@@ -929,7 +929,7 @@ describe('근무스케줄 (e2e, DB)', () => {
         where: { accountId: accountId! },
         data: {
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: 'v1.0',
           hqSharingAgreedAt: new Date(),
         },
       });
@@ -1483,7 +1483,7 @@ describe('근무스케줄 (e2e, DB)', () => {
         where: { staffMembers: { some: { staffMemberId: otherStaffId } } },
         data: {
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: 'v1.0',
           hqSharingAgreedAt: new Date(),
         },
       });

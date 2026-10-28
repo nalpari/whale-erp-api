@@ -205,7 +205,12 @@ describe('PayslipListService', () => {
           {
             storeId: { in: [6] },
             staffMember: {
-              account: { is: { isHqSharingConsented: true } },
+              account: {
+                is: {
+                  isHqSharingConsented: true,
+                  hqSharingConsentVersion: { in: ['v1.0'] },
+                },
+              },
             },
           },
         ],
@@ -312,7 +317,12 @@ describe('PayslipListService', () => {
           {
             storeId: { in: [6] },
             staffMember: {
-              account: { is: { isHqSharingConsented: true } },
+              account: {
+                is: {
+                  isHqSharingConsented: true,
+                  hqSharingConsentVersion: { in: ['v1.0'] },
+                },
+              },
             },
           },
         ],
@@ -543,7 +553,14 @@ describe('PayslipListService', () => {
           { storeId: { in: [5] } },
           {
             storeId: { in: [6] },
-            staffMember: { account: { is: { isHqSharingConsented: true } } },
+            staffMember: {
+              account: {
+                is: {
+                  isHqSharingConsented: true,
+                  hqSharingConsentVersion: { in: ['v1.0'] },
+                },
+              },
+            },
           },
         ],
       };
@@ -567,7 +584,14 @@ describe('PayslipListService', () => {
           { storeId: { in: [5] } },
           {
             storeId: { in: [6] },
-            staffMember: { account: { is: { isHqSharingConsented: true } } },
+            staffMember: {
+              account: {
+                is: {
+                  isHqSharingConsented: true,
+                  hqSharingConsentVersion: { in: ['v1.0'] },
+                },
+              },
+            },
           },
         ],
       };
@@ -622,7 +646,10 @@ describe('PayslipListService', () => {
           storeId: 6,
           staffMember: {
             name: '이도윤',
-            account: { isHqSharingConsented: true },
+            account: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: 'v1.0',
+            },
           },
         }),
       ]);
@@ -700,7 +727,14 @@ describe('PayslipListService', () => {
       expect(firstArg(prisma.payslip.groupBy).where).toEqual({
         storeId: 6,
         ...SEPTEMBER,
-        staffMember: { account: { is: { isHqSharingConsented: true } } },
+        staffMember: {
+          account: {
+            is: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: { in: ['v1.0'] },
+            },
+          },
+        },
       });
     });
 
@@ -733,7 +767,12 @@ describe('PayslipListService', () => {
           storeId: true,
           staffMember: {
             select: {
-              account: { select: { isHqSharingConsented: true } },
+              account: {
+                select: {
+                  isHqSharingConsented: true,
+                  hqSharingConsentVersion: true,
+                },
+              },
             },
           },
         },

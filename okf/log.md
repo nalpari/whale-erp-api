@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [My profile](/api/my-profile.md) · [Staff members](/api/staff-members.md) · [Staff signup](/api/staff-signup.md) — 본사 제공 동의의 문구 버전 판정(WHALEERP-137, ATT-30 2026-10-15 재영). 받아 주는 버전 목록 `HQ_SHARING_VALID_VERSIONS`(`src/admin-scope/hq-sharing.ts`)을 두고, 글자만 고치면 앞 버전을 남기고 항목 · 목적을 넓히면 새 버전만 남긴다. 목록에 없는 버전으로 동의한 계정은 가림(`HQ_SHARING_SELECT` · `HQ_SHARING_CONSENTED` · `hqSharingConsentedOf`)에서 미동의이고, 내 정보 `hqSharingConsent.needsReconsent` 가 true 라 앱이 다시 묻는다. 다시 동의(`POST /me/hq-sharing-consent`)와 근무지 더하기의 동의 질문도 같은 판정을 쓴다. 지금 목록은 `v1.0` 하나라 동작 변화는 없다. 마이그레이션 없음. openapi 갱신.
 * **Update**: main 병합(api charizard, main #176 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api charizard, main #175 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api charizard, main #170 · #174 까지 — PR #163 `/bp-masters` 포함): okf/api/bp-admins.md · stores.md 시각 충돌은 늦은 값을, okf/log 는 양쪽 기록을 살렸다. #163 이 들어와 `lockBp` 주석 · [BP admins](/api/bp-admins.md) 의 「미사용 전환 · 삭제는 아직 없다」를 실제 `BpMastersService.changeStatus` · `remove` 의 잠금 순서(bp_codes → admin_accounts, 이 PR 전제와 같음)로 고쳤고, P2028 이 잠금 대기를 끊지 못해 5초 상한이 아님을 적었다.

@@ -4,12 +4,12 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T02:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T04:52:10Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
     title: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
-    last_modified: 2026-10-20T05:37:25Z
+    last_modified: 2026-10-28T04:52:10Z
   - id: my-address-service
     resource: ../../src/my-profile/my-address.service.ts
     title: MyAddressService — 주소 수정과 이력(WHALEERP-189)
@@ -21,7 +21,7 @@ sources:
   - id: my-consent-service
     resource: ../../src/my-profile/my-consent.service.ts
     title: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-28T04:52:10Z
   - id: my-profile-controller
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
@@ -29,7 +29,7 @@ sources:
   - id: my-consent-controller
     resource: ../../src/my-profile/my-consent.controller.ts
     title: 위치정보 · 본사 제공 동의 경로
-    last_modified: 2026-10-20T09:20:00Z
+    last_modified: 2026-10-28T04:52:10Z
   - id: my-email-change-service
     resource: ../../src/my-profile/my-email-change.service.ts
     title: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
@@ -250,10 +250,12 @@ is active and in force (an operator switched or deleted them all), 동의 is 500
 log naming the account. 본사 제공: 동의
 sets the four account columns with `HQ_SHARING_CONSENT_VERSION` (`v1.0`, an api
 constant — the wording is in the app, and both change together, 2026-10-20
-노영주), overwriting an earlier withdrawal (A안); 철회 sets only the flag and
+노영주), overwriting an earlier withdrawal (A안) or a consent to a version no longer
+accepted; 철회 sets only the flag and
 `hq_sharing_withdrawn_at`, keeping version and 동의 시각 as the CHECKs require.
 The api does not check that the person has a 가맹 소속; the screen shows the row
-only then. 409 carries no code — the app refetches.
+only then. 409 (already consented to an accepted version) carries no code — the
+app refetches.
 
 # Memberships are the 재직 직원 rule, not every record
 
@@ -296,6 +298,16 @@ field is always present; the app shows it only when a membership's
 `store.storeTypeCode` is `FRANCHISE`. Ending a 가맹 relationship does not end the
 account's consent (ATT-30 v149), so whatever later writes this consent must not
 end it per store record.
+
+**Wording versions** (ATT-30, 2026-10-15 재영 · WHALEERP-137): `HQ_SHARING_VALID_VERSIONS`
+in `src/admin-scope/hq-sharing.ts` lists the versions still accepted. A wording-only
+fix keeps the old version in the list; widening the items or purposes leaves only
+the new one. A consent to a version not in the list counts as **not consented**
+everywhere the masking reads it (`hqSharingConsentedOf` · `HQ_SHARING_CONSENTED`), and
+`hqSharingConsent.needsReconsent` is true — the app asks again on entry and posts
+`POST /me/hq-sharing-consent`, which then overwrites it with `HQ_SHARING_CONSENT_VERSION`.
+`isConsented` stays the stored flag, like the location consent's `state` beside its
+`needsReconsent`; 미동의 · 철회 are never `needsReconsent` (they are asked anyway).
 
 # 위치정보 동의 state is derived
 

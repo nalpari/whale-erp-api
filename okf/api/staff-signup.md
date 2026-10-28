@@ -4,12 +4,12 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-22T07:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T04:52:10Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
     title: StaffSignupService (lookup, check, signup transaction, under-age notice)
-    last_modified: 2026-10-21T07:07:00Z
+    last_modified: 2026-10-28T04:52:10Z
   - id: staff-signup-controller
     resource: ../../src/staff-signup/staff-signup.controller.ts
     title: /auth/account/invitations/check · /auth/account/signup (public, default rate limit)
@@ -165,7 +165,9 @@ rate limit (no IP limit of its own — JOI-02 v158):
   account's phone, and for the token the invitation's phone must equal the account's — otherwise the
   same 404 `INVITATION_NOT_FOUND` as no invitation, so nobody can attach someone else's invitation. 200
   is the check shape; `asksHqSharingConsent` is true only at a non-`DIRECT` store **and** when the
-  account has not consented yet (one answer per person, api #78).
+  account has not consented yet (one answer per person, api #78) — a consent to a wording version no
+  longer accepted counts as not yet (`hqSharingAgreedOf`, [My profile](/api/my-profile.md)), and the
+  accept then overwrites it with the current version.
 - `POST /me/invitations/accept` — the same lookup plus `hqSharingConsented`. In one transaction:
   accept the invitation (`SENT → ACCEPTED`, conditioned), link that 직원 레코드 to the account
   (`JOINED`), 발송 대기 contracts → 서명 대기 (actor `STAFF`). When consent is asked and sent, the

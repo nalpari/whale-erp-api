@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InvitationStatus, Prisma } from '@prisma/client';
+import { hqSharingAgreedOf } from '../admin-scope/hq-sharing';
 import {
   AuthSessionService,
   INVALID_SESSION_MESSAGE,
@@ -341,7 +342,7 @@ export class StaffSignupService {
       phone: account.phone,
       asksHqSharingConsent:
         asksHqSharingConsentAt(store.storeTypeCode) &&
-        !account.isHqSharingConsented,
+        !hqSharingAgreedOf(account),
     };
   }
 
@@ -383,7 +384,7 @@ export class StaffSignupService {
         throw await this.endedOrJoined(tx, invitation.invitationId);
       if (
         asksHqSharingConsentAt(store.storeTypeCode) &&
-        !account.isHqSharingConsented &&
+        !hqSharingAgreedOf(account) &&
         dto.hqSharingConsented === true
       )
         // 철회했던 계정이 다시 동의하면 철회 시각을 지운다 — 동의 중에는 철회 시각이 없다(accounts_hq_sharing_consent_fields)
@@ -426,7 +427,12 @@ export class StaffSignupService {
   private async accountOf(db: Db, accountId: number) {
     const account = await db.account.findUnique({
       where: { accountId },
-      select: { phone: true, status: true, isHqSharingConsented: true },
+      select: {
+        phone: true,
+        status: true,
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: true,
+      },
     });
     if (!account || account.status === 'WITHDRAWN')
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);

@@ -122,7 +122,7 @@ describe('TO-DO (e2e, DB)', () => {
           // 본사 제공 동의는 계정에 있다(2026-10-20)
           isHqSharingConsented: consented,
           ...(consented
-            ? { hqSharingConsentVersion: 'v1', hqSharingAgreedAt: new Date() }
+            ? { hqSharingConsentVersion: 'v1.0', hqSharingAgreedAt: new Date() }
             : {}),
         },
       }));

@@ -115,7 +115,7 @@ describe('내 정보 (e2e, DB)', () => {
       where: { accountId: meId },
       data: {
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: 'v1.0',
         hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
       },
     });
@@ -327,9 +327,10 @@ describe('내 정보 (e2e, DB)', () => {
       status: 'JOINED',
       hqSharingConsent: {
         isConsented: true,
-        consentVersion: 'v1',
+        consentVersion: 'v1.0',
         agreedAt: '2026-10-01T00:00:00.000Z',
         withdrawnAt: null,
+        needsReconsent: false,
       },
       locationConsent: {
         state: 'PAUSED',

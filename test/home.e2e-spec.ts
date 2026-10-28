@@ -149,7 +149,7 @@ describe('로그인 후 홈 (e2e, DB)', () => {
               status: 'JOINED',
               ...(consented && {
                 isHqSharingConsented: true,
-                hqSharingConsentVersion: 'v1',
+                hqSharingConsentVersion: 'v1.0',
                 hqSharingAgreedAt: new Date(),
               }),
             },

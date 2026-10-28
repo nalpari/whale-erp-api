@@ -166,7 +166,7 @@ describe('운영 알림 (e2e, DB)', () => {
       franchiseStoreId,
       withAccount({
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: 'v1.0',
         hqSharingAgreedAt: new Date(),
       }),
     );
@@ -174,7 +174,7 @@ describe('운영 알림 (e2e, DB)', () => {
       franchiseStoreId,
       withAccount({
         isHqSharingConsented: false,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: 'v1.0',
         hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
         hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
       }),

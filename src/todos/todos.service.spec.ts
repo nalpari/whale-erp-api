@@ -320,7 +320,12 @@ describe('TodosService', () => {
         expect(firstArg(db.staffMember.findMany).where).toEqual({
           storeId: 4,
           ...ACTIVE_STAFF,
-          account: { is: { isHqSharingConsented: true } },
+          account: {
+            is: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: { in: ['v1.0'] },
+            },
+          },
           staffMemberId: { in: [11, 12] },
         });
       });
@@ -411,7 +416,12 @@ describe('TodosService', () => {
       expect(firstArg(db.staffMember.findMany).where).toEqual({
         storeId: 4,
         ...ACTIVE_STAFF,
-        account: { is: { isHqSharingConsented: true } },
+        account: {
+          is: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: { in: ['v1.0'] },
+          },
+        },
       });
     });
 
@@ -1190,14 +1200,20 @@ describe('TodosService', () => {
         performerStaffMember: {
           staffMemberId: 21,
           name: '수행자',
-          account: { isHqSharingConsented: consented },
+          account: {
+            isHqSharingConsented: consented,
+            hqSharingConsentVersion: 'v1.0',
+          },
         },
         todoAssignees: [
           {
             staffMemberId: 21,
             staffMember: {
               name: '수행자',
-              account: { isHqSharingConsented: consented },
+              account: {
+                isHqSharingConsented: consented,
+                hqSharingConsentVersion: 'v1.0',
+              },
             },
           },
         ],

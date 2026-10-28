@@ -141,10 +141,21 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       ['가맹 점포 · 아직 동의 안 함', 'FRANCHISE', false, true],
     ])('%s — 동의를 묻는가 %s', async (_label, type, consented, asks) => {
       store(type);
-      account({ isHqSharingConsented: consented });
+      account({
+        isHqSharingConsented: consented,
+        hqSharingConsentVersion: 'v1.0',
+      });
       await expect(
         service().checkForAccount(77, { code: CODE }),
       ).resolves.toMatchObject({ asksHqSharingConsent: asks });
+    });
+
+    it('가맹 점포 · 더는 받아 주지 않는 문구 버전에 동의했으면 다시 묻는다(ATT-30)', async () => {
+      store('FRANCHISE');
+      account({ isHqSharingConsented: true, hqSharingConsentVersion: 'v0.9' });
+      await expect(
+        service().checkForAccount(77, { code: CODE }),
+      ).resolves.toMatchObject({ asksHqSharingConsent: true });
     });
 
     it('링크 토큰은 sha256 으로 찾는다', async () => {
@@ -221,7 +232,10 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       '%s — 계정 동의를 바꾸지 않는다',
       async (_label, type, consented, send) => {
         store(type);
-        account({ isHqSharingConsented: consented });
+        account({
+          isHqSharingConsented: consented,
+          hqSharingConsentVersion: 'v1.0',
+        });
         await service().acceptForAccount(77, {
           code: CODE,
           hqSharingConsented: send,
@@ -229,6 +243,21 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
         expect(tx.account.update).not.toHaveBeenCalled();
       },
     );
+
+    it('옛 문구 버전에 동의한 계정이 다시 동의를 보내면 지금 버전으로 덮는다(ATT-30)', async () => {
+      store('FRANCHISE');
+      account({ isHqSharingConsented: true, hqSharingConsentVersion: 'v0.9' });
+      await service().acceptForAccount(77, {
+        code: CODE,
+        hqSharingConsented: true,
+      });
+      expect(tx.account.update).toHaveBeenCalledWith({
+        where: { accountId: 77 },
+        data: expect.objectContaining({
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        }) as unknown,
+      });
+    });
 
     it('같은 초대로 먼저 더했으면 409 — 레코드를 잇지 않는다', async () => {
       tx.invitation.updateMany.mockResolvedValue({ count: 0 });

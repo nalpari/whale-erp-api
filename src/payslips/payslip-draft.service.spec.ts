@@ -276,7 +276,12 @@ describe('PayslipDraftService', () => {
           { storeId: { in: [5] } },
           {
             storeId: { in: [6] },
-            account: { is: { isHqSharingConsented: true } },
+            account: {
+              is: {
+                isHqSharingConsented: true,
+                hqSharingConsentVersion: { in: ['v1.0'] },
+              },
+            },
           },
         ],
       });

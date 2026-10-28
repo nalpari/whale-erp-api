@@ -387,7 +387,7 @@ describe('직원 목록 (e2e, DB)', () => {
       'JOINED',
       await consentAccount({
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: 'v1.0',
         hqSharingAgreedAt: new Date(),
       }),
     );
@@ -398,7 +398,7 @@ describe('직원 목록 (e2e, DB)', () => {
       'JOINED',
       await consentAccount({
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: 'v1.0',
         hqSharingAgreedAt: new Date(),
       }),
     );
@@ -410,7 +410,7 @@ describe('직원 목록 (e2e, DB)', () => {
       'JOINED',
       await consentAccount({
         isHqSharingConsented: false,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: 'v1.0',
         hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
         hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
       }),
@@ -536,6 +536,32 @@ describe('직원 목록 (e2e, DB)', () => {
     const res = await get(`?keyword=${encodeURIComponent('동의직원')}`, baId);
     expect(idsOf(res.body)).toEqual([ids.consented]);
     expect(res.body.total).toBe(1);
+  });
+
+  it('더는 받아 주지 않는 문구 버전에 동의한 직원은 다시 동의할 때까지 가린다 — 검색에도 걸리지 않는다(WHALEERP-137)', async () => {
+    const { accountId } = await prisma.staffMember.findUniqueOrThrow({
+      where: { staffMemberId: ids.consented },
+      select: { accountId: true },
+    });
+    const version = (hqSharingConsentVersion: string) =>
+      prisma.account.update({
+        where: { accountId: accountId! },
+        data: { hqSharingConsentVersion },
+      });
+    await version('v0.9');
+    try {
+      const res = await get(`?pageSize=200&storeIds=${consentStoreId}`);
+      expect(res.body.items).toEqual([
+        expect.objectContaining({ staffMemberId: null, isMasked: true }),
+      ]);
+      const found = await get(
+        `?keyword=${encodeURIComponent('동의직원')}`,
+        baId,
+      );
+      expect(found.body.total).toBe(0);
+    } finally {
+      await version('v1.0');
+    }
   });
 
   it('한 가맹 점포 안에서도 동의는 직원마다다 — 동의한 직원은 보이고 철회한 직원은 가린다', async () => {
@@ -1124,7 +1150,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone: `010${randomInt(10_000_000, 99_999_999)}`,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: 'v1.0',
           hqSharingAgreedAt: new Date(),
         },
       });
@@ -1583,7 +1609,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: 'v1.0',
           hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
         },
       }));
@@ -1918,7 +1944,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone: `010${n}98`,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: 'v1.0',
           hqSharingAgreedAt: new Date(),
         },
       });
@@ -1947,7 +1973,7 @@ describe('직원 목록 (e2e, DB)', () => {
             phone: `010${n}97`,
             status: 'JOINED',
             isHqSharingConsented: true,
-            hqSharingConsentVersion: 'v1',
+            hqSharingConsentVersion: 'v1.0',
             hqSharingAgreedAt: new Date(),
           },
         });
@@ -2109,7 +2135,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: 'v1.0',
           hqSharingAgreedAt: new Date(),
         },
       }));

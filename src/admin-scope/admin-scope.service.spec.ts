@@ -76,7 +76,9 @@ describe('AdminScopeService', () => {
       prisma.staffMember.findFirst.mockResolvedValue({
         storeId: 5,
         account:
-          isHqSharingConsented === null ? null : { isHqSharingConsented },
+          isHqSharingConsented === null
+            ? null
+            : { isHqSharingConsented, hqSharingConsentVersion: 'v1.0' },
       });
 
     // 직원을 먼저 찾고 그 점포를 관리하는지 보면, 다른 BP 직원 ID 는 없는 ID 보다 쿼리가 더 돌아 같은 404 라도
@@ -88,7 +90,12 @@ describe('AdminScopeService', () => {
         where: { staffMemberId: 30, storeId: { in: [5] } },
         select: {
           storeId: true,
-          account: { select: { isHqSharingConsented: true } },
+          account: {
+            select: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: true,
+            },
+          },
         },
       });
       expect(prisma.staffMember.findUnique).not.toHaveBeenCalled();
@@ -230,7 +237,12 @@ describe('AdminScopeService', () => {
         where: { staffMemberId: 30, storeId: { in: [5] } },
         select: {
           storeId: true,
-          account: { select: { isHqSharingConsented: true } },
+          account: {
+            select: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: true,
+            },
+          },
         },
       });
       expect(prisma.staffMember.findUnique).not.toHaveBeenCalled();

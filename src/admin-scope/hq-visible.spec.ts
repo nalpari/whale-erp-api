@@ -5,7 +5,14 @@ describe('hqVisibleWhere (본사 역할에게 보이는 개인 단위 자료 —
     [1, 'DIRECT'],
     [2, 'FRANCHISE'],
   ]);
-  const consented = { account: { is: { isHqSharingConsented: true } } };
+  const consented = {
+    account: {
+      is: {
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: { in: ['v1.0'] },
+      },
+    },
+  };
 
   it('본사 역할은 가려지는 점포(직영이 아님)에서 본사 제공 동의한 직원 것만', () => {
     expect(hqVisibleWhere('BA', [1, 2], typeOf)).toEqual({

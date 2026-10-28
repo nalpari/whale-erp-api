@@ -1245,7 +1245,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
             phone,
             status: 'JOINED',
             isHqSharingConsented: true,
-            hqSharingConsentVersion: 'v1',
+            hqSharingConsentVersion: 'v1.0',
             hqSharingAgreedAt: new Date(),
           },
         });
@@ -1288,7 +1288,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
             phone,
             status: 'JOINED',
             isHqSharingConsented: false,
-            hqSharingConsentVersion: 'v1',
+            hqSharingConsentVersion: 'v1.0',
             hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
             hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
           },

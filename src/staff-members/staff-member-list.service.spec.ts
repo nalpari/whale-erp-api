@@ -209,7 +209,12 @@ describe('StaffMemberListService', () => {
           { storeId: { in: [] } },
           {
             storeId: { in: [6] },
-            account: { is: { isHqSharingConsented: true } },
+            account: {
+              is: {
+                isHqSharingConsented: true,
+                hqSharingConsentVersion: { in: ['v1.0'] },
+              },
+            },
           },
         ],
       });
@@ -248,7 +253,12 @@ describe('StaffMemberListService', () => {
         { storeId: { in: [5] } },
         {
           storeId: { in: [6] },
-          account: { is: { isHqSharingConsented: true } },
+          account: {
+            is: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: { in: ['v1.0'] },
+            },
+          },
         },
       ],
     });
@@ -296,7 +306,12 @@ describe('StaffMemberListService', () => {
           { storeId: { in: [5] } },
           {
             storeId: { in: [6] },
-            account: { is: { isHqSharingConsented: true } },
+            account: {
+              is: {
+                isHqSharingConsented: true,
+                hqSharingConsentVersion: { in: ['v1.0'] },
+              },
+            },
           },
         ],
       });
@@ -327,7 +342,13 @@ describe('StaffMemberListService', () => {
         stores: [{ storeId: 6, storeTypeCode: 'FRANCHISE' }],
       });
       prisma.staffMember.findMany.mockResolvedValue([
-        row({ storeId: 6, account: { isHqSharingConsented: true } }),
+        row({
+          storeId: 6,
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: 'v1.0',
+          },
+        }),
       ]);
       const item = (await service.list(9, {}))!.items[0];
       expect(item.isMasked).toBe(false);
@@ -335,7 +356,9 @@ describe('StaffMemberListService', () => {
       expect(item.name).toBe('서지안');
       expect(item.phone).toBe('01028417702');
       expect(firstArg(prisma.staffMember.findMany).select).toMatchObject({
-        account: { select: { isHqSharingConsented: true } },
+        account: {
+          select: { isHqSharingConsented: true, hqSharingConsentVersion: true },
+        },
       });
     },
   );
@@ -347,7 +370,12 @@ describe('StaffMemberListService', () => {
         { storeId: { in: [] } },
         {
           storeId: { in: [6] },
-          account: { is: { isHqSharingConsented: true } },
+          account: {
+            is: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: { in: ['v1.0'] },
+            },
+          },
         },
       ],
     });
@@ -917,6 +945,7 @@ describe('StaffMemberListService', () => {
               email: 'd@test.invalid',
               status: 'JOINED',
               isHqSharingConsented: true,
+              hqSharingConsentVersion: 'v1.0',
             },
           }),
         );
@@ -933,6 +962,7 @@ describe('StaffMemberListService', () => {
               email: 'fc@test.invalid',
               status: 'JOINED',
               isHqSharingConsented: true,
+              hqSharingConsentVersion: 'v1.0',
             },
           }),
         );
@@ -1120,6 +1150,7 @@ describe('StaffMemberListService', () => {
             email: 'fc@test.invalid',
             status: 'JOINED',
             isHqSharingConsented: true,
+            hqSharingConsentVersion: 'v1.0',
           },
         }),
       );
@@ -1192,7 +1223,9 @@ describe('StaffMemberListService', () => {
       expect(listed).not.toHaveProperty('email');
       // 목록은 본사 제공 동의를 보려고 계정을 읽지만 그 칸 하나뿐이다
       expect(firstArg(prisma.staffMember.findMany).select).toMatchObject({
-        account: { select: { isHqSharingConsented: true } },
+        account: {
+          select: { isHqSharingConsented: true, hqSharingConsentVersion: true },
+        },
       });
       expect(
         (
@@ -1244,7 +1277,13 @@ describe('StaffMemberListService', () => {
 
     it('본사 제공 동의한 가맹 점포 직원은 가리지 않고 낸다', async () => {
       prisma.staffMember.findFirst.mockResolvedValue(
-        row({ storeId: 6, account: { isHqSharingConsented: true } }),
+        row({
+          storeId: 6,
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: 'v1.0',
+          },
+        }),
       );
       const item = await service.findOne(9, 30);
       expect(item).toMatchObject({ staffMemberId: 30, isMasked: false });

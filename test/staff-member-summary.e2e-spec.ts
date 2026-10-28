@@ -215,7 +215,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
       joinStatus: 'JOINED',
       accountId: await account({
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: 'v1.0',
         hqSharingAgreedAt: new Date(),
       }),
     });

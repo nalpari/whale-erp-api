@@ -400,7 +400,12 @@ describe('PayslipSendService', () => {
               {
                 storeId: { in: [6] },
                 staffMember: {
-                  account: { is: { isHqSharingConsented: true } },
+                  account: {
+                    is: {
+                      isHqSharingConsented: true,
+                      hqSharingConsentVersion: { in: ['v1.0'] },
+                    },
+                  },
                 },
               },
             ],

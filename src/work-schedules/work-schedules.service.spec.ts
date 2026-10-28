@@ -414,7 +414,12 @@ describe('WorkSchedulesService', () => {
             { retiredDate: null },
             { retiredDate: { gte: d('2026-10-21') } },
           ],
-          account: { is: { isHqSharingConsented: true } },
+          account: {
+            is: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: { in: ['v1.0'] },
+            },
+          },
         },
       });
     });
@@ -497,7 +502,10 @@ describe('WorkSchedulesService', () => {
             phone: '01033334444',
             jobTitle: '바리스타',
             employmentType: 'FULL_TIME',
-            account: { isHqSharingConsented: true },
+            account: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: 'v1.0',
+            },
           },
         ]);
       db.workSchedule.findMany.mockResolvedValue([
@@ -803,7 +811,10 @@ describe('WorkSchedulesService', () => {
           staffMemberId: 11,
           name: '다라',
           retiredDate: null,
-          account: { isHqSharingConsented: true },
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: 'v1.0',
+          },
         },
       ]);
       db.staffMember.findUnique.mockResolvedValue(staffRow({ storeId: 4 }));
@@ -938,7 +949,14 @@ describe('WorkSchedulesService', () => {
         where: {
           workSchedule: {
             storeId: 4,
-            staffMember: { account: { is: { isHqSharingConsented: true } } },
+            staffMember: {
+              account: {
+                is: {
+                  isHqSharingConsented: true,
+                  hqSharingConsentVersion: { in: ['v1.0'] },
+                },
+              },
+            },
           },
         },
       });

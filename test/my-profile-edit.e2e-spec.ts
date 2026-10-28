@@ -424,5 +424,36 @@ describe('내 정보 편집 (e2e, DB)', () => {
         withdrawnAt: null,
       });
     });
+
+    it('더는 받아 주지 않는 문구 버전에 동의했으면 다시 묻고, 다시 동의하면 지금 버전으로 덮는다', async () => {
+      const id = await account(
+        '옛버전',
+        'JOINED',
+        await hashPassword(PASSWORD),
+      );
+      await prisma.account.update({
+        where: { accountId: id },
+        data: {
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v0.9',
+          hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
+        },
+      });
+      const { token } = await login(id);
+      const hq = async () => (await profile(token)).hqSharingConsent;
+
+      expect(await hq()).toMatchObject({
+        isConsented: true,
+        consentVersion: 'v0.9',
+        needsReconsent: true,
+      });
+      await send('post', '/me/hq-sharing-consent', token).expect(204);
+      expect(await hq()).toMatchObject({
+        isConsented: true,
+        consentVersion: HQ_SHARING_CONSENT_VERSION,
+        needsReconsent: false,
+      });
+      await send('post', '/me/hq-sharing-consent', token).expect(409);
+    });
   });
 });

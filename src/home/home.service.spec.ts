@@ -16,14 +16,29 @@ const SHOWN_CONTRACT = {
     { storeId: { in: [1] } },
     {
       storeId: { in: [2] },
-      staffMember: { account: { is: { isHqSharingConsented: true } } },
+      staffMember: {
+        account: {
+          is: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: { in: ['v1.0'] },
+          },
+        },
+      },
     },
   ],
 };
 const SHOWN_STAFF = {
   OR: [
     { storeId: { in: [1] } },
-    { storeId: { in: [2] }, account: { is: { isHqSharingConsented: true } } },
+    {
+      storeId: { in: [2] },
+      account: {
+        is: {
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: { in: ['v1.0'] },
+        },
+      },
+    },
   ],
 };
 
@@ -253,7 +268,12 @@ describe('HomeService', () => {
       storeId,
       staffMemberId,
       startAt,
-      staffMember: { account: { isHqSharingConsented: consented } },
+      staffMember: {
+        account: {
+          isHqSharingConsented: consented,
+          hqSharingConsentVersion: 'v1.0',
+        },
+      },
     });
     const punch = (
       storeId: number,
