@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T00:50:40Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -223,10 +223,12 @@ table, which PostgreSQL has no function for — so a SQL version would still car
 
 The cost of the migration form: the table can no longer be corrected by re-running
 anything. A change means a new migration, because an applied one is never edited.
-That matches where this table is going anyway — 공공 API 동기화 will be mutating it,
-and that feature is when the calculation (and a lunar conversion dependency) comes
-back, to fill 2051–2100 and to reconcile what the API returns against what the rule
-predicts.
+That matches where this table went — since 2026-10-28 the monthly 공공 API 동기화
+(`public-holiday-sync`, [platform holidays](/api/public-holidays.md)) rewrites 올해 · 다음 해
+from the API, deleting rule rows the API does not return. It was built **without** the
+calculation: the API only answers years it has published, so filling 2051–2100's lunar
+holidays early, or reporting where the API and the rule disagree, still needs the rule
+(and a lunar conversion dependency) back — nothing calls for that yet.
 
 ## The platform master has no password
 
