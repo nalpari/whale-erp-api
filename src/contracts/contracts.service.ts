@@ -45,7 +45,6 @@ import {
   overlappingReplaceable,
   renewedPreviousIds,
   replacedRenewals,
-  IN_PROGRESS,
   inProgressAtStore,
   InProgressContract,
   lockStaffForReplace,
@@ -53,11 +52,13 @@ import {
   signedOverlap,
 } from './contract-duplicates';
 import { renewalDateOf } from './contract-renewal';
-import { SIGNED_ONCE } from './signed-contract';
+import { reopenBlockOf, reopenWorkTimeFree } from './contract-reopen';
+import { LIVE_RENEWAL, SIGNED_ONCE } from './signed-contract';
 import {
   ContractDeliveryService,
   channelOf,
   deliveredStatusOf,
+  type DispatchResult,
   type PendingInvite,
 } from './contract-delivery.service';
 import {
@@ -68,6 +69,7 @@ import {
   lockContract,
   lockContractWithStaff,
   lockStaffMember,
+  REOPENED_STATUSES,
   RESENDABLE_STATUSES,
   statusConflict,
   transition,
@@ -119,14 +121,6 @@ const zeroStatusCounts = () =>
   Object.fromEntries(
     Object.values(ContractStatus).map((s) => [s, 0]),
   ) as Record<ContractStatus, number>;
-
-/**
- * 이 계약을 직전 계약으로 둔 살아 있는 재계약 — 진행 중이거나 체결을 거친 것(WHALEERP-156). 거부 · 만료 · 체결 없이 종료(대체)된
- * 것은 치지 않는다. 한 계약에 살아 있는 재계약은 하나다.
- */
-export const LIVE_RENEWAL: Prisma.ContractWhereInput = {
-  OR: [{ status: { in: IN_PROGRESS } }, SIGNED_ONCE],
-};
 
 /** 목록 줄의 직원 칸 — 이름, 상태 칸에 붙일 가입 · 초대 상태(joinStateOf, 직원 목록과 같은 재료)와 퇴직 여부 */
 const LIST_STAFF_SELECT = {
@@ -1415,15 +1409,16 @@ export class ContractsService {
 
   /**
    * 커밋 뒤 보내기(dispatch)를 마친 저장 응답. dispatch 가 보내지 않았으면(그사이 다른 요청 — 발송 대기 종료 · 재발송 — 이 초대를
-   * 무효로 했다, false) 지금 상태를 싣고 처리 결과는 null 로 둔다 — 보냈다고 알리지 않게(api #146 리뷰). 보냈거나 보낼 것이 없으면
+   * 무효로 했다, false) 지금 상태를 싣고 처리 결과는 null 로 둔다 — 보냈다고 알리지 않게(api #146 리뷰). 그사이 직원이 소속 추가
+   * 확인 요청에 답했으면('ANSWERED') 계약은 그 답으로 서명 대기 · 거부라 지금 상태를 싣고 처리 결과는 둔다. 보냈거나 보낼 것이 없으면
    * 그대로다(다시 읽지 않는다). 지금 상태를 읽다 실패하면 저장은 이미 끝났으니 오류로 답하지 않는다 — 500 이면 화면이 저장 실패로
    * 알고 다시 저장한다. 계산한 상태에 처리 결과 null 을 싣고 로그만 남긴다.
    */
   private async settledResult(
     result: CreatedContractResponseDto,
-    sent: boolean,
+    sent: DispatchResult,
   ): Promise<CreatedContractResponseDto> {
-    if (sent) return result;
+    if (sent === true) return result;
     const now = await this.prisma.contract
       .findUnique({
         where: { contractId: result.contractId },
@@ -1446,9 +1441,13 @@ export class ContractsService {
         retryable: false,
         contractId: result.contractId,
         message:
-          '저장했지만 가입 초대가 나갔는지 확인하지 못했습니다. 상세를 다시 열어 상태를 확인해 주세요',
+          '저장했지만 가입 초대 · 소속 추가 확인 요청이 나갔는지 확인하지 못했습니다. 상세를 다시 열어 상태를 확인해 주세요',
       });
-    return { ...result, status: now.status, draftAction: null };
+    return {
+      ...result,
+      status: now.status,
+      draftAction: sent === 'ANSWERED' ? result.draftAction : null,
+    };
   }
 
   /**
@@ -1503,6 +1502,9 @@ export class ContractsService {
             jobTitle: true,
             employmentType: true,
             joinStatus: true,
+            // 거부 · 만료를 되살릴 수 있는가(reopenBlockOf)
+            employmentStatus: true,
+            retiredDate: true,
             ...HQ_SHARING_SELECT,
           },
         },
@@ -1556,13 +1558,31 @@ export class ContractsService {
         h.toStatus === 'PENDING_SEND' || h.toStatus === 'PENDING_SIGNATURE',
     );
     const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
-    // 재발송할 수 있는가 — 재발송(ContractSendService.send)과 같은 판정: 발송 대기 · 서명 대기이고, 가입한 직원(앱 알림)이거나
-    // 그 번호로 계정이 없는 가입 전 직원(가입 초대). 계정이 있는 번호(소속 추가 확인 · 복귀 확인)는 409 라 버튼을 숨긴다
+    // 재발송할 수 있는가 — 재발송(ContractSendService.send)과 같은 판정: 발송 대기 · 서명 대기 · 거부 · 만료. 가입한 직원은 앱 알림,
+    // 가입 전 직원은 가입 초대이거나 그 번호에 계정이 있으면 소속 추가 확인 요청이다(WHALEERP-130, 2026-10-26 재영). 그 계정이 이
+    // 점포에 재직 중이면 보낼 때 409 다. 거부 · 만료는 되살릴 수 없는 까닭(퇴직 · 다른 진행 중 · 기간 끝남 · 체결 완료 계약 · 다른
+    // 재계약 · 근무 시간 겹침)이 있으면 숨긴다(reopenBlockOf, WHALEERP-153)
     const canResend =
       !!c.status &&
       RESENDABLE_STATUSES.includes(c.status) &&
-      (c.staffMember.joinStatus === 'JOINED' ||
-        (await accountOfPhone(this.prisma, c.staffMember.phone)) === null);
+      (!REOPENED_STATUSES.includes(c.status) ||
+        ((await reopenBlockOf(
+          this.prisma,
+          {
+            contractId: c.contractId,
+            storeId: c.storeId,
+            previousContractId: c.previousContractId,
+            startDate: c.startDate,
+            endDate: c.endDate,
+            staffMember: c.staffMember,
+          },
+          false,
+        )) === null &&
+          (await reopenWorkTimeFree(
+            this.prisma,
+            c.contractId,
+            c.staffMember.phone,
+          ))));
     return {
       contractId: c.contractId,
       staffMemberId: c.staffMemberId,
@@ -1981,7 +2001,8 @@ export class ContractsService {
    * - 저장하면 곧바로 다시 보낸다(2026-10-19 재영) — 새 서명 기한(30일), 앞서 나간 링크는 무효. 가입 초대면 발송 대기,
    *   앱으로 받는 직원이면 서명 대기다(수정 요청도 서명 대기로).
    * - 번호가 바뀌면 새 번호로 재직 확인 · 같은 점포 진행 중 계약(대체 확인) · 다른 점포 근무 시간 겹침 · 초대 유형 판별을
-   *   다시 한다. 번호를 바꾸려면 점포 단위 범위가 있어야 한다(이어 쓰기와 같은 규칙).
+   *   다시 한다. 번호를 바꾸려면 점포 단위 범위가 있어야 한다(이어 쓰기와 같은 규칙). 번호가 같아도 가입 전 직원이면 초대
+   *   유형만 다시 판별한다(재발송과 같다 — 그사이 생기거나 바뀐 계정으로 소속 추가 확인 요청을 건다).
    * - 가입한 직원 레코드(가입 완료)는 계정 값이라 레코드는 두고 계약 당사자 값만 고친다.
    */
   async updateWorker(
@@ -2118,6 +2139,12 @@ export class ContractsService {
         const invite = await decideInvitation(tx, current.storeId, dto.phone);
         draftAction = invite.draftAction;
         candidateAccountId = invite.candidateAccountId;
+      } else if (!joined) {
+        // 번호가 같아도 가입 전이면 다시 판별한다 — 저장한 뒤 그 번호로 계정이 생기거나 탈퇴 후 다시 가입했으면 옛 판별값 ·
+        // 후보 계정으로 보내면 소속 추가 확인 요청이 옛 계정에 걸린다(재발송과 같다, WHALEERP-130 리뷰)
+        const invite = await decideInvitation(tx, current.storeId, dto.phone);
+        draftAction = invite.draftAction;
+        candidateAccountId = invite.candidateAccountId;
       }
 
       // 다시 보낸 뒤의 상태 — 상태가 바뀌면 전환(이력), 그대로면 기한 · 초대만 새로(prepare)
@@ -2139,7 +2166,7 @@ export class ContractsService {
           data: {
             name: dto.name,
             phone: dto.phone,
-            ...(phoneChanged && { candidateAccountId }),
+            ...(candidateAccountId !== undefined && { candidateAccountId }),
             // 이름 · 번호를 바로잡으면 이을 옛 레코드를 다시 찾는다(WHALEERP-615) — 퇴직(예정) 레코드는 이어 쓰기와 같이 둔다
             ...(!current.staffMember.retiredDate && {
               previousStaffMemberId: await previousRecordOf(

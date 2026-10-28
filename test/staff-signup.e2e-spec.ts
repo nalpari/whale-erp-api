@@ -79,6 +79,8 @@ describe('직원 가입 (e2e, DB)', () => {
         staffMemberId: staff.staffMemberId,
         storeId,
         employmentType: 'PART_TIME',
+        // 계약에 고용 형태가 있으면 직무도 계약 값을 읽는다(pendingTermsOf, api #164)
+        jobTitle: '매장',
         contractMethod: 'ELECTRONIC',
         startDate: addDays(kstToday(), 1),
         isHealthPensionInsured: false,

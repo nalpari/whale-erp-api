@@ -18,8 +18,9 @@ export class MyInvitationDto {
   @ApiProperty({ enum: EmploymentType })
   employmentType: EmploymentType;
 
-  /** 직무 */
-  jobTitle: string;
+  /** 직무 — 함께 온 계약의 값(없으면 직원 레코드), 고용 형태와 같은 곳에서 읽는다. 계약에 직무가 없는 옛 행이면 null 일 수 있다 */
+  @ApiProperty({ nullable: true, type: String })
+  jobTitle: string | null;
 
   /** 초대를 보낸 시각 */
   sentAt: Date;

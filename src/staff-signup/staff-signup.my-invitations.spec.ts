@@ -1,3 +1,4 @@
+import { PENDING_TERMS_SELECT } from '../contracts/contract-status';
 import { HttpException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AuthSessionService } from '../auth-session/auth-session.service';
@@ -39,6 +40,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     name: '홍길동',
     phone: PHONE,
     employmentType: 'FULL_TIME',
+    jobTitle: '홀',
     accountId: null,
     contracts: [],
     ...overrides,
@@ -131,7 +133,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
         name: '홍길동',
         employmentType: 'PART_TIME',
         jobTitle: '홀',
-        contracts: [] as { employmentType: string }[],
+        contracts: [] as { employmentType: string; jobTitle: string | null }[],
       },
     });
 
@@ -155,21 +157,21 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       expect(total).toBe(1);
     });
 
-    it('고용 형태는 함께 온 발송 대기 계약의 값이 직원 레코드 값보다 앞선다(api #157)', async () => {
+    it('고용 형태 · 직무는 함께 온 시작 전 계약의 값이 직원 레코드 값보다 앞선다(pendingTermsOf, api #157 · #164)', async () => {
       const r = row(42, 4);
-      r.staffMember.contracts = [{ employmentType: 'FULL_TIME' }];
+      r.staffMember.contracts = [
+        { employmentType: 'FULL_TIME', jobTitle: '바리스타' },
+      ];
       tx.invitation.findMany.mockResolvedValue([r]);
       const { items } = await service().listForAccount(77);
-      expect(items[0].employmentType).toBe('FULL_TIME');
+      expect(items[0]).toMatchObject({
+        employmentType: 'FULL_TIME',
+        jobTitle: '바리스타',
+      });
       const { select } = argOf(tx.invitation.findMany) as {
         select: { staffMember: { select: Record<string, unknown> } };
       };
-      expect(select.staffMember.select.contracts).toEqual({
-        where: { status: 'PENDING_SEND' },
-        orderBy: { contractId: 'desc' },
-        take: 1,
-        select: { employmentType: true },
-      });
+      expect(select.staffMember.select).toMatchObject(PENDING_TERMS_SELECT);
     });
 
     it('이름이 모두 다르면 점포를 읽지 않고 빈 목록', async () => {
