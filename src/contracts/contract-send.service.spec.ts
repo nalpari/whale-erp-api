@@ -475,6 +475,26 @@ describe('ContractSendService (재발송)', () => {
     },
   );
 
+  it('화면이 본 상태(expectedStatus)와 지금 상태가 다르면 409 CONTRACT_STATUS_CONFLICT — 그사이 거부된 계약을 되살리지 않는다(front #136 재리뷰)', async () => {
+    tx.contract.findUnique.mockResolvedValue(row({ status: 'REJECTED' }));
+    const error = await service()
+      .send(9, 7, NOW, 'PENDING_SIGNATURE')
+      .catch((e: unknown) => e);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      code: 'CONTRACT_STATUS_CONFLICT',
+      status: 'REJECTED',
+    });
+    expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    expect(delivery.prepare).not.toHaveBeenCalled();
+  });
+
+  it('화면이 본 상태와 같으면 그대로 보낸다', async () => {
+    tx.contract.findUnique.mockResolvedValue(row());
+    await expect(
+      service().send(9, 7, NOW, 'PENDING_SEND'),
+    ).resolves.toMatchObject({ status: 'PENDING_SEND' });
+  });
+
   it('범위를 본 뒤 다른 요청이 번호를 고쳤으면 409', async () => {
     tx.contract.findUnique.mockResolvedValue(
       row({

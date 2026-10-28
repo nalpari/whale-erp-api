@@ -82,6 +82,7 @@ export class ContractSendService {
     adminAccountId: number,
     contractId: number,
     now = new Date(),
+    expectedStatus?: ContractStatus,
   ): Promise<SendResult> {
     const scoped = await this.contracts.scopedContractOf(
       adminAccountId,
@@ -121,6 +122,10 @@ export class ContractSendService {
         );
       if (!c.status || !RESENDABLE_STATUSES.includes(c.status))
         throw statusConflict(c.status ?? 'PENDING_SEND');
+      // 화면이 본 상태와 다르면 낡은 화면이다 — 그사이 거부 · 만료된 계약을 모르고 되살리거나, 두 탭이 같은 계약을 두 번 보내지
+      // 않게(front #136 재리뷰). 재발송은 네 상태를 모두 받아 위 검사만으로는 잡히지 않는다
+      if (expectedStatus !== undefined && expectedStatus !== c.status)
+        throw statusConflict(c.status);
       const reopened = REOPENED_STATUSES.includes(c.status);
       if (reopened) {
         const blocked = await reopenBlockOf(

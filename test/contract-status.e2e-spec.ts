@@ -1577,6 +1577,18 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       ).rejects.toThrow('계약 기간이 끝난 근로계약서는 다시 보낼 수 없습니다');
     });
 
+    it('서명 대기로 본 화면에서 보내면 그사이 거부된 계약을 되살리지 않는다 — 409 CONTRACT_STATUS_CONFLICT(front #136 재리뷰)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+
+      await expect(
+        app
+          .get(ContractSendService)
+          .send(adminId, contractId, new Date(), 'PENDING_SIGNATURE'),
+      ).rejects.toThrow('화면을 새로 고쳐');
+      expect((await stateOf(contractId)).status).toBe('REJECTED');
+    });
+
     it('가입한 직원의 만료 계약은 서명 대기 · 새 기한으로 다시 보내고 다시 날인할 수 있다', async () => {
       const contractId = await sent(BEFORE_NOW);
       await runDaily();

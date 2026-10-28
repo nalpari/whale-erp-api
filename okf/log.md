@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-28
+* **Update**: [Contracts API](/api/contracts-api.md) — front #136 재리뷰 참고 1: 재발송 본문에 화면이 본 상태(`expectedStatus`, `SendContractDto`)를 받아 지금 상태와 다르면 409 `CONTRACT_STATUS_CONFLICT` — 열어 둔 서명 대기 화면에서 그사이 거부된 계약을 되살리거나, 두 탭이 같은 만료 계약을 두 번 보내지 않게. 본문을 비우면 전처럼(직원 목록 재발송). openapi 갱신.
+
 ## 2026-10-27
 * **Update**: [Contracts API](/api/contracts-api.md) — api #157 셀프 code-review(2차): 종이 재계약 겹침 409 는 이어받는 줄의 앞 계약만 겹치면 막지 않음(조기 재계약 C2 의 재계약이 C1 때문에 빈 목록 409 로 막히던 것), 바로잡기 대체 목록을 한 번만 정해 가입 레코드 찾기와 대체가 같은 목록을 씀, 다시 맞출 때 효력 계약의 빈 칸은 다시 올린 계약 값, `applyStartedTerms` 도 `!= null`(배치 COALESCE 와 같게), `correctionTargets` inherited 단위 테스트 · 조기 재계약의 재계약 e2e.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #157 재리뷰 5 반영 뒤 셀프 code-review: `correctionTargets` 가 이어받는 직전 계약을 받아 남길 계약을 정한 뒤 뺀다(재계약 겹침 409 `checkSignedOverlap` 도 — 조기 재계약 C2 의 재계약이 C1 때문에 막히던 것), 가입 레코드 찾기는 대체될 계약으로만(재입사 재계약이 퇴직 레코드의 C1 까지 세어 찾지 못하던 것), POST 다시 맞추기는 다시 쓰는 레코드가 정해진 뒤에, 다시 맞출 때 한 계약의 값만(빈 직무도), 재입사 가입 직원 바로잡기 e2e · 시작 전 날짜를 먼 앞날로.
