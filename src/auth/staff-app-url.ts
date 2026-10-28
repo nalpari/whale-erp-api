@@ -46,3 +46,14 @@ export function inviteLinkOf(baseUrl: string, token: string): string {
   url.hash = new URLSearchParams({ token }).toString();
   return url.toString();
 }
+
+/** 직원 앱의 소속 추가 확인 요청 화면(WHALEERP-130 · 144, 2026-10-26 재영) — 로그인한 직원이 요청을 보고 수락 · 거절한다 */
+export const AFFILIATION_PATH = '/affiliations';
+
+/**
+ * 소속 추가 확인 요청 링크. 초대 링크와 같이 origin 만 쓴다. 토큰을 싣지 않는다 — 요청은 그 번호의 계정에 걸려 있어 로그인하면
+ * 앱이 요청 목록으로 찾는다(링크가 새어도 로그인 없이는 열리지 않는다).
+ */
+export function affiliationLinkOf(baseUrl: string): string {
+  return new URL(AFFILIATION_PATH, baseUrl).toString();
+}

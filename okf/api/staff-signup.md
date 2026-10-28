@@ -4,7 +4,7 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T06:48:50Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:08:41Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
@@ -41,8 +41,9 @@ The 직원 who got a 가입 초대 ([Contracts API](/api/contracts-api.md) — s
 
 1. **Check** — `POST /auth/account/invitations/check` with either `{ token }` (opened from the link)
    or `{ phone, code }` (typed in the app). 200 `{ storeName, employmentType, expiresAt, phone,
-   asksHqSharingConsent }` — `employmentType` is the waiting (발송 대기) contract's, the record's only when that column
-   is empty (the record moves to a contract's terms only when a signed contract starts; api #157 re-review 4).
+   asksHqSharingConsent }`. `employmentType` is the invitation's in-progress contract's (발송 대기 · 서명 대기), or the
+   record's when there is none — `pendingTermsOf`; a 재계약 invite's record still has the old terms. The in-app check
+   (`/me/invitations/check`) does the same.
 2. **Signup** — `POST /auth/account/signup` with the same lookup plus the account and 인적사항.
    201 with the **login response** (`accessToken` · `refreshToken` · `refreshTokenExpiresAt` ·
    `account`, built by `AccountAuthService.loginResponseOf`) — the 직원 lands on the home screen
@@ -185,7 +186,41 @@ No account details, 인적사항, 약관 or age check — the account exists alr
 withdrawn account is 401. Ended · joined invitations answer as at signup. A typed code goes through the
 same per-phone lock, counted on the **account's phone** (outside the accept transaction, so a later
 failure does not undo the count); a token is not counted. This is not 소속 추가 확인 (WHALEERP-144): that path is for numbers that already had
-an account when the 근로계약서 was saved and carries no code.
+an account when the 근로계약서 was saved and carries no code — see below.
+
+# 소속 추가 확인 요청 — /me/affiliation-requests (WHALEERP-130 · 144, 2026-10-26 재영)
+
+When a 근로계약서 is saved for a number that already has an account but no record linked at that store, the contract
+stays 발송 대기 and a 소속 추가 확인 요청 (`AFFILIATION_CONFIRM`, or `RETURN_CONFIRM` for someone who left that store)
+hangs on the record's `candidate_account_id`, with an alimtalk (SMS fallback until the Kakao template is approved) and
+a mail linking to `/affiliations` in the 직원 app ([Contracts API](/api/contracts-api.md)). No code, no token: the 직원
+logs in and the app finds it. Account token only (`@UserTypes('account')`). Accept · reject are throttled per account
+like 근무지 더하기 (10 per 10 minutes); the list is not — the app reads it on every open, like `GET /auth/account/me`.
+
+- `GET /me/affiliation-requests` — live requests (`SENT`, before `expires_at`, the record still unlinked, its phone =
+  the account's phone), newest first: `invitationId`, `invitationType`, `storeName`, `bpName`, `employmentType`
+  (+ `employmentTypeLabel` 정직원 · 파트타이머), `jobTitle`, `sentAt`, `expiresAt`, `asksHqSharingConsent` (not 직영 and
+  the account has not consented to an accepted wording version — `hqSharingAgreedOf`, ATT-30). The login popup and 나의 정보 - 소속 점포 read this. `employmentType` ·
+  `jobTitle` come together from the request's in-progress contract when it carries terms, otherwise both from the
+  record (the record takes them only when a contract starts — `applyStartedTerms`, WHALEERP-156); one rule,
+  `pendingTermsOf` (`contract-status.ts`), also used by the 알림톡 · 메일 고용형태 and the signup invitation check.
+- `POST /me/affiliation-requests/:invitationId/accept` `{ hqSharingConsented? }` — 번호 lock → account row `FOR UPDATE`
+  (so rewriting an old-version consent cannot undo a withdrawal made meanwhile, as at 근무지 더하기, api #183) → 직원 row
+  `FOR UPDATE` → re-read; the request must be this account's (`candidate_account_id`), `SENT`, unexpired, and the record's phone the
+  account's phone. 409 if the account is already 재직 at that store. Invitation → `ACCEPTED`, optional consent written
+  exactly as at 근무지 더하기, record linked (`account_id`, `JOINED`, candidate cleared), its 발송 대기 contracts →
+  서명 대기 (`STAFF`) with `sign_deadline_at = now + 30 days` (the deadline starts here, not at sending) and one
+  `PUSH_CONTRACT_SENT` notice each. Returns `{ staffMemberId, storeName, contractIds }`.
+- `POST /me/affiliation-requests/:invitationId/reject` `{ reason? }` — reason optional, NFC-normalized and trimmed, then
+  at most 500 chars (400 otherwise — the same DTO rules as a contract 거부, JOIN-5). Invitation → `REJECTED` with `reject_reason`; the record is kept (운영 정책 JOI-08) and so is its
+  `candidate_account_id` (재발송 runs 판별 again anyway); its 발송 대기 contracts → 거부 (`PENDING_SEND → REJECTED`, `STAFF`)
+  with the same `reject_reason`. After commit, ops notice `NTF_AFFILIATION_REJECTED` (related `STAFF_MEMBER`, link
+  `/staff-members/:id`, event key = invitation id) to the admins who wrote those contracts (`created_by`) — only those
+  still active and managing that store (`storeManagers`, with its 가맹 masking rule) — or the store's managers if none. `EMAIL_AFFILIATION_REJECTED` stays switched off — not sent. 204.
+- Errors: 404 `AFFILIATION_REQUEST_NOT_FOUND` (no such request, not this account's, not a 소속 추가 확인 type),
+  404 `AFFILIATION_REQUEST_ENDED` (expired — also before the batch —, or the record's phone changed / got linked),
+  409 `AFFILIATION_REQUEST_ANSWERED` (already accepted or rejected). An unanswered request expires after 30 days (daily
+  batch) and the contract stays 발송 대기; the admin's 재발송 sends a new one.
 
 # No 본인인증
 

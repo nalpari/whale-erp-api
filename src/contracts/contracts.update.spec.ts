@@ -548,11 +548,11 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.account.findMany).toHaveBeenCalledTimes(1);
     });
 
-    it('초안 저장으로 넘기면 곧바로 보낸다 — 계정이 있는 번호면 서명 대기, 초대 유형 · 이력을 남기고 커밋 뒤 보낸다', async () => {
+    it('초안 저장으로 넘기면 곧바로 보낸다 — 계정이 있는 번호면 발송 대기(소속 추가 확인 요청), 초대 유형 · 이력을 남기고 커밋 뒤 보낸다', async () => {
       tx.account.findMany.mockResolvedValue([{ accountId: 42 }]);
       await service.update(9, 7, dto({ isTemporarySave: false }));
       expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
-        status: 'PENDING_SIGNATURE',
+        status: 'PENDING_SEND',
         draftAction: 'AFFILIATION_CONFIRM',
       });
       expect(tx.staffMember.update.mock.calls[0][0].data).toMatchObject({
@@ -562,7 +562,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         data: {
           contractId: 7,
           fromStatus: 'DRAFT',
-          toStatus: 'PENDING_SIGNATURE',
+          toStatus: 'PENDING_SEND',
           actor: 'ADMIN',
         },
       });
