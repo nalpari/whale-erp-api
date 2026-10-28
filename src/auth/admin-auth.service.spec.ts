@@ -286,7 +286,11 @@ describe('AdminAuthService', () => {
       prisma.adminAccount.findUnique.mockResolvedValue(
         account({ accountStatusCode: 'INACTIVE' }),
       );
-      await expect(login()).rejects.toThrow(ForbiddenException);
+      await expect(login()).rejects.toThrow(
+        new ForbiddenException(
+          '사용이 제한된 계정입니다. 관리자에게 문의해 주세요.',
+        ),
+      );
       expect(logged()[0]).toMatchObject({ failureReason: 'INACTIVE' });
       await expect(login('wrong')).rejects.toThrow(UnauthorizedException);
     });
