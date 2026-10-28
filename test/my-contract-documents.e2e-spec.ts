@@ -85,6 +85,7 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
     if (!prisma) return;
     const byStaff = { contract: { staffMemberId: { in: staffIds } } };
     await prisma.contractDocument.deleteMany({ where: byStaff });
+    await prisma.contractStatusHistory.deleteMany({ where: byStaff });
     await prisma.contract.deleteMany({
       where: { staffMemberId: { in: staffIds } },
     });
@@ -244,9 +245,11 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
     const others = await contract(other, 'SIGNED');
     const candidate = await contract(me, 'SIGNED', 'candidate');
     const notSent = await contract(me, 'PENDING_SEND');
+    const draft = await contract(me, 'DRAFT');
     const othersDoc = await document(others, 'PAPER_EMPLOYMENT_CONTRACT');
     const candidateDoc = await document(candidate, 'PAPER_EMPLOYMENT_CONTRACT');
     const notSentDoc = await document(notSent, 'PAPER_EMPLOYMENT_CONTRACT');
+    const draftDoc = await document(draft, 'PAPER_EMPLOYMENT_CONTRACT');
     const signature = await document(mine, 'SIGNATURE', '서명.png');
 
     const detail404 = await request(app.getHttpServer())
@@ -258,6 +261,7 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
       [others, othersDoc],
       [candidate, candidateDoc],
       [notSent, notSentDoc],
+      [draft, draftDoc],
     ] as const) {
       const res = await download(id, d.contractDocumentId, auth).expect(404);
       expect(res.body).toEqual(detail404.body);
@@ -278,9 +282,39 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
     const auth = await token(me);
     for (const status of ['SIGNED', 'ENDED'] as const) {
       const id = await contract(me, status);
+      // 종료는 체결 완료에서 닫혔을 때만 체결된 계약이다
+      if (status === 'ENDED')
+        await prisma.contractStatusHistory.create({
+          data: {
+            contractId: id,
+            fromStatus: 'SIGNED',
+            toStatus: 'ENDED',
+            actor: 'SYSTEM',
+          },
+        });
       const copy = await document(id, 'SIGNED_COPY');
       await download(id, copy.contractDocumentId, auth).expect(200);
     }
+    // 날인 전(서명 대기)에 닫힌 종료 — 처리 완료본이 있어도 내주지 않는다
+    const closedUnsigned = await contract(me, 'ENDED');
+    await prisma.contractStatusHistory.create({
+      data: {
+        contractId: closedUnsigned,
+        fromStatus: 'PENDING_SIGNATURE',
+        toStatus: 'ENDED',
+        actor: 'ADMIN',
+      },
+    });
+    const unsignedCopy = await document(closedUnsigned, 'SIGNED_COPY');
+    const unsigned = await download(
+      closedUnsigned,
+      unsignedCopy.contractDocumentId,
+      auth,
+    ).expect(409);
+    expect(unsigned.body).toMatchObject({
+      code: 'CONTRACT_STATUS_CONFLICT',
+      status: 'ENDED',
+    });
     for (const status of [
       'PENDING_SIGNATURE',
       'CORRECTION_REQUESTED',

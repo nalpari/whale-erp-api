@@ -10,15 +10,14 @@ import {
 import { statusConflict } from './contract-status';
 import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
 
-/** 처리 완료본(SIGNED_COPY)을 내주는 상태 — 체결 완료와, 체결 뒤 닫힌 종료. 서명 대기 · 수정 요청 · 거부 · 만료는 체결 전이다 */
-const FINAL_COPY_STATUSES: readonly ContractStatus[] = ['SIGNED', 'ENDED'];
-
 /**
  * 직원 앱의 근로계약 파일 내려받기 주소(WHALEERP-146 종이 계약 날인본 · 임금계약서, 149 처리 완료본). 관리자
  * 내려받기(ContractsService.documentDownloadUrl)와 같은 300초 서명 주소다.
  * - 계약은 상세와 같은 「내 계약」이다 — 아니면 상세와 같은 404 본문.
  * - 파일은 그 계약의 것이고 상세 `documents` 에 나오는 것뿐이다(직원 필기 서명 제외) — 아니면 404.
- * - 처리 완료본은 체결된 계약에서만 준다 — 그 밖의 상태면 지금 상태를 실은 409(CONTRACT_STATUS_CONFLICT).
+ * - 처리 완료본은 체결된 계약에서만 준다 — 체결 완료(SIGNED)와, 체결 완료에서 닫힌 종료(SIGNED → ENDED 이력). 종료는 날인 전
+ *   (임시저장 · 발송 대기 · 서명 대기 · 수정 요청)에서도 들어오므로 상태만으로 보지 않는다(PR 전 리뷰). 그 밖이면 지금 상태를
+ *   실은 409(CONTRACT_STATUS_CONFLICT). 체결 완료를 누가 닫았는지(시스템 · 관리자 대체)는 보지 않는다.
  * - 404 · 409 를 먼저 가리고 저장소 설정은 그 뒤에 본다(설정 없으면 503).
  */
 @Injectable()
@@ -48,12 +47,25 @@ export class MyContractDocumentsService {
     const status = contract.status!;
     if (
       document.kind === 'SIGNED_COPY' &&
-      !FINAL_COPY_STATUSES.includes(status)
+      !(await this.executed(contractId, status))
     )
       throw statusConflict(status);
     const storage = requireStorage(this.storage);
     return {
       url: await storage.downloadUrl(document.storageKey, document.fileName),
     };
+  }
+
+  /** 체결된 계약인가 — 체결 완료이거나, 체결 완료에서 종료로 닫혔다 */
+  private async executed(
+    contractId: number,
+    status: ContractStatus,
+  ): Promise<boolean> {
+    if (status === 'SIGNED') return true;
+    if (status !== 'ENDED') return false;
+    const closedAfterSigning = await this.prisma.contractStatusHistory.count({
+      where: { contractId, fromStatus: 'SIGNED', toStatus: 'ENDED' },
+    });
+    return closedAfterSigning > 0;
   }
 }

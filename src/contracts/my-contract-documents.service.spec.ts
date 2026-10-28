@@ -13,6 +13,7 @@ describe('MyContractDocumentsService', () => {
   let prisma: {
     contract: { findFirst: jest.Mock };
     contractDocument: { findFirst: jest.Mock };
+    contractStatusHistory: { count: jest.Mock };
   };
   let storage: { downloadUrl: jest.Mock };
   const service = (s: unknown = storage) =>
@@ -36,6 +37,7 @@ describe('MyContractDocumentsService', () => {
           .fn()
           .mockResolvedValue(doc('PAPER_EMPLOYMENT_CONTRACT')),
       },
+      contractStatusHistory: { count: jest.fn().mockResolvedValue(1) },
     };
     storage = {
       downloadUrl: jest.fn().mockResolvedValue('https://s3.test/signed'),
@@ -98,6 +100,21 @@ describe('MyContractDocumentsService', () => {
     const run = service(null).downloadUrl(77, 41, 5);
     await expect(run).rejects.toBeInstanceOf(NotFoundException);
     await expect(run).rejects.toThrow('파일을 찾을 수 없습니다');
+  });
+
+  it('종료는 체결 완료에서 닫혔을 때만(SIGNED → ENDED 이력) 처리 완료본을 준다 — 날인 전 종료는 409', async () => {
+    prisma.contract.findFirst.mockResolvedValue({ status: 'ENDED' });
+    prisma.contractDocument.findFirst.mockResolvedValue(doc('SIGNED_COPY'));
+    prisma.contractStatusHistory.count.mockResolvedValue(0);
+    const run = service().downloadUrl(77, 41, 5);
+    await expect(run).rejects.toBeInstanceOf(ConflictException);
+    await expect(run).rejects.toMatchObject({
+      response: { code: 'CONTRACT_STATUS_CONFLICT', status: 'ENDED' },
+    });
+    expect(prisma.contractStatusHistory.count).toHaveBeenCalledWith({
+      where: { contractId: 41, fromStatus: 'SIGNED', toStatus: 'ENDED' },
+    });
+    expect(storage.downloadUrl).not.toHaveBeenCalled();
   });
 
   it.each(['SIGNED', 'ENDED'])(
