@@ -338,15 +338,14 @@ export class AttendanceRecordsService {
   ): Promise<Scope> {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    const typeOf = new Map(
-      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
-    );
     const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
-    const picked = [...typeOf.keys()].filter(
+    const picked = [...storeOf.keys()].filter(
       (id) =>
         (!query.storeIds || query.storeIds.includes(id)) &&
         (!query.storeTypes ||
-          query.storeTypes.some((type) => type === typeOf.get(id))),
+          query.storeTypes.some(
+            (type) => type === storeOf.get(id)?.storeTypeCode,
+          )),
     );
     const stores = picked.length
       ? await this.prisma.store.findMany({

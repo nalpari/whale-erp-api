@@ -275,7 +275,7 @@ export class StaffMemberListService {
     });
     if (!row) return null;
     // 가림은 점포 · 계약을 읽기 전에 정한다. 읽은 뒤에 거르면 가려지는 직원의 404 만 그만큼 늦어, 응답 시간으로
-    // 목록이 숨긴 ID 를 가려낼 수 있다. 판정은 목록(toItems)과 같은 값 — 관리 범위의 점포 유형과 행의 계정 동의다.
+    // 목록이 숨긴 ID 를 가려낼 수 있다. 판정은 목록(toItems)과 같은 값 — 관리 범위의 점포(유형 · 상태)와 행의 계정 동의다.
     const store = manageable.stores.find((s) => s.storeId === row.storeId);
     const storeTypeCode = store?.storeTypeCode;
     if (
@@ -414,7 +414,7 @@ export class StaffMemberListService {
       isHqSharingConsented: boolean,
     ) =>
       hidesPersonalData(manageable.roleTypeCode, store, isHqSharingConsented);
-    // 가림은 관리 범위를 정할 때 읽은 점포 유형과 행의 계정 동의로 판단한다 — 점포 유형은 목록을 거른 것과 같은
+    // 가림은 관리 범위를 정할 때 읽은 점포(유형 · 상태)와 행의 계정 동의로 판단한다 — 점포는 목록을 거른 것과 같은
     // 값이다.
     const maskingStoreOf = new Map(
       manageable.stores.map((s) => [s.storeId, s]),

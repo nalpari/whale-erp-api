@@ -413,6 +413,40 @@ describe('PayslipSendService', () => {
       });
     });
 
+    it('직원명으로 거르면 폐점한 가맹 점포의 명세서는 동의한 직원 것도 대상에서 뺀다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 5, storeTypeCode: 'DIRECT', storeStatusCode: 'OPERATING' },
+          {
+            storeId: 6,
+            storeTypeCode: 'FRANCHISE',
+            storeStatusCode: 'OPERATING',
+          },
+          { storeId: 7, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.sendMany(9, { month: '2026-07', staffName: '유_' });
+      expect(call(prisma.payslip.findMany).where).toEqual({
+        AND: [
+          {
+            OR: [
+              { storeId: { in: [5] } },
+              {
+                storeId: { in: [6] },
+                staffMember: {
+                  account: HQ_SHARING_CONSENTED.account,
+                },
+              },
+            ],
+          },
+          { periodStartDate: { gte: d('2026-07-01'), lt: d('2026-08-01') } },
+          { status: 'CONFIRMED' },
+          { staffMember: { name: { contains: '유\\_', mode: 'insensitive' } } },
+        ],
+      });
+    });
+
     it('메일 설정이 없으면 쓰지 않고 모두 실패로 알린다', async () => {
       mail = null;
       await build();

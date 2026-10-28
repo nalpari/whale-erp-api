@@ -622,7 +622,9 @@ export class AttendanceEditService {
       (id) =>
         (!stores.storeIds || stores.storeIds.includes(id)) &&
         (!stores.storeTypes ||
-          stores.storeTypes.some((t) => t === access.typeOf.get(id))),
+          stores.storeTypes.some(
+            (t) => t === access.storeOf.get(id)?.storeTypeCode,
+          )),
     );
     if (!storeIds.length) return { items: [] };
     const [candidates, storeRows] = await Promise.all([
@@ -685,13 +687,10 @@ export class AttendanceEditService {
   private async access(adminAccountId: number) {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    const typeOf = new Map(
-      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
-    );
     const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
     return {
-      storeIds: [...typeOf.keys()],
-      typeOf,
+      storeIds: [...storeOf.keys()],
+      storeOf,
       hides: (storeId: number, consented: boolean) =>
         hidesPersonalData(
           manageable.roleTypeCode,

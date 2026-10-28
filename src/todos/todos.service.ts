@@ -274,7 +274,7 @@ export class TodosService {
     adminAccountId: number,
     query: ListTodosQueryDto,
   ): Promise<TodoListResponseDto> {
-    const { storeIds, typeOf, hide } = await this.scopeOf(adminAccountId);
+    const { storeIds, storeOf, hide } = await this.scopeOf(adminAccountId);
     // 직원 필터 — 그 직원을 다룰 수 없으면(범위 밖 · 가려지는 직원) 직원 상세와 같은 404(운영 정책 ATT-30)
     if (
       query.staffMemberId &&
@@ -290,7 +290,9 @@ export class TodosService {
         (!query.storeId || id === query.storeId) &&
         (!query.storeIds || query.storeIds.includes(id)) &&
         (!query.storeTypes ||
-          query.storeTypes.some((type) => type === typeOf.get(id))),
+          query.storeTypes.some(
+            (type) => type === storeOf.get(id)?.storeTypeCode,
+          )),
     );
     // 점포 유형은 상단 범위 직영 · 가맹이라 폐점 점포는 뺀다 — 범위 칩 · 점포 목록과 같다. 폐점 점포는 전체 · 점포를 골라 본다(2026-10-22 재영)
     if (query.storeTypes && ids.length)
@@ -777,11 +779,8 @@ export class TodosService {
   private async scopeOf(adminAccountId: number) {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    const typeOf = new Map(
-      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
-    );
     const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
-    const storeIds = [...typeOf.keys()];
+    const storeIds = [...storeOf.keys()];
     const hide: Hide = (storeId, isHqSharingConsented) =>
       hidesPersonalData(
         manageable.roleTypeCode,
@@ -790,11 +789,11 @@ export class TodosService {
       );
     return {
       storeIds,
-      typeOf,
+      storeOf,
       where: { isDeleted: false, storeId: { in: storeIds } },
       hide,
       storeHides: (storeId: number): boolean | null =>
-        typeOf.has(storeId) ? hide(storeId, false) : null,
+        storeOf.has(storeId) ? hide(storeId, false) : null,
       hiddenWhere: (storeId: number) =>
         hiddenStoreStaffWhere(manageable.roleTypeCode, storeOf.get(storeId)),
     };

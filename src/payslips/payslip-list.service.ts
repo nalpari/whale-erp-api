@@ -425,12 +425,8 @@ export class PayslipListService {
       fullTime: { count: 0, grossPayAmount: 0 },
       partTime: { count: 0, grossPayAmount: 0 },
     };
-    // 폐점한 가맹 점포는 동의한 직원도 가리므로(ATT-30 v227) 본사 역할에게는 셀 명세서가 없다
-    if (
-      !store ||
-      (hidesPersonalData(manageable.roleTypeCode, store, false) &&
-        !consentOpensStore(manageable.roleTypeCode, store))
-    )
+    // 동의해도 가려지는 점포(폐점한 가맹 점포, ATT-30 v227)면 본사 역할에게는 셀 명세서가 없다
+    if (!store || hidesPersonalData(manageable.roleTypeCode, store, true))
       return result;
 
     const grouped = await this.prisma.payslip.groupBy({

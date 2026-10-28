@@ -1029,59 +1029,75 @@ describe('직원 목록 (e2e, DB)', () => {
       expect(storeIds).not.toContain(consentStoreId);
     });
 
-    // 같은 근무지면 범위를 점포 단위로 다시 묻지 않지만, 점포가 남아 있는지는 늘 본다(api #21 재리뷰).
-    it('임시저장 뒤 근무지가 폐점하면 같은 근무지로 이어 써도 404 — 계약은 그대로 임시저장이다', async () => {
-      const staff = await prisma.staffMember.findUniqueOrThrow({
-        where: { staffMemberId: ids.consented },
-        select: { name: true, phone: true },
-      });
-      const { contractId } = await prisma.contract.create({
-        data: {
-          staffMemberId: ids.consented,
-          storeId: consentStoreId,
-          createdBy: bmId,
-          status: 'DRAFT',
-        },
-        select: { contractId: true },
-      });
-      const { storeStatusCode } = await prisma.store.findUniqueOrThrow({
-        where: { storeId: consentStoreId },
-        select: { storeStatusCode: true },
-      });
-      await prisma.store.update({
-        where: { storeId: consentStoreId },
-        data: { storeStatusCode: 'CLOSED' },
-      });
-      try {
-        const res = await request(app.getHttpServer())
-          .put(`/contracts/${contractId}`)
-          .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
-          .send({
-            name: staff.name,
-            phone: staff.phone,
-            storeId: consentStoreId,
-            jobTitle: '홀',
-            employmentType: 'PART_TIME',
-            contractMethod: 'ELECTRONIC',
-            isTemporarySave: true,
-          });
-        expect(res.status).toBe(404);
-        // 폐점한 가맹 점포의 레코드는 동의해도 본사 역할에게 가려(ATT-30 v227) 근무지보다 먼저 계약이 404 다
-        expect((res.body as { message: string }).message).toBe(
-          '근로계약을 찾을 수 없습니다',
-        );
-        const after = await prisma.contract.findUniqueOrThrow({
-          where: { contractId },
-          select: { status: true },
+    // 같은 근무지면 범위를 점포 단위로 다시 묻지 않지만, 점포가 남아 있는지는 늘 본다(api #21 재리뷰) — 직영 점포 직원이면
+    // 범위는 지나 근무지 404 다. 동의한 가맹 직원이면 폐점한 가맹 점포의 레코드는 동의해도 본사 역할에게 가려(ATT-30 v227)
+    // 근무지보다 먼저 계약이 404 다. 어느 쪽이든 계약은 그대로 임시저장이다.
+    it.each([
+      [
+        '직영 점포 직원 — 근무지 404',
+        'joined',
+        () => directStoreId,
+        '근무지 점포를 찾을 수 없습니다',
+      ],
+      [
+        '동의한 가맹 점포 직원 — 계약부터 404',
+        'consented',
+        () => consentStoreId,
+        '근로계약을 찾을 수 없습니다',
+      ],
+    ] as const)(
+      '임시저장 뒤 근무지가 폐점하면 같은 근무지로 이어 써도 404 — %s',
+      async (_label, key, storeIdOf, message) => {
+        const storeId = storeIdOf();
+        const staff = await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId: ids[key] },
+          select: { name: true, phone: true },
         });
-        expect(after.status).toBe('DRAFT');
-      } finally {
+        const { contractId } = await prisma.contract.create({
+          data: {
+            staffMemberId: ids[key],
+            storeId,
+            createdBy: bmId,
+            status: 'DRAFT',
+          },
+          select: { contractId: true },
+        });
+        const { storeStatusCode } = await prisma.store.findUniqueOrThrow({
+          where: { storeId },
+          select: { storeStatusCode: true },
+        });
         await prisma.store.update({
-          where: { storeId: consentStoreId },
-          data: { storeStatusCode },
+          where: { storeId },
+          data: { storeStatusCode: 'CLOSED' },
         });
-      }
-    });
+        try {
+          const res = await request(app.getHttpServer())
+            .put(`/contracts/${contractId}`)
+            .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
+            .send({
+              name: staff.name,
+              phone: staff.phone,
+              storeId,
+              jobTitle: '홀',
+              employmentType: 'PART_TIME',
+              contractMethod: 'ELECTRONIC',
+              isTemporarySave: true,
+            });
+          expect(res.status).toBe(404);
+          expect((res.body as { message: string }).message).toBe(message);
+          const after = await prisma.contract.findUniqueOrThrow({
+            where: { contractId },
+            select: { status: true },
+          });
+          expect(after.status).toBe('DRAFT');
+        } finally {
+          await prisma.store.update({
+            where: { storeId },
+            data: { storeStatusCode },
+          });
+        }
+      },
+    );
   });
   describe('직원 상세 GET /staff-members/:id (WHALEERP-599)', () => {
     /** 응답 본문은 any 라 상세 응답 DTO 모양을 붙여 돌려준다. */

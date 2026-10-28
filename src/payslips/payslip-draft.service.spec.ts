@@ -283,6 +283,45 @@ describe('PayslipDraftService', () => {
       });
     });
 
+    it('본사 역할에게 폐점한 가맹 점포는 동의한 직원도 작성 대상에서 빠진다 — 그 점포뿐이면 아무도 없다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 5, storeTypeCode: 'DIRECT', storeStatusCode: 'OPERATING' },
+          {
+            storeId: 6,
+            storeTypeCode: 'FRANCHISE',
+            storeStatusCode: 'OPERATING',
+          },
+          { storeId: 7, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.candidates(9, '2026-10');
+      expect(staffWhere().where.AND[0]).toEqual({
+        OR: [
+          { storeId: { in: [5] } },
+          {
+            storeId: { in: [6] },
+            account: HQ_SHARING_CONSENTED.account,
+          },
+        ],
+      });
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 7, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.candidates(9, '2026-10');
+      expect(
+        (
+          prisma.staffMember.findMany.mock.calls.at(-1) as [
+            { where: { AND: unknown[] } },
+          ]
+        )[0].where.AND[0],
+      ).toEqual({ OR: [] });
+    });
+
     it('가맹 역할은 관리 범위 전체를 가리지 않는다', async () => {
       scope.getManageableStores.mockResolvedValue({
         roleTypeCode: 'FM',
