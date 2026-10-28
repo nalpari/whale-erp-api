@@ -714,6 +714,17 @@ async function correctedJoinedRecordOf(
  * 레코드(target)는 남은 효력 계약이 없으면 그 계약 값으로, 다른 레코드는 남은 효력 계약이 있을 때만 맞춘다. 직원 행은
  * lockStaffForReplace 가 같은 점포 · 번호로 잠가 두었다.
  */
+/** 바로잡기로 닫은 체결 완료를 레코드마다 묶는다 — 잠금 순서대로(id 오름차순) */
+function closedByRecord(replaced: InProgressContract[]): [number, number[]][] {
+  const closed = replaced.filter((r) => r.status === 'SIGNED');
+  return [...new Set(closed.map((r) => r.staffMemberId))]
+    .sort((a, b) => a - b)
+    .map((id) => [
+      id,
+      closed.filter((r) => r.staffMemberId === id).map((r) => r.contractId),
+    ]);
+}
+
 async function resyncClosedRecords(
   db: Prisma.TransactionClient,
   replaced: InProgressContract[],
@@ -721,11 +732,7 @@ async function resyncClosedRecords(
   dto: CreateContractDto,
   now: Date,
 ): Promise<void> {
-  const closed = replaced.filter((r) => r.status === 'SIGNED');
-  const records = [...new Set(closed.map((r) => r.staffMemberId))].sort(
-    (a, b) => a - b,
-  );
-  for (const staffMemberId of records)
+  for (const [staffMemberId] of closedByRecord(replaced))
     await resyncAfterCorrection(
       db,
       staffMemberId,
@@ -738,19 +745,10 @@ async function resyncClosedRecords(
 async function refixClosedHiredDates(
   db: Prisma.TransactionClient,
   replaced: InProgressContract[],
+  target: number,
 ): Promise<void> {
-  const closed = replaced.filter((r) => r.status === 'SIGNED');
-  const records = [...new Set(closed.map((r) => r.staffMemberId))].sort(
-    (a, b) => a - b,
-  );
-  for (const staffMemberId of records)
-    await refixHiredDate(
-      db,
-      staffMemberId,
-      closed
-        .filter((r) => r.staffMemberId === staffMemberId)
-        .map((r) => r.contractId),
-    );
+  for (const [staffMemberId, closed] of closedByRecord(replaced))
+    await refixHiredDate(db, staffMemberId, closed, staffMemberId === target);
 }
 
 const correctedTooMany = () =>
@@ -1342,13 +1340,13 @@ export class ContractsService {
           await fillHiredDate(tx, staffMemberId, fields.startDate);
           await applyStartedTerms(tx, contractId, now);
         }
-        // 바로잡기로 닫은 계약에서 온 입사일 — 다시 올린 계약을 넣은 뒤에 맞춘다(api #157 재리뷰 7)
-        await refixClosedHiredDates(tx, replaced);
         await dropOrphanRecords(
           tx,
           replaced.map((r) => r.staffMemberId),
           staffMemberId,
         );
+        // 바로잡기로 닫은 계약에서 온 입사일 — 다시 올린 계약을 넣고 빈 레코드를 지운 뒤에 맞춘다(api #157 재리뷰 7, PUT 과 같은 순서)
+        await refixClosedHiredDates(tx, replaced, staffMemberId);
         const pending = await deliver(contractId, staffMemberId, {
           joinStatus,
           candidateAccountId,
@@ -1381,7 +1379,6 @@ export class ContractsService {
       await saveDocuments(created.contracts[0].contractId);
       if (status === 'SIGNED')
         await fillHiredDate(tx, created.staffMemberId, fields.startDate);
-      await refixClosedHiredDates(tx, replaced);
       // 이름이 달라 새 레코드를 만들었어도, 대체로 계약을 잃은 옛 가입 전 레코드는 지운다 — 남기면 직원 목록에
       // 「재직 · 계약 없음」 레코드가 보인다.
       await dropOrphanRecords(
@@ -1389,6 +1386,7 @@ export class ContractsService {
         replaced.map((r) => r.staffMemberId),
         created.staffMemberId,
       );
+      await refixClosedHiredDates(tx, replaced, created.staffMemberId);
       const contractId = created.contracts[0].contractId;
       const pending = await deliver(contractId, created.staffMemberId, {
         joinStatus: 'DRAFT',
@@ -1907,7 +1905,7 @@ export class ContractsService {
         await fillHiredDate(tx, current.staffMemberId, fields.startDate);
         await applyStartedTerms(tx, contractId, now);
       }
-      await refixClosedHiredDates(tx, replaced);
+      await refixClosedHiredDates(tx, replaced, current.staffMemberId);
 
       // 가입한 직원 레코드는 이름 · 번호가 계정 값이라 덮어쓰지 않는다 — 계약 쪽(당사자) 값만 고친다(근로자 정보 수정과
       // 같은 규칙). 직무 · 고용 형태는 체결을 거친 계약이 없는 레코드에만 쓴다 — 있으면 계약이 시작할 때 옮긴다
