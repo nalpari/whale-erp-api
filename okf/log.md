@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [My profile](/api/my-profile.md) — 직원 앱 PR #45 머지 블로커: `POST /me/location-consent` 가 본문 `termsVersion`(화면이 보여 준 약관 버전)을 받아 시행 중인 버전과 다르면 409(동의를 남기지 않음). 빼면 지금처럼 시행 중인 버전으로 받는다. 단위 · e2e 테스트(WHALEERP-628).
 * **Update**: [Attendance](/api/attendance.md) · [Public 약관 API](/api/terms-versions.md) — api #185 머지 블로커: LOCATION v1.1 마이그레이션은 직원 앱 #45 를 머지 · 배포한 뒤에 #185 를 머지하고 올린다(먼저 올리면 예전 문구로 받은 동의가 v1.1 로 기록된다, `migrate deploy` 가 대기 중인 것을 모두 올리므로 머지 순서로 막는다).
 * **Update**: [Public 약관 API](/api/terms-versions.md) · [Attendance](/api/attendance.md) — 위치정보 약관 `LOCATION` v1.1(시행 2026-10-28) 을 새 버전 행으로 쌓고 v1.0 을 내렸다. 탭 진입 때 읽기 · 지도 표시 · 카카오에 대략적인 위치 전달을 본문에 더했고(ATT-05 · ATT-22 v229, 재영), v1.0 동의자는 다음 출퇴근 등록 때 다시 동의한다(ATT-23). `POST /me/attendance/location-reads` 설명도 탭 진입 때 부른다로 고쳤다. 배포하면 v1.0 동의자는 다시 동의할 때까지 GPS 출퇴근이 막히고 관리자 대신 등록 대상이 된다(WHALEERP-628).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 셀프 code-review: 보낸 적 없는 계약에 `expectedSentAt` 이 오면 「먼저 다시 보냄」이 아니라 상태 충돌 409, `hasOverlappingSigned` 는 볼 계약 조건(`SIGNED_NOW` · `SIGNED_ONCE`)을 받는다(불 값 인자 대신). gyarados(#157 입사일) 병합.

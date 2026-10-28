@@ -161,6 +161,39 @@ describe('MyConsentService', () => {
       expect(tx.locationConsentHistory.create).not.toHaveBeenCalled();
     });
 
+    it('화면이 보여 준 약관 버전이 시행 중인 것과 같으면 받는다 (WHALEERP-628)', async () => {
+      const service = await build();
+      await service.agreeLocation(12, 'v1.0');
+      expect(tx.locationConsent.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('화면이 보여 준 약관 버전이 그사이 바뀌었으면 409 이고 동의를 남기지 않는다 (WHALEERP-628)', async () => {
+      const service = await build();
+      tx.termsVersion.findFirst.mockResolvedValue({ version: 'v1.1' });
+      await expect(service.agreeLocation(12, 'v1.0')).rejects.toThrow(
+        new ConflictException(
+          '그사이 위치정보 약관이 바뀌었습니다. 바뀐 약관을 확인하고 다시 동의해 주세요',
+        ),
+      );
+      expect(tx.locationConsent.create).not.toHaveBeenCalled();
+      expect(tx.locationConsent.update).not.toHaveBeenCalled();
+      expect(tx.locationConsentHistory.create).not.toHaveBeenCalled();
+    });
+
+    it('화면이 보여 준 버전이 null 이면 빼고 보낸 것과 같다 — 시행 중인 버전으로 받는다', async () => {
+      const service = await build();
+      await service.agreeLocation(12, null);
+      expect(tx.locationConsent.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('시행 중인 약관이 없으면 화면이 버전을 보냈어도 500 이 먼저다 — 운영 장애를 「약관 바뀜」으로 가리지 않는다', async () => {
+      const service = await build();
+      tx.termsVersion.findFirst.mockResolvedValue(null);
+      await expect(service.agreeLocation(12, 'v1.0')).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      );
+    });
+
     it('시행 중인 위치정보 약관이 없으면 500 과 안내 문구 — 버전 없는 동의를 남기지 않는다', async () => {
       const service = await build();
       tx.termsVersion.findFirst.mockResolvedValue(null);

@@ -20,8 +20,27 @@ describe('MyConsentController', () => {
     expect(Reflect.getMetadata(PATH_METADATA, MyConsentController)).toBe('me');
   });
 
+  it('agreeLocation 은 POST /me/location-consent 이고 토큰의 계정 · 화면이 보여 준 약관 버전으로 부른다', async () => {
+    const fn = jest.fn().mockResolvedValue(undefined);
+    const controller = new MyConsentController({
+      agreeLocation: fn,
+    } as unknown as MyConsentService);
+    expect(
+      Reflect.getMetadata(
+        PATH_METADATA,
+        Object.getOwnPropertyDescriptor(
+          MyConsentController.prototype,
+          'agreeLocation',
+        )?.value as object,
+      ),
+    ).toBe('location-consent');
+    await controller.agreeLocation(me, { termsVersion: 'v1.1' });
+    expect(fn).toHaveBeenCalledWith(12, 'v1.1');
+    await controller.agreeLocation(me, {});
+    expect(fn).toHaveBeenLastCalledWith(12, undefined);
+  });
+
   it.each([
-    ['agreeLocation', 'location-consent'],
     ['pauseLocation', 'location-consent/pause'],
     ['resumeLocation', 'location-consent/resume'],
     ['withdrawLocation', 'location-consent/withdraw'],

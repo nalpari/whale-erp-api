@@ -15371,6 +15371,16 @@
       "post": {
         "operationId": "MyConsentController_agreeLocation",
         "parameters": [],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgreeLocationConsentDto"
+              }
+            }
+          }
+        },
         "responses": {
           "204": {
             "description": "동의함"
@@ -15382,7 +15392,7 @@
             "description": "관리자 토큰"
           },
           "409": {
-            "description": "지금 동의 상태에서 할 수 없는 동작"
+            "description": "이미 같은 버전에 동의함 · 화면이 보여 준 약관 버전(termsVersion)이 시행 중인 것과 다름(그사이 바뀜 — 화면은 다시 받는다)"
           },
           "500": {
             "description": "시행 중인 위치정보 약관이 없음(운영자가 모두 끄거나 지움) — 「지금은 위치정보 동의를 받을 수 없습니다 …」"
@@ -15393,7 +15403,7 @@
             "bearer": []
           }
         ],
-        "summary": "위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23)",
+        "summary": "위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23). 본문의\n`termsVersion`(화면이 보여 준 버전)이 그와 다르면 409 — 화면은 다시 받아 새 약관을 보인다",
         "tags": [
           "MyConsent"
         ]
@@ -31759,6 +31769,17 @@
             "type": "string",
             "description": "지금 비밀번호 — 이미 낸 신고 정보를 고칠 때 필수다. 없거나 틀리면 400 `CURRENT_PASSWORD_MISMATCH`(토큰만 손에 넣은\n사람이 급여 계좌를 바꾸지 못하게, WHALEERP-333 · 334 후속 2026-10-23). 처음 작성할 때는 보내지 않는다 — 보내도 서버가 비교하지\n않지만 형식은 본다(빈 문자열 · 128자 초과는 처음 작성에도 400). 형식 · 상한은 이메일 변경 핀 요청(WHALEERP-607)과 같다",
             "maxLength": 128
+          }
+        }
+      },
+      "AgreeLocationConsentDto": {
+        "type": "object",
+        "properties": {
+          "termsVersion": {
+            "type": "string",
+            "nullable": true,
+            "description": "동의 시트에 보여 준 위치정보 약관 버전 — 예: v1.1",
+            "maxLength": 64
           }
         }
       },

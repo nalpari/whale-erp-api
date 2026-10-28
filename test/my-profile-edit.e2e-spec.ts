@@ -335,6 +335,39 @@ describe('내 정보 편집 (e2e, DB)', () => {
   });
 
   describe('위치정보 동의 (ATT-23 · ATT-26)', () => {
+    it('본문의 약관 버전(화면이 보여 준 것)이 시행 중인 것과 다르면 409 이고 동의를 남기지 않는다 (WHALEERP-628)', async () => {
+      const id = await account(
+        '위치버전',
+        'JOINED',
+        await hashPassword(PASSWORD),
+      );
+      const { token } = await login(id);
+      const res = await send('post', '/me/location-consent', token, {
+        termsVersion: 'v1.0',
+      }).expect(409);
+      expect((res.body as { message: string }).message).toContain(
+        '그사이 위치정보 약관이 바뀌었습니다',
+      );
+      expect(
+        await prisma.locationConsent.count({ where: { accountId: id } }),
+      ).toBe(0);
+      await send('post', '/me/location-consent', token, {
+        termsVersion: 'v1.1',
+      }).expect(204);
+      expect((await profile(token)).locationConsent).toMatchObject({
+        state: 'AGREED',
+        consentVersion: 'v1.1',
+      });
+      for (const termsVersion of [7, ''])
+        // 이미 동의한 뒤라도 본문 검증(400)이 먼저다
+        await send('post', '/me/location-consent', token, {
+          termsVersion,
+        }).expect(400);
+      await send('post', '/me/location-consent', token, {
+        version: 'v1.1', // 모르는 칸(forbidNonWhitelisted)
+      }).expect(400);
+    });
+
     it('동의 → 잠시 멈춤 → 다시 켜기 → 철회 → 다시 동의, 상태가 맞지 않으면 409', async () => {
       const id = await account('위치', 'JOINED', await hashPassword(PASSWORD));
       const { token } = await login(id);
