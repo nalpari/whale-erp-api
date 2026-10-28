@@ -1119,9 +1119,9 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         });
         expect(await record()).toEqual({ jobTitle: '점장' });
 
-        // 바로 쓴 계약서(아직 시작 전, 매니저)로 바로잡는다
+        // 바로 쓴 계약서(아직 시작 전, 매니저)로 바로잡는다 — 날짜가 지나도 시작 전이게 먼 앞날
         await paper(phone, {
-          startDate: '2026-12-01',
+          startDate: '2099-12-01',
           jobTitle: '매니저',
           correctSignedContracts: true,
           replaceContractIds: [wrong.contractId],
@@ -1129,6 +1129,70 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         expect((await stateOf(wrong.contractId)).status).toBe('ENDED');
         // 닫힌 W 의 점장이 남지 않고 지금 효력인 C1 의 바리스타 — 매니저는 시작일에 옮긴다
         expect(await record()).toEqual({ jobTitle: '바리스타' });
+      });
+
+      it('재입사한 가입 직원의 잘못 올린 재계약도 POST 바로잡기로 그 레코드에 다시 올린다(api #157 재리뷰 5 참고 4)', async () => {
+        // 퇴직한 옛 레코드의 C1(종료일 없음 — 아직 체결 완료)
+        const {
+          phone,
+          contractId: c1,
+          staffMemberId: retired,
+        } = await signedContract();
+        await prisma.contract.update({
+          where: { contractId: c1 },
+          data: { endDate: null },
+        });
+        await prisma.staffMember.update({
+          where: { staffMemberId: retired },
+          data: { employmentStatus: 'RETIRED', retiredDate: day(-1) },
+        });
+        // 재입사 레코드(가입함)의 재입사 재계약 W — C1 을 잇는다, 내용이 틀렸다
+        const reentry = await contracts.create(
+          { ...dto(phone), isTemporarySave: true },
+          adminId,
+        );
+        const { accountId } = await prisma.account.create({
+          data: {
+            email: `reentry-${n}-${phone}@test.invalid`,
+            passwordHash: '!',
+            realName: '남도현',
+            birthDate: new Date('1998-07-12'),
+            phone,
+            gender: 'MALE',
+            status: 'JOINED',
+          },
+          select: { accountId: true },
+        });
+        await prisma.staffMember.update({
+          where: { staffMemberId: reentry.staffMemberId },
+          data: { joinStatus: 'JOINED', accountId },
+        });
+        await prisma.contract.update({
+          where: { contractId: reentry.contractId },
+          data: {
+            status: 'SIGNED',
+            contractMethod: 'PAPER',
+            startDate: utc('2026-10-01'),
+            previousContractId: c1,
+          },
+        });
+
+        const fixed = await paper(phone, {
+          startDate: '2026-10-01',
+          correctSignedContracts: true,
+          replaceContractIds: [reentry.contractId],
+        });
+        expect(fixed).toMatchObject({
+          staffMemberId: reentry.staffMemberId,
+          status: 'SIGNED',
+        });
+        expect((await stateOf(reentry.contractId)).status).toBe('ENDED');
+        expect((await stateOf(c1)).status).toBe('SIGNED');
+        const saved = await prisma.contract.findUniqueOrThrow({
+          where: { contractId: fixed.contractId },
+          select: { previousContractId: true },
+        });
+        expect(saved.previousContractId).toBe(c1);
       });
 
       it('이어 쓰기 바로잡기는 대체되는 재계약이 다른 레코드의 것이면 409 — 재입사 재계약이어도(api #157 재리뷰 4 참고 3)', async () => {

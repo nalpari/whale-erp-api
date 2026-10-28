@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-27
+* **Update**: [Contracts API](/api/contracts-api.md) — api #157 재리뷰 5 반영 뒤 셀프 code-review: `correctionTargets` 가 이어받는 직전 계약을 받아 남길 계약을 정한 뒤 뺀다(재계약 겹침 409 `checkSignedOverlap` 도 — 조기 재계약 C2 의 재계약이 C1 때문에 막히던 것), 가입 레코드 찾기는 대체될 계약으로만(재입사 재계약이 퇴직 레코드의 C1 까지 세어 찾지 못하던 것), POST 다시 맞추기는 다시 쓰는 레코드가 정해진 뒤에, 다시 맞출 때 한 계약의 값만(빈 직무도), 재입사 가입 직원 바로잡기 e2e · 시작 전 날짜를 먼 앞날로.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #157 재리뷰 5 반영: POST 바로잡기가 이어받는 직전 계약을 먼저 빼고 대체 대상을 정해, C2 가 C1 기간 안에서 시작한 줄에서 C1 까지 닫던 것을 고침(전체 후보로 정한 뒤 뺀다), 바로잡기로 체결 완료를 닫은 레코드를 모두 다시 맞춤(`resyncClosedRecords`), 재입사 재계약의 가입 직원도 POST 바로잡기로 같은 레코드에, `replacedRenewals` · `correctionTargets` 단위 테스트와 효력 계약으로 되돌리는 · PUT 다른 레코드 409 e2e. main 병합.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #157 재리뷰 4 반영 뒤 셀프 code-review: 바로잡기로 레코드의 체결 완료를 닫으면 효력인 계약이 남지 않을 때 다시 올리는 계약 값으로 맞추고, 닫힌 계약에서 온 입사일은 비우고 다시 채움(`resyncAfterCorrection` · `refillHiredDate` except), 바로잡기 POST 의 같은 후보 조회를 한 번으로, 체결 완료 재계약 판정(`signedRenewals`)을 한 곳에.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup](/api/staff-signup.md) — api #157 재리뷰 4 반영: 바로잡기는 재계약 줄의 끝만 대체하고 앞 계약은 모두 남김(`replacedRenewals` — C1 → C2 → C3 에서 C3 를 바로잡으면 다시 올린 계약이 C2 를 잇는다, 전에는 늘 409), 가입한 재직 직원의 잘못 올린 첫 계약도 같은 레코드로 바로잡음(`correctedJoinedRecordOf`), 바로잡기로 레코드의 체결 완료를 닫으면 직무 · 고용 형태를 지금 효력인 계약으로 다시 맞춤(`resyncStartedTerms`), PUT 바로잡기는 대체되는 재계약도 이어 쓰는 레코드의 것이어야 함, 가입 초대 확인의 고용 형태는 함께 온 계약 값. main #173 병합 · okf/log 날짜 제목 바로잡음.
