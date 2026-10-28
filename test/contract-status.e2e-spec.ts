@@ -1828,7 +1828,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         .send(adminId, contractId);
 
       expect(result.status).toBe('PENDING_SIGNATURE');
-      expect(new Date(result.signDeadlineAt).getTime()).toBeGreaterThan(
+      expect(new Date(result.signDeadlineAt!).getTime()).toBeGreaterThan(
         Date.now(),
       );
       await prisma.$transaction((tx) => signContract(tx, contractId));

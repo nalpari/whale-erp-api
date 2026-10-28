@@ -3,7 +3,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { ContractStatus, Prisma } from '@prisma/client';
+import { ContractDraftAction, ContractStatus, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
@@ -43,23 +43,34 @@ import { dateOnly } from '../common/date-only';
 import { isBirthDateCorrectable } from './birth-date-correctable';
 import { linkedRecords } from './previous-records';
 
-/**
- * 가입 초대를 다시 보낼 수 있는 가입 상태. 재발송 간격 제한은 없다(2026-10-12 재영). 가입 완료는 가입 초대가 아니라
- * 앱 알림이라 근로계약 상세에서 다시 보내고(WHALEERP-611), 초안(첫 발송은 초안 저장)은 보낸 초대가 없고, 연결 보류는
- * 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은 다시 보내지 않는다. 소속 추가 확인 · 복귀 확인은 그 번호의 계정이
- * 탈퇴해 없어졌을 때만 재발송 api 가 가입 초대로 보낸다 — 계정은 toItems 가 번호로 한 번에 찾아 본다.
- */
 /** 직원 목록에서 초대를 다시 보낼 수 있는 계약 상태 — 발송 대기 · 서명 대기(거부 · 만료는 근로계약 상세에서, WHALEERP-153) */
 const INVITE_RESENDABLE: readonly ContractStatus[] = [
   'PENDING_SEND',
   'PENDING_SIGNATURE',
 ];
+
+/**
+ * 가입 · 인증 칸에서 다시 보낼 수 있는 가입 상태. 재발송 간격 제한은 없다(2026-10-12 재영). 가입 완료는 가입 초대가 아니라
+ * 앱 알림이라 근로계약 상세에서 다시 보내고(WHALEERP-611), 연결 보류는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은
+ * 다시 보내지 않는다. 받을 길(가입 초대 · 소속 추가 확인 요청)은 재발송 api 가 다시 판별한다(WHALEERP-130). 직원이 한 번이라도
+ * 거절했으면(가입 상태 거절) 뒤에 나간 새 요청이 만료돼도 이 칸에서는 다시 보내지 않는다 — 근로계약 상세에서 관리자가 보고
+ * 보낸다(상세 canResend 는 참일 수 있다, api #164 리뷰 참고 1).
+ */
 const RESENDABLE = new Set<StaffJoinState>([
   'INVITED',
   'EXPIRED',
   'AFFILIATION_PENDING',
   'RETURN_PENDING',
 ]);
+
+/**
+ * 초대 행이 하나도 없는 가입 전 직원(가입 상태 초안)은 그 최근 계약이 소속 추가 확인 · 복귀 확인으로 판별된 것일 때만 다시
+ * 보낸다 — WHALEERP-130 전에는 이런 계약이 요청 없이 서명 대기가 됐다(재발송이 첫 요청을 보낸다, api #164 리뷰). 그 밖의 초대
+ * 없는 줄(판별값이 없는 옛 계약 등)은 노린 대상이 아니라 거짓이다.
+ */
+const isOldAffiliation = (
+  draftAction: ContractDraftAction | null | undefined,
+) => draftAction === 'AFFILIATION_CONFIRM' || draftAction === 'RETURN_CONFIRM';
 
 const STAFF_SELECT = {
   staffMemberId: true,
@@ -416,15 +427,17 @@ export class StaffMemberListService {
       manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
     );
     const staffIds = rows.map((r) => r.staffMemberId);
-    // 재발송을 물을 줄 — 가린 줄은 칸을 내지 않으니 묻지 않는다
-    const askable = (r: StaffRow) =>
+    // 재발송을 물을 줄 — 가린 줄은 칸을 내지 않으니 묻지 않는다. 가입 상태는 부르는 쪽이 한 번 구해 넘긴다
+    const askable = (
+      r: StaffRow,
+      joinState: StaffJoinState,
+      draftAction: ContractDraftAction | null | undefined,
+    ) =>
       !hidden(typeById.get(r.storeId), hqSharingConsentedOf(r)) &&
-      RESENDABLE.has(joinStateOf(r.joinStatus, r.invitations)) &&
+      (RESENDABLE.has(joinState) ||
+        (joinState === 'DRAFT' && isOldAffiliation(draftAction))) &&
       isMobilePhone(r.phone);
-    const askPhones = [
-      ...new Set(rows.filter((r) => askable(r)).map((r) => r.phone)),
-    ];
-    const [storeRows, contracts, accountRows] = await Promise.all([
+    const [storeRows, contracts] = await Promise.all([
       this.prisma.store.findMany({
         where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
         select: { storeId: true, name: true, storeTypeCode: true },
@@ -447,27 +460,16 @@ export class StaffMemberListService {
           sentAt: true,
           endDate: true,
           updatedAt: true,
+          draftAction: true,
           // 중첩 select 라 Prisma 가 한 번에 IN 으로 읽는다 — 직원 수만큼 쿼리가 늘지 않는다(WHALEERP-622)
           ...(showsWorkDays
             ? { contractWorkDays: CONTRACT_WORK_DAYS_SELECT }
             : {}),
         },
       }),
-      // 재발송 api 가 판별할 「그 번호의 계정」(decideInvitation — 탈퇴하지 않은 계정)이 있는 번호를 한 번에 찾는다.
-      // 있으면 소속 추가 확인 · 복귀 확인이라 409 다(줄마다 묻지 않는다)
-      askPhones.length
-        ? this.prisma.account.findMany({
-            where: {
-              phone: { in: askPhones },
-              status: { not: 'WITHDRAWN' },
-            },
-            select: { phone: true },
-          })
-        : Promise.resolve<{ phone: string }[]>([]),
     ]);
 
     const storeById = new Map(storeRows.map((s) => [s.storeId, s]));
-    const accountPhones = new Set(accountRows.map((a) => a.phone));
     const contractByStaff = new Map(contracts.map((c) => [c.staffMemberId, c]));
 
     return rows.map((r): StaffMemberListItemDto => {
@@ -505,6 +507,15 @@ export class StaffMemberListService {
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
       const contract = contractByStaff.get(r.staffMemberId);
       const joinState = joinStateOf(r.joinStatus, r.invitations);
+      // 재발송 버튼 — 발송 대기 · 서명 대기(INVITE_RESENDABLE — 거부 · 만료는 근로계약 상세에서, WHALEERP-153) 위에 가입 · 인증 칸 정책(askable —
+      // 가입 전 · 휴대폰 번호 · 가린 줄 아님)을 더한다. 보이는 초대를 수락했으면 다시 보내지 않는다 — 받은 링크로 다시 들어온다
+      // (2026-10-12 yjnoh). 앞 초대만 수락했고 뒤에 재초대가 나갔으면(연결 보류 → 번호 수정 후 재초대) 그 재초대가 보이는 초대라
+      // 다시 보낼 수 있다. 초대 행이 없는 옛 소속 확인 계약(서명 대기)도 참이다 — contract.canResend 로 싣는다(api #164 리뷰)
+      const canResend =
+        askable(r, joinState, contract?.draftAction) &&
+        shown?.status !== 'ACCEPTED' &&
+        !!contract?.status &&
+        INVITE_RESENDABLE.includes(contract.status);
       return {
         staffMemberId: r.staffMemberId,
         isMasked: false,
@@ -519,15 +530,7 @@ export class StaffMemberListService {
               status: shown.status,
               lastSentAt: shown.sentAt,
               expiresAt: shown.expiresAt,
-              // 초대 재발송 — 계약이 발송 대기 · 서명 대기, 가입 전, 그 번호에 계정 없음(재발송 api 의 판정). 거부 · 만료 재발송(WHALEERP-153)은
-              // 되살릴 수 있는지(퇴직 · 다른 계약)까지 봐야 해 근로계약 상세에서 한다,
-              // 휴대폰 번호. 이미 수락한 초대는 다시 보내지 않는다 — 받은 링크로 다시 들어온다(2026-10-12 yjnoh).
-              canResend:
-                askable(r) &&
-                shown.status !== 'ACCEPTED' &&
-                !accountPhones.has(r.phone) &&
-                !!contract?.status &&
-                INVITE_RESENDABLE.includes(contract.status),
+              canResend,
             }
           : null,
         linkHold: hold
@@ -546,6 +549,7 @@ export class StaffMemberListService {
               lastSentAt: contract.sentAt,
               endDate: dateOnly(contract.endDate),
               updatedAt: contract.updatedAt,
+              canResend,
               workDays: showsWorkDays
                 ? workDaysOf(contract.contractWorkDays ?? [])
                 : null,
