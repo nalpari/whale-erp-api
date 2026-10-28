@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-28
+* **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — WHALEERP-621(재영 요청, 로그인 후 홈 점포 하나 화면 직원 급여 카드). `GET /payslips/summary?storeId=&month=` 로 그 달 명세서의 건수 · 지급 합계를 전체 · 정직원 · 파트타이머로 준다. 네 상태 모두, 관리 범위 밖 점포는 0건, 본사 역할에게 가려지는 점포는 본사 제공 동의한 직원만(금액이 붙어 목록 상태 건수와 다르게 뺀다). 권한은 목록과 같은 MN000009 조회. 마이그레이션 없음. openapi 갱신.
+
 ## 2026-10-27
 * **Update**: [BP masters](/api/bp-masters.md) · [Platform admins](/api/platform-admins.md) · [BP admins](/api/bp-admins.md) · [Admin authentication](/api/admin-auth.md) — PR #163 적대적 리뷰 블로커 2건(사용자 결정). (1) `invalidateTempPasswords` 가 `used_at IS NULL` 인 임시 비밀번호만 막아, 로그인에 한 번 쓴 것이 만료 전까지 다시 로그인 · 강제 변경에 쓰였다 — 오타 주소로 받은 사람이 이메일을 바로잡거나 초기화한 뒤에도 계정을 가져갈 수 있었다. 쓴 것도 함께 막는다(이메일 변경 · 초기화 · 등록 모두 이 함수를 쓴다). (2) BP 삭제가 BP 마스터의 「로그인한 적 없음」을 계정 행을 잠그지 않고 읽어, 같은 순간의 첫 로그인을 놓치고 막 쓰기 시작한 BP 를 지울 수 있었다. `bp_codes` 다음 BP 마스터 계정 행도 `FOR UPDATE` 로 잠근 뒤 읽는다(순서 bp_codes → admin_accounts, 로그인 쪽은 bp_codes 를 건드리지 않아 교착 없음). 마이그레이션 없음.
 * **Update**: [BP masters](/api/bp-masters.md) — 검색 기준 없이 검색어만 주면 사업자등록번호 조건이 검색어에서 숫자만 남겨 찾아, `hangang01` 이 `01` 이 든 번호를 가진 BP 를 거의 다 찾던 것을 고쳤다(PR #163 리뷰). 기준이 없을 때는 검색어가 숫자 · 공백 · 하이픈만이어야 번호로 찾는다. 사업자등록번호를 기준으로 고르면 전처럼 숫자만 남긴다. 검색 기준 표를 `BpSearchType` 으로 좁혀 빠진 기준을 컴파일러가 잡게 했다.

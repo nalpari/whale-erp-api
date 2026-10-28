@@ -104,3 +104,21 @@ export class PayslipListQueryDto {
   @IsIn(PAYSLIP_PAGE_SIZES)
   pageSize?: number;
 }
+
+/**
+ * 점포 하나 · 급여 월 하나의 급여명세서 요약 (WHALEERP-621, 로그인 후 홈 점포 하나 화면 직원 급여 카드). 관리 범위 밖
+ * 점포는 목록처럼 조용히 빠져 0건이다.
+ */
+export class PayslipSummaryQueryDto {
+  /** 급여 월(YYYY-MM). 목록의 month 와 같다 — 급여 기간 시작일이 그 달인 명세서다 */
+  @ApiProperty({ example: '2026-09' })
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'month 는 YYYY-MM 입니다' })
+  month: string;
+
+  /** 점포 ID */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  storeId: number;
+}

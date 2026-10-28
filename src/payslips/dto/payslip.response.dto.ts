@@ -182,3 +182,23 @@ export class PayslipDetailResponseDto {
   /** 발송 이력, 보낸 순서 */
   dispatches: PayslipDispatchDto[];
 }
+
+/** 요약의 한 묶음 — 명세서 건수와 지급 합계(grossPayAmount 의 합) */
+export class PayslipSummaryGroupDto {
+  count: number;
+  grossPayAmount: number;
+}
+
+/**
+ * 점포 하나 · 급여 월 하나의 급여명세서 요약 (WHALEERP-621). 작성 중 · 검토 중 · 확정 · 발송 완료를 모두 센다. 본사
+ * 역할에게 가린 명세서(본사 제공 동의 없는 가맹 점포 직원, ATT-30)는 건수 · 금액 모두에서 뺀다.
+ */
+export class PayslipSummaryResponseDto {
+  @ApiProperty({ example: '2026-09' })
+  month: string;
+  total: PayslipSummaryGroupDto;
+  /** 정직원(명세서의 고용형태 FULL_TIME) */
+  fullTime: PayslipSummaryGroupDto;
+  /** 파트타이머(PART_TIME) */
+  partTime: PayslipSummaryGroupDto;
+}

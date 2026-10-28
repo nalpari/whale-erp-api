@@ -6766,6 +6766,71 @@
         ]
       }
     },
+    "/payslips/summary": {
+      "get": {
+        "operationId": "PayslipsController_summary",
+        "parameters": [
+          {
+            "name": "month",
+            "required": true,
+            "in": "query",
+            "description": "급여 월(YYYY-MM). 목록의 month 와 같다 — 급여 기간 시작일이 그 달인 명세서다",
+            "schema": {
+              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+              "example": "2026-09",
+              "type": "string"
+            }
+          },
+          {
+            "name": "storeId",
+            "required": true,
+            "in": "query",
+            "description": "점포 ID",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PayslipSummaryResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류(month · storeId 누락 포함)"
+          },
+          "403": {
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "점포 하나 · 급여 월 하나의 요약(로그인 후 홈 점포 하나 화면 직원 급여 카드, WHALEERP-621). `:id` 보다 먼저 선언해야\n한다.",
+        "tags": [
+          "Payslips"
+        ]
+      }
+    },
     "/payslips/candidates": {
       "get": {
         "operationId": "PayslipsController_candidates",
@@ -22734,6 +22799,55 @@
           "items",
           "total",
           "statusCounts"
+        ]
+      },
+      "PayslipSummaryGroupDto": {
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "number"
+          },
+          "grossPayAmount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "count",
+          "grossPayAmount"
+        ]
+      },
+      "PayslipSummaryResponseDto": {
+        "type": "object",
+        "properties": {
+          "month": {
+            "type": "string",
+            "example": "2026-09"
+          },
+          "total": {
+            "$ref": "#/components/schemas/PayslipSummaryGroupDto"
+          },
+          "fullTime": {
+            "description": "정직원(명세서의 고용형태 FULL_TIME)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayslipSummaryGroupDto"
+              }
+            ]
+          },
+          "partTime": {
+            "description": "파트타이머(PART_TIME)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PayslipSummaryGroupDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "month",
+          "total",
+          "fullTime",
+          "partTime"
         ]
       },
       "PayslipCandidateDto": {

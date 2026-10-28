@@ -12,12 +12,16 @@ import {
 import { adminNames } from '../common/admin-names';
 import { containsText } from '../common/contains-text';
 import { PrismaService } from '../prisma/prisma.service';
-import { PayslipListQueryDto } from './dto/payslip-list.query.dto';
+import {
+  PayslipListQueryDto,
+  PayslipSummaryQueryDto,
+} from './dto/payslip-list.query.dto';
 import {
   PayslipDetailResponseDto,
   PayslipListItemDto,
   PayslipListResponseDto,
   PayslipStatusCountsDto,
+  PayslipSummaryResponseDto,
 } from './dto/payslip.response.dto';
 import {
   dateOnly,
@@ -272,6 +276,53 @@ export class PayslipListService {
       };
     });
     return { items, total, statusCounts };
+  }
+
+  /**
+   * 점포 하나 · 급여 월 하나의 요약 — 고용형태별 건수 · 지급 합계(WHALEERP-621). 네 상태를 모두 센다. 관리 범위 밖 점포는
+   * 목록처럼 0건이다. 본사 역할에게 가려지는 점포면 본사 제공 동의를 한 직원 명세서만 센다 — 목록의 상태 건수와 달리
+   * 금액이 붙어, 가린 직원의 급여가 합계로 드러나지 않게(2026-10-27 재영). 관리자 계정이 없거나 사용 중이 아니면 null.
+   */
+  async summary(
+    adminAccountId: number,
+    query: PayslipSummaryQueryDto,
+  ): Promise<PayslipSummaryResponseDto | null> {
+    const manageable = await this.scope.getManageableStores(adminAccountId);
+    if (!manageable) return null;
+    const store = manageable.stores.find((s) => s.storeId === query.storeId);
+    const result: PayslipSummaryResponseDto = {
+      month: query.month,
+      total: { count: 0, grossPayAmount: 0 },
+      fullTime: { count: 0, grossPayAmount: 0 },
+      partTime: { count: 0, grossPayAmount: 0 },
+    };
+    if (!store) return result;
+
+    const grouped = await this.prisma.payslip.groupBy({
+      by: ['employmentType'],
+      where: {
+        storeId: store.storeId,
+        periodStartDate: monthRange(query.month),
+        ...(hidesPersonalData(
+          manageable.roleTypeCode,
+          store.storeTypeCode,
+          false,
+        ) && { staffMember: HQ_SHARING_CONSENTED }),
+      },
+      _count: { _all: true },
+      _sum: { grossPayAmount: true },
+    });
+    for (const g of grouped) {
+      const group = {
+        count: g._count._all,
+        grossPayAmount: g._sum.grossPayAmount ?? 0,
+      };
+      result[g.employmentType === 'FULL_TIME' ? 'fullTime' : 'partTime'] =
+        group;
+      result.total.count += group.count;
+      result.total.grossPayAmount += group.grossPayAmount;
+    }
+    return result;
   }
 
   /**
