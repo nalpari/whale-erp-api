@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:26:42Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-23T09:40:00Z
+    last_modified: 2026-10-27T07:26:42Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -54,10 +54,14 @@ sources:
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
     last_modified: 2026-10-22T00:21:08Z
+  - id: contracts-menu
+    resource: ../../src/contracts/contracts-menu.ts
+    title: 근로계약 관리 메뉴 상수(CONTRACTS_MENU) — 서비스의 권한 재확인과 직원 목록 · 상세의 workDays 판정이 같이 쓴다
+    last_modified: 2026-10-27T07:26:42Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 계약서 근무 조건 칸 · 변환 (관리자 · 직원 상세 공용)
-    last_modified: 2026-10-22T00:21:08Z
+    last_modified: 2026-10-27T07:06:44Z
   - id: my-contract-scope
     resource: ../../src/contracts/my-contract-scope.ts
     title: 직원 앱 「내 계약」 기준 (145 · 610 공용)
@@ -77,7 +81,7 @@ ANDed and always inside the admin scope below. `storeIds` · `storeTypes` are wh
 and the header store scope send (WHALEERP-326 · 133, 2026-10-22 — same shape as 점포 정보 관리 `GET /stores`).
 An empty `storeIds=` (or an empty piece such as `storeIds=3,`) is 400, like `GET /stores`, so the 관리자웹 leaves the
 parameter out for 「전체」 instead of sending it empty. Narrowing by `storeIds` · `storeTypes` never skips the ATT-30
-consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff.[^contracts-service]
+consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff. The condition is `hqVisibleWhere` in `src/admin-scope/hq-visible.ts`, shared with 로그인 후 홈 so both screens count the same contracts.[^contracts-service]
 
 It also returns `statusCounts` — contracts per status (all eight, zeros included; WHALEERP-133, 2026-10-23): the same
 conditions as the list with only the `status` filter dropped, so the store · store name · staff name filters apply and
@@ -239,10 +243,14 @@ duplicate check like any other in-progress contract, `CONTRACT_IN_PROGRESS` with
   (`contracts.job_title`, migration `20261027153411_team3_contract_job_title` — existing rows filled from the record)
   and 고용 형태 (`employment_type`); the 직원 레코드 holds the current ones. Saving a 재계약 (임시저장 · 발송, `POST` or
   `PUT`) does not touch them on the record (a 가입 전 record still gets name and phone) — before, the 직원 목록 · 상세
-  switched to the next contract's values at once and kept them after a 거부 · 만료. When a contract becomes 체결 완료
+  switched to the next contract's values at once and kept them after a 거부 · 만료. Saving any other contract writes
+them only to a record with no contract that went through 체결 (`recordTermsFree` — otherwise the daily batch would put
+the effective contract's values back every night; api #157 code-review). When a contract becomes 체결 완료
   (날인 · 종이 계약 등록) and has already started, `applyStartedTerms` copies them to the record — unless a 체결 완료
   that started later is already in force (an old 종이 계약 uploaded late does not overwrite current terms). The daily
-  batch keeps the record on the latest started 체결 완료 of that record (any contract, not only 재계약), so a 재계약
+  batch keeps the record on the latest started contract of that record that went through 체결 (`SIGNED`, or `ENDED` by
+  the batch — any contract, not only 재계약; a tie on 시작일 goes to the larger id, the same rule as
+  `applyStartedTerms`), so a 재계약
   signed ahead of its 시작일 is copied on that day. The detail and the 직원 앱 contract show the contract's own 직무 ·
   고용 형태 (the record's only for old rows with an empty column).
 - The 직원 목록 · 상세 「latest contract」 skips an extension 재계약 (previous contract on a 재직 record with no 퇴직일)
@@ -418,11 +426,28 @@ suggested one; 2026-10-26 김민식 declined it) — the `ADMIN` 체결 완료 �
 right after it tell what happened. **A wrongly uploaded 재계약 is corrected the same way** (2026-10-27 김민식, api #157
 review): the 재계약 being replaced is closed, but its previous contract is left out of the list (`correctionTargets` — a
 재계약 starts inside its previous contract's term, so it always overlaps it) and the contract uploaded again takes over
-that previous contract (`correctedRenewalOf` — the batch closes it on the new 시작일). This works for a 가입 완료 재직 직원
-too: re-uploading the same 계약서 without `previousContractId` is treated as a re-upload (409 `SIGNED_CONTRACT_OVERLAP`,
-checked before the 「재직 중」 409), so 바로잡기 can be offered. Two replaced 재계약 continuing different contracts are
-409. Continuing a 임시저장 as 바로잡기 (`PUT`) checks the inherited previous contract like `POST`: same 직원 레코드
-(409 otherwise), 시작일 after the previous contract's, no later 체결 (api #157 code-review). `previousContractId` itself
+that previous contract (`correctedRenewalOf` — the batch closes it on the new 시작일). In a chain C1 → C2 → C3 only the
+end of the chain is replaced (`replacedRenewals` — a 재계약 that another overlapping 재계약 continues is the one in force),
+every earlier contract of the chain stays — the list is decided on the whole candidate set before the inherited previous
+contract is taken out, so a C2 that started inside C1's term still keeps C1 (api #157 re-review 5); the same rule
+makes the 종이 재계약 overlap 409 ignore those earlier contracts of the chain — a 재계약 of an early C2 is not blocked
+by C1 — and the contract
+uploaded again continues C2 (api #157 re-review 3 · 4). This
+works for a 가입 완료 재직 직원 too: re-uploading the same 계약서 without `previousContractId` is treated as a re-upload
+(409 `SIGNED_CONTRACT_OVERLAP`, checked before the 「재직 중」 409), so 바로잡기 can be offered; a 바로잡기 that is not a
+재계약 (their first contract) goes onto the same 가입 record when every replaced 체결 완료 is that record's
+(`correctedJoinedRecordOf` — before, it stopped at the 「재직 중」 409; also for a 재입사 재계약 whose previous record is
+retired). When 바로잡기 closes a 체결 완료, every record that
+had one is resynced (`resyncClosedRecords`; another record only when a contract in force remains): the 직무 · 고용 형태 go back to the contract in force — or, when none is left, to the contract being
+uploaded (`resyncAfterCorrection`, the batch's rule) — so the closed contract's values do not stay until the next batch,
+and a 입사일 that came from a closed contract is set, after the uploaded contract is registered, to the **earliest 시작일**
+among the record's remaining contracts that went through 체결 (`SIGNED_ONCE` — contracts closed by an earlier 바로잡기 do
+not count) and the uploaded one (`refixHiredDate`, api #157 re-review 7) — so pay calculation does not drop the days
+before a wrong 시작일. A record with nothing left to take it from (a retired old record) keeps its 입사일. Two replaced 재계약 continuing different contracts are
+409. Continuing a 임시저장 as 바로잡기 (`PUT`) checks the inherited previous contract like `POST`, after the permission checks: same 직원 레코드 for an 연장
+(409 otherwise; a 재입사 재계약 whose previous record is retired is allowed; either way the replaced 재계약 must be on the
+record being continued), 시작일 after the previous contract's, no
+later 체결 (api #157 code-review). `previousContractId` itself
 still cannot be sent with 바로잡기 (400), nor on a `PUT` of a 재계약 임시저장, and 바로잡기
 outside a 종이 계약 등록 is 400. 전자계약 saves do not
 count 체결 완료 (a 재계약 is a new contract beside it).
@@ -548,11 +573,12 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   Both null for a 종이 임시저장 not registered yet, or one ended (대체 · 퇴직) before it was. Only an old 체결 완료 ·
   종료 contract with no history rows at all falls back to `created_at`.
   A 임시저장 continued by another admin still shows the creator — history rows do not record which admin.
-- `canResend` — whether policy allows `POST …/send`: 발송 대기 or 서명 대기. A 가입 완료 직원 gets the app notice, a 가입 전
-  직원 the 가입 초대, or the 소속 추가 확인 요청 when the number has an account (WHALEERP-130 — it stays 발송 대기
-  until the 직원 accepts). Computed by `canResendContract` (`contract-status.ts`), which the staff
-  list's `contract.canResend` also uses, adding its 가입·인증 column policy for a 가입 전 직원 (a joined 직원 is false
-  there, true here — the app notice).
+- `canResend` — whether policy allows `POST …/send`: 발송 대기 · 서명 대기, or 거부 · 만료 that can be reopened
+  (`reopenBlockOf` · 근무 시간 겹침, WHALEERP-153). A 가입 완료 직원 gets the app notice, a 가입 전 직원 the 가입 초대,
+  or the 소속 추가 확인 요청 when the number has an account (WHALEERP-130 — it stays 발송 대기 until the 직원 accepts).
+  The staff list's `contract.canResend` covers only 발송 대기 · 서명 대기 (`INVITE_RESENDABLE` — 거부 · 만료 is resent
+  from the 상세) and adds its 가입·인증 column policy for a 가입 전 직원 (a joined 직원 is false there, true here — the
+  app notice).
   Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503) or the account being 재직 at this
   store already (409) still fail when sent.
 
@@ -598,6 +624,30 @@ WHALEERP-136. **Saving sends** (2026-10-19 재영 정정 — the admin no longer
 초안 저장 (`POST` · `PUT` from 임시저장), a 수정 요청 fixed with `PUT`, and every
 `PATCH /worker` send the contract in the same request. `POST /contracts/:contractId/send` is
 only the 재발송. All of them go through `ContractDeliveryService`.[^contract-delivery]
+
+**거부 · 만료 재발송** (WHALEERP-153, 운영 정책 CTR-10 · 2026-10-26 재영): `POST …/send` also takes a 거부 or 만료
+contract and sends **the same terms** again — no interval limit. It goes back to the status a send gives (앱 직원 →
+서명 대기, 가입 초대 · 소속 추가 확인 요청 → 발송 대기 — a number with an account gets a new 소속 추가 확인 요청,
+WHALEERP-130) with a history row from 거부 · 만료, a new 30-day deadline and `resend_count + 1`; the
+거부 사유 stays on the row. Before reopening it is refused (409) when the store is closed or deleted (a store whose
+only contracts are 거부 · 만료 can be closed), when the 직원 is 퇴직 or has any 퇴직일 set — past or future, the same
+rule as sending a 재계약 임시저장 (CTR-25 — write a new contract when they come back; api #158 review), when another contract is in progress at the same store and phone (two
+would come alive), when its 계약 기간 has already ended (it would end the day it is signed — write a new contract; api #158 code-review),
+when another contract that went through 체결 (`SIGNED_ONCE` — also one the batch closed, the same basis as 입사일 · 직무 ·
+the batch; api #158 re-review) — other than the earlier contracts of its own 재계약 chain (its previous contract and those
+before it, as the 종이 재계약 overlap 409 ignores them) — overlaps its period or starts after it
+(`hasOverlappingSigned` with an open end — one that ended before it does not block; a contract without 시작일 is
+blocked by any other 체결 완료 — its period is unknown; api #158 review · code-review) — old terms must not
+be signed next to or ahead of a newer contract; a 재계약 does that — or, for a 재계약, when the same previous contract already has
+another live 재계약 (WHALEERP-156). These are 409 `REOPEN_BLOCKED` with the reason as `message` (a code so the screen shows the reason instead of reloading as stale), the 재발송 reads the store `FOR SHARE` so a 폐점 cannot slip in between (the detail reads it without a lock — it is outside a transaction), and the 근무 시간 겹침 is 409 `WORK_TIME_OVERLAP`. The body may carry `expectedStatus` and `expectedSentAt` (`SendContractDto`, the status and last 발송 시각 the screen
+showed): when either differs from the contract the 재발송 is 409 `CONTRACT_STATUS_CONFLICT` — a 서명 대기 screen left
+open must not revive a contract the 직원 has just rejected (status), and two tabs must not each resend the same 발송 대기 ·
+서명 대기 contract, whose status stays the same (발송 시각, changed by every 재발송; front #136 re-review). Both are
+optional — an older screen without them is sent as before (the 직원 목록 sends only the status). One function decides it (`reopenBlockOf`, `contract-reopen.ts`) and the detail's `canResend` also runs the 근무 시간 check (`reopenWorkTimeFree` — only `WORK_TIME_OVERLAP` turns it false, other errors propagate); the detail's
+`canResend` is false in those cases too. The 직원 목록's invitation `canResend` stays 발송 대기 · 서명 대기 only — a
+거부 · 만료 재발송 is done from the contract detail.
+It also runs the cross-store 근무 시간 겹침 check with the contract's own 근무 요일 · 기간 (`checkReopenWorkTime`, 409 `WORK_TIME_OVERLAP` — a 거부 · 만료 contract is not counted by that check, so another store may have taken the hours meanwhile; api #158 review). If the 가입 초대 then fails to go out, it rolls back to 거부 · 만료, not to 임시저장 (`restoredStatusOf`). 종료 is never
+resent — a new contract instead.
 
 - **How the 직원 receives it** (`channelOf`): not 가입 완료 and no account for the number
   (`draft_action = SIGNUP_INVITE`) → a **가입 초대** 알림톡 `TALK_STAFF_INVITATION` (근무지 · 초대코드 · 링크)
@@ -679,7 +729,7 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
   - Other statuses are 409 `CONTRACT_STATUS_CONFLICT`. Locks stay 번호 (`lockPeople`) → 직원 행 →
     계약 행 (`lockContractWithStaff`).
   - 직원 목록 `contract.canResend` (and the deprecated `invitation.canResend`) mirrors this for a 가입 전 직원 — see
-    [Staff members](/api/staff-members.md). `canResendContract` (`contract-status.ts`) is shared with the 상세.
+    [Staff members](/api/staff-members.md) (발송 대기 · 서명 대기 only).
 - The 알림톡 has **no button yet** — the common module does not send `at.button` and the
   Kakao button name of `WHALE_INVITE_01` is not recorded. The 초대 링크 reaches the 직원 only
   through the SMS fallback (`BIZPPURIO_SMS_FROM`). The new body also waits for Kakao to re-approve
@@ -696,9 +746,8 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
   `BIZPPURIO_*`** (2026-10-16 김민식 결정: required). e2e (`test/e2e-env.ts`) and
   `openapi:export` fill format-only values when they are empty.
 - 발송 대기 does **not** expire: an unanswered 가입 초대 past its 30 days only has its invitation made `EXPIRED` by the
-  daily batch, and the contract stays 발송 대기 so 직원 목록 「초대 만료 → 재발송」 still works. A 만료 contract has no
-  way back until 재발송 (WHALEERP-153) is decided (api #150 review — see
-  [Employment contract batch](/api/employment-contract-batch.md)).
+  daily batch, and the contract stays 발송 대기 so 직원 목록 「초대 만료 → 재발송」 still works (api #150 review — see
+  [Employment contract batch](/api/employment-contract-batch.md)). A 만료 서명 대기 can be resent too (WHALEERP-153).
 
 # Telling the 사업자 관리자: 날인 · 거부 · 만료 · 갱신 예정
 
@@ -780,7 +829,8 @@ transaction.[^contract-status]
 | 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (계정 없는 번호로 고침) · 만료 · 종료 |
 | 수정 요청 `CORRECTION_REQUESTED` | 서명 대기 (관리자가 고침) · 발송 대기 (계정 없는 번호로 고침) · 종료 (대체 · 퇴직) — never 만료: the deadline does not run |
 | 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약으로 이어지는 계약의 시작일 — 하루 배치, 대체 · 퇴직) |
-| 거부 · 만료 · 종료 | — (재발송 WHALEERP-153 is not decided yet) |
+| 거부 `REJECTED` · 만료 `EXPIRED` | 서명 대기 · 발송 대기 (재발송 `POST …/send`, WHALEERP-153 — 같은 조건, 새 기한) |
+| 종료 `ENDED` | — (다시 보내지 않는다 — 새 계약) |
 
 A contract's first status (임시저장, 발송 대기 · 서명 대기 when saved, or 체결 완료 for a 종이 계약)
 is set when it is created, and deleting a 임시저장 removes rows — neither is a

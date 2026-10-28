@@ -121,7 +121,7 @@ export class AttendanceScheduleDto {
   breakMinutes: number;
 }
 
-/** 직원(레코드) · 날 한 줄. 본사 계정에게 가려지는 가맹 직원(ATT-30)은 줄이 없고 상태별 건수(`counts`)에만 센다 */
+/** 직원(레코드) · 날 한 줄. 본사 계정에게 가려지는 가맹 직원(ATT-30)은 줄도 상태별 건수(`counts`)도 빠진다(운영 정책 v218, 2026-10-27) */
 export class AttendanceDayItemDto {
   /** 날 YYYY-MM-DD(한국) */
   date: string;
@@ -153,7 +153,7 @@ export class DailyAttendanceResponseDto {
   date: string;
   /** 점포 · 이름순 */
   items: AttendanceDayItemDto[];
-  /** 상태별 인원 — 가린 직원도 센다(ATT-30 「점포별 숫자에는 센다」) */
+  /** 상태별 인원 — 본사에게 가려지는 직원은 세지 않는다(ATT-30, 운영 정책 v218 2026-10-27 — 로그인 후 홈 · 근태 요약과 같은 기준) */
   counts: Record<AttendanceDayStatus, number>;
 }
 
@@ -179,7 +179,7 @@ export class PeriodAttendanceResponseDto {
   to: string;
   /** 근무스케줄이나 기록이 있는 직원 · 날만(휴무는 없음). 날짜 내림차순, 같은 날은 점포 · 이름순 */
   items: AttendancePeriodItemDto[];
-  /** 직원 · 날 상태별 건수 — 본사에게 가려지는 직원도 센다(ATT-30) */
+  /** 직원 · 날 상태별 건수 — 본사에게 가려지는 직원은 세지 않는다(ATT-30, 운영 정책 v218 2026-10-27 — 로그인 후 홈 · 근태 요약과 같은 기준) */
   counts: Record<AttendanceDayStatus, number>;
   /**
    * 근태 요약의 직원별 한 주 값 — 기간이 월요일 ~ 일요일 한 주일 때만(아니면 없음). 급여 계산(WHALEERP-227)과 같은 규칙이다.

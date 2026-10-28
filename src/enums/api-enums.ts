@@ -3,6 +3,7 @@ import { ANSWER_STATUS_LABELS } from '../common/answer-status';
 import { ROLE_GROUP_LOCK_REASON_LABELS } from '../platform-role-groups/platform-role-group-format';
 import { MENU_BLOCK_REASON_LABELS } from '../platform-role-groups/role-menu-rules';
 import { LOCATION_CONSENT_STATE_LABELS } from '../my-profile/location-consent-state';
+import { PERIOD_STATE_LABELS } from '../bp-holidays/store-periods';
 import { ATTENDANCE_DAY_STATUS_LABELS } from '../attendance/attendance-day-status';
 import { STAFF_JOIN_STATE_LABELS } from '../staff-members/join-state';
 import { HQ_SHARING_CONSENT_STATE_LABELS } from '../admin-scope/hq-sharing';
@@ -36,6 +37,8 @@ export const API_ENUMS: EnumSource = {
   PlatformRoleGroupLockReason: Object.entries(ROLE_GROUP_LOCK_REASON_LABELS),
   /** 직원 앱 내 정보의 위치정보 동의 상태 — GET /me/profile (WHALEERP-188) */
   LocationConsentState: Object.entries(LOCATION_CONSENT_STATE_LABELS),
+  /** BP 휴일 상세의 대상 · 예외 점포 기간 상태 — GET /bp-holidays/{id} 의 stores[].periodState (MN000015) */
+  BpHolidayPeriodState: Object.entries(PERIOD_STATE_LABELS),
   /** 관리자 웹 일별 출퇴근의 상태 — GET /attendance-records/daily (WHALEERP-217 · 219) */
   AttendanceDayStatus: Object.entries(ATTENDANCE_DAY_STATUS_LABELS),
 };

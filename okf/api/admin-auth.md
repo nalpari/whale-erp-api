@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:48:04Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -17,7 +17,7 @@ sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
-    last_modified: 2026-10-16T00:00:00Z
+    last_modified: 2026-10-27T05:11:09Z
   - id: password
     resource: ../../src/auth/password.ts
     title: verifyPassword — scrypt 형식이 아닌 저장값('!')도 더미 해시로 한 번 대조
@@ -29,7 +29,7 @@ sources:
   - id: admin-profile-service
     resource: ../../src/auth/admin-profile.service.ts
     title: MY PAGE 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
-    last_modified: 2026-10-23T08:19:28Z
+    last_modified: 2026-10-27T07:48:04Z
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
     title: BpProfileService — MY PAGE 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영 · 지우기) · 사업자 번호 검사
@@ -57,7 +57,7 @@ sources:
   - id: admin-temporary-password-service
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
-    last_modified: 2026-10-20T05:00:00Z
+    last_modified: 2026-10-27T05:11:09Z
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
@@ -93,7 +93,7 @@ sources:
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
 | `GET /auth/admin/me` | admin | MY PAGE(S-JXKHCM) — `{ loginId, name, phone, email, roleTypeCode, createdAt, lastLoginAt }` for the signed-in admin's own account only (`CurrentUser().id`, never a BP/customer context) |
-| `PATCH /auth/admin/me` | admin | `{ name, phone, email, updatedAt }` → 204. Changing `email` does **not** check the current password (S-JXKHCM, user decision 2026-10-22 · confirmed 2026-10-23). The check added by the 2026-10-21 adversarial review was removed knowingly — a stolen access token alone can again change the login email and intercept a mailed temp-password via `POST /auth/admin/temporary-passwords`; the user was told and accepted it. With the check gone, a token-only caller can also learn whether an email is taken from the 409 (the same is already possible through `GET /auth/admin/me/email-availability`). `currentPassword` was kept for a while as an ignored optional field so the old front build didn't hit `forbidNonWhitelisted` 400; front #125 stopped sending it and the field is now gone (2026-10-26) — sending it now gets 400. my-profile(직원 앱)'s email-change keeps its own current-password check. `updatedAt` is the optimistic-lock token from `GET /me` — `updateMany` with `sameMillisecond(updatedAt)`, 409 if another admin (e.g. via platform-admins) saved first (same review round — the original diff had no concurrency check and silently overwrote concurrent edits). Re-checks email uniqueness (excluding `WITHDRAWN`) inside the same transaction, 409 on conflict; if email changed, invalidates any unused `temporary_passwords` for the account (an account-takeover path via the mailed temp-password flow otherwise survives an email change) and re-arms `isInitialPasswordUnsent` if any were invalidated; logs changed fields to `admin_change_histories` with `updatedBy` set to the signed-in admin. Account axis throttled on the signed-in user, not the request's own `email` field (the default account tracker keys on `body.email`, which this route's caller controls) |
+| `PATCH /auth/admin/me` | admin | `{ name, phone, email, updatedAt }` → 204. Changing `email` does **not** check the current password (S-JXKHCM, user decision 2026-10-22 · confirmed 2026-10-23). The check added by the 2026-10-21 adversarial review was removed knowingly — a stolen access token alone can again change the login email and intercept a mailed temp-password via `POST /auth/admin/temporary-passwords`; the user was told and accepted it. With the check gone, a token-only caller can also learn whether an email is taken from the 409 (the same is already possible through `GET /auth/admin/me/email-availability`). `currentPassword` was kept for a while as an ignored optional field so the old front build didn't hit `forbidNonWhitelisted` 400; front #125 stopped sending it and the field is now gone (2026-10-26) — sending it now gets 400. my-profile(직원 앱)'s email-change keeps its own current-password check. `updatedAt` is the optimistic-lock token from `GET /me` — `updateMany` with `sameMillisecond(updatedAt)`, 409 if another admin (e.g. via platform-admins) saved first (same review round — the original diff had no concurrency check and silently overwrote concurrent edits). Re-checks email uniqueness (excluding `WITHDRAWN`) inside the same transaction, 409 on conflict; if email changed, invalidates every live `temporary_passwords` row for the account (used ones too) (an account-takeover path via the mailed temp-password flow otherwise survives an email change) and re-arms `isInitialPasswordUnsent` if any were invalidated and the account has no usable password (`'!'`) — the shared `voidTempPasswordsForEmailChange`, so a signed-in admin (who has one) never gets it; logs changed fields to `admin_change_histories` with `updatedBy` set to the signed-in admin. Account axis throttled on the signed-in user, not the request's own `email` field (the default account tracker keys on `body.email`, which this route's caller controls) |
 | `GET /auth/admin/me/email-availability?email=` | admin | `{ available }` for MY PAGE's blur/Enter check — DTO-validated (400 on missing/malformed `email`, fixed from a prior 500). No `@SkipThrottle` (아이디 · 이메일 중복 확인은 기본 한도를 둔다는 결정, api #37 과 같다) |
 | `POST /auth/admin/me/password-change` | admin | `{ currentPassword, newPassword, newPasswordConfirm }` → 204. MY PAGE 자기 비밀번호 변경(S-PTWREE) — 강제 변경(위)과 달리 현재 비밀번호를 먼저 본다. 자세한 순서·임시 비밀번호 처리는 아래 「Self-service password change」 |
 | `GET /auth/admin/me/bp` | admin, BP 마스터만 | MY PAGE 사업자정보 탭(S-UOJVUR) — 그 밖의 권한은 403 |
@@ -137,6 +137,15 @@ Lock → id · password → account status → forced change (front `auth.md`).
   not count as failures.
 - `admin_login_logs` keeps every attempt with the client IP. An unknown id has
   no account to point at and is logged as `PASSWORD_MISMATCH` with a null id.
+- **Logging in is not editing the account.** Success (`last_login_at`, cleared
+  failures, the forced-change flag), a counted failure and the lock cleared by
+  비밀번호 찾기 write `admin_accounts` back with the `updated_at` they read under
+  the lock. Without that, Prisma's `@updatedAt` sets it on every `update()`: the
+  수정일시 on the account screens showed the login time next to an unchanged
+  수정자, and an edit screen opened before the owner logged in failed its
+  `updatedAt` check with 409 (2026-10-27). Only a real database shows Prisma
+  leaving the column alone, so the e2e suites (`test/admin-auth.e2e-spec.ts`,
+  `test/admin-temporary-password.e2e-spec.ts`) pin it; mocks only see the payload.
 
 # Signup auto-login (「웨일ERP 시작하기」)
 

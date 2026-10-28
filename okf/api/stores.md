@@ -4,12 +4,12 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:37:14Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-22T08:30:00Z
+    last_modified: 2026-10-27T05:57:17Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
@@ -49,7 +49,7 @@ sources:
   - id: api-enums
     resource: ../../src/enums/api-enums.ts
     title: API 전용 enum — StoreOperationRequirement · StoreBusinessVerificationResult
-    last_modified: 2026-10-15T09:12:30Z
+    last_modified: 2026-10-27T07:37:14Z
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
@@ -143,6 +143,11 @@ of that 400.
   (STORE-1).
 - An account with only some stores mapped is **mapped to the store it registers**;
   without that it could not see what it just made. 전체 점포 accounts need no row.
+  The same transaction moves that account's `updated_by` (and through `@updatedAt` its
+  `updated_at`): an edit form in [BP admins](/api/bp-admins.md) opened before the
+  registration does not know the new store, and saving it would silently drop the
+  mapping — with the bump the save is a 409 instead (2026-10-27). No history row is
+  written for the added mapping.
 - 403s use the shared admin wording (`auth/access-messages`) — the 관리자 웹 branches
   on it, so this module coins none of its own.
 

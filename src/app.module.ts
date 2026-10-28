@@ -6,6 +6,7 @@ import { AdminSignupModule } from './admin-signup/admin-signup.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { BpCodesModule } from './bp-codes/bp-codes.module';
+import { BpMastersModule } from './bp-masters/bp-masters.module';
 import { CodesModule } from './codes/codes.module';
 import { TermsVersionsModule } from './terms-versions/terms-versions.module';
 import { AuthModule } from './auth/auth.module';
@@ -34,6 +35,7 @@ import { TodosModule } from './todos/todos.module';
 import { WorkSchedulesModule } from './work-schedules/work-schedules.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { MyProfileModule } from './my-profile/my-profile.module';
+import { HomeModule } from './home/home.module';
 
 @Module({
   imports: [
@@ -58,6 +60,7 @@ import { MyProfileModule } from './my-profile/my-profile.module';
     PublicHolidaysModule,
     CodesModule,
     BpCodesModule,
+    BpMastersModule,
     TermsVersionsModule,
     StaffMembersModule,
     PayslipsModule,
@@ -74,6 +77,7 @@ import { MyProfileModule } from './my-profile/my-profile.module';
     MyProfileModule,
     StaffSignupModule,
     BpHolidaysModule,
+    HomeModule,
   ],
   controllers: [AppController],
   providers: [

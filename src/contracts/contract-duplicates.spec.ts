@@ -3,9 +3,12 @@ import { Prisma } from '@prisma/client';
 import {
   checkReplace,
   checkWorkTimeOverlap,
+  correctionTargets,
   dropOrphanRecords,
   InProgressContract,
   periodsOverlap,
+  renewedPreviousIds,
+  replacedRenewals,
   replaceContracts,
   shiftOverlaps,
 } from './contract-duplicates';
@@ -28,6 +31,63 @@ const conflictBody = (fn: () => unknown) => {
   }
   throw new Error('409 가 나지 않았다');
 };
+
+describe('바로잡기 대상 — 재계약 줄 (api #157 재리뷰 4 · 5)', () => {
+  const day = (d: string) => new Date(`${d}T00:00:00Z`);
+  const signed = (
+    contractId: number,
+    startDate: string,
+    endDate: string | null,
+    previousContractId: number | null,
+  ): InProgressContract => ({
+    ...WHO,
+    contractId,
+    status: 'SIGNED',
+    staffMemberId: 3,
+    startDate: day(startDate),
+    endDate: endDate ? day(endDate) : null,
+    previousContractId,
+  });
+  // C1 → C2(C1 기간 안에서 시작) → C3(C2 의 재계약, 잘못 올림)
+  const c1 = signed(1, '2026-11-01', '2027-10-31', null);
+  const c2 = signed(2, '2027-05-01', null, 1);
+  const c3 = signed(3, '2027-08-01', null, 2);
+  const period = { start: '2027-08-01', end: null };
+
+  it('대체하는 재계약은 줄의 끝(C3)뿐이고, 다시 올린 계약은 C2 를 잇는다', () => {
+    expect(replacedRenewals([c1, c2, c3]).map((c) => c.contractId)).toEqual([
+      3,
+    ]);
+    expect(renewedPreviousIds([c1, c2, c3])).toEqual([2]);
+  });
+
+  it('줄의 앞 계약(C1 · C2)은 기간이 겹쳐도 대체 대상에서 빠진다', () => {
+    expect(
+      correctionTargets([c1, c2, c3], period).map((c) => c.contractId),
+    ).toEqual([3]);
+  });
+
+  it('이어받는 직전 계약(inherited)은 남길 계약을 정한 뒤 뺀다 — C2 를 이어받아도 C1 은 남는다(api #157 재리뷰 5)', () => {
+    // C2 의 재계약을 새로 올리는 자리 — C2 를 이어받고 C1 · C2 모두 대체하지 않는다
+    expect(correctionTargets([c1, c2], period, [2])).toEqual([]);
+    // 먼저 빼면 C1 이 남길 계약에서 빠져 대체 대상이 되던 것
+    expect(
+      correctionTargets([c1], period, []).map((c) => c.contractId),
+    ).toEqual([1]);
+  });
+
+  it('재계약이 아닌 체결 완료 하나면 그것을 대체하고 이을 직전 계약은 없다', () => {
+    expect(correctionTargets([c1], period).map((c) => c.contractId)).toEqual([
+      1,
+    ]);
+    expect(renewedPreviousIds([c1])).toEqual([]);
+  });
+
+  it('서로 다른 계약에 이어진 줄 끝이 둘이면 이을 직전 계약이 둘이다(호출부가 409)', () => {
+    const other = signed(9, '2027-08-01', null, 8);
+    expect(renewedPreviousIds([c3, other]).sort()).toEqual([2, 8]);
+  });
+});
 
 describe('periodsOverlap', () => {
   it.each([

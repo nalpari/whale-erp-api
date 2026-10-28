@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T09:08:26Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,15 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-26T02:25:03Z
+    last_modified: 2026-10-27T07:26:42Z
+  - id: contract-terms
+    resource: ../../src/contracts/contract-terms.ts
+    title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
+    last_modified: 2026-10-27T07:06:44Z
+  - id: contracts-menu
+    resource: ../../src/contracts/contracts-menu.ts
+    title: 근로계약 관리 메뉴(CONTRACTS_MENU) — 직원 목록 · 상세의 workDays 노출 판정과 근로계약 서비스가 같이 쓴다
+    last_modified: 2026-10-27T07:26:42Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -25,7 +33,7 @@ sources:
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
-    last_modified: 2026-10-26T02:32:13Z
+    last_modified: 2026-10-27T07:26:42Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -41,7 +49,7 @@ sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE
-    last_modified: 2026-10-22T07:45:10Z
+    last_modified: 2026-10-27T09:08:26Z
   - id: week-query-dto
     resource: ../../src/staff-members/dto/staff-member-week.query.dto.ts
     title: 근무스케줄 영역 쿼리 — weekStart(그 주의 아무 날짜)
@@ -104,6 +112,20 @@ sources:
 폐점을 가리는 점포 조회가 1번 더해 5번) —
 직원 페이지를 먼저 얻고, 그 직원 ID 로 점포 · 최근 계약을 따로 읽어 합친다. `stores` 는 3팀 모델과 Prisma 관계가
 없어 `include` 할 수 없다.
+
+**`contract.workDays`**(WHALEERP-622, 관리자웹 홈 「점포 하나 화면」 직원 정보 표의 근무 시간 · 근무요일 열): 목록 · 상세의 대표 계약(`contract`)의
+근무 요일을 월→일 순서(`weekday` enum 순서)로 낸다. 항목은 근로계약 상세와 같은 `ContractDetailWorkDayDto`(`weekday` ·
+`startTime` · `endTime` · `breakStartTime` · `breakEndTime`, 시각 HH:mm)이고 근무 요일이 없는 계약은 빈 배열이다. 대표 계약
+조회의 중첩 select(`contractWorkDays`)라 Prisma 가 한 번에 IN 으로 읽는다 — 직원 수만큼 쿼리가 늘지 않는다. 변환은 계약서
+근무 조건과 같은 `workDaysOf`(`contract-terms.ts`)다. 가린 행은 `contract` 가 null 이라 싣지 않는다. 근로계약은 자정을
+넘지 않아(`contract_work_days` CHECK `end_time > start_time`) 익일 표시 칸은 없다.
+
+**`workDays` 권한**(WHALEERP-622 후속, 재영 결정 2026-10-27): 근무 시간 · 근무요일은 근로계약 조항에서 나온 값이라 근로계약
+관리 메뉴(`/contracts`) 조회(read) 권한이 있는 관리자에게만 준다. 판정은 가드와 같은 `adminHasMenuAction`(`CONTRACTS_MENU`,
+`contracts-menu.ts`)이고 목록 · 상세 모두 요청마다 한 번만 묻는다(`getManageableStores` 와 나란히 읽고, 직원 줄마다 묻지
+않는다). 권한이 없으면 대표 계약 select 에 `contractWorkDays` 를 붙이지 않고(읽지 않는다) `workDays` 는 **null** 이다 —
+null 은 「근로계약 조회 권한 없음」, `[]` 는 「근무 요일 없음」이다. `contract` 의 나머지 칸과 가린 행(`contract` null)은
+그대로다.
 
 `joinState` · `employmentType` · `storeIds` · `storeTypes` 는 쉼표 목록이다. 공백 처리는 다르다 — `joinState` ·
 `employmentType` 은 조각의 앞뒤 공백을 지우고, 점포 두 칸(`storeIds` · `storeTypes`)은 공백이 있으면 400 이다(근로계약
@@ -412,7 +434,7 @@ BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(
   보낼 길이 없다. 연결 보류 · 만 19세 미만은 api 가 보낼 수 있어도 정책으로 거짓이다(거절은 계약이 거부라 api 도 409 다).
 - 또는 가입 상태가 초안(초대 행이 하나도 없음)이고 최근 계약의 초대 유형이 소속 추가 확인 · 복귀 확인 — WHALEERP-130 전
   요청 없이 서명 대기가 된 옛 계약이다(재발송이 첫 요청을 보낸다, api #164 리뷰). 다른 초대 없는 줄은 거짓이다.
-- 최근 계약이 발송 대기 · 서명 대기 — 근로계약 상세 `canResend` 와 같은 `canResendContract`(`contract-status.ts`) 한 곳을 본다.
+- 최근 계약이 발송 대기 · 서명 대기(`INVITE_RESENDABLE`) — 거부 · 만료 재발송은 되살릴 수 있는지까지 봐야 해 근로계약 상세에서 한다(WHALEERP-153).
 - 그 번호의 계정은 묻지 않는다 — 계정이 있으면 재발송이 소속 추가 확인 요청을 보내고 계약은 발송 대기다(WHALEERP-130,
   2026-10-26 재영). 그 계정이 이 점포에 재직 중이면 보낼 때 409 다(드문 일 — 화면이 다시 읽는다).
 - 휴대폰 번호(유선번호는 409 `SEND_PHONE_NOT_MOBILE`).

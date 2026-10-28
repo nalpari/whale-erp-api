@@ -12,6 +12,7 @@ import {
   StatusChangeActor,
 } from '@prisma/client';
 import { kstToday } from '../staff-members/kst-date';
+import { SIGNED_ONCE } from './signed-contract';
 
 /**
  * 근로계약 상태 전환 (WHALEERP-151). 상태가 바뀌는 길을 한 표로 두고, 바꿀 때마다 같은 트랜잭션에서 상태 이력
@@ -48,9 +49,10 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   CORRECTION_REQUESTED: ['PENDING_SIGNATURE', 'PENDING_SEND', 'ENDED'],
   // 계약 기간이 끝나거나 재계약 · 퇴직으로 닫는다. 내용은 고치지 않는다 — 바꾸려면 새 계약으로 대체한다
   SIGNED: ['ENDED'],
-  // 거부 · 만료 계약의 재발송(WHALEERP-153)은 아직 정하지 않았다 — 정해지면 여기에 더한다
-  REJECTED: [],
-  EXPIRED: [],
+  // 거부 · 만료 계약은 같은 조건으로 다시 보낼 수 있다(WHALEERP-153, 운영 정책 CTR-10 · 2026-10-26 재영) — 앱으로 받는
+  // 직원이면 서명 대기, 가입 초대면 발송 대기로 새 기한과 함께 돌아간다
+  REJECTED: ['PENDING_SIGNATURE', 'PENDING_SEND'],
+  EXPIRED: ['PENDING_SIGNATURE', 'PENDING_SEND'],
   ENDED: [],
 };
 
@@ -67,19 +69,22 @@ const NOW_STATUS: Record<ContractStatus, string> = {
   ENDED: '이미 종료된 근로계약입니다',
 };
 
-/** 다시 보낼 수 있는 상태 — 발송 대기 · 서명 대기(WHALEERP-136). 밖에서는 canResendContract 로만 본다 */
-const RESENDABLE_STATUSES: readonly ContractStatus[] = [
+/**
+ * 다시 보낼 수 있는 상태 — 발송 대기 · 서명 대기(WHALEERP-136)와 거부 · 만료(WHALEERP-153). 재발송(contract-send)과 상세의
+ * canResend 가 함께 쓴다. 종료는 다시 보내지 못한다 — 새 계약으로.
+ */
+export const RESENDABLE_STATUSES: readonly ContractStatus[] = [
   'PENDING_SEND',
   'PENDING_SIGNATURE',
+  'REJECTED',
+  'EXPIRED',
 ];
 
-/**
- * 재발송(POST /contracts/:id/send)을 정책상 할 수 있는 계약인가 — 재발송 api 가 막는 기준이자 근로계약 상세의 canResend 와 직원
- * 목록의 canResend 가 함께 보는 한 곳이다(api #164 리뷰). 받을 길(가입 초대 · 소속 추가 확인 요청 · 앱 알림)은 재발송이 다시 판별하므로 상태만 본다 —
- * 요청 행 없이 서명 대기가 된 옛 소속 확인 계약도 참이다. 목록은 그 위에 「가입 · 인증」 칸의 정책(가입 전 · 휴대폰 번호 등)을 더한다.
- */
-export const canResendContract = (status: ContractStatus | null | undefined) =>
-  !!status && RESENDABLE_STATUSES.includes(status);
+/** 끝난 뒤 다시 보내는 상태 — 거부 · 만료(WHALEERP-153). 다시 살아나므로 같은 사람의 다른 진행 중 계약 · 퇴직을 먼저 본다 */
+export const REOPENED_STATUSES: readonly ContractStatus[] = [
+  'REJECTED',
+  'EXPIRED',
+];
 
 export const canTransition = (from: ContractStatus, to: ContractStatus) =>
   TRANSITIONS[from].includes(to);
@@ -280,14 +285,23 @@ export async function applyStartedTerms(
   });
   const today = kstToday(now);
   if (!c?.startDate || c.startDate > today) return;
-  if (!c.employmentType && !c.jobTitle) return;
-  // 지금 효력인 계약이 더 늦게 시작했으면 옮기지 않는다 — 옛 종이 계약을 뒤늦게 올려도 지금 조건을 덮지 않게(api #157 code-review)
+  if (c.employmentType == null && c.jobTitle == null) return;
+  // 지금 효력인 계약이 더 늦게 시작했으면 옮기지 않는다 — 옛 종이 계약을 뒤늦게 올려도 지금 조건을 덮지 않게(api #157 code-review).
+  // 하루 배치(LATEST_STARTED_SIGNED)와 같은 기준이다 — 체결을 거친 계약(기간이 끝나 배치가 닫은 것도), 시작일이 같으면 id 가 큰 것
   const newer = await db.contract.findFirst({
     where: {
       staffMemberId: c.staffMemberId,
       contractId: { not: contractId },
-      status: 'SIGNED',
-      startDate: { gt: c.startDate, lte: today },
+      startDate: { lte: today },
+      AND: [
+        SIGNED_ONCE,
+        {
+          OR: [
+            { startDate: { gt: c.startDate } },
+            { startDate: c.startDate, contractId: { gt: contractId } },
+          ],
+        },
+      ],
     },
     select: { contractId: true },
   });
@@ -295,8 +309,8 @@ export async function applyStartedTerms(
   await db.staffMember.update({
     where: { staffMemberId: c.staffMemberId },
     data: {
-      ...(c.employmentType && { employmentType: c.employmentType }),
-      ...(c.jobTitle && { jobTitle: c.jobTitle }),
+      ...(c.employmentType != null && { employmentType: c.employmentType }),
+      ...(c.jobTitle != null && { jobTitle: c.jobTitle }),
     },
   });
 }
@@ -332,6 +346,82 @@ export function pendingTermsOf(
   return contract?.employmentType
     ? { employmentType: contract.employmentType, jobTitle: contract.jobTitle }
     : { employmentType: record.employmentType, jobTitle: record.jobTitle };
+}
+
+/**
+ * 바로잡기가 직원 레코드의 체결 완료를 닫은 뒤 그 레코드를 다시 맞춘다(api #157 재리뷰 4 · code-review). 직원 행은 부르는
+ * 쪽이 write 로 잠가 둔다.
+ * - 고용 형태 · 직무는 지금 효력인 계약 — 가장 늦게 시작한(오늘까지) 체결을 거친 계약, 시작일이 같으면 id 가 큰 것(하루 배치
+ *   LATEST_STARTED_SIGNED · applyStartedTerms 와 같은 기준, 배치는 원시 SQL 이라 따로 적는다) — 의 값이다. 그런 계약이 남지
+ *   않았으면 다시 올리는 계약의 값(fallback)이다 — 체결 계약이 없는 레코드가 저장한 계약 값을 보이는 것(recordTermsFree)과 같다.
+ *   다시 올린 계약이 붙지 않는 레코드(fallback 없음)는 남은 효력 계약이 있을 때만 맞춘다.
+ * 입사일은 다시 올린 계약을 넣은 뒤 refixHiredDate 가 맞춘다.
+ */
+export async function resyncAfterCorrection(
+  db: Prisma.TransactionClient,
+  staffMemberId: number,
+  fallback: { employmentType: EmploymentType; jobTitle: string } | undefined,
+  now = new Date(),
+): Promise<void> {
+  const c = await db.contract.findFirst({
+    where: { staffMemberId, startDate: { lte: kstToday(now) }, ...SIGNED_ONCE },
+    orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
+    select: { employmentType: true, jobTitle: true },
+  });
+  // 칸마다 효력 계약 값, 그 칸이 빈 옛 계약이면 다시 올린 계약 값이다 — 닫힌 계약이 쓴 값이 남지 않게(셀프 code-review). 둘 다
+  // 없으면 그 칸은 그대로 둔다(배치 LATEST_STARTED_SIGNED 의 COALESCE 와 같다)
+  const employmentType = c?.employmentType ?? fallback?.employmentType;
+  const jobTitle = c?.jobTitle ?? fallback?.jobTitle;
+  if (employmentType != null || jobTitle != null)
+    await db.staffMember.update({
+      where: { staffMemberId },
+      data: {
+        ...(employmentType != null && { employmentType }),
+        ...(jobTitle != null && { jobTitle }),
+      },
+    });
+}
+
+/**
+ * 바로잡기 뒤 입사일(api #157 재리뷰 7) — 입사일이 바로잡기로 닫힌 계약(closed)의 시작일이면, 그 레코드에 남은 체결을 거친 계약
+ * (SIGNED_ONCE — 앞선 바로잡기로 닫힌 계약은 빠진다)과 다시 올린 계약 가운데 **가장 이른 시작일**로 바꾼다. 다시 올린 계약을
+ * 넣은 뒤(체결 완료) 부른다 — 먼저 부르면 그 시작일이 후보에 들지 않는다. 이력 순이 아니라 시작일 순이다 — 잘못 올린 첫 계약을
+ * 더 이른 날로 바로잡으면 그 날이 입사일이다. 퇴직일보다 늦게 시작한 계약은 치지 않는다(fillHiredDate 와 같다). 바꿀 출처가
+ * 없으면 다시 올린 계약이 붙는 레코드(target)는 입사일을 비운다 — 바로잡아 버린 계약의 날을 남기지 않는다(새 계약이 퇴직일 뒤에
+ * 시작하면 fillHiredDate 도 채우지 않는 것과 같다). 재직 중인 다른 레코드(이름까지 고쳐 새 레코드에 다시 올린 옛 레코드)도
+ * 비운다 — 버린 계약의 날이 목록 · 상세에 남는다(api #157 재리뷰 8 참고). 퇴직한 옛 레코드는 그대로 둔다 — 비우면 그 재직 기간 ·
+ * 급여의 기준이 사라진다(셀프 code-review). 직원 행은 부르는 쪽이 write 로 잠가 둔다.
+ */
+export async function refixHiredDate(
+  db: Prisma.TransactionClient,
+  staffMemberId: number,
+  closed: number[],
+  target: boolean,
+): Promise<void> {
+  const s = await db.staffMember.findUnique({
+    where: { staffMemberId },
+    select: { hiredDate: true, retiredDate: true },
+  });
+  if (!s?.hiredDate) return;
+  const fromClosed = await db.contract.findFirst({
+    where: { contractId: { in: closed }, startDate: s.hiredDate },
+    select: { contractId: true },
+  });
+  if (!fromClosed) return;
+  const first = await db.contract.findFirst({
+    where: {
+      staffMemberId,
+      startDate: s.retiredDate ? { lte: s.retiredDate } : { not: null },
+      ...SIGNED_ONCE,
+    },
+    orderBy: [{ startDate: 'asc' }, { contractId: 'asc' }],
+    select: { startDate: true },
+  });
+  if (!first?.startDate && !target && s.retiredDate) return;
+  await db.staffMember.update({
+    where: { staffMemberId },
+    data: { hiredDate: first?.startDate ?? null },
+  });
 }
 
 /**
@@ -376,6 +466,8 @@ export async function refillHiredDate(
       contract: {
         staffMemberId,
         startDate: retiredDate ? { lte: retiredDate } : { not: null },
+        // 바로잡기로 닫은(관리자 종료) 계약은 치지 않는다 — 버린 계약의 시작일이 입사일로 되살아나지 않게(api #157 셀프 code-review)
+        ...SIGNED_ONCE,
       },
     },
     orderBy: [{ changedAt: 'asc' }, { contractStatusHistoryId: 'asc' }],

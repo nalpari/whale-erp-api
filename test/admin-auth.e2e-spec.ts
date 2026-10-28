@@ -182,6 +182,26 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
     expect((await login(admin.loginId)).status).toBe(429);
   });
 
+  it('로그인 실패 · 성공은 계정 수정이 아니다 — updated_at 이 그대로다', async () => {
+    const editedAt = new Date('2026-10-01T00:00:00.000Z');
+    const admin = await createAdmin({ updatedAt: editedAt });
+    const stored = () =>
+      prisma.adminAccount.findUniqueOrThrow({
+        where: { adminAccountId: admin.adminAccountId },
+      });
+
+    expect((await login(admin.loginId, 'nope')).status).toBe(401);
+    const failed = await stored();
+    expect(failed.failedLoginCount).toBe(1);
+    expect(failed.updatedAt).toEqual(editedAt);
+
+    expect((await login(admin.loginId)).status).toBe(200);
+    const succeeded = await stored();
+    expect(succeeded.failedLoginCount).toBe(0);
+    expect(succeeded.lastLoginAt).not.toBeNull();
+    expect(succeeded.updatedAt).toEqual(editedAt);
+  });
+
   it('미사용 계정은 맞는 비밀번호일 때만 403', async () => {
     const admin = await createAdmin({ accountStatusCode: 'INACTIVE' });
     expect((await login(admin.loginId)).status).toBe(403);

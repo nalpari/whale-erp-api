@@ -763,6 +763,21 @@ describe('PayslipEditService', () => {
       }
     });
 
+    it('확정이 확인한 검토 사유를 다시 확인 전으로 — 남은 사유로 다시 검토 대기(운영 정책 v221 PAY-06)', async () => {
+      prisma.payslip.findFirst.mockResolvedValue(
+        located({ status: 'CONFIRMED' }),
+      );
+      prisma.payslipReviewReason.updateMany.mockResolvedValue({ count: 2 });
+      await expect(cancel()).resolves.toEqual({ payslipId: 40 });
+      expect(call(prisma.payslipReviewReason.updateMany)).toEqual({
+        where: { payslipId: 40, acknowledgedAt: { not: null } },
+        data: { acknowledgedAt: null },
+      });
+      expect(call(prisma.payslipLog.create).data.summary).toBe(
+        '확정 취소 · 검토 사유 2건 다시 검토 대기',
+      );
+    });
+
     it('작성 중 · 검토 중은 409', async () => {
       prisma.payslip.findFirst.mockResolvedValue(
         located({ status: 'REVIEWING' }),

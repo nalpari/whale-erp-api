@@ -1,6 +1,12 @@
 import { ConflictException, HttpStatus } from '@nestjs/common';
 import { ContractStatus, Prisma, Weekday } from '@prisma/client';
 import { lockContract, lockStaffMember, transition } from './contract-status';
+import { IN_PROGRESS, SIGNED_ONCE } from './signed-contract';
+
+/** 지금 체결 완료 — hasOverlappingSigned 가 저장 때 보는 계약 */
+export const SIGNED_NOW = {
+  status: 'SIGNED',
+} as const satisfies Prisma.ContractWhereInput;
 import { CreateContractDto } from './dto/create-contract.dto';
 
 /**
@@ -10,13 +16,8 @@ import { CreateContractDto } from './dto/create-contract.dto';
  * 같은 사람은 휴대전화번호로 본다 — 가입 전 직원 레코드에는 계정이 없다.
  */
 
-/** 진행 중 — 체결 전이고 끝나지 않은 계약. 같은 점포에 둘이 되지 않게 대체를 묻는다. */
-export const IN_PROGRESS: ContractStatus[] = [
-  'DRAFT',
-  'PENDING_SEND',
-  'PENDING_SIGNATURE',
-  'CORRECTION_REQUESTED',
-];
+/** 진행 중 — 체결 전이고 끝나지 않은 계약. 같은 점포에 둘이 되지 않게 대체를 묻는다. 값은 순환 없는 signed-contract 에 둔다 */
+export { IN_PROGRESS };
 /** 근무 시간을 차지하는 다른 점포 계약 — 발송 대기부터 체결 완료까지. 임시저장은 아직 계약이 아니라 뺀다. */
 const OCCUPYING: ContractStatus[] = [
   'PENDING_SEND',
@@ -170,43 +171,77 @@ export function overlappingReplaceable(
 export function correctionTargets(
   list: InProgressContract[],
   period: { start: string; end: string | null },
+  inherited: number[] = [],
 ): InProgressContract[] {
   const overlapping = overlappingReplaceable(list, period);
-  const kept = new Set(renewedPreviousIds(overlapping));
-  return overlapping.filter((c) => !kept.has(c.contractId));
+  // 이어진 줄의 앞 계약은 모두 남긴다 — C1 → C2 → C3 에서 C3 를 바로잡으면 C1 · C2 는 그대로다(api #157 재리뷰 4)
+  const kept = new Set(
+    signedRenewals(overlapping).map((c) => c.previousContractId),
+  );
+  // 이어받는 직전 계약(재계약의 직전 · 이어 쓰는 계약 자신)은 남길 계약을 정한 뒤에 뺀다 — 먼저 빼면 그것이 잇는 앞 계약이
+  // 남길 계약에서 빠져 함께 닫히거나 겹침으로 잡힌다(api #157 재리뷰 5 · 셀프 code-review)
+  return overlapping.filter(
+    (c) => !kept.has(c.contractId) && !inherited.includes(c.contractId),
+  );
+}
+
+/** 목록의 체결 완료 재계약(직전 계약이 있는 체결 완료) */
+const signedRenewals = (list: InProgressContract[]) =>
+  list.filter(
+    (c) => c.status === 'SIGNED' && typeof c.previousContractId === 'number',
+  );
+
+/**
+ * 바로잡기로 대체되는 체결 완료 재계약 — 이어진 줄의 끝만. 겹치는 목록에서 다른 재계약의 직전 계약인 재계약은 지금 효력인
+ * 직전 계약이라 대체하지 않는다(C1 → C2 → C3 에서 C3 를 바로잡으면 C2 는 남고 C1 은 보지 않는다, api #157 재리뷰 3 · 4).
+ */
+export function replacedRenewals(
+  list: InProgressContract[],
+): InProgressContract[] {
+  const renewals = signedRenewals(list);
+  const previous = new Set(renewals.map((c) => c.previousContractId));
+  return renewals.filter((c) => !previous.has(c.contractId));
 }
 
 /** 바로잡기로 대체되는 체결 완료 재계약들이 잇던 직전 계약 */
 export function renewedPreviousIds(list: InProgressContract[]): number[] {
   return [
     ...new Set(
-      list
-        .filter(
-          (c) =>
-            c.status === 'SIGNED' && typeof c.previousContractId === 'number',
-        )
-        .map((c) => c.previousContractId as number),
+      replacedRenewals(list).map((c) => c.previousContractId as number),
     ),
   ];
 }
 
+/**
+ * period.start 가 null 이면 시작을 열어 둔다 — 거부 · 만료 재발송이 시작일이 빈 옛 계약을 볼 때(api #158 code-review). signed 는
+ * 볼 계약 — 저장은 지금 체결 완료(SIGNED_NOW, 같은 계약서를 두 번 올림 방지), 거부 · 만료 재발송은 기간이 끝나 배치가 닫은 계약까지
+ * (SIGNED_ONCE — 날인 뒤 처리 · 배치와 같은 기준, api #158 재리뷰 참고 1)
+ */
 export async function hasOverlappingSigned(
   db: Prisma.TransactionClient,
   storeId: number,
   phone: string,
-  period: { start: string; end: string | null },
+  period: { start: string | null; end: string | null },
   except: number[],
+  signed: typeof SIGNED_NOW | typeof SIGNED_ONCE = SIGNED_NOW,
 ): Promise<boolean> {
   const found = await db.contract.findFirst({
     where: {
       storeId,
-      status: 'SIGNED',
+      ...signed,
       staffMember: { phone },
       contractId: { notIn: except },
       AND: [
-        {
-          OR: [{ endDate: null }, { endDate: { gte: utcDate(period.start) } }],
-        },
+        ...(period.start
+          ? [
+              {
+                OR: [
+                  { endDate: null },
+                  { endDate: { gte: utcDate(period.start) } },
+                ],
+              },
+            ]
+          : []),
         ...(period.end
           ? [
               {
@@ -332,9 +367,9 @@ type Shift = { weekday: Weekday; start: number; end: number };
 
 const minutes = (hm: string) =>
   Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
-const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+export const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 const utcDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
-const timeOf = (d: Date) => d.toISOString().slice(11, 16);
+export const timeOf = (d: Date) => d.toISOString().slice(11, 16);
 
 /** 두 계약 기간이 하루라도 겹치는가. 시작일이 없으면 처음부터, 종료일이 없으면 끝없이로 본다. */
 export function periodsOverlap(a: Period, b: Period): boolean {
@@ -394,7 +429,10 @@ const earlier = (a: string | null, b: string | null) =>
  */
 export async function checkWorkTimeOverlap(
   db: Prisma.TransactionClient,
-  dto: CreateContractDto,
+  dto: Pick<
+    CreateContractDto,
+    'storeId' | 'phone' | 'startDate' | 'endDate' | 'workDays'
+  >,
 ): Promise<void> {
   const mine: Shift[] = (dto.workDays ?? []).map((d) => ({
     weekday: d.weekday,

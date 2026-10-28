@@ -133,6 +133,22 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
     await login(admin.loginId, PASSWORD).expect(200);
   });
 
+  it('잠금 해제는 계정 수정이 아니다 — updated_at 이 그대로다', async () => {
+    const editedAt = new Date('2026-10-01T00:00:00.000Z');
+    const admin = await createAdmin();
+    await prisma.adminAccount.update({
+      where: { adminAccountId: admin.adminAccountId },
+      data: { updatedAt: editedAt },
+    });
+    await issue(admin).expect(202);
+
+    const after = await prisma.adminAccount.findUniqueOrThrow({
+      where: { adminAccountId: admin.adminAccountId },
+    });
+    expect(after.lockExpiresAt).toBeNull();
+    expect(after.updatedAt).toEqual(editedAt);
+  });
+
   it('로그인 중인 관리자는 누가 임시 비밀번호를 요청해도 계속 일한다', async () => {
     const admin = await createAdmin({ locked: false });
     const { accessToken } = (await login(admin.loginId, PASSWORD).expect(200))

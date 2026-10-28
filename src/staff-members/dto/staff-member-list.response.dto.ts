@@ -11,6 +11,7 @@ import {
   HQ_SHARING_CONSENT_STATES,
   type HqSharingConsentState,
 } from '../../admin-scope/hq-sharing';
+import { ContractDetailWorkDayDto } from '../../contracts/dto/contract.response.dto';
 import { STAFF_JOIN_STATES, type StaffJoinState } from '../join-state';
 
 export class StaffMemberStoreDto {
@@ -62,6 +63,11 @@ export class StaffMemberContractDto {
   })
   status: ContractStatus | null;
   signDeadlineAt: Date | null;
+  /**
+   * 마지막으로 보낸 때(계약 상세 lastSentAt 과 같은 값). 초대 재발송 본문 expectedSentAt 으로 그대로 보낸다 — 두 화면에서 같은 계약을
+   * 두 번 다시 보내지 않게(api #158 셀프 code-review). 보낸 적 없으면 null
+   */
+  lastSentAt: Date | null;
   /** 계약 종료일(YYYY-MM-DD). 비면 무기한 */
   endDate: string | null;
   /** 최종 수정 일시. 거부일을 따로 저장하지 않아 「거부 · MM-DD」는 이 값으로 보인다 */
@@ -70,12 +76,19 @@ export class StaffMemberContractDto {
    * 가입 · 인증 칸 재발송용 — 근로계약 상세의 canResend 와 달리 가입한 직원은 거짓이다(가입한 직원의 앱 알림 재발송은 근로계약
    * 상세에서). 이 칸의 버튼은 이 값 하나만 본다. 참이면 이 계약으로 근로계약 재발송(POST
    * /contracts/{contractId}/send)이 가입 초대 알림톡 또는 소속 추가 확인 요청을 보낸다(설정 누락 503 · 그사이 바뀐 상태 409 · 발송
-   * 실패 502 는 남는다). 근로계약 상세의 canResend 와 같은 판정(발송 대기 · 서명 대기) 위에 모두 맞을 때만 참이다: 가입 전 ·
+   * 실패 502 는 남는다). 발송 대기 · 서명 대기(거부 · 만료 재발송은 근로계약 상세에서, WHALEERP-153) 위에 모두 맞을 때만 참이다: 가입 전 ·
    * 가입 상태가 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인(연결 보류 · 만 19세 미만 · 거절은 거짓), 또는 초안이고 이
    * 계약이 소속 추가 확인 · 복귀 확인으로 판별된 것(WHALEERP-130 전 요청 없이 서명 대기가 된 옛 계약) · 보이는 초대가 수락되지
    * 않음 · 휴대폰 번호 · 가린 줄 아님. 간격 제한은 없다.
    */
   canResend: boolean;
+  /**
+   * 근무 요일 — 월→일, 시각 HH:mm. 근로계약은 자정을 넘지 않는다(contract_work_days CHECK). 없으면 빈 배열.
+   * null 은 「근로계약 조회 권한 없음」 — 근무 시간 · 근무요일은 근로계약 조항에서 나온 값이라 근로계약 관리 메뉴 조회
+   * 권한이 없는 관리자에게는 주지 않는다(재영 결정 2026-10-27)
+   */
+  @ApiProperty({ type: [ContractDetailWorkDayDto], nullable: true })
+  workDays: ContractDetailWorkDayDto[] | null;
 }
 
 /**

@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T02:07:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:53:14Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -17,7 +17,7 @@ sources:
   - id: app-module
     resource: ../../src/app.module.ts
     title: Root module (ConfigModule registration)
-    last_modified: 2026-10-22T00:24:54Z
+    last_modified: 2026-10-27T04:53:14Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update · DELETE items
@@ -122,6 +122,11 @@ the BP's own rows of every 플랫폼제공 group (applied or not) edited and del
 users reading a picked BP only; it reuses `groupCodeOf`, `assertNoRepeat`, `notCreated`, `takenInOrder` and
 `restoreDeletedItems` from `CodeGroupsModule` — see
 [BP code groups](/api/bp-code-groups.md).
+`BpMastersModule` (`/bp-masters` — BP 마스터 계정 관리 MN000203) is the platform side of a customer BP and its
+one BP 마스터: register (with 공통코드 copy and a mailed first password, sharing 플랫폼 관리자 관리's
+`admin-password.ts`), edit, 미사용 cascading to every account of the BP, password reset and delete of an
+unused 오등록. Like `PlatformAdminsModule` it builds its own mail sender — see
+[BP masters](/api/bp-masters.md).
 `PlatformMenusModule` (`/platform-menus` — 플랫폼 메뉴 관리 MN000215) edits the `menus` table that `login-info`
 and the 권한 popup read, judged the same way; it numbers codes globally, gives each new menu a PM000001
 row, refuses overlapping URLs among active menus, and moves a menu with its subtree — see
