@@ -5,5 +5,6 @@ export const BATCH_JOB = {
   TODO_DUE_SOON: 'todo-due-soon',
   WORK_SCHEDULE_PURGE: 'work-schedule-purge',
   ATTENDANCE_PURGE: 'attendance-purge',
+  PUBLIC_HOLIDAY_SYNC: 'public-holiday-sync',
 } as const;
 export type BatchJobName = (typeof BATCH_JOB)[keyof typeof BATCH_JOB];
