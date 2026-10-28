@@ -387,6 +387,10 @@ describe('직원 가입 (e2e, DB)', () => {
     const accept = (invitationId: number | string, payload: object = {}) =>
       authed('post', `/me/invitations/${invitationId}/accept`).send(payload);
 
+    // 목록은 소속 근무지 화면을 열 때마다 부른다 — 계정 축 한도(10분 10번)를 받지 않는다
+    for (let i = 0; i < 11; i += 1)
+      await authed('get', '/me/invitations').expect(200);
+
     // 남의 번호로 나간 초대는 목록에 없고, id 로도 잇지 못한다 — 상태(살아 있음 · 수락 · 끝남)와 상관없이 같은 404
     const stranger = await invited(franchiseStoreId);
     const strangerAccepted = await invited(franchiseStoreId);

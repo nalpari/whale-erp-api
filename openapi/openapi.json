@@ -15248,7 +15248,7 @@
             "bearer": []
           }
         ],
-        "summary": "내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은\n퇴직일과 함께. `includeRetired=true` 면 퇴직한 레코드도 지금 소속 뒤에 퇴직일 최근 순으로 넣는다 — 퇴직일(retiredDate)이\n오늘보다 앞이면 퇴직, 오늘 · 뒤면 퇴직 예정이다(2026-10-28).",
+        "summary": "내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은\n퇴직일과 함께. `includeRetired=true` 면 퇴직한 레코드도 지금 소속 뒤에 퇴직일 최근 순으로 넣는다 — 퇴직일(retiredDate)이\n오늘보다 앞이면 퇴직, 오늘 · 뒤면 퇴직 예정이다(2026-10-28). 묶음은 재직 상태로 가르므로 퇴직 배치가 늦은 날에는 날짜와\n어긋날 수 있다.",
         "tags": [
           "MyMemberships"
         ]
@@ -15715,7 +15715,7 @@
             "description": "관리자 토큰"
           },
           "404": {
-            "description": "INVITATION_NOT_FOUND — 없는 초대 · 범위 밖 id · 가입 초대가 아님 · 남의 번호로 온 초대(그 초대의 상태와 상관없이 같다) · INVITATION_ENDED — 내 초대가 끝남(기한 · 다시 보냄 · 번호 변경 · 퇴직 · 가입 불가)"
+            "description": "INVITATION_NOT_FOUND — 없는 초대 · 범위 밖 id · 가입 초대가 아님 · 남의 번호로 온 초대(그 초대의 상태와 상관없이 같다) · INVITATION_ENDED — 내 초대가 끝남(기한 · 다시 보냄 · 퇴직 · 가입 불가, 처리 중 번호 변경)"
           },
           "409": {
             "description": "INVITATION_ALREADY_JOINED — 내 초대를 먼저 더했거나 같은 초대로 동시에"
@@ -31583,7 +31583,7 @@
           "retiredDate": {
             "type": "string",
             "nullable": true,
-            "description": "퇴직일(YYYY-MM-DD) — 이날까지 일한다. 오늘(한국 시각) · 뒤면 퇴직 예정, 앞이면 퇴직(`includeRetired=true` 로 받은\n퇴직한 소속)이다. 없으면 null"
+            "description": "퇴직일(YYYY-MM-DD) — 이날까지 일한다. 오늘(한국 시각) · 뒤면 퇴직 예정, 앞이면 퇴직(`includeRetired=true` 로 받은\n퇴직한 소속)이다. 없으면 null. 목록의 묶음(지금 소속 · 퇴직)은 재직 상태로 가르므로, 퇴직 배치가 늦은 날에는 퇴직일이 지난\n레코드가 지금 소속 쪽에 섞일 수 있다"
           }
         },
         "required": [

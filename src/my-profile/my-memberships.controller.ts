@@ -47,7 +47,8 @@ export class MyMembershipsController {
   /**
    * 내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은
    * 퇴직일과 함께. `includeRetired=true` 면 퇴직한 레코드도 지금 소속 뒤에 퇴직일 최근 순으로 넣는다 — 퇴직일(retiredDate)이
-   * 오늘보다 앞이면 퇴직, 오늘 · 뒤면 퇴직 예정이다(2026-10-28).
+   * 오늘보다 앞이면 퇴직, 오늘 · 뒤면 퇴직 예정이다(2026-10-28). 묶음은 재직 상태로 가르므로 퇴직 배치가 늦은 날에는 날짜와
+   * 어긋날 수 있다.
    */
   @Get()
   @ApiOkResponse({ type: MyMembershipListResponseDto })

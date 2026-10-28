@@ -167,8 +167,16 @@ Two stores can send a 가입 초대 to the same phone at the same time (neither 
 signing up with one, the other answers 409 `ACCOUNT_EXISTS` at the check. The logged-in 직원 then adds
 that 근무지 in the app (2026-10-20 김민식) — `MyInvitationsController`, account token required (admin
 token 403), AuthModule's default rate limit plus the account axis (10 per 10 minutes per account,
-`signedInUserTracker`) on the accept route only — the list is read whenever the 소속 근무지 screen
-opens, so it gets the default limit; no IP limit of its own (JOI-02 v158).
+`signedInUserTracker`) on the accept route only. The list is read whenever the 소속 근무지 screen opens,
+so it skips the account axis (`@SkipThrottle({ account: true })` — the global default is also 10 per
+10 minutes, counted per token; e2e calls it 11 times) and keeps the IP axis; no IP limit of its own
+(JOI-02 v158).
+
+Risk accepted with the list: possession of the phone is no longer proven by a code · link from the
+알림톡. An account's phone is fixed at signup and has no change path, so if a number is recycled to
+someone else, the old account sees (and can accept) the new owner's invitations. The public signup
+already stops at `ACCOUNT_EXISTS` for that number, and there is no 본인인증 (2026-10-16), so this is
+left as is (2026-10-28 change, PR review note).
 
 **Since 2026-10-28 the app picks from a list instead of typing a code or opening the link**
 (WHALEERP-603 changed). The old `POST /me/invitations/check` · `POST /me/invitations/accept` (code ·

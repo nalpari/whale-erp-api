@@ -18,7 +18,7 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle, Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 import { signedInUserTracker } from '../auth/throttle';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
@@ -48,6 +48,9 @@ export class MyInvitationsController {
    * 직원 레코드). 보낸 시각 최근 순. 근무지 · 고용 형태 · 직무 · 유효 기간과 본사 제공 동의를 물을지(직영이 아니고 계정이
    * 아직 동의하지 않았을 때) 준다.
    */
+  // 계정 축(전역 기본도 10분 10번, 토큰으로 센다)을 건너뛴다 — 소속 근무지 화면을 열 때마다 부르는 읽기라 그대로 두면 화면을
+  // 몇 번 오가면 429 다(PR 전 리뷰). 축 이름을 적어야 한다 — 인자 없는 @SkipThrottle() 은 'default' 만 건너뛴다. IP 축은 남긴다.
+  @SkipThrottle({ account: true })
   @Get()
   list(@CurrentUser() user: AuthUser): Promise<MyInvitationListResponseDto> {
     // @UserTypes('account') 가 막지만 타입은 그것을 모른다.
@@ -69,7 +72,7 @@ export class MyInvitationsController {
   @ApiBadRequestResponse({ description: '형식 오류' })
   @ApiNotFoundResponse({
     description:
-      'INVITATION_NOT_FOUND — 없는 초대 · 범위 밖 id · 가입 초대가 아님 · 남의 번호로 온 초대(그 초대의 상태와 상관없이 같다) · INVITATION_ENDED — 내 초대가 끝남(기한 · 다시 보냄 · 번호 변경 · 퇴직 · 가입 불가)',
+      'INVITATION_NOT_FOUND — 없는 초대 · 범위 밖 id · 가입 초대가 아님 · 남의 번호로 온 초대(그 초대의 상태와 상관없이 같다) · INVITATION_ENDED — 내 초대가 끝남(기한 · 다시 보냄 · 퇴직 · 가입 불가, 처리 중 번호 변경)',
   })
   @ApiConflictResponse({
     description:
