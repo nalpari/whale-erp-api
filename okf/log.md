@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [Contracts API](/api/contracts-api.md) — 본인 대조 항목의 한글(`IDENTITY_FIELD_LABELS`)을 `GET /enums` 의 `IdentityField` 로 등록했다(직원 앱 날인 화면이 다른 항목을 알린다, WHALEERP-147 — 화면에 상수 대응표를 두지 않게).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 셀프 code-review: 보낸 적 없는 계약에 `expectedSentAt` 이 오면 「먼저 다시 보냄」이 아니라 상태 충돌 409, `hasOverlappingSigned` 는 볼 계약 조건(`SIGNED_NOW` · `SIGNED_ONCE`)을 받는다(불 값 인자 대신). gyarados(#157 입사일) 병합.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 재리뷰: `IN_PROGRESS` 를 순환 없는 `signed-contract` 로 옮겨 `LIVE_RENEWAL` 이 모듈 읽는 순서에 따라 조건 없음으로 굳던 것을 고침(contract-duplicates 가 다시 내보냄, 읽는 순서 회귀 테스트), 거부 · 만료 재발송의 겹침은 배치가 닫은 계약(SIGNED_ONCE)도 보고 이 계약이 잇는 줄의 앞 계약은 치지 않음(만들 때의 겹침 409 와 같게). gyarados(#157 재리뷰 7 · main) 병합.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — #158 셀프 code-review(2차): 직원 목록 · 상세의 계약에 `lastSentAt`(초대 재발송 `expectedSentAt` 으로 보낸다), 발송 시각만 다르면 「다른 요청이 먼저 다시 보냈습니다」 409(code 는 같음), `expectedSentAt` 은 시간대가 있어야 함, 상세 lastSentAt 을 그대로 보내는 DB e2e.
