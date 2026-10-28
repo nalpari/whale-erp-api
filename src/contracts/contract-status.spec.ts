@@ -7,6 +7,8 @@ import { ContractStatus, Prisma } from '@prisma/client';
 import { SIGNED_ONCE } from './signed-contract';
 import {
   applyStartedTerms,
+  refillHiredDate,
+  refixHiredDate,
   canTransition,
   fillHiredDate,
   rejectContract,
@@ -367,6 +369,62 @@ describe('applyStartedTerms (계약 조건을 직원 레코드로, WHALEERP-156)
         ],
       },
     ]);
+  });
+});
+
+describe('refixHiredDate (바로잡기 뒤 입사일, api #157 재리뷰 7)', () => {
+  const db = (first: unknown) => ({
+    staffMember: {
+      findUnique: jest.fn().mockResolvedValue({
+        hiredDate: new Date('2026-11-01T00:00:00Z'),
+        retiredDate: new Date('2026-11-15T00:00:00Z'),
+      }),
+      update: jest.fn(),
+    },
+    contract: {
+      findFirst: jest
+        .fn()
+        // 입사일이 닫힌 계약에서 왔다
+        .mockResolvedValueOnce({ contractId: 3 })
+        .mockResolvedValueOnce(first),
+    },
+  });
+  const run = (d: ReturnType<typeof db>, target: boolean) =>
+    refixHiredDate(d as unknown as Prisma.TransactionClient, 9, [3], target);
+
+  it('남은 체결 계약 · 다시 올린 계약 가운데 가장 이른 시작일로 바꾼다', async () => {
+    const d = db({ startDate: new Date('2026-10-30T00:00:00Z') });
+    await run(d, true);
+    expect(d.staffMember.update).toHaveBeenCalledWith({
+      where: { staffMemberId: 9 },
+      data: { hiredDate: new Date('2026-10-30T00:00:00Z') },
+    });
+  });
+
+  it('출처가 없으면 다시 올린 계약이 붙는 레코드는 비우고, 다른 레코드는 그대로 둔다(셀프 code-review)', async () => {
+    const target = db(null);
+    await run(target, true);
+    expect(target.staffMember.update).toHaveBeenCalledWith({
+      where: { staffMemberId: 9 },
+      data: { hiredDate: null },
+    });
+    const other = db(null);
+    await run(other, false);
+    expect(other.staffMember.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('refillHiredDate (퇴직 취소 · 퇴직일 변경)', () => {
+  it('바로잡기로 닫은 계약은 치지 않는다 — 체결을 거친 계약(SIGNED_ONCE)의 첫 체결만(api #157 셀프 code-review)', async () => {
+    const d = {
+      contractStatusHistory: { findFirst: jest.fn().mockResolvedValue(null) },
+      staffMember: { updateMany: jest.fn() },
+    };
+    await refillHiredDate(d as unknown as Prisma.TransactionClient, 9, null);
+    const [[query]] = d.contractStatusHistory.findFirst.mock.calls as [
+      [{ where: { contract: unknown } }],
+    ];
+    expect(query.where.contract).toMatchObject(SIGNED_ONCE);
   });
 });
 

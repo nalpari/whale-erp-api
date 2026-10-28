@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [Contracts API](/api/contracts-api.md) — api #157 셀프 code-review(입사일): 퇴직 취소 · 퇴직일 변경의 입사일 다시 채우기(`refillHiredDate`)도 체결을 거친 계약(`SIGNED_ONCE`)만 봐 바로잡기로 닫은 계약이 되살아나지 않게, `refixHiredDate` 는 출처가 없으면 다시 올린 계약이 붙는 레코드만 비움(다른 레코드는 그대로), POST 도 빈 레코드를 지운 뒤 입사일을 맞춤, 닫은 레코드 묶음(`closedByRecord`)을 한 곳에.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #157 재리뷰 7 블로커: 바로잡기 뒤 입사일은 다시 올린 계약을 넣은 뒤, 남은 체결을 거친 계약(`SIGNED_ONCE`)과 다시 올린 계약 가운데 가장 이른 시작일로 맞춘다(`refixHiredDate`). 전에는 새 계약을 넣기 전에 체결 이력 순으로 다시 채워 뒤의 재계약 시작일이 되거나(a), 앞선 바로잡기로 닫힌 계약이 되살아나거나(b), 남은 계약이 없는 퇴직 레코드의 입사일을 비웠다(c). e2e (a) · (b) · (c).
 * **Update**: main 병합(api gyarados, main 급여 검토 대기 · 마이그레이션 20261027150500 까지): okf/log 충돌은 양쪽 기록을 살렸다. 직무 마이그레이션(20261027153411)은 그대로 main 마지막 뒤다.
 * **Update**: main 병합(api pinsir, main #169 까지): okf/api/payslips.md 시각 충돌은 늦은 값을 남겼다. 목록 서비스 · DTO · openapi 는 자동 병합.
