@@ -1,6 +1,7 @@
 import { ConflictException, HttpStatus } from '@nestjs/common';
 import { ContractStatus, Prisma, Weekday } from '@prisma/client';
 import { lockContract, lockStaffMember, transition } from './contract-status';
+import { IN_PROGRESS, SIGNED_ONCE } from './signed-contract';
 import { CreateContractDto } from './dto/create-contract.dto';
 
 /**
@@ -10,13 +11,8 @@ import { CreateContractDto } from './dto/create-contract.dto';
  * 같은 사람은 휴대전화번호로 본다 — 가입 전 직원 레코드에는 계정이 없다.
  */
 
-/** 진행 중 — 체결 전이고 끝나지 않은 계약. 같은 점포에 둘이 되지 않게 대체를 묻는다. */
-export const IN_PROGRESS: ContractStatus[] = [
-  'DRAFT',
-  'PENDING_SEND',
-  'PENDING_SIGNATURE',
-  'CORRECTION_REQUESTED',
-];
+/** 진행 중 — 체결 전이고 끝나지 않은 계약. 같은 점포에 둘이 되지 않게 대체를 묻는다. 값은 순환 없는 signed-contract 에 둔다 */
+export { IN_PROGRESS };
 /** 근무 시간을 차지하는 다른 점포 계약 — 발송 대기부터 체결 완료까지. 임시저장은 아직 계약이 아니라 뺀다. */
 const OCCUPYING: ContractStatus[] = [
   'PENDING_SEND',
@@ -211,18 +207,23 @@ export function renewedPreviousIds(list: InProgressContract[]): number[] {
   ];
 }
 
-/** period.start 가 null 이면 시작을 열어 둔다 — 거부 · 만료 재발송이 시작일이 빈 옛 계약을 볼 때(api #158 code-review) */
+/**
+ * period.start 가 null 이면 시작을 열어 둔다 — 거부 · 만료 재발송이 시작일이 빈 옛 계약을 볼 때(api #158 code-review). signedOnce 면
+ * 기간이 끝나 배치가 닫은 계약(SIGNED_ONCE)도 본다 — 재발송이 날인 뒤 처리(입사일 · 직무 · 배치)와 같은 기준으로 겹침을 보게
+ * (api #158 재리뷰 참고 1). 저장은 지금 체결 완료만 본다(같은 계약서를 두 번 올림 방지).
+ */
 export async function hasOverlappingSigned(
   db: Prisma.TransactionClient,
   storeId: number,
   phone: string,
   period: { start: string | null; end: string | null },
   except: number[],
+  signedOnce = false,
 ): Promise<boolean> {
   const found = await db.contract.findFirst({
     where: {
       storeId,
-      status: 'SIGNED',
+      ...(signedOnce ? SIGNED_ONCE : { status: 'SIGNED' as const }),
       staffMember: { phone },
       contractId: { notIn: except },
       AND: [

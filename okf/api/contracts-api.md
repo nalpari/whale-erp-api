@@ -592,7 +592,9 @@ contract and sends **the same terms** again — no interval limit. It goes back 
 only contracts are 거부 · 만료 can be closed), when the 직원 is 퇴직 or has any 퇴직일 set — past or future, the same
 rule as sending a 재계약 임시저장 (CTR-25 — write a new contract when they come back; api #158 review), when another contract is in progress at the same store and phone (two
 would come alive), when its 계약 기간 has already ended (it would end the day it is signed — write a new contract; api #158 code-review),
-when another 체결 완료 contract (other than its own previous contract) overlaps its period or starts after it
+when another contract that went through 체결 (`SIGNED_ONCE` — also one the batch closed, the same basis as 입사일 · 직무 ·
+the batch; api #158 re-review) — other than the earlier contracts of its own 재계약 chain (its previous contract and those
+before it, as the 종이 재계약 overlap 409 ignores them) — overlaps its period or starts after it
 (`hasOverlappingSigned` with an open end — one that ended before it does not block; a contract without 시작일 is
 blocked by any other 체결 완료 — its period is unknown; api #158 review · code-review) — old terms must not
 be signed next to or ahead of a newer contract; a 재계약 does that — or, for a 재계약, when the same previous contract already has

@@ -70,17 +70,17 @@ export async function reopenBlockOf(
     return '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 그 근로계약을 확인해 주세요';
   if (c.endDate !== null && c.endDate < kstToday(now))
     return '계약 기간이 끝난 근로계약서는 다시 보낼 수 없습니다. 새 근로계약서를 작성해 주세요';
-  // 끝을 열어 두면 「겹침」과 「이 계약보다 늦게 시작함」을 한 번에 본다 — 늦게 시작한 계약은 이 시작일 뒤에 끝난다
+  // 끝을 열어 두면 「겹침」과 「이 계약보다 늦게 시작함」을 한 번에 본다 — 늦게 시작한 계약은 이 시작일 뒤에 끝난다. 기간이 끝나
+  // 배치가 닫은 계약도 본다(SIGNED_ONCE). 이 계약이 잇는 줄의 앞 계약(직전 계약과 그 앞)은 치지 않는다 — 만들 때의 겹침 검사
+  // (checkSignedOverlap)와 같다. 하루 배치가 차례로 닫는다(api #158 재리뷰 참고 1 · 2)
   if (
     await hasOverlappingSigned(
       db,
       c.storeId,
       s.phone,
       { start: c.startDate ? isoDate(c.startDate) : null, end: null },
-      [
-        c.contractId,
-        ...(c.previousContractId !== null ? [c.previousContractId] : []),
-      ],
+      [c.contractId, ...(await chainOf(db, c.previousContractId))],
+      true,
     )
   )
     return '이 점포에 같은 직원의 체결 완료된 근로계약이 있습니다. 이어 일하면 새 계약(재계약)을 보내 주세요';
@@ -97,6 +97,24 @@ export async function reopenBlockOf(
   )
     return '직전 계약에 이어지는 다른 재계약이 있습니다. 그 근로계약을 확인해 주세요';
   return null;
+}
+
+/** 직전 계약부터 거슬러 올라간 재계약 줄의 앞 계약들 — 고리가 생겨도 멈추게 본 것은 다시 보지 않는다 */
+async function chainOf(
+  db: Prisma.TransactionClient,
+  previousContractId: number | null,
+): Promise<number[]> {
+  const chain: number[] = [];
+  let id = previousContractId;
+  while (id !== null && !chain.includes(id)) {
+    chain.push(id);
+    const prev = await db.contract.findUnique({
+      where: { contractId: id },
+      select: { previousContractId: true },
+    });
+    id = prev?.previousContractId ?? null;
+  }
+  return chain;
 }
 
 /**

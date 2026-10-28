@@ -5,6 +5,7 @@ import {
   SEND_VALID_MS,
 } from './contract-delivery.service';
 import { ContractSendService } from './contract-send.service';
+import { SIGNED_ONCE } from './signed-contract';
 import { ContractsService } from './contracts.service';
 
 // 근로계약 재발송(WHALEERP-136). 보내기 자체(초대 · 알림톡 · 되돌리기)는 contract-delivery.service.spec 에서 본다
@@ -436,9 +437,10 @@ describe('ContractSendService (재발송)', () => {
         unknown,
         [{ where: unknown }],
       ];
-      // 이 계약 기간과 겹치는 것만 · 이 계약과 직전 계약은 빼고(api #158 리뷰)
+      // 이 계약 기간과 겹치는 것만 · 이 계약과 직전 계약(줄의 앞 계약)은 빼고(api #158 리뷰), 기간이 끝나 배치가 닫은 계약도
+      // 본다(SIGNED_ONCE, api #158 재리뷰 참고 1)
       expect(signedQuery[0].where).toMatchObject({
-        status: 'SIGNED',
+        ...SIGNED_ONCE,
         contractId: { notIn: [7, 5] },
       });
     });

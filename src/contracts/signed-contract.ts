@@ -1,5 +1,16 @@
-import { Prisma } from '@prisma/client';
-import { IN_PROGRESS } from './contract-duplicates';
+import { ContractStatus, Prisma } from '@prisma/client';
+
+/**
+ * 진행 중 근로계약 — 임시저장부터 수정 요청까지(체결 전). contract-duplicates 가 다시 내보낸다. 여기에 두는 까닭: 이 파일은
+ * 다른 계약 모듈을 읽지 않아야 한다 — contract-duplicates → contract-status → 이 파일로 도는 순환에서 이 값을 읽을 때 아직
+ * 정해지지 않아 LIVE_RENEWAL 이 조건 없음({ status: {} })으로 굳었다(api #158 재리뷰).
+ */
+export const IN_PROGRESS: ContractStatus[] = [
+  'DRAFT',
+  'PENDING_SEND',
+  'PENDING_SIGNATURE',
+  'CORRECTION_REQUESTED',
+];
 
 /**
  * 체결을 거친 근로계약 — 지금 체결 완료이거나, 기간이 끝나 하루 배치가 종료(ENDED)한 계약(2026-10-21 재영 A안 · PAY-11). 하루
