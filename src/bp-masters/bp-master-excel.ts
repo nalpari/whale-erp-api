@@ -1,10 +1,6 @@
 import ExcelJS from 'exceljs';
-import {
-  addressText,
-  bizNumberText,
-  kstDateTime,
-  maskPhone,
-} from '../stores/store-excel';
+import { kstDateTime } from '../common/kst-date-time';
+import { addressText, bizNumberText, maskPhone } from '../stores/store-excel';
 
 /** 엑셀 한 줄의 재료 — 목록 항목과 BP 사업자정보. 탈퇴 BP 는 이름 · 연락처 · 이메일이 null 이다. */
 export type BpMasterExcelRow = {

@@ -1,6 +1,6 @@
 import {
-  BadRequestException,
   ConflictException,
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Inject,
@@ -15,6 +15,8 @@ import {
   DUPLICATE_BIZ_REGISTRATION_NUMBER,
 } from '../admin-signup/business-verification.service';
 import { nextBpCode } from '../admin-signup/next-bp-code';
+import { isPlatformRole } from '../admin-scope/admin-scope.service';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import type { BpBusinessVerificationDto } from '../auth/dto/bp-business-verification.dto';
 import { WITHDRAW_REASON_LABEL } from '../auth/admin-withdrawal.service';
 import { hashPassword } from '../auth/password';
@@ -36,14 +38,7 @@ import {
 } from '../platform-admins/platform-admin-mail';
 import { generateTempPassword } from '../platform-admins/temp-password';
 import { PrismaService } from '../prisma/prisma.service';
-import {
-  STORE_EXCEL_INTERVAL_MS,
-  STORE_EXCEL_MAX_ROWS,
-} from '../stores/store-excel';
-import {
-  bpMasterExcelFileName,
-  buildBpMasterWorkbook,
-} from './bp-master-excel';
+import { buildBpMasterWorkbook } from './bp-master-excel';
 import type { ChangeableBpStatus } from './dto/bp-master-status.dto';
 import type {
   BpMasterBusinessVerificationResponseDto,
@@ -166,8 +161,6 @@ type HistoryRow = {
 @Injectable()
 export class BpMastersService {
   private readonly logger = new Logger(BpMastersService.name);
-  /** 관리자별 엑셀 받은 시각(ms). 프로세스 메모리라 인스턴스마다 따로 센다(점포 엑셀과 같다). */
-  private readonly excelAt = new Map<number, number>();
   /** 관리자별 국세청 호출 시각(ms). */
   private readonly ntsCallsAt = new Map<number, number[]>();
 
@@ -724,49 +717,34 @@ export class BpMastersService {
   }
 
   /**
-   * 엑셀 바로 받기. 목록과 같은 조건 · 순서로 전부 담는다. 1만 건 이상은 아직 받지 않는다(400). 한 사람 1분에
-   * 한 번이다(429) — 점포 엑셀과 같은 규칙이고, 받은 기록은 남기지 않는다(점포와 같다, 2026-10-23 결정).
+   * 엑셀 건수 — 목록과 같은 조건. 1분 제한 · 1만 건 기준(바로 받기 · 예약 생성) · 이력은 공통 엑셀이 정한다
+   * (ExcelExportsService, BpMasterExcelSource 가 부른다 — 2026-10-28, 받은 기록을 남기게 됐다).
    */
-  async excel(
-    callerId: number,
-    filter: BpMasterFilterDto,
-  ): Promise<{ fileName: string; buffer: Buffer }> {
-    const now = Date.now();
-    const last = this.excelAt.get(callerId);
-    if (last !== undefined && now - last < STORE_EXCEL_INTERVAL_MS)
-      throw new HttpException(
-        `엑셀은 1분에 한 번 받을 수 있습니다. ${Math.ceil((last + STORE_EXCEL_INTERVAL_MS - now) / 1000)}초 뒤 다시 받아 주세요`,
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    // 파일을 만들기 전에 적어 둔다 — 두 번 누른 요청 중 하나만 지나가게.
-    this.excelAt.set(callerId, now);
-    for (const [admin, at] of this.excelAt)
-      if (now - at >= STORE_EXCEL_INTERVAL_MS) this.excelAt.delete(admin);
-    try {
-      return await this.buildExcel(filter);
-    } catch (error) {
-      // 조건을 고치면 되는 거절(4xx)은 1분에 세지 않는다. 서버 오류는 센다 — 다시 눌러 거듭 읽지 않게.
-      if (error instanceof HttpException && error.getStatus() < 500)
-        this.excelAt.delete(callerId);
-      throw error;
-    }
+  excelCount(filter: BpMasterFilterDto): Promise<number> {
+    return this.prisma.bpCode.count({ where: listWhere(filter) });
   }
 
-  private async buildExcel(
-    filter: BpMasterFilterDto,
-  ): Promise<{ fileName: string; buffer: Buffer }> {
-    const where = listWhere(filter);
-    const total = await this.prisma.bpCode.count({ where });
-    if (total >= STORE_EXCEL_MAX_ROWS)
-      throw new BadRequestException(
-        `1만 건 이상은 바로 받을 수 없습니다(${total.toLocaleString('ko-KR')}건). 검색 조건을 좁혀 주세요`,
-      );
+  /**
+   * 엑셀을 만들 사람이 지금도 쓸 수 있는 플랫폼 계정인지 — 가드(platformOnly)와 같은 판정. 예약 생성은 요청 뒤에 배치가
+   * 만들므로 그 사이 막혔거나 권한을 잃었으면 403 이다(공통 엑셀은 그것을 실패로 남긴다).
+   */
+  async assertExcelCaller(adminAccountId: number): Promise<void> {
+    const admin = await this.prisma.adminAccount.findFirst({
+      where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
+      select: { roleTypeCode: true, bpCode: { select: { isPlatform: true } } },
+    });
+    if (!admin || !isPlatformRole(admin.roleTypeCode, admin.bpCode.isPlatform))
+      throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
+  }
+
+  /** 엑셀 파일(xlsx) — 목록과 같은 조건 · 순서로 전부. 예약 생성 배치도 저장해 둔 조건으로 이것을 부른다. */
+  async excelFile(filter: BpMasterFilterDto): Promise<Buffer> {
     const rows = await this.prisma.bpCode.findMany({
-      where,
+      where: listWhere(filter),
       select: bpSelect,
       orderBy: ORDER_BY,
     });
-    const buffer = await buildBpMasterWorkbook(
+    return buildBpMasterWorkbook(
       rows.flatMap((row) => {
         const master = row.adminAccounts[0];
         if (!master) return [];
@@ -786,7 +764,6 @@ export class BpMastersService {
         ];
       }),
     );
-    return { fileName: bpMasterExcelFileName(), buffer };
   }
 
   /** 고객 BP 중 지우지 않은 것과 그 BP 마스터. 없으면 404. */

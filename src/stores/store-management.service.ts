@@ -60,12 +60,7 @@ import {
   type OptionalStoreBusinessVerifier,
   STORE_BUSINESS_VERIFIER,
 } from './store-business-verifier';
-import {
-  buildStoreWorkbook,
-  STORE_EXCEL_INTERVAL_MS,
-  STORE_EXCEL_MAX_ROWS,
-  storeExcelFileName,
-} from './store-excel';
+import { buildStoreWorkbook } from './store-excel';
 import {
   canTransition,
   floorLabel,
@@ -235,9 +230,6 @@ export class StoreManagementService implements OnModuleInit {
   /** 관리자 · 세 값별로 국세청이 일치라고 한 시각(ms). VERIFIED_REUSE_MS 에 쓴다. */
   private readonly verifiedAt = new Map<string, number>();
 
-  /** 관리자별 마지막 엑셀 받은 시각(ms). 1분 1회 제한에 쓴다. */
-  private readonly excelAt = new Map<number, number>();
-
   /** 연동이 없으면 아무 점포도 운영으로 바꿀 수 없다 — 운영자가 로그에서 알 수 있게 기동 때 남긴다. */
   onModuleInit(): void {
     if (!this.verifier)
@@ -306,51 +298,26 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   /**
-   * 엑셀 바로 받기. 목록과 같은 조건 · 순서로 전부 담는다. 1만 건 이상은 예약 생성 대상이라 아직 받지 않는다
-   * (400 — 조건을 좁히면 된다). 한 사람 1분에 한 번이다(429). 횟수는 이 프로세스 메모리에서 센다 — 서버를
-   * 여러 대로 늘리면 대수만큼 늘어난다.
+   * 엑셀 건수 — 목록과 같은 조건. 1분 제한 · 1만 건 기준(바로 받기 · 예약 생성) · 이력은 공통 엑셀이 정한다
+   * (ExcelExportsService, StoreExcelSource 가 부른다). 범위 · 계정 거절은 여기서 던진다.
    */
-  async excel(
+  async excelCount(
     callerId: number,
     bp: TargetBpContext,
     query: StoreExcelQueryDto,
-  ): Promise<{ fileName: string; buffer: Buffer }> {
+  ): Promise<number> {
     const caller = await this.loadCaller(callerId, bp);
-    const id = caller.adminAccountId;
-    const now = Date.now();
-    const last = this.excelAt.get(id);
-    if (last !== undefined && now - last < STORE_EXCEL_INTERVAL_MS)
-      throw new HttpException(
-        `엑셀은 1분에 한 번 받을 수 있습니다. ${Math.ceil((last + STORE_EXCEL_INTERVAL_MS - now) / 1000)}초 뒤 다시 받아 주세요`,
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    // 파일을 만들기 전에 적어 둔다 — 두 번 누른 요청 중 하나만 지나가게.
-    this.excelAt.set(id, now);
-    for (const [admin, at] of this.excelAt)
-      if (now - at >= STORE_EXCEL_INTERVAL_MS) this.excelAt.delete(admin);
-
-    try {
-      return await this.buildExcel(caller, query);
-    } catch (error) {
-      // 조건을 고치면 되는 거절(1만 건 초과 같은 4xx)은 1분에 세지 않는다. 서버 오류는 센다 — 다시 눌러
-      // 최대 1만 행을 거듭 읽지 않게.
-      if (error instanceof HttpException && error.getStatus() < 500)
-        this.excelAt.delete(id);
-      throw error;
-    }
+    return this.prisma.store.count({ where: listWhere(caller, query) });
   }
 
-  private async buildExcel(
-    caller: StoreCaller,
+  /** 엑셀 파일(xlsx) — 목록과 같은 조건 · 순서로 전부. 예약 생성 배치도 저장해 둔 조건으로 이것을 부른다. */
+  async excelFile(
+    callerId: number,
+    bp: TargetBpContext,
     query: StoreExcelQueryDto,
-  ): Promise<{ fileName: string; buffer: Buffer }> {
+  ): Promise<Buffer> {
+    const caller = await this.loadCaller(callerId, bp);
     const where = listWhere(caller, query);
-    const total = await this.prisma.store.count({ where });
-    if (total >= STORE_EXCEL_MAX_ROWS) {
-      throw new BadRequestException(
-        `1만 건 이상은 바로 받을 수 없습니다(${total.toLocaleString('ko-KR')}건). 검색 조건을 좁혀 주세요`,
-      );
-    }
     const rows = await this.prisma.store.findMany({
       where,
       select: {
@@ -383,7 +350,7 @@ export class StoreManagementService implements OnModuleInit {
       orderBy: [{ createdAt: 'desc' }, { storeId: 'desc' }],
     });
     const staff = await this.staffCounts(rows.map((r) => r.storeId));
-    const buffer = await buildStoreWorkbook(
+    return buildStoreWorkbook(
       rows.map(({ bpCode, businessProfile, storeId, ...r }) => ({
         ...r,
         bpTradeName: bpCode.tradeName,
@@ -391,7 +358,6 @@ export class StoreManagementService implements OnModuleInit {
         business: businessProfile,
       })),
     );
-    return { fileName: storeExcelFileName(), buffer };
   }
 
   async detail(

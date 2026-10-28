@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   Query,
+  Res,
   StreamableFile,
   UploadedFiles,
   UseGuards,
@@ -17,6 +18,7 @@ import {
 } from '@nestjs/common';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import {
+  ApiAcceptedResponse,
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiBody,
@@ -39,8 +41,14 @@ import {
 import { signedInUserTracker } from '../auth/throttle';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
+import type { Response } from 'express';
 import { parseRouteId } from '../common/route-id';
-import { contentDisposition } from '../storage/storage.service';
+import { ExcelScheduledResponseDto } from '../excel-exports/dto/excel-export.response.dto';
+import { ExcelExportsService } from '../excel-exports/excel-exports.service';
+import {
+  excelResponse,
+  XLSX_CONTENT_TYPE,
+} from '../excel-exports/excel-response';
 import { AttachmentsInterceptor } from '../storage/upload-check';
 import { ListStoreOptionsQueryDto } from './dto/list-store-options-query.dto';
 import {
@@ -63,7 +71,7 @@ import {
   StoreListResponseDto,
   StoreTransitionCheckResponseDto,
 } from './dto/store.response.dto';
-import { XLSX_CONTENT_TYPE } from './store-excel';
+import { StoreExcelSource } from './store-excel.source';
 import {
   STORE_IMAGE_MAX_BYTES,
   StoreManagementService,
@@ -98,6 +106,8 @@ export class StoresController {
   constructor(
     private readonly stores: StoresService,
     private readonly management: StoreManagementService,
+    private readonly excelExports: ExcelExportsService,
+    private readonly excelSource: StoreExcelSource,
   ) {}
 
   /** 근무지 선택지. 업무 범위 안에서 지우지 않았고 폐점이 아닌 점포, 이름순. `:id` 보다 먼저 둔다. */
@@ -131,36 +141,42 @@ export class StoresController {
   }
 
   /**
-   * 엑셀 바로 받기(xlsx). 목록과 같은 검색 조건으로 전부 담고, 대표자 연락처만 가운데 자리를 가린다.
-   * 1만 건 이상은 400(예약 생성은 아직 없다), 한 사람 1분에 한 번(429). `:id` 보다 먼저 둔다.
+   * 엑셀(xlsx). 목록과 같은 검색 조건으로 전부 담고, 대표자 연락처만 가운데 자리를 가린다. 공통 엑셀 규칙을 따른다 —
+   * 1만 건 미만은 바로 파일(200), 이상은 예약 생성(202, 다 만들어지면 등록한 이메일로 링크). 같은 사람 · 같은 화면은 생성
+   * 중이면 409, 1분에 한 번(429). `:id` 보다 먼저 둔다.
    */
   @Get('excel')
   @MenuPermission('read')
-  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiProduces(XLSX_CONTENT_TYPE, 'application/json')
   @ApiOkResponse({
     description: '점포목록_YYYYMMDD.xlsx',
     schema: { type: 'string', format: 'binary' },
   })
+  @ApiAcceptedResponse({
+    description: '1만 건 이상 — 예약 생성(메일로 링크)',
+    type: ExcelScheduledResponseDto,
+  })
   @ApiBadRequestResponse({
-    description: `검색 조건 형식 · 1만 건 이상 · ${BP_MISSING_DESCRIPTION}`,
+    description: `검색 조건 형식 · 1만 건 이상인데 등록한 이메일이 없음 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
+  @ApiConflictResponse({ description: '같은 화면의 엑셀을 만드는 중' })
   @ApiTooManyRequestsResponse({ description: '1분 안에 다시 받음' })
+  @ApiServiceUnavailableResponse({
+    description: '1만 건 이상인데 메일 · 저장소 설정이 없음',
+  })
   async excel(
     @CurrentUser() user: AuthUser,
     @TargetBp() bp: TargetBpContext,
     @Query() query: StoreExcelQueryDto,
-  ): Promise<StreamableFile> {
-    const { fileName, buffer } = await this.management.excel(
-      user.id,
-      bp,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile | ExcelScheduledResponseDto> {
+    const result = await this.excelExports.request(
+      this.excelSource,
+      { adminAccountId: user.id, bp },
       query,
     );
-    return new StreamableFile(buffer, {
-      type: XLSX_CONTENT_TYPE,
-      disposition: contentDisposition(fileName),
-      length: buffer.length,
-    });
+    return excelResponse(result, res);
   }
 
   /**

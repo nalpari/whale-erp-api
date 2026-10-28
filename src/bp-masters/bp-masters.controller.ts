@@ -10,10 +10,12 @@ import {
   Post,
   Put,
   Query,
+  Res,
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiAcceptedResponse,
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
@@ -29,6 +31,7 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
+import type { Response } from 'express';
 import { MenuPermission } from '../auth/menu-permission.guard';
 import { signedInUserTracker } from '../auth/throttle';
 import { AdminProfileEmailAvailabilityQueryDto } from '../auth/dto/admin-profile-email-availability-query.dto';
@@ -39,8 +42,13 @@ import {
   LoginIdAvailabilityQueryDto,
   LoginIdAvailabilityResponseDto,
 } from '../platform-admins/dto/login-id-availability.dto';
-import { contentDisposition } from '../storage/storage.service';
-import { XLSX_CONTENT_TYPE } from '../stores/store-excel';
+import { ExcelScheduledResponseDto } from '../excel-exports/dto/excel-export.response.dto';
+import { ExcelExportsService } from '../excel-exports/excel-exports.service';
+import {
+  excelResponse,
+  XLSX_CONTENT_TYPE,
+} from '../excel-exports/excel-response';
+import { BpMasterExcelSource } from './bp-master-excel.source';
 import { BpMastersService } from './bp-masters.service';
 import { ChangeBpMasterStatusDto } from './dto/bp-master-status.dto';
 import {
@@ -70,7 +78,11 @@ const WITHDRAWN_DESCRIPTION = '탈퇴한 BP';
 @UserTypes('admin')
 @Controller('bp-masters')
 export class BpMastersController {
-  constructor(private readonly bpMasters: BpMastersService) {}
+  constructor(
+    private readonly bpMasters: BpMastersService,
+    private readonly excelExports: ExcelExportsService,
+    private readonly excelSource: BpMasterExcelSource,
+  ) {}
 
   /** 목록. 고객 BP, 등록 일시 최신순. */
   @Get()
@@ -80,28 +92,40 @@ export class BpMastersController {
   }
 
   /**
-   * 엑셀 바로 받기(xlsx). 목록과 같은 조건으로 전부, 연락처 · 대표자 연락처는 가운데 자리를 가린다.
-   * 1만 건 이상은 400, 한 사람 1분에 한 번(429). `:id` 보다 먼저 둔다.
+   * 엑셀(xlsx). 목록과 같은 조건으로 전부, 연락처 · 대표자 연락처는 가운데 자리를 가린다. 공통 엑셀 규칙을 따른다 —
+   * 1만 건 미만은 바로 파일(200), 이상은 예약 생성(202, 등록한 이메일로 링크). 같은 사람이 생성 중이면 409, 1분에
+   * 한 번(429). `:id` 보다 먼저 둔다.
    */
   @Get('excel')
   @MenuPermission('read', { platformOnly: true })
-  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiProduces(XLSX_CONTENT_TYPE, 'application/json')
   @ApiOkResponse({
     description: 'BP목록_YYYYMMDD.xlsx',
     schema: { type: 'string', format: 'binary' },
   })
-  @ApiBadRequestResponse({ description: '검색 조건 형식 · 1만 건 이상' })
+  @ApiAcceptedResponse({
+    description: '1만 건 이상 — 예약 생성(메일로 링크)',
+    type: ExcelScheduledResponseDto,
+  })
+  @ApiBadRequestResponse({
+    description: '검색 조건 형식 · 1만 건 이상인데 등록한 이메일이 없음',
+  })
+  @ApiConflictResponse({ description: '같은 화면의 엑셀을 만드는 중' })
   @ApiTooManyRequestsResponse({ description: '1분 안에 다시 받음' })
+  @ApiServiceUnavailableResponse({
+    description: '1만 건 이상인데 메일 · 저장소 설정이 없음',
+  })
   async excel(
     @CurrentUser() user: AuthUser,
     @Query() query: BpMasterFilterDto,
-  ): Promise<StreamableFile> {
-    const { fileName, buffer } = await this.bpMasters.excel(user.id, query);
-    return new StreamableFile(buffer, {
-      type: XLSX_CONTENT_TYPE,
-      disposition: contentDisposition(fileName),
-      length: buffer.length,
-    });
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile | ExcelScheduledResponseDto> {
+    const result = await this.excelExports.request(
+      this.excelSource,
+      { adminAccountId: user.id, bp: null },
+      query,
+    );
+    return excelResponse(result, res);
   }
 
   /** 아이디 중복 확인. 등록 권한이 필요하다. `:id` 보다 먼저 둔다. */

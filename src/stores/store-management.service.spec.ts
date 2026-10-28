@@ -489,8 +489,8 @@ describe('StoreManagementService', () => {
           s.list(PM, PLATFORM_NO_HEADER, { page: 1, pageSize: 20 }),
       ],
       [
-        'excel',
-        (s: StoreManagementService) => s.excel(PM, PLATFORM_NO_HEADER, {}),
+        'excelCount',
+        (s: StoreManagementService) => s.excelCount(PM, PLATFORM_NO_HEADER, {}),
       ],
       [
         'detail',
@@ -1715,7 +1715,8 @@ describe('StoreManagementService', () => {
     });
   });
 
-  describe('excel', () => {
+  // 1분 제한 · 1만 건 기준 · 생성 중 거절 · 이력은 공통 엑셀(ExcelExportsService)이 맡는다 — test/excel-exports.e2e-spec.ts.
+  describe('엑셀 — 건수 · 파일', () => {
     const excelRow = {
       storeId: 11,
       storeCode: 'ST000011',
@@ -1730,37 +1731,41 @@ describe('StoreManagementService', () => {
       bpCode: { tradeName: '모리커피' },
       businessProfile: null,
     };
-    let now: jest.SpyInstance;
+    const where = {
+      AND: [
+        { isDeleted: false, bpCodeId: 3 },
+        {
+          storeStatusCode: { in: ['CLOSED'] },
+          storeTypeCode: { in: ['DIRECT', 'FRANCHISE'] },
+        },
+      ],
+    };
 
     beforeEach(() => {
-      now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
       prisma.store.findMany.mockResolvedValue([excelRow]);
-      prisma.store.count.mockResolvedValue(1);
+      prisma.store.count.mockResolvedValue(12_480);
     });
-    afterEach(() => now.mockRestore());
 
-    it('목록과 같은 조건 · 순서로 전부 읽어 xlsx 를 만든다(쪽 나눔 없음)', async () => {
+    it('건수는 목록과 같은 조건으로 센다 — 1만 건이 넘어도 그대로 돌려준다(예약 생성은 공통이 정한다)', async () => {
+      await expect(
+        service.excelCount(BM, OWN_BP, { statuses: ['CLOSED'] }),
+      ).resolves.toBe(12_480);
+      expect(prisma.store.count).toHaveBeenCalledWith({ where });
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
+    });
+
+    it('파일은 목록과 같은 조건 · 순서로 전부 읽어 xlsx 를 만든다(쪽 나눔 없음)', async () => {
       prisma.staffMember.groupBy.mockResolvedValue([
         { storeId: 11, _count: { _all: 3 } },
       ]);
-      const file = await service.excel(BM, OWN_BP, { statuses: ['CLOSED'] });
+      const buffer = await service.excelFile(BM, OWN_BP, {
+        statuses: ['CLOSED'],
+      });
 
-      expect(file.fileName).toMatch(/^점포목록_\d{8}\.xlsx$/);
       // xlsx 는 zip 이다.
-      expect(file.buffer.subarray(0, 2).toString()).toBe('PK');
+      expect(buffer.subarray(0, 2).toString()).toBe('PK');
       const args = prisma.store.findMany.mock.calls[0][0];
-      expect(args.where).toEqual({
-        AND: [
-          { isDeleted: false, bpCodeId: 3 },
-          {
-            storeStatusCode: { in: ['CLOSED'] },
-            storeTypeCode: { in: ['DIRECT', 'FRANCHISE'] },
-          },
-        ],
-      });
-      expect(prisma.store.count.mock.calls[0][0]).toEqual({
-        where: args.where,
-      });
+      expect(args.where).toEqual(where);
       expect(args.orderBy).toEqual([
         { createdAt: 'desc' },
         { storeId: 'desc' },
@@ -1770,44 +1775,15 @@ describe('StoreManagementService', () => {
       expect(args.select.businessProfile).toBeTruthy();
     });
 
-    it('1만 건 이상이면 400 이고 읽지 않는다 — 조건을 좁혀 다시 받을 수 있다', async () => {
-      prisma.store.count.mockResolvedValue(10_000);
-      await expect(service.excel(BM, OWN_BP, {})).rejects.toThrow(
-        '1만 건 이상은 바로 받을 수 없습니다',
-      );
-      expect(prisma.store.findMany).not.toHaveBeenCalled();
-
-      prisma.store.count.mockResolvedValue(9_999);
-      await expect(service.excel(BM, OWN_BP, {})).resolves.toBeDefined();
-    });
-
-    it('한 사람은 1분에 한 번 — 그 안의 두 번째는 429, 다른 사람은 받는다, 1분이 지나면 다시 받는다', async () => {
-      await service.excel(BM, OWN_BP, {});
-      await expect(service.excel(BM, OWN_BP, {})).rejects.toMatchObject({
-        status: 429,
-      });
-      await expect(service.excel(PM, OWN_BP, {})).resolves.toBeDefined();
-      now.mockReturnValue(1_000_000 + 60_000);
-      await expect(service.excel(BM, OWN_BP, {})).resolves.toBeDefined();
-    });
-
-    it('동시에 두 번 눌러도 하나만 만든다', async () => {
-      const results = await Promise.allSettled([
-        service.excel(BM, OWN_BP, {}),
-        service.excel(BM, OWN_BP, {}),
-      ]);
-      expect(results.map((r) => r.status).sort()).toEqual([
-        'fulfilled',
-        'rejected',
-      ]);
-    });
-
-    it('사용 중인 관리자 계정이 아니면 403, 횟수에 세지 않는다', async () => {
+    it('사용 중인 관리자 계정이 아니면 403 — 건수 · 파일 모두', async () => {
       prisma.adminAccount.findFirst.mockResolvedValueOnce(null);
-      await expect(service.excel(BM, OWN_BP, {})).rejects.toBeInstanceOf(
+      await expect(service.excelCount(BM, OWN_BP, {})).rejects.toBeInstanceOf(
         ForbiddenException,
       );
-      await expect(service.excel(BM, OWN_BP, {})).resolves.toBeDefined();
+      prisma.adminAccount.findFirst.mockResolvedValueOnce(null);
+      await expect(service.excelFile(BM, OWN_BP, {})).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
     });
   });
 
@@ -2830,14 +2806,6 @@ describe('StoreManagementService', () => {
         failure,
       );
       expect(storage!.delete).not.toHaveBeenCalled();
-    });
-
-    it('엑셀을 만들다 서버 오류가 나면 1분 제한은 그대로 걸린다 — 다시 눌러 DB 를 거듭 읽지 않게', async () => {
-      prisma.store.findMany.mockRejectedValueOnce(new Error('db down'));
-      await expect(service.excel(BM, OWN_BP, {})).rejects.toThrow('db down');
-      await expect(service.excel(BM, OWN_BP, {})).rejects.toMatchObject({
-        status: 429,
-      });
     });
   });
 });

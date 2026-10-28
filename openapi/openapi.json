@@ -5167,17 +5167,44 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "1만 건 이상 — 예약 생성(메일로 링크)",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExcelScheduledResponseDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExcelScheduledResponseDto"
+                }
               }
             }
           },
           "400": {
-            "description": "검색 조건 형식 · 1만 건 이상"
+            "description": "검색 조건 형식 · 1만 건 이상인데 등록한 이메일이 없음"
           },
           "403": {
             "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
           },
+          "409": {
+            "description": "같은 화면의 엑셀을 만드는 중"
+          },
           "429": {
             "description": "1분 안에 다시 받음"
+          },
+          "503": {
+            "description": "1만 건 이상인데 메일 · 저장소 설정이 없음"
           }
         },
         "security": [
@@ -5185,7 +5212,7 @@
             "bearer": []
           }
         ],
-        "summary": "엑셀 바로 받기(xlsx). 목록과 같은 조건으로 전부, 연락처 · 대표자 연락처는 가운데 자리를 가린다.\n1만 건 이상은 400, 한 사람 1분에 한 번(429). `:id` 보다 먼저 둔다.",
+        "summary": "엑셀(xlsx). 목록과 같은 조건으로 전부, 연락처 · 대표자 연락처는 가운데 자리를 가린다. 공통 엑셀 규칙을 따른다 —\n1만 건 미만은 바로 파일(200), 이상은 예약 생성(202, 등록한 이메일로 링크). 같은 사람이 생성 중이면 409, 1분에\n한 번(429). `:id` 보다 먼저 둔다.",
         "tags": [
           "BpMasters"
         ]
@@ -5708,6 +5735,51 @@
         "summary": "비밀번호 초기화. 새 1시간짜리 비밀번호를 BP 마스터 이메일로만 보낸다. 수정 권한이 필요하다.",
         "tags": [
           "BpMasters"
+        ]
+      }
+    },
+    "/excel-downloads/{id}": {
+      "get": {
+        "operationId": "ExcelDownloadsController_download",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExcelDownloadLinkResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "없음 · 요청한 본인이 아님 · 바로 받기"
+          },
+          "409": {
+            "description": "아직 만드는 중 · 만들지 못함"
+          },
+          "410": {
+            "description": "내려받기 기한(24시간)이 지남"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내려받기 주소(5분). 받은 시각을 이력에 남긴다.",
+        "tags": [
+          "ExcelDownloads"
         ]
       }
     },
@@ -9513,11 +9585,32 @@
                   "type": "string",
                   "format": "binary"
                 }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "1만 건 이상 — 예약 생성(메일로 링크)",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExcelScheduledResponseDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExcelScheduledResponseDto"
+                }
               }
             }
           },
           "400": {
-            "description": "검색 조건 형식 · 1만 건 이상 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+            "description": "검색 조건 형식 · 1만 건 이상인데 등록한 이메일이 없음 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
             "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더 · 가맹 계정의 등록"
@@ -9525,8 +9618,14 @@
           "404": {
             "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
+          "409": {
+            "description": "같은 화면의 엑셀을 만드는 중"
+          },
           "429": {
             "description": "1분 안에 다시 받음"
+          },
+          "503": {
+            "description": "1만 건 이상인데 메일 · 저장소 설정이 없음"
           }
         },
         "security": [
@@ -9534,7 +9633,7 @@
             "bearer": []
           }
         ],
-        "summary": "엑셀 바로 받기(xlsx). 목록과 같은 검색 조건으로 전부 담고, 대표자 연락처만 가운데 자리를 가린다.\n1만 건 이상은 400(예약 생성은 아직 없다), 한 사람 1분에 한 번(429). `:id` 보다 먼저 둔다.",
+        "summary": "엑셀(xlsx). 목록과 같은 검색 조건으로 전부 담고, 대표자 연락처만 가운데 자리를 가린다. 공통 엑셀 규칙을 따른다 —\n1만 건 미만은 바로 파일(200), 이상은 예약 생성(202, 다 만들어지면 등록한 이메일로 링크). 같은 사람 · 같은 화면은 생성\n중이면 409, 1분에 한 번(429). `:id` 보다 먼저 둔다.",
         "tags": [
           "Stores"
         ]
@@ -21053,6 +21152,30 @@
           "total"
         ]
       },
+      "ExcelScheduledResponseDto": {
+        "type": "object",
+        "properties": {
+          "excelDownloadId": {
+            "type": "number",
+            "description": "다운로드 이력 ID — 메일 링크와 `GET /excel-downloads/{id}` 가 쓴다.",
+            "example": 41
+          },
+          "rowCount": {
+            "type": "number",
+            "description": "담길 건수(요청 때 센 값).",
+            "example": 12480
+          },
+          "message": {
+            "type": "string",
+            "description": "화면에 그대로 보일 안내."
+          }
+        },
+        "required": [
+          "excelDownloadId",
+          "rowCount",
+          "message"
+        ]
+      },
       "VerifyBpMasterBusinessDto": {
         "type": "object",
         "properties": {
@@ -21632,6 +21755,29 @@
         },
         "required": [
           "isMailSent"
+        ]
+      },
+      "ExcelDownloadLinkResponseDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "S3 서명 주소(5분)."
+          },
+          "fileName": {
+            "type": "string",
+            "example": "점포목록_20261028.xlsx"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "내려받기 기한(완료 + 24시간).",
+            "example": "2026-10-29T05:05:00.000Z"
+          }
+        },
+        "required": [
+          "url",
+          "fileName",
+          "expiresAt"
         ]
       },
       "TermsVersionResponseDto": {
@@ -27583,7 +27729,7 @@
           },
           "hasDefault": {
             "type": "boolean",
-            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 42건) — 되돌리기를 보일지"
+            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 44건) — 되돌리기를 보일지"
           },
           "updatedByName": {
             "type": "string",
@@ -27727,7 +27873,7 @@
           },
           "hasDefault": {
             "type": "boolean",
-            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 42건) — 되돌리기를 보일지"
+            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 44건) — 되돌리기를 보일지"
           },
           "updatedByName": {
             "type": "string",
