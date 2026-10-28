@@ -53,7 +53,10 @@ export class StaffMemberLinkHoldDto {
   heldAt: Date;
 }
 
-/** 가장 최근 근로계약 */
+/**
+ * 가장 최근 근로계약 — 만든 순서로 가장 늦은 것. 연장 재계약이 임시저장이거나 거부 · 만료 · 체결 없이 종료로 끝났으면 건너뛴다
+ * (NOT_IDLE_RENEWAL, WHALEERP-156) — 지금 효력인 직전 계약과 갱신 예정일이 보이게
+ */
 export class StaffMemberContractDto {
   contractId: number;
   @ApiProperty({
@@ -63,6 +66,11 @@ export class StaffMemberContractDto {
   })
   status: ContractStatus | null;
   signDeadlineAt: Date | null;
+  /**
+   * 마지막으로 보낸 때(계약 상세 lastSentAt 과 같은 값). 초대 재발송 본문 expectedSentAt 으로 그대로 보낸다 — 두 화면에서 같은 계약을
+   * 두 번 다시 보내지 않게(api #158 셀프 code-review). 보낸 적 없으면 null
+   */
+  lastSentAt: Date | null;
   /** 계약 종료일(YYYY-MM-DD). 비면 무기한 */
   endDate: string | null;
   /** 최종 수정 일시. 거부일을 따로 저장하지 않아 「거부 · MM-DD」는 이 값으로 보인다 */

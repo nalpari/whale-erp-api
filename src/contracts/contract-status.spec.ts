@@ -4,7 +4,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ContractStatus, Prisma } from '@prisma/client';
+import { SIGNED_ONCE } from './signed-contract';
 import {
+  applyStartedTerms,
+  refillHiredDate,
+  refixHiredDate,
   canTransition,
   fillHiredDate,
   rejectContract,
@@ -73,9 +77,10 @@ const conflictOf = async (run: Promise<unknown>) => {
 };
 
 describe('전환 표', () => {
-  it('거부 · 만료 · 종료는 끝 상태다 (재발송은 WHALEERP-153 에서 정한다)', () => {
-    for (const s of ['REJECTED', 'EXPIRED', 'ENDED'] as const)
-      expect(TRANSITIONS[s]).toEqual([]);
+  it('거부 · 만료는 재발송으로 서명 대기 · 발송 대기로 돌아가고(WHALEERP-153), 종료는 끝 상태다 — 새 계약으로', () => {
+    for (const s of ['REJECTED', 'EXPIRED'] as const)
+      expect(TRANSITIONS[s]).toEqual(['PENDING_SIGNATURE', 'PENDING_SEND']);
+    expect(TRANSITIONS.ENDED).toEqual([]);
   });
 
   it('체결 완료는 종료로만 간다 — 내용을 바꾸려면 새 계약으로 대체한다', () => {
@@ -305,6 +310,122 @@ describe('fillHiredDate (입사일, WHALEERP-613)', () => {
       },
       data: { hiredDate: startDate },
     });
+  });
+});
+
+describe('applyStartedTerms (계약 조건을 직원 레코드로, WHALEERP-156)', () => {
+  const NOW = new Date('2026-10-27T03:00:00Z');
+  const contract = (startDate: string) => ({
+    staffMemberId: 3,
+    startDate: new Date(`${startDate}T00:00:00Z`),
+    employmentType: 'FULL_TIME',
+    jobTitle: '매니저',
+  });
+  const db = (c: unknown, newer: unknown = null) => ({
+    contract: {
+      findUnique: jest.fn().mockResolvedValue(c),
+      findFirst: jest.fn().mockResolvedValue(newer),
+    },
+    staffMember: { update: jest.fn() },
+  });
+  const run = (d: ReturnType<typeof db>) =>
+    applyStartedTerms(d as unknown as Prisma.TransactionClient, 7, NOW);
+
+  it('시작한 계약이면 직무 · 고용 형태를 직원 레코드로 옮긴다', async () => {
+    const d = db(contract('2026-10-01'));
+    await run(d);
+    expect(d.staffMember.update).toHaveBeenCalledWith({
+      where: { staffMemberId: 3 },
+      data: { employmentType: 'FULL_TIME', jobTitle: '매니저' },
+    });
+  });
+
+  it('시작 전이면 옮기지 않는다 — 시작일에 하루 배치가 옮긴다', async () => {
+    const d = db(contract('2026-11-01'));
+    await run(d);
+    expect(d.staffMember.update).not.toHaveBeenCalled();
+  });
+
+  it('더 늦게 시작해 지금 효력인 체결 완료가 있으면 옮기지 않는다 — 옛 계약을 뒤늦게 올려도(api #157 code-review)', async () => {
+    const d = db(contract('2024-01-01'), { contractId: 9 });
+    await run(d);
+    expect(d.staffMember.update).not.toHaveBeenCalled();
+  });
+
+  it('더 늦은 계약은 배치와 같은 기준이다 — 기간이 끝나 닫힌 계약도, 시작일이 같으면 id 가 큰 것(api #157 code-review)', async () => {
+    const d = db(contract('2026-10-01'));
+    await run(d);
+    const [[query]] = d.contract.findFirst.mock.calls as [
+      [{ where: { AND: unknown } }],
+    ];
+    expect(query.where.AND).toEqual([
+      SIGNED_ONCE,
+      {
+        OR: [
+          { startDate: { gt: new Date('2026-10-01T00:00:00Z') } },
+          {
+            startDate: new Date('2026-10-01T00:00:00Z'),
+            contractId: { gt: 7 },
+          },
+        ],
+      },
+    ]);
+  });
+});
+
+describe('refixHiredDate (바로잡기 뒤 입사일, api #157 재리뷰 7)', () => {
+  const db = (first: unknown) => ({
+    staffMember: {
+      findUnique: jest.fn().mockResolvedValue({
+        hiredDate: new Date('2026-11-01T00:00:00Z'),
+        retiredDate: new Date('2026-11-15T00:00:00Z'),
+      }),
+      update: jest.fn(),
+    },
+    contract: {
+      findFirst: jest
+        .fn()
+        // 입사일이 닫힌 계약에서 왔다
+        .mockResolvedValueOnce({ contractId: 3 })
+        .mockResolvedValueOnce(first),
+    },
+  });
+  const run = (d: ReturnType<typeof db>, target: boolean) =>
+    refixHiredDate(d as unknown as Prisma.TransactionClient, 9, [3], target);
+
+  it('남은 체결 계약 · 다시 올린 계약 가운데 가장 이른 시작일로 바꾼다', async () => {
+    const d = db({ startDate: new Date('2026-10-30T00:00:00Z') });
+    await run(d, true);
+    expect(d.staffMember.update).toHaveBeenCalledWith({
+      where: { staffMemberId: 9 },
+      data: { hiredDate: new Date('2026-10-30T00:00:00Z') },
+    });
+  });
+
+  it('출처가 없으면 다시 올린 계약이 붙는 레코드는 비우고, 다른 레코드는 그대로 둔다(셀프 code-review)', async () => {
+    const target = db(null);
+    await run(target, true);
+    expect(target.staffMember.update).toHaveBeenCalledWith({
+      where: { staffMemberId: 9 },
+      data: { hiredDate: null },
+    });
+    const other = db(null);
+    await run(other, false);
+    expect(other.staffMember.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('refillHiredDate (퇴직 취소 · 퇴직일 변경)', () => {
+  it('바로잡기로 닫은 계약은 치지 않는다 — 체결을 거친 계약(SIGNED_ONCE)의 첫 체결만(api #157 셀프 code-review)', async () => {
+    const d = {
+      contractStatusHistory: { findFirst: jest.fn().mockResolvedValue(null) },
+      staffMember: { updateMany: jest.fn() },
+    };
+    await refillHiredDate(d as unknown as Prisma.TransactionClient, 9, null);
+    const [[query]] = d.contractStatusHistory.findFirst.mock.calls as [
+      [{ where: { contract: unknown } }],
+    ];
+    expect(query.where.contract).toMatchObject(SIGNED_ONCE);
   });
 });
 

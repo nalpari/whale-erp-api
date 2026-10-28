@@ -589,7 +589,13 @@ export function restoredStatusOf(
 ): ContractStatus {
   const { status, draftAction } = p.before;
   if (status === null || status === 'DRAFT') return 'DRAFT';
-  if (status === 'CORRECTION_REQUESTED') return status;
+  // 수정 요청 · 거부 · 만료는 그대로 돌아간다 — 임시저장으로 되돌리면 끝난 계약이 다시 쓸 수 있는 계약이 된다(WHALEERP-153)
+  if (
+    status === 'CORRECTION_REQUESTED' ||
+    status === 'REJECTED' ||
+    status === 'EXPIRED'
+  )
+    return status;
   const reachable =
     liveInvitation ||
     (status === 'PENDING_SIGNATURE' &&

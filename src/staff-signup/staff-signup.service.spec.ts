@@ -67,6 +67,7 @@ describe('StaffSignupService', () => {
       phone: PHONE,
       employmentType: 'PART_TIME',
       accountId: null,
+      contracts: [],
     },
     ...overrides,
   });
@@ -170,6 +171,25 @@ describe('StaffSignupService', () => {
   });
 
   describe('초대 확인', () => {
+    it('고용 형태는 함께 온 계약(발송 대기)의 값이다 — 직원 레코드는 지난 계약 조건일 수 있다(api #157 재리뷰 4 참고)', async () => {
+      tx.invitation.findMany.mockResolvedValue([
+        invitation({
+          staffMember: {
+            staffMemberId: 9,
+            storeId: 3,
+            name: '홍길동',
+            phone: PHONE,
+            employmentType: 'PART_TIME',
+            accountId: null,
+            contracts: [{ employmentType: 'FULL_TIME' }],
+          },
+        }),
+      ]);
+      await expect(service().check(byCode)).resolves.toMatchObject({
+        employmentType: 'FULL_TIME',
+      });
+    });
+
     it('번호 + 코드 — 코드 HMAC 과 그 초대의 직원 레코드 번호가 모두 맞아야 한다', async () => {
       await expect(service().check(byCode)).resolves.toEqual({
         storeName: '모리커피 연남점',

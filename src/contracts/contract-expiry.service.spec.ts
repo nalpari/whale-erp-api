@@ -87,6 +87,10 @@ describe('ContractExpiryService (근로계약 하루 배치)', () => {
     );
     // 종료 · 갱신 예정 대상(종료일이 범위 끝까지인 체결 완료)의 직원도 잡는다
     expect(text).toMatch(/status = 'SIGNED' AND end_date <=/);
+    // 재계약으로 이어지는 계약이 시작해 닫을 앞 계약의 직원도
+    expect(text).toMatch(
+      /JOIN contracts n ON n\.previous_contract_id = p\.contract_id/,
+    );
     expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
       tx.contract.updateManyAndReturn.mock.invocationCallOrder[0],
     );
@@ -102,13 +106,21 @@ describe('ContractExpiryService (근로계약 하루 배치)', () => {
     expect(result.invitationsExpired).toBe(3);
   });
 
-  it('계약 종료일이 한국 날짜로 오늘보다 앞인 체결 완료 계약을 종료로 바꾼다', async () => {
+  it('계약 종료일이 한국 날짜로 오늘보다 앞이거나, 재계약으로 이어지는 체결 완료가 시작한 체결 완료 계약을 종료로 바꾼다', async () => {
     changed([], [7]);
 
     const result = await run();
 
     expect(argsOf(1).where).toEqual({
-      endDate: { lt: TODAY },
+      OR: [
+        { endDate: { lt: TODAY } },
+        // 이어지는 계약의 시작일에 앞 계약을 닫는다 — 종료일은 고치지 않는다(WHALEERP-156)
+        {
+          contractsAsPrevious: {
+            some: { status: 'SIGNED', startDate: { lte: TODAY } },
+          },
+        },
+      ],
       status: 'SIGNED',
     });
     expect(result.ended).toEqual([7]);

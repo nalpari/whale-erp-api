@@ -46,6 +46,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       phone: PHONE,
       employmentType: 'FULL_TIME',
       accountId: null,
+      contracts: [],
     },
     ...overrides,
   });
