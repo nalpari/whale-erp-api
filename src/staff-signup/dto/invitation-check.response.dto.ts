@@ -9,10 +9,7 @@ export class InvitationCheckResponseDto {
   /** 초대한 근무지(점포) 이름 */
   storeName: string;
 
-  /**
-   * 고용 형태 — 정직원 · 파트타이머. 함께 온 계약(발송 대기)의 값이고, 계약 칸이 비었으면 직원 레코드 값이다(직원 레코드는
-   * 체결을 거친 계약이 시작할 때 옮긴다)
-   */
+  /** 고용 형태 — 정직원 · 파트타이머. 함께 온 진행 중 계약의 값(없으면 직원 레코드) — 재계약 초대면 레코드는 옛 조건이다 */
   // enumName 을 주면 다른 DTO 의 EmploymentType 스키마와 설명을 나눠 써 한쪽 설명이 덮인다 — 여기서는 펼쳐 둔다
   @ApiProperty({ enum: EmploymentType })
   employmentType: EmploymentType;

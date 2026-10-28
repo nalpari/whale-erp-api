@@ -30,7 +30,8 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   // 가입 초대가 나가 가입을 기다린다. 가입하면 서명 대기(직원 앱, WHALEERP-141). 당사자 정보를 고쳐 그 번호에 계정이
   // 있으면 곧바로 서명 대기다. 대체 · 퇴직, 또는 채용을 접어 관리자가 종료로 닫는다(WHALEERP-327). 30일 안에 가입하지 않아도
   // 만료하지 않는다 — 초대만 만료되고 계약은 재발송할 수 있게 둔다(만료 재발송 WHALEERP-153 미정, api #150 리뷰)
-  PENDING_SEND: ['PENDING_SIGNATURE', 'ENDED'],
+  // 소속 추가 확인 요청을 직원이 거절하면 함께 온 계약은 거부로 닫는다(WHALEERP-130, 2026-10-26 재영 — 거절 사유를 계약에도 남김)
+  PENDING_SEND: ['PENDING_SIGNATURE', 'REJECTED', 'ENDED'],
   // 직원이 날인 · 거부하거나, 가입 값과 계약서 값이 달라 수정을 요청하거나(본인 대조, WHALEERP-125), 기한이 지나
   // 만료되거나, 대체 · 퇴직으로 닫는다. 관리자가 당사자 정보를 고치면 서명 대기 그대로 새 기한으로 다시 보낸다 — 번호를
   // 계정이 없는 번호로 고쳤으면 가입 초대를 보내 발송 대기로 간다
@@ -48,16 +49,18 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   CORRECTION_REQUESTED: ['PENDING_SIGNATURE', 'PENDING_SEND', 'ENDED'],
   // 계약 기간이 끝나거나 재계약 · 퇴직으로 닫는다. 내용은 고치지 않는다 — 바꾸려면 새 계약으로 대체한다
   SIGNED: ['ENDED'],
-  // 거부 · 만료 계약의 재발송(WHALEERP-153)은 아직 정하지 않았다 — 정해지면 여기에 더한다
-  REJECTED: [],
-  EXPIRED: [],
+  // 거부 · 만료 계약은 같은 조건으로 다시 보낼 수 있다(WHALEERP-153, 운영 정책 CTR-10 · 2026-10-26 재영) — 앱으로 받는
+  // 직원이면 서명 대기, 가입 초대면 발송 대기로 새 기한과 함께 돌아간다
+  REJECTED: ['PENDING_SIGNATURE', 'PENDING_SEND'],
+  EXPIRED: ['PENDING_SIGNATURE', 'PENDING_SEND'],
   ENDED: [],
 };
 
 /** 지금 상태라 바꿀 수 없을 때 알릴 문장. 다시 하는 방법(새로 고쳐 지금 상태 확인)을 함께 준다. */
 const NOW_STATUS: Record<ContractStatus, string> = {
   DRAFT: '임시저장한 근로계약입니다',
-  PENDING_SEND: '가입 초대를 보내고 직원 가입을 기다리는 근로계약입니다',
+  PENDING_SEND:
+    '가입 초대 · 소속 추가 확인 요청을 보내고 직원의 가입 · 수락을 기다리는 근로계약입니다',
   PENDING_SIGNATURE: '서명을 기다리는 근로계약입니다',
   CORRECTION_REQUESTED: '직원이 수정을 요청한 근로계약입니다',
   SIGNED: '이미 체결 완료된 근로계약입니다',
@@ -67,12 +70,20 @@ const NOW_STATUS: Record<ContractStatus, string> = {
 };
 
 /**
- * 다시 보낼 수 있는 상태 — 발송 대기 · 서명 대기(WHALEERP-136). 재발송(contract-send)과 직원 목록의 「다시 보낼 수
- * 있는가」(invitation.canResend)가 함께 쓴다.
+ * 다시 보낼 수 있는 상태 — 발송 대기 · 서명 대기(WHALEERP-136)와 거부 · 만료(WHALEERP-153). 재발송(contract-send)과 상세의
+ * canResend 가 함께 쓴다. 종료는 다시 보내지 못한다 — 새 계약으로.
  */
 export const RESENDABLE_STATUSES: readonly ContractStatus[] = [
   'PENDING_SEND',
   'PENDING_SIGNATURE',
+  'REJECTED',
+  'EXPIRED',
+];
+
+/** 끝난 뒤 다시 보내는 상태 — 거부 · 만료(WHALEERP-153). 다시 살아나므로 같은 사람의 다른 진행 중 계약 · 퇴직을 먼저 본다 */
+export const REOPENED_STATUSES: readonly ContractStatus[] = [
+  'REJECTED',
+  'EXPIRED',
 ];
 
 export const canTransition = (from: ContractStatus, to: ContractStatus) =>
@@ -304,6 +315,39 @@ export async function applyStartedTerms(
   });
 }
 
+/** 고용 형태 · 직무 한 벌 — 계약 행은 옛 행이면 비어 있을 수 있다 */
+type Terms = { employmentType: EmploymentType | null; jobTitle: string | null };
+
+/**
+ * 직원 레코드 select 에 펼쳐, 아직 시작하지 않은 진행 중 계약(보내 놓고 날인 전 — 발송 대기 · 서명 대기)의 고용 형태 · 직무를 함께
+ * 읽는다. pendingTermsOf 에 레코드와 그 계약 행(contracts[0])을 넘긴다. 가입 전 레코드에는 진행 중 계약이 하나다(같은 점포 진행
+ * 중 계약은 대체한다) — 가장 늦게 만든 것을 고른다.
+ */
+export const PENDING_TERMS_SELECT = {
+  employmentType: true,
+  jobTitle: true,
+  contracts: {
+    where: { status: { in: ['PENDING_SEND', 'PENDING_SIGNATURE'] } },
+    orderBy: { contractId: 'desc' },
+    take: 1,
+    select: { employmentType: true, jobTitle: true },
+  },
+} as const satisfies Prisma.StaffMemberSelect;
+
+/**
+ * 직원에게 알릴 고용 형태 · 직무 — 아직 시작 전 계약 조건은 계약에서, 없으면 레코드에서(WHALEERP-156 · 130). 직원 레코드는 계약이
+ * 시작할 때 옮겨(applyStartedTerms) 재계약 · 복귀 확인이면 옛 조건이다. 칸마다 섞지 않는다 — 조건을 적은 계약 행(고용 형태가
+ * 있음)이면 둘 다 그 계약, 아니면(계약이 없거나 조건이 비어 있는 옛 행) 둘 다 레코드다.
+ */
+export function pendingTermsOf(
+  record: { employmentType: EmploymentType; jobTitle: string },
+  contract: Terms | null | undefined,
+): { employmentType: EmploymentType; jobTitle: string | null } {
+  return contract?.employmentType
+    ? { employmentType: contract.employmentType, jobTitle: contract.jobTitle }
+    : { employmentType: record.employmentType, jobTitle: record.jobTitle };
+}
+
 /**
  * 바로잡기가 직원 레코드의 체결 완료를 닫은 뒤 그 레코드를 다시 맞춘다(api #157 재리뷰 4 · code-review). 직원 행은 부르는
  * 쪽이 write 로 잠가 둔다.
@@ -344,7 +388,8 @@ export async function resyncAfterCorrection(
  * 넣은 뒤(체결 완료) 부른다 — 먼저 부르면 그 시작일이 후보에 들지 않는다. 이력 순이 아니라 시작일 순이다 — 잘못 올린 첫 계약을
  * 더 이른 날로 바로잡으면 그 날이 입사일이다. 퇴직일보다 늦게 시작한 계약은 치지 않는다(fillHiredDate 와 같다). 바꿀 출처가
  * 없으면 다시 올린 계약이 붙는 레코드(target)는 입사일을 비운다 — 바로잡아 버린 계약의 날을 남기지 않는다(새 계약이 퇴직일 뒤에
- * 시작하면 fillHiredDate 도 채우지 않는 것과 같다). 다른 레코드(퇴직한 옛 레코드 등)는 그대로 둔다 — 비우면 그 재직 기간 ·
+ * 시작하면 fillHiredDate 도 채우지 않는 것과 같다). 재직 중인 다른 레코드(이름까지 고쳐 새 레코드에 다시 올린 옛 레코드)도
+ * 비운다 — 버린 계약의 날이 목록 · 상세에 남는다(api #157 재리뷰 8 참고). 퇴직한 옛 레코드는 그대로 둔다 — 비우면 그 재직 기간 ·
  * 급여의 기준이 사라진다(셀프 code-review). 직원 행은 부르는 쪽이 write 로 잠가 둔다.
  */
 export async function refixHiredDate(
@@ -372,7 +417,7 @@ export async function refixHiredDate(
     orderBy: [{ startDate: 'asc' }, { contractId: 'asc' }],
     select: { startDate: true },
   });
-  if (!first?.startDate && !target) return;
+  if (!first?.startDate && !target && s.retiredDate) return;
   await db.staffMember.update({
     where: { staffMemberId },
     data: { hiredDate: first?.startDate ?? null },

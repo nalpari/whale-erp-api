@@ -7,6 +7,7 @@ import { ContractStatus, Prisma } from '@prisma/client';
 import { SIGNED_ONCE } from './signed-contract';
 import {
   applyStartedTerms,
+  pendingTermsOf,
   refillHiredDate,
   refixHiredDate,
   canTransition,
@@ -77,21 +78,29 @@ const conflictOf = async (run: Promise<unknown>) => {
 };
 
 describe('전환 표', () => {
-  it('거부 · 만료 · 종료는 끝 상태다 (재발송은 WHALEERP-153 에서 정한다)', () => {
-    for (const s of ['REJECTED', 'EXPIRED', 'ENDED'] as const)
-      expect(TRANSITIONS[s]).toEqual([]);
+  it('거부 · 만료는 재발송으로 서명 대기 · 발송 대기로 돌아가고(WHALEERP-153), 종료는 끝 상태다 — 새 계약으로', () => {
+    for (const s of ['REJECTED', 'EXPIRED'] as const)
+      expect(TRANSITIONS[s]).toEqual(['PENDING_SIGNATURE', 'PENDING_SEND']);
+    expect(TRANSITIONS.ENDED).toEqual([]);
   });
 
   it('체결 완료는 종료로만 간다 — 내용을 바꾸려면 새 계약으로 대체한다', () => {
     expect(TRANSITIONS.SIGNED).toEqual(['ENDED']);
   });
 
-  it('거부 · 만료는 서명 대기에서만 간다 — 발송 대기는 초대만 만료되고 재발송할 수 있게 둔다(api #150 리뷰)', () => {
+  it('만료는 서명 대기에서만 간다 — 발송 대기는 초대만 만료되고 재발송할 수 있게 둔다(api #150 리뷰)', () => {
     const statuses = Object.keys(TRANSITIONS) as ContractStatus[];
-    for (const to of ['REJECTED', 'EXPIRED'] as const)
-      expect(statuses.filter((s) => canTransition(s, to))).toEqual([
-        'PENDING_SIGNATURE',
-      ]);
+    expect(statuses.filter((s) => canTransition(s, 'EXPIRED'))).toEqual([
+      'PENDING_SIGNATURE',
+    ]);
+  });
+
+  it('거부는 서명 대기(직원 거부)와 발송 대기(소속 추가 확인 요청 거절, WHALEERP-130)에서 간다', () => {
+    const statuses = Object.keys(TRANSITIONS) as ContractStatus[];
+    expect(statuses.filter((s) => canTransition(s, 'REJECTED'))).toEqual([
+      'PENDING_SEND',
+      'PENDING_SIGNATURE',
+    ]);
   });
 
   // 날인은 서명 대기에서, 종이 계약 등록(날인본을 올려 발송 · 날인 없이 체결 완료, CTR-23)은 임시저장에서 간다.
@@ -545,5 +554,21 @@ describe('수정 요청', () => {
       status: 'PENDING_SIGNATURE',
     });
     expect(d.contract.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+// 아직 시작 전 계약 조건은 계약에서, 없으면 레코드에서 — 칸마다 섞지 않는다(api #164 code-review)
+describe('pendingTermsOf', () => {
+  const record = { employmentType: 'PART_TIME' as const, jobTitle: '홀' };
+  it('조건을 적은 계약 행이면 둘 다 계약 값 — 계약 직무가 비어 있어도 레코드 직무로 채우지 않는다', () => {
+    expect(
+      pendingTermsOf(record, { employmentType: 'FULL_TIME', jobTitle: null }),
+    ).toEqual({ employmentType: 'FULL_TIME', jobTitle: null });
+  });
+  it('계약이 없거나 고용 형태가 빈 옛 행이면 둘 다 레코드 값', () => {
+    expect(pendingTermsOf(record, undefined)).toEqual(record);
+    expect(
+      pendingTermsOf(record, { employmentType: null, jobTitle: '매니저' }),
+    ).toEqual(record);
   });
 });

@@ -319,7 +319,8 @@ token's `sub`. Returns `201 { contractId, staffMemberId, status, draftAction }` 
 the system actually did, so the 관리자웹 can say it (WHALEERP-132): `null` when nothing was sent (임시저장, 종이 계약
 등록). When it sent, the channel is the same `channelOf` the send used: the 가입 초대 알림톡 is `SIGNUP_INVITE`; the
 app path is `IMMEDIATE_SEND` for a joined 직원 (app notice, whatever 초대 유형 the contract was first sent with),
-otherwise 소속 추가 확인 · 복귀 확인 (nothing reaches the 직원 until they confirm) — or `null` for an old contract with
+otherwise 소속 추가 확인 · 복귀 확인 (the 소속 추가 확인 요청 went out; the contract waits in 발송 대기 until the 직원
+accepts — see below) — or `null` for an old contract with
 no 초대 유형 and a 가입 전 직원 (no account to notify, nothing went out). If `dispatch` reports it sent nothing (another request —
 발송 대기 종료, 재발송 — expired the invitation between the commit and the send), the save reads the contract's
 status again and answers it with `null`; when it sent, nothing is read again. If that re-read fails it answers 502
@@ -576,11 +577,50 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   Both null for a 종이 임시저장 not registered yet, or one ended (대체 · 퇴직) before it was. Only an old 체결 완료 ·
   종료 contract with no history rows at all falls back to `created_at`.
   A 임시저장 continued by another admin still shows the creator — history rows do not record which admin.
-- `canResend` — whether policy allows `POST …/send`: 발송 대기 or 서명 대기, and the 직원 is 가입 완료 (app notice) or the
-  number has no account (가입 초대). A number with an account but no 가입 here (소속 추가 확인 · 복귀 확인) is 409
-  `SEND_CHANNEL_NOT_READY`, so the 상세 hides the button. The staff list's `invitation.canResend` follows the same rule
-  for the 가입 초대 case only (a joined 직원 is false there, true here — the app notice).
-  Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`) or missing send settings (503) still fail when sent.
+- `canResend` — whether policy allows `POST …/send`: 발송 대기 · 서명 대기, or 거부 · 만료 that can be reopened
+  (`reopenBlockOf` · 근무 시간 겹침, WHALEERP-153). A 가입 완료 직원 gets the app notice, a 가입 전 직원 the 가입 초대,
+  or the 소속 추가 확인 요청 when the number has an account (WHALEERP-130 — it stays 발송 대기 until the 직원 accepts).
+  The staff list's `contract.canResend` covers only 발송 대기 · 서명 대기 (`INVITE_RESENDABLE` — 거부 · 만료 is resent
+  from the 상세) and adds its 가입·인증 column policy for a 가입 전 직원 (a joined 직원 is false there, true here — the
+  app notice).
+  Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503) or the account being 재직 at this
+  store already (409) still fail when sent.
+
+# 소속 추가 확인 요청 (WHALEERP-130 · 144, 2026-10-26 재영)
+
+A number that already has an account but no record linked at this store (판별 `AFFILIATION_CONFIRM`, or
+`RETURN_CONFIRM` for someone who 퇴직 from this store) used to go straight to 서명 대기 with nothing reaching the 직원 —
+the app shows no contract to a 후보 계정. Now the missing 「점포 연결」 step is filled in (`channelOf` → `AFFILIATION`):
+
+- **On save · 재발송 · 근로자 정보 수정** the contract stays **발송 대기** (`deliveredStatusOf`). `prepare` expires earlier
+  `SENT` invitations, writes one `AFFILIATION_CONFIRM` / `RETURN_CONFIRM` invitation (channel `ALIMTALK`, 30 days, no code,
+  no token — the request hangs on the record's `candidate_account_id`, which the save's 판별 already wrote and `prepare`
+  leaves alone) and marks the record 초대 발송. `sent_at` is set; **`sign_deadline_at` stays null** — the 30-day 날인 기한
+  starts at acceptance (재영). 발송 대기 is never expired by the daily batch (it only expires 서명 대기); the invitation
+  expires after 30 days and the contract stays 발송 대기, so 재발송 continues it.
+- **After commit** `dispatch` sends alimtalk `TALK_STAFF_AFFILIATION_REQUEST` (사업자 · 근무지 · 고용형태 · 링크 =
+  `STAFF_APP_URL` + `/affiliations`, no token — the 직원 must log in). Its Kakao code `WHALE_AFFILIATION_01` is not
+  registered yet (2026-10-27 김민식: SMS fallback first), so Bizppurio answers with the 대체 문자; the same checks as the
+  가입 초대 apply before writing (app URL · SMS sender · mobile number · template on — 503 · 409). Failure handling is the
+  가입 초대's: surely not sent → undo (invitation deleted, previous one revived, status back, 502 `SEND_FAILED`); unknown
+  → 502 `SEND_UNCONFIRMED`. Undo leaves `candidate_account_id` as the save wrote it. The request shows in the 직원 app
+  right after commit, so the 직원 may answer before the alimtalk: if the invitation is already `ACCEPTED` /
+  `REJECTED` when `dispatch` checks it, or when a failed send's undo reads it, nothing is sent, deleted or reverted;
+  `dispatch` returns `'ANSWERED'` and the save · 재발송 re-read the contract and answer its current status (and
+  재발송 its current `sentAt` · `signDeadlineAt`) instead of the precomputed 발송 대기 · null. When a failed send is undone
+  after a 판별 that changed the 초대 유형 (same phone included), the new 판별 stays (`draftAction`, `candidate_account_id`)
+  and earlier invitations are not revived — the old channel no longer fits the number. An old-flow 서명 대기
+  소속 확인 contract with no request row goes back to 서명 대기 with its old `sentAt` · deadline. Then mail
+  `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email — its failure, or no `MAIL_*`, is logged only.
+- **근로자 정보 수정** runs the 판별 again for a 가입 전 직원 even when the phone is unchanged (as 재발송 does), so a
+  number whose account was created — or withdrawn and re-created — since the save gets the request on the current
+  account, and an old contract with no 초대 유형 gets a 가입 초대.
+- **Old data:** contracts saved before this change for such numbers sit in 서명 대기 with a 30-day deadline and
+  nothing reached the 직원; they expire on that deadline like any 서명 대기 unless an admin resends (재발송 moves them
+  back to 발송 대기 with a request). No data migration was run.
+- **The 직원 answers** in the app (`/me/affiliation-requests`, [Staff signup](/api/staff-signup.md)): accepting links the
+  record and moves its 발송 대기 contracts to 서명 대기 with `sign_deadline_at = now + 30 days` and the
+  `PUSH_CONTRACT_SENT` notice; rejecting closes them as 거부 (`PENDING_SEND → REJECTED`, `STAFF`) with the same reason.
 
 # Sending: on save, and POST /contracts/:contractId/send (재발송)
 
@@ -588,6 +628,30 @@ WHALEERP-136. **Saving sends** (2026-10-19 재영 정정 — the admin no longer
 초안 저장 (`POST` · `PUT` from 임시저장), a 수정 요청 fixed with `PUT`, and every
 `PATCH /worker` send the contract in the same request. `POST /contracts/:contractId/send` is
 only the 재발송. All of them go through `ContractDeliveryService`.[^contract-delivery]
+
+**거부 · 만료 재발송** (WHALEERP-153, 운영 정책 CTR-10 · 2026-10-26 재영): `POST …/send` also takes a 거부 or 만료
+contract and sends **the same terms** again — no interval limit. It goes back to the status a send gives (앱 직원 →
+서명 대기, 가입 초대 · 소속 추가 확인 요청 → 발송 대기 — a number with an account gets a new 소속 추가 확인 요청,
+WHALEERP-130) with a history row from 거부 · 만료, a new 30-day deadline and `resend_count + 1`; the
+거부 사유 stays on the row. Before reopening it is refused (409) when the store is closed or deleted (a store whose
+only contracts are 거부 · 만료 can be closed), when the 직원 is 퇴직 or has any 퇴직일 set — past or future, the same
+rule as sending a 재계약 임시저장 (CTR-25 — write a new contract when they come back; api #158 review), when another contract is in progress at the same store and phone (two
+would come alive), when its 계약 기간 has already ended (it would end the day it is signed — write a new contract; api #158 code-review),
+when another contract that went through 체결 (`SIGNED_ONCE` — also one the batch closed, the same basis as 입사일 · 직무 ·
+the batch; api #158 re-review) — other than the earlier contracts of its own 재계약 chain (its previous contract and those
+before it, as the 종이 재계약 overlap 409 ignores them) — overlaps its period or starts after it
+(`hasOverlappingSigned` with an open end — one that ended before it does not block; a contract without 시작일 is
+blocked by any other 체결 완료 — its period is unknown; api #158 review · code-review) — old terms must not
+be signed next to or ahead of a newer contract; a 재계약 does that — or, for a 재계약, when the same previous contract already has
+another live 재계약 (WHALEERP-156). These are 409 `REOPEN_BLOCKED` with the reason as `message` (a code so the screen shows the reason instead of reloading as stale), the 재발송 reads the store `FOR SHARE` so a 폐점 cannot slip in between (the detail reads it without a lock — it is outside a transaction), and the 근무 시간 겹침 is 409 `WORK_TIME_OVERLAP`. The body may carry `expectedStatus` and `expectedSentAt` (`SendContractDto`, the status and last 발송 시각 the screen
+showed): when either differs from the contract the 재발송 is 409 `CONTRACT_STATUS_CONFLICT` — a 서명 대기 screen left
+open must not revive a contract the 직원 has just rejected (status), and two tabs must not each resend the same 발송 대기 ·
+서명 대기 contract, whose status stays the same (발송 시각, changed by every 재발송; front #136 re-review). Both are
+optional — an older screen without them is sent as before (the 직원 목록 sends only the status). One function decides it (`reopenBlockOf`, `contract-reopen.ts`) and the detail's `canResend` also runs the 근무 시간 check (`reopenWorkTimeFree` — only `WORK_TIME_OVERLAP` turns it false, other errors propagate); the detail's
+`canResend` is false in those cases too. The 직원 목록's invitation `canResend` stays 발송 대기 · 서명 대기 only — a
+거부 · 만료 재발송 is done from the contract detail.
+It also runs the cross-store 근무 시간 겹침 check with the contract's own 근무 요일 · 기간 (`checkReopenWorkTime`, 409 `WORK_TIME_OVERLAP` — a 거부 · 만료 contract is not counted by that check, so another store may have taken the hours meanwhile; api #158 review). If the 가입 초대 then fails to go out, it rolls back to 거부 · 만료, not to 임시저장 (`restoredStatusOf`). 종료 is never
+resent — a new contract instead.
 
 - **How the 직원 receives it** (`channelOf`): not 가입 완료 and no account for the number
   (`draft_action = SIGNUP_INVITE`) → a **가입 초대** 알림톡 `TALK_STAFF_INVITATION` (근무지 · 초대코드 · 링크)
@@ -662,13 +726,14 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
     `PUSH_CONTRACT_SENT` template also means 200 with no notice (`noticeStaff` skips). The notice is
     an 알림함 row; no app push goes out until #261. 502 · 503 only come from the 가입 초대 알림톡. The 직원 app's
     open sign screen then answers 409 `CONTRACT_RESENT` (its `sentAt` is old) — on purpose.
-  - An account but not 가입 at this 점포 (소속 추가 확인 · 복귀 확인): 409 `SEND_CHANNEL_NOT_READY`
-    (body carries `draftAction`) — the 직원 app shows no contract to a 후보 계정
-    (`my-contract-scope.ts`) and has no 소속 확인 yet, so there is nowhere to receive it.
+  - An account but not 가입 at this 점포 (소속 추가 확인 · 복귀 확인): a new 소속 추가 확인 요청 (below) — the record's
+    `candidate_account_id` is set again from the fresh 판별 (the number's account may have changed), and an old
+    contract left in 서명 대기 by the earlier flow is moved back to 발송 대기 (`ADMIN` history row) since it is not
+    accepted yet. The answer's `signDeadlineAt` is `null` — the deadline starts at acceptance.
   - Other statuses are 409 `CONTRACT_STATUS_CONFLICT`. Locks stay 번호 (`lockPeople`) → 직원 행 →
     계약 행 (`lockContractWithStaff`).
-  - 직원 목록 `invitation.canResend` mirrors this for the 가입 초대 case — see
-    [Staff members](/api/staff-members.md). `RESENDABLE_STATUSES` (`contract-status.ts`) is shared.
+  - 직원 목록 `contract.canResend` (and the deprecated `invitation.canResend`) mirrors this for a 가입 전 직원 — see
+    [Staff members](/api/staff-members.md) (발송 대기 · 서명 대기 only).
 - The 알림톡 has **no button yet** — the common module does not send `at.button` and the
   Kakao button name of `WHALE_INVITE_01` is not recorded. The 초대 링크 reaches the 직원 only
   through the SMS fallback (`BIZPPURIO_SMS_FROM`). The new body also waits for Kakao to re-approve
@@ -685,9 +750,8 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
   `BIZPPURIO_*`** (2026-10-16 김민식 결정: required). e2e (`test/e2e-env.ts`) and
   `openapi:export` fill format-only values when they are empty.
 - 발송 대기 does **not** expire: an unanswered 가입 초대 past its 30 days only has its invitation made `EXPIRED` by the
-  daily batch, and the contract stays 발송 대기 so 직원 목록 「초대 만료 → 재발송」 still works. A 만료 contract has no
-  way back until 재발송 (WHALEERP-153) is decided (api #150 review — see
-  [Employment contract batch](/api/employment-contract-batch.md)).
+  daily batch, and the contract stays 발송 대기 so 직원 목록 「초대 만료 → 재발송」 still works (api #150 review — see
+  [Employment contract batch](/api/employment-contract-batch.md)). A 만료 서명 대기 can be resent too (WHALEERP-153).
 
 # Telling the 사업자 관리자: 날인 · 거부 · 만료 · 갱신 예정
 
@@ -769,7 +833,8 @@ transaction.[^contract-status]
 | 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (계정 없는 번호로 고침) · 만료 · 종료 |
 | 수정 요청 `CORRECTION_REQUESTED` | 서명 대기 (관리자가 고침) · 발송 대기 (계정 없는 번호로 고침) · 종료 (대체 · 퇴직) — never 만료: the deadline does not run |
 | 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약으로 이어지는 계약의 시작일 — 하루 배치, 대체 · 퇴직) |
-| 거부 · 만료 · 종료 | — (재발송 WHALEERP-153 is not decided yet) |
+| 거부 `REJECTED` · 만료 `EXPIRED` | 서명 대기 · 발송 대기 (재발송 `POST …/send`, WHALEERP-153 — 같은 조건, 새 기한) |
+| 종료 `ENDED` | — (다시 보내지 않는다 — 새 계약) |
 
 A contract's first status (임시저장, 발송 대기 · 서명 대기 when saved, or 체결 완료 for a 종이 계약)
 is set when it is created, and deleting a 임시저장 removes rows — neither is a

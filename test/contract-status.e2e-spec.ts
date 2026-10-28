@@ -10,6 +10,7 @@ import { ContractExpiryService } from '../src/contracts/contract-expiry.service'
 import { ContractNoticeService } from '../src/contracts/contract-notice.service';
 import { rejectContract, signContract } from '../src/contracts/contract-status';
 import { ContractsService } from '../src/contracts/contracts.service';
+import { ContractSendService } from '../src/contracts/contract-send.service';
 import { SIGNED_ONCE } from '../src/contracts/signed-contract';
 import { StaffMemberSummaryService } from '../src/staff-members/staff-member-summary.service';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
@@ -1387,6 +1388,25 @@ describe('계약 상태 전환 (e2e, DB)', () => {
           expect((await stateOf(c1)).status).toBe('ENDED');
           expect(await hiredOf(a)).toEqual(utc('2026-01-01'));
         });
+
+        it('(d) 이름까지 고쳐 새 레코드에 다시 올리면, 재직 중인 옛 레코드는 버린 계약의 입사일을 비운다(api #157 재리뷰 8 참고)', async () => {
+          const { phone, contractId: c, staffMemberId: x } = await signedFrom();
+          await prisma.staffMember.update({
+            where: { staffMemberId: x },
+            data: { hiredDate: utc('2026-11-01') },
+          });
+
+          const fixed = await paper(phone, {
+            name: '남도연',
+            startDate: '2026-11-01',
+            correctSignedContracts: true,
+            replaceContractIds: [c],
+          });
+          expect(fixed.staffMemberId).not.toBe(x);
+          expect((await stateOf(c)).status).toBe('ENDED');
+          expect(await hiredOf(x)).toBeNull();
+          expect(await hiredOf(fixed.staffMemberId)).toEqual(utc('2026-11-01'));
+        });
       });
 
       it('가입한 재직 직원의 잘못 올린 첫 계약도 바로잡기로 고친다 — 같은 레코드에 다시 올린다(api #157 재리뷰 3 · 4 참고)', async () => {
@@ -1518,6 +1538,301 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       // 아직 시작 전이면 그대로
       expect(result.ended).not.toContain(waiting.contractId);
       expect((await stateOf(waiting.contractId)).status).toBe('SIGNED');
+    });
+  });
+
+  describe('거부 · 만료 재발송 (WHALEERP-153)', () => {
+    it('가입 전 직원의 거부 계약은 가입 초대로 다시 보내 발송 대기가 되고, 이력 · 재발송 횟수가 남는다', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) =>
+        rejectContract(tx, contractId, '시급이 달라요'),
+      );
+
+      const result = await app
+        .get(ContractSendService)
+        .send(adminId, contractId);
+
+      expect(result.status).toBe('PENDING_SEND');
+      const after = await prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { status: true, resendCount: true, staffMemberId: true },
+      });
+      expect(after).toMatchObject({ status: 'PENDING_SEND', resendCount: 1 });
+      expect(
+        (await stateOf(contractId)).contractStatusHistories.at(-1),
+      ).toEqual({
+        fromStatus: 'REJECTED',
+        toStatus: 'PENDING_SEND',
+        actor: 'ADMIN',
+      });
+      expect(
+        await prisma.invitation.count({
+          where: { staffMemberId: after.staffMemberId, status: 'SENT' },
+        }),
+      ).toBe(1);
+    });
+
+    it('같은 사람의 체결 완료 계약이 따로 있으면 거부 계약을 되살리지 않고, 상세의 재발송 버튼도 숨긴다(api #158 code-review)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      const { staffMemberId } = await prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { staffMemberId: true },
+      });
+      // 같은 레코드에 새로 체결된 계약
+      await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'SIGNED',
+          startDate: day(0),
+          createdBy: adminId,
+        },
+      });
+
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        false,
+      );
+      await expect(
+        app.get(ContractSendService).send(adminId, contractId),
+      ).rejects.toThrow('체결 완료된 근로계약이 있습니다');
+      expect((await stateOf(contractId)).status).toBe('REJECTED');
+    });
+
+    it('겹치지 않아도 더 늦게 시작한 체결 완료가 있으면 되살리지 않는다 — 먼저 끝난 체결 완료는 막지 않는다(api #158 code-review)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      const { staffMemberId } = await prisma.contract.update({
+        where: { contractId },
+        data: {
+          startDate: new Date('2026-11-01'),
+          endDate: new Date('2027-01-31'),
+        },
+        select: { staffMemberId: true },
+      });
+      const earlier = await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'SIGNED',
+          startDate: new Date('2026-01-01'),
+          endDate: new Date('2026-10-31'),
+          createdBy: adminId,
+        },
+      });
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        true,
+      );
+
+      await prisma.contract.update({
+        where: { contractId: earlier.contractId },
+        data: {
+          startDate: new Date('2027-03-01'),
+          endDate: new Date('2027-08-31'),
+        },
+      });
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        false,
+      );
+      await expect(
+        app.get(ContractSendService).send(adminId, contractId),
+      ).rejects.toThrow('체결 완료된 근로계약이 있습니다');
+    });
+
+    it('기간이 끝나 배치가 닫은 체결 계약과 겹쳐도 되살리지 않는다 — 날인 뒤 처리와 같은 기준(api #158 재리뷰 참고 1)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      const { staffMemberId } = await prisma.contract.update({
+        where: { contractId },
+        data: {
+          startDate: new Date('2026-11-01'),
+          endDate: new Date('2027-10-31'),
+        },
+        select: { staffMemberId: true },
+      });
+      // 그사이 체결됐다가 기간이 끝나 배치가 닫은 B
+      const b = await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'ENDED',
+          startDate: new Date('2027-01-01'),
+          endDate: new Date('2027-03-31'),
+          createdBy: adminId,
+        },
+      });
+      await prisma.contractStatusHistory.create({
+        data: {
+          contractId: b.contractId,
+          fromStatus: 'SIGNED',
+          toStatus: 'ENDED',
+          actor: 'SYSTEM',
+        },
+      });
+
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        false,
+      );
+    });
+
+    it('조기 재계약 C2 의 재계약 C3 를 되살릴 때 줄의 앞 계약 C1 때문에 막지 않는다 — 만들 때와 같은 판정(api #158 재리뷰 참고 2)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      const { staffMemberId } = await prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { staffMemberId: true },
+      });
+      const c1 = await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'SIGNED',
+          startDate: new Date('2026-11-01'),
+          endDate: new Date('2027-10-31'),
+          createdBy: adminId,
+        },
+      });
+      const c2 = await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'SIGNED',
+          startDate: new Date('2027-05-01'),
+          previousContractId: c1.contractId,
+          createdBy: adminId,
+        },
+      });
+      // 거부된 C3 — C2 를 잇는다
+      await prisma.contract.update({
+        where: { contractId },
+        data: {
+          startDate: new Date('2027-08-01'),
+          endDate: null,
+          previousContractId: c2.contractId,
+        },
+      });
+
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        true,
+      );
+    });
+
+    it('시작일이 빈 거부 계약도 상세가 열리고, 다른 체결 완료가 있으면 기간을 몰라 되살리지 않는다(api #158 code-review)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      const { staffMemberId } = await prisma.contract.update({
+        where: { contractId },
+        data: { startDate: null },
+        select: { staffMemberId: true },
+      });
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        true,
+      );
+
+      await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          status: 'SIGNED',
+          startDate: new Date('2020-01-01'),
+          endDate: new Date('2020-12-31'),
+          createdBy: adminId,
+        },
+      });
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        false,
+      );
+      await expect(
+        app.get(ContractSendService).send(adminId, contractId),
+      ).rejects.toThrow('체결 완료된 근로계약이 있습니다');
+    });
+
+    it('계약 기간이 끝난 거부 계약은 되살리지 않는다(api #158 code-review)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      await prisma.contract.update({
+        where: { contractId },
+        data: {
+          startDate: new Date('2020-01-01'),
+          endDate: new Date('2020-12-31'),
+        },
+      });
+
+      expect((await contracts.findOne(adminId, contractId)).canResend).toBe(
+        false,
+      );
+      await expect(
+        app.get(ContractSendService).send(adminId, contractId),
+      ).rejects.toThrow('계약 기간이 끝난 근로계약서는 다시 보낼 수 없습니다');
+    });
+
+    it('상세의 마지막 발송 시각을 그대로 보내면 다시 보내고, 그 낡은 값으로 또 보내면 409 — 두 탭 재발송(api #158 셀프 code-review)', async () => {
+      const contractId = await sent();
+      const seen = (await contracts.findOne(adminId, contractId)).lastSentAt;
+      expect(seen).not.toBeNull();
+      const send = () =>
+        app.get(ContractSendService).send(adminId, contractId, new Date(), {
+          status: 'PENDING_SIGNATURE',
+          sentAt: seen as string,
+        });
+
+      await send();
+      await expect(send()).rejects.toThrow(
+        '다른 요청이 먼저 근로계약서를 다시 보냈습니다',
+      );
+    });
+
+    it('서명 대기로 본 화면에서 보내면 그사이 거부된 계약을 되살리지 않는다 — 409 CONTRACT_STATUS_CONFLICT(front #136 재리뷰)', async () => {
+      const contractId = await sent();
+      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+
+      await expect(
+        app.get(ContractSendService).send(adminId, contractId, new Date(), {
+          status: 'PENDING_SIGNATURE',
+        }),
+      ).rejects.toThrow('화면을 새로 고쳐');
+      expect((await stateOf(contractId)).status).toBe('REJECTED');
+    });
+
+    it('가입한 직원의 만료 계약은 서명 대기 · 새 기한으로 다시 보내고 다시 날인할 수 있다', async () => {
+      const contractId = await sent(BEFORE_NOW);
+      await runDaily();
+      expect((await stateOf(contractId)).status).toBe('EXPIRED');
+      const { staffMemberId, staffMember } =
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId },
+          select: {
+            staffMemberId: true,
+            staffMember: { select: { phone: true } },
+          },
+        });
+      const { accountId } = await prisma.account.create({
+        data: {
+          email: `resend-${n}-${staffMember.phone}@test.invalid`,
+          passwordHash: '!',
+          realName: '남도현',
+          birthDate: new Date('1998-07-12'),
+          phone: staffMember.phone,
+          gender: 'MALE',
+          status: 'JOINED',
+        },
+        select: { accountId: true },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId },
+        data: { joinStatus: 'JOINED', accountId },
+      });
+
+      const result = await app
+        .get(ContractSendService)
+        .send(adminId, contractId);
+
+      expect(result.status).toBe('PENDING_SIGNATURE');
+      expect(new Date(result.signDeadlineAt!).getTime()).toBeGreaterThan(
+        Date.now(),
+      );
+      await prisma.$transaction((tx) => signContract(tx, contractId));
+      expect((await stateOf(contractId)).status).toBe('SIGNED');
     });
   });
 });
