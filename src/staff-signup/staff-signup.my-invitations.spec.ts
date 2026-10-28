@@ -302,15 +302,27 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       expect(calls.some((c) => c.includes(`contracts:${PHONE}`))).toBe(true);
     });
 
-    it('번호 → 직원 행 → 초대 · 레코드 순서로 잠근다 — 퇴직 확정과 같은 순서(api #81 3차 리뷰)', async () => {
+    it('번호 → 계정 행 → 직원 행 → 초대 · 레코드 순서로 잠근다 — 퇴직 확정과 같은 순서(api #81 3차 리뷰), 계정 행은 내 정보 동의 · 철회와 겹치지 않게(api #183 리뷰)', async () => {
       await service().acceptForAccount(77, { code: CODE });
       const calls = tx.$executeRaw.mock.calls as unknown[][];
       const people = calls.findIndex((c) => c.includes(`contracts:${PHONE}`));
       const order = (m: jest.Mock, i = 0) => m.mock.invocationCallOrder[i];
-      const staffLock = order(tx.$queryRaw);
-      expect(order(tx.$executeRaw, people)).toBeLessThan(staffLock);
-      expect(String((tx.$queryRaw.mock.calls[0] as [string[]])[0])).toContain(
-        'FOR UPDATE',
+      const sql = (i: number) =>
+        String((tx.$queryRaw.mock.calls[i] as [string[]])[0]);
+      const accountLock = order(tx.$queryRaw, 0);
+      const staffLock = order(tx.$queryRaw, 1);
+      expect(sql(0)).toContain('FROM accounts');
+      expect(sql(0)).toContain('FOR UPDATE');
+      expect(sql(1)).toContain('FROM staff_members');
+      expect(sql(1)).toContain('FOR UPDATE');
+      expect(order(tx.$executeRaw, people)).toBeLessThan(accountLock);
+      expect(accountLock).toBeLessThan(staffLock);
+      // 트랜잭션 안에서 다시 읽는 계정(마지막 읽기)은 잠근 뒤다 — 앞의 읽기는 트랜잭션 밖 잠금 횟수 세기용이다
+      expect(accountLock).toBeLessThan(
+        order(
+          tx.account.findUnique,
+          tx.account.findUnique.mock.calls.length - 1,
+        ),
       );
       expect(staffLock).toBeLessThan(order(tx.invitation.updateMany));
       expect(staffLock).toBeLessThan(order(tx.staffMember.updateMany));

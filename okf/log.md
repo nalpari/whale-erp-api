@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) — api #183 code-review 반영: 근무지 더하기 수락이 계정 행을 `FOR UPDATE` 로 잠근 뒤 동의를 판정한다(번호 → 계정 → 직원 행 순). 옛 문구 버전 동의를 다시 쓰는 사이 내 정보 철회가 들어오면 철회가 덮이던 경합. `hqSharingConsented` 설명을 「받아 주는 버전에 이미 동의했으면 바꾸지 않는다」로 고치고, `HQ_SHARING_CONSENT_VERSION` 재내보내기를 지웠다. openapi 갱신.
 * **Update**: [My profile](/api/my-profile.md) · [Staff members](/api/staff-members.md) · [Staff signup](/api/staff-signup.md) — 본사 제공 동의의 문구 버전 판정(WHALEERP-137, ATT-30 2026-10-15 재영). 받아 주는 버전 목록 `HQ_SHARING_VALID_VERSIONS`(`src/admin-scope/hq-sharing.ts`)을 두고, 글자만 고치면 앞 버전을 남기고 항목 · 목적을 넓히면 새 버전만 남긴다. 목록에 없는 버전으로 동의한 계정은 가림(`HQ_SHARING_SELECT` · `HQ_SHARING_CONSENTED` · `hqSharingConsentedOf`)에서 미동의이고, 내 정보 `hqSharingConsent.needsReconsent` 가 true 라 앱이 다시 묻는다. 다시 동의(`POST /me/hq-sharing-consent`)와 근무지 더하기의 동의 질문도 같은 판정을 쓴다. 지금 목록은 `v1.0` 하나라 동작 변화는 없다. 마이그레이션 없음. openapi 갱신.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 셀프 code-review: 보낸 적 없는 계약에 `expectedSentAt` 이 오면 「먼저 다시 보냄」이 아니라 상태 충돌 409, `hasOverlappingSigned` 는 볼 계약 조건(`SIGNED_NOW` · `SIGNED_ONCE`)을 받는다(불 값 인자 대신). gyarados(#157 입사일) 병합.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 재리뷰: `IN_PROGRESS` 를 순환 없는 `signed-contract` 로 옮겨 `LIVE_RENEWAL` 이 모듈 읽는 순서에 따라 조건 없음으로 굳던 것을 고침(contract-duplicates 가 다시 내보냄, 읽는 순서 회귀 테스트), 거부 · 만료 재발송의 겹침은 배치가 닫은 계약(SIGNED_ONCE)도 보고 이 계약이 잇는 줄의 앞 계약은 치지 않음(만들 때의 겹침 409 와 같게). gyarados(#157 재리뷰 7 · main) 병합.

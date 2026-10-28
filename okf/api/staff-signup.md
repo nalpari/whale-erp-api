@@ -4,7 +4,7 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T04:52:10Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T06:48:50Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
@@ -174,7 +174,9 @@ rate limit (no IP limit of its own — JOI-02 v158):
   (`JOINED`), 발송 대기 contracts → 서명 대기 (actor `STAFF`). When consent is asked and sent, the
   account gets it (version · agreed-at, withdrawn-at cleared). 200 `{ staffMemberId, storeName }` —
   the app goes to that 소속's waiting contract.
-- Locks as at signup: the person lock `lockPeople(tx, [phone])` first, then the staff record
+- Locks as at signup: the person lock `lockPeople(tx, [phone])` first, then the account row
+  `FOR UPDATE` (the row 내 정보 동의 · 철회 lock — accepting rewrites a consent to a version no longer
+  accepted, and an unlocked read would undo a withdrawal made meanwhile, api #183 review), then the staff record
   `FOR UPDATE` before the invitation and the contracts — the same order as 재발송 and 퇴직 확정, so they
   never wait on each other (api #81 3rd review). The phone is read again under that lock; if a
   근로계약 edit changed it meanwhile, 404 `INVITATION_ENDED` and nothing is linked.
