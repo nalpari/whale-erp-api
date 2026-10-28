@@ -719,7 +719,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       expect(resent.resendCount).toBe(1);
     });
 
-    it('계정이 있는 번호의 가입 전 직원(소속 추가 확인)은 재발송할 수 없다 — 상세가 알린다', async () => {
+    it('계정이 있는 번호의 가입 전 직원(소속 추가 확인)은 재발송하면 소속 추가 확인 요청을 새로 보낸다 — 상세가 알린다(WHALEERP-130)', async () => {
       const phone = nextPhone();
       const account = await prisma.account.create({
         data: {
@@ -734,9 +734,12 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       const { contractId } = await contracts.create(dto(phone), adminId);
       const detail = await contracts.findOne(adminId, contractId);
       expect(detail.draftAction).toBe('AFFILIATION_CONFIRM');
-      expect(detail.canResend).toBe(false);
-      await expect(sender.send(adminId, contractId)).rejects.toMatchObject({
-        status: 409,
+      expect(detail.status).toBe('PENDING_SEND');
+      expect(detail.canResend).toBe(true);
+      // 날인 기한은 직원이 수락한 때부터라 재발송 응답의 기한은 없다
+      await expect(sender.send(adminId, contractId)).resolves.toMatchObject({
+        status: 'PENDING_SEND',
+        signDeadlineAt: null,
       });
       expect(account.accountId).toBeGreaterThan(0);
     });

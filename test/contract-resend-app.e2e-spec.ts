@@ -11,8 +11,8 @@ import { SEND_VALID_MS } from '../src/contracts/contract-delivery.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import type { StaffMemberListResponseDto } from '../src/staff-members/dto/staff-member-list.response.dto';
 
-// 가입한 직원의 근로계약 재발송 — 앱 알림(WHALEERP-611)과, 직원 목록 invitation.canResend 가 재발송 api 의 판정과
-// 맞는지를 실제 DB 로. 알림 줄 · 날인 기한 · 상태 이력은 목으로는 증명되지 않는다.
+// 가입한 직원의 근로계약 재발송 — 앱 알림(WHALEERP-611)과, 직원 목록 contract.canResend 가 재발송 api 의 판정과
+// 맞는지를 실제 DB 로(초대 행 없는 옛 소속 확인 계약 포함, api #164 리뷰). 알림 줄 · 날인 기한 · 상태 이력은 목으로는 증명되지 않는다.
 describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -97,7 +97,7 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
     const staff = async (
       key: string,
       opts: {
-        joinStatus: 'INVITED' | 'JOINED';
+        joinStatus: 'DRAFT' | 'INVITED' | 'JOINED';
         contractStatus: 'PENDING_SEND' | 'PENDING_SIGNATURE' | 'SIGNED';
         accountId?: number;
         phone?: string;
@@ -189,6 +189,14 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
       invitation: { invitationType: 'SIGNUP', status: 'ACCEPTED' },
     });
     const other = await account();
+    // WHALEERP-130 전에 저장돼 요청(초대) 행 없이 서명 대기가 된 소속 확인 계약 — 그때는 아무것도 나가지 않았다
+    const old = await account();
+    await staff('oldAffiliation', {
+      joinStatus: 'DRAFT',
+      contractStatus: 'PENDING_SIGNATURE',
+      phone: old.phone,
+      draftAction: 'AFFILIATION_CONFIRM',
+    });
     // 계정은 있고 이 점포에 가입하지 않은 번호 — 소속 추가 확인(서명 대기)
     await staff('affiliation', {
       joinStatus: 'INVITED',
@@ -327,7 +335,7 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
     return `${k.getUTCMonth() + 1}월 ${k.getUTCDate()}일`;
   };
 
-  it('목록 canResend 는 재발송 api 가 보낼 수 있는 줄만 참이다', async () => {
+  it('목록 contract.canResend 는 재발송 api 가 보낼 수 있는 줄만 참이다', async () => {
     const res = await request(app.getHttpServer())
       .get(`/staff-members?storeIds=${storeId}&pageSize=100`)
       .set('Authorization', `Bearer ${await token()}`)
@@ -336,7 +344,7 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
     const canResend = Object.fromEntries(
       Object.entries(ids).map(([key, { staffMemberId }]) => [
         key,
-        body.items.find((i) => i.staffMemberId === staffMemberId)?.invitation
+        body.items.find((i) => i.staffMemberId === staffMemberId)?.contract
           ?.canResend,
       ]),
     );
@@ -346,8 +354,10 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
       joinedSend: false,
       joinedSendRace: false,
       joinedWithdrawn: false,
-      // 그 번호에 계정이 있어 api 가 409 SEND_CHANNEL_NOT_READY
-      affiliation: false,
+      // 그 번호에 계정이 있으면 소속 추가 확인 요청을 다시 보낸다(WHALEERP-130)
+      affiliation: true,
+      // 초대 행이 없어 invitation 은 null 이지만 contract.canResend 로 보인다(api #164 리뷰)
+      oldAffiliation: true,
       // 계정이 탈퇴해 없으니 api 는 가입 초대로 보낸다
       affiliationGone: true,
       invited: true,
@@ -448,15 +458,53 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
     expect(await noticesOf('joinedWithdrawn')).toHaveLength(0);
   });
 
-  it('소속 추가 확인(계정 있음 · 이 점포 미가입)은 409 SEND_CHANNEL_NOT_READY — 아무것도 쓰지 않는다', async () => {
-    const before = await contractOf('affiliation');
-    const res = await send('affiliation', 409);
+  it('소속 추가 확인(계정 있음 · 이 점포 미가입)은 소속 추가 확인 요청을 새로 보낸다 — 옛 서명 대기는 수락 전이라 발송 대기로, 날인 기한은 없앤다(WHALEERP-130)', async () => {
+    alimtalkSend.mockResolvedValueOnce({ referenceKey: 'e2e' });
+    const res = await send('affiliation', 200);
     expect(res.body).toMatchObject({
-      code: 'SEND_CHANNEL_NOT_READY',
+      status: 'PENDING_SEND',
+      signDeadlineAt: null,
+    });
+    const after = await contractOf('affiliation');
+    expect(after).toMatchObject({
+      status: 'PENDING_SEND',
+      signDeadlineAt: null,
       draftAction: 'AFFILIATION_CONFIRM',
     });
-    expect(await contractOf('affiliation')).toEqual(before);
-    expect(alimtalkSend).not.toHaveBeenCalled();
+    expect(alimtalkSend).toHaveBeenCalledTimes(1);
+    const [input] = alimtalkSend.mock.calls[0] as [{ templateCode: string }];
+    expect(input).toMatchObject({
+      templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+    });
+  });
+
+  it('초대 행 없는 옛 소속 확인 계약(서명 대기)을 재발송하면 발송 대기로 돌리고 첫 소속 추가 확인 요청 행을 만든다(api #164 리뷰)', async () => {
+    expect(
+      await prisma.invitation.count({
+        where: { staffMemberId: ids.oldAffiliation.staffMemberId },
+      }),
+    ).toBe(0);
+    alimtalkSend.mockResolvedValueOnce({ referenceKey: 'e2e' });
+    const res = await send('oldAffiliation', 200);
+    expect(res.body).toMatchObject({
+      status: 'PENDING_SEND',
+      signDeadlineAt: null,
+    });
+    expect(await contractOf('oldAffiliation')).toMatchObject({
+      status: 'PENDING_SEND',
+      signDeadlineAt: null,
+    });
+    expect(
+      await prisma.invitation.findMany({
+        where: { staffMemberId: ids.oldAffiliation.staffMemberId },
+        select: { invitationType: true, status: true },
+      }),
+    ).toEqual([{ invitationType: 'AFFILIATION_CONFIRM', status: 'SENT' }]);
+    expect(alimtalkSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+      }),
+    );
   });
 
   it('체결 완료 계약은 409 CONTRACT_STATUS_CONFLICT, 유선번호는 409 SEND_PHONE_NOT_MOBILE — 목록이 거짓으로 낸 줄', async () => {
