@@ -429,10 +429,13 @@ export class StaffSignupService {
       );
       const { staffMemberId } = invitation.staffMember;
       // 직원 행도 초대 · 계약보다 먼저 잠근다 — 퇴직 확정(직원 → 초대 → 계약)과 같은 순서라 서로 기다려 교착하지 않는다.
-      // 잠근 뒤 번호를 다시 읽어, 그사이 근로계약 수정으로 번호가 바뀌었으면 잇지 않는다(가입과 같다, api #81 3차 리뷰)
-      const [locked] = await tx.$queryRaw<{ phone: string }[]>`
-        SELECT phone FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
-      if (locked?.phone !== account.phone)
+      // 잠근 뒤 번호 · 이름을 다시 읽어, 그사이 근로계약 수정으로 바뀌었으면 잇지 않는다(가입과 같다, api #81 3차 리뷰 · 이름은 api #180 리뷰)
+      const [locked] = await tx.$queryRaw<{ phone: string; name: string }[]>`
+        SELECT phone, name FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
+      if (
+        locked?.phone !== account.phone ||
+        !sameName(locked.name, account.realName)
+      )
         throw notFound('INVITATION_ENDED', INVITATION_ENDED);
       // 같은 초대로 동시에 더하면 뒤에 온 쪽은 바뀐 초대를 다시 읽어 0건이다 — 까닭에 맞게 답한다(가입과 같다)
       const accepted = await tx.invitation.updateMany({

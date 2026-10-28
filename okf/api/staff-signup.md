@@ -180,7 +180,11 @@ list and accept therefore also require the record's name (근로계약서) to eq
 `contracts/identity-match.ts` `nameKey`, kept local because contracts is another team's area). A
 different name is treated like another person's invitation: absent from the list, 404
 `INVITATION_NOT_FOUND` on accept, checked before the status. A same-name new owner is not caught;
-the 날인 본인 대조 (name · phone · birth date · gender · foreigner) still stands in front of signing.
+the 날인 본인 대조 (name · phone · birth date · gender · foreigner) still stands in front of signing. Accept re-reads the
+name with the phone under the staff-row lock. Limits accepted: the name is the staff record's
+(`staff_members.name`), while 날인 본인 대조 reads the contract party's entered name first; and a typo
+in the record hides the invitation from its real owner with no message — the admin can fix the
+근로자 정보 before signing and the invitation then shows.
 
 **Since 2026-10-28 the app picks from a list instead of typing a code or opening the link**
 (WHALEERP-603 changed). The old `POST /me/invitations/check` · `POST /me/invitations/accept` (code ·

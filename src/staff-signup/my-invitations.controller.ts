@@ -45,7 +45,7 @@ export class MyInvitationsController {
 
   /**
    * 내게 온 가입 초대 — 계정의 휴대전화번호로 나간, 아직 쓸 수 있는 가입 초대 · 재초대(보냄 · 기한 안 · 아직 계정 없는
-   * 직원 레코드). 보낸 시각 최근 순. 근무지 · 고용 형태 · 직무 · 유효 기간과 본사 제공 동의를 물을지(직영이 아니고 계정이
+   * 직원 레코드). 근로계약서 이름이 계정 이름과 다른 초대는 뺀다(본인 대조 규칙 — 번호 재활용 대비, 2026-10-28). 보낸 시각 최근 순. 근무지 · 고용 형태 · 직무 · 유효 기간과 본사 제공 동의를 물을지(직영이 아니고 계정이
    * 아직 동의하지 않았을 때) 준다.
    */
   // 계정 축(전역 기본도 10분 10번, 토큰으로 센다)을 건너뛴다 — 소속 근무지 화면을 열 때마다 부르는 읽기라 그대로 두면 화면을
@@ -72,7 +72,7 @@ export class MyInvitationsController {
   @ApiBadRequestResponse({ description: '형식 오류' })
   @ApiNotFoundResponse({
     description:
-      'INVITATION_NOT_FOUND — 없는 초대 · 범위 밖 id · 가입 초대가 아님 · 남의 번호로 온 초대(그 초대의 상태와 상관없이 같다) · INVITATION_ENDED — 내 초대가 끝남(기한 · 다시 보냄 · 퇴직 · 가입 불가, 처리 중 번호 변경)',
+      'INVITATION_NOT_FOUND — 없는 초대 · 범위 밖 id · 가입 초대가 아님 · 남의 번호로 온 초대 · 근로계약서 이름이 계정 이름과 다른 초대(그 초대의 상태와 상관없이 같다) · INVITATION_ENDED — 내 초대가 끝남(기한 · 다시 보냄 · 퇴직 · 가입 불가, 처리 중 번호 · 이름 변경)',
   })
   @ApiConflictResponse({
     description:

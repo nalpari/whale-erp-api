@@ -92,7 +92,9 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     jest.useFakeTimers().setSystemTime(NOW);
     tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
-      $queryRaw: jest.fn().mockResolvedValue([{ phone: PHONE }]),
+      $queryRaw: jest
+        .fn()
+        .mockResolvedValue([{ phone: PHONE, name: '홍길동' }]),
       account: { findUnique: jest.fn(), update: jest.fn() },
       invitation: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -410,6 +412,14 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       expect(e.getStatus()).toBe(404);
       expect(codeOf(e)).toBe('INVITATION_ENDED');
       expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('잠근 뒤 다시 읽은 이름이 바뀌었으면(근로계약 수정) 404 INVITATION_ENDED — 잇지 않는다', async () => {
+      tx.$queryRaw.mockResolvedValue([{ phone: PHONE, name: '김철수' }]);
+      const e = await thrown(service().acceptForAccount(77, 41, {}));
+      expect(e.getStatus()).toBe(404);
+      expect(codeOf(e)).toBe('INVITATION_ENDED');
       expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
     });
 
