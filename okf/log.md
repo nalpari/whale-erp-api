@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [My profile (staff app)](/api/my-profile.md) — `MyMembershipsService.reveal` 주석을 #95 설계(미리 풀어 보는 단계 없음, 저장 응답도 같은 트랜잭션의 `open`)에 맞췄다(api #95 리뷰 후속, WHALEERP-150). 출처 시각만 올렸다. 동작 변화 없음.
 * **Update**: main 병합(api charizard, main #176 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api charizard, main #175 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api charizard, main #170 · #174 까지 — PR #163 `/bp-masters` 포함): okf/api/bp-admins.md · stores.md 시각 충돌은 늦은 값을, okf/log 는 양쪽 기록을 살렸다. #163 이 들어와 `lockBp` 주석 · [BP admins](/api/bp-admins.md) 의 「미사용 전환 · 삭제는 아직 없다」를 실제 `BpMastersService.changeStatus` · `remove` 의 잠금 순서(bp_codes → admin_accounts, 이 PR 전제와 같음)로 고쳤고, P2028 이 잠금 대기를 끊지 못해 5초 상한이 아님을 적었다.
