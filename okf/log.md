@@ -1,11 +1,14 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [BP masters](/api/bp-masters.md) — 이력 라우트에 탈퇴 BP 409 를 OpenAPI 로 적었다(`@ApiConflictResponse`). front 가 생성 타입에서 이 실패를 볼 수 있게 한다(PR #175 리뷰). 동작 변화 없음.
+* **Update**: [BP masters](/api/bp-masters.md) — PR #175 리뷰 반영. 사유 한글 조회를 `Object.hasOwn` 으로 막고(표에 없는 코드는 코드 그대로), 이력 `note` 설명에서 받을 수 없게 된 「탈퇴 사유」를 뺐다. 탈퇴 BP 의 이력 409 · 상세 `withdrawal` 을 실제 DB e2e 로 확인한다. 출처에 응답 DTO · 회원 탈퇴 서비스를 더했다.
 * **Update**: main 병합(api pinsir, main #169 까지): okf/api/payslips.md 시각 충돌은 늦은 값을 남겼다. 목록 서비스 · DTO · openapi 는 자동 병합.
 * **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — PR #174 code-review 반영: 요약 DTO 를 더한 응답 · 쿼리 DTO 출처 시각을 올렸다. 동작 변화 없음.
 * **Update**: [Payslip list, detail and draft creation](/api/payslips.md) — WHALEERP-621(재영 요청, 로그인 후 홈 점포 하나 화면 직원 급여 카드). `GET /payslips/summary?storeId=&month=` 로 그 달 명세서의 건수 · 지급 합계를 전체 · 정직원 · 파트타이머로 준다. 네 상태 모두, 관리 범위 밖 점포는 0건, 본사 역할에게 가려지는 점포는 본사 제공 동의한 직원만(금액이 붙어 목록 상태 건수와 다르게 뺀다). 권한은 목록과 같은 MN000009 조회. 마이그레이션 없음. openapi 갱신.
 
 ## 2026-10-27
+* **Update**: [BP masters](/api/bp-masters.md) — 탈퇴 BP 의 변경 이력은 409 로 거절한다(탈퇴로 지운 개인정보가 이력 줄에 남아 있어서다. 이력은 고치지 않는다). 상세에 `withdrawal`(탈퇴 일시 · 사유 한글 · 직접 입력, 탈퇴가 아니면 null)을 더했다 — 사유 한글은 회원 탈퇴와 같은 `WITHDRAW_REASON_LABEL` 을 내보내 쓴다. WHALEERP-625, 마이그레이션 없음.
 * **Update**: main 병합(api butterfree, main #169 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api butterfree, 재영 리뷰 뒤 main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api butterfree, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.

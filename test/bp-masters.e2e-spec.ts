@@ -341,4 +341,45 @@ describe('BP 마스터 계정 관리 (e2e, DB)', () => {
       expect(availability.body).toEqual({ available: false });
     });
   });
+
+  it('탈퇴한 BP 는 이력이 409 이고, 상세에 탈퇴 정보가 실린다', async () => {
+    const res = await call('post', '/bp-masters', createBody('w'));
+    expect(res.status).toBe(201);
+    const { bpCodeId } = res.body as CreateBpMasterResponseDto;
+    bpCodeIds.push(bpCodeId);
+    // 회원 탈퇴가 쓰는 칸만 그대로 바꾼다 — 이력 줄에는 탈퇴 전 이름이 남아 있다.
+    const withdrawnAt = new Date('2026-10-20T01:00:00Z');
+    await prisma.bpCode.update({
+      where: { bpCodeId },
+      data: { accountStatusCode: 'WITHDRAWN' },
+    });
+    await prisma.adminAccount.updateMany({
+      where: { bpCodeId, roleTypeCode: 'BM' },
+      data: {
+        accountStatusCode: 'WITHDRAWN',
+        statusChangedAt: withdrawnAt,
+        name: null,
+        phone: null,
+        email: null,
+        withdrawReasonCode: 'WD_CLOSE',
+      },
+    });
+
+    const histories = await call('get', `/bp-masters/${bpCodeId}/histories`);
+    expect(histories.status).toBe(409);
+    expect(histories.body).toMatchObject({
+      message: '탈퇴한 BP는 변경 이력을 볼 수 없습니다',
+    });
+
+    const detail = await call('get', `/bp-masters/${bpCodeId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body).toMatchObject({
+      name: null,
+      withdrawal: {
+        withdrawnAt: withdrawnAt.toISOString(),
+        reasonLabel: '폐업·사업 종료',
+        reasonDetail: null,
+      },
+    });
+  });
 });

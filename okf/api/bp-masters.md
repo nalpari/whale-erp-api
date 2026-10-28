@@ -4,16 +4,16 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:48:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T02:06:15Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excel)
-    last_modified: 2026-10-27T07:48:04Z
+    last_modified: 2026-10-28T01:57:16Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
-    last_modified: 2026-10-27T03:08:29Z
+    last_modified: 2026-10-28T02:06:15Z
   - id: bp-master-excel
     resource: ../../src/bp-masters/bp-master-excel.ts
     title: BP 목록 엑셀 — columns, both phone numbers masked
@@ -26,10 +26,18 @@ sources:
     resource: ../../src/admin-signup/next-bp-code.ts
     title: nextBpCode — BP code numbering under an advisory lock, shared with signup
     last_modified: 2026-10-23T00:40:00Z
+  - id: bp-master-response-dto
+    resource: ../../src/bp-masters/dto/bp-master.response.dto.ts
+    title: 상세 · 이력 응답 — withdrawal(탈퇴 일시 · 사유)
+    last_modified: 2026-10-28T01:57:16Z
+  - id: admin-withdrawal-service
+    resource: ../../src/auth/admin-withdrawal.service.ts
+    title: 회원 탈퇴 — status_changed_at · 사유를 BP 마스터 본인 행에 쓴다, WITHDRAW_REASON_LABEL
+    last_modified: 2026-10-28T01:57:16Z
   - id: bp-masters-e2e
     resource: ../../test/bp-masters.e2e-spec.ts
-    title: e2e on a real database — 403 for BP accounts, concurrent register, code copy, history paging, cascade, delete
-    last_modified: 2026-10-23T00:40:00Z
+    title: e2e on a real database — 403 for BP accounts, concurrent register, code copy, history paging, cascade, delete, withdrawn BP (histories 409 · detail withdrawal)
+    last_modified: 2026-10-28T01:57:16Z
 ---
 
 # What it is
@@ -42,6 +50,16 @@ The platform BP (`BP000000`) and deleted BPs are outside it (404). A 탈퇴 BP i
 never changed — every write answers 409 — and its 이름 · 연락처 · 이메일 come back `null`
 whatever the row still holds, so the screen prints 「탈퇴로 삭제됨」 and the name search
 cannot find it.
+
+Withdrawal (회원 탈퇴) clears that personal data from the rows but not from the history
+tables, which keep every old value — and the master's own lines lose their 변경자, since
+the name is gone. So a 탈퇴 BP's `GET /bp-masters/:id/histories` answers 409 (「탈퇴한 BP는
+변경 이력을 볼 수 없습니다」) instead of showing them, and the front is to hide the button; the
+history rows are not rewritten (WHALEERP-625, 2026-10-27). What the screen shows instead is
+the detail's `withdrawal` — `{ withdrawnAt, reasonLabel, reasonDetail }`, `null` unless
+탈퇴 — read from the master's `status_changed_at` and `withdraw_reason_code` · `_detail`, the
+label from the same table the withdrawal flow uses (`WITHDRAW_REASON_LABEL`; an unknown code
+comes back as itself). There is no separate reason endpoint.
 
 The menu is found from the controller path (`/bp-masters` → MN000203, the URL the
 `20261019144438` migration set), and every route also needs `platformOnly` — a BP-side
@@ -130,7 +148,7 @@ rather than adding a table for this screen alone.
 
 - 소속 점포 수 is a number only; linking it to the store list waits for the front.
 - Scheduled generation for 10,000+ rows, together with 점포 엑셀.
-- Withdrawal itself is not here — no flow sets a BP to 탈퇴 yet; this screen only reads it.
+- Withdrawal itself is not here — it is the BP master's own 회원 탈퇴 (PR #162); this screen only reads it.
 
 [^bp-masters-service]: BpMastersService
 [^bp-masters-controller]: /bp-masters routes
