@@ -31895,10 +31895,15 @@
             "items": {
               "$ref": "#/components/schemas/MyInvitationDto"
             }
+          },
+          "total": {
+            "type": "number",
+            "description": "items 의 개수"
           }
         },
         "required": [
-          "items"
+          "items",
+          "total"
         ]
       },
       "AcceptMyInvitationDto": {

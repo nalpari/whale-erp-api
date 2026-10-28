@@ -351,7 +351,7 @@ export class StaffSignupService {
       },
       orderBy: [{ sentAt: 'desc' }, { invitationId: 'desc' }],
     });
-    if (rows.length === 0) return { items: [] };
+    if (rows.length === 0) return { items: [], total: 0 };
     // 직원 레코드의 store_id 는 1팀 점포를 가리키지만 Prisma 관계가 없다(팀 경계) — 따로 한 번에 읽는다
     const stores = await this.prisma.store.findMany({
       where: {
@@ -360,25 +360,24 @@ export class StaffSignupService {
       select: { storeId: true, name: true, storeTypeCode: true },
     });
     const storeById = new Map(stores.map((st) => [st.storeId, st]));
-    return {
-      items: rows.flatMap((r) => {
-        const store = storeById.get(r.staffMember.storeId);
-        if (!store) return [];
-        return [
-          {
-            invitationId: r.invitationId,
-            storeName: store.name,
-            employmentType: r.staffMember.employmentType,
-            jobTitle: r.staffMember.jobTitle,
-            sentAt: r.sentAt,
-            expiresAt: r.expiresAt,
-            asksHqSharingConsent:
-              asksHqSharingConsentAt(store.storeTypeCode) &&
-              !account.isHqSharingConsented,
-          },
-        ];
-      }),
-    };
+    const items = rows.flatMap((r) => {
+      const store = storeById.get(r.staffMember.storeId);
+      if (!store) return [];
+      return [
+        {
+          invitationId: r.invitationId,
+          storeName: store.name,
+          employmentType: r.staffMember.employmentType,
+          jobTitle: r.staffMember.jobTitle,
+          sentAt: r.sentAt,
+          expiresAt: r.expiresAt,
+          asksHqSharingConsent:
+            asksHqSharingConsentAt(store.storeTypeCode) &&
+            !account.isHqSharingConsented,
+        },
+      ];
+    });
+    return { items, total: items.length };
   }
 
   /**

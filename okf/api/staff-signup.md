@@ -167,14 +167,15 @@ Two stores can send a 가입 초대 to the same phone at the same time (neither 
 signing up with one, the other answers 409 `ACCOUNT_EXISTS` at the check. The logged-in 직원 then adds
 that 근무지 in the app (2026-10-20 김민식) — `MyInvitationsController`, account token required (admin
 token 403), AuthModule's default rate limit plus the account axis (10 per 10 minutes per account,
-`signedInUserTracker`) on both routes; no IP limit of its own (JOI-02 v158).
+`signedInUserTracker`) on the accept route only — the list is read whenever the 소속 근무지 screen
+opens, so it gets the default limit; no IP limit of its own (JOI-02 v158).
 
 **Since 2026-10-28 the app picks from a list instead of typing a code or opening the link**
 (WHALEERP-603 changed). The old `POST /me/invitations/check` · `POST /me/invitations/accept` (code ·
 token lookup, with the per-phone code lock counted on the account's phone) are gone, and with them
 `MyInvitationLookupDto` and the account-side lock — the public signup path keeps its lock unchanged.
 
-- `GET /me/invitations` → 200 `{ items: MyInvitationDto[] }`, each `{ invitationId, storeName,
+- `GET /me/invitations` → 200 `{ items: MyInvitationDto[], total }`, each `{ invitationId, storeName,
   employmentType, jobTitle, sentAt, expiresAt, asksHqSharingConsent }`. The items are the live 가입
   초대 · 재초대 sent to **the account's phone** — `SENT`, `expires_at` ahead, the record's phone equals
   the account's and the record has no account yet (the same "live" as the signup check) — newest

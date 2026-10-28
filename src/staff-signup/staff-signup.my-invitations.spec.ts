@@ -174,6 +174,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
             asksHqSharingConsent: true,
           },
         ],
+        total: 2,
       });
       expect(argOf(tx.store.findMany).where).toEqual({
         storeId: { in: [5, 4, 99] },
@@ -190,6 +191,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     it('초대가 없으면 빈 목록 — 점포를 읽지 않는다', async () => {
       await expect(service().listForAccount(77)).resolves.toEqual({
         items: [],
+        total: 0,
       });
       expect(tx.store.findMany).not.toHaveBeenCalled();
     });

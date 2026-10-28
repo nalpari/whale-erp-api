@@ -34,6 +34,9 @@ export class MyInvitationDto {
 export class MyInvitationListResponseDto {
   /** 보낸 시각 최근 순 */
   items: MyInvitationDto[];
+
+  /** items 의 개수 */
+  total: number;
 }
 
 /** 근무지 더하기 — 본사 제공 동의 */

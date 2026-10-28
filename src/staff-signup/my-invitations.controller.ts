@@ -38,10 +38,6 @@ import { StaffSignupService } from './staff-signup.service';
 @ApiForbiddenResponse({ description: '관리자 토큰' })
 @ApiTooManyRequestsResponse({ description: '계정 · IP 요청 한도' })
 @UseGuards(ThrottlerGuard)
-// 계정 축은 접근 토큰이 아니라 계정으로 센다 — 토큰은 15분마다 바뀌어 새 버킷이 된다(api #82 리뷰). 한도는 기본값 그대로
-@Throttle({
-  account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
-})
 @UserTypes('account')
 @Controller('me/invitations')
 export class MyInvitationsController {
@@ -65,6 +61,11 @@ export class MyInvitationsController {
    */
   @Post(':invitationId/accept')
   @HttpCode(HttpStatus.OK)
+  // 계정 축은 접근 토큰이 아니라 계정으로 센다 — 토큰은 15분마다 바뀌어 새 버킷이 된다(api #82 리뷰). 목록은 소속 근무지 화면을
+  // 열 때마다 부르므로 이 한도를 수락에만 건다(목록은 기본 요청 제한만)
+  @Throttle({
+    account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+  })
   @ApiBadRequestResponse({ description: '형식 오류' })
   @ApiNotFoundResponse({
     description:

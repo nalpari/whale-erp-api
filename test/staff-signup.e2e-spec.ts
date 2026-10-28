@@ -481,6 +481,7 @@ describe('직원 가입 (e2e, DB)', () => {
         (i) => i.invitationId,
       ),
     ).toEqual([older.invitationId]);
+    expect((after.body as MyInvitationListResponseDto).total).toBe(1);
     const again = await accept(second.invitationId).expect(409);
     expect(again.body).toMatchObject({ code: 'INVITATION_ALREADY_JOINED' });
     // 이미 동의한 계정에는 가맹점이어도 묻지 않는다
