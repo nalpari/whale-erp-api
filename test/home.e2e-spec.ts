@@ -340,7 +340,7 @@ describe('로그인 후 홈 (e2e, DB)', () => {
     await confirm(resent, 'AFFILIATION_CONFIRM', 'REJECTED', 4);
     await confirm(resent, 'AFFILIATION_CONFIRM', 'SENT', 2);
 
-    // 긴급 TO-DO. 미완료(대기 · 진행 중)만 센다 — 완료 · 긴급 아님 · 삭제는 빠진다. 배정 그룹은 완료 행이 섞여도 한 줄이다
+    // 긴급 TO-DO. 미완료(대기 · 진행 중)만 센다 — 완료 · 긴급 아님 · 삭제는 빠진다. 배정 그룹은 미완료 행이 여럿이어도 한 줄이다
     const todo = (
       storeId: number,
       title: string,
@@ -364,18 +364,20 @@ describe('로그인 후 홈 (e2e, DB)', () => {
           ...extra,
         },
       });
-    for (const status of ['DONE', 'PENDING'] as const)
+    // 늦게 등록한 것을 먼저 만든다 — 순서가 만든 순서가 아니라 등록 시각에서 나오는지 본다
+    await todo(franchiseStoreId, `긴급 가맹 ${n}`);
+    await todo(directStoreId, `긴급 진행 ${n}`, {
+      status: 'IN_PROGRESS',
+      createdAt: daysAgo(1),
+    });
+    await todo(directStoreId, `긴급 대기 ${n}`, { createdAt: daysAgo(2) });
+    // 그룹에 미완료 행이 둘(대기 · 진행 중)과 완료 행 하나 — 미완료 둘이 묶여 한 줄이어야 한다
+    for (const status of ['DONE', 'PENDING', 'IN_PROGRESS'] as const)
       await todo(directStoreId, `긴급 그룹 ${n}`, {
         status,
         assignmentGroupId: n,
         createdAt: daysAgo(3),
       });
-    await todo(directStoreId, `긴급 대기 ${n}`, { createdAt: daysAgo(2) });
-    await todo(directStoreId, `긴급 진행 ${n}`, {
-      status: 'IN_PROGRESS',
-      createdAt: daysAgo(1),
-    });
-    await todo(franchiseStoreId, `긴급 가맹 ${n}`);
     await todo(directStoreId, `긴급 완료 ${n}`, { status: 'DONE' });
     await todo(directStoreId, `보통 ${n}`, { isUrgent: false });
     await todo(directStoreId, `긴급 삭제 ${n}`, { isDeleted: true });
@@ -517,7 +519,7 @@ describe('로그인 후 홈 (e2e, DB)', () => {
       waitingDays: 3,
       filter: { storeIds: [directStoreId], status: ['REJECTED'] },
     });
-    // 긴급 TO-DO 미완료 네 줄 — 그룹(완료 행이 섞여도 한 줄) · 대기 · 진행 중 · 가맹. 등록이 이른 것이 앞이다
+    // 긴급 TO-DO 미완료 네 줄 — 그룹(미완료 행 둘이 한 줄) · 대기 · 진행 중 · 가맹. 등록이 이른 것이 앞이다
     expect(body.items[3]).toEqual({
       type: 'URGENT_TODO',
       count: 4,
