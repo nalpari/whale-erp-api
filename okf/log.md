@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [BP masters](/api/bp-masters.md) — 이력 라우트에 탈퇴 BP 409 를 OpenAPI 로 적었다(`@ApiConflictResponse`). front 가 생성 타입에서 이 실패를 볼 수 있게 한다(PR #175 리뷰). 동작 변화 없음.
 * **Update**: [BP masters](/api/bp-masters.md) — PR #175 리뷰 반영. 사유 한글 조회를 `Object.hasOwn` 으로 막고(표에 없는 코드는 코드 그대로), 이력 `note` 설명에서 받을 수 없게 된 「탈퇴 사유」를 뺐다. 탈퇴 BP 의 이력 409 · 상세 `withdrawal` 을 실제 DB e2e 로 확인한다. 출처에 응답 DTO · 회원 탈퇴 서비스를 더했다.
 
 ## 2026-10-27
