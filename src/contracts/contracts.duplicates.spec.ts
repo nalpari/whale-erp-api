@@ -143,6 +143,11 @@ describe('ContractsService 계약 중복 검사', () => {
       contractStatusHistory: { deleteMany: jest.fn(), create: jest.fn() },
       invitation: { updateMany: jest.fn() },
     };
+    service = await build(null);
+  });
+
+  /** 서비스를 만든다 — 날인본 저장소는 종이 계약 등록 사례만 넣는다 */
+  const build = async (storage: unknown) => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ContractsService,
@@ -151,12 +156,12 @@ describe('ContractsService 계약 중복 검사', () => {
           provide: AdminScopeService,
           useValue: { canManageStaffAt: jest.fn().mockResolvedValue(true) },
         },
-        { provide: STORAGE, useValue: null },
+        { provide: STORAGE, useValue: storage },
         { provide: ContractDeliveryService, useValue: delivery },
       ],
     }).compile();
-    service = module.get(ContractsService);
-  });
+    return module.get(ContractsService);
+  };
 
   describe('저장 (POST)', () => {
     it('같은 점포에 진행 중 계약이 있으면 409 로 묻고 아무것도 만들지 않는다', async () => {
@@ -235,10 +240,11 @@ describe('ContractsService 계약 중복 검사', () => {
         },
       ]);
       db.roleGroupMenu.count.mockResolvedValue(0);
-      // 종이 계약 등록은 날인본 저장소가 있어야 한다 — 이 묶음은 저장소 없이 만들었으니 이 사례만 넣는다
+      // 종이 계약 등록은 날인본 저장소가 있어야 한다 — 이 사례만 저장소를 넣어 만든다
       const storage = { put: jest.fn(), delete: jest.fn() };
-      (service as unknown as { storage: unknown }).storage = storage;
-      const error = await service
+      const error = await (
+        await build(storage)
+      )
         .create(
           dto({
             contractMethod: 'PAPER',
