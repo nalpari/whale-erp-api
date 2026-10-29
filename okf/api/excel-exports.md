@@ -4,12 +4,12 @@ title: Excel exports
 description: 모든 화면의 엑셀 공통 — 1만 건 미만은 바로 파일, 이상은 예약 생성(S3 24시간 · 등록한 이메일로 링크 · 요청한 본인만), 같은 사람 · 같은 화면은 생성 중이면 409 · 1분에 한 번, 모든 요청을 excel_download_logs 에 2년 남긴다. GET /excel-downloads/:id 가 예약 생성한 파일의 주소를 준다.
 tags: [admin, excel, batch, storage, mail, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: excel-exports-service
     resource: ../../src/excel-exports/excel-exports.service.ts
     title: ExcelExportsService — request · processPending · download · purgeExpired
-    last_modified: 2026-10-29T02:30:00Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: excel-export-policy
     resource: ../../src/excel-exports/excel-export-policy.ts
     title: 1만 건 · 1분 · 24시간 · 두 번 시도 · 2년, 판단 규칙과 메일 변수
@@ -25,7 +25,7 @@ sources:
   - id: excel-downloads-controller
     resource: ../../src/excel-exports/excel-downloads.controller.ts
     title: GET /excel-downloads/:id
-    last_modified: 2026-10-29T02:30:00Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: excel-download-logs-migration
     resource: ../../prisma/migrations/20261028140448_team1_excel_download_logs/migration.sql
     title: excel_download_logs · 메일 템플릿 2건

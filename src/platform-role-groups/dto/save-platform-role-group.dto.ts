@@ -31,9 +31,9 @@ export class CreatePlatformRoleGroupDto {
   /** 권한명. 앞뒤 공백을 지우고 1~20자. 플랫폼 권한(PM · PA · BM · FM) 안에서 겹칠 수 없다. @example 고객지원 담당 */
   @Transform(trimText)
   @IsString()
-  @MinLength(1, { message: '권한명을 입력해 주세요' })
-  @MaxLength(ROLE_NAME_MAX, { message: '권한명은 20자까지입니다' })
-  @Matches(NO_NUL, { message: '권한명에 쓸 수 없는 문자가 있습니다' })
+  @MinLength(1, { message: '권한명을 입력해 주세요.' })
+  @MaxLength(ROLE_NAME_MAX, { message: '권한명은 20자까지입니다.' })
+  @Matches(NO_NUL, { message: '권한명에 쓸 수 없는 문자가 있습니다.' })
   name: string;
 
   /** 설명. 선택, 앞뒤 공백을 지우고 100자까지. 비우면 null. @example 커뮤니티관리·BP 조회 */
@@ -41,8 +41,8 @@ export class CreatePlatformRoleGroupDto {
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
   @IsString()
-  @MaxLength(ROLE_DESCRIPTION_MAX, { message: '설명은 100자까지입니다' })
-  @Matches(NO_NUL, { message: '설명에 쓸 수 없는 문자가 있습니다' })
+  @MaxLength(ROLE_DESCRIPTION_MAX, { message: '설명은 100자까지입니다.' })
+  @Matches(NO_NUL, { message: '설명에 쓸 수 없는 문자가 있습니다.' })
   description?: string | null;
 }
 

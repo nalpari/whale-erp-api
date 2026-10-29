@@ -32,7 +32,7 @@ import { dummyPasswordHash, verifyPassword } from './password';
 const ACCESS_TTL = '15m';
 
 // 아이디와 비밀번호 가운데 어느 쪽이 틀렸는지 구분해 알리지 않는다.
-const INVALID_LOGIN_MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다';
+const INVALID_LOGIN_MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다.';
 
 // 잠겨 있을 때만 다른 답을 준다. 그 계정이 있고 틀린 시도가 5번 쌓였다는 뜻이라
 // 가입 여부가 그 순간에는 드러난다. 잠금을 알리지 않으면 정상 사용자가 왜 안
@@ -40,7 +40,7 @@ const INVALID_LOGIN_MESSAGE = '이메일 또는 비밀번호가 올바르지 않
 // 기다릴 시간은 적지 않는다 — 잠긴 뒤 다시 시도한 사람에게 「5분 뒤」는 틀린 말이고,
 // 남은 시간은 본문의 해제 시각(lockExpiresAt)이 말한다.
 const LOCKED_MESSAGE =
-  '로그인이 잠겼습니다. 잠금이 풀린 뒤에 다시 시도하거나 비밀번호를 재설정해 주세요';
+  '로그인이 잠겼습니다. 잠금이 풀린 뒤에 다시 시도하거나 비밀번호를 재설정해 주세요.';
 
 /** 성공 처리 트랜잭션의 결과. 거부면 아무것도 쓰지 않고 결과만 돌려주고, 실패 이력과 예외는 호출한 쪽이 트랜잭션 밖에서 처리한다. */
 type SuccessOutcome =

@@ -605,7 +605,7 @@ describe('ContractsService 계약 중복 검사', () => {
       await expect(
         service.update(9, 7, dto({ isTemporarySave: true })),
       ).rejects.toThrow(
-        '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+        '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
       );
       expect(db.contract.updateMany).not.toHaveBeenCalled();
     });

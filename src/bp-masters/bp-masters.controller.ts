@@ -283,6 +283,6 @@ export class BpMastersController {
 /** 경로의 id 는 문자열이다. 1..2147483647 밖이면 DB 에 묻지 않고 404 — Postgres 가 던지면 500 이 된다. */
 function idOf(raw: string): number {
   const id = parseRouteId(raw);
-  if (id === null) throw new NotFoundException('BP를 찾을 수 없습니다');
+  if (id === null) throw new NotFoundException('BP를 찾을 수 없습니다.');
   return id;
 }

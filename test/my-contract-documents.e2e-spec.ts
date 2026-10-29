@@ -272,7 +272,7 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
       othersDoc.contractDocumentId,
       auth,
     ).expect(404);
-    expect(wrong.body).toMatchObject({ message: '파일을 찾을 수 없습니다' });
+    expect(wrong.body).toMatchObject({ message: '파일을 찾을 수 없습니다.' });
     await download(mine, signature.contractDocumentId, auth).expect(404);
     expect(storage.downloadUrl).not.toHaveBeenCalled();
   });

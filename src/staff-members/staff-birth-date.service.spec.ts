@@ -172,7 +172,7 @@ describe('StaffBirthDateService', () => {
     prisma.staffMember.findUnique.mockResolvedValue(null);
 
     await expect(correct('1991-06-18')).rejects.toThrow(
-      '직원을 찾을 수 없습니다',
+      '직원을 찾을 수 없습니다.',
     );
   });
 

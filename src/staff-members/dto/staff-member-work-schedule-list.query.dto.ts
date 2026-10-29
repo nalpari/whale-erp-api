@@ -35,7 +35,7 @@ export class StaffMemberWorkScheduleListQueryDto {
   })
   @IsOptional()
   @IsIn(STAFF_WORK_SCHEDULE_PERIODS, {
-    message: `period 는 ${STAFF_WORK_SCHEDULE_PERIODS.join(' · ')} 중 하나입니다`,
+    message: `period 는 ${STAFF_WORK_SCHEDULE_PERIODS.join(' · ')} 중 하나입니다.`,
   })
   period?: StaffWorkSchedulePeriod;
 

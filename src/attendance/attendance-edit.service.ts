@@ -45,9 +45,9 @@ import type { AttendanceStoresQueryDto } from './dto/attendance-records.dto';
 
 type Tx = Prisma.TransactionClient;
 
-const RECORD_NOT_FOUND = '출퇴근 기록을 찾을 수 없습니다';
-const STAFF_NOT_FOUND = '직원을 찾을 수 없습니다';
-const TOO_OLD = '최근 3개월 안의 기록만 고칠 수 있습니다';
+const RECORD_NOT_FOUND = '출퇴근 기록을 찾을 수 없습니다.';
+const STAFF_NOT_FOUND = '직원을 찾을 수 없습니다.';
+const TOO_OLD = '최근 3개월 안의 기록만 고칠 수 있습니다.';
 const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 /** 그날(한국) HH:mm 의 순간 */
 const at = (day: Date, hhmm: string) => {
@@ -71,7 +71,7 @@ function assertNotFuture(...times: (Date | null)[]) {
   const now = Date.now();
   if (times.some((t) => t && t.getTime() > now))
     throw new BadRequestException(
-      '아직 오지 않은 시각은 등록할 수 없습니다. 퇴근이 출근보다 이르면 다음 날 퇴근입니다',
+      '아직 오지 않은 시각은 등록할 수 없습니다. 퇴근이 출근보다 이르면 다음 날 퇴근입니다.',
     );
 }
 const rejection = (
@@ -151,8 +151,8 @@ async function assertNoOverlap(
       'Conflict',
       'ATTENDANCE_OVERLAP',
       clash && !clash.attendanceRecordsAsCheckIn.length
-        ? `${md} ${kstTimeOf(at)} 퇴근 미등록 출근이 있어 그 뒤 시간은 등록할 수 없습니다. 그 기록을 먼저 보정해 주세요`
-        : `${md} 출퇴근 기록과 시간이 겹칩니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요`,
+        ? `${md} ${kstTimeOf(at)} 퇴근 미등록 출근이 있어 그 뒤 시간은 등록할 수 없습니다. 그 기록을 먼저 보정해 주세요.`
+        : `${md} 출퇴근 기록과 시간이 겹칩니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요.`,
     ),
   );
 }
@@ -198,9 +198,9 @@ export class AttendanceEditService {
       const pair = await this.lockedPair(tx, access, recordId);
       const day = pair.day;
       if (pair.checkIn && !dto.checkInTime)
-        throw new BadRequestException('출근 시각을 입력해 주세요');
+        throw new BadRequestException('출근 시각을 입력해 주세요.');
       if (pair.checkOut && !dto.checkOutTime)
-        throw new BadRequestException('퇴근 시각을 입력해 주세요');
+        throw new BadRequestException('퇴근 시각을 입력해 주세요.');
       if (
         (pair.checkIn?.recordedAt.toISOString() ?? null) !==
           (dto.expectedCheckInAt
@@ -216,7 +216,7 @@ export class AttendanceEditService {
             HttpStatus.CONFLICT,
             'Conflict',
             'ATTENDANCE_CHANGED',
-            '그사이 다른 관리자가 이 기록을 고쳤습니다. 최신 기록을 다시 불러왔습니다',
+            '그사이 다른 관리자가 이 기록을 고쳤습니다. 최신 기록을 다시 불러왔습니다.',
           ),
         );
 
@@ -244,7 +244,7 @@ export class AttendanceEditService {
         );
         if (outAt <= inAt)
           throw new BadRequestException(
-            '퇴근이 출근보다 이르거나 같습니다. 다음 날 퇴근이면 「다음 날 퇴근」을 골라 주세요',
+            '퇴근이 출근보다 이르거나 같습니다. 다음 날 퇴근이면 「다음 날 퇴근」을 골라 주세요.',
           );
       }
       // 24시간 넘는 짝(09:00 → 다음 날 10:00 — 퇴근을 출근 다음 날까지 받아 생긴다)은 시각만으로 나타낼 수 없다. 퇴근 시각을 그대로
@@ -270,7 +270,7 @@ export class AttendanceEditService {
       );
       const after = summaryOf(inAt, outAt);
       if (before === after && !pair.hasReason)
-        throw new BadRequestException('바뀐 값이 없습니다');
+        throw new BadRequestException('바뀐 값이 없습니다.');
 
       const now = new Date();
       // 고친 짝이 그 직원의 다른 기록과 겹치면 막는다 — 겹친 시간이 급여에 두 번 들어가지 않게(자기 짝은 빼고 본다)
@@ -370,7 +370,7 @@ export class AttendanceEditService {
             HttpStatus.CONFLICT,
             'Conflict',
             'ATTENDANCE_CHANGED',
-            '확인 필요 사유가 없는 기록입니다. 최신 기록을 다시 불러왔습니다',
+            '확인 필요 사유가 없는 기록입니다. 최신 기록을 다시 불러왔습니다.',
           ),
         );
       await tx.attendanceRecord.updateMany({
@@ -412,7 +412,7 @@ export class AttendanceEditService {
     const day = toDate(dto.date);
     assertEditable(day);
     if (day.getTime() > kstToday().getTime())
-      throw new BadRequestException('오늘 이후 날짜는 등록할 수 없습니다');
+      throw new BadRequestException('오늘 이후 날짜는 등록할 수 없습니다.');
     const { inAt, outAt } = shiftOf(day, dto.checkInTime, dto.checkOutTime);
     assertNotFuture(inAt, outAt);
     return this.prisma.$transaction(async (tx) => {
@@ -440,7 +440,7 @@ export class AttendanceEditService {
       const isProxy = await proxyAllowed(tx, staff.accountId, staff.storeId);
       if (!isProxy && !dto.checkOutTime)
         throw new BadRequestException(
-          '대신 등록 대상이 아닌 직원은 출근 · 퇴근을 함께 넣어 보정합니다. 퇴근 시각을 입력해 주세요',
+          '대신 등록 대상이 아닌 직원은 출근 · 퇴근을 함께 넣어 보정합니다. 퇴근 시각을 입력해 주세요.',
         );
       const covered = await tx.contract.findFirst({
         where: { staffMemberId: staff.staffMemberId, ...contractCovers(day) },
@@ -452,7 +452,7 @@ export class AttendanceEditService {
             HttpStatus.UNPROCESSABLE_ENTITY,
             'Unprocessable Entity',
             'NO_CONTRACT',
-            '그날은 체결 완료 근로계약 기간이 아니라 등록할 수 없습니다',
+            '그날은 체결 완료 근로계약 기간이 아니라 등록할 수 없습니다.',
           ),
         );
       if (!dto.checkOutTime) {
@@ -492,8 +492,8 @@ export class AttendanceEditService {
               'Conflict',
               'ALREADY_CHECKED_IN',
               own
-                ? '이 직원은 퇴근하지 않은 출근이 있습니다. 퇴근까지 함께 등록하거나 그 기록을 먼저 보정해 주세요'
-                : '이 직원은 다른 근무지에 퇴근하지 않은 출근이 있어 대신 등록할 수 없습니다. 그 근무지에서 퇴근이 등록된 뒤 다시 해 주세요',
+                ? '이 직원은 퇴근하지 않은 출근이 있습니다. 퇴근까지 함께 등록하거나 그 기록을 먼저 보정해 주세요.'
+                : '이 직원은 다른 근무지에 퇴근하지 않은 출근이 있어 대신 등록할 수 없습니다. 그 근무지에서 퇴근이 등록된 뒤 다시 해 주세요.',
             ),
           );
         }
@@ -518,7 +518,7 @@ export class AttendanceEditService {
               HttpStatus.CONFLICT,
               'Conflict',
               'ATTENDANCE_EXISTS',
-              '그날 출퇴근 기록이 있습니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요',
+              '그날 출퇴근 기록이 있습니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요.',
             ),
           );
       }

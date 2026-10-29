@@ -101,7 +101,7 @@ export class SupportInquiriesController {
     const allowed = Object.values(AttachmentFileType);
     // 파일 이름은 그대로 text 칸에 저장한다 — NUL 이면 PostgreSQL 이 거부해 업로드가 끝난 뒤 500 이 된다.
     if (files?.some((f) => !NO_NUL.test(f.originalname)))
-      throw new BadRequestException('파일 이름에 쓸 수 없는 문자가 있습니다');
+      throw new BadRequestException('파일 이름에 쓸 수 없는 문자가 있습니다.');
     const uploads = (files ?? []).map((f) => ({
       fileName: f.originalname,
       buffer: f.buffer,
@@ -147,7 +147,7 @@ export class SupportInquiriesController {
     const inquiryId = inquiryIdOf(rawId);
     const attachmentId = parseRouteId(rawAttachmentId);
     if (attachmentId === null)
-      throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+      throw new NotFoundException('첨부파일을 찾을 수 없습니다.');
     return this.inquiries.attachmentDownloadUrl(
       user.id,
       inquiryId,
@@ -158,6 +158,6 @@ export class SupportInquiriesController {
 
 function inquiryIdOf(rawId: string): number {
   const id = parseRouteId(rawId);
-  if (id === null) throw new NotFoundException('문의를 찾을 수 없습니다');
+  if (id === null) throw new NotFoundException('문의를 찾을 수 없습니다.');
   return id;
 }

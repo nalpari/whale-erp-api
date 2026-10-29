@@ -473,7 +473,7 @@ describe('checkWorkTimeOverlap', () => {
       statusCode: 409,
       error: 'Conflict',
       code: 'WORK_TIME_OVERLAP',
-      message: '다른 점포 근로계약과 근무 시간이 겹칩니다',
+      message: '다른 점포 근로계약과 근무 시간이 겹칩니다.',
     });
   });
 

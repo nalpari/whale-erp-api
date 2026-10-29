@@ -30,7 +30,7 @@ export class TermsVersionsController {
     @Param('termsTypeCode') termsTypeCode: string,
   ): Promise<TermsVersionDetailResponseDto> {
     const terms = await this.terms.findOne(termsTypeCode);
-    if (!terms) throw new NotFoundException('약관을 찾을 수 없습니다');
+    if (!terms) throw new NotFoundException('약관을 찾을 수 없습니다.');
     return terms;
   }
 }

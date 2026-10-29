@@ -275,7 +275,7 @@ describe('planStores', () => {
         allowed: new Set(hqPart.storeIds),
         requested: { isAllStores: false, storeIds: [1, 3] },
       }),
-    ).toThrow('점포 범위를 벗어나 저장하지 않았습니다');
+    ).toThrow('점포 범위를 벗어나 저장하지 않았습니다.');
   });
 
   it('일부 점포인데 한 곳도 없으면 400', () => {
@@ -313,7 +313,7 @@ describe('planStores', () => {
         requested: { isAllStores: false, storeIds: [1, 4] },
         closed: new Set([4]),
       }),
-    ).toThrow('폐점한 점포는 새로 맡길 수 없습니다');
+    ).toThrow('폐점한 점포는 새로 맡길 수 없습니다.');
   });
 
   it('이미 붙어 있던 폐점 점포는 그대로 남길 수 있다', () => {

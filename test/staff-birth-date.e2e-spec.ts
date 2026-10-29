@@ -327,7 +327,7 @@ describe('직원 생년월일 정정 (e2e, DB)', () => {
 
     expect(res.status).toBe(404);
     expect((res.body as { message: string }).message).toBe(
-      '직원을 찾을 수 없습니다',
+      '직원을 찾을 수 없습니다.',
     );
     expect(await birthOf(accountId)).toBe('1990-05-17');
     expect(

@@ -137,7 +137,7 @@ export class StaffMemberSummaryService {
       weekStart === undefined ? kstToday(now) : parseDateOnly(weekStart);
     if (!day)
       throw new BadRequestException(
-        'weekStart 는 YYYY-MM-DD 형식의 있는 날짜입니다',
+        'weekStart 는 YYYY-MM-DD 형식의 있는 날짜입니다.',
       );
     // getUTCDay 는 일요일이 0 — 월요일로부터 며칠 지났는지로 바꾼다
     const monday = addDays(day, -((day.getUTCDay() + 6) % 7));
@@ -172,7 +172,7 @@ export class StaffMemberSummaryService {
       // 근무스케줄의 점포는 외래키로 묶여 있다. 못 찾으면 데이터가 깨진 것이라 빈 칸으로 내보내지 않는다(직원 목록과 같다)
       if (storeName === undefined)
         throw new InternalServerErrorException(
-          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다`,
+          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다.`,
         );
       return {
         workScheduleId: r.workScheduleId,

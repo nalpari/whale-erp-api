@@ -431,7 +431,7 @@ describe('BP 마스터 계정 관리 (e2e, DB)', () => {
     const histories = await call('get', `/bp-masters/${bpCodeId}/histories`);
     expect(histories.status).toBe(409);
     expect(histories.body).toMatchObject({
-      message: '탈퇴한 BP는 변경 이력을 볼 수 없습니다',
+      message: '탈퇴한 BP는 변경 이력을 볼 수 없습니다.',
     });
 
     const detail = await call('get', `/bp-masters/${bpCodeId}`);

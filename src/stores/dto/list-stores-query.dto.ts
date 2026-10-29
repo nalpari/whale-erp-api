@@ -56,7 +56,7 @@ export class ListStoresQueryDto {
   @IsString()
   @Transform(trimText)
   @MaxLength(50)
-  @Matches(NO_NUL, { message: '쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '쓸 수 없는 문자가 있습니다.' })
   keyword?: string;
 
   /** 사업자등록번호. 하이픈을 빼고 숫자만 견주며, 일부만 넣어도 찾는다. @example 123-45 */
@@ -64,7 +64,7 @@ export class ListStoresQueryDto {
   @IsString()
   @Transform(digitsOnly)
   @Matches(/^[0-9]{1,10}$/, {
-    message: '사업자등록번호는 숫자 10자리 이내로 찾습니다',
+    message: '사업자등록번호는 숫자 10자리 이내로 찾습니다.',
   })
   bizRegistrationNumber?: string;
 

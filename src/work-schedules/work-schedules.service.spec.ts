@@ -665,14 +665,14 @@ describe('WorkSchedulesService', () => {
           staffMemberId: 12,
           statusCode: 400,
           code: 'WORK_SCHEDULE_NO_CONTRACT',
-          message: '근무일에 체결 완료된 근로계약이 없는 직원입니다',
+          message: '근무일에 체결 완료된 근로계약이 없는 직원입니다.',
         },
         {
           index: 3,
           staffMemberId: 13,
           statusCode: 400,
           code: null,
-          message: '시작과 종료가 같습니다 — 근무는 24시간보다 짧아야 합니다',
+          message: '시작과 종료가 같습니다 — 근무는 24시간보다 짧아야 합니다.',
         },
       ]);
       // 줄마다 트랜잭션 + 직원(11)마다 알림 트랜잭션 하나

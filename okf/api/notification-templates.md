@@ -4,7 +4,7 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T10:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: payslip-resent-same-wording
     resource: ../../prisma/migrations/20261021100935_team3_payslip_resent_same_wording/migration.sql
@@ -25,7 +25,7 @@ sources:
   - id: service
     resource: ../../src/notification-templates/notification-templates.service.ts
     title: 목록 · 상세 · 등록 · 수정 · 되돌리기 · 사용 여부
-    last_modified: 2026-10-28T10:30:00Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: validate
     resource: ../../src/notification-templates/validate-template.ts
     title: 저장 검사(validateTemplate)
@@ -33,7 +33,7 @@ sources:
   - id: controller
     resource: ../../src/notification-templates/notification-templates.controller.ts
     title: /notification-templates (플랫폼 관리자만)
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: plan
     resource: ../../docs/plans/2026-10-13-notification-templates.md
     title: 알림 템플릿 관리 API 계획

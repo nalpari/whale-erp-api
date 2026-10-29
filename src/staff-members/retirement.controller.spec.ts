@@ -115,7 +115,7 @@ describe('RetirementController', () => {
       () => controller.cancel(admin, '42'),
       () => controller.preview(admin, '42', body),
     ])
-      await expect(run()).rejects.toThrow('직원을 찾을 수 없습니다');
+      await expect(run()).rejects.toThrow('직원을 찾을 수 없습니다.');
     expect(retirement.retire).not.toHaveBeenCalled();
     expect(retirement.changeDate).not.toHaveBeenCalled();
     expect(retirement.cancel).not.toHaveBeenCalled();

@@ -4,32 +4,32 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:13:28Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-10-13T03:44:30Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
-    last_modified: 2026-10-15T08:30:00Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: contract-status
     resource: ../../src/contracts/contract-status.ts
     title: 계약 상태 전환 (WHALEERP-151)
-    last_modified: 2026-10-23T07:22:15Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: contract-send
     resource: ../../src/contracts/contract-send.service.ts
     title: 근로계약 재발송 (WHALEERP-136 · 611)
-    last_modified: 2026-10-23T07:22:15Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-10-23T07:22:15Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
@@ -41,7 +41,7 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-10-23T09:40:00Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
@@ -53,7 +53,7 @@ sources:
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
-    last_modified: 2026-10-22T00:21:08Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: contracts-menu
     resource: ../../src/contracts/contracts-menu.ts
     title: 근로계약 관리 메뉴 상수(CONTRACTS_MENU) — 서비스의 권한 재확인과 직원 목록 · 상세의 workDays 판정이 같이 쓴다
@@ -65,11 +65,11 @@ sources:
   - id: my-contract-scope
     resource: ../../src/contracts/my-contract-scope.ts
     title: 직원 앱 「내 계약」 기준 (145 · 610 공용)
-    last_modified: 2026-10-22T00:21:08Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: my-contract-documents
     resource: ../../src/contracts/my-contract-documents.service.ts
     title: 직원 앱 근로계약 파일 내려받기 주소 (WHALEERP-146 · 149)
-    last_modified: 2026-10-28T06:10:30Z
+    last_modified: 2026-10-29T04:44:34Z
 ---
 
 # What it is
@@ -125,7 +125,7 @@ worked example `okf/index.md` used to lack.
   who could not replace never sees the other contracts' names · periods. Their 403 says why instead of the shared
   text — 「…기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다」(「체결 완료되었거나 진행 중인」 when a 종이 계약
   등록 would end a 체결 완료, as the 409 says), and for a 임시저장 「…삭제 권한이 필요합니다 — 기존 임시저장을 이어 써
-  주세요」(`PUT` · `PATCH /:id/worker`: 「삭제 권한이 있는 관리자에게 맡겨 주세요」 — they are already editing another contract) —
+  주세요」(`PUT` · `PATCH /:id/worker`: 「삭제 권한이 있는 관리자에게 맡겨 주세요.」 — they are already editing another contract) —
   since the 관리자 웹 shows the 작성 button to them. All are 403 before anything is written;
   `PATCH /:id/worker` and `POST /:id/send` (재발송) need update; `DELETE` needs delete. No permission is
   403 before the service runs. The 관리자 웹 hides the same buttons (`ContractPermission`), mapping in
@@ -167,7 +167,7 @@ a 직원 not yet joined has no account, so counts as not consented)
   있습니다 …」 before the 409 that would show names (5th review — this path opens
   once 본사 제공 동의 is saved). Whether the store still exists and is
   not 폐점 is checked either way — a draft whose store closed after it was saved
-  is 404 「근무지 점포를 찾을 수 없습니다」 even when kept at the same store, so
+  is 404 「근무지 점포를 찾을 수 없습니다.」 even when kept at the same store, so
   it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403
   on the list (`getManageableStores` is null). 플랫폼 관리자 (PM · PA) manage no
   customer store until this module passes the tab BP (`@TargetBp()`, WHALEERP-618), so
@@ -221,7 +221,7 @@ duplicate check like any other in-progress contract, `CONTRACT_IN_PROGRESS` with
 (else 400). It is stored in `contracts.previous_contract_id`. The previous contract's 직원 row is locked before its
 재직 is read, so a 퇴직 확정 cannot slip in between.
 - **연장** — the 직원 is 재직 (not 퇴직, no 퇴직일 set): the new contract goes on **that same record**, even a 가입 완료
-  재직 직원 (the 409 「이 점포에 같은 번호로 재직 중인 직원이 있습니다」 skips that record). A 가입 완료 record is not
+  재직 직원 (the 409 「이 점포에 같은 번호로 재직 중인 직원이 있습니다.」 skips that record). A 가입 완료 record is not
   run through 초대 유형 판별 (it would always be 「이미 재직 중」) and its name and phone are not overwritten — only
   직무 · 고용 형태 follow the contract, like 이어 쓰기; 초안 저장 sends it to the app (서명 대기). Continuing such a 임시저장
   (`PUT`) skips 판별 the same way.
@@ -500,7 +500,7 @@ transaction because the key needs the `contractId`; with documents the
 transaction gets 60 seconds (`PAPER_TRANSACTION_TIMEOUT_MS`) instead of the
 default 5. Writes of the same phone queue on its advisory lock meanwhile; a write
 transaction that runs out of time (P2028, the upload itself or one waiting behind
-it) is a 503 「저장이 몰렸습니다. 잠시 뒤 다시 저장해 주세요」 instead of a 500. Without
+it) is a 503 「저장이 몰렸습니다. 잠시 뒤 다시 저장해 주세요.」 instead of a 500. Without
 `AWS_S3_*` the paper routes are a 503 and nothing is written; 전자계약 saves never
 touch the storage. `GET /contracts/:contractId` lists `documents` (`contractDocumentId`,
 `kind`, `fileName`), and `GET /contracts/:contractId/documents/:contractDocumentId/download-url`
@@ -965,7 +965,7 @@ apply to reading.
   account (`staff_members.account_id`) in 서명 대기 or later (`PENDING_SIGNATURE` · `CORRECTION_REQUESTED` · `SIGNED` · `REJECTED` · `EXPIRED` · `ENDED`).
   임시저장 and 발송 대기 are not the 직원's yet (mockup: 발송 대기 is not in the list); someone else's
   contract and one waiting for 소속 추가 확인 (only `candidate_account_id`) are absent too — the detail
-  is the same 404 「근로계약을 찾을 수 없습니다」 for all of them. A 퇴직 직원 still sees their contracts.
+  is the same 404 「근로계약을 찾을 수 없습니다.」 for all of them. A 퇴직 직원 still sees their contracts.
 - **`GET /me/contracts`** — all of them, not paged (a 직원 has a handful): `{ items, total }`. A row is
   `contractId` · `status` · `storeId` · `storeName` (근무지 — the app groups by it) · `employmentType`
   (the contract's copy; the 직원 레코드's when empty, as in the 관리자 detail) · `contractMethod` · `startDate` · `endDate` · `sentAt` · `signDeadlineAt` ·
@@ -1003,7 +1003,7 @@ apply to reading.
   filename*=UTF-8''…` is set on the S3 response, not by this API). The app hands that file to the share sheet.
   The path ends in `/download-url` like every other download route here, because the reply is a URL, not the file.
   - Not mine (same `myContractWhere`) → the detail's 404 body. Then the file must belong to that contract and be
-    one `documents` lists (`kind ≠ SIGNATURE`) → else 404 「파일을 찾을 수 없습니다」 — so another contract's
+    one `documents` lists (`kind ≠ SIGNATURE`) → else 404 「파일을 찾을 수 없습니다.」 — so another contract's
     file id under my contract is 404 too.
   - **처리 완료본 (`SIGNED_COPY`) only for executed contracts** — `SIGNED`, or `ENDED` with a `SIGNED → ENDED`
     status history row (any actor: the nightly end or an admin replacement), or an old `ENDED` with no history at

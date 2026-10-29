@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: 화면에 보이는 응답 문구 끝에 마침표를 붙였다(사용자 지정 2026-10-29 — 모든 문장 뒤에 마침표). 예외 message · DTO 검증 message · 응답 안내 문구(급여 검토 사유 detail 등) 666곳, 바꾼 문구를 인용한 concept 29개의 인용과 generated · last_modified 를 맞췄다. 그대로 둔 것: 뒤에 「: 코드」가 붙는 앞부분(`SAME_AS_LIVE_ITEM` · `DELETED_BEFORE_SAVE` · `assertNoRepeat` · 휴일 점포 `reject` — front `code-drafts.ts` 가 「: 」 뒤 코드를 읽는다), 뒤에 문장이 이어지는 `NOW_STATUS`, front 가 `===` 로 비교하는 점포 404 「점포를 찾을 수 없습니다」(front `store-frame.tsx`), 로그 · `new Error` · Swagger 설명. DB 의 알림 템플릿 · 공통코드 문구는 마이그레이션이 필요해 범위 밖이다. 이미 저장된 `payslip_review_reasons.detail` 은 다시 계산할 때까지 마침표 없이 남는다(다시 계산은 `reviewReason` 으로 맞추므로 동작은 같다).
 * **Update**: [Staff signup](/api/staff-signup.md) — 받은 초대 수락(`POST /me/invitations/:invitationId/accept`) 응답에 `storeId` 를 더했다. 직원앱이 수락 뒤 그 근무지 근로계약서만(`/contracts?store=`) 연다(staff #40 후속 리뷰, Plane WHALEERP-604).
 * **Update**: main 병합(api omastar, main #187 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #186 재리뷰 참고: 상태 전환 표를 `TRANSITIONS` 에 맞춤(임시저장 → 발송 대기에 소속 추가 확인 요청, 발송 대기 → 거부(요청 거절), 서명 대기 → 발송 대기에 옛 소속 확인 계약 재발송). #186 줄의 템플릿 건수(44 → 46건) 서술을 바로잡음.

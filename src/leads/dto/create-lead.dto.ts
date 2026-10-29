@@ -27,13 +27,13 @@ export class CreateLeadDto {
   @Transform(trimText)
   @IsString()
   @Length(1, 50)
-  @Matches(NO_NUL, { message: '이름에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '이름에 쓸 수 없는 문자가 있습니다.' })
   contactName: string;
 
   /** 업종 — 공통코드 `INDUSTRY` 의 상세 코드. @example CAFE */
   @IsString()
   @MaxLength(20)
-  @Matches(NO_NUL, { message: '업종에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '업종에 쓸 수 없는 문자가 있습니다.' })
   industryCode: string;
 
   /** 업종 직접 입력. 업종이 기타(`ETC`)일 때만 필수이고, 아니면 저장하지 않는다. @example 꽃집 */
@@ -41,7 +41,7 @@ export class CreateLeadDto {
   @Transform(trimText)
   @IsString()
   @Length(1, 50)
-  @Matches(NO_NUL, { message: '업종 직접 입력에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '업종 직접 입력에 쓸 수 없는 문자가 있습니다.' })
   industryDetail?: string;
 
   /**
@@ -53,7 +53,7 @@ export class CreateLeadDto {
     typeof value === 'string' ? value.replace(/[\s-]/g, '') : value,
   )
   @Matches(/^(0[0-9]{8,10}|1[568][0-9]{6})$/, {
-    message: '전화번호 형식이 올바르지 않습니다',
+    message: '전화번호 형식이 올바르지 않습니다.',
   })
   phone: string;
 
@@ -76,18 +76,20 @@ export class CreateLeadDto {
   @IsOptional()
   @IsString()
   @Length(1, 20)
-  @Matches(NO_NUL, { message: '도입 예정 시기에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '도입 예정 시기에 쓸 수 없는 문자가 있습니다.' })
   planPeriodCode?: string | null;
 
   /** 문의 내용. 앞뒤 공백을 지우고 1~2000자. */
   @Transform(trimText)
   @IsString()
   @Length(1, 2000)
-  @Matches(NO_NUL, { message: '문의 내용에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '문의 내용에 쓸 수 없는 문자가 있습니다.' })
   body: string;
 
   /** 개인정보 수집·이용 동의. 필수라 `true` 만 받는다. */
-  @Equals(true, { message: '개인정보 수집·이용에 동의해야 접수할 수 있습니다' })
+  @Equals(true, {
+    message: '개인정보 수집·이용에 동의해야 접수할 수 있습니다.',
+  })
   privacyAgreed: boolean;
 
   /** 마케팅 정보 수신 동의. 선택. */

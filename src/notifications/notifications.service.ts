@@ -89,7 +89,7 @@ export class NotificationsService {
       where,
       select: ITEM_SELECT,
     });
-    if (!row) throw new NotFoundException('알림을 찾을 수 없습니다');
+    if (!row) throw new NotFoundException('알림을 찾을 수 없습니다.');
     return toItem(row, await this.kinds([row]));
   }
 

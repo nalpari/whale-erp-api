@@ -24,9 +24,9 @@ import type {
 } from './dto/template.response.dto';
 import { validateTemplate } from './validate-template';
 
-const NOT_FOUND = '알림 템플릿을 찾을 수 없습니다';
-const STALE = '그사이 다른 운영자가 고쳤습니다. 다시 불러온 뒤 고쳐 주세요';
-const DUPLICATE_CODE = '이미 다른 템플릿이 쓰는 템플릿 코드입니다';
+const NOT_FOUND = '알림 템플릿을 찾을 수 없습니다.';
+const STALE = '그사이 다른 운영자가 고쳤습니다. 다시 불러온 뒤 고쳐 주세요.';
+const DUPLICATE_CODE = '이미 다른 템플릿이 쓰는 템플릿 코드입니다.';
 
 type Row = Prisma.NotificationTemplateGetPayload<object>;
 /** 이력 행과 템플릿 행이 함께 갖는 칸 — 요약 비교에 쓴다 */
@@ -131,7 +131,7 @@ export class NotificationTemplatesService {
     await this.change(adminId, id, dto, (current) => {
       if (current.defaultBody === null || current.defaultVariables === null)
         throw new ConflictException(
-          '등록한 템플릿은 되돌릴 기본 문구가 없습니다',
+          '등록한 템플릿은 되돌릴 기본 문구가 없습니다.',
         );
       const restored = {
         title: current.channel === 'ALIMTALK' ? null : current.defaultTitle,

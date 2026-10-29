@@ -4,20 +4,20 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:29:30Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
     title: sideOf · canSee · creatableRoles · actionsOf · assertSelfEdit · planStores · shrinkCascade — the role rules as pure functions
-    last_modified: 2026-10-27T02:30:00Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-29T01:29:30Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
-    last_modified: 2026-10-28T02:11:16Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear, shared with platform admins
@@ -50,7 +50,7 @@ reset.[^bp-admins-service]
 The menu is found by the controller path, and the target BP is the guard's
 `@TargetBp()` — a BP or franchise account its own BP, a platform account the tab's
 customer BP. A platform account calling without the header targets the platform BP,
-which this service answers with the one string 400 「관리자 계정을 볼 BP 를 골라 주세요」;
+which this service answers with the one string 400 「관리자 계정을 볼 BP 를 골라 주세요.」;
 관리자 웹 shows a string 400 on a read route as the target-BP refusal, so no other
 business 400 on `GET /bp-admins` or `GET /bp-admins/:id` may be a bare string.
 
@@ -92,7 +92,7 @@ master. Anything else is 400 「선택할 수 없는 권한입니다.」.
 - **전체 점포** only for a BA, and only by a caller who manages all stores. A platform
   user counts as managing every store of the tab BP (2026-10-23).
 - **Picked stores** must be within the caller's stores; for an FA, the master's.
-  Outside is 400 「점포 범위를 벗어나 저장하지 않았습니다」.
+  Outside is 400 「점포 범위를 벗어나 저장하지 않았습니다.」.
 - **범위 밖 매핑 stays.** Mappings outside the caller's stores are kept even though the
   request does not list them — the form shows them read-only (2026-09-29). A caller with
   some stores editing an all-stores BA keeps it all-stores; turning it partial is 403.
@@ -114,8 +114,8 @@ inserted — the composite key would refuse a second row.
 
 **Register and edit lock the BP first.** Both transactions open with
 `SELECT account_status_code, is_deleted FROM bp_codes … FOR SHARE` on the tab's BP and
-re-read it: deleted is 404 (`BP 를 찾을 수 없습니다`, the guard's wording), and a BP that is
-not 사용 — 미사용 or 탈퇴 alike — is 409 `BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다` for a
+re-read it: deleted is 404 (`BP 를 찾을 수 없습니다.`, the guard's wording), and a BP that is
+not 사용 — 미사용 or 탈퇴 alike — is 409 `BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.` for a
 register and for any edit that saves 사용 — re-activating included. Editing a 미사용 account of a 미사용 BP, staying 미사용,
 still works. Restoring 사용 is the BP 마스터's job (WHALEERP-414), so the platform can no
 longer pick a 미사용 BP in the header and add a 사용 account there. The lock exists because

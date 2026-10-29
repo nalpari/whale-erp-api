@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:53:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -21,15 +21,15 @@ sources:
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update · DELETE items
-    last_modified: 2026-10-22T08:42:33Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
-    last_modified: 2026-10-27T02:07:39Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
-    last_modified: 2026-10-15T08:37:00Z
+    last_modified: 2026-10-29T04:44:34Z
 ---
 
 # Status
@@ -141,8 +141,8 @@ admin process 문의사항; the first answer notifies the author (ops notificati
 `LeadsAdminController` that is admin-only and not rate-limited, see [Inquiry and lead handling](/api/inquiries.md).
 The intake route takes two limits:
 the same IP gets 5 per hour (`LeadsThrottlerGuard`, counted before validation, so a rejected form counts too;
-its 429 says 「잠시 후 다시 시도해 주세요」), and the same phone or email is refused with 429 for 10 minutes
-(「이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다」, CNT-14, 재영 2026-10-13), counted on the
+its 429 says 「잠시 후 다시 시도해 주세요.」), and the same phone or email is refused with 429 for 10 minutes
+(「이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다.」, CNT-14, 재영 2026-10-13), counted on the
 database clock against a `created_at` the database fills ([Inquiry and lead handling](/api/inquiries.md)). The check and
 the insert run under advisory locks on the phone key then the email key (`lead-intake:phone:…` ·
 `lead-intake:email:…`, always in that order so two requests never wait on each other), so a double-clicked

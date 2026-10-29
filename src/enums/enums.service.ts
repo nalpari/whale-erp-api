@@ -51,7 +51,7 @@ export class EnumsService {
     const values = Object.hasOwn(this.catalog.enums, name)
       ? this.catalog.enums[name]
       : undefined;
-    if (!values) throw new NotFoundException(`enum ${name} 이 없습니다`);
+    if (!values) throw new NotFoundException(`enum ${name} 이 없습니다.`);
     return { version: this.catalog.version, enums: { [name]: values } };
   }
 }

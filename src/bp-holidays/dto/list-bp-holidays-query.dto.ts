@@ -12,9 +12,9 @@ import { IsDateOnly } from '../../common/is-date-only';
 import { NO_NUL } from '../../common/no-nul';
 import { trimText } from '../../platform-admins/platform-admin-format';
 
-const YEAR_RANGE = '연도는 2000~2100 사이로 보내 주세요';
-const MONTH_RANGE = '월은 1~12 사이로 보내 주세요';
-const DATE = '날짜는 YYYY-MM-DD 로 보내 주세요';
+const YEAR_RANGE = '연도는 2000~2100 사이로 보내 주세요.';
+const MONTH_RANGE = '월은 1~12 사이로 보내 주세요.';
+const DATE = '날짜는 YYYY-MM-DD 로 보내 주세요.';
 
 /** 월 캘린더 · 목록(WHALEERP-553). 고른 달 하나만 본다 — 기간 조건은 받지 않는다(CONFIG-8). */
 export class ListBpHolidaysQueryDto {
@@ -37,7 +37,7 @@ export class ListBpHolidaysQueryDto {
   @IsString()
   @Transform(trimText)
   @MaxLength(30)
-  @Matches(NO_NUL, { message: '쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '쓸 수 없는 문자가 있습니다.' })
   name?: string;
 }
 

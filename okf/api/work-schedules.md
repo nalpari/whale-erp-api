@@ -4,12 +4,12 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
 tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:41:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
@@ -21,7 +21,7 @@ sources:
   - id: controller
     resource: ../../src/work-schedules/work-schedules.controller.ts
     title: /work-schedules
-    last_modified: 2026-10-21T08:25:49Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: notice
     resource: ../../src/work-schedules/work-schedule-notice.ts
     title: 저장 알림 — 직원 알림 · 앱 푸시 발송 대기(#201)
@@ -130,7 +130,7 @@ sources:
 # Staff app month
 
 `GET /me/work-schedules?staffMemberId=&month=YYYY-MM`(#205) — 직원 앱 토큰만, 관리자 토큰은 403. 직원 근무 앱 근무 탭의 월 달력이 쓴다.[^my-controller]
-- 소속 하나(= 직원 레코드)를 받는다 — `GET /me/memberships` 의 `staffMemberId`. 기준은 내 소속 근무지 · TO-DO 와 같은 `ACTIVE_STAFF`(체결 완료 계약 · 가입 완료 · 재직). 남의 · 퇴직한 · 없는 레코드는 모두 같은 404 「소속을 찾을 수 없습니다」.
+- 소속 하나(= 직원 레코드)를 받는다 — `GET /me/memberships` 의 `staffMemberId`. 기준은 내 소속 근무지 · TO-DO 와 같은 `ACTIVE_STAFF`(체결 완료 계약 · 가입 완료 · 재직). 남의 · 퇴직한 · 없는 레코드는 모두 같은 404 「소속을 찾을 수 없습니다.」.
 - 달은 근무일 기준(`monthSpan` — 그 달 1일 한국 0시 ≤ 시작 < 다음 달 1일 한국 0시). 앞달 말일 밤에 시작해 1일로 넘어온 근무는 앞달 것이다. 지운 것은 빠지고, 본인 것이라 본사 제공 동의와 상관없다. 시작순 `{ items: WorkScheduleDto[] }`.
 - 실제 출근 · 실제 근무(목업의 채운 칠)는 출퇴근 기록이 생길 때 붙인다(2026-10-22 재영, 이번에는 예정만).
 

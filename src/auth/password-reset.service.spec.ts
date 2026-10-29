@@ -422,7 +422,7 @@ describe('PasswordResetService', () => {
   });
 
   describe('verifyPin — 핀 확인', () => {
-    const INVALID = '핀이 올바르지 않거나 만료되었습니다';
+    const INVALID = '핀이 올바르지 않거나 만료되었습니다.';
 
     beforeEach(() => {
       tx.passwordResetPin.findFirst.mockResolvedValue(pinRow());

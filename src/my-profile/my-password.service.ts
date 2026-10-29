@@ -14,7 +14,7 @@ import { validateNewPassword } from '../auth/password-policy';
 import { PrismaService } from '../prisma/prisma.service';
 
 export const CURRENT_PASSWORD_MISMATCH_MESSAGE =
-  '지금 비밀번호가 맞지 않습니다';
+  '지금 비밀번호가 맞지 않습니다.';
 
 /**
  * 직원 앱 비밀번호 변경 (WHALEERP-192). 지금 비밀번호를 확인한 뒤 새 비밀번호로 바꾼다. 규칙은 가입 · 재설정과 같은

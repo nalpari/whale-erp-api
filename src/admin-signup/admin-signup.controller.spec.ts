@@ -52,7 +52,7 @@ describe('AdminSignupController 경로 보호', () => {
       SignupThrottlerGuard.prototype,
     ) as SignupThrottlerGuard;
     await expect(guard['getErrorMessage']()).resolves.toBe(
-      '잠시 후 다시 시도해 주세요',
+      '잠시 후 다시 시도해 주세요.',
     );
   });
 });

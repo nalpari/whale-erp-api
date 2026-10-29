@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:41:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -25,15 +25,15 @@ sources:
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: pdf
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
@@ -167,7 +167,7 @@ sources:
   `DRAFT`(→ 작성 중, 「초안 생성」, 처리 관리자)를 남긴다.
 * **검토 대기 분류**(WHALEERP-229, `payslip-attendance-reasons.ts`) — 사유를 붙여도 초안은 만든다. 순서는 출퇴근 누락 · 기간 중
   계약 변경 · 계약 만료 후 기록 · 확인 필요 기록 포함.
-  * **출퇴근 누락**(`MISSING_ATTENDANCE`): 급여 기간(한국 시간)에 기록이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다」. 있으면
+  * **출퇴근 누락**(`MISSING_ATTENDANCE`): 급여 기간(한국 시간)에 기록이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다.」. 있으면
     빠진 날 — 그날을 덮는 근로계약의 근무 요일인데 출근이 없는 날(출근·퇴근 모두 없음)과 출근만 있고 퇴근이 없는 날(퇴근 미등록) —
     을 「출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음」(데모, 날짜 내림차순, 10일 넘으면 「외 N일」)
     으로 적는다. 오늘은 끝나지 않아 어제까지만 보고, 퇴직일 뒤 · 계약 기간 밖은 빼며, 근무스케줄은 보지 않는다(STAFF-40).

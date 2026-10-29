@@ -496,7 +496,7 @@ describe('플랫폼 관리자 관리 (e2e, DB)', () => {
         if (created) adminIds.push(created.adminAccountId);
         expect(res.status).toBe(400);
         expect(res.body).toMatchObject({
-          message: '플랫폼 관리자에게 줄 수 있는 권한이 아닙니다',
+          message: '플랫폼 관리자에게 줄 수 있는 권한이 아닙니다.',
         });
         expect(created).toBeNull();
       },
@@ -601,7 +601,7 @@ describe('플랫폼 관리자 관리 (e2e, DB)', () => {
 
         expect(res.status).toBe(400);
         expect(res.body).toMatchObject({
-          message: '플랫폼 관리자에게 줄 수 있는 권한이 아닙니다',
+          message: '플랫폼 관리자에게 줄 수 있는 권한이 아닙니다.',
         });
         await expect(
           prisma.adminAccount.findUniqueOrThrow({

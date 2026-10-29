@@ -208,13 +208,13 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
     const { accountId, token } = await fresh('dup');
     const before = sent.length;
     const dup = await requestPin(token, otherEmail.toUpperCase()).expect(409);
-    expect(message(dup)).toBe('이미 쓰고 있는 이메일입니다');
+    expect(message(dup)).toBe('이미 쓰고 있는 이메일입니다.');
     await requestPin(token, await emailOf(accountId)).expect(400);
     await requestPin(token, 'not-an-email').expect(400);
     // @IsEmail 은 받지만 메일 발송이 막는 주소 — 받으면 핀이 지워지고 「메일 설정 문제」 500 이 됐다
     const quoted = await requestPin(token, '"a"@example.com').expect(400);
     expect(JSON.stringify(quoted.body)).toContain(
-      '메일을 보낼 수 없는 형식의 이메일입니다',
+      '메일을 보낼 수 없는 형식의 이메일입니다.',
     );
     expect(await prisma.emailChangePin.count({ where: { accountId } })).toBe(0);
     expect(sent).toHaveLength(before);
@@ -228,10 +228,10 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
       `pw-${n}@test.invalid`,
       'Wrong1!!',
     ).expect(400);
-    expect(message(wrong)).toBe('지금 비밀번호가 맞지 않습니다');
+    expect(message(wrong)).toBe('지금 비밀번호가 맞지 않습니다.');
     // 비밀번호 없이는 409 로 주소가 쓰이는지 알 수 없다
     const dup = await requestPin(token, otherEmail, 'Wrong1!!').expect(400);
-    expect(message(dup)).toBe('지금 비밀번호가 맞지 않습니다');
+    expect(message(dup)).toBe('지금 비밀번호가 맞지 않습니다.');
     await post('/me/profile/email-change-pins', token, {
       newEmail: `pw-${n}@test.invalid`,
     }).expect(400);
@@ -257,7 +257,7 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
       newPassword: 'NewPass456!',
     }).expect(204);
     const res = await change(token, pin).expect(400);
-    expect(message(res)).toBe('핀이 올바르지 않거나 만료되었습니다');
+    expect(message(res)).toBe('핀이 올바르지 않거나 만료되었습니다.');
     expect(await emailOf(accountId)).toBe(before);
   });
 
@@ -274,7 +274,7 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
     const pin = lastPinTo(target);
     for (let i = 0; i < 5; i += 1) {
       const res = await change(token, wrongOf(pin)).expect(400);
-      expect(message(res)).toBe('핀이 올바르지 않거나 만료되었습니다');
+      expect(message(res)).toBe('핀이 올바르지 않거나 만료되었습니다.');
     }
     await change(token, pin).expect(400);
     expect(await emailOf(accountId)).toBe(before);
@@ -327,7 +327,7 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
         500,
       );
       expect(message(res)).toBe(
-        '메일 설정 문제로 인증 메일을 보내지 못했습니다. 관리자에게 문의해 주세요',
+        '메일 설정 문제로 인증 메일을 보내지 못했습니다. 관리자에게 문의해 주세요.',
       );
     } finally {
       failSend = null;

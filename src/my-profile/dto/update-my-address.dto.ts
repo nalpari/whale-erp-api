@@ -14,7 +14,7 @@ const trimmed = ({ value }: { value: unknown }) =>
 export class UpdateMyAddressDto {
   /** 우편번호 — 도로명 주소 체계의 5자리 */
   @Transform(trimmed)
-  @Matches(/^[0-9]{5}$/, { message: '우편번호는 숫자 5자리입니다' })
+  @Matches(/^[0-9]{5}$/, { message: '우편번호는 숫자 5자리입니다.' })
   zipCode: string;
 
   /** 도로명 주소 — 주소 검색에서 고른 값 */

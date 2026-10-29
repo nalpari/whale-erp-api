@@ -31,7 +31,7 @@ import {
   lockPeople,
 } from './contracts.service';
 
-const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
+const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다.';
 
 export type EndResult = { contractId: number; status: 'ENDED' };
 
@@ -106,7 +106,7 @@ export class ContractSendService {
           c.staffMember.phone !== scoped.phone
         )
           throw new ConflictException(
-            '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+            '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
           );
         if (!c.status || !RESENDABLE_STATUSES.includes(c.status))
           throw statusConflict(c.status ?? 'PENDING_SEND');
@@ -195,7 +195,7 @@ export class ContractSendService {
     const dispatched = await this.delivery.dispatch(pending, adminAccountId);
     if (!dispatched)
       throw new ConflictException(
-        '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+        '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
       );
     // 그사이 직원이 소속 추가 확인 요청에 답했으면 계약은 그 답으로 서명 대기(기한은 수락부터) · 거부다 — 지금 값을 싣는다(api #164 리뷰)
     if (dispatched === 'ANSWERED') {
@@ -246,7 +246,7 @@ export class ContractSendService {
       if (!c) throw new NotFoundException(CONTRACT_NOT_FOUND);
       if (c.storeId !== scoped.storeId || c.staffMember.phone !== scoped.phone)
         throw new ConflictException(
-          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
         );
       // 발송 대기가 아니면 transition 이 지금 상태를 실어 409 다
       await transition(tx, contractId, 'ENDED', 'ADMIN', {
@@ -272,6 +272,6 @@ const resentMeanwhile = (status: ContractStatus) =>
     error: 'Conflict',
     code: 'CONTRACT_STATUS_CONFLICT',
     message:
-      '다른 요청이 먼저 근로계약서를 다시 보냈습니다. 화면을 새로 고쳐 마지막 발송 시각을 확인해 주세요',
+      '다른 요청이 먼저 근로계약서를 다시 보냈습니다. 화면을 새로 고쳐 마지막 발송 시각을 확인해 주세요.',
     status,
   });

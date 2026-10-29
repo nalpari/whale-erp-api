@@ -56,12 +56,12 @@ const STATUS_LABEL: Record<string, string> = {
   ACTIVE: '사용',
   INACTIVE: '미사용',
 };
-const NOT_FOUND = '플랫폼 관리자 계정을 찾을 수 없습니다';
+const NOT_FOUND = '플랫폼 관리자 계정을 찾을 수 없습니다.';
 const LOGIN_ID_TAKEN =
-  '이미 사용 중인 아이디입니다. 삭제된 계정의 아이디도 다시 쓸 수 없습니다';
-const EMAIL_TAKEN = '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다';
+  '이미 사용 중인 아이디입니다. 삭제된 계정의 아이디도 다시 쓸 수 없습니다.';
+const EMAIL_TAKEN = '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.';
 const CHANGED_MEANWHILE =
-  '그 사이 다른 관리자가 이 계정을 바꿨습니다. 최신 정보를 불러온 뒤 다시 해 주세요';
+  '그 사이 다른 관리자가 이 계정을 바꿨습니다. 최신 정보를 불러온 뒤 다시 해 주세요.';
 
 const roleGroupSelect = {
   roleGroupId: true,
@@ -297,7 +297,7 @@ export class PlatformAdminsService {
         const group = await this.lockPlatformRoleGroup(tx, input.roleGroupId);
         if (group.roleTypeCode === MASTER && caller.roleTypeCode !== MASTER)
           throw new ForbiddenException(
-            '플랫폼 마스터 계정을 등록할 권한이 없습니다',
+            '플랫폼 마스터 계정을 등록할 권한이 없습니다.',
           );
         if (!(await this.isLoginIdAvailable(input.loginId, tx)))
           throw new ConflictException(LOGIN_ID_TAKEN);
@@ -348,7 +348,7 @@ export class PlatformAdminsService {
         // 확인과 INSERT 사이에 같은 아이디 · 이메일이 먼저 들어갔다.
         if (isUniqueViolation(error))
           throw new ConflictException(
-            '이미 사용 중인 아이디 또는 이메일입니다',
+            '이미 사용 중인 아이디 또는 이메일입니다.',
           );
         throw error;
       });
@@ -402,7 +402,7 @@ export class PlatformAdminsService {
           input.accountStatus !== target.accountStatusCode;
         if (isSelf && (isRoleChanged || isStatusChanged))
           throw new ForbiddenException(
-            '본인 계정의 권한 · 상태는 바꿀 수 없습니다',
+            '본인 계정의 권한 · 상태는 바꿀 수 없습니다.',
           );
 
         const group = isRoleChanged
@@ -414,7 +414,7 @@ export class PlatformAdminsService {
           caller.roleTypeCode !== MASTER
         )
           throw new ForbiddenException(
-            '플랫폼 마스터 권한을 줄 권한이 없습니다',
+            '플랫폼 마스터 권한을 줄 권한이 없습니다.',
           );
 
         if (
@@ -422,7 +422,7 @@ export class PlatformAdminsService {
           (await this.findEmailOwner(tx, input.email, adminAccountId))
         )
           throw new ConflictException(
-            '이미 다른 관리자 계정에 등록된 이메일입니다',
+            '이미 다른 관리자 계정에 등록된 이메일입니다.',
           );
 
         const leavesMaster =
@@ -457,7 +457,7 @@ export class PlatformAdminsService {
         });
         if (count === 0)
           throw new ConflictException(
-            '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요',
+            '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.',
           );
         // 옛 주소로 나간(또는 나가는 중인) 임시 비밀번호는 옛 주소의 주인이 쓸 수 있다 — 함께 막는다.
         // 등록 · 초기화한 계정은 그것이 유일한 로그인 수단이므로, 막았으면 「미발송」을 다시 켜 초기화하게 한다.
@@ -494,7 +494,7 @@ export class PlatformAdminsService {
       .catch((error: unknown) => {
         if (isUniqueViolation(error))
           throw new ConflictException(
-            '이미 다른 관리자 계정에 등록된 이메일입니다',
+            '이미 다른 관리자 계정에 등록된 이메일입니다.',
           );
         throw error;
       });
@@ -509,7 +509,7 @@ export class PlatformAdminsService {
     await this.prisma.$transaction(async (tx) => {
       const target = await this.findTarget(tx, adminAccountId);
       if (caller.adminAccountId === adminAccountId)
-        throw new ForbiddenException('본인 계정은 스스로 삭제할 수 없습니다');
+        throw new ForbiddenException('본인 계정은 스스로 삭제할 수 없습니다.');
       this.assertMasterProtection(caller, target.roleTypeCode, '지울');
       if (
         target.roleTypeCode === MASTER &&
@@ -552,15 +552,15 @@ export class PlatformAdminsService {
     const caller = await this.permissions.caller(callerId);
     const target = await this.findTarget(this.prisma, adminAccountId);
     if (caller.adminAccountId === adminAccountId)
-      throw new ForbiddenException('본인 비밀번호는 내 정보에서 바꿔 주세요');
+      throw new ForbiddenException('본인 비밀번호는 내 정보에서 바꿔 주세요.');
     this.assertMasterProtection(caller, target.roleTypeCode, '초기화할');
     if (!target.email)
-      throw new ConflictException('이메일이 없는 계정이라 보낼 곳이 없습니다');
+      throw new ConflictException('이메일이 없는 계정이라 보낼 곳이 없습니다.');
     // 초기화는 기존 비밀번호를 지운다. 새 비밀번호를 보낼 길이 없으면 계정이 잠기므로 아무것도 쓰지 않는다
     // (등록은 지울 비밀번호가 없어 「미발송」으로 남긴다).
     if (this.sender === null)
       throw new ServiceUnavailableException(
-        '메일 설정이 없어 비밀번호를 초기화할 수 없습니다',
+        '메일 설정이 없어 비밀번호를 초기화할 수 없습니다.',
       );
 
     const by = caller.adminAccountId;
@@ -669,7 +669,7 @@ export class PlatformAdminsService {
     });
     if (!group)
       throw new BadRequestException(
-        '플랫폼 관리자에게 줄 수 있는 권한이 아닙니다',
+        '플랫폼 관리자에게 줄 수 있는 권한이 아닙니다.',
       );
     return group;
   }
@@ -700,7 +700,7 @@ export class PlatformAdminsService {
   ): void {
     if (targetRoleType === MASTER && caller.roleTypeCode !== MASTER)
       throw new ForbiddenException(
-        `플랫폼 마스터 계정은 플랫폼 마스터만 ${verb} 수 있습니다`,
+        `플랫폼 마스터 계정은 플랫폼 마스터만 ${verb} 수 있습니다.`,
       );
   }
 
@@ -725,7 +725,7 @@ export class PlatformAdminsService {
          FOR NO KEY UPDATE`;
     if (!masters.some((m) => m.admin_account_id !== adminAccountId))
       throw new ConflictException(
-        '사용 중인 플랫폼 마스터가 한 명은 있어야 합니다',
+        '사용 중인 플랫폼 마스터가 한 명은 있어야 합니다.',
       );
   }
 

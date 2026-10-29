@@ -21,7 +21,7 @@ import type {
   SupportPostResponseDto,
 } from './dto/published-post.response.dto';
 
-const NOT_VISIBLE = '게시가 끝났거나 볼 수 없는 게시물입니다';
+const NOT_VISIBLE = '게시가 끝났거나 볼 수 없는 게시물입니다.';
 
 /**
  * 노출 대상의 「BP」는 사업자 관리자(BP 마스터 · BP 관리자), 「점포」는 점포 단위 관리자(가맹 마스터 · 가맹 관리자),
@@ -189,7 +189,8 @@ export class PublishedPostsService {
             where: { postAttachmentId, postId, isDeleted: false },
             select: { storageKey: true, fileName: true },
           });
-    if (!attachment) throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+    if (!attachment)
+      throw new NotFoundException('첨부파일을 찾을 수 없습니다.');
     return {
       url: await storage.downloadUrl(
         attachment.storageKey,

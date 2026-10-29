@@ -38,7 +38,7 @@ const INACTIVE_MESSAGE = '사용이 제한된 계정입니다. 관리자에게 �
 const LOCKED_MESSAGE = `로그인이 잠겼습니다. ${ATTEMPT_LOCK_MS / 60_000}분 뒤에 다시 시도해주세요.`;
 // signupToken 이 만료·위조됐거나(10분 지남) 그 사이 계정이 탈퇴·삭제됐다 — front 는 이 문구를 보이지 않고
 // 로그인 화면으로 보낸다(front 가입 완료 화면, 「웨일ERP 시작하기」).
-const INVALID_SIGNUP_TOKEN_MESSAGE = '만료되었거나 올바르지 않은 요청입니다';
+const INVALID_SIGNUP_TOKEN_MESSAGE = '만료되었거나 올바르지 않은 요청입니다.';
 
 const ACCOUNT_SELECT = {
   adminAccountId: true,
@@ -205,7 +205,7 @@ export class AdminAuthService {
       select: { loginId: true, isPasswordChangeRequired: true },
     });
     if (!account)
-      throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
+      throw new UnauthorizedException('만료되었거나 종료된 접속입니다.');
     let cap: Date | null = null;
     if (account.isPasswordChangeRequired) {
       const used = await this.prisma.temporaryPassword.findFirst({
@@ -224,7 +224,7 @@ export class AdminAuthService {
       // 새로 받은 비밀번호로 다시 들어오면 된다.
       if (!used) {
         await this.sessions.revoke(sessionId);
-        throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
+        throw new UnauthorizedException('만료되었거나 종료된 접속입니다.');
       }
       cap = used.expiresAt;
     }

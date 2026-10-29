@@ -111,7 +111,7 @@ describe('AdminMyPasswordService', () => {
   it('지운 계정이면 404 — 접근 토큰이 아직 살아있어도(세션은 계정 상태를 안 봄) 비밀번호를 못 바꾼다', async () => {
     tx.adminAccount.findFirst.mockResolvedValue(null);
     await expect(change()).rejects.toThrow(
-      new NotFoundException('관리자 계정을 찾을 수 없습니다'),
+      new NotFoundException('관리자 계정을 찾을 수 없습니다.'),
     );
     expect(tx.adminAccount.update).not.toHaveBeenCalled();
     expect(tx.adminChangeHistory.create).not.toHaveBeenCalled();

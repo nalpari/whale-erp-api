@@ -244,7 +244,7 @@ async function findBaseRole(db: Db, roleCode: string) {
   });
   if (!group) {
     // 응답만으로는 운영자가 모른다 — 전역 예외 필터가 없어 HttpException 은 로그에 남지 않는다.
-    const message = `고정 권한 ${roleCode} 이 없습니다 — 1팀 초기 데이터 마이그레이션을 확인해 주세요`;
+    const message = `고정 권한 ${roleCode} 이 없습니다 — 1팀 초기 데이터 마이그레이션을 확인해 주세요.`;
     logger.error(message);
     throw new InternalServerErrorException(message);
   }

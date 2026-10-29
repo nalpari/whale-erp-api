@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:13:48Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -17,11 +17,11 @@ sources:
   - id: my-password-service
     resource: ../../src/my-profile/my-password.service.ts
     title: MyPasswordService — 지금 비밀번호 확인 뒤 변경(WHALEERP-192)
-    last_modified: 2026-10-21T01:31:05Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: my-consent-service
     resource: ../../src/my-profile/my-consent.service.ts
     title: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
-    last_modified: 2026-10-28T08:22:00Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: my-profile-controller
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
@@ -33,7 +33,7 @@ sources:
   - id: my-email-change-service
     resource: ../../src/my-profile/my-email-change.service.ts
     title: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
-    last_modified: 2026-10-21T01:22:19Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: close-unverified-email-change-pins
     resource: ../../prisma/migrations/20261021110054_team3_close_unverified_email_change_pins/migration.sql
     title: 비밀번호 확인 없이 낸 이메일 변경 핀을 배포 때 닫기(WHALEERP-607)
@@ -45,7 +45,7 @@ sources:
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
-    last_modified: 2026-10-28T08:30:00Z
+    last_modified: 2026-10-29T04:44:34Z
     last_modified: 2026-10-28T05:30:00Z
   - id: my-memberships-controller
     resource: ../../src/my-profile/my-memberships.controller.ts
@@ -58,7 +58,7 @@ sources:
   - id: save-my-tax-profile-dto
     resource: ../../src/my-profile/dto/save-my-tax-profile.dto.ts
     title: 신고 정보 저장 본문(rrn · bankCode · payrollAccountNumber · currentPassword)
-    last_modified: 2026-10-23T02:20:00Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: location-consent-state
     resource: ../../src/my-profile/location-consent-state.ts
     title: 위치정보 동의 상태 판정(API 전용 enum LocationConsentState)
@@ -155,7 +155,7 @@ when there is none; the app decides what "오래" means for the 194 suggestion.
 address are both right.** After the DTO's format checks (e-mail format, a
 sendable address, `currentPassword` present — those 400s come first and reveal
 nothing about accounts) and the service's own 503 (no `MAIL_*`) and 401
-(withdrawn account), it checks `currentPassword` (WHALEERP-607, 운영 정책 ACC-13): a wrong one is 400 「지금 비밀번호가 맞지 않습니다」, the same
+(withdrawn account), it checks `currentPassword` (WHALEERP-607, 운영 정책 ACC-13): a wrong one is 400 「지금 비밀번호가 맞지 않습니다.」, the same
 `message` as the password change, nothing is stored or sent, and — as there — it
 does **not** count toward the login lock; the route's 10-per-10-minutes limit is
 what slows guessing. That limit is counted per route, so a stolen token gets 10
@@ -189,7 +189,7 @@ PIN is deleted either way, so the person can ask again at once instead of waitin
 out the 1-minute interval. An SMTP-stage failure (`isMailTransportError`) is 503
 「지금은 인증 메일을 보낼 수 없습니다…」; a failure before sending (the
 `EMAIL_CHANGE_PIN` template switched off, a missing title, a DB error) is 500
-「메일 설정 문제로 인증 메일을 보내지 못했습니다. 관리자에게 문의해 주세요」, since
+「메일 설정 문제로 인증 메일을 보내지 못했습니다. 관리자에게 문의해 주세요.」, since
 asking again will not fix it. The log line names the account and, for the second
 kind, only the error's name and Prisma code — never the SMTP text, which can carry
 the address; `MailService` logs the masked cause. Without `MAIL_*` every PIN request
@@ -260,7 +260,7 @@ change writes 철회 on the old row and 동의 on the new one) — 운영 정책
 잠시 멈춤 needs an unpaused row, 다시 켜기 a paused one and clears `paused_at`
 without a new agreement (ATT-26), 철회 any unwithdrawn row. If no `LOCATION` 약관
 is active and in force (an operator switched or deleted them all), 동의 is 500
-「지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요」 with an `error`
+「지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요.」 with an `error`
 log naming the account. 본사 제공: 동의
 sets the four account columns with `HQ_SHARING_CONSENT_VERSION` (`v1.0`, an api
 constant in `src/admin-scope/hq-sharing.ts` — the wording is in the app, and both change together, 2026-10-20
@@ -438,7 +438,7 @@ masked values only.
 - **Changing an existing profile needs the current password** (`currentPassword`, string, 1–128 —
   the same shape as the e-mail change PIN request, WHALEERP-607; WHALEERP-333 · 334 follow-up, 2026-10-23
   노영주). A stolen token alone must not be able to point the 급여 계좌 at another account. Missing or
-  wrong is the same 400 `{ code: 'CURRENT_PASSWORD_MISMATCH', message: '지금 비밀번호가 맞지 않습니다' }`
+  wrong is the same 400 `{ code: 'CURRENT_PASSWORD_MISMATCH', message: '지금 비밀번호가 맞지 않습니다.' }`
   (607's message) — 607 tells them apart only because there the field is always required and the DTO
   rejects it; here it is optional, so the service answers both. The **first save does not take it** (the
   post-signing flow, 150) — sent anyway, the service does not compare it, but the DTO still checks its

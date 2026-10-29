@@ -4,7 +4,7 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:43:51Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
@@ -13,11 +13,11 @@ sources:
   - id: platform-role-groups-service
     resource: ../../src/platform-role-groups/platform-role-groups.service.ts
     title: PlatformRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-27T05:43:51Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: platform-role-group-menus-service
     resource: ../../src/platform-role-groups/platform-role-group-menus.service.ts
     title: PlatformRoleGroupMenusService (tree · save · preview, revocation cascade)
-    last_modified: 2026-10-21T06:37:25Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: role-menu-rules
     resource: ../../src/platform-role-groups/role-menu-rules.ts
     title: Pure menu rules — visible menus, group normalisation, cell block reasons, cascade
@@ -25,7 +25,7 @@ sources:
   - id: platform-role-group-format
     resource: ../../src/platform-role-groups/platform-role-group-format.ts
     title: Role types, controller path and menu URL, code numbering, list order, lock reasons, cascade child types
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: platform-role-group-access
     resource: ../../src/platform-role-groups/platform-role-group-access.ts
     title: Target lookup, flags, and the caller's own 권한 관리 rights (callerRoleMenuRights, by PLATFORM_ROLE_MENU_URL)
@@ -87,7 +87,7 @@ not), `createdBy` / `updatedBy` as
 
 # Status codes chosen
 
-- **본인이 연결된 권한 → 403** 「본인이 연결된 권한이라 고칠 수 없습니다」, for name edit,
+- **본인이 연결된 권한 → 403** 「본인이 연결된 권한이라 고칠 수 없습니다.」, for name edit,
   menu save and delete alike. It matches 플랫폼 관리자 관리's self protection, which is
   403 too. So a PM cannot touch PM000001 at all, while a PA with MN000214 수정 may edit
   PM000001's name and description.
@@ -97,7 +97,7 @@ not), `createdBy` / `updatedBy` as
   등록 · 수정 · 삭제 without 조회, a 플랫폼 menu for BM · FM, a cell outside the caller's own
   range, a missing or ineligible replacement.
 - **Concurrency → 409** 「다른 관리자가 먼저 수정했습니다…」, duplicate name → 409
-  「같은 이름의 권한이 있습니다」.
+  「같은 이름의 권한이 있습니다.」.
 
 Both blocked-reason fields are API-only enums in `GET /enums`:
 `PlatformRoleMenuBlockReason` (`PM_FIXED` · `READ_ONLY` · `SELF_LINKED` ·

@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:41:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
@@ -41,7 +41,7 @@ sources:
   - id: summary-service
     resource: ../../src/staff-members/staff-member-summary.service.ts
     title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
-    last_modified: 2026-10-22T07:45:10Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
@@ -49,11 +49,11 @@ sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE
-    last_modified: 2026-10-27T09:08:26Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: week-query-dto
     resource: ../../src/staff-members/dto/staff-member-week.query.dto.ts
     title: 근무스케줄 영역 쿼리 — weekStart(그 주의 아무 날짜)
-    last_modified: 2026-10-21T08:26:04Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: work-schedule-list-controller
     resource: ../../src/staff-members/staff-member-work-schedules.controller.ts
     title: GET /staff-members/:id/work-schedules (WHALEERP-185)
@@ -61,11 +61,11 @@ sources:
   - id: work-schedule-list-service
     resource: ../../src/staff-members/staff-member-work-schedules.service.ts
     title: StaffMemberWorkSchedulesService · periodRange — 근무스케줄 관리 권한 → 범위 → 기간 · 페이지 · 합계
-    last_modified: 2026-10-22T04:49:32Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: work-schedule-list-dto
     resource: ../../src/staff-members/dto/staff-member-work-schedule-list.query.dto.ts
     title: 근무스케줄 표 쿼리 — period · page · pageSize(20 · 50 · 100)
-    last_modified: 2026-10-22T04:49:32Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: work-schedule-list-response-dto
     resource: ../../src/staff-members/dto/staff-member-work-schedule-list.response.dto.ts
     title: 근무스케줄 표 응답 — items · total · totalWorkMinutes
@@ -93,11 +93,11 @@ sources:
   - id: birth-date-dto
     resource: ../../src/staff-members/dto/birth-date-correction.dto.ts
     title: 생년월일 정정 요청 DTO
-    last_modified: 2026-10-26T02:32:13Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: birth-date-service
     resource: ../../src/staff-members/staff-birth-date.service.ts
     title: StaffBirthDateService — 생년월일 정정 + 계정 변경 이력
-    last_modified: 2026-10-26T02:32:04Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: design
     resource: ../../docs/plans/2026-10-12-staff-member-list-design.md
     title: 직원 목록 조회 API 설계 (WHALEERP-329)
@@ -345,7 +345,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 본문은 `{ birthDate: "YYYY-MM-DD" }`, 성공은 204 다. 정정 이력을 조회하는 API 는 없다(화면에 보이지 않기로 함).
 
 - **권한 · 범위** — 직원 정보 관리(`MN000005`) 수정 권한. 퇴직 처리와 같은 `staffInScope` 방식이라 정수 범위 밖 ID ·
-  관리 범위 밖 · 본사 제공 동의로 가린 직원은 모두 같은 404 「직원을 찾을 수 없습니다」다.
+  관리 범위 밖 · 본사 제공 동의로 가린 직원은 모두 같은 404 「직원을 찾을 수 없습니다.」다.
 - **무엇을 고치나** — 그 직원 레코드의 계정(`StaffMember.accountId` → `accounts.birth_date`). 계정에 하나라 **같은 사람의 다른
   BP 소속에도 같이 바뀐다**(허용, 따로 알리지 않는다 — 재영 10-21). 계약서의 입력 · 본인인증 생년월일
   (`contract_parties.entered_birth_date` · `verified_birth_date`)은 그 시점 값이라 바꾸지 않고, 날인 대기 중인 계약이 있어도
@@ -357,7 +357,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 
 | 상태 | code | 경우 | message |
 |---|---|---|---|
-| 400 | `BIRTH_DATE_INVALID` | 문자열 날짜의 형식 오류 · 없는 날짜 · 오늘(KST) 뒤 날짜 | 형식: 「생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다」 / 오늘 뒤: 「오늘 이후 날짜는 넣을 수 없습니다.」 |
+| 400 | `BIRTH_DATE_INVALID` | 문자열 날짜의 형식 오류 · 없는 날짜 · 오늘(KST) 뒤 날짜 | 형식: 「생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다.」 / 오늘 뒤: 「오늘 이후 날짜는 넣을 수 없습니다.」 |
 | 400 | `BIRTH_DATE_UNDER_AGE` | 오늘(KST) 기준 만 19세 미만(ACC-22, `ageOn`) | 만 19세 미만으로 정정할 수 없습니다. |
 | 409 | `BIRTH_DATE_NOT_JOINED` | 계정 없음(가입 전) · 계정이 `JOINED` 가 아님(탈퇴 · 연결 보류) | 가입 전 직원은 생년월일을 정정할 수 없습니다. |
 | 409 | `BIRTH_DATE_RETIRED` | 이 직원 레코드가 퇴직(`RETIRED`)이거나 퇴직일이 지났는데 배치 전(계약과 같은 `employedOn` 기준). 퇴직 예정(퇴직일이 오늘이거나 그 뒤)은 허용 | 퇴직한 직원은 생년월일을 정정할 수 없습니다. |

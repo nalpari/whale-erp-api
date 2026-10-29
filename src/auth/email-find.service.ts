@@ -19,10 +19,10 @@ import { readJwtSecret } from './jwt-secret';
 import { phoneKeyOf } from './phone-key';
 
 // 이름 · 휴대전화번호 · 생년월일 가운데 어느 값이 틀렸는지 알리지 않는다.
-const NOT_FOUND_MESSAGE = '일치하는 계정이 없습니다';
+const NOT_FOUND_MESSAGE = '일치하는 계정이 없습니다.';
 
 const LOCKED_MESSAGE =
-  '이메일 찾기가 잠시 막혔습니다. 잠시 뒤에 다시 시도하거나 근무지 점포에 직접 방문해 문의해 주세요';
+  '이메일 찾기가 잠시 막혔습니다. 잠시 뒤에 다시 시도하거나 근무지 점포에 직접 방문해 문의해 주세요.';
 
 /** `EmailFindDto` 검증을 거친 값. 번호 형식이 다르면 잠금 키와 계정 조회가 함께 어긋난다. */
 export interface EmailFindInput {

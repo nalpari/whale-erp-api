@@ -179,7 +179,7 @@ describe('EmailFindService', () => {
       async (_, over) => {
         const error = await thrown(service.find(input(over)));
         expect(error).toBeInstanceOf(NotFoundException);
-        expect(error.message).toBe('일치하는 계정이 없습니다');
+        expect(error.message).toBe('일치하는 계정이 없습니다.');
       },
     );
 
@@ -187,7 +187,7 @@ describe('EmailFindService', () => {
       tx.account.findMany.mockResolvedValue([]);
       const error = await thrown(service.find(input()));
       expect(error).toBeInstanceOf(NotFoundException);
-      expect(error.message).toBe('일치하는 계정이 없습니다');
+      expect(error.message).toBe('일치하는 계정이 없습니다.');
     });
 
     it('실패를 한 번 센 상태를 남긴다', async () => {

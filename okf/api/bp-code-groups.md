@@ -4,7 +4,7 @@ title: BP code groups
 description: 관리자 웹 「BP 공통코드 관리」(MN000014) — groups are read-only and only in-use 플랫폼제공 groups are visible (플랫폼고정 is hidden, 404); every such group (applied or not) shows the BP's own rows, where the BP edits name · status · order, adds BP전용 codes and deletes its rows; platform users read a picked BP only.
 tags: [admin, codes, bp]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T05:08:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
 sources:
   - id: bp-code-groups-controller
     resource: ../../src/bp-code-groups/bp-code-groups.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-code-groups-service
     resource: ../../src/bp-code-groups/bp-code-groups.service.ts
     title: Which groups and rows a BP sees, BP전용 creation, edits and deletion
-    last_modified: 2026-10-27T05:08:14Z
+    last_modified: 2026-10-29T04:44:34Z
   - id: bp-code-groups-e2e
     resource: ../../test/bp-code-groups.e2e-spec.ts
     title: Real-DB proof — visibility (플랫폼고정 hidden), other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore
@@ -56,7 +56,7 @@ FM000001 read only.
 - **Platform users (PM · PA)** pick a BP with the header and **read only**. Without the header
   the guard leaves the platform BP, which this screen refuses with 400 「공통코드를 볼 BP 를 골라
   주세요」 — the platform BP's codes are 플랫폼 공통코드 관리's. A create, update or delete is 403
-  「플랫폼 사용자는 BP 공통코드를 조회만 할 수 있습니다」 even though PM000001 holds the
+  「플랫폼 사용자는 BP 공통코드를 조회만 할 수 있습니다.」 even though PM000001 holds the
   rights — the policy (F-QPDEWN) is stricter than the seeded row. That 403 comes first: before
   the missing-header 400 and before any group 404 (e2e).[^bp-code-groups-service]
 
@@ -65,7 +65,7 @@ FM000001 read only.
 Groups are made by the platform and never added, edited or deleted here. The list holds
 **every undeleted, in-use (사용) 플랫폼제공 group**, ordered by `sort_order` then `group_code`.
 A 플랫폼고정 or 사용중지 group is simply not there: it leaves `items` and `total`, and its items,
-create, update and delete routes are 404 「공통코드 그룹을 찾을 수 없습니다」 like a deleted group.
+create, update and delete routes are 404 「공통코드 그룹을 찾을 수 없습니다.」 like a deleted group.
 
 How it got here: until 2026-10-22 only 플랫폼제공 groups marked applied were listed and 사용중지
 groups were listed read-only; 2026-10-22 (1팀 요청, A안) listed every in-use 플랫폼고정 and
@@ -140,7 +140,7 @@ copied 플랫폼제공 row is registered again and comes back as BP전용 (below
   same code again does (above). The
   update is conditioned on the rows still being undeleted; if another admin deleted one in between,
   fewer rows change and the whole request is
-  409 「다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요」 instead of a
+  409 「다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요.」 instead of a
   partial delete. Two admins deleting the same code at once give one 204 and a 404 or 409 (e2e).
 
 All three are all-or-nothing in one transaction. Update and create write row by row — up to 500

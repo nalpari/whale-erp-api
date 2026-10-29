@@ -27,10 +27,10 @@ const ISSUE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_ISSUES_PER_WINDOW = 10;
 
 // 틀림 · 만료 · 5회로 닫힘 · 이미 씀 · 없음 · 없는 계정을 구분해 알리지 않는다.
-const INVALID_PIN_MESSAGE = '핀이 올바르지 않거나 만료되었습니다';
+const INVALID_PIN_MESSAGE = '핀이 올바르지 않거나 만료되었습니다.';
 
 const UNAVAILABLE_MESSAGE =
-  '지금은 비밀번호 재설정 핀을 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요';
+  '지금은 비밀번호 재설정 핀을 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요.';
 
 type IssueResult = 'issued' | 'interval' | 'daily_cap';
 

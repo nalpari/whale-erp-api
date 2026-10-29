@@ -216,7 +216,7 @@ describe('AccountAuthService', () => {
   });
 
   describe('실패', () => {
-    const MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다';
+    const MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다.';
 
     it('비밀번호가 틀리면 401 이다', async () => {
       verifyPasswordMock.mockResolvedValue(false);
@@ -759,7 +759,7 @@ describe('AccountAuthService', () => {
   });
 
   describe('탈퇴한 계정', () => {
-    const MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다';
+    const MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다.';
     beforeEach(() => {
       prisma.account.findUnique.mockResolvedValue(
         account({ status: 'WITHDRAWN' }),
