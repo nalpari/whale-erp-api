@@ -1,7 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
-* **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) — 소속 추가 확인 · 복귀 확인 요청에도 이름 대조(WHALEERP-140, 2026-10-29 김민식): 직원 레코드 이름이 계정 실명과 다르면(`sameName`, 근무지 더하기와 같은 본인 대조 기준) 그 계정 목록에 없고 수락 · 거절은 404 `AFFILIATION_REQUEST_NOT_FOUND` 다 — 번호 재활용 때 옛 계정이 새 주인 앞 요청을 받아 수락하던 것을 막는다. `sameName` 을 `src/staff-signup/same-name.ts` 로 꺼냈다. 140 점검: 관리자에게 후보 계정 정보가 보이지 않고 응답에도 실리지 않음(충족), 발송 전 이름 불일치 경고는 아직 없음(근로계약 쪽과 조율). 마이그레이션 없음.
+* **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) — 소속 추가 확인 · 복귀 확인 요청에도 이름 대조(WHALEERP-140, 2026-10-29 김민식): 직원 레코드 이름이 계정 실명과 다르면(`sameName`, 근무지 더하기와 같은 본인 대조 기준) 그 계정 목록에 없고 수락 · 거절은 404 `AFFILIATION_REQUEST_NOT_FOUND` 다 — 번호 재활용 때 옛 계정이 새 주인 앞 요청을 받아 수락하던 것을 막는다. `sameName` 을 `src/staff-signup/same-name.ts` 로 꺼냈다. 140 점검: 관리자에게 후보 계정 정보가 보이지 않고 응답에도 실리지 않음(충족). 근로계약 쪽에 남은 것: 발송 전 이름 불일치 경고, 소속 추가 확인 메일이 이름 대조 없이 후보 계정 이메일로 감(번호 재활용 때 옛 주인이 채용 정보를 받음), 판별이 옛 계정을 잡아 새 주인에게 가입 초대가 안 감. 마이그레이션 없음.
 * **Update**: [Staff signup](/api/staff-signup.md) — 받은 초대 수락(`POST /me/invitations/:invitationId/accept`) 응답에 `storeId` 를 더했다. 직원앱이 수락 뒤 그 근무지 근로계약서만(`/contracts?store=`) 연다(staff #40 후속 리뷰, Plane WHALEERP-604).
 * **Update**: main 병합(api omastar, main #187 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #186 재리뷰 참고: 상태 전환 표를 `TRANSITIONS` 에 맞춤(임시저장 → 발송 대기에 소속 추가 확인 요청, 발송 대기 → 거부(요청 거절), 서명 대기 → 발송 대기에 옛 소속 확인 계약 재발송). #186 줄의 템플릿 건수(44 → 46건) 서술을 바로잡음.

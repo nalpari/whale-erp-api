@@ -314,6 +314,14 @@ describe('AffiliationRequestsService', () => {
       expect((await codeOf(service().reject(5, 41, {}, NOW))).code).toBe(
         'AFFILIATION_REQUEST_NOT_FOUND',
       );
+      // 이미 수락해 이 계정에 이어진 요청은 그 뒤 관리자가 이름을 바꿔도 본인에게 409(이미 답함)다
+      request(
+        { status: 'ACCEPTED' },
+        { name: '김철수', accountId: 5, candidateAccountId: null },
+      );
+      expect((await codeOf(service().accept(5, 41, {}, NOW))).code).toBe(
+        'AFFILIATION_REQUEST_ANSWERED',
+      );
       expect(tx.invitation.updateMany).not.toHaveBeenCalled();
       expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
     });

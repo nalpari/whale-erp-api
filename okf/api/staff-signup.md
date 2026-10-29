@@ -255,9 +255,15 @@ like 근무지 더하기 (10 per 10 minutes); the list is not — the app reads 
 (근로계약서) differs from the account's `realName` under `sameName` is not this account's — 판별 found the account by
 the phone alone, and a recycled number would otherwise send the old owner the new owner's request and let them accept
 it. Such a request is absent from the list, and accept · reject answer 404 `AFFILIATION_REQUEST_NOT_FOUND`, checked
-before the status so its state does not show. On the 관리자 side it stays 소속 추가 확인 대기; once the admin fixes the
-name in 근로자 정보 the request shows. The 관리자-side warning before sending (WHALEERP-140 condition 2) is not built yet
-— it needs 판별 and the 근로계약 작성 screen.
+before the status so its state does not show. The list logs a warning with the hidden request ids (no names) so a
+mismatch can be traced. On the 관리자 side it stays 소속 추가 확인 대기; if the name was the
+admin's typo, 근로자 정보 수정 (`PATCH /contracts/:id/worker`) runs 판별 again and sends a new request, which then shows.
+
+**Left for the 근로계약 side** (they need 판별 · `contract-delivery`, another work area): the 관리자 warning before
+sending (WHALEERP-140 condition 2); the 소속 추가 확인 **mail** still goes to the candidate account's e-mail without the
+name check (`prepareAffiliation` · `mailAffiliation`), so on a recycled number the old owner still gets the store ·
+고용형태 by mail — only the app list and the answers are closed here; and 판별 still picks the old account, so the
+number's new owner gets no 가입 초대 and the request expires after 30 days.
 
 - `GET /me/affiliation-requests` — live requests (`SENT`, before `expires_at`, the record still unlinked, its phone =
   the account's phone and its name the account's), newest first: `invitationId`, `invitationType`, `storeName`, `bpName`, `employmentType`

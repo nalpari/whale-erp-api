@@ -124,6 +124,14 @@ export class AffiliationRequestsService {
     const mine = rows.filter((r) =>
       sameName(r.staffMember.name, account.realName),
     );
+    // 관리자 쪽은 소속 추가 확인 대기로만 남아 원인이 보이지 않는다 — 추적할 수 있게 걸러진 요청 id 만 남긴다(이름은 남기지 않음)
+    if (mine.length < rows.length)
+      this.logger.warn(
+        `계정 ${accountId} — 근로계약서 이름이 달라 보이지 않는 소속 추가 확인 요청: ${rows
+          .filter((r) => !mine.includes(r))
+          .map((r) => r.invitationId)
+          .join(', ')}`,
+      );
     const stores = await this.prisma.store.findMany({
       where: {
         storeId: { in: [...new Set(mine.map((r) => r.staffMember.storeId))] },
