@@ -1429,7 +1429,7 @@ COMMENT ON COLUMN "attendance_records"."store_id" IS '근무지 — 여럿이면
 COMMENT ON COLUMN "attendance_records"."kind" IS '구분 — 출근·퇴근';
 COMMENT ON COLUMN "attendance_records"."recorded_at" IS '기록 시각 — 기기 시각';
 COMMENT ON COLUMN "attendance_records"."received_at" IS '서버 수신 시각 — 확정 기준';
-COMMENT ON COLUMN "attendance_records"."review_reason" IS '확인 필요 사유 — 반경 밖 출근·반경 밖 퇴근·위치 조작, 검토 후 null';
+COMMENT ON COLUMN "attendance_records"."review_reason" IS '확인 필요 사유 — 반경 밖 출근·반경 밖 퇴근·위치 조작·근무 12시간 초과, 검토 후 null';
 COMMENT ON COLUMN "attendance_records"."reviewed_by" IS '검토 관리자 — 보정 또는 이상 없음';
 COMMENT ON COLUMN "attendance_records"."reviewed_at" IS '검토 일시';
 COMMENT ON COLUMN "attendance_records"."entry_method" IS '등록 방식 — 직원 등록·대신 등록';

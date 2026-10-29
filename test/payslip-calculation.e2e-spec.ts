@@ -544,4 +544,22 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
         ?.detail,
     ).toContain('직접 입력해 주세요');
   });
+
+  it('기간 앞 날의 퇴근 미등록도 출퇴근 누락이다 — 9월이 맡은 8/31 주의 8/31 실근무가 주휴 금액에 들어가서(PR #193 리뷰)', async () => {
+    await prisma.attendanceRecord.deleteMany({
+      where: {
+        staffMemberId,
+        kind: 'CHECK_OUT',
+        recordedAt: { gte: at('2026-08-31', 0), lt: at('2026-09-01', 0) },
+      },
+    });
+    await send('post', `/payslips/${payslipId}/recalculate`, 200, {
+      updatedAt: (await detail()).updatedAt,
+    });
+    const d = await detail();
+    expect(
+      d.reviewReasons.find((r) => r.reviewReason === 'MISSING_ATTENDANCE')
+        ?.detail,
+    ).toMatch(/08-31 퇴근 미등록$/);
+  });
 });
