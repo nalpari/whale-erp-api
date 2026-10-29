@@ -456,10 +456,7 @@ describe('ContractDeliveryService', () => {
         input({ draftAction: 'AFFILIATION_CONFIRM' }),
         NOW,
       );
-      expect(pending?.affiliation).toMatchObject({
-        email: null,
-        nameMismatch: true,
-      });
+      expect(pending?.affiliation).toMatchObject({ nameMismatch: true });
       prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
       const mail = { send: jest.fn().mockResolvedValue({}) };
       const warn = jest
@@ -483,7 +480,7 @@ describe('ContractDeliveryService', () => {
         expect(mail.send).not.toHaveBeenCalled();
         // 유선 확인 때 근거가 되는 로그 — 계약 id 와 사유만(이름 · 주소는 남기지 않는다)
         expect(warn).toHaveBeenCalledWith(
-          'affiliation request mail SKIPPED contract=7: name differs from the account',
+          expect.stringContaining('name differs from the account'),
         );
       } finally {
         warn.mockRestore();

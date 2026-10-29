@@ -49,6 +49,13 @@ export type AccountIdentity = {
 /** 이름은 공백을 모두 지우고 영문은 대문자로 비교한다 — 저장 값은 그대로다(2026-10-16) */
 export const nameKey = (name: string) =>
   name.normalize('NFC').replace(/\s/g, '').toUpperCase();
+
+/**
+ * 계정이 그 직원 레코드의 사람인지 이름으로 본다(nameKey). 계정 번호는 바꿀 길이 없어, 번호가 다른 사람에게 넘어가면 옛 계정이 새
+ * 주인 앞으로 온 초대 · 요청 · 메일을 받지 않게 번호와 함께 이름을 본다 — 근무지 더하기(2026-10-28 김민식, api #180 리뷰), 소속
+ * 추가 확인 · 복귀 확인 요청과 그 메일(2026-10-29 김민식, WHALEERP-140)이 이 하나를 쓴다.
+ */
+export const sameName = (a: string, b: string) => nameKey(a) === nameKey(b);
 const digits = (phone: string) => phone.replace(/\D/g, '');
 const day = (d: Date) => d.toISOString().slice(0, 10);
 

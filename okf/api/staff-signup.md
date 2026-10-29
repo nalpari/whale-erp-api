@@ -10,10 +10,10 @@ sources:
     resource: ../../src/staff-signup/staff-signup.service.ts
     title: StaffSignupService (lookup, check, signup transaction, under-age notice, logged-in list · accept)
     last_modified: 2026-10-29T04:33:07Z
-  - id: same-name
-    resource: ../../src/staff-signup/same-name.ts
-    title: sameName — 근무지 더하기 · 소속 추가 확인 요청의 이름 대조(본인 대조 규칙)
-    last_modified: 2026-10-29T04:33:07Z
+  - id: identity-match
+    resource: ../../src/contracts/identity-match.ts
+    title: sameName · nameKey — 근무지 더하기 · 소속 추가 확인 요청 · 메일의 이름 대조(본인 대조 규칙)
+    last_modified: 2026-10-29T05:55:24Z
   - id: affiliation-requests-service
     resource: ../../src/staff-signup/affiliation-requests.service.ts
     title: AffiliationRequestsService — 소속 추가 확인 · 복귀 확인 요청 목록 · 수락 · 거절
@@ -187,7 +187,7 @@ be proven by a code · link from the 알림톡. An account's phone is fixed at s
 so a recycled number would let the old account see and accept the new owner's invitations. Both the
 list and accept therefore also require the record's name (근로계약서) to equal the account's
 `realName` under the 본인 대조 rule — whitespace removed, Latin upper-cased (`sameName` in
-`src/staff-signup/same-name.ts`, which calls `contracts/identity-match.ts` `nameKey`; 소속 추가 확인 · 복귀 확인
+`contracts/identity-match.ts`, on the same `nameKey` as 날인 본인 대조; 소속 추가 확인 · 복귀 확인
 requests use it too). A
 different name is treated like another person's invitation: absent from the list, 404
 `INVITATION_NOT_FOUND` on accept, checked before the status. A same-name new owner is not caught;
@@ -258,7 +258,7 @@ it. Such a request is absent from the list, and accept · reject answer 404 `AFF
 before the status so its state does not show. Hidden request ids (no names) are logged so a mismatch can be traced —
 at debug on the list (the app reads it on every open), as a warning when an answer is refused. A request already
 accepted stays 409 for its account even if the name changes later (the link proves it answered); a rejected one has
-no such proof, so it is 404 like anyone else's. The name rule is `contracts/identity-match.ts` `nameKey` itself (`sameName` calls it), the
+no such proof, so it is 404 like anyone else's. The name rule is `sameName` in `contracts/identity-match.ts` (on `nameKey`), the
 same one the 소속 추가 확인 mail uses, so the app list and the mail cannot drift apart. On the 관리자 side it stays 소속 추가 확인 대기; if the name was the
 admin's typo, 근로자 정보 수정 (`PATCH /contracts/:id/worker`) runs 판별 again and sends a new request, which then shows.
 
