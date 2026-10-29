@@ -17,6 +17,7 @@ import {
 import { nextBpCode } from '../admin-signup/next-bp-code';
 import type { BpBusinessVerificationDto } from '../auth/dto/bp-business-verification.dto';
 import { WITHDRAW_REASON_LABEL } from '../auth/admin-withdrawal.service';
+import { CLEARED_ATTEMPT_STATE } from '../auth/attempt-lock';
 import { hashPassword } from '../auth/password';
 import {
   copyProvidedItems,
@@ -644,8 +645,8 @@ export class BpMastersService {
           passwordHash: LOCKED_PASSWORD,
           isPasswordChangeRequired: true,
           isInitialPasswordUnsent: true,
-          failedLoginCount: 0,
-          lockExpiresAt: null,
+          failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
+          lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
           updatedBy: by,
         },
       });

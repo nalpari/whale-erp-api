@@ -18,6 +18,7 @@ import {
   OTHER_BP_MESSAGE,
   type TargetBpContext,
 } from '../auth/menu-permission.guard';
+import { CLEARED_ATTEMPT_STATE } from '../auth/attempt-lock';
 import { hashPassword } from '../auth/password';
 import { sameMillisecond } from '../common/updated-at';
 import {
@@ -814,8 +815,8 @@ export class BpAdminsService {
           passwordHash: LOCKED_PASSWORD,
           isPasswordChangeRequired: true,
           isInitialPasswordUnsent: true,
-          failedLoginCount: 0,
-          lockExpiresAt: null,
+          failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
+          lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
           updatedBy: by,
         },
       });
