@@ -322,6 +322,11 @@ describe('AffiliationRequestsService', () => {
       expect((await codeOf(service().accept(5, 41, {}, NOW))).code).toBe(
         'AFFILIATION_REQUEST_ANSWERED',
       );
+      // 거절은 레코드가 이어지지 않아 본인이 답했다는 증거가 없다 — 이름이 바뀐 뒤에는 남의 요청과 같은 404(상태를 드러내지 않는다)
+      request({ status: 'REJECTED' }, { name: '김철수' });
+      expect((await codeOf(service().reject(5, 41, {}, NOW))).code).toBe(
+        'AFFILIATION_REQUEST_NOT_FOUND',
+      );
       expect(tx.invitation.updateMany).not.toHaveBeenCalled();
       expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
     });

@@ -255,8 +255,11 @@ like 근무지 더하기 (10 per 10 minutes); the list is not — the app reads 
 (근로계약서) differs from the account's `realName` under `sameName` is not this account's — 판별 found the account by
 the phone alone, and a recycled number would otherwise send the old owner the new owner's request and let them accept
 it. Such a request is absent from the list, and accept · reject answer 404 `AFFILIATION_REQUEST_NOT_FOUND`, checked
-before the status so its state does not show. The list logs a warning with the hidden request ids (no names) so a
-mismatch can be traced. On the 관리자 side it stays 소속 추가 확인 대기; if the name was the
+before the status so its state does not show. Hidden request ids (no names) are logged so a mismatch can be traced —
+at debug on the list (the app reads it on every open), as a warning when an answer is refused. A request already
+accepted stays 409 for its account even if the name changes later (the link proves it answered); a rejected one has
+no such proof, so it is 404 like anyone else's. The name rule is a copy of `contracts/identity-match.ts` `nameKey`;
+making that file use `same-name.ts` is left for the 근로계약 side. On the 관리자 side it stays 소속 추가 확인 대기; if the name was the
 admin's typo, 근로자 정보 수정 (`PATCH /contracts/:id/worker`) runs 판별 again and sends a new request, which then shows.
 
 **Left for the 근로계약 side** (they need 판별 · `contract-delivery`, another work area): the 관리자 warning before

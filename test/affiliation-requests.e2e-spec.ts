@@ -287,13 +287,17 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       data: { name: '김철수' },
     });
     expect(await requests.list(r.accountId)).toEqual([]);
-    for (const answer of [
-      () => requests.accept(r.accountId, r.invitationId, {}),
-      () => requests.reject(r.accountId, r.invitationId, {}),
-    ])
-      expect(codeOf(await answer().catch((e: unknown) => e))).toBe(
-        'AFFILIATION_REQUEST_NOT_FOUND',
-      );
+    const notFound = expect.objectContaining({
+      response: expect.objectContaining({
+        code: 'AFFILIATION_REQUEST_NOT_FOUND',
+      }) as unknown,
+    }) as unknown;
+    await expect(
+      requests.accept(r.accountId, r.invitationId, {}),
+    ).rejects.toEqual(notFound);
+    await expect(
+      requests.reject(r.accountId, r.invitationId, {}),
+    ).rejects.toEqual(notFound);
     expect((await contractOf(r.contractId)).status).toBe('PENDING_SEND');
     // 공백만 다른 같은 이름이면 그 계정 요청이다(날인 본인 대조와 같은 기준)
     await prisma.staffMember.update({
