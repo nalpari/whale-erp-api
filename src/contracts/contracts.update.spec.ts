@@ -9,6 +9,7 @@ import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
 import { ContractDeliveryService } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
@@ -192,6 +193,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
         { provide: ContractDeliveryService, useValue: delivery },
+        { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -832,6 +834,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: storage },
           { provide: ContractDeliveryService, useValue: delivery },
+          { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
         ],
       }).compile();
       await module.get(ContractsService).update(

@@ -61,6 +61,7 @@ import {
   type DispatchResult,
   type PendingInvite,
 } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import {
   applyStartedTerms,
   refixHiredDate,
@@ -971,6 +972,7 @@ export class ContractsService {
     private readonly scope: AdminScopeService,
     @Inject(STORAGE) private readonly storage: OptionalStorage,
     private readonly delivery: ContractDeliveryService,
+    private readonly files: ContractFilesService,
   ) {}
 
   /**
@@ -1413,11 +1415,14 @@ export class ContractsService {
    * 확인 요청에 답했으면('ANSWERED') 계약은 그 답으로 서명 대기 · 거부라 지금 상태를 싣고 처리 결과는 둔다. 보냈거나 보낼 것이 없으면
    * 그대로다(다시 읽지 않는다). 지금 상태를 읽다 실패하면 저장은 이미 끝났으니 오류로 답하지 않는다 — 500 이면 화면이 저장 실패로
    * 알고 다시 저장한다. 계산한 상태에 처리 결과 null 을 싣고 로그만 남긴다.
+   * 나갔으면(답한 것 포함) 그 발송의 보낸 원본을 만든다(WHALEERP-131) — 기다리지 않는다. 보내지 않은 저장(임시저장 · 종이 계약)은
+   * 만들 것이 없어 ContractFilesService 가 건너뛴다.
    */
   private async settledResult(
     result: CreatedContractResponseDto,
     sent: DispatchResult,
   ): Promise<CreatedContractResponseDto> {
+    if (sent !== false) this.files.afterSent(result.contractId);
     if (sent === true) return result;
     const now = await this.prisma.contract
       .findUnique({

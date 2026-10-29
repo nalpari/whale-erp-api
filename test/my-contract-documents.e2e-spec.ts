@@ -171,7 +171,18 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
   ) {
     const storageKey = `contracts/${contractId}/${randomUUID()}.pdf`;
     const { contractDocumentId } = await prisma.contractDocument.create({
-      data: { contractId, kind, storageKey, fileName, checksum: 'e2e' },
+      data: {
+        contractId,
+        kind,
+        storageKey,
+        fileName,
+        checksum: 'e2e',
+        // 보낸 원본 · 처리 완료본은 어느 발송의 것인지 있어야 한다(CHECK, WHALEERP-131)
+        sentAt:
+          kind === 'SENT_ORIGINAL' || kind === 'SIGNED_COPY'
+            ? new Date()
+            : null,
+      },
     });
     return { contractDocumentId, storageKey, fileName };
   }

@@ -11,6 +11,7 @@ import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
 import { ContractDeliveryService } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractsService, type PaperDocument } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 
@@ -162,6 +163,7 @@ describe('ContractsService.create', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: storage },
         { provide: ContractDeliveryService, useValue: delivery },
+        { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -866,6 +868,7 @@ describe('ContractsService.create', () => {
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: null },
           { provide: ContractDeliveryService, useValue: delivery },
+          { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
         ],
       }).compile();
       await expect(
@@ -1082,6 +1085,7 @@ describe('ContractsService.create', () => {
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: null },
           { provide: ContractDeliveryService, useValue: delivery },
+          { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
         ],
       }).compile();
       prisma.contract.findUnique.mockResolvedValueOnce({

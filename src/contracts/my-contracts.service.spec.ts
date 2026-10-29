@@ -2,6 +2,7 @@ import { HttpException, Logger } from '@nestjs/common';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractNoticeService } from './contract-notice.service';
 import { MY_CONTRACT_STATUSES } from './my-contract-scope';
 import { MyContractsService } from './my-contracts.service';
@@ -25,15 +26,19 @@ describe('MyContractsService', () => {
     contractDocument: { create: jest.Mock; findFirst: jest.Mock };
     contractParty: { update: jest.Mock };
     staffMember: { updateMany: jest.Mock };
+    store: { findUniqueOrThrow: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let storage: { put: jest.Mock; delete: jest.Mock };
   // 날인 · 거부 알림(WHALEERP-154) — 무엇을 넘기는지만 본다(ContractNoticeService 는 따로 시험한다)
   let notice: { statusChanged: jest.Mock };
+  // 처리 완료본 만들기(WHALEERP-131) — 커밋 뒤 부르는지만 본다(ContractFilesService 는 따로 시험한다)
+  let files: { afterSigned: jest.Mock };
 
   /** 내 계약 — 서명 대기 · 기한 안 · 계약서 값과 계정 값이 같다 */
   const mine = (o: Record<string, unknown> = {}) => ({
     status: 'PENDING_SIGNATURE',
+    storeId: 3,
     sentAt: SENT,
     signDeadlineAt: new Date('2026-11-19T01:00:00.000Z'),
     contractParty: {
@@ -64,6 +69,7 @@ describe('MyContractsService', () => {
       prisma as unknown as PrismaService,
       (withStorage ? storage : null) as unknown as StorageService | null,
       notice as unknown as ContractNoticeService,
+      files as unknown as ContractFilesService,
     );
   const file = () => ({ buffer: png, size: png.length });
   const thrown = async (run: Promise<unknown>) => {
@@ -97,6 +103,7 @@ describe('MyContractsService', () => {
 
   beforeEach(() => {
     notice = { statusChanged: jest.fn().mockResolvedValue(undefined) };
+    files = { afterSigned: jest.fn() };
     jest.spyOn(Logger.prototype, 'error').mockImplementation();
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     tx = {
@@ -127,6 +134,20 @@ describe('MyContractsService', () => {
       },
       contractParty: { update: jest.fn() },
       staffMember: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      // 날인 때 고정하는 사용자 칸(WHALEERP-131)
+      store: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          name: '강남점',
+          phone: '0212345678',
+          businessProfile: {
+            bizTradeName: null,
+            bizRegistrationNumber: '1234567890',
+            bizCeoName: '김대표',
+            bizAddress: '서울 강남구 테헤란로 1',
+            bizAddressDetail: null,
+          },
+        }),
+      },
     };
     prisma = {
       ...tx,
@@ -205,8 +226,19 @@ describe('MyContractsService', () => {
           address: '서울 마포구 동교로 1',
           addressDetail: '2층',
           filledAt: NOW,
+          // 사용자 칸은 날인 시점 점포 정보 — 상호가 없으면 점포명(WHALEERP-131)
+          employerName: '강남점',
+          employerCeoName: '김대표',
+          employerRegistrationNumber: '1234567890',
+          employerAddress: '서울 강남구 테헤란로 1',
+          employerAddressDetail: null,
+          employerPhone: '0212345678',
+          employerFixedAt: NOW,
         },
       });
+      expect(tx.store.findUniqueOrThrow).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { storeId: 3 } }),
+      );
       // 입사일이 비어 있으면 계약 시작일로(WHALEERP-613)
       expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
         where: {
@@ -432,6 +464,8 @@ describe('MyContractsService', () => {
         service().sign(77, 41, file(), SENT_ISO, NOW),
       ).rejects.toThrow('DB 끊김');
       expect(storage.delete).toHaveBeenCalled();
+      // 커밋이 끊겨 실제로 체결됐을 수 있는 경우는 채우기 배치가 완료본을 만든다
+      expect(files.afterSigned).not.toHaveBeenCalled();
     });
 
     it.each<[string, () => void]>([
@@ -551,6 +585,8 @@ describe('MyContractsService', () => {
     it('날인 · 거부가 커밋되면 그 상태 이력을 사건 키로 관리자에게 알린다(WHALEERP-154)', async () => {
       await service().sign(77, 41, file(), SENT_ISO, NOW);
       expect(notice.statusChanged).toHaveBeenCalledWith('SIGNED', 41, 501);
+      // 처리 완료본도 커밋 뒤에 만든다(WHALEERP-131)
+      expect(files.afterSigned).toHaveBeenCalledWith(41);
 
       await service().reject(77, 41, '근무 시간이 달라요', NOW);
       expect(notice.statusChanged).toHaveBeenLastCalledWith(
@@ -569,6 +605,7 @@ describe('MyContractsService', () => {
         .reject(77, 41, undefined, NOW)
         .catch(() => undefined);
       expect(notice.statusChanged).not.toHaveBeenCalled();
+      expect(files.afterSigned).not.toHaveBeenCalled();
     });
 
     it('거부 사유는 선택이다', async () => {
