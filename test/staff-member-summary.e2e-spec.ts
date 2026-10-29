@@ -19,6 +19,7 @@ import type {
   StaffMemberTodoSummaryResponseDto,
   StaffMemberWeekScheduleResponseDto,
 } from '../src/staff-members/dto/staff-member-summary.response.dto';
+import type { ContractDetailDto } from '../src/contracts/dto/contract.response.dto';
 import {
   encryptPersonalData,
   staffTaxProfileAad,
@@ -883,4 +884,100 @@ describe('직원 상세 요약 (e2e, DB)', () => {
       expect(res.status).toBe(200);
     },
   );
+
+  // 근로계약 상세의 신고 정보(WHALEERP-155) — 직원 상세 급여 계좌와 같은 판정(canManageStaffAccount)을 같은 직원들로 본다.
+  // 동의 직원의 계약은 위 요약(계약 없음)을 바꾸지 않게 여기서 만든다
+  describe('근로계약 상세의 신고 정보 (WHALEERP-155)', () => {
+    let consentedContractId: number;
+    const contractOf = async (staffMemberId: number) =>
+      (
+        await prisma.contract.findFirstOrThrow({
+          where: { staffMemberId, status: { not: 'DRAFT' } },
+          select: { contractId: true },
+        })
+      ).contractId;
+    const taxProfileOf = async (contractId: number, sub = bmId) => {
+      const res = await get(`/contracts/${contractId}`, sub);
+      expect(res.status).toBe(200);
+      return res.body as ContractDetailDto;
+    };
+
+    beforeAll(async () => {
+      consentedContractId = (
+        await prisma.contract.create({
+          data: {
+            staffMemberId: consentedId,
+            storeId: franchiseStoreId,
+            createdBy: fmId,
+            status: 'PENDING_SIGNATURE',
+          },
+        })
+      ).contractId;
+    });
+
+    it('가린 주민번호 · 은행 이름 · 계좌번호 전체 — 주민번호 원문은 본문에 없다', async () => {
+      const body = await taxProfileOf(await contractOf(jianId));
+      expect(body.taxProfile).toEqual({
+        status: 'OK',
+        rrnMasked: '980712-1******',
+        bankName: 'KB국민은행',
+        accountNumber: '12345678901234',
+      });
+      // 픽스처 계좌번호에 뒷자리(234567)가 들어 있어 원문 전체로 본다
+      expect(JSON.stringify(body)).not.toContain('9807121234567');
+      expect(JSON.stringify(body)).not.toContain('980712-1234567');
+    });
+
+    it('신고 정보가 없으면 NONE', async () => {
+      const body = await taxProfileOf(await contractOf(draftId));
+      expect(body.taxProfile.status).toBe('NONE');
+    });
+
+    it('본사 역할(BM)이 동의한 가맹 직원 계약을 열면 계약은 보이고 신고 정보는 HIDDEN — 본문에 원문이 없다', async () => {
+      const body = await taxProfileOf(consentedContractId);
+      expect(body.taxProfile).toEqual({
+        status: 'HIDDEN',
+        rrnMasked: null,
+        bankName: null,
+        accountNumber: null,
+      });
+      expect(JSON.stringify(body)).not.toContain('22223333444455');
+    });
+
+    it('가맹마스터(FM)는 같은 계약의 신고 정보를 본다', async () => {
+      const body = await taxProfileOf(consentedContractId, fmId);
+      expect(body.taxProfile).toMatchObject({
+        status: 'OK',
+        accountNumber: '22223333444455',
+      });
+    });
+
+    it('풀 수 없으면 상세는 200 이고 신고 정보만 UNAVAILABLE', async () => {
+      // 다른 행(동의 직원)의 암호문을 옮겨 놓는다 — AAD 가 달라 풀리지 않는다
+      const original = await prisma.staffTaxProfile.findUniqueOrThrow({
+        where: { staffMemberId: jianId },
+      });
+      const moved = await prisma.staffTaxProfile.findUniqueOrThrow({
+        where: { staffMemberId: consentedId },
+      });
+      await prisma.staffTaxProfile.update({
+        where: { staffMemberId: jianId },
+        data: { rrnEncrypted: moved.rrnEncrypted },
+      });
+      try {
+        const body = await taxProfileOf(await contractOf(jianId));
+        expect(body.taxProfile).toEqual({
+          status: 'UNAVAILABLE',
+          rrnMasked: null,
+          bankName: null,
+          accountNumber: null,
+        });
+      } finally {
+        await prisma.staffTaxProfile.update({
+          where: { staffMemberId: jianId },
+          data: { rrnEncrypted: original.rrnEncrypted },
+        });
+      }
+    });
+  });
 });
