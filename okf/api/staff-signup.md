@@ -187,8 +187,8 @@ be proven by a code · link from the 알림톡. An account's phone is fixed at s
 so a recycled number would let the old account see and accept the new owner's invitations. Both the
 list and accept therefore also require the record's name (근로계약서) to equal the account's
 `realName` under the 본인 대조 rule — whitespace removed, Latin upper-cased (`sameName` in
-`src/staff-signup/same-name.ts`, same as `contracts/identity-match.ts` `nameKey`, kept apart because contracts is
-another work area; 소속 추가 확인 · 복귀 확인 requests use it too). A
+`src/staff-signup/same-name.ts`, which calls `contracts/identity-match.ts` `nameKey`; 소속 추가 확인 · 복귀 확인
+requests use it too). A
 different name is treated like another person's invitation: absent from the list, 404
 `INVITATION_NOT_FOUND` on accept, checked before the status. A same-name new owner is not caught;
 the 날인 본인 대조 (name · phone · birth date · gender · foreigner) still stands in front of signing. Accept re-reads the
@@ -258,8 +258,8 @@ it. Such a request is absent from the list, and accept · reject answer 404 `AFF
 before the status so its state does not show. Hidden request ids (no names) are logged so a mismatch can be traced —
 at debug on the list (the app reads it on every open), as a warning when an answer is refused. A request already
 accepted stays 409 for its account even if the name changes later (the link proves it answered); a rejected one has
-no such proof, so it is 404 like anyone else's. The name rule is a copy of `contracts/identity-match.ts` `nameKey`;
-making that file use `same-name.ts` is left for the 근로계약 side. On the 관리자 side it stays 소속 추가 확인 대기; if the name was the
+no such proof, so it is 404 like anyone else's. The name rule is `contracts/identity-match.ts` `nameKey` itself (`sameName` calls it), the
+same one the 소속 추가 확인 mail uses, so the app list and the mail cannot drift apart. On the 관리자 side it stays 소속 추가 확인 대기; if the name was the
 admin's typo, 근로자 정보 수정 (`PATCH /contracts/:id/worker`) runs 판별 again and sends a new request, which then shows.
 
 **On the 근로계약 side** (WHALEERP-140, 2026-10-29 김민식): no warning before sending — the request and the alimtalk go as

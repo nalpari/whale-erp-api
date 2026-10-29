@@ -613,7 +613,8 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
   and earlier invitations are not revived — the old channel no longer fits the number. An old-flow 서명 대기
   소속 확인 contract with no request row goes back to 서명 대기 with its old `sentAt` · deadline. Then mail
   `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email — its failure, or no `MAIL_*`, is logged only. The mail is
-  sent only when the entered name matches that account's `realName` (`nameKey`, the 본인 대조 rule): the mail goes to the
+  sent only when the staff record's name (as entered — save, 이어 쓰기 and 근로자 정보 수정 write it first) matches
+  that account's `realName` (`nameKey`, the 본인 대조 rule, also used by the 직원 앱 list through `sameName`): the mail goes to the
   account found by the phone, not to the entered number, so on a recycled number it would tell someone else the store and
   고용형태. The alimtalk still goes to the entered number, the request is made as entered, and there is no warning before
   sending — a 직원 who got nothing is checked by phone and the admin fixes the name in 근로자 정보 (WHALEERP-140,

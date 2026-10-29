@@ -462,21 +462,32 @@ describe('ContractDeliveryService', () => {
       });
       prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
       const mail = { send: jest.fn().mockResolvedValue({}) };
-      await new ContractDeliveryService(
-        prisma as unknown as PrismaService,
-        alimtalk as unknown as AlimtalkService,
-        {
-          get: (key: string) => (key === 'JWT_SECRET' ? SECRET : appUrl),
-        } as unknown as ConfigService,
-        mail as never,
-      ).dispatch(pending, 1);
-      expect(alimtalk.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
-          to: PHONE,
-        }),
-      );
-      expect(mail.send).not.toHaveBeenCalled();
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        await new ContractDeliveryService(
+          prisma as unknown as PrismaService,
+          alimtalk as unknown as AlimtalkService,
+          {
+            get: (key: string) => (key === 'JWT_SECRET' ? SECRET : appUrl),
+          } as unknown as ConfigService,
+          mail as never,
+        ).dispatch(pending, 1);
+        expect(alimtalk.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+            to: PHONE,
+          }),
+        );
+        expect(mail.send).not.toHaveBeenCalled();
+        // 유선 확인 때 근거가 되는 로그 — 계약 id 와 사유만(이름 · 주소는 남기지 않는다)
+        expect(warn).toHaveBeenCalledWith(
+          'affiliation request mail SKIPPED contract=7: name differs from the account',
+        );
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it('알림톡 · 메일의 고용 형태는 이 계약의 것이다 — 레코드가 옛 조건(복귀 확인 · 재계약)이어도(api #164 code-review)', async () => {
