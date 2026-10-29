@@ -828,9 +828,9 @@ transaction.[^contract-status]
 
 | from | to |
 |---|---|
-| 임시저장 `DRAFT` | 발송 대기 (초안 저장 — 가입 초대) · 서명 대기 (초안 저장 — 앱 직원) · 체결 완료 (종이 계약 등록) · 종료 (대체 · 퇴직) |
-| 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 당사자 정보 수정으로 앱 직원이 됨) · 종료 (대체 · 퇴직 · 관리자 종료 `POST …/end`) — never 만료: only the 초대 expires, so it can be resent |
-| 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (계정 없는 번호로 고침) · 만료 · 종료 |
+| 임시저장 `DRAFT` | 발송 대기 (초안 저장 — 가입 초대 · 소속 추가 확인 요청, WHALEERP-130) · 서명 대기 (초안 저장 — 가입한 직원) · 체결 완료 (종이 계약 등록) · 종료 (대체 · 퇴직) |
+| 발송 대기 `PENDING_SEND` | 서명 대기 (가입 · 소속 추가 확인 요청 수락 · 당사자 정보 수정으로 앱 직원이 됨) · 거부 (직원이 소속 추가 확인 요청을 거절, WHALEERP-130) · 종료 (대체 · 퇴직 · 관리자 종료 `POST …/end`) — never 만료: only the 초대 · 요청 expires, so it can be resent |
+| 서명 대기 `PENDING_SIGNATURE` | 체결 완료 (날인) · 거부 · 수정 요청 (직원) · 발송 대기 (계정 없는 번호로 고침, 또는 #164 전 요청 없이 서명 대기가 된 옛 소속 확인 계약을 재발송) · 만료 · 종료 |
 | 수정 요청 `CORRECTION_REQUESTED` | 서명 대기 (관리자가 고침) · 발송 대기 (계정 없는 번호로 고침) · 종료 (대체 · 퇴직) — never 만료: the deadline does not run |
 | 체결 완료 `SIGNED` | 종료 (계약 기간 끝 · 재계약으로 이어지는 계약의 시작일 — 하루 배치, 대체 · 퇴직) |
 | 거부 `REJECTED` · 만료 `EXPIRED` | 서명 대기 · 발송 대기 (재발송 `POST …/send`, WHALEERP-153 — 같은 조건, 새 기한) |

@@ -1,11 +1,12 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Contracts API](/api/contracts-api.md) — api #186 재리뷰 참고: 상태 전환 표를 `TRANSITIONS` 에 맞춤(임시저장 → 발송 대기에 소속 추가 확인 요청, 발송 대기 → 거부(요청 거절), 서명 대기 → 발송 대기에 옛 소속 확인 계약 재발송). #186 줄의 템플릿 건수(44 → 46건) 서술을 바로잡음.
 * **Update**: main 병합(api treecko, main #186 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션 없음.
 * **Update**: main 병합(api treecko, main #185 · #188 까지 — 마이그레이션 20261028140448 · 20261028160701): okf/log · [BP masters](/api/bp-masters.md) 충돌은 양쪽 기록을 살렸다(BP masters 출처 제목은 main 의 엑셀 메서드, 시각은 늦은 값).
 * **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — api #179 리뷰 참고: 세 초기화의 잠금 해제 값을 `CLEARED_ATTEMPT_STATE` 로 쓴다(다른 잠금 해제와 같은 출처). e2e `admin-password-reset-unlock` — 잠긴 플랫폼 관리자 · BP 마스터를 초기화하면 메일로 받은 비밀번호로 바로 로그인된다(잠금 해제를 빼면 429 로 실패하는 것을 확인). 동작 변화 없음.
 * **Update**: [BP admins](/api/bp-admins.md) — api #179 review-pr 반영: 잠금이 풀리는 길에 운영자 비밀번호 초기화를 더했다(같은 문서 아래 · 코드와 맞춤). `resetPassword` 주석의 「잠금을 풀고」 중복을 지웠다. 계획서(2026-10-13 관리자 로그인) 6번은 원래 결정 문구를 두고 10-28 변경을 덧붙였다. 동작 변화 없음.
-* **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — api #164 후속(#186): 저장 · 전환 표 · 재발송 응답 status 설명을 계정 있는 번호(소속 추가 확인 요청 · 발송 대기)와 거부 · 만료 되살리기에 맞추고, 거절한 요청의 계약은 상세 재발송으로 되살아남을 적음. 기본 알림 템플릿 e2e 기대 목록에 소속 추가 확인 요청 알림톡 · 메일(44건).
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — api #164 후속(#186): 저장 · 전환 표 · 재발송 응답 status 설명을 계정 있는 번호(소속 추가 확인 요청 · 발송 대기)와 거부 · 만료 되살리기에 맞추고, 거절한 요청의 계약은 상세 재발송으로 되살아남을 적음. 기본 알림 템플릿 e2e 머리 주석을 main 의 46건(소속 추가 확인 요청 · 공통 엑셀 메일 포함)에 맞춤 — 기대 목록 항목은 main 이 먼저 넣었다.
 * **Update**: main 병합(api monferno, main #177 · #178 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #182 · #184 까지): okf/log · [Employment Contract Batch](/api/employment-contract-batch.md) 충돌은 양쪽 기록을 살리고 생성 시각은 늦은 값을 썼다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #180 까지): okf/log 충돌은 양쪽 기록을 살렸다. #180 에는 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
