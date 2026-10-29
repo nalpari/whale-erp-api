@@ -1,12 +1,15 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: main 병합(api farfetchd, main #198 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api farfetchd, main #194 까지 — 마이그레이션 20261029114945 포함): okf/log · [Payslips](/api/payslips.md) 충돌은 양쪽 기록을 살리고 시각은 늦은 값을 남겼다.
 * **Update**: [Payslips](/api/payslips.md) — PR #193 적대적 리뷰 블로커 반영: 달을 걸친 첫 주의 앞 달 날은 실근무가 이 달 계산에 늘 들어가는데(이 달이 주를 맡으면 주휴 금액, 앞 달이 맡으면 주 40시간 연장), 출퇴근 누락은 급여 기간 안의 날만 봐서 앞 달 날의 퇴근 미등록(0분)이 사유 없이 이 달 금액을 줄였다. `attendanceReviewReasons` 가 그 주 월요일부터 기간 전날까지의 퇴근 미등록도 출퇴근 누락에 넣는다(출근 · 퇴근 모두 없는 날은 넣지 않는다). 기록 없음 · 계약 만료 후 기록은 기간 안 날만 본다. 단위 테스트 · e2e(8/31 퇴근 미등록 — 고치기 전 실패 확인).
 * **Update**: main 병합(api farfetchd, main #189 까지 — PR #193 충돌 풀기): okf/log 충돌은 양쪽 기록을 살렸다. 이 브랜치는 새 마이그레이션 없음.
 * **Update**: main 병합(api farfetchd, main #186 까지 — #185 머지 포함): okf/log 충돌은 양쪽 기록을 살렸다. 이 브랜치는 새 마이그레이션 없음.
 * **Update**: main 병합(api farfetchd, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션 없음.
 * **Update**: [Payslips](/api/payslips.md) — 재영 답(2026-10-28 PAY-05 v234 · 2026-10-29 PAY-04 v237, WHALEERP-243 노무사 답 · WHALEERP-630) 반영: 파트타이머 주휴수당을 계약 소정시간이 아니라 그 주 실근무에서 연장을 뺀 시간 ÷ 5 × 시급(40시간 상한)으로. 대상 판정(계약 소정 15시간 · 개근)과 달을 걸친 주(앞 달이 맡으면 앞 달 날만, 보충 없음)는 그대로. 정직원 결근은 자동 공제하지 않는다(관리자가 고침 — 코드 변경 없음). 단위 테스트.
+* **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) — 소속 추가 확인 · 복귀 확인 요청에도 이름 대조(WHALEERP-140, 2026-10-29 김민식): 직원 레코드 이름이 계정 실명과 다르면(`sameName`, 근무지 더하기와 같은 본인 대조 기준) 그 계정 목록에 없고 수락 · 거절은 404 `AFFILIATION_REQUEST_NOT_FOUND` 다 — 번호 재활용 때 옛 계정이 새 주인 앞 요청을 받아 수락하던 것을 막는다. `sameName` 을 `src/staff-signup/same-name.ts` 로 꺼냈다. 140 점검: 관리자에게 후보 계정 정보가 보이지 않고 응답에도 실리지 않음(충족). 근로계약 쪽에 남은 것: 발송 전 이름 불일치 경고, 소속 추가 확인 메일이 이름 대조 없이 후보 계정 이메일로 감(번호 재활용 때 옛 주인이 채용 정보를 받음), 판별이 옛 계정을 잡아 새 주인에게 가입 초대가 안 감. 마이그레이션 없음.
+* **Update**: [Staff signup](/api/staff-signup.md) — 받은 초대 수락(`POST /me/invitations/:invitationId/accept`) 응답에 `storeId` 를 더했다. 직원앱이 수락 뒤 그 근무지 근로계약서만(`/contracts?store=`) 연다(staff #40 후속 리뷰, Plane WHALEERP-604).
 * **Update**: main 병합(api omastar, main #187 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #186 재리뷰 참고: 상태 전환 표를 `TRANSITIONS` 에 맞춤(임시저장 → 발송 대기에 소속 추가 확인 요청, 발송 대기 → 거부(요청 거절), 서명 대기 → 발송 대기에 옛 소속 확인 계약 재발송). #186 줄의 템플릿 건수(44 → 46건) 서술을 바로잡음.
 * **Update**: main 병합(api seadra, base golduck → main, main #194 까지): [Admin auth](/api/admin-auth.md) 시각 충돌은 늦은 값을 남겼다. admin-scope.service.ts 는 자동 병합(main 의 listBps withMaster · 정렬과 seadra 의 가림 판정이 다른 곳).

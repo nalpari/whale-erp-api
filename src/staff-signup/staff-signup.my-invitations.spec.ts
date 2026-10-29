@@ -97,7 +97,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       $executeRaw: jest.fn().mockResolvedValue(1),
       $queryRaw: jest
         .fn()
-        .mockResolvedValue([{ phone: PHONE, name: '홍길동' }]),
+        .mockResolvedValue([{ phone: PHONE, name: '홍길동', store_id: 4 }]),
       account: { findUnique: jest.fn(), update: jest.fn() },
       invitation: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -279,7 +279,11 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     it('초대 id 로 찾아 수락 · 레코드를 이 계정에 잇기 · 서명 대기, 동의를 보내면 계정에 남긴다', async () => {
       await expect(
         service().acceptForAccount(77, 41, { hqSharingConsented: true }),
-      ).resolves.toEqual({ staffMemberId: 19, storeName: '모리커피 합정점' });
+      ).resolves.toEqual({
+        staffMemberId: 19,
+        storeId: 4,
+        storeName: '모리커피 합정점',
+      });
       expect(argOf(tx.invitation.findUnique).where).toEqual({
         invitationId: 41,
       });
@@ -313,6 +317,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       );
       await expect(service().acceptForAccount(77, 41, {})).resolves.toEqual({
         staffMemberId: 19,
+        storeId: 4,
         storeName: '모리커피 합정점',
       });
     });
@@ -475,6 +480,16 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
 
     it('잠근 뒤 다시 읽은 이름이 바뀌었으면(근로계약 수정) 404 INVITATION_ENDED — 잇지 않는다', async () => {
       tx.$queryRaw.mockResolvedValue([{ phone: PHONE, name: '김철수' }]);
+      const e = await thrown(service().acceptForAccount(77, 41, {}));
+      expect(e.getStatus()).toBe(404);
+      expect(codeOf(e)).toBe('INVITATION_ENDED');
+      expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('잠근 뒤 다시 읽은 점포가 바뀌었으면(근로계약 수정) 404 INVITATION_ENDED — 응답의 storeId 가 잇는 레코드와 어긋나지 않게', async () => {
+      tx.$queryRaw.mockResolvedValue([
+        { phone: PHONE, name: '홍길동', store_id: 6 },
+      ]);
       const e = await thrown(service().acceptForAccount(77, 41, {}));
       expect(e.getStatus()).toBe(404);
       expect(codeOf(e)).toBe('INVITATION_ENDED');
