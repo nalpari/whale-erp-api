@@ -682,7 +682,7 @@ describe('AdminScopeService', () => {
           tradeName: true,
           accountStatusCode: true,
         },
-        orderBy: [{ bpCode: 'asc' }, { bpCodeId: 'asc' }],
+        orderBy: [{ createdAt: 'desc' }, { bpCodeId: 'desc' }],
         skip: 20,
         take: 10,
       });

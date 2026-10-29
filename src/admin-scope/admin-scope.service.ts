@@ -220,7 +220,8 @@ export class AdminScopeService {
           tradeName: true,
           accountStatusCode: true,
         },
-        orderBy: [{ bpCode: 'asc' }, { bpCodeId: 'asc' }],
+        // 최신 등록이 위 — BP 마스터 계정 목록(bp-masters ORDER_BY)과 같은 순서(2026-10-29 사용자 지정, 전엔 BP 코드 오름차순)
+        orderBy: [{ createdAt: 'desc' }, { bpCodeId: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
