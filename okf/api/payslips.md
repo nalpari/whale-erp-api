@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:50:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:54:57Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -12,8 +12,8 @@ sources:
     last_modified: 2026-10-28T08:41:55Z
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
-    title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년)
-    last_modified: 2026-10-22T04:38:14Z
+    title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년). DETAIL_SELECT · toSummary 는 직원 자료 일괄 저장도 쓴다
+    last_modified: 2026-10-29T02:54:57Z
   - id: controllers
     resource: ../../src/payslips/payslips.controller.ts
     title: GET /payslips · /payslips/summary · /payslips/:id (급여명세서 관리 MN000009 조회)
@@ -334,6 +334,8 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 「다시 발송」은 적지 않는다, PAY-20), 지급 항목 표(비과세 표시) · 공제 항목 표(원천징수 둘은 3.3% 적용일 때만, 그때 소득세 · 지방소득세는 뺀다 —
 원천징수 줄에 「끝자리 세무 확인 대기(PAY-7)」), 지급 합계 · 공제 합계 · 실지급액(저장된 합계 값). 줄 금액은 `adjustedAmount ??
 calculatedAmount ?? 0`, 「1,000원」 형식. 「입금」이라는 말은 쓰지 않고 끝에 「급여 지급은 이 명세서로 처리하지 않습니다」를 둔다.
+
+직원 자료 일괄 저장([Bulk exports](/api/bulk-exports.md))도 이 PDF 를 쓴다. 그 점포 범위의 발송 완료(`SENT`) 명세서를 같은 `DETAIL_SELECT` 로 읽고 `toSummary` 와 같은 상세로 바꿔 그린다. 그래서 상세의 모양을 바꾸면 zip 안의 PDF 도 바뀐다. 확정을 취소해 검토 중인 명세서는 담지 않는다.
 
 그리기는 `pdfkit`(MIT, 0.20.2 고정)로 A4 한 장(넘치면 다음 장). 한글은 직원 앱과 같은 **Pretendard 1.3.9 OTF**(Regular · Bold,
 OFL — `src/payslips/assets/fonts/Pretendard-LICENSE.txt`)를 쓰고 pdfkit 이 쓴 글자만 넣는다(표본 한 장 약 60KB). 글꼴은

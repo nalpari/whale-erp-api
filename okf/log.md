@@ -1,6 +1,13 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: main 병합(api bulbasaur, main #199 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: main 병합(api bulbasaur, main #193 · #200 까지): okf/api/payslips.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: main 병합(api bulbasaur, main #198 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Bulk exports](/api/bulk-exports.md) — api #197 리뷰 블로커 3건: 저장소가 4xx 로 거절한 계약서 파일은 건너뛰고 `누락_파일.csv` 에 적는다. 메모리 상한을 200MB 로 낮추고 받은 파일을 복사하지 않으며 zip 올리기는 10분 기한이다. 올리기 전에 키를 행에 적어 실패 · 멈춘 작업 정리 때 지운다.
+* **Update**: main 병합(api bulbasaur, origin/main 최신): okf/api/payslips.md · okf/domain/team3-physical-schema.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다. 마이그레이션 폴더를 main 의 마지막 마이그레이션 뒤 시각(20261029134408)으로 옮겼다.
+* **Update**: [Bulk exports](/api/bulk-exports.md) — 리뷰 「With fixes」 반영(WHALEERP-336). 부분 고유 인덱스를 `(bp_code_id, md5(scope_key))` 로 바꿨다. 전체 점포 범위 키가 btree 한 행 한도를 넘을 수 있어서다. 메모리 한도 500MB를 넘으면 413 으로 바로 실패하고, 화면 실패 사유는 우리가 낸 문구만 보인다. 요청자를 다시 볼 때 난 DB 오류는 다시 시도한다. 점만 있는 이름은 `_` 로 바꾸고(zip-slip), 만료 정리는 기한이 오래된 순으로 한다. 목록 항목에 `storeIds` 를 더했다. e2e 에는 긴 범위 키 · 동시 요청 · 실패 사유 · 멈춘 작업 되살리기를 더했다. [Team 3 physical schema](/domain/team3-physical-schema.md)도 맞췄다.
+* **Add**: [Bulk exports](/api/bulk-exports.md) — 직원 자료 일괄 저장 API(WHALEERP-336). 마이그레이션 `20261029134408_team3_bulk_exports`(`bulk_exports` · `bulk_export_download_logs`, enum `bulk_export_status`)를 더했고, 물리 생성기 밖에서 손으로 썼다([Team 3 physical schema](/domain/team3-physical-schema.md)). [Attachment storage](/api/storage.md)에 `get` · `ZIP` 을 더했고, [Payslips](/api/payslips.md)의 `DETAIL_SELECT` · `toSummary` 를 내보냈다. 배치 이름 둘([Employment Contract Batch](/api/employment-contract-batch.md))과 AppModule 등록 순서([whale-erp-api](/api/whale-erp-api.md))도 바뀌었다. `fflate` 는 직접 의존성으로 넣었다.
 * **Update**: main 병합(api dragonair, main #193 · #200 까지): okf/log 는 양쪽 기록을 살렸다.
 * **Update**: [Auth](/api/auth.md) — 직원 앱 로그인이 `accounts` 수정 일시를 바꾸지 않는다(WHALEERP-624): 실패 횟수 · 잠금과 성공 때 초기화가 두 칸만 바꾸는 raw `UPDATE`(`writeAttemptState`)로 쓴다 — 읽은 `updated_at` 을 되돌려 쓰면(관리자 로그인 api #167 방식) JS `Date` 가 마이크로초를 버려 값이 움직인다(api #199 리뷰). 실제 계정 수정(비밀번호 · 이메일 · 주소)은 그대로 수정 일시를 올린다. 단위 · e2e. 마이그레이션 없음.
 * **Update**: main 병합(api farfetchd, main #198 까지): okf/log 충돌은 양쪽 기록을 살렸다.

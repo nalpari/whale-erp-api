@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:41:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:54:57Z }
 sources:
+  - id: bulk-exports
+    resource: ../../prisma/migrations/20261029134408_team3_bulk_exports/migration.sql
+    title: 직원 자료 일괄 저장 bulk_exports · bulk_export_download_logs (WHALEERP-336)
+    last_modified: 2026-10-29T02:54:57Z
   - id: account-birth-date-correction
     resource: ../../prisma/migrations/20261026110852_team3_account_birth_date_correction/migration.sql
     title: 계정 변경 이력에 생년월일 · 관리자 정정 값 (WHALEERP-602)
@@ -565,6 +569,19 @@ table document:
   keeps every earlier session at 30 days. The `expires_at` and `last_used_at`
   comments still say 30 days; correcting them takes a `COMMENT ON COLUMN` in a
   migration (and the `_model.ADD` remark for `last_used_at`), left as is for now.
+- **직원 자료 일괄 저장 tables were written by hand, outside the generator** (WHALEERP-336,
+  2026-10-29). `bulk_exports` (one row per request: BP, requester, role type `BM`/`FM` by CHECK,
+  sorted non-empty `store_ids int[]`, `scope_key`, packed `staff_member_ids int[]`, enum `bulk_export_status`, file key/name/size,
+  attempts, timestamps) and `bulk_export_download_logs` (`bulk_export_id`, `downloaded_by`,
+  `downloaded_at`) are in `20261029134408_team3_bulk_exports` and in `schema.prisma` at the end of
+  the 3팀 section only.[^bulk-exports] They are not in the front logical catalog, `_model.py`,
+  `schema.sql` or the table document. The precedent above (a copy of the catalog plus the
+  generators) could not run: `_build_physical.py` stops on main because two `_model.RENAME`
+  entries hold remarks instead of column names (`accounts.birth_date`,
+  `account_change_histories.field`, from d4f86c34). Until the catalog gains the tables and the
+  generator runs again, regenerating `schema.prisma` drops these three blocks. Re-add them by
+  hand rather than editing generated output. SQL-only: five CHECKs, three 1팀 FKs, and the
+  partial unique `(bp_code_id, md5(scope_key)) WHERE status IN ('PENDING','PROCESSING')`. The md5 is there because an all-stores scope key can pass btree's row size limit (about 2.7KB).
 - **The e-mail change pin is its own table, ahead of the logical ERD**
   (WHALEERP-191, 2026-10-20 노영주). `email_change_pins` keeps the same rules as
   the reset pin (hash only, five misses close it, 1-minute interval, 10 a day)
@@ -716,3 +733,4 @@ table where it has them; the rest (`invitation_channel`,
 [^email-change-pins]: 이메일 변경 핀 테이블 (WHALEERP-191)
 [^auth-session-remember-me]: 접속 상태의 자동 로그인 칸 (끄면 7일)
 [^account-status-migration]: 계정 상태에 탈퇴를 더하는 마이그레이션 (2026-10-07)
+[^bulk-exports]: 직원 자료 일괄 저장 테이블 (WHALEERP-336)
