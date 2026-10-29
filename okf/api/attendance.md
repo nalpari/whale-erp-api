@@ -9,7 +9,7 @@ sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
     title: 관리자 웹 일별 출퇴근 GET /attendance-records/daily(WHALEERP-217)
-    last_modified: 2026-10-27T06:45:04Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: day-status
     resource: ../../src/attendance/attendance-day-status.ts
     title: 일별 출퇴근 상태 판정(API 전용 enum AttendanceDayStatus)
@@ -127,7 +127,7 @@ sources:
 - 상태 `AttendanceDayStatus`(API 전용 enum, STAFF-31 의 여섯)는 기록에서 만든다.[^day-status] 판정 기준은 정책에 없어 가장 단순하게
   정했고 재영 답으로 그대로 확정했다(운영 정책 ATT-34, 2026-10-23 — 지각 유예 없음, 근무스케줄 없는 날 출근은 정상): 근무스케줄 · 기록 없음 = 휴무, 짝 없는 퇴근 = 출근 미등록, 퇴근을 더 기다리지 않는 날의 퇴근 없는 출근 = 퇴근 미등록(퇴근은 다음 날까지 받으므로 어제 출근은 근무스케줄이 모두 자정 전에 끝났을 때만, 그 전 날은 모두 — `checkOutDue`, 밤샘 근무가 근무 중에 퇴근 미등록으로 보이지 않게),
   첫 출근 분이 첫 근무스케줄 시작 분보다 늦으면 지각(유예 없음), 기록 없이 시작이 지난 근무스케줄 = 미출근, 시작 전이면 null.
-- 본사 계정에게 동의 없는 가맹 직원(ATT-30)은 줄도 `counts`(상태별 인원)도 빼고 센다(운영 정책 v218, 2026-10-27 재영 — 로그인 후 홈(api #166)의
+- 본사 계정에게 동의 없는 가맹 직원(ATT-30 — 폐점한 가맹 점포면 동의했어도, v227)은 줄도 `counts`(상태별 인원)도 빼고 센다(운영 정책 v218, 2026-10-27 재영 — 로그인 후 홈(api #166)의
   출근 · 미출근, 같은 화면의 근태 요약과 기준을 맞춘다. 예전에는 목업 STAFF-31 · Plane 219 「기록은 보이지 않고 점포별 숫자에만 센다」대로 숫자에는 셌다). 근무스케줄 관리(줄은 두고 이름을 비움, STAFF-39)와 다르다.
 
 [^records]: `src/attendance/attendance-records.service.ts`

@@ -11,6 +11,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InvitationStatus, Prisma } from '@prisma/client';
 import {
+  HQ_SHARING_CONSENT_VERSION,
+  hqSharingAgreedOf,
+} from '../admin-scope/hq-sharing';
+import {
   AuthSessionService,
   INVALID_SESSION_MESSAGE,
 } from '../auth-session/auth-session.service';
@@ -44,10 +48,7 @@ import type {
   MyInvitationListResponseDto,
 } from './dto/my-invitation.dto';
 import type { StaffSignupDto } from './dto/staff-signup.dto';
-import {
-  asksHqSharingConsentAt,
-  HQ_SHARING_CONSENT_VERSION,
-} from './hq-sharing-consent';
+import { asksHqSharingConsentAt } from './hq-sharing-consent';
 
 /** 번호 · 코드가 맞는 초대가 없다 — 어느 쪽이 틀렸는지, 그 번호로 초대가 있는지 알리지 않는다(JOIN-7) */
 export const CODE_MISMATCH = '휴대전화번호나 초대 코드를 다시 확인해 주세요';
@@ -351,7 +352,7 @@ export class StaffSignupService {
   /**
    * 로그인한 직원에게 온 가입 초대(WHALEERP-603, 2026-10-28) — 계정 번호로 나간 살아 있는 가입 초대 · 재초대(보냄 · 기한 안 ·
    * 아직 계정 없는 레코드, 가입 확인과 같은 기준)를 보낸 때 최근 순으로. 점포를 찾지 못한 초대는 뺀다. 본사 제공 동의는
-   * 직영이 아니고 계정이 아직 동의하지 않았을 때만 묻는다.
+   * 직영이 아니고 계정이 받아 주는 문구 버전에 아직 동의하지 않았을 때만 묻는다(hqSharingAgreedOf).
    */
   async listForAccount(
     accountId: number,
@@ -402,7 +403,7 @@ export class StaffSignupService {
           expiresAt: r.expiresAt,
           asksHqSharingConsent:
             asksHqSharingConsentAt(store.storeTypeCode) &&
-            !account.isHqSharingConsented,
+            !hqSharingAgreedOf(account),
         },
       ];
     });
@@ -422,6 +423,9 @@ export class StaffSignupService {
     return this.prisma.$transaction(async (tx) => {
       // 가입 · 근로계약 저장 · 재발송과 같은 순서로 번호부터 잡는다(api #81 리뷰) — 근무지 더하기와 재발송이 교착하지 않게
       await lockPeople(tx, [phone]);
+      // 계정 행도 잠그고 읽는다 — 옛 문구 버전 동의를 다시 쓰는 사이 내 정보에서 철회하면(MyConsentService 도 이 행을 잠근다)
+      // 철회가 덮여 사라진다(api #183 리뷰)
+      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
       const now = new Date();
       const account = await this.accountOf(tx, accountId);
       const { invitation, store } = await this.accountInvitation(
@@ -453,7 +457,7 @@ export class StaffSignupService {
         );
       if (
         asksHqSharingConsentAt(store.storeTypeCode) &&
-        !account.isHqSharingConsented &&
+        !hqSharingAgreedOf(account) &&
         dto.hqSharingConsented === true
       )
         // 철회했던 계정이 다시 동의하면 철회 시각을 지운다 — 동의 중에는 철회 시각이 없다(accounts_hq_sharing_consent_fields)
@@ -491,6 +495,7 @@ export class StaffSignupService {
         realName: true,
         status: true,
         isHqSharingConsented: true,
+        hqSharingConsentVersion: true,
       },
     });
     if (!account || account.status === 'WITHDRAWN')

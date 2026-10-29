@@ -5,7 +5,7 @@ import type { AuthSessionService } from '../auth-session/auth-session.service';
 import type { AccountAuthService } from '../auth/account-auth.service';
 import type { OpsNotificationService } from '../notifications/ops-notification.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { HQ_SHARING_CONSENT_VERSION } from './hq-sharing-consent';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 import { InvitationIdPipe } from './invitation-id.pipe';
 import { StaffSignupService } from './staff-signup.service';
 
@@ -239,10 +239,20 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     });
 
     it('계정이 이미 본사 제공 동의를 했으면 가맹점이어도 묻지 않는다', async () => {
-      account({ isHqSharingConsented: true });
+      account({
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+      });
       tx.invitation.findMany.mockResolvedValue([row(42, 4)]);
       const { items } = await service().listForAccount(77);
       expect(items[0].asksHqSharingConsent).toBe(false);
+    });
+
+    it('더는 받아 주지 않는 문구 버전에 동의했으면 가맹점에서 다시 묻는다(ATT-30, WHALEERP-137)', async () => {
+      account({ isHqSharingConsented: true, hqSharingConsentVersion: 'v0.9' });
+      tx.invitation.findMany.mockResolvedValue([row(42, 4)]);
+      const { items } = await service().listForAccount(77);
+      expect(items[0].asksHqSharingConsent).toBe(true);
     });
 
     it('초대가 없으면 빈 목록 — 점포를 읽지 않는다', async () => {
@@ -315,11 +325,26 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       '%s — 계정 동의를 바꾸지 않는다',
       async (_label, type, consented, send) => {
         store(type);
-        account({ isHqSharingConsented: consented });
+        account({
+          isHqSharingConsented: consented,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        });
         await service().acceptForAccount(77, 41, { hqSharingConsented: send });
         expect(tx.account.update).not.toHaveBeenCalled();
       },
     );
+
+    it('옛 문구 버전에 동의한 계정이 다시 동의를 보내면 지금 버전으로 덮는다(ATT-30, WHALEERP-137)', async () => {
+      store('FRANCHISE');
+      account({ isHqSharingConsented: true, hqSharingConsentVersion: 'v0.9' });
+      await service().acceptForAccount(77, 41, { hqSharingConsented: true });
+      expect(tx.account.update).toHaveBeenCalledWith({
+        where: { accountId: 77 },
+        data: expect.objectContaining({
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        }) as unknown,
+      });
+    });
 
     it.each([
       ['없는 초대', null],
@@ -413,15 +438,27 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       expect(calls.some((c) => c.includes(`contracts:${PHONE}`))).toBe(true);
     });
 
-    it('번호 → 직원 행 → 초대 · 레코드 순서로 잠근다 — 퇴직 확정과 같은 순서(api #81 3차 리뷰)', async () => {
+    it('번호 → 계정 행 → 직원 행 → 초대 · 레코드 순서로 잠근다 — 퇴직 확정과 같은 순서(api #81 3차 리뷰), 계정 행은 내 정보 동의 · 철회와 겹치지 않게(api #183 리뷰)', async () => {
       await service().acceptForAccount(77, 41, {});
       const calls = tx.$executeRaw.mock.calls as unknown[][];
       const people = calls.findIndex((c) => c.includes(`contracts:${PHONE}`));
       const order = (m: jest.Mock, i = 0) => m.mock.invocationCallOrder[i];
-      const staffLock = order(tx.$queryRaw);
-      expect(order(tx.$executeRaw, people)).toBeLessThan(staffLock);
-      expect(String((tx.$queryRaw.mock.calls[0] as [string[]])[0])).toContain(
-        'FOR UPDATE',
+      const sql = (i: number) =>
+        String((tx.$queryRaw.mock.calls[i] as [string[]])[0]);
+      const accountLock = order(tx.$queryRaw, 0);
+      const staffLock = order(tx.$queryRaw, 1);
+      expect(sql(0)).toContain('FROM accounts');
+      expect(sql(0)).toContain('FOR UPDATE');
+      expect(sql(1)).toContain('FROM staff_members');
+      expect(sql(1)).toContain('FOR UPDATE');
+      expect(order(tx.$executeRaw, people)).toBeLessThan(accountLock);
+      expect(accountLock).toBeLessThan(staffLock);
+      // 트랜잭션 안에서 다시 읽는 계정(마지막 읽기)은 잠근 뒤다 — 앞의 읽기는 트랜잭션 밖 번호 확인용이다
+      expect(accountLock).toBeLessThan(
+        order(
+          tx.account.findUnique,
+          tx.account.findUnique.mock.calls.length - 1,
+        ),
       );
       expect(staffLock).toBeLessThan(order(tx.invitation.updateMany));
       expect(staffLock).toBeLessThan(order(tx.staffMember.updateMany));

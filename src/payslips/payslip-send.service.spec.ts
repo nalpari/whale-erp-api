@@ -12,6 +12,7 @@ import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayslipListService } from './payslip-list.service';
 import { PayslipSendService } from './payslip-send.service';
+import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const UPDATED = '2026-10-19T01:00:00.000Z';
@@ -400,7 +401,41 @@ describe('PayslipSendService', () => {
               {
                 storeId: { in: [6] },
                 staffMember: {
-                  account: { is: { isHqSharingConsented: true } },
+                  account: HQ_SHARING_CONSENTED.account,
+                },
+              },
+            ],
+          },
+          { periodStartDate: { gte: d('2026-07-01'), lt: d('2026-08-01') } },
+          { status: 'CONFIRMED' },
+          { staffMember: { name: { contains: '유\\_', mode: 'insensitive' } } },
+        ],
+      });
+    });
+
+    it('직원명으로 거르면 폐점한 가맹 점포의 명세서는 동의한 직원 것도 대상에서 뺀다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 5, storeTypeCode: 'DIRECT', storeStatusCode: 'OPERATING' },
+          {
+            storeId: 6,
+            storeTypeCode: 'FRANCHISE',
+            storeStatusCode: 'OPERATING',
+          },
+          { storeId: 7, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.sendMany(9, { month: '2026-07', staffName: '유_' });
+      expect(call(prisma.payslip.findMany).where).toEqual({
+        AND: [
+          {
+            OR: [
+              { storeId: { in: [5] } },
+              {
+                storeId: { in: [6] },
+                staffMember: {
+                  account: HQ_SHARING_CONSENTED.account,
                 },
               },
             ],

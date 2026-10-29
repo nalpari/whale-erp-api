@@ -9,13 +9,13 @@ import type { OpsNotificationService } from '../notifications/ops-notification.s
 import { storeManagers } from '../notifications/recipients';
 import { PrismaService } from '../prisma/prisma.service';
 import type { StaffSignupDto } from './dto/staff-signup.dto';
-import { HQ_SHARING_CONSENT_VERSION } from './hq-sharing-consent';
 import {
   CODE_MISMATCH,
   INVITATION_ENDED,
   StaffSignupService,
   UNDER_AGE,
 } from './staff-signup.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 // scrypt 는 느리다 — 값만 확인한다. hashToken 은 진짜를 쓴다
 jest.mock('../auth/password', () => ({

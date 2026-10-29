@@ -80,7 +80,10 @@ export class MyConsentController {
     return this.consents.withdrawLocation(user.id);
   }
 
-  /** 본사 제공 동의 — 처음이든 철회 뒤든 (ATT-30). 계정에 하나라 소속 가맹 점포 모두에 같이 적용된다 */
+  /**
+   * 본사 제공 동의 — 처음이든 철회 뒤든, 내 정보의 `needsReconsent` 로 다시 동의할 때든 (ATT-30). 계정에 하나라 소속 가맹
+   * 점포 모두에 같이 적용된다
+   */
   @Post('hq-sharing-consent')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse({ description: '동의함' })

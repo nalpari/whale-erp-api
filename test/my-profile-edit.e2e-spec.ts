@@ -8,9 +8,9 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { hashPassword, verifyPassword } from '../src/auth/password';
-import { HQ_SHARING_CONSENT_VERSION } from '../src/my-profile/my-consent.service';
 import type { MyProfileResponseDto } from '../src/my-profile/dto/my-profile.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 직원 앱 내 정보 편집을 실제 DB 로 확인한다 — 주소 저장과 이력(189), 비밀번호 변경과 다른 기기 접속 종료(192), 위치정보 ·
 // 본사 제공 동의의 상태 전환과 DB CHECK · 부분 고유 인덱스(193). 관리자 토큰 403, 남의 계정에 쓰지 않음, 탈퇴 401.
@@ -476,6 +476,37 @@ describe('내 정보 편집 (e2e, DB)', () => {
         isConsented: true,
         withdrawnAt: null,
       });
+    });
+
+    it('더는 받아 주지 않는 문구 버전에 동의했으면 다시 묻고, 다시 동의하면 지금 버전으로 덮는다', async () => {
+      const id = await account(
+        '옛버전',
+        'JOINED',
+        await hashPassword(PASSWORD),
+      );
+      await prisma.account.update({
+        where: { accountId: id },
+        data: {
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: 'v0.9',
+          hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
+        },
+      });
+      const { token } = await login(id);
+      const hq = async () => (await profile(token)).hqSharingConsent;
+
+      expect(await hq()).toMatchObject({
+        isConsented: true,
+        consentVersion: 'v0.9',
+        needsReconsent: true,
+      });
+      await send('post', '/me/hq-sharing-consent', token).expect(204);
+      expect(await hq()).toMatchObject({
+        isConsented: true,
+        consentVersion: HQ_SHARING_CONSENT_VERSION,
+        needsReconsent: false,
+      });
+      await send('post', '/me/hq-sharing-consent', token).expect(409);
     });
   });
 });

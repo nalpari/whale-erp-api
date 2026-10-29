@@ -9,7 +9,7 @@ sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
     title: PayslipListService (관리자 목록 · 상세, 가림 · 상태 건수)
-    last_modified: 2026-10-28T00:37:39Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
     title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년)
@@ -25,15 +25,15 @@ sources:
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
-    last_modified: 2026-10-19T12:00:00Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-10-27T09:19:27Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
-    last_modified: 2026-10-21T05:50:00Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: pdf
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
@@ -59,7 +59,8 @@ sources:
 센다 — 그래서 상태로 거르면 `total` 과 건수 합이 다르다. 가린 줄도 센다(건수는 개인 단위가 아니다, ATT-30). **직원명으로
 거르면 건수도 그 이름으로 센다** — 이때는 아래 가림 규칙대로 가린 줄도 건수에서 빠진다.
 
-가림은 직원 목록과 같은 `hidesPersonalData` 다. 본사 역할(BM · BA)에게 가맹 점포의 본사 제공 동의 없는 직원 명세서는
+가림은 직원 목록과 같은 `hidesPersonalData` 다. 폐점한 가맹 점포는 계정이 동의했어도 동의하지 않은 것으로 본다(ATT-30 v227 — [Staff members](/api/staff-members.md) 「본사 제공 동의 가림」). 그래서 요약(`/payslips/summary`)은 폐점한 가맹 점포에서 0건이고,
+상태 · 직원명 필터와 발송 · 작성 대상에서도 그 점포 명세서는 빠진다. 본사 역할(BM · BA)에게 가맹 점포의 본사 제공 동의 없는 직원 명세서는
 근무지 · 급여 기간만 남고 `payslipId` 까지 null, `isMasked: true` 다. **상태나 직원명으로 거르면** 그 줄의 상태가 드러나거나
 이름이 맞는지 드러나므로, 가려지는 점포에서는 동의한 직원 명세서만 남긴다(직원 목록의 개인 칸 필터와 같은 규칙) — 직원명은
 목록 · 건수 모두, 상태는 목록만. 네 상태를 모두 보낸 것은 거르지 않은 것으로 본다. 점포 필터는 개인 칸이 아니라 가린 줄을

@@ -9,6 +9,7 @@ import { AdminSessionService } from '../src/admin-session/admin-session.service'
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 관리자 웹 출·퇴근 현황 조회를 실제 DB 로 확인한다(WHALEERP-217 · 219) — 메뉴 권한 · 업무 범위 밖 점포 빠짐, 하루 · 기간 조회, 짝 퇴근,
 // 상태 판정, 본사 계정에게 동의 없는 가맹 직원은 줄도 상태별 건수도 빠지는 것(ATT-30).
@@ -139,7 +140,7 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
         ...(consented
           ? {
               isHqSharingConsented: true,
-              hqSharingConsentVersion: 'v1.0',
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
               hqSharingAgreedAt: new Date(),
             }
           : {}),

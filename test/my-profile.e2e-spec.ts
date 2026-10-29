@@ -19,6 +19,7 @@ import type {
 } from '../src/my-profile/dto/my-membership.response.dto';
 import type { MyProfileResponseDto } from '../src/my-profile/dto/my-profile.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 직원 앱 내 정보(GET /me/profile) · 소속 근무지(GET /me/memberships) · 소속의 신고 정보를 실제 DB 로 확인한다 — 소속
 // 고르기(체결 완료 · 가입 완료 · 퇴직 전, 임시저장만 있는 레코드 제외), 남의 레코드를 경로 id 로 열 수 없는지, 신고 정보
@@ -115,7 +116,7 @@ describe('내 정보 (e2e, DB)', () => {
       where: { accountId: meId },
       data: {
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
       },
     });
@@ -327,9 +328,10 @@ describe('내 정보 (e2e, DB)', () => {
       status: 'JOINED',
       hqSharingConsent: {
         isConsented: true,
-        consentVersion: 'v1',
+        consentVersion: HQ_SHARING_CONSENT_VERSION,
         agreedAt: '2026-10-01T00:00:00.000Z',
         withdrawnAt: null,
+        needsReconsent: false,
       },
       locationConsent: {
         state: 'PAUSED',
