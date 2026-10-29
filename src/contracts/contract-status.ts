@@ -24,7 +24,8 @@ import { SIGNED_ONCE } from './signed-contract';
  * 않고 같은 규칙(진행 중 계약 → 종료 + 이력)을 직접 쓴다.
  */
 export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
-  // 초안 저장하면 곧바로 보낸다 — 가입 초대면 발송 대기, 앱으로 받는 직원(가입 · 계정 있음)이면 서명 대기(2026-10-19 재영).
+  // 초안 저장하면 곧바로 보낸다 — 가입 초대 · 소속 추가 확인 요청(계정만 있는 번호, WHALEERP-130)이면 발송 대기, 가입한 직원이면
+  // 서명 대기(2026-10-19 재영).
   // 종이 계약으로 등록하거나(날인본을 올리면 발송 · 날인 없이 체결 완료, CTR-23), 대체 · 퇴직으로 닫는다
   DRAFT: ['PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED', 'ENDED'],
   // 가입 초대 · 소속 추가 확인 요청이 나가 가입 · 수락을 기다린다. 가입 · 수락하면 서명 대기(직원 앱, WHALEERP-141 · 130).
