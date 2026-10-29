@@ -13,6 +13,8 @@ import { ContractSendController } from './contract-send.controller';
 import { ContractSendService } from './contract-send.service';
 import { ContractsController } from './contracts.controller';
 import { ContractsService } from './contracts.service';
+import { MyContractDocumentsController } from './my-contract-documents.controller';
+import { MyContractDocumentsService } from './my-contract-documents.service';
 import { MyContractViewsController } from './my-contract-views.controller';
 import { MyContractViewsService } from './my-contract-views.service';
 import { MyContractsController } from './my-contracts.controller';
@@ -35,6 +37,7 @@ import { MyContractsService } from './my-contracts.service';
     ContractSendController,
     MyContractsController,
     MyContractViewsController,
+    MyContractDocumentsController,
   ],
   providers: [
     ContractsService,
@@ -42,6 +45,7 @@ import { MyContractsService } from './my-contracts.service';
     ContractSendService,
     MyContractsService,
     MyContractViewsService,
+    MyContractDocumentsService,
     ContractExpiryService,
     ContractExpiryScheduler,
     ContractNoticeService,

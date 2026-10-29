@@ -17,12 +17,19 @@ export class MyMembershipDto {
   jobTitle: string;
   /** 입사일(YYYY-MM-DD) */
   hiredDate: string | null;
-  /** 퇴직일(YYYY-MM-DD). 값이 있으면 퇴직 예정 */
+  /**
+   * 퇴직일(YYYY-MM-DD) — 이날까지 일한다. 오늘(한국 시각) · 뒤면 퇴직 예정, 앞이면 퇴직(`includeRetired=true` 로 받은
+   * 퇴직한 소속)이다. 없으면 null. 목록의 묶음(지금 소속 · 퇴직)은 재직 상태로 가르므로, 퇴직 배치가 늦은 날에는 퇴직일이 지난
+   * 레코드가 지금 소속 쪽에 섞일 수 있다
+   */
   retiredDate: string | null;
 }
 
 export class MyMembershipListResponseDto {
-  /** 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 입사일(없으면 뒤) · id 순 */
+  /**
+   * 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 입사일(없으면 뒤) · id 순. `includeRetired=true` 면 그 뒤에
+   * 퇴직한 레코드가 퇴직일 최근 순으로 붙는다
+   */
   items: MyMembershipDto[];
   total: number;
 }

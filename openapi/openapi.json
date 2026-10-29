@@ -8755,6 +8755,65 @@
         ]
       }
     },
+    "/me/contracts/{contractId}/documents/{contractDocumentId}/download-url": {
+      "get": {
+        "operationId": "MyContractDocumentsController_downloadUrl",
+        "parameters": [
+          {
+            "name": "contractId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "contractDocumentId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadUrlResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
+          },
+          "403": {
+            "description": "관리자 토큰"
+          },
+          "404": {
+            "description": "내 계약이 아님(상세와 같은 본문) · 그 계약의 파일이 아님 · 상세 documents 에 없는 파일(직원 필기 서명)"
+          },
+          "409": {
+            "description": "CONTRACT_STATUS_CONFLICT — 처리 완료본(SIGNED_COPY)인데 체결된 계약이 아님(서명 대기 · 수정 요청 · 거부 · 만료, 체결 완료를 거치지 않은 종료). 본문 status 에 지금 상태"
+          },
+          "503": {
+            "description": "첨부파일 저장소가 설정되지 않음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "내 근로계약 파일 내려받기 주소(300초) — 상세 documents 의 파일. 받으면 원래 파일 이름으로 저장된다",
+        "tags": [
+          "MyContractDocuments"
+        ]
+      }
+    },
     "/notifications": {
       "get": {
         "operationId": "NotificationsController_findAll",
@@ -15228,7 +15287,17 @@
     "/me/memberships": {
       "get": {
         "operationId": "MyMembershipsController_list",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "includeRetired",
+            "required": false,
+            "in": "query",
+            "description": "퇴직한 소속도 넣을지(true · false, 없으면 false). true 면 지금 소속 뒤에 퇴직한 소속을 퇴직일 최근 순으로 붙인다 —\n응답 모양은 같고, 퇴직일(retiredDate)이 오늘보다 앞이면 퇴직한 소속이다. 'true' · 'false' 밖의 값은 400.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -15239,6 +15308,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "includeRetired 가 true · false 가 아님"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -15252,7 +15324,7 @@
             "bearer": []
           }
         ],
-        "summary": "내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은 퇴직일과 함께",
+        "summary": "내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은\n퇴직일과 함께. `includeRetired=true` 면 퇴직한 레코드도 지금 소속 뒤에 퇴직일 최근 순으로 넣는다 — 퇴직일(retiredDate)이\n오늘보다 앞이면 퇴직, 오늘 · 뒤면 퇴직 예정이다(2026-10-28). 묶음은 재직 상태로 가르므로 퇴직 배치가 늦은 날에는 날짜와\n어긋날 수 있다.",
         "tags": [
           "MyMemberships"
         ]
@@ -15639,33 +15711,20 @@
         ]
       }
     },
-    "/me/invitations/check": {
-      "post": {
-        "operationId": "MyInvitationsController_check",
+    "/me/invitations": {
+      "get": {
+        "operationId": "MyInvitationsController_list",
         "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MyInvitationLookupDto"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InvitationCheckResponseDto"
+                  "$ref": "#/components/schemas/MyInvitationListResponseDto"
                 }
               }
             }
-          },
-          "400": {
-            "description": "형식 오류 · 토큰과 코드를 함께 보내거나 둘 다 없음"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -15673,14 +15732,8 @@
           "403": {
             "description": "관리자 토큰"
           },
-          "404": {
-            "description": "맞는 초대가 없음(INVITATION_NOT_FOUND — 코드가 틀림, 링크의 초대 번호가 계정 번호와 다름) · 끝난 초대(INVITATION_ENDED)"
-          },
-          "409": {
-            "description": "이미 가입을 마친 초대(INVITATION_ALREADY_JOINED)"
-          },
           "429": {
-            "description": "계정 번호로 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 기본 요청 제한"
+            "description": "계정 · IP 요청 한도"
           }
         },
         "security": [
@@ -15688,16 +15741,25 @@
             "bearer": []
           }
         ],
-        "summary": "초대 확인 — 앱 안에서 넣은 초대 코드(계정의 번호로 찾는다) 또는 로그인한 채 연 초대 링크의 토큰. 근무지 · 고용 형태 ·\n유효 기간과 본사 제공 동의를 물을지(직영이 아니고 계정이 아직 동의하지 않았을 때) 준다.",
+        "summary": "내게 온 가입 초대 — 계정의 휴대전화번호로 나간, 아직 쓸 수 있는 가입 초대 · 재초대(보냄 · 기한 안 · 아직 계정 없는\n직원 레코드). 근로계약서 이름이 계정 이름과 다른 초대는 뺀다(본인 대조 규칙 — 번호 재활용 대비, 2026-10-28). 보낸 시각 최근 순. 근무지 · 고용 형태 · 직무 · 유효 기간과 본사 제공 동의를 물을지(직영이 아니고 계정이\n아직 동의하지 않았을 때) 준다.",
         "tags": [
           "MyInvitations"
         ]
       }
     },
-    "/me/invitations/accept": {
+    "/me/invitations/{invitationId}/accept": {
       "post": {
         "operationId": "MyInvitationsController_accept",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "invitationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -15720,7 +15782,7 @@
             }
           },
           "400": {
-            "description": "형식 오류 · 토큰과 코드를 함께 보내거나 둘 다 없음"
+            "description": "형식 오류"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -15729,13 +15791,13 @@
             "description": "관리자 토큰"
           },
           "404": {
-            "description": "INVITATION_NOT_FOUND · INVITATION_ENDED — 확인과 같다"
+            "description": "INVITATION_NOT_FOUND — 없는 초대 · 범위 밖 id · 가입 초대가 아님 · 남의 번호로 온 초대 · 근로계약서 이름이 계정 이름과 다른 초대(그 초대의 상태와 상관없이 같다) · INVITATION_ENDED — 내 초대가 끝남(기한 · 다시 보냄 · 퇴직 · 가입 불가, 처리 중 번호 · 이름 변경)"
           },
           "409": {
-            "description": "INVITATION_ALREADY_JOINED — 먼저 더했거나 같은 초대로 동시에"
+            "description": "INVITATION_ALREADY_JOINED — 내 초대를 먼저 더했거나 같은 초대로 동시에"
           },
           "429": {
-            "description": "계정 번호로 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 기본 요청 제한"
+            "description": "계정 · IP 요청 한도"
           }
         },
         "security": [
@@ -15743,7 +15805,7 @@
             "bearer": []
           }
         ],
-        "summary": "근무지 더하기 — 초대를 다시 확인하고 그 근무지의 직원 레코드를 이 계정에 잇는다(가입 완료 · 초대 수락). 가입을 기다리던\n근로계약서는 서명 대기가 된다.",
+        "summary": "근무지 더하기 — 목록에서 고른 초대를 다시 확인하고 그 근무지의 직원 레코드를 이 계정에 잇는다(가입 완료 · 초대 수락).\n가입을 기다리던 근로계약서는 서명 대기가 된다.",
         "tags": [
           "MyInvitations"
         ]
@@ -31857,7 +31919,7 @@
           "retiredDate": {
             "type": "string",
             "nullable": true,
-            "description": "퇴직일(YYYY-MM-DD). 값이 있으면 퇴직 예정"
+            "description": "퇴직일(YYYY-MM-DD) — 이날까지 일한다. 오늘(한국 시각) · 뒤면 퇴직 예정, 앞이면 퇴직(`includeRetired=true` 로 받은\n퇴직한 소속)이다. 없으면 null. 목록의 묶음(지금 소속 · 퇴직)은 재직 상태로 가르므로, 퇴직 배치가 늦은 날에는 퇴직일이 지난\n레코드가 지금 소속 쪽에 섞일 수 있다"
           }
         },
         "required": [
@@ -31873,7 +31935,7 @@
         "type": "object",
         "properties": {
           "items": {
-            "description": "체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 입사일(없으면 뒤) · id 순",
+            "description": "체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 입사일(없으면 뒤) · id 순. `includeRetired=true` 면 그 뒤에\n퇴직한 레코드가 퇴직일 최근 순으로 붙는다",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/MyMembershipDto"
@@ -32112,37 +32174,81 @@
           "address"
         ]
       },
-      "MyInvitationLookupDto": {
+      "MyInvitationDto": {
         "type": "object",
         "properties": {
-          "token": {
-            "type": "string",
-            "description": "초대 링크의 토큰(base64url 43자)",
-            "pattern": "^[A-Za-z0-9_-]{43}$"
+          "employmentType": {
+            "description": "고용 형태 — 정직원 · 파트타이머",
+            "enum": [
+              "FULL_TIME",
+              "PART_TIME"
+            ],
+            "type": "string"
           },
-          "code": {
+          "jobTitle": {
             "type": "string",
-            "description": "초대 코드 — 대문자 · 숫자 8자리, 0 · O · 1 · I 는 없다. 소문자로 넣어도 대문자로 맞춰 본다",
-            "pattern": "^[A-HJ-NP-Z2-9]{8}$"
+            "nullable": true,
+            "description": "직무 — 함께 온 계약의 값(없으면 직원 레코드), 고용 형태와 같은 곳에서 읽는다. 계약에 직무가 없는 옛 행이면 null 일 수 있다"
+          },
+          "invitationId": {
+            "type": "number",
+            "description": "초대 — 더하기(`POST /me/invitations/{invitationId}/accept`)의 경로 값"
+          },
+          "storeName": {
+            "type": "string",
+            "description": "초대한 근무지(점포) 이름"
+          },
+          "sentAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "초대를 보낸 시각"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "초대가 끝나는 시각(보낸 때부터 30일)"
+          },
+          "asksHqSharingConsent": {
+            "type": "boolean",
+            "description": "본사 제공 동의를 물을지 — 직영이 아닌 점포이고 계정이 아직 동의하지 않았다(운영 정책 ATT-30)"
           }
-        }
+        },
+        "required": [
+          "employmentType",
+          "jobTitle",
+          "invitationId",
+          "storeName",
+          "sentAt",
+          "expiresAt",
+          "asksHqSharingConsent"
+        ]
+      },
+      "MyInvitationListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "보낸 시각 최근 순",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyInvitationDto"
+            }
+          },
+          "total": {
+            "type": "number",
+            "description": "items 의 개수"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
       },
       "AcceptMyInvitationDto": {
         "type": "object",
         "properties": {
-          "token": {
-            "type": "string",
-            "description": "초대 링크의 토큰(base64url 43자)",
-            "pattern": "^[A-Za-z0-9_-]{43}$"
-          },
-          "code": {
-            "type": "string",
-            "description": "초대 코드 — 대문자 · 숫자 8자리, 0 · O · 1 · I 는 없다. 소문자로 넣어도 대문자로 맞춰 본다",
-            "pattern": "^[A-HJ-NP-Z2-9]{8}$"
-          },
           "hqSharingConsented": {
             "type": "boolean",
-            "description": "본사 제공 동의(운영 정책 ATT-30, 선택). 확인의 asksHqSharingConsent 가 true 일 때만 쓴다 — 직영 점포이거나 계정이\n이미 동의했으면 보내도 바꾸지 않는다. 동의는 계정에 하나다(api #78)"
+            "description": "본사 제공 동의(운영 정책 ATT-30, 선택). 목록의 asksHqSharingConsent 가 true 일 때만 쓴다 — 직영 점포이거나 계정이\n이미 동의했으면 보내도 바꾸지 않는다. 동의는 계정에 하나다(api #78)"
           }
         }
       },
