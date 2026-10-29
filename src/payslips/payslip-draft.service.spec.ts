@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { attendanceReviewReasons } from './payslip-attendance-reasons';
 import { calculatePayslip } from './payslip-calculation';
 import { PayslipDraftService } from './payslip-draft.service';
+import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
 
 // 금액 계산(WHALEERP-227)은 pay-calculation.spec 이 본다. 여기서는 계산값이 항목 · 합계로 옮겨지는지만 본다 — 기본은 계산할 수 없음.
 jest.mock('./payslip-calculation', () => ({
@@ -276,7 +277,7 @@ describe('PayslipDraftService', () => {
           { storeId: { in: [5] } },
           {
             storeId: { in: [6] },
-            account: { is: { isHqSharingConsented: true } },
+            account: HQ_SHARING_CONSENTED.account,
           },
         ],
       });

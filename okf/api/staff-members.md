@@ -4,12 +4,12 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T09:08:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T04:52:10Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
     title: 본사 제공 동의를 직원 레코드의 계정에서 읽는 조각
-    last_modified: 2026-10-21T09:06:34Z
+    last_modified: 2026-10-28T04:52:10Z
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
@@ -391,7 +391,9 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(`accounts.is_hq_sharing_consented`, #137)를
 하지 않았으면 가린 행이다(ATT-30). 동의는 계정에 하나라 그 사람의 모든 소속에 같이 적용되고(2026-10-20 노영주, 처음에는
 직원 레코드 칸), 가입 전이라 계정이 없는 직원은 동의하지 않은 것으로 보고 가린다. 동의한 직원은 직영 점포 직원처럼 다 보이고, 철회하면 칸이 false 라 다시
-가려진다. 개인 칸으로 거르면(검색 · 고용형태 · 가입 상태) 가맹 점포에서는 동의한 직원만 남긴다 — 가린 행 하나가
+가려진다. 동의한 문구 버전이 더는 받아 주는 버전(`HQ_SHARING_VALID_VERSIONS`)에 없으면 — 항목 · 목적을 넓힌 새 버전이
+나온 뒤 — 다시 동의할 때까지 동의하지 않은 것으로 보고 가린다(WHALEERP-137, [My profile](/api/my-profile.md)).
+`HQ_SHARING_SELECT` · `HQ_SHARING_CONSENTED` · `hqSharingConsentedOf` 가 버전까지 보므로 가림을 쓰는 곳은 따로 고칠 것이 없다. 개인 칸으로 거르면(검색 · 고용형태 · 가입 상태) 가맹 점포에서는 동의한 직원만 남긴다 — 가린 행 하나가
 검색에 걸리는 것만으로 그 사람이 있다는 것이 드러나기 때문이다. 그래서 점포 조건이
 `storeId ∈ 가림 대상이 아닌 점포 OR (storeId ∈ 가림 대상 점포(직영 아님) AND 동의)` 가 된다. 동의는 사람(계정)마다라
 한 가맹 점포 안에서도 동의한 직원만 남고, 고른 점포가 모두 가맹이면 첫 갈래는 빈 목록이다. 재직 상태는 화면 기본

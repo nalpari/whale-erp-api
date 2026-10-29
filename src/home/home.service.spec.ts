@@ -4,6 +4,10 @@ import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { PrismaService } from '../prisma/prisma.service';
 import { HomeService, openRejectionAt } from './home.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_CONSENT_VERSION,
+} from '../admin-scope/hq-sharing';
 
 const date = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
 // 2026-10-27(화) 한국 시각 오전 7시 — UTC 로는 전날 밤이라 한국 날짜로 정하는지 함께 본다
@@ -16,14 +20,19 @@ const SHOWN_CONTRACT = {
     { storeId: { in: [1] } },
     {
       storeId: { in: [2] },
-      staffMember: { account: { is: { isHqSharingConsented: true } } },
+      staffMember: {
+        account: HQ_SHARING_CONSENTED.account,
+      },
     },
   ],
 };
 const SHOWN_STAFF = {
   OR: [
     { storeId: { in: [1] } },
-    { storeId: { in: [2] }, account: { is: { isHqSharingConsented: true } } },
+    {
+      storeId: { in: [2] },
+      account: HQ_SHARING_CONSENTED.account,
+    },
   ],
 };
 
@@ -253,7 +262,12 @@ describe('HomeService', () => {
       storeId,
       staffMemberId,
       startAt,
-      staffMember: { account: { isHqSharingConsented: consented } },
+      staffMember: {
+        account: {
+          isHqSharingConsented: consented,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        },
+      },
     });
     const punch = (
       storeId: number,

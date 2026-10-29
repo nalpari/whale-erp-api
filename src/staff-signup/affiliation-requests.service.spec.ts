@@ -5,7 +5,7 @@ import { storeManagers } from '../notifications/recipients';
 import { noticeStaff } from '../notifications/staff-notice';
 import { PrismaService } from '../prisma/prisma.service';
 import { AffiliationRequestsService } from './affiliation-requests.service';
-import { HQ_SHARING_CONSENT_VERSION } from './hq-sharing-consent';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 jest.mock('../contracts/contracts.service', () => ({
   lockPeople: jest.fn().mockResolvedValue(undefined),
@@ -190,10 +190,44 @@ describe('AffiliationRequestsService', () => {
         phone: PHONE,
         status: 'JOINED',
         isHqSharingConsented: true,
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
       });
       request();
       await service().accept(5, 41, { hqSharingConsented: true }, NOW);
       expect(tx.account.update).not.toHaveBeenCalled();
+    });
+
+    it('더는 받아 주지 않는 문구 버전에 동의한 계정이 동의를 보내면 지금 버전으로 덮는다(ATT-30, WHALEERP-137)', async () => {
+      tx.store.findUnique.mockResolvedValue({
+        name: '모리커피 합정점',
+        storeTypeCode: 'FRANCHISE',
+      });
+      tx.account.findUnique.mockResolvedValue({
+        phone: PHONE,
+        status: 'JOINED',
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: 'v0.9',
+      });
+      request();
+      await service().accept(5, 41, { hqSharingConsented: true }, NOW);
+      expect(tx.account.update).toHaveBeenCalledWith({
+        where: { accountId: 5 },
+        data: expect.objectContaining({
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        }) as unknown,
+      });
+    });
+
+    it('번호 → 계정 행 → 직원 행 순서로 잠근다 — 동의를 다시 쓰는 사이 내 정보 철회가 덮이지 않게(api #183 리뷰)', async () => {
+      request();
+      await service().accept(5, 41, {}, NOW);
+      const sql = (tx.$executeRaw.mock.calls as unknown[][]).map((c) =>
+        String(c[0]),
+      );
+      const account = sql.findIndex((q) => q.includes('FROM accounts'));
+      const staff = sql.findIndex((q) => q.includes('FROM staff_members'));
+      expect(account).toBeGreaterThan(-1);
+      expect(account).toBeLessThan(staff);
     });
 
     it('그 점포에 이미 재직 중인 레코드가 이 계정에 있으면 409 — 아무것도 쓰지 않는다', async () => {

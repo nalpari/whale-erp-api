@@ -44,7 +44,8 @@ export class MyInvitationListResponseDto {
 export class AcceptMyInvitationDto {
   /**
    * 본사 제공 동의(운영 정책 ATT-30, 선택). 목록의 asksHqSharingConsent 가 true 일 때만 쓴다 — 직영 점포이거나 계정이
-   * 이미 동의했으면 보내도 바꾸지 않는다. 동의는 계정에 하나다(api #78)
+   * 받아 주는 문구 버전에 이미 동의했으면 보내도 바꾸지 않는다. 더는 받아 주지 않는 버전에 동의했으면 true 로 지금 버전에
+   * 다시 동의한다. 동의는 계정에 하나다(api #78)
    */
   @IsOptional()
   @IsBoolean()

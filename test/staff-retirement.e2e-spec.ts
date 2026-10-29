@@ -16,6 +16,7 @@ import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 import { RetirementService } from '../src/staff-members/retirement.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 퇴직 처리(WHALEERP-584)를 실제 DB 로 확인한다. 계약은 바꾸지 않고, 퇴직일 다음 날 배치(retireDue)가
 // 상태를 바꾸며 스케줄 · 개인 TO-DO 배정 · 대기 계약을 정리한다는 규칙이 여러 표에 걸쳐 있어 목으로는
@@ -1245,7 +1246,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
             phone,
             status: 'JOINED',
             isHqSharingConsented: true,
-            hqSharingConsentVersion: 'v1',
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
             hqSharingAgreedAt: new Date(),
           },
         });
@@ -1288,7 +1289,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
             phone,
             status: 'JOINED',
             isHqSharingConsented: false,
-            hqSharingConsentVersion: 'v1',
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
             hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
             hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
           },

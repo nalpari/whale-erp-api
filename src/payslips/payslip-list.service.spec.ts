@@ -3,6 +3,10 @@ import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayslipListService } from './payslip-list.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_CONSENT_VERSION,
+} from '../admin-scope/hq-sharing';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
@@ -205,7 +209,7 @@ describe('PayslipListService', () => {
           {
             storeId: { in: [6] },
             staffMember: {
-              account: { is: { isHqSharingConsented: true } },
+              account: HQ_SHARING_CONSENTED.account,
             },
           },
         ],
@@ -312,7 +316,7 @@ describe('PayslipListService', () => {
           {
             storeId: { in: [6] },
             staffMember: {
-              account: { is: { isHqSharingConsented: true } },
+              account: HQ_SHARING_CONSENTED.account,
             },
           },
         ],
@@ -543,7 +547,9 @@ describe('PayslipListService', () => {
           { storeId: { in: [5] } },
           {
             storeId: { in: [6] },
-            staffMember: { account: { is: { isHqSharingConsented: true } } },
+            staffMember: {
+              account: HQ_SHARING_CONSENTED.account,
+            },
           },
         ],
       };
@@ -567,7 +573,9 @@ describe('PayslipListService', () => {
           { storeId: { in: [5] } },
           {
             storeId: { in: [6] },
-            staffMember: { account: { is: { isHqSharingConsented: true } } },
+            staffMember: {
+              account: HQ_SHARING_CONSENTED.account,
+            },
           },
         ],
       };
@@ -622,7 +630,10 @@ describe('PayslipListService', () => {
           storeId: 6,
           staffMember: {
             name: '이도윤',
-            account: { isHqSharingConsented: true },
+            account: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+            },
           },
         }),
       ]);
@@ -700,7 +711,9 @@ describe('PayslipListService', () => {
       expect(firstArg(prisma.payslip.groupBy).where).toEqual({
         storeId: 6,
         ...SEPTEMBER,
-        staffMember: { account: { is: { isHqSharingConsented: true } } },
+        staffMember: {
+          account: HQ_SHARING_CONSENTED.account,
+        },
       });
     });
 
@@ -733,7 +746,12 @@ describe('PayslipListService', () => {
           storeId: true,
           staffMember: {
             select: {
-              account: { select: { isHqSharingConsented: true } },
+              account: {
+                select: {
+                  isHqSharingConsented: true,
+                  hqSharingConsentVersion: true,
+                },
+              },
             },
           },
         },

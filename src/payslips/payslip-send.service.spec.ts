@@ -12,6 +12,7 @@ import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayslipListService } from './payslip-list.service';
 import { PayslipSendService } from './payslip-send.service';
+import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const UPDATED = '2026-10-19T01:00:00.000Z';
@@ -400,7 +401,7 @@ describe('PayslipSendService', () => {
               {
                 storeId: { in: [6] },
                 staffMember: {
-                  account: { is: { isHqSharingConsented: true } },
+                  account: HQ_SHARING_CONSENTED.account,
                 },
               },
             ],

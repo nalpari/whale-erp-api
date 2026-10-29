@@ -6,6 +6,10 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { InvitationType, Prisma } from '@prisma/client';
+import {
+  HQ_SHARING_CONSENT_VERSION,
+  hqSharingAgreedOf,
+} from '../admin-scope/hq-sharing';
 import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
 import { SEND_VALID_MS } from '../contracts/contract-delivery.service';
 import {
@@ -28,10 +32,7 @@ import type {
   AcceptAffiliationResponseDto,
   RejectAffiliationRequestDto,
 } from './dto/affiliation-request.dto';
-import {
-  asksHqSharingConsentAt,
-  HQ_SHARING_CONSENT_VERSION,
-} from './hq-sharing-consent';
+import { asksHqSharingConsentAt } from './hq-sharing-consent';
 
 type Db = Prisma.TransactionClient | PrismaService;
 
@@ -145,7 +146,7 @@ export class AffiliationRequestsService {
         expiresAt: r.expiresAt.toISOString(),
         asksHqSharingConsent:
           asksHqSharingConsentAt(store?.storeTypeCode) &&
-          !account.isHqSharingConsented,
+          !hqSharingAgreedOf(account),
       };
     });
   }
@@ -187,7 +188,7 @@ export class AffiliationRequestsService {
       });
       if (
         asksHqSharingConsentAt(store?.storeTypeCode) &&
-        !account.isHqSharingConsented &&
+        !hqSharingAgreedOf(account) &&
         dto.hqSharingConsented === true
       )
         // 철회했던 계정이 다시 동의하면 철회 시각을 지운다 — 근무지 더하기와 같다(accounts_hq_sharing_consent_fields)
@@ -339,8 +340,12 @@ export class AffiliationRequestsService {
   ) {
     // 경로의 id 는 정수만 받는다(ParseIntPipe) — int4 를 넘으면 DB 가 받지 못해 없는 요청과 같게 답한다
     if (invitationId < 1 || invitationId > 2_147_483_647) throw notFound();
+    const { phone } = await this.accountOf(tx, accountId);
+    await lockPeople(tx, [phone]);
+    // 계정 행도 잠그고 다시 읽는다 — 수락이 옛 문구 버전 동의를 다시 쓰는 사이 내 정보 철회(이 행을 잠근다)가 들어와도
+    // 덮지 않게(근무지 더하기와 같다, api #183 리뷰). 번호 → 계정 → 직원 행 순서다
+    await tx.$executeRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
     const account = await this.accountOf(tx, accountId);
-    await lockPeople(tx, [account.phone]);
     const head = await tx.invitation.findUnique({
       where: { invitationId },
       select: { staffMemberId: true, invitationType: true },
@@ -388,7 +393,12 @@ export class AffiliationRequestsService {
   private async accountOf(db: Db, accountId: number) {
     const account = await db.account.findUnique({
       where: { accountId },
-      select: { phone: true, status: true, isHqSharingConsented: true },
+      select: {
+        phone: true,
+        status: true,
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: true,
+      },
     });
     if (!account || account.status === 'WITHDRAWN')
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
