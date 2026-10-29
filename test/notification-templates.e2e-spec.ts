@@ -14,7 +14,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 
 // 알림 템플릿 관리(WHALEERP-572 · 573 · 581)를 실제 DB 로 확인한다. 기본값 복사 마이그레이션, 채널별 CHECK,
 // 템플릿 코드 고유, 이력 · 되돌리기는 목으로 증명되지 않는다.
-// 마이그레이션으로 넣은 기본 템플릿 코드(okf conventions/naming.md 「기본 템플릿 코드」) — 운영 알림 11 · 앱 푸시 5 · 메일 25 · 알림톡 1.
+// 마이그레이션으로 넣은 기본 템플릿 코드(okf conventions/naming.md 「기본 템플릿 코드」) — 운영 알림 11 · 앱 푸시 5 · 메일 28 · 알림톡 2.
 // 메일 10건은 처음 운영 알림 10건과 같은 이름이다(NTF-03) — 나중에 더한 NTF_SIGNUP_UNDER_AGE 는 메일 짝이 없다.
 const FIRST_NOTIFICATION_CODES = [
   'NTF_INQUIRY_RECEIVED',
