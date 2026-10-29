@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { dateOnly } from '../common/date-only';
 import { PrismaService } from '../prisma/prisma.service';
 import { storeNames } from '../payslips/payslip-shared';
+import { contractArticles } from './contract-template';
 import { CONTRACT_TERMS_SELECT, contractTermsOf } from './contract-terms';
 import { employedOn, signDeadlinePassed } from './contract-status';
 import type {
@@ -108,6 +109,13 @@ export class MyContractViewsService {
               zipCode: true,
               address: true,
               addressDetail: true,
+              employerName: true,
+              employerCeoName: true,
+              employerRegistrationNumber: true,
+              employerAddress: true,
+              employerAddressDetail: true,
+              employerPhone: true,
+              employerFixedAt: true,
             },
           },
           staffMember: {
@@ -179,9 +187,21 @@ export class MyContractViewsService {
       account,
     );
     const biz = store.businessProfile;
+    const terms = contractTermsOf(c);
+    const jobTitle = c.jobTitle ?? c.staffMember.jobTitle;
+    // 날인한 계약은 사용자 칸을 날인 때 고정한 값으로 — 처리 완료본과 같게(WHALEERP-131). 점포명 · 점포 주소는 지금 값이다
+    const fixed = party?.employerFixedAt ? party : null;
     return {
       ...item,
-      ...contractTermsOf(c),
+      ...terms,
+      // 보낸 원본 · 처리 완료본 PDF 와 같은 템플릿(WHALEERP-131)
+      articles: contractArticles({
+        ...terms,
+        employmentType: c.employmentType,
+        storeName: store.name,
+        workLocation: c.workLocation,
+        jobTitle,
+      }),
       signable: item.awaitingSignature && mismatches.length === 0,
       mismatches,
       worker: {
@@ -194,23 +214,27 @@ export class MyContractViewsService {
         gender: party?.enteredGender ?? null,
         isForeigner: party?.isForeigner ?? false,
         // 그 계약서에 적은 직무(WHALEERP-156) — 칸이 빈 옛 계약만 직원 레코드 값
-        jobTitle: c.jobTitle ?? c.staffMember.jobTitle,
+        jobTitle,
         zipCode: party?.zipCode ?? null,
         address: party?.address ?? null,
         addressDetail: party?.addressDetail ?? null,
       },
       employer: {
         storeName: store.name,
-        storePhone: store.phone,
+        storePhone: fixed ? fixed.employerPhone : store.phone,
         storeZipCode: store.zipCode,
         storeAddress: store.address,
         storeAddressDetail: store.addressDetail,
-        tradeName: biz?.bizTradeName ?? null,
-        registrationNumber: biz?.bizRegistrationNumber ?? null,
-        ceoName: biz?.bizCeoName ?? null,
+        tradeName: fixed ? fixed.employerName : (biz?.bizTradeName ?? null),
+        registrationNumber: fixed
+          ? fixed.employerRegistrationNumber
+          : (biz?.bizRegistrationNumber ?? null),
+        ceoName: fixed ? fixed.employerCeoName : (biz?.bizCeoName ?? null),
         bizZipCode: biz?.bizZipCode ?? null,
-        bizAddress: biz?.bizAddress ?? null,
-        bizAddressDetail: biz?.bizAddressDetail ?? null,
+        bizAddress: fixed ? fixed.employerAddress : (biz?.bizAddress ?? null),
+        bizAddressDetail: fixed
+          ? fixed.employerAddressDetail
+          : (biz?.bizAddressDetail ?? null),
       },
       account: {
         name: account.realName,

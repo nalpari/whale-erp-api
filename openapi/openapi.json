@@ -26415,6 +26415,96 @@
           "fileName"
         ]
       },
+      "ContractTableRowDto": {
+        "type": "object",
+        "properties": {
+          "cells": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "off": {
+            "type": "boolean",
+            "description": "근무하지 않는 날(휴무 · 주휴일) — 흐리게 그린다"
+          }
+        },
+        "required": [
+          "cells",
+          "off"
+        ]
+      },
+      "ContractValueDto": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ]
+      },
+      "ContractBlockDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "TEXT",
+              "TABLE",
+              "VALUES"
+            ],
+            "type": "string"
+          },
+          "tableRows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractTableRowDto"
+            }
+          },
+          "values": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractValueDto"
+            }
+          },
+          "text": {
+            "type": "string"
+          },
+          "header": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "ContractArticleDto": {
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractBlockDto"
+            }
+          },
+          "title": {
+            "type": "string",
+            "description": "「제1조(근로계약기간)」"
+          }
+        },
+        "required": [
+          "blocks",
+          "title"
+        ]
+      },
       "MyContractDetailDto": {
         "type": "object",
         "properties": {
@@ -26597,6 +26687,13 @@
               "$ref": "#/components/schemas/MyContractDocumentDto"
             }
           },
+          "articles": {
+            "description": "계약서 조항 열 가지 — 보낸 원본 · 처리 완료본 PDF 와 같은 템플릿(WHALEERP-131). 화면은 이 순서대로 그린다",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractArticleDto"
+            }
+          },
           "contractId": {
             "type": "number"
           },
@@ -26647,6 +26744,7 @@
           "employer",
           "account",
           "documents",
+          "articles",
           "contractId",
           "storeId",
           "awaitingSignature",

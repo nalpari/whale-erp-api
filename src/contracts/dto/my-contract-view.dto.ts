@@ -7,6 +7,7 @@ import {
   Gender,
 } from '@prisma/client';
 import { IDENTITY_FIELDS, type IdentityField } from '../identity-match';
+import { ContractArticleDto } from './contract-article.dto';
 import { ContractTermsDto } from './contract.response.dto';
 
 /** 직원 앱 근로계약 목록의 한 줄 (GET /me/contracts, WHALEERP-610) */
@@ -83,7 +84,11 @@ export class MyContractWorkerDto {
   addressDetail: string | null;
 }
 
-/** 계약서의 사용자 칸 — 근무지 점포와 그 사업자 정보. 사업자 정보는 등록 전이면 비어 있다 */
+/**
+ * 계약서의 사용자 칸 — 근무지 점포와 그 사업자 정보. 사업자 정보는 등록 전이면 비어 있다. 날인한 계약은 상호 · 대표자 ·
+ * 사업자등록번호 · 사업장 주소 · 점포 연락처가 날인 때 고정한 값이다(처리 완료본과 같다, WHALEERP-131) — 상호가 없던 점포는 상호에
+ * 점포명이 들어 있다
+ */
 export class MyContractEmployerDto {
   storeName: string;
   @ApiProperty({ nullable: true, type: String })
@@ -182,4 +187,7 @@ export class MyContractDetailDto extends ContractTermsDto {
   account: MyContractAccountDto;
   @ApiProperty({ type: [MyContractDocumentDto] })
   documents: MyContractDocumentDto[];
+  /** 계약서 조항 열 가지 — 보낸 원본 · 처리 완료본 PDF 와 같은 템플릿(WHALEERP-131). 화면은 이 순서대로 그린다 */
+  @ApiProperty({ type: [ContractArticleDto] })
+  articles: ContractArticleDto[];
 }
