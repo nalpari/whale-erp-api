@@ -18,11 +18,11 @@ export class EmailFindDto {
   )
   @IsString()
   @Matches(/^[0-9]{10,11}$/, {
-    message: '휴대전화번호는 숫자 10~11자리입니다',
+    message: '휴대전화번호는 숫자 10~11자리입니다.',
   })
   phone: string;
 
   /** 생년월일. YYYY-MM-DD 이고 있는 날짜여야 한다. */
-  @IsDateOnly('생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다')
+  @IsDateOnly('생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다.')
   birthDate: string;
 }

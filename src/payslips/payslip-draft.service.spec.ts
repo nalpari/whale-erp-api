@@ -551,7 +551,7 @@ describe('PayslipDraftService', () => {
     it('출퇴근 검토 대기 사유를 그 직원 · 계약 · 급여 기간으로 만들어 붙이고 그래도 만든다(WHALEERP-229)', async () => {
       const missing = {
         reviewReason: 'MISSING_ATTENDANCE',
-        detail: '급여 기간에 출퇴근 기록이 없습니다',
+        detail: '급여 기간에 출퇴근 기록이 없습니다.',
       };
       attendanceReasons.mockResolvedValue([missing]);
       expect(await service.create(9, 30, '2026-10')).toEqual({
@@ -615,7 +615,7 @@ describe('PayslipDraftService', () => {
         {
           reviewReason: 'CONTRACT_CHANGED',
           detail:
-            '급여 기간에 근로계약이 2건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다',
+            '급여 기간에 근로계약이 2건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다.',
         },
       ]);
     });

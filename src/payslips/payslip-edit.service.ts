@@ -59,7 +59,7 @@ export const statusConflict = (now: PayslipStatus) =>
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
     code: 'PAYSLIP_STATUS_CONFLICT',
-    message: `${NOW_STATUS[now]}. 화면을 새로 고쳐 지금 상태를 확인해 주세요`,
+    message: `${NOW_STATUS[now]}. 화면을 새로 고쳐 지금 상태를 확인해 주세요.`,
     status: now,
   });
 
@@ -70,7 +70,7 @@ export const stale = () =>
     error: 'Conflict',
     code: 'PAYSLIP_STALE',
     message:
-      '그사이 다른 관리자가 이 급여명세서를 고쳤습니다. 화면을 새로 고친 뒤 다시 해 주세요',
+      '그사이 다른 관리자가 이 급여명세서를 고쳤습니다. 화면을 새로 고친 뒤 다시 해 주세요.',
   });
 
 const LINE_SELECT = {
@@ -112,7 +112,7 @@ function totalsOf(lines: Line[], withholding: boolean) {
     else deduction += amount;
   }
   if (gross > MAX_INT || deduction > MAX_INT || gross - deduction < -MAX_INT)
-    throw new BadRequestException('금액 합계가 너무 큽니다');
+    throw new BadRequestException('금액 합계가 너무 큽니다.');
   return {
     grossPayAmount: gross,
     totalDeductionAmount: deduction,
@@ -236,12 +236,12 @@ export class PayslipEditService {
       throw statusConflict(current.status);
     if (dto.isWithholdingApplied && current.employmentType !== 'PART_TIME')
       throw new BadRequestException(
-        '3.3% 원천징수는 파트타이머 명세서에만 적용할 수 있습니다',
+        '3.3% 원천징수는 파트타이머 명세서에만 적용할 수 있습니다.',
       );
     const wanted = new Map<number, number | null>();
     for (const { payslipItemMasterId, amount } of dto.items) {
       if (wanted.has(payslipItemMasterId))
-        throw new BadRequestException('같은 항목을 두 번 보냈습니다');
+        throw new BadRequestException('같은 항목을 두 번 보냈습니다.');
       wanted.set(payslipItemMasterId, amount);
     }
 
@@ -333,7 +333,7 @@ export class PayslipEditService {
         });
         if (masters.length !== wanted.size)
           throw new BadRequestException(
-            '붙일 수 없는 급여 항목이 있습니다. 화면을 새로 고친 뒤 다시 해 주세요',
+            '붙일 수 없는 급여 항목이 있습니다. 화면을 새로 고친 뒤 다시 해 주세요.',
           );
         for (const m of masters) {
           const amount = wanted.get(m.payslipItemMasterId)!;
@@ -488,7 +488,7 @@ export class PayslipEditService {
           statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
           error: 'Unprocessable Entity',
           code: 'DEDUCTION_MISSING',
-          message: `비어 있는 공제가 있어 확정할 수 없습니다: ${missing.map((l) => l.itemName).join(', ')}. 공제 대상이 아니면 0 을 넣어 주세요`,
+          message: `비어 있는 공제가 있어 확정할 수 없습니다: ${missing.map((l) => l.itemName).join(', ')}. 공제 대상이 아니면 0 을 넣어 주세요.`,
           items: missing.map((l) => ({
             payslipItemId: l.payslipItemId,
             itemName: l.itemName,

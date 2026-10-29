@@ -143,7 +143,7 @@ export class NotificationTemplatesController {
   private async idOf(user: AuthUser, rawId: string): Promise<number> {
     const id = /^\d{1,10}$/.test(rawId) ? Number(rawId) : 0;
     if (id < 1 || id > MAX_ID)
-      throw new NotFoundException('알림 템플릿을 찾을 수 없습니다');
+      throw new NotFoundException('알림 템플릿을 찾을 수 없습니다.');
     await this.assertPlatformAdmin(user);
     return id;
   }

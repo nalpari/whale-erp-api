@@ -14,7 +14,7 @@ export function IsUpdatedAt(): PropertyDecorator {
     ApiProperty({ pattern: WITH_OFFSET.source }),
     IsISO8601({ strict: true }),
     Matches(WITH_OFFSET, {
-      message: 'updatedAt 은 상세 응답의 값 그대로(시간대 포함) 보내야 합니다',
+      message: 'updatedAt 은 상세 응답의 값 그대로(시간대 포함) 보내야 합니다.',
     }),
   );
 }

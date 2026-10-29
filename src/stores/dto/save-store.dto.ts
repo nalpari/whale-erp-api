@@ -35,7 +35,7 @@ import {
   type StoreType,
 } from '../store-format';
 
-const NUL_MESSAGE = '쓸 수 없는 문자가 있습니다';
+const NUL_MESSAGE = '쓸 수 없는 문자가 있습니다.';
 
 /** 층별 정보 한 줄. 모든 칸이 선택이다. */
 export class StoreFloorInputDto {
@@ -94,7 +94,7 @@ export class StoreBusinessInputDto {
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
   @Matches(/^[0-9]{9,12}$/, {
-    message: '대표자 연락처는 숫자 9~12자리입니다',
+    message: '대표자 연락처는 숫자 9~12자리입니다.',
   })
   ceoPhone?: string | null;
 
@@ -102,7 +102,7 @@ export class StoreBusinessInputDto {
   @IsOptional()
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
-  @Matches(/^[0-9]{5}$/, { message: '우편번호는 숫자 5자리입니다' })
+  @Matches(/^[0-9]{5}$/, { message: '우편번호는 숫자 5자리입니다.' })
   zipCode?: string | null;
 
   /** 사업자 기본주소 — 주소 검색 결과 */
@@ -147,7 +147,7 @@ export class BusinessIdentityInputDto {
   /** 사업자등록번호 — 하이픈은 빼고 숫자 10자리로 저장한다. @example 123-45-67890 */
   @IsString()
   @Transform(digitsOnly)
-  @Matches(/^[0-9]{10}$/, { message: '사업자등록번호는 숫자 10자리입니다' })
+  @Matches(/^[0-9]{10}$/, { message: '사업자등록번호는 숫자 10자리입니다.' })
   bizRegistrationNumber: string;
 
   /** 대표자명 */
@@ -158,7 +158,7 @@ export class BusinessIdentityInputDto {
   ceoName: string;
 
   /** 개업일자. @example 2020-03-02 */
-  @IsDateOnly('개업일자는 YYYY-MM-DD 입니다')
+  @IsDateOnly('개업일자는 YYYY-MM-DD 입니다.')
   openDate: string;
 }
 
@@ -182,14 +182,14 @@ export class SaveStoreDto {
   @IsOptional()
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
-  @Matches(/^[0-9]{9,12}$/, { message: '점포 연락처는 숫자 9~12자리입니다' })
+  @Matches(/^[0-9]{9,12}$/, { message: '점포 연락처는 숫자 9~12자리입니다.' })
   phone?: string | null;
 
   /** 우편번호 — 숫자 5자리, 주소 검색 결과 */
   @IsOptional()
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
-  @Matches(/^[0-9]{5}$/, { message: '우편번호는 숫자 5자리입니다' })
+  @Matches(/^[0-9]{5}$/, { message: '우편번호는 숫자 5자리입니다.' })
   zipCode?: string | null;
 
   /** 기본주소 — 주소 검색 결과 */

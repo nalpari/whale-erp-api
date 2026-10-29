@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:54:57Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -21,15 +21,15 @@ sources:
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update · DELETE items
-    last_modified: 2026-10-22T08:42:33Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
-    last_modified: 2026-10-27T02:07:39Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
-    last_modified: 2026-10-15T08:37:00Z
+    last_modified: 2026-10-29T05:17:36Z
 ---
 
 # Status
@@ -46,7 +46,7 @@ copies a 플랫폼제공 group to every active customer BP (`POST /code-groups/{
 사용자 요청 — both stay managed by 사용 상태). A 플랫폼고정 group's codes are values the system refers to —
 `SERVICE` is what `menus.service_code` holds and 플랫폼 메뉴 관리 looks up (a missing one is a 500),
 `ROLE_TYPE` · `ACCOUNT_STATUS` are what accounts carry — so deleting one is 409 「플랫폼고정 그룹의 상세 코드는
-지울 수 없습니다 — 사용 상태로 관리해 주세요」 (merge-blocker found in api #135 review). A delete sets
+지울 수 없습니다 — 사용 상태로 관리해 주세요.」 (merge-blocker found in api #135 review). A delete sets
 `is_deleted` on the 플랫폼제공 group's undeleted platform originals only, whether or not BPs use the code:
 rows already copied to a BP are that BP's and stay, and the deleted code drops out of later [BP에 적용] and
 signup copies. Creating
@@ -59,7 +59,7 @@ whose copy is still live in some BP (it was applied) cannot be registered again 
 row, so the answer is 409, not a restore. Delete is all-or-nothing: an unknown or already
 deleted code is 404, a repeated one 409, and if another admin deleted one between the check and the
 write the short `updateMany` count makes the whole request 409 「다른 관리자가 먼저 지운 상세 코드가
-있습니다 — 다시 불러온 뒤 삭제해 주세요」. Item updates are conditioned on the row still being
+있습니다 — 다시 불러온 뒤 삭제해 주세요.」. Item updates are conditioned on the row still being
 undeleted too, so an edit racing a delete is 409 「다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시
 불러온 뒤 저장해 주세요: CODE」 instead of a 204 that wrote to a deleted row. Create and update both run
 under `BULK_UPDATE_TX` (30 seconds), since a restore also writes row by row.
@@ -141,8 +141,8 @@ admin process 문의사항; the first answer notifies the author (ops notificati
 `LeadsAdminController` that is admin-only and not rate-limited, see [Inquiry and lead handling](/api/inquiries.md).
 The intake route takes two limits:
 the same IP gets 5 per hour (`LeadsThrottlerGuard`, counted before validation, so a rejected form counts too;
-its 429 says 「잠시 후 다시 시도해 주세요」), and the same phone or email is refused with 429 for 10 minutes
-(「이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다」, CNT-14, 재영 2026-10-13), counted on the
+its 429 says 「잠시 후 다시 시도해 주세요.」), and the same phone or email is refused with 429 for 10 minutes
+(「이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다.」, CNT-14, 재영 2026-10-13), counted on the
 database clock against a `created_at` the database fills ([Inquiry and lead handling](/api/inquiries.md)). The check and
 the insert run under advisory locks on the phone key then the email key (`lead-intake:phone:…` ·
 `lead-intake:email:…`, always in that order so two requests never wait on each other), so a double-clicked

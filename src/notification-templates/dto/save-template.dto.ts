@@ -2,7 +2,7 @@ import { IsBoolean, IsISO8601, Matches } from 'class-validator';
 import { TemplateFieldsDto } from './template-fields.dto';
 
 const UPDATED_AT_MESSAGE =
-  'updatedAt 은 상세 응답의 값 그대로(시간대 포함) 보내야 합니다';
+  'updatedAt 은 상세 응답의 값 그대로(시간대 포함) 보내야 합니다.';
 
 /** 등록 */
 export class CreateTemplateDto extends TemplateFieldsDto {

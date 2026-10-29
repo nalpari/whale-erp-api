@@ -499,7 +499,7 @@ describe('BpMastersService', () => {
       await expect(
         service.histories(12, { page: 1, pageSize: 20 }),
       ).rejects.toThrow(
-        new ConflictException('탈퇴한 BP는 변경 이력을 볼 수 없습니다'),
+        new ConflictException('탈퇴한 BP는 변경 이력을 볼 수 없습니다.'),
       );
       expect(prisma.$queryRaw).not.toHaveBeenCalled();
     });

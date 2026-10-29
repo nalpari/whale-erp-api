@@ -635,16 +635,24 @@ describe('직원 상세 요약 (e2e, DB)', () => {
   it('근로계약 요약의 급여 계좌 — 신고 정보의 은행 이름 · 계좌번호 전체(하이픈 없음)', async () => {
     const res = await get(`/staff-members/${jianId}/summary/contracts`);
     expect(res.status).toBe(200);
-    expect(
-      (res.body as StaffMemberContractSummaryResponseDto).payrollAccount,
-    ).toEqual({ bankName: 'KB국민은행', accountNumber: '12345678901234' });
+    const body = res.body as StaffMemberContractSummaryResponseDto;
+    // 본사 역할(BM) + 직영 점포 직원 — 본사 쪽에도 그대로 보인다
+    expect(body.canViewPayrollAccount).toBe(true);
+    expect(body.payrollAccount).toEqual({
+      bankName: 'KB국민은행',
+      accountNumber: '12345678901234',
+    });
   });
 
-  it('근로계약 요약의 급여 계좌 — 계약이 없어도 신고 정보가 있으면 온다', async () => {
-    const res = await get(`/staff-members/${consentedId}/summary/contracts`);
+  it('근로계약 요약의 급여 계좌 — 가맹마스터(FM)가 가맹 점포 직원을 보면 계약이 없어도 신고 정보가 온다', async () => {
+    const res = await get(
+      `/staff-members/${consentedId}/summary/contracts`,
+      fmId,
+    );
     expect(res.status).toBe(200);
     expect(res.body as StaffMemberContractSummaryResponseDto).toEqual({
       contract: null,
+      canViewPayrollAccount: true,
       payrollAccount: {
         bankName: 'KB국민은행',
         accountNumber: '22223333444455',
@@ -652,12 +660,34 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     });
   });
 
+  it('근로계약 요약의 급여 계좌 — 가맹마스터(FM)는 미동의 가맹 직원도 canViewPayrollAccount true — 판정은 동의와 상관없다', async () => {
+    const res = await get(`/staff-members/${maskedId}/summary/contracts`, fmId);
+    expect(res.status).toBe(200);
+    const body = res.body as StaffMemberContractSummaryResponseDto;
+    expect(body.canViewPayrollAccount).toBe(true);
+    expect(body.payrollAccount).toEqual({
+      bankName: 'KB국민은행',
+      accountNumber: '99998888777766',
+    });
+  });
+
+  it('근로계약 요약의 급여 계좌 — 본사 역할(BM)은 본사 제공 동의한 가맹 직원의 계좌를 못 본다(canViewPayrollAccount false, 본문에 계좌번호 없음)', async () => {
+    const res = await get(`/staff-members/${consentedId}/summary/contracts`);
+    expect(res.status).toBe(200);
+    expect(res.body as StaffMemberContractSummaryResponseDto).toEqual({
+      contract: null,
+      canViewPayrollAccount: false,
+      payrollAccount: null,
+    });
+    expect(JSON.stringify(res.body)).not.toContain('22223333444455');
+  });
+
   it('근로계약 요약의 급여 계좌 — 신고 정보가 없으면 null', async () => {
     const res = await get(`/staff-members/${draftId}/summary/contracts`);
     expect(res.status).toBe(200);
-    expect(
-      (res.body as StaffMemberContractSummaryResponseDto).payrollAccount,
-    ).toBeNull();
+    const body = res.body as StaffMemberContractSummaryResponseDto;
+    expect(body.canViewPayrollAccount).toBe(true);
+    expect(body.payrollAccount).toBeNull();
   });
 
   it('신고 정보가 있어도 본사 역할에게 가려진 직원이면 요약 경로가 막힌다(404) — 계좌가 새지 않는다', async () => {

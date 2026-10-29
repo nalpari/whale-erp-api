@@ -947,7 +947,7 @@ describe('직원 목록 (e2e, DB)', () => {
         .set('Authorization', `Bearer ${sub}`);
       expect(link.status).toBe(404);
       expect((link.body as { message: string }).message).toBe(
-        '직원을 찾을 수 없습니다',
+        '직원을 찾을 수 없습니다.',
       );
 
       const preview = await request(app.getHttpServer())
@@ -1037,13 +1037,13 @@ describe('직원 목록 (e2e, DB)', () => {
         '직영 점포 직원 — 근무지 404',
         'joined',
         () => directStoreId,
-        '근무지 점포를 찾을 수 없습니다',
+        '근무지 점포를 찾을 수 없습니다.',
       ],
       [
         '동의한 가맹 점포 직원 — 계약부터 404',
         'consented',
         () => consentStoreId,
-        '근로계약을 찾을 수 없습니다',
+        '근로계약을 찾을 수 없습니다.',
       ],
     ] as const)(
       '임시저장 뒤 근무지가 폐점하면 같은 근무지로 이어 써도 404 — %s',
@@ -1280,7 +1280,7 @@ describe('직원 목록 (e2e, DB)', () => {
       for (const id of [ids.otherBp, 2_147_483_647]) {
         const res = await getOne(id);
         expect(res.status).toBe(404);
-        expect(res.body.message).toBe('직원을 찾을 수 없습니다');
+        expect(res.body.message).toBe('직원을 찾을 수 없습니다.');
       }
     });
 

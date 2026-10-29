@@ -423,7 +423,7 @@ describe('PasswordResetLinkService', () => {
       const error = await thrown(service.issue(31, 5));
       expect(error).toBeInstanceOf(ServiceUnavailableException);
       expect(error.message).toBe(
-        '메일 발송이 설정되지 않아 재설정 링크를 보낼 수 없습니다. 운영자에게 문의해 주세요',
+        '메일 발송이 설정되지 않아 재설정 링크를 보낼 수 없습니다. 운영자에게 문의해 주세요.',
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
@@ -469,7 +469,7 @@ describe('PasswordResetLinkService', () => {
       const error = await thrown(service.issue(31, 5));
       expect(error).toBeInstanceOf(ServiceUnavailableException);
       expect(error.message).toBe(
-        '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요',
+        '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요.',
       );
     });
 
@@ -478,7 +478,7 @@ describe('PasswordResetLinkService', () => {
       sender.send.mockRejectedValue(new Error('template off'));
       await expect(service.issue(31, 5)).rejects.toThrow(
         new InternalServerErrorException(
-          '메일 설정 문제로 재설정 링크를 보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요',
+          '메일 설정 문제로 재설정 링크를 보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요.',
         ),
       );
       expect(prisma.passwordResetLink.deleteMany).toHaveBeenCalledWith({
@@ -584,7 +584,7 @@ describe('PasswordResetLinkService', () => {
       const error = await thrown(service.verify('tok'));
       expect(error).toBeInstanceOf(UnauthorizedException);
       expect(error.message).toBe(
-        '쓸 수 없는 링크입니다. 관리자에게 다시 청하거나 비밀번호 찾기로 인증번호를 받아 다시 정해 주세요',
+        '쓸 수 없는 링크입니다. 관리자에게 다시 청하거나 비밀번호 찾기로 인증번호를 받아 다시 정해 주세요.',
       );
     });
   });

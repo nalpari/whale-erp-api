@@ -16,7 +16,7 @@ export const MENU_URL_ONE_SEGMENT_MESSAGE =
   "메뉴 URL 은 '/' 하나로 시작하는 1뎁스 경로만 됩니다 — 소문자 · 숫자 · '-' 로, 구간은 '-' 로 잇습니다(예: /staff-content)";
 export const MENU_URL_MAX = 200;
 
-export const NOT_FOUND = '메뉴를 찾을 수 없습니다';
-export const SERVICE_NOT_FOUND = '서비스를 찾을 수 없습니다';
+export const NOT_FOUND = '메뉴를 찾을 수 없습니다.';
+export const SERVICE_NOT_FOUND = '서비스를 찾을 수 없습니다.';
 export const CHANGED_MEANWHILE =
-  '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요';
+  '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.';

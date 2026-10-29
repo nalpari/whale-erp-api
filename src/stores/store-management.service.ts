@@ -86,9 +86,9 @@ type History = {
 
 const NOT_FOUND = '점포를 찾을 수 없습니다';
 const CHANGED_MEANWHILE =
-  '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요';
+  '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.';
 const BP_INACTIVE =
-  '소속 BP가 미사용 상태여서 이 업무를 할 수 없습니다. 조회는 그대로 됩니다';
+  '소속 BP가 미사용 상태여서 이 업무를 할 수 없습니다. 조회는 그대로 됩니다.';
 /** 번호를 쓰는 것이 점포인지 BP 인지 드러내지 않는다 — 가입 · 마이페이지와 같은 문구(PL-OCJOFP). */
 const NUMBER_TAKEN = '이미 등록된 사업자등록번호입니다.';
 
@@ -507,13 +507,13 @@ export class StoreManagementService implements OnModuleInit {
     const { isPlatform, targetBpCodeId: bpCodeId } = caller;
     // 본문의 bpCodeId 는 front 가 아직 보내서 받아 두는 칸이다 — 대상 BP 와 같을 때만 받는다.
     if (dto.bpCodeId && dto.bpCodeId !== bpCodeId)
-      throw new BadRequestException('다른 BP 에 점포를 등록할 수 없습니다');
+      throw new BadRequestException('다른 BP 에 점포를 등록할 수 없습니다.');
 
     const target = await this.prisma.bpCode.findFirst({
       where: { bpCodeId, isDeleted: false, isPlatform: false },
       select: { accountStatusCode: true },
     });
-    if (!target) throw new BadRequestException('없는 BP 입니다');
+    if (!target) throw new BadRequestException('없는 BP 입니다.');
     if (target.accountStatusCode !== 'ACTIVE')
       throw new ConflictException(BP_INACTIVE);
 
@@ -586,7 +586,7 @@ export class StoreManagementService implements OnModuleInit {
             `점포 등록이 고유 제약에 걸렸다 meta=${JSON.stringify(error.meta ?? null)}`,
           );
           throw new ConflictException(
-            '점포코드가 겹쳤습니다. 잠시 뒤 다시 등록해 주세요',
+            '점포코드가 겹쳤습니다. 잠시 뒤 다시 등록해 주세요.',
           );
         }
         // 모든 등록이 점포코드 잠금에 줄을 선다 — 몰려서 시간을 넘기면 장애가 아니라 다시 시도할 일이다.
@@ -596,7 +596,7 @@ export class StoreManagementService implements OnModuleInit {
             stackOf(error),
           );
           throw new ServiceUnavailableException(
-            '등록이 몰렸습니다. 잠시 뒤 다시 등록해 주세요',
+            '등록이 몰렸습니다. 잠시 뒤 다시 등록해 주세요.',
           );
         }
         throw error;
@@ -619,13 +619,13 @@ export class StoreManagementService implements OnModuleInit {
     const from = store.storeStatusCode;
     if (from === 'CLOSED')
       throw new ConflictException(
-        '폐점한 점포는 고칠 수 없습니다. 다시 운영하려면 신규 점포로 등록합니다',
+        '폐점한 점포는 고칠 수 없습니다. 다시 운영하려면 신규 점포로 등록합니다.',
       );
     if (store.bpCode.accountStatusCode !== 'ACTIVE')
       throw new ConflictException(BP_INACTIVE);
     if (!canTransition(from, dto.storeStatus))
       throw new BadRequestException(
-        `${statusLabel(from)} 점포를 ${statusLabel(dto.storeStatus)}으로 바꿀 수 없습니다`,
+        `${statusLabel(from)} 점포를 ${statusLabel(dto.storeStatus)}으로 바꿀 수 없습니다.`,
       );
 
     const profile = store.businessProfile;
@@ -639,7 +639,7 @@ export class StoreManagementService implements OnModuleInit {
           v.openDate !== dateOnly(profile!.bizOpenDate))
       )
         throw new BadRequestException(
-          '사업자등록번호 · 개업일자는 저장한 뒤 바꿀 수 없습니다. 대표자명만 다시 인증합니다',
+          '사업자등록번호 · 개업일자는 저장한 뒤 바꿀 수 없습니다. 대표자명만 다시 인증합니다.',
         );
       // 재인증은 이 점포가 이미 가진 번호라 중복을 다시 보지 않는다.
       identity = await this.verifiedIdentity(
@@ -659,7 +659,9 @@ export class StoreManagementService implements OnModuleInit {
       store.longitude != null &&
       (dto.latitude == null || dto.longitude == null)
     )
-      throw new BadRequestException('운영 중인 점포의 좌표는 지울 수 없습니다');
+      throw new BadRequestException(
+        '운영 중인 점포의 좌표는 지울 수 없습니다.',
+      );
     if (from !== 'OPERATING' && dto.storeStatus === 'OPERATING') {
       const missing = missingForOperation({
         bizRegistrationNumber: identity?.bizRegistrationNumber ?? savedNumber,
@@ -669,7 +671,7 @@ export class StoreManagementService implements OnModuleInit {
       });
       if (missing.length)
         throw new BadRequestException(
-          `운영으로 바꾸려면 다음이 필요합니다 — ${missing.map((m) => OPERATION_REQUIREMENT_LABELS[m]).join(', ')}`,
+          `운영으로 바꾸려면 다음이 필요합니다 — ${missing.map((m) => OPERATION_REQUIREMENT_LABELS[m]).join(', ')}.`,
         );
     }
     const isClosing = dto.storeStatus === 'CLOSED';
@@ -765,7 +767,7 @@ export class StoreManagementService implements OnModuleInit {
     if (store.bpCode.accountStatusCode !== 'ACTIVE')
       throw new ConflictException(BP_INACTIVE);
     if (store.storeStatusCode !== 'NOT_OPERATING')
-      throw new ConflictException('미운영 점포만 삭제할 수 있습니다');
+      throw new ConflictException('미운영 점포만 삭제할 수 있습니다.');
     await this.assertNoContracts(storeId, '삭제할');
 
     const by = caller.adminAccountId;
@@ -825,7 +827,7 @@ export class StoreManagementService implements OnModuleInit {
     storeId: number,
     file: StoreImageUpload | undefined,
   ): Promise<StoreImageResponseDto> {
-    if (!file) throw new BadRequestException('대표 이미지 파일을 골라 주세요');
+    if (!file) throw new BadRequestException('대표 이미지 파일을 골라 주세요.');
     const kind = assertUpload(file, STORE_IMAGE_TYPES, STORE_IMAGE_MAX_BYTES);
     const caller = await this.loadCaller(callerId, bp);
     assertImageEditable(await this.findStore(this.prisma, caller, storeId));
@@ -846,7 +848,7 @@ export class StoreManagementService implements OnModuleInit {
         stackOf(error),
       );
       throw new ServiceUnavailableException(
-        '이미지를 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
+        '이미지를 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     }
 
@@ -992,7 +994,7 @@ export class StoreManagementService implements OnModuleInit {
     const isPlatform = isPlatformRole(rest.roleTypeCode, bpCode.isPlatform);
     // 가드는 헤더가 없으면 소속 BP(플랫폼 BP)를 정한다 — 플랫폼 BP 에는 점포가 없으니 고르라고 답한다(BP 권한 그룹과 같다).
     if (isPlatform && bp.bpCodeId === rest.bpCodeId)
-      throw new BadRequestException('점포를 볼 BP 를 골라 주세요');
+      throw new BadRequestException('점포를 볼 BP 를 골라 주세요.');
     return {
       ...rest,
       isPlatform,
@@ -1059,7 +1061,7 @@ export class StoreManagementService implements OnModuleInit {
     const count = await this.countContracts(storeId, db);
     if (count > 0)
       throw new ConflictException(
-        `진행 중인 근로계약이 ${count}건 있어 ${verb} 수 없습니다`,
+        `진행 중인 근로계약이 ${count}건 있어 ${verb} 수 없습니다.`,
       );
   }
 
@@ -1108,7 +1110,7 @@ export class StoreManagementService implements OnModuleInit {
     if (this.recentlyVerified(adminAccountId, identity)) return identity;
     if (!(await this.askVerifier(adminAccountId, identity)))
       throw new BadRequestException(
-        '국세청에 등록된 사업자 정보와 맞지 않습니다. 사업자등록번호 · 대표자명 · 개업일자를 확인해 주세요',
+        '국세청에 등록된 사업자 정보와 맞지 않습니다. 사업자등록번호 · 대표자명 · 개업일자를 확인해 주세요.',
       );
     return identity;
   }
@@ -1119,7 +1121,7 @@ export class StoreManagementService implements OnModuleInit {
   ): Promise<boolean> {
     if (!this.verifier)
       throw new ServiceUnavailableException(
-        '사업자 진위확인 연동이 아직 없어 인증할 수 없습니다',
+        '사업자 진위확인 연동이 아직 없어 인증할 수 없습니다.',
       );
     this.countNtsCall(adminAccountId);
     try {
@@ -1131,7 +1133,7 @@ export class StoreManagementService implements OnModuleInit {
         stackOf(error),
       );
       throw new ServiceUnavailableException(
-        '사업자 진위확인 중 오류가 났습니다. 잠시 뒤 다시 시도해 주세요',
+        '사업자 진위확인 중 오류가 났습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     }
   }
@@ -1162,7 +1164,7 @@ export class StoreManagementService implements OnModuleInit {
     );
     if (recent.length >= NTS_CALLS_PER_HOUR)
       throw new HttpException(
-        `사업자 인증은 한 시간에 ${NTS_CALLS_PER_HOUR}번까지 할 수 있습니다. 잠시 후 다시 시도해 주세요`,
+        `사업자 인증은 한 시간에 ${NTS_CALLS_PER_HOUR}번까지 할 수 있습니다. 잠시 후 다시 시도해 주세요.`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     recent.push(now);
@@ -1286,7 +1288,7 @@ function scopeOf(caller: StoreCaller): Prisma.StoreWhereInput {
 /** 이미지는 수정과 같은 조건에서만 바꾼다 — 폐점한 점포와 소속 BP 가 미사용인 점포는 조회만 된다. */
 function assertImageEditable(store: StoreDetailRow): void {
   if (store.storeStatusCode === 'CLOSED')
-    throw new ConflictException('폐점한 점포는 고칠 수 없습니다');
+    throw new ConflictException('폐점한 점포는 고칠 수 없습니다.');
   if (store.bpCode.accountStatusCode !== 'ACTIVE')
     throw new ConflictException(BP_INACTIVE);
 }
@@ -1314,7 +1316,7 @@ async function lockForImage(
 ): Promise<{ fileId: number; fileName: string } | null> {
   const locked = await lockStore(tx, storeId);
   if (locked.storeStatusCode === 'CLOSED')
-    throw new ConflictException('폐점한 점포는 고칠 수 없습니다');
+    throw new ConflictException('폐점한 점포는 고칠 수 없습니다.');
   const old = await tx.storeImageFile.findFirst({
     where: { storeId, isDeleted: false },
     select: { fileId: true, fileName: true },
@@ -1374,7 +1376,7 @@ function storeFields(dto: SaveStoreDto) {
 /** 좌표는 주소 검색이 함께 채운다 — 하나만 있는 좌표는 위치로 쓸 수 없다. */
 function assertCoordinatePair(dto: SaveStoreDto): void {
   if ((dto.latitude == null) !== (dto.longitude == null))
-    throw new BadRequestException('위도 · 경도는 함께 넣거나 함께 비웁니다');
+    throw new BadRequestException('위도 · 경도는 함께 넣거나 함께 비웁니다.');
 }
 
 /** 저장할 층 줄. 모든 칸이 빈 줄은 버린다 — 화면의 빈 입력 줄이 빈 행과 「 / 」 이력이 되지 않게. */
@@ -1387,7 +1389,7 @@ function filledFloors(floors: StoreFloorInputDto[]) {
 /** DTO 가 날짜를 검사했지만, DTO 를 거치지 않은 호출이 조용히 null 을 넘기지 않게 막는다. */
 function dateOrThrow(raw: string): Date {
   const date = parseDateOnly(raw);
-  if (!date) throw new BadRequestException('개업일자는 YYYY-MM-DD 입니다');
+  if (!date) throw new BadRequestException('개업일자는 YYYY-MM-DD 입니다.');
   return date;
 }
 
@@ -1505,7 +1507,7 @@ function verifiedKey(
 function nextStoreCode(last: string | null): string {
   const next = (last ? Number(last.slice(2)) : 0) + 1;
   if (next > 999_999)
-    throw new ConflictException('점포코드를 더 만들 수 없습니다');
+    throw new ConflictException('점포코드를 더 만들 수 없습니다.');
   return `ST${String(next).padStart(6, '0')}`;
 }
 

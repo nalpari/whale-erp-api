@@ -1,8 +1,8 @@
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
-const YEAR_RANGE = '연도는 2000~2100 사이로 보내 주세요';
-const MONTH_RANGE = '월은 1~12 사이로 보내 주세요';
+const YEAR_RANGE = '연도는 2000~2100 사이로 보내 주세요.';
+const MONTH_RANGE = '월은 1~12 사이로 보내 주세요.';
 
 /** 공식 휴일 조회 조건 — 캘린더는 연도 · 월, 목록은 연도만. */
 export class ListPublicHolidaysQueryDto {

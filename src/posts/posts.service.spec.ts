@@ -301,7 +301,7 @@ describe('PostsService', () => {
           status: 'DRAFT',
           audiences: [],
         }),
-      ).rejects.toThrow('FAQ 카테고리를 골라 주세요');
+      ).rejects.toThrow('FAQ 카테고리를 골라 주세요.');
       expect(prisma.codeItem.count).not.toHaveBeenCalled();
     });
 
@@ -594,7 +594,7 @@ describe('PostsService', () => {
           },
           [png()],
         ),
-      ).rejects.toThrow('FAQ 에는 첨부파일을 올릴 수 없습니다');
+      ).rejects.toThrow('FAQ 에는 첨부파일을 올릴 수 없습니다.');
       expect(prisma.post.create).not.toHaveBeenCalled();
       expect(storage.put).not.toHaveBeenCalled();
     });
@@ -701,7 +701,7 @@ describe('PostsService', () => {
           update({ removeAttachmentIds: [99] }),
           [],
         ),
-      ).rejects.toThrow('없는 첨부파일입니다');
+      ).rejects.toThrow('없는 첨부파일입니다.');
       expect(prisma.postAttachment.updateMany).not.toHaveBeenCalled();
     });
 
@@ -723,7 +723,7 @@ describe('PostsService', () => {
           update({ noticeType: undefined, faqCategoryCode: 'BILLING' }),
           [png()],
         ),
-      ).rejects.toThrow('FAQ 에는 첨부파일을 올릴 수 없습니다');
+      ).rejects.toThrow('FAQ 에는 첨부파일을 올릴 수 없습니다.');
       expect(prisma.post.updateMany).not.toHaveBeenCalled();
     });
 

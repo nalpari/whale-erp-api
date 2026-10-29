@@ -149,10 +149,10 @@ export class StaffMemberWorkSchedulesService {
       // 근무스케줄의 점포는 외래키로 묶여 있다. 못 찾으면 데이터가 깨진 것이라 빈 칸으로 내보내지 않는다(직원 상세 요약과 같다)
       if (storeName === undefined) {
         this.logger.error(
-          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다(직원 ${staffMemberId})`,
+          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다(직원 ${staffMemberId}).`,
         );
         throw new InternalServerErrorException(
-          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다`,
+          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다.`,
         );
       }
       return {

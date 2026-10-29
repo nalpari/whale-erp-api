@@ -164,8 +164,8 @@ describe('InquiriesService', () => {
     });
 
     it.each([
-      ['IN_PROGRESS', '이미 처리중인 문의입니다'],
-      ['ANSWERED', '이미 답변한 문의입니다'],
+      ['IN_PROGRESS', '이미 처리중인 문의입니다.'],
+      ['ANSWERED', '이미 답변한 문의입니다.'],
     ])('이미 %s 인 문의는 409 — %s', async (status, message) => {
       prisma.inquiry.updateMany.mockResolvedValue({ count: 0 });
       prisma.inquiry.findUnique.mockResolvedValue(inquiry({ status }));

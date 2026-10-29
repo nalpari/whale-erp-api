@@ -831,7 +831,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
           startDate: '2026-12-01',
         }),
       ).rejects.toThrow(
-        '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+        '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다.',
       );
 
       await expect(
@@ -881,12 +881,12 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         })
         .then((c) => c.staffMember);
       await expect(renew(phone, pending)).rejects.toThrow(
-        '체결 완료되었거나 체결 뒤 종료된 근로계약만 재계약할 수 있습니다',
+        '체결 완료되었거나 체결 뒤 종료된 근로계약만 재계약할 수 있습니다.',
       );
 
       const { contractId } = await signedContract();
       await expect(renew(nextPhone(), contractId)).rejects.toThrow(
-        '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+        '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다.',
       );
     });
 

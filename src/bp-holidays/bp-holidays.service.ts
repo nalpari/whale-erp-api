@@ -45,7 +45,7 @@ import {
 } from './holiday-dates';
 import { appliesOn, periodStateOf } from './store-periods';
 
-export const NOT_FOUND = 'BP 휴일을 찾을 수 없습니다';
+export const NOT_FOUND = 'BP 휴일을 찾을 수 없습니다.';
 /** 겹침을 보는 기간 — 끝이 없거나 긴 반복도 오늘(시작 전이면 시작일)부터 1년 안에서만 센다. */
 const OVERLAP_WINDOW_DAYS = 365;
 /** 점포마다 보여 줄 겹치는 날짜 수(나머지는 건수로, WHALEERP-556). */
@@ -209,7 +209,9 @@ export class BpHolidaysService {
     const from =
       sentFrom ?? new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
     if (from > to)
-      throw new BadRequestException('시작 날짜는 끝 날짜보다 늦을 수 없습니다');
+      throw new BadRequestException(
+        '시작 날짜는 끝 날짜보다 늦을 수 없습니다.',
+      );
     const where = {
       changedAt: { gte: kstDayStart(from), lt: kstDayStart(addDays(to, 1)) },
       bpHoliday: visibleWhere(caller),

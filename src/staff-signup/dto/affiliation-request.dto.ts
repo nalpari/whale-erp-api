@@ -88,7 +88,7 @@ export class RejectAffiliationRequestDto {
   )
   @IsString()
   @MaxLength(REJECT_REASON_MAX, {
-    message: `거절 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요`,
+    message: `거절 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요.`,
   })
   reason?: string;
 }

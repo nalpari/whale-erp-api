@@ -16,16 +16,16 @@ import {
 export class AdminProfileUpdateDto {
   /** 이름. 한글 · 영문 2~20자. @example 이서준 */
   @Transform(trimText)
-  @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다' })
+  @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다.' })
   name: string;
 
   /** 연락처. 하이픈 없이 숫자 9~12자리. @example 01012345678 */
-  @Matches(PHONE_PATTERN, { message: '연락처는 숫자 9~12자리입니다' })
+  @Matches(PHONE_PATTERN, { message: '연락처는 숫자 9~12자리입니다.' })
   phone: string;
 
   /** 이메일. 소문자로 저장한다. 원래 값과 같으면 중복 검사를 하지 않는다. @example seojun@whale.test */
   @Transform(lowerEmail)
-  @IsEmail({}, { message: '이메일 형식이 아닙니다' })
+  @IsEmail({}, { message: '이메일 형식이 아닙니다.' })
   @MaxLength(100)
   email: string;
 

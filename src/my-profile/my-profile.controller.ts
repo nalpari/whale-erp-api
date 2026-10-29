@@ -114,7 +114,7 @@ export class MyProfileController {
   @ApiNoContentResponse({ description: '보냄' })
   @ApiBadRequestResponse({
     description:
-      '지금 비밀번호가 맞지 않음(「지금 비밀번호가 맞지 않습니다」) · 이메일 형식 · 지금 이메일과 같음',
+      '지금 비밀번호가 맞지 않음(「지금 비밀번호가 맞지 않습니다.」) · 이메일 형식 · 지금 이메일과 같음',
   })
   @ApiConflictResponse({ description: '다른 계정이 쓰는 이메일' })
   @ApiTooManyRequestsResponse({
@@ -126,7 +126,7 @@ export class MyProfileController {
   })
   @ApiInternalServerErrorResponse({
     description:
-      '보내기 전에 막힘(메일 템플릿 꺼짐 · 제목 없음 · DB 오류) — 「메일 설정 문제로 … 관리자에게 문의해 주세요」',
+      '보내기 전에 막힘(메일 템플릿 꺼짐 · 제목 없음 · DB 오류) — 「메일 설정 문제로 … 관리자에게 문의해 주세요.」',
   })
   requestEmailChangePin(
     @CurrentUser() user: AccountUser,

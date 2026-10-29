@@ -42,7 +42,7 @@ import type {
   PeriodAttendanceResponseDto,
 } from './dto/attendance-records.dto';
 
-const STAFF_NOT_FOUND = '직원을 찾을 수 없습니다';
+const STAFF_NOT_FOUND = '직원을 찾을 수 없습니다.';
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** 직원 앱 기간별의 최대 일수 — 한 번에 1년(HIST-2, WHALEERP-221) */
 export const MAX_MY_PERIOD_DAYS = 366;
@@ -128,7 +128,7 @@ export class AttendanceRecordsService {
     const days = (to.getTime() - from.getTime()) / DAY_MS + 1;
     if (days < 1 || days > MAX_PERIOD_DAYS)
       throw new BadRequestException(
-        `기간은 시작일부터 ${MAX_PERIOD_DAYS}일 이하입니다`,
+        `기간은 시작일부터 ${MAX_PERIOD_DAYS}일 이하입니다.`,
       );
     const scope = await this.scopeOf(adminAccountId, stores);
     if (staffMemberId !== null) {
@@ -177,13 +177,13 @@ export class AttendanceRecordsService {
     const days = (to.getTime() - from.getTime()) / DAY_MS + 1;
     if (days < 1 || days > MAX_MY_PERIOD_DAYS)
       throw new BadRequestException(
-        `기간은 시작일부터 ${MAX_MY_PERIOD_DAYS}일 이하입니다`,
+        `기간은 시작일부터 ${MAX_MY_PERIOD_DAYS}일 이하입니다.`,
       );
     const member = await this.prisma.staffMember.findFirst({
       where: { staffMemberId, accountId, ...ACTIVE_STAFF },
       select: { storeId: true, employmentType: true },
     });
-    if (!member) throw new NotFoundException('소속을 찾을 수 없습니다');
+    if (!member) throw new NotFoundException('소속을 찾을 수 없습니다.');
     const store = await this.prisma.store.findUniqueOrThrow({
       where: { storeId: member.storeId },
       select: { name: true },

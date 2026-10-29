@@ -31,18 +31,18 @@ export const REISSUE_INTERVAL_MS = 60 * 1000;
 
 /** 링크 주소 · 메일 설정이 없다. 기다려도 풀리지 않는다. */
 const UNAVAILABLE_MESSAGE =
-  '메일 발송이 설정되지 않아 재설정 링크를 보낼 수 없습니다. 운영자에게 문의해 주세요';
+  '메일 발송이 설정되지 않아 재설정 링크를 보낼 수 없습니다. 운영자에게 문의해 주세요.';
 /** 발송 실패. 앞선 링크 · 핀은 닫지 않았으니 그대로 쓸 수 있다. */
 const SEND_FAILED_MESSAGE =
-  '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요';
-const RETIRED_MESSAGE = '퇴직한 직원에게는 재설정 링크를 보낼 수 없습니다';
-const WITHDRAWN_MESSAGE = '탈퇴한 계정입니다';
+  '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요.';
+const RETIRED_MESSAGE = '퇴직한 직원에게는 재설정 링크를 보낼 수 없습니다.';
+const WITHDRAWN_MESSAGE = '탈퇴한 계정입니다.';
 const INTERVAL_MESSAGE =
-  '방금 재설정 링크를 보냈습니다. 1분 뒤에 다시 보낼 수 있습니다';
+  '방금 재설정 링크를 보냈습니다. 1분 뒤에 다시 보낼 수 있습니다.';
 
 /** 만료 · 사용 · 대체 · 없는 토큰 · 탈퇴를 가리지 않는다(WHALEERP-172). */
 export const INVALID_LINK_MESSAGE =
-  '쓸 수 없는 링크입니다. 관리자에게 다시 청하거나 비밀번호 찾기로 인증번호를 받아 다시 정해 주세요';
+  '쓸 수 없는 링크입니다. 관리자에게 다시 청하거나 비밀번호 찾기로 인증번호를 받아 다시 정해 주세요.';
 
 interface LinkState {
   closedAt: Date | null;
@@ -127,10 +127,10 @@ export class PasswordResetLinkService {
       select: { accountId: true, storeId: true, employmentStatus: true },
     });
     // 범위를 확인한 뒤 사이에 지워졌다. 없는 직원과 같게 답한다.
-    if (!staff) throw new NotFoundException('직원을 찾을 수 없습니다');
+    if (!staff) throw new NotFoundException('직원을 찾을 수 없습니다.');
     if (staff.accountId === null)
       throw new ConflictException(
-        '가입을 마치지 않은 직원입니다. 재설정 링크 대신 초대를 다시 보내 주세요',
+        '가입을 마치지 않은 직원입니다. 재설정 링크 대신 초대를 다시 보내 주세요.',
       );
     if (staff.employmentStatus === 'RETIRED')
       throw new ConflictException(RETIRED_MESSAGE);
@@ -253,7 +253,7 @@ export class PasswordResetLinkService {
       // 알린다. 원래 오류는 던지지 않는다 — 그 메시지에 주소가 섞일 수 있고, 원인은 위 줄과 MailService 가 남겼다.
       if (!transient)
         throw new InternalServerErrorException(
-          '메일 설정 문제로 재설정 링크를 보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요',
+          '메일 설정 문제로 재설정 링크를 보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요.',
         );
       throw new ServiceUnavailableException(SEND_FAILED_MESSAGE);
     }

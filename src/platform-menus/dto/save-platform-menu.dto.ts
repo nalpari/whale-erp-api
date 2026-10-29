@@ -31,9 +31,9 @@ class PlatformMenuFieldsDto {
   /** 노출 메뉴명. 앞뒤 공백을 지우고 1~20자. 같은 상위 아래 같은 이름도 받는다. @example 플랫폼 메뉴 관리 */
   @Transform(trimText)
   @IsString()
-  @MinLength(1, { message: '노출 메뉴명을 입력해 주세요' })
-  @MaxLength(MENU_NAME_MAX, { message: '노출 메뉴명은 20자까지입니다' })
-  @Matches(NO_NUL, { message: '노출 메뉴명에 쓸 수 없는 문자가 있습니다' })
+  @MinLength(1, { message: '노출 메뉴명을 입력해 주세요.' })
+  @MaxLength(MENU_NAME_MAX, { message: '노출 메뉴명은 20자까지입니다.' })
+  @Matches(NO_NUL, { message: '노출 메뉴명에 쓸 수 없는 문자가 있습니다.' })
   name: string;
 
   /**
@@ -45,7 +45,7 @@ class PlatformMenuFieldsDto {
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
   @IsString()
-  @MaxLength(MENU_URL_MAX, { message: '메뉴 URL 은 200자까지입니다' })
+  @MaxLength(MENU_URL_MAX, { message: '메뉴 URL 은 200자까지입니다.' })
   @Matches(MENU_URL_PATTERN, {
     message:
       "메뉴 URL 은 '/' 로 시작하는 소문자 · 숫자 · '-' 경로여야 합니다(예: /staff-content)",
@@ -59,7 +59,7 @@ const SERVICE_CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,19}$/;
 export class PlatformMenuTreeQueryDto {
   /** 서비스 코드 — 공통코드 SERVICE 값(사용중지 서비스도 된다). @example PLATFORM */
   @IsString()
-  @Matches(SERVICE_CODE_PATTERN, { message: '서비스 코드 형식이 아닙니다' })
+  @Matches(SERVICE_CODE_PATTERN, { message: '서비스 코드 형식이 아닙니다.' })
   serviceCode: string;
 }
 
@@ -67,7 +67,7 @@ export class PlatformMenuTreeQueryDto {
 export class CreatePlatformMenuDto extends PlatformMenuFieldsDto {
   /** 서비스 코드 — 공통코드 SERVICE 값(사용중지 서비스도 된다). @example PLATFORM */
   @IsString()
-  @Matches(SERVICE_CODE_PATTERN, { message: '서비스 코드 형식이 아닙니다' })
+  @Matches(SERVICE_CODE_PATTERN, { message: '서비스 코드 형식이 아닙니다.' })
   serviceCode: string;
 
   /** 상위 메뉴. 생략하거나 null 이면 최상위(1단계). 같은 서비스의 2단계까지의 메뉴여야 한다. */

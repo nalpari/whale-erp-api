@@ -133,7 +133,7 @@ describe('이메일 찾기 (e2e, DB)', () => {
       404,
     );
     const byPhone = await find(body(newPhone())).expect(404);
-    expect(errorOf(byName).message).toBe('일치하는 계정이 없습니다');
+    expect(errorOf(byName).message).toBe('일치하는 계정이 없습니다.');
     expect(byBirth.body).toEqual(byName.body);
     expect(byPhone.body).toEqual(byName.body);
 
@@ -230,7 +230,7 @@ describe('이메일 찾기 (e2e, DB)', () => {
     async (birthDate) => {
       const res = await find(body(newPhone(), { birthDate })).expect(400);
       expect((res.body as { message: string[] }).message).toEqual([
-        '생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다',
+        '생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다.',
       ]);
     },
   );

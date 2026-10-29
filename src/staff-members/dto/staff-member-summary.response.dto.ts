@@ -61,8 +61,16 @@ export class StaffMemberContractSummaryResponseDto {
   /** 계약이 없으면 null */
   contract: StaffMemberContractSummaryDto | null;
   /**
+   * 이 관리자가 이 직원의 급여 계좌를 볼 수 있는가. 본사 역할(BP 마스터 · BP 관리자)이 가맹 점포 직원을 보면 false —
+   * 본사 제공 동의를 했어도 그렇다(동의 범위에 신고 정보가 없고 계좌는 가맹 점포 사업주가 받는 정보, 운영 정책 TAX-07 ·
+   * TAX-08, 재영 2026-10-29). 그 밖(직영 점포 직원, 가맹마스터 · 가맹관리자)은 true. false 이면 화면은 「급여 계좌」 줄
+   * 자체를 숨긴다
+   */
+  canViewPayrollAccount: boolean;
+  /**
    * 신고 정보의 급여 계좌 — 은행 이름 · 계좌번호 전체(하이픈 없음, 가리지 않음). 신고 정보가 없으면 null. 계약이 없어도
-   * 신고 정보가 있으면 오고, 급여 지급 방식(계좌 · 현금)과 상관없다
+   * 신고 정보가 있으면 오고, 급여 지급 방식(계좌 · 현금)과 상관없다. canViewPayrollAccount 가 false 이면 신고 정보를
+   * 읽지 않고 항상 null
    */
   @ApiProperty({ type: StaffMemberPayrollAccountDto, nullable: true })
   payrollAccount: StaffMemberPayrollAccountDto | null;

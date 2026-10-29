@@ -252,7 +252,7 @@ describe('AdminAuthService', () => {
       )) as HttpException;
       expect(error.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
       expect(error.getResponse()).toMatchObject({
-        message: '로그인이 잠겼습니다. 5분 뒤에 다시 시도해주세요.',
+        message: '로그인이 잠겼습니다. 5분 뒤에 다시 시도해 주세요.',
       });
     });
 

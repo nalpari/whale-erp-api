@@ -527,7 +527,7 @@ describe('PlatformRoleGroupMenusService', () => {
     it('플랫폼 마스터 권한은 409, 본인 연결은 403, 없는 그룹은 404', async () => {
       await expect(save(PA, 1, [])).rejects.toBeInstanceOf(ConflictException);
       await expect(save(PA, 2, [])).rejects.toThrow(
-        new ForbiddenException('본인이 연결된 권한이라 고칠 수 없습니다'),
+        new ForbiddenException('본인이 연결된 권한이라 고칠 수 없습니다.'),
       );
       await expect(save(PM, 99, [])).rejects.toBeInstanceOf(NotFoundException);
     });
@@ -536,7 +536,7 @@ describe('PlatformRoleGroupMenusService', () => {
       tx.roleGroup.updateMany.mockResolvedValue({ count: 0 });
       await expect(save(PM, 5, [cells(12, true)])).rejects.toThrow(
         new ConflictException(
-          '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요',
+          '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.',
         ),
       );
       expect(tx.roleGroupMenu.upsert).not.toHaveBeenCalled();
@@ -553,7 +553,7 @@ describe('PlatformRoleGroupMenusService', () => {
     it('BP 마스터에 플랫폼 메뉴를 켜면 400', async () => {
       await expect(save(PM, 3, [cells(11, true)])).rejects.toThrow(
         new BadRequestException(
-          'BP 마스터·가맹 마스터 권한에는 플랫폼 관리 메뉴를 줄 수 없습니다',
+          'BP 마스터·가맹 마스터 권한에는 플랫폼 관리 메뉴를 줄 수 없습니다.',
         ),
       );
       expect(tx.roleGroupMenu.upsert).not.toHaveBeenCalled();
@@ -569,7 +569,7 @@ describe('PlatformRoleGroupMenusService', () => {
         await expect(
           save(PA, 5, [cells(11, true, false, false, true)]),
         ).rejects.toThrow(
-          new BadRequestException('본인 권한 범위 밖 칸은 바꿀 수 없습니다'),
+          new BadRequestException('본인 권한 범위 밖 칸은 바꿀 수 없습니다.'),
         );
         expect(tx.roleGroupMenu.upsert).not.toHaveBeenCalled();
       });
@@ -589,7 +589,7 @@ describe('PlatformRoleGroupMenusService', () => {
         await expect(
           save(PA, 5, [cells(11, false)]), // 조회 · 삭제를 함께 끈다
         ).rejects.toThrow(
-          new BadRequestException('본인 권한 범위 밖 칸은 바꿀 수 없습니다'),
+          new BadRequestException('본인 권한 범위 밖 칸은 바꿀 수 없습니다.'),
         );
         expect(tx.roleGroupMenu.upsert).not.toHaveBeenCalled();
       });
@@ -804,7 +804,7 @@ describe('PlatformRoleGroupMenusService', () => {
         service.preview(PM.adminAccountId, 3, { menus: [cells(11, true)] }),
       ).rejects.toThrow(
         new BadRequestException(
-          'BP 마스터·가맹 마스터 권한에는 플랫폼 관리 메뉴를 줄 수 없습니다',
+          'BP 마스터·가맹 마스터 권한에는 플랫폼 관리 메뉴를 줄 수 없습니다.',
         ),
       );
     });
@@ -815,7 +815,7 @@ describe('PlatformRoleGroupMenusService', () => {
           menus: [cells(11, true, false, false, true)],
         }),
       ).rejects.toThrow(
-        new BadRequestException('본인 권한 범위 밖 칸은 바꿀 수 없습니다'),
+        new BadRequestException('본인 권한 범위 밖 칸은 바꿀 수 없습니다.'),
       );
     });
   });

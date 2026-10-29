@@ -41,7 +41,7 @@ export class EmailFindController {
   })
   @ApiNotFoundResponse({
     description:
-      '맞는 계정이 없음. 어느 값이 틀렸든 같은 메시지(「일치하는 계정이 없습니다」)이고 실패 1회로 센다',
+      '맞는 계정이 없음. 어느 값이 틀렸든 같은 메시지(「일치하는 계정이 없습니다.」)이고 실패 1회로 센다',
   })
   @ApiTooManyRequestsResponse({
     description:

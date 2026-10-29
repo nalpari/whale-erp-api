@@ -280,7 +280,7 @@ describe('StaffMemberWorkSchedulesService', () => {
     ];
     await expect(service.list(9, 30, {}, NOW)).rejects.toThrow(
       new InternalServerErrorException(
-        '근무스케줄 7 의 점포 5 를 찾을 수 없습니다',
+        '근무스케줄 7 의 점포 5 를 찾을 수 없습니다.',
       ),
     );
     expect(error).toHaveBeenCalledTimes(1);

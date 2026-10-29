@@ -175,7 +175,7 @@ export class PlatformMenusService {
     ]);
     if (!service)
       throw new InternalServerErrorException(
-        `메뉴의 서비스(${menu.serviceCode})가 공통코드 SERVICE 에 없습니다`,
+        `메뉴의 서비스(${menu.serviceCode})가 공통코드 SERVICE 에 없습니다.`,
       );
     const byId = new Map(menus.map((m) => [m.menuId, m]));
     const path: string[] = [];
@@ -246,10 +246,10 @@ export class PlatformMenusService {
             });
       if (parentMenuId !== null) {
         if (!parent)
-          throw new BadRequestException('상위 메뉴로 고를 수 없는 메뉴입니다');
+          throw new BadRequestException('상위 메뉴로 고를 수 없는 메뉴입니다.');
         if (parent.serviceCode !== dto.serviceCode)
           throw new BadRequestException(
-            '같은 서비스의 메뉴만 상위로 고를 수 있습니다',
+            '같은 서비스의 메뉴만 상위로 고를 수 있습니다.',
           );
         if (parent.depth >= MAX_MENU_DEPTH)
           throw new BadRequestException(TOO_DEEP);
@@ -278,7 +278,7 @@ export class PlatformMenusService {
       });
       if (!master)
         throw new InternalServerErrorException(
-          '플랫폼 마스터 권한(PM000001)이 없습니다 — 1팀 초기 데이터 마이그레이션을 확인해 주세요',
+          '플랫폼 마스터 권한(PM000001)이 없습니다 — 1팀 초기 데이터 마이그레이션을 확인해 주세요.',
         );
 
       const created = await tx.menu.create({
@@ -421,7 +421,7 @@ export class PlatformMenusService {
       ) {
         this.logger.error(`메뉴 ${action} 트랜잭션 시간 초과`, error.stack);
         throw new ServiceUnavailableException(
-          '메뉴 저장이 몰렸습니다. 잠시 뒤 다시 시도해 주세요',
+          '메뉴 저장이 몰렸습니다. 잠시 뒤 다시 시도해 주세요.',
         );
       }
       throw error;
@@ -480,6 +480,6 @@ async function assertUrlFree(
   );
   if (clash)
     throw new ConflictException(
-      `같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(${clash.menuCode})`,
+      `같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(${clash.menuCode}).`,
     );
 }

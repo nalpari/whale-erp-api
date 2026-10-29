@@ -50,7 +50,7 @@ function IsDateOnly(): PropertyDecorator {
       validate: (value: unknown) =>
         typeof value === 'string' && parseDateOnly(value) !== null,
       defaultMessage: (args) =>
-        `${args?.property} 는 YYYY-MM-DD 형식의 있는 날짜여야 합니다`,
+        `${args?.property} 는 YYYY-MM-DD 형식의 있는 날짜여야 합니다.`,
     },
   });
 }
@@ -60,8 +60,8 @@ export class PostFieldsDto {
   /** 제목. 200자까지. */
   @IsString()
   @MaxLength(200)
-  @Matches(/\S/, { message: '제목을 입력해 주세요' })
-  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다' })
+  @Matches(/\S/, { message: '제목을 입력해 주세요.' })
+  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다.' })
   title: string;
 
   /**
@@ -70,8 +70,8 @@ export class PostFieldsDto {
    */
   @IsString()
   @MaxLength(20_000)
-  @Matches(/\S/, { message: '본문을 입력해 주세요' })
-  @Matches(NO_NUL, { message: '본문에 쓸 수 없는 문자가 있습니다' })
+  @Matches(/\S/, { message: '본문을 입력해 주세요.' })
+  @Matches(NO_NUL, { message: '본문에 쓸 수 없는 문자가 있습니다.' })
   body: string;
 
   /** 게시 상태. 게시하려면 노출 대상이 하나 이상 있어야 한다. */
@@ -114,7 +114,7 @@ export class PostFieldsDto {
   @IsString()
   @Matches(/^[A-Z][A-Z0-9_]{0,19}$/, {
     message:
-      'FAQ 카테고리는 상세코드(영문 대문자 · 숫자 · 밑줄, 20자)여야 합니다',
+      'FAQ 카테고리는 상세코드(영문 대문자 · 숫자 · 밑줄, 20자)여야 합니다.',
   })
   faqCategoryCode?: string | null;
 

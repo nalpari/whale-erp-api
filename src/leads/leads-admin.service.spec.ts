@@ -185,11 +185,11 @@ describe('LeadsAdminService', () => {
       prisma.lead.updateMany.mockResolvedValue({ count: 0 });
       prisma.lead.findUnique.mockResolvedValue(lead({ status: 'ANSWERED' }));
       await expect(service.startProcessing(3, 5)).rejects.toThrow(
-        new ConflictException('이미 답변한 도입문의입니다'),
+        new ConflictException('이미 답변한 도입문의입니다.'),
       );
       prisma.lead.findUnique.mockResolvedValue(lead({ status: 'IN_PROGRESS' }));
       await expect(service.startProcessing(3, 5)).rejects.toThrow(
-        new ConflictException('이미 처리중인 도입문의입니다'),
+        new ConflictException('이미 처리중인 도입문의입니다.'),
       );
       prisma.lead.findUnique.mockResolvedValue(null);
       await expect(service.startProcessing(3, 5)).rejects.toThrow(
@@ -640,7 +640,7 @@ describe('LeadsAdminService', () => {
         async (status) => {
           prisma.lead.findFirst.mockResolvedValue({ status, reply: null });
           await expect(service.resendReplyMail(3, 5)).rejects.toThrow(
-            '답변완료 도입문의만 답변 메일을 다시 보낼 수 있습니다',
+            '답변완료 도입문의만 답변 메일을 다시 보낼 수 있습니다.',
           );
         },
       );
@@ -651,7 +651,7 @@ describe('LeadsAdminService', () => {
           reply: null,
         });
         await expect(service.resendReplyMail(3, 5)).rejects.toThrow(
-          '답변완료 도입문의만 답변 메일을 다시 보낼 수 있습니다',
+          '답변완료 도입문의만 답변 메일을 다시 보낼 수 있습니다.',
         );
       });
 
@@ -661,7 +661,7 @@ describe('LeadsAdminService', () => {
           reply: '연락드렸습니다',
         });
         await expect(service.resendReplyMail(3, 5)).rejects.toThrow(
-          '방금 답변 메일을 보냈습니다. 1분 뒤 다시 보내 주세요',
+          '방금 답변 메일을 보냈습니다. 1분 뒤 다시 보내 주세요.',
         );
         expect(mail!.send).not.toHaveBeenCalled();
         expect(prisma.$executeRaw).not.toHaveBeenCalled();
@@ -878,7 +878,7 @@ describe('LeadsAdminService', () => {
       prisma.lead.deleteMany.mockResolvedValue({ count: 0 });
       prisma.lead.findFirst.mockResolvedValue({ leadId: 5 });
       await expect(service.remove(3, 5)).rejects.toThrow(
-        '상담을 마친 도입문의는 지울 수 없습니다',
+        '상담을 마친 도입문의는 지울 수 없습니다.',
       );
       expect(logged.log).not.toHaveBeenCalled();
     });

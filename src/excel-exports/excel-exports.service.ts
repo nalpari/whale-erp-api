@@ -508,7 +508,7 @@ export class ExcelExportsService {
         ))
       )
         throw new ForbiddenException(
-          '이 화면을 볼 권한이 없어 엑셀을 만들지 않았습니다',
+          '이 화면을 볼 권한이 없어 엑셀을 만들지 않았습니다.',
         );
       const caller = await this.callerOf(job);
       // 만들 때의 범위 지문 — 파일과 같은 시점으로 남겨, 받을 때 지금 범위와 견준다.

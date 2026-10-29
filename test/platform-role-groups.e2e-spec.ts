@@ -377,7 +377,7 @@ describe('플랫폼 권한 관리 (e2e, DB)', () => {
         name: 'BP 마스터',
       });
       expect(res.status).toBe(409);
-      expect(res.body.message).toBe('같은 이름의 권한이 있습니다');
+      expect(res.body.message).toBe('같은 이름의 권한이 있습니다.');
     });
 
     it('수정은 updatedAt 이 맞을 때만 — 옛 값으로 다시 저장하면 409', async () => {
@@ -519,7 +519,7 @@ describe('플랫폼 권한 관리 (e2e, DB)', () => {
         },
       );
       expect(res.status).toBe(400);
-      expect(res.body.message).toBe('본인 권한 범위 밖 칸은 바꿀 수 없습니다');
+      expect(res.body.message).toBe('본인 권한 범위 밖 칸은 바꿀 수 없습니다.');
     });
 
     it('BP 마스터에서 칸을 회수하면 미리보기가 범위를 세고, 저장하면 BA 그룹의 같은 칸도 꺼진다', async () => {

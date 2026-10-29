@@ -25,7 +25,10 @@ const KEY = randomBytes(32);
 
 describe('StaffMemberSummaryService', () => {
   let service: StaffMemberSummaryService;
-  let scope: { canManageStaffMember: jest.Mock };
+  let scope: {
+    canManageStaffMember: jest.Mock;
+    canManageStaffAccount: jest.Mock;
+  };
   let prisma: {
     adminAccount: { findFirst: jest.Mock };
     roleGroupMenu: { count: jest.Mock };
@@ -45,7 +48,10 @@ describe('StaffMemberSummaryService', () => {
   afterEach(() => jest.restoreAllMocks());
 
   beforeEach(async () => {
-    scope = { canManageStaffMember: jest.fn().mockResolvedValue(true) };
+    scope = {
+      canManageStaffMember: jest.fn().mockResolvedValue(true),
+      canManageStaffAccount: jest.fn().mockResolvedValue(true),
+    };
     prisma = {
       adminAccount: {
         findFirst: jest.fn().mockResolvedValue({ roleGroupId: 3 }),
@@ -187,6 +193,7 @@ describe('StaffMemberSummaryService', () => {
     it('계약이 없으면 null', async () => {
       await expect(service.contract(9, 30, NOW)).resolves.toEqual({
         contract: null,
+        canViewPayrollAccount: true,
         payrollAccount: null,
       });
     });
@@ -209,6 +216,7 @@ describe('StaffMemberSummaryService', () => {
         prisma.codeItem.findFirst.mockResolvedValue({ label: 'KB국민은행' });
         await expect(service.contract(9, 30, NOW)).resolves.toEqual({
           contract: null,
+          canViewPayrollAccount: true,
           payrollAccount: {
             bankName: 'KB국민은행',
             accountNumber: '12345678901234',
@@ -298,6 +306,7 @@ describe('StaffMemberSummaryService', () => {
         const svc = keyless.get(StaffMemberSummaryService);
         await expect(svc.contract(9, 30, NOW)).resolves.toEqual({
           contract: null,
+          canViewPayrollAccount: true,
           payrollAccount: null,
         });
         prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
@@ -305,6 +314,70 @@ describe('StaffMemberSummaryService', () => {
         await expect(svc.contract(9, 30, NOW)).rejects.toBeInstanceOf(
           ServiceUnavailableException,
         );
+      });
+
+      describe('canViewPayrollAccount — 본사 역할은 가맹 직원의 급여 계좌를 못 본다(동의와 상관없이)', () => {
+        it('볼 수 없으면(본사 + 가맹 동의 직원) false · null — 신고 정보를 읽지도 풀지도 않는다(키가 없어도 503 이 아니다)', async () => {
+          scope.canManageStaffAccount.mockResolvedValue(false);
+          prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+          const keyless = await Test.createTestingModule({
+            providers: [
+              StaffMemberSummaryService,
+              { provide: PrismaService, useValue: prisma },
+              { provide: AdminScopeService, useValue: scope },
+              { provide: PERSONAL_DATA_KEY, useValue: null },
+            ],
+          }).compile();
+          const svc = keyless.get(StaffMemberSummaryService);
+          const [withKey, withoutKey] = await Promise.all([
+            service.contract(9, 30, NOW),
+            svc.contract(9, 30, NOW),
+          ]);
+          for (const res of [withKey, withoutKey])
+            expect(res).toEqual({
+              contract: null,
+              canViewPayrollAccount: false,
+              payrollAccount: null,
+            });
+          expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 30);
+          expect(prisma.staffTaxProfile.findUnique).not.toHaveBeenCalled();
+          expect(prisma.codeItem.findFirst).not.toHaveBeenCalled();
+        });
+
+        it('볼 수 없어도 계약 칸은 그대로 온다', async () => {
+          scope.canManageStaffAccount.mockResolvedValue(false);
+          prisma.contract.findFirst.mockResolvedValue(contract());
+          const res = await service.contract(9, 30, NOW);
+          expect(res.contract?.contractId).toBe(70);
+          expect(res.canViewPayrollAccount).toBe(false);
+          expect(res.payrollAccount).toBeNull();
+        });
+
+        it('볼 수 있고(본사 + 직영 · 가맹마스터 + 가맹) 신고 정보가 있으면 true · 계좌', async () => {
+          scope.canManageStaffAccount.mockResolvedValue(true);
+          prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+          prisma.codeItem.findFirst.mockResolvedValue({ label: 'KB국민은행' });
+          const res = await service.contract(9, 30, NOW);
+          expect(res.canViewPayrollAccount).toBe(true);
+          expect(res.payrollAccount).toEqual({
+            bankName: 'KB국민은행',
+            accountNumber: '12345678901234',
+          });
+        });
+
+        it('볼 수 있어도 신고 정보가 없으면 true · null', async () => {
+          const res = await service.contract(9, 30, NOW);
+          expect(res.canViewPayrollAccount).toBe(true);
+          expect(res.payrollAccount).toBeNull();
+        });
+
+        it('기존 권한 · 범위 확인(403/404)이 먼저다 — 막히면 판정을 부르지 않는다', async () => {
+          scope.canManageStaffMember.mockResolvedValue(false);
+          await expect(service.contract(9, 30, NOW)).rejects.toBeInstanceOf(
+            NotFoundException,
+          );
+          expect(scope.canManageStaffAccount).not.toHaveBeenCalled();
+        });
       });
     });
 
@@ -322,6 +395,7 @@ describe('StaffMemberSummaryService', () => {
     it('유형 · 기간 · 상태 · 최근 발송일 · 갱신 예정일(종료일 30일 전)', async () => {
       prisma.contract.findFirst.mockResolvedValue(contract());
       await expect(service.contract(9, 30, NOW)).resolves.toEqual({
+        canViewPayrollAccount: true,
         payrollAccount: null,
         contract: {
           contractId: 70,

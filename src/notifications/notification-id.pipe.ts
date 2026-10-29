@@ -6,7 +6,7 @@ export class NotificationIdPipe implements PipeTransform<string, number> {
   transform(raw: string): number {
     const id = /^[1-9][0-9]{0,9}$/.test(raw) ? Number(raw) : NaN;
     if (!(id >= 1 && id <= 2147483647))
-      throw new NotFoundException('알림을 찾을 수 없습니다');
+      throw new NotFoundException('알림을 찾을 수 없습니다.');
     return id;
   }
 }

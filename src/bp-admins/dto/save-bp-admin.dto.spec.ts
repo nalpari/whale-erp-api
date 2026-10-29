@@ -16,7 +16,7 @@ describe('CreateBpAdminDto phone', () => {
   it.each(['02123456', '0507203313345', '010-1234-5678'])(
     '%s 는 400 — 숫자 9~12자리만',
     (p) => {
-      expect(phoneErrors(p)).toEqual(['휴대전화는 숫자 9~12자리입니다']);
+      expect(phoneErrors(p)).toEqual(['휴대전화는 숫자 9~12자리입니다.']);
     },
   );
 });

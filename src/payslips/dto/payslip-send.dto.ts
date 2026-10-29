@@ -24,7 +24,7 @@ const MAX_ID = 2_147_483_647;
 export class SendPayslipsDto {
   /** 급여 월(YYYY-MM) — 급여 기간 시작일이 그 달인 명세서 */
   @ApiProperty({ example: '2026-10' })
-  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'month 는 YYYY-MM 입니다' })
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'month 는 YYYY-MM 입니다.' })
   month: string;
 
   /** 점포 ID 목록. 관리 범위 밖은 조용히 빠진다. 없으면 관리 범위 전체 */

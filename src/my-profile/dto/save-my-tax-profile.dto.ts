@@ -26,7 +26,7 @@ export class SaveMyTaxProfileDto {
   /** 주민등록번호 13자리(외국인등록번호 포함). 앞 7자리가 가입한 생년월일과 맞아야 한다 */
   @ValidateIf(sent)
   @Transform(digitsOnly)
-  @Matches(/^\d{13}$/, { message: '주민등록번호는 숫자 13자리입니다' })
+  @Matches(/^\d{13}$/, { message: '주민등록번호는 숫자 13자리입니다.' })
   rrn?: string;
 
   /** 은행 — 공통코드 BANK 의 코드 */
@@ -39,7 +39,7 @@ export class SaveMyTaxProfileDto {
   /** 급여 계좌번호 — 숫자 10~16자리(하이픈은 지운다). 예금주는 본인이어야 한다 */
   @ValidateIf(sent)
   @Transform(digitsOnly)
-  @Matches(/^\d{10,16}$/, { message: '계좌번호는 숫자 10~16자리입니다' })
+  @Matches(/^\d{10,16}$/, { message: '계좌번호는 숫자 10~16자리입니다.' })
   payrollAccountNumber?: string;
 
   /**

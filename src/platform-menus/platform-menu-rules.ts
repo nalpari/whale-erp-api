@@ -26,9 +26,9 @@ export interface MenuPlacement {
 }
 
 export const SELF_OR_DESCENDANT =
-  '메뉴를 자기 자신이나 하위 메뉴 아래로 옮길 수 없습니다';
-export const TOO_DEEP = '메뉴는 최대 3단계까지만 둘 수 있습니다';
-export const OTHER_SERVICE = '같은 서비스 안에서만 옮길 수 있습니다';
+  '메뉴를 자기 자신이나 하위 메뉴 아래로 옮길 수 없습니다.';
+export const TOO_DEEP = '메뉴는 최대 3단계까지만 둘 수 있습니다.';
+export const OTHER_SERVICE = '같은 서비스 안에서만 옮길 수 있습니다.';
 
 /**
  * 다음 메뉴 코드 — MN + 6자리. 서비스를 가리지 않고 지운 메뉴까지 포함한 가장 큰 코드의 다음이라, 지운 번호를
@@ -37,7 +37,7 @@ export const OTHER_SERVICE = '같은 서비스 안에서만 옮길 수 있습니
 export function nextMenuCode(last: string | null): string {
   const next = (last ? Number(last.slice(2)) : 0) + 1;
   if (next > 999_999)
-    throw new ConflictException('메뉴 코드를 더 만들 수 없습니다');
+    throw new ConflictException('메뉴 코드를 더 만들 수 없습니다.');
   return `MN${String(next).padStart(6, '0')}`;
 }
 

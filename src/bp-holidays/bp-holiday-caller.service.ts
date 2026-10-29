@@ -45,7 +45,7 @@ export class BpHolidayCallerService {
     );
     // 가드는 헤더가 없으면 소속 BP(플랫폼 BP)를 정한다 — 플랫폼 BP 에는 점포 · 휴일이 없으니 고르라고 답한다.
     if (isPlatform && bp.bpCodeId === admin.bpCodeId)
-      throw new BadRequestException('휴일을 볼 BP 를 골라 주세요');
+      throw new BadRequestException('휴일을 볼 BP 를 골라 주세요.');
     const [menu, mappings] = await Promise.all([
       this.prisma.roleGroupMenu.findFirst({
         where: {

@@ -21,7 +21,7 @@ function expiresAtFrom(now: Date, isRemembered: boolean): Date {
 }
 
 /** 갱신·접속 확인 실패의 공통 메시지. 원인별로 다르게 답하지 않는다. */
-export const INVALID_SESSION_MESSAGE = '만료되었거나 종료된 접속입니다';
+export const INVALID_SESSION_MESSAGE = '만료되었거나 종료된 접속입니다.';
 
 type SessionClient = Pick<Prisma.TransactionClient, 'authSession'>;
 

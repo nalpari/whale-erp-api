@@ -44,13 +44,13 @@ export class BpProfileUpdateDto {
   /** 대표자 연락처. 하이픈 없이 숫자 9~12자리(02 지역번호 · 050X 평생번호 포함). 비워 둘 수 있다. @example 01012345678 */
   @Transform(emptyToNull)
   @IsOptional()
-  @Matches(PHONE_PATTERN, { message: '대표자 연락처는 숫자 9~12자리입니다' })
+  @Matches(PHONE_PATTERN, { message: '대표자 연락처는 숫자 9~12자리입니다.' })
   bizCeoPhone?: string;
 
   /** 대표자 이메일. 비워 둘 수 있다. @example ceo@hangang.co.kr */
   @Transform(emptyToNull)
   @IsOptional()
-  @IsEmail({}, { message: '대표자 이메일 형식이 아닙니다' })
+  @IsEmail({}, { message: '대표자 이메일 형식이 아닙니다.' })
   @MaxLength(100)
   bizCeoEmail?: string;
 

@@ -43,8 +43,9 @@ import type {
 import type { InquiryStateResponseDto } from './dto/inquiry-state.response.dto';
 import type { ListInquiriesDto } from './dto/list-inquiries.dto';
 
-const NOT_FOUND = '문의를 찾을 수 없습니다';
-const STALE = '그사이 다른 운영자가 저장했습니다. 다시 불러온 뒤 저장해 주세요';
+const NOT_FOUND = '문의를 찾을 수 없습니다.';
+const STALE =
+  '그사이 다른 운영자가 저장했습니다. 다시 불러온 뒤 저장해 주세요.';
 const STATE = { inquiryId: true, status: true, updatedAt: true } as const;
 
 type Answered = { createdBy: number; title: string };
@@ -146,7 +147,8 @@ export class InquiriesService {
       where: { inquiryAttachmentId, inquiryId },
       select: { storageKey: true, fileName: true },
     });
-    if (!attachment) throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+    if (!attachment)
+      throw new NotFoundException('첨부파일을 찾을 수 없습니다.');
     return {
       url: await storage.downloadUrl(
         attachment.storageKey,
@@ -249,8 +251,8 @@ export class InquiriesService {
     const current = await this.stateOf(inquiryId);
     throw new ConflictException(
       current.status === 'ANSWERED'
-        ? '이미 답변한 문의입니다'
-        : '이미 처리중인 문의입니다',
+        ? '이미 답변한 문의입니다.'
+        : '이미 처리중인 문의입니다.',
     );
   }
 

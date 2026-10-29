@@ -57,10 +57,10 @@ import {
   workDateOf,
 } from './work-schedule-rules';
 
-const SCHEDULE_NOT_FOUND = '근무스케줄을 찾을 수 없습니다';
-const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다';
+const SCHEDULE_NOT_FOUND = '근무스케줄을 찾을 수 없습니다.';
+const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다.';
 /** 직원 앱 — 내 소속 근무지(`GET /me/memberships`)와 같은 문구 */
-const MEMBERSHIP_NOT_FOUND = '소속을 찾을 수 없습니다';
+const MEMBERSHIP_NOT_FOUND = '소속을 찾을 수 없습니다.';
 
 const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -232,7 +232,7 @@ const copyHiddenStaff = () =>
     error: 'Conflict',
     code: 'WORK_SCHEDULE_COPY_HIDDEN_STAFF',
     message:
-      '본사 계정은 이 점포의 지난 주 복사를 할 수 없습니다 — 가맹 점포 관리자가 복사해 주세요',
+      '본사 계정은 이 점포의 지난 주 복사를 할 수 없습니다 — 가맹 점포 관리자가 복사해 주세요.',
   });
 
 /**
@@ -244,7 +244,7 @@ const storeClosed = () =>
     statusCode: HttpStatus.BAD_REQUEST,
     error: 'Bad Request',
     code: 'WORK_SCHEDULE_STORE_CLOSED',
-    message: '폐점 점포는 근무스케줄을 등록할 수 없습니다',
+    message: '폐점 점포는 근무스케줄을 등록할 수 없습니다.',
   });
 
 /** 폐점 점포인가. 점포는 1팀 표라 직원 레코드에서 관계로 닿지 않아 따로 읽는다(저장 알림과 같다) */
@@ -264,7 +264,7 @@ const overlap = () =>
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
     code: 'WORK_SCHEDULE_OVERLAP',
-    message: '같은 직원의 근무스케줄과 시간이 겹칩니다',
+    message: '같은 직원의 근무스케줄과 시간이 겹칩니다.',
   });
 
 /** 동시 저장이 DB 의 겹침 금지(work_schedules_no_overlap, EXCLUDE)에 걸렸는가 — PostgreSQL 23P01 */
@@ -308,7 +308,7 @@ export class WorkSchedulesService {
     const dayCount = (to.getTime() - from.getTime()) / DAY_MS + 1;
     if (dayCount < 1 || dayCount > MAX_LIST_DAYS)
       throw new BadRequestException(
-        `기간은 시작 근무일부터 ${MAX_LIST_DAYS}일 이하입니다`,
+        `기간은 시작 근무일부터 ${MAX_LIST_DAYS}일 이하입니다.`,
       );
     const scope = await this.scopeOf(adminAccountId);
     if (scope.storeHides(storeId) === null)
@@ -450,7 +450,7 @@ export class WorkSchedulesService {
   ): Promise<WorkScheduleHistoryListResponseDto> {
     const scope = await this.scopeOf(adminAccountId);
     if (query.from && query.to && query.from > query.to)
-      throw new BadRequestException('기간의 끝이 시작보다 앞입니다');
+      throw new BadRequestException('기간의 끝이 시작보다 앞입니다.');
     const hidesStore = scope.storeHides(query.storeId);
     if (hidesStore === null) throw new NotFoundException(STORE_NOT_FOUND);
     if (query.staffMemberId !== undefined) {
@@ -649,7 +649,7 @@ export class WorkSchedulesService {
             staffMemberId: line.staffMemberId,
             statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
             code: 'WORK_SCHEDULE_SAVE_FAILED',
-            message: '저장하지 못했습니다. 이 줄만 다시 시도해 주세요',
+            message: '저장하지 못했습니다. 이 줄만 다시 시도해 주세요.',
           });
           continue;
         }
@@ -705,7 +705,7 @@ export class WorkSchedulesService {
   ): Promise<CopyLastWeekResponseDto> {
     const monday = toDate(weekStartYmd);
     if (monday.getUTCDay() !== 1)
-      throw new BadRequestException('weekStart 는 월요일입니다');
+      throw new BadRequestException('weekStart 는 월요일입니다.');
     const scope = await this.scopeOf(adminAccountId);
     if (scope.storeHides(storeId) === null)
       throw new NotFoundException(STORE_NOT_FOUND);
@@ -732,7 +732,7 @@ export class WorkSchedulesService {
           error: 'Conflict',
           code: 'WORK_SCHEDULE_WEEK_NOT_EMPTY',
           message:
-            '이미 근무스케줄이 있는 주입니다 — 지난 주 복사는 빈 주에서만 합니다',
+            '이미 근무스케줄이 있는 주입니다 — 지난 주 복사는 빈 주에서만 합니다.',
         });
 
       const sources = await db.workSchedule.findMany({
@@ -1065,21 +1065,21 @@ export class WorkSchedulesService {
         error: 'Bad Request',
         code: 'WORK_SCHEDULE_HIDDEN',
         message:
-          '본사 제공에 동의하지 않은 가맹 직원의 근무스케줄은 다룰 수 없습니다',
+          '본사 제공에 동의하지 않은 가맹 직원의 근무스케줄은 다룰 수 없습니다.',
       });
     if (staff.joinStatus !== 'JOINED')
       throw new BadRequestException({
         statusCode: HttpStatus.BAD_REQUEST,
         error: 'Bad Request',
         code: 'WORK_SCHEDULE_NOT_JOINED',
-        message: '가입을 마친 직원만 근무스케줄을 받을 수 있습니다',
+        message: '가입을 마친 직원만 근무스케줄을 받을 수 있습니다.',
       });
     if (staff.retiredDate && staff.retiredDate < workDate)
       throw new BadRequestException({
         statusCode: HttpStatus.BAD_REQUEST,
         error: 'Bad Request',
         code: 'WORK_SCHEDULE_AFTER_RETIREMENT',
-        message: `퇴직일(${isoDate(staff.retiredDate)}) 뒤 날짜에는 근무스케줄을 넣을 수 없습니다`,
+        message: `퇴직일(${isoDate(staff.retiredDate)}) 뒤 날짜에는 근무스케줄을 넣을 수 없습니다.`,
       });
     const contract = staff.contracts[0];
     if (!contract)
@@ -1087,7 +1087,7 @@ export class WorkSchedulesService {
         statusCode: HttpStatus.BAD_REQUEST,
         error: 'Bad Request',
         code: 'WORK_SCHEDULE_NO_CONTRACT',
-        message: '근무일에 체결 완료된 근로계약이 없는 직원입니다',
+        message: '근무일에 체결 완료된 근로계약이 없는 직원입니다.',
       });
     return { storeId: staff.storeId, contractId: contract.contractId };
   }
@@ -1219,9 +1219,9 @@ function spanOf(dto: WorkScheduleFieldsDto): { date: Date; span: Span } {
   const span = toSpan(date, dto.startTime, dto.endTime);
   if (!span)
     throw new BadRequestException(
-      '시작과 종료가 같습니다 — 근무는 24시간보다 짧아야 합니다',
+      '시작과 종료가 같습니다 — 근무는 24시간보다 짧아야 합니다.',
     );
   if (!breakFits(span, dto.breakMinutes))
-    throw new BadRequestException('휴게시간이 근무시간보다 깁니다');
+    throw new BadRequestException('휴게시간이 근무시간보다 깁니다.');
   return { date, span };
 }

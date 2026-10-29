@@ -4,7 +4,7 @@ title: BP role groups
 description: 관리자 웹 「BP 권한 그룹 관리」(MN000013) — BA · FA groups scoped by the caller's role, codes numbered per type, names unique per (BP, 관리계정), per-menu CRUD capped by the fixed role ∩ the caller's own rights, and deletion that moves linked admins.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T09:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: bp-role-groups-controller
     resource: ../../src/bp-role-groups/bp-role-groups.controller.ts
@@ -13,15 +13,15 @@ sources:
   - id: bp-role-group-access
     resource: ../../src/bp-role-groups/bp-role-group-access.ts
     title: Caller scope, visible groups, writable type, cell block reasons, ceiling intersection
-    last_modified: 2026-10-21T09:00:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-role-groups-service
     resource: ../../src/bp-role-groups/bp-role-groups.service.ts
     title: BpRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-21T09:00:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-role-group-menus-service
     resource: ../../src/bp-role-groups/bp-role-group-menus.service.ts
     title: BpRoleGroupMenusService (tree · save · preview · franchise-master view)
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-role-group-dto
     resource: ../../src/bp-role-groups/dto/bp-role-group.response.dto.ts
     title: Response shapes extending the platform DTOs (roleTypeCode narrowed)
@@ -66,7 +66,7 @@ is a 403 at the menu check; the screen hides the button with `can.delete`. The d
 controller takes it with `@TargetBp()` — see [admin authentication](/api/admin-auth.md). A BP or
 가맹 caller sending another BP gets 403 from the guard; a platform caller sending a missing,
 deleted or the platform BP gets 404 from the guard, and sending none reaches the service with the
-platform BP, which answers 400 「권한 그룹을 볼 BP 를 골라 주세요」 — this screen has nothing to show
+platform BP, which answers 400 「권한 그룹을 볼 BP 를 골라 주세요.」 — this screen has nothing to show
 for the platform BP. The `bpCodeId` query the request first had is gone. A group outside the scope — another
 가맹 마스터's FA, a fixed role, a platform role, a deleted group — is 404, so an id does not
 reveal that it exists. The role check runs before the self-link check, so a caller who cannot

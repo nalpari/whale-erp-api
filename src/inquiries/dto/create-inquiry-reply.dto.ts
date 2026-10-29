@@ -7,8 +7,8 @@ export class CreateInquiryReplyDto {
   /** 문의자에게 보이는 답변. 평문이고 20,000자까지. 첨부파일은 받지 않는다(CNT-18). */
   @IsString()
   @MaxLength(20_000)
-  @Matches(/\S/, { message: '답변을 입력해 주세요' })
-  @Matches(NO_NUL, { message: '답변에 쓸 수 없는 문자가 있습니다' })
+  @Matches(/\S/, { message: '답변을 입력해 주세요.' })
+  @Matches(NO_NUL, { message: '답변에 쓸 수 없는 문자가 있습니다.' })
   body: string;
 
   /**

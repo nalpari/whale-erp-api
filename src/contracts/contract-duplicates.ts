@@ -40,7 +40,7 @@ export type InProgressContract = {
 
 const replacedMeanwhile = () =>
   new ConflictException(
-    '다른 요청이 먼저 기존 근로계약을 고쳤습니다. 다시 저장해 주세요',
+    '다른 요청이 먼저 기존 근로계약을 고쳤습니다. 다시 저장해 주세요.',
   );
 
 /**
@@ -124,8 +124,8 @@ export function checkReplace(
     error: 'Conflict',
     code: 'CONTRACT_IN_PROGRESS',
     message: current.some((c) => c.status === 'SIGNED')
-      ? '이 점포에 같은 직원의 체결 완료되었거나 진행 중인 근로계약이 있습니다. 기존 계약을 대체할지 확인해 주세요'
-      : '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 기존 계약을 대체할지 확인해 주세요',
+      ? '이 점포에 같은 직원의 체결 완료되었거나 진행 중인 근로계약이 있습니다. 기존 계약을 대체할지 확인해 주세요.'
+      : '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 기존 계약을 대체할지 확인해 주세요.',
     contracts: listed(current),
   });
 }
@@ -274,8 +274,8 @@ export function signedOverlap(
     error: 'Conflict',
     code: renewal ? 'RENEWAL_SIGNED_OVERLAP' : 'SIGNED_CONTRACT_OVERLAP',
     message: renewal
-      ? '이 점포에 같은 직원의 직전 계약이 아닌 체결 완료 근로계약과 계약 기간이 겹쳐 재계약을 등록할 수 없습니다. 그 계약을 먼저 확인해 주세요'
-      : '이 점포에 같은 직원의 계약 기간이 겹치는 체결 완료 근로계약이 있습니다. 잘못 올린 계약이면 「잘못 올린 계약 바로잡기」로 다시 등록해 주세요',
+      ? '이 점포에 같은 직원의 직전 계약이 아닌 체결 완료 근로계약과 계약 기간이 겹쳐 재계약을 등록할 수 없습니다. 그 계약을 먼저 확인해 주세요.'
+      : '이 점포에 같은 직원의 계약 기간이 겹치는 체결 완료 근로계약이 있습니다. 잘못 올린 계약이면 「잘못 올린 계약 바로잡기」로 다시 등록해 주세요.',
     contracts: listed(replaceable),
   });
 }
@@ -483,6 +483,6 @@ export async function checkWorkTimeOverlap(
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
     code: 'WORK_TIME_OVERLAP',
-    message: '다른 점포 근로계약과 근무 시간이 겹칩니다',
+    message: '다른 점포 근로계약과 근무 시간이 겹칩니다.',
   });
 }

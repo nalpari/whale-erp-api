@@ -25,7 +25,7 @@ import type { CodeGroupInputDto } from './dto/code-group-input.dto';
 import type { CodeItemInputDto } from './dto/code-item-input.dto';
 import type { CreateCodeGroupDto } from './dto/create-code-groups.dto';
 
-const GROUP_NOT_FOUND = '공통코드 그룹을 찾을 수 없습니다';
+const GROUP_NOT_FOUND = '공통코드 그룹을 찾을 수 없습니다.';
 
 const groupSelect = {
   groupCode: true,
@@ -160,7 +160,9 @@ export class CodeGroupsService {
       for (const { groupCode } of items) {
         const g = byCode.get(groupCode);
         if (!g || g.isDeleted || !isPlatformOwner(g.manageOwnerCode))
-          throw new NotFoundException(`${GROUP_NOT_FOUND}: ${groupCode}`);
+          throw new NotFoundException(
+            `공통코드 그룹을 찾을 수 없습니다: ${groupCode}`,
+          );
       }
 
       for (const { groupCode, groupName, status, sortOrder } of items)
@@ -368,7 +370,7 @@ export class CodeGroupsService {
   ): Promise<BpApplicationResponseDto> {
     const group = await this.findPlatformGroup(groupCode);
     if (group.manageOwnerCode !== PLATFORM_PROVIDED_OWNER_CODE)
-      throw new ConflictException('플랫폼제공 그룹만 BP에 적용할 수 있습니다');
+      throw new ConflictException('플랫폼제공 그룹만 BP에 적용할 수 있습니다.');
 
     return this.prisma.$transaction(
       async (tx) => {
@@ -385,10 +387,10 @@ export class CodeGroupsService {
         const bpCodes = bps.map((b) => b.bpCode);
         if (!originals.length)
           throw new ConflictException(
-            '상세 코드가 없는 그룹은 BP에 적용할 수 없습니다',
+            '상세 코드가 없는 그룹은 BP에 적용할 수 없습니다.',
           );
         if (!bpCodes.length)
-          throw new ConflictException('적용할 사용 중인 고객 BP 가 없습니다');
+          throw new ConflictException('적용할 사용 중인 고객 BP 가 없습니다.');
 
         // 이미 있는 행은 건너뛴다 — 덮어쓰지 않는다(copyProvidedItems, 회원가입과 같은 함수).
         const createdCount = await copyProvidedItems(
@@ -432,7 +434,7 @@ function isPlatformOwner(code: string): boolean {
 }
 
 const FIXED_NOT_DELETABLE =
-  '플랫폼고정 그룹의 상세 코드는 지울 수 없습니다 — 사용 상태로 관리해 주세요';
+  '플랫폼고정 그룹의 상세 코드는 지울 수 없습니다 — 사용 상태로 관리해 주세요.';
 
 /** 상세 코드 등록이 같은 그룹의 살아 있는 행과 겹칠 때(지운 행은 겹침이 아니라 되살린다). */
 export const SAME_AS_LIVE_ITEM = '이 그룹에 이미 있는 상세 코드입니다';
@@ -479,7 +481,7 @@ export function takenInOrder(
 
 /** 삭제 확인 뒤 다른 관리자가 먼저 지워 지운 행 수가 모자랄 때 — 일부만 지우지 않고 되돌린다. */
 export const DELETED_MEANWHILE =
-  '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요';
+  '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요.';
 
 /** 수정 확인 뒤 다른 관리자가 먼저 지운 행이 있을 때 — 지운 행에 쓰지 않고 되돌린다. 뒤에 그 코드를 붙인다. */
 export const DELETED_BEFORE_SAVE =

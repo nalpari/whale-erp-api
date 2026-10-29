@@ -100,7 +100,7 @@ describe('PasswordResetLinkAdminController', () => {
     scope.canManageStaffAccount.mockResolvedValue(false);
 
     await expect(controller.issue(admin, '42')).rejects.toThrow(
-      '직원을 찾을 수 없습니다',
+      '직원을 찾을 수 없습니다.',
     );
     expect(links.issue).not.toHaveBeenCalled();
   });

@@ -499,7 +499,7 @@ describe('ContractsService.updateWorker', () => {
     await expect(
       service.updateWorker(9, 7, dto({ phone: '01011112222' })),
     ).rejects.toThrow(
-      '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+      '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다.',
     );
     expect(tx.contractParty.upsert).not.toHaveBeenCalled();
   });

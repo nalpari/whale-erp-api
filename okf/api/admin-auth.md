@@ -17,7 +17,7 @@ sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
-    last_modified: 2026-10-28T09:05:49Z
+    last_modified: 2026-10-29T06:02:57Z
   - id: password
     resource: ../../src/auth/password.ts
     title: verifyPassword — scrypt 형식이 아닌 저장값('!')도 더미 해시로 한 번 대조
@@ -29,11 +29,11 @@ sources:
   - id: admin-profile-service
     resource: ../../src/auth/admin-profile.service.ts
     title: 마이페이지 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
-    last_modified: 2026-10-27T07:48:04Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
     title: BpProfileService — 마이페이지 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영 · 지우기) · 사업자 번호 검사
-    last_modified: 2026-10-23T02:40:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -41,15 +41,15 @@ sources:
   - id: admin-session-service
     resource: ../../src/admin-session/admin-session.service.ts
     title: admin_sessions (issue · find · extend · isActive · revoke)
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-login-info-service
     resource: ../../src/auth/admin-login-info.service.ts
     title: Login info — account, menu tree with CRUD, managed stores, codes
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check, target BP (X-Bp-Code-Id → @TargetBp())'
-    last_modified: 2026-10-22T00:37:16Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
@@ -61,15 +61,15 @@ sources:
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
-    last_modified: 2026-10-19T05:00:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-my-password-service
     resource: ../../src/auth/admin-my-password.service.ts
     title: POST /auth/admin/me/password-change · me/password-verifications — 마이페이지 내 비밀번호 변경 · 현재 비밀번호 확인
-    last_modified: 2026-10-29T02:50:08Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-password-policy
     resource: ../../src/auth/admin-password-policy.ts
     title: 1팀 비밀번호 정책(PL-QSBSYY) 검사와 문구
-    last_modified: 2026-10-26T09:30:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 선택과 진입
@@ -319,7 +319,7 @@ forced popup above. `AdminMyPasswordService.change` (`admin-my-password.service.
   confirmation) — there is no issued-password step here, nothing was issued.
   A wrong current password is 400 `현재 비밀번호가 올바르지 않습니다.`, a
   wording 1팀 picked for 마이페이지 (비밀번호 변경 · 현재 비밀번호 확인 · 회원 탈퇴);
-  it is not the 3팀 직원 앱 string (`지금 비밀번호가 맞지 않습니다`) despite
+  it is not the 3팀 직원 앱 string (`지금 비밀번호가 맞지 않습니다.`) despite
   meaning the same thing.
 - On success: new hash, `admin_change_histories` gets 「비밀번호 · 변경」 (no
   value, same no-value rule as the forced path). **No session is touched** —
@@ -496,7 +496,7 @@ forgotten — and only when the judged menu's `serviceCode` is `WHALE_ERP`; a
 
 | Caller | No header | Own BP | Another customer BP | Missing · deleted · platform BP · malformed |
 |---|---|---|---|---|
-| PM · PA of the platform BP | platform BP | — | that BP | 404 「BP 를 찾을 수 없습니다」 |
+| PM · PA of the platform BP | platform BP | — | that BP | 404 「BP 를 찾을 수 없습니다.」 |
 | BM · BA · FM · FA | own BP | own BP | 403 「다른 BP 의 정보는 다룰 수 없습니다.」 | 403 (same) |
 
 The own BP is `admin_accounts.bp_code_id` from the database, never a query, body

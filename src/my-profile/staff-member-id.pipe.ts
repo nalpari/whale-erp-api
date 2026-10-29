@@ -6,7 +6,7 @@ import { parseRouteId } from '../common/route-id';
 export class StaffMemberIdPipe implements PipeTransform<string, number> {
   transform(raw: string): number {
     const id = parseRouteId(raw);
-    if (id === null) throw new NotFoundException('소속을 찾을 수 없습니다');
+    if (id === null) throw new NotFoundException('소속을 찾을 수 없습니다.');
     return id;
   }
 }

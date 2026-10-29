@@ -4,12 +4,12 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:50:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-29T01:42:58Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear — moved out of the service, shared with BP admins
@@ -21,7 +21,7 @@ sources:
   - id: platform-admins-controller
     resource: ../../src/platform-admins/platform-admins.controller.ts
     title: /platform-admins routes, the menu permission per action (`/platform-admins`, MN000213 today) and the platform-account check
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: platform-admins-menu-url
     resource: ../../prisma/migrations/20261019144438_team1_menu_single_level_urls/migration.sql
     title: 1팀 메뉴 10개 url 을 한 단계로 (MN000213 /platform/system/admins → /platform-admins 등)
@@ -37,7 +37,7 @@ sources:
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action, { platformOnly }) — 경로로 찾은 메뉴의 권한 · 플랫폼 계정 가드'
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (one rule for every mail)
@@ -121,9 +121,9 @@ changes the role group, take `SELECT … FOR SHARE` on that `role_groups` row in
 transaction and only then check it is an undeleted platform `PM` · `PA` group. Deleting a
 role group holds the row `FOR UPDATE` ([platform role groups](/api/platform-role-groups.md)),
 so the two wait for each other: if the delete is first, the check runs after its commit and
-answers 400 「플랫폼 관리자에게 줄 수 있는 권한이 아닙니다」; if registration is first, the delete
+answers 400 「플랫폼 관리자에게 줄 수 있는 권한이 아닙니다.」; if registration is first, the delete
 waits and then reads the new admin too — moving it to the replacement with its 「사용자 권한」
-history when one was chosen, or answering 400 「연결 사용자가 있어 대체 권한을 골라야 합니다」 when
+history when one was chosen, or answering 400 「연결 사용자가 있어 대체 권한을 골라야 합니다.」 when
 none was (the screen showed no linked users). Since 2026-10-27 registration runs the group,
 아이디 and 이메일 checks inside its transaction (the password is hashed before it, to keep
 scrypt out of the lock). The group is locked before any `admin_accounts` row — the delete

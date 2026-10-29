@@ -77,7 +77,7 @@ export async function resolveScope(
 
   if (isPlatformType) {
     if (bp.bpCodeId === account.bpCodeId)
-      throw new BadRequestException('권한 그룹을 볼 BP 를 골라 주세요');
+      throw new BadRequestException('권한 그룹을 볼 BP 를 골라 주세요.');
     return {
       caller,
       bpCodeId: bp.bpCodeId,
