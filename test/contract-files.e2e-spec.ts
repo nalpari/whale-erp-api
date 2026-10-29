@@ -216,7 +216,7 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
     expect(stored.get(b[0].storageKey)!.toString('latin1')).toContain(
       '/Subtype /Image',
     );
-    expect((await docs(noMethod)).map((d) => d.kind)).toEqual([
+    expect((await docs(noMethod)).map((d) => d.kind).sort()).toEqual([
       'SENT_ORIGINAL',
       'SIGNED_COPY',
     ]);

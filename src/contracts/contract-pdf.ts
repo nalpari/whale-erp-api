@@ -124,12 +124,19 @@ const LINE = '#d1d5db';
 export function renderContractPdf(
   model: ContractPdfModel,
   signature: Buffer | null,
+  /** 테스트용 — 묶음이 그려진 쪽(0부터). 표 · 당사자 칸이 장에 걸쳐 갈라지지 않는지 본다 */
+  trace?: (
+    event: 'tableStart' | 'tableEnd' | 'partiesStart' | 'partiesEnd',
+    page: number,
+  ) => void,
 ): Promise<Buffer> {
+  let page = 0;
   const doc = new PDFDocument({
     size: 'A4',
     margin: 56,
     info: { Title: model.title, Producer: 'WHALE ERP' },
   });
+  doc.on('pageAdded', () => (page += 1));
   doc.registerFont('R', REGULAR);
   doc.registerFont('B', BOLD);
   const chunks: Buffer[] = [];
@@ -224,10 +231,12 @@ export function renderContractPdf(
         };
         // 머리글만 앞 장에 남지 않게 표 전체(머리글 + 일곱 줄)가 들어갈 자리를 먼저 본다
         ensure(15 * (block.tableRows.length + 1) + 4);
+        trace?.('tableStart', page);
         line(block.header, MUTED, true);
         rule();
         doc.y += 3;
         for (const r of block.tableRows) line(r.cells, r.off ? MUTED : INK);
+        trace?.('tableEnd', page);
       }
     }
   }
@@ -240,6 +249,7 @@ export function renderContractPdf(
       // 구분선 · 칸 사이 여백 · 머리글 둘 · 서명 칸 · 안내문
       160,
   );
+  trace?.('partiesStart', page);
   rule(INK);
   doc.moveDown(0.6);
   row(model.dateLine[0], model.dateLine[1]);
@@ -271,6 +281,7 @@ export function renderContractPdf(
       valign: 'center',
     });
   doc.y = top + boxH + 10;
+  trace?.('partiesEnd', page);
   if (model.note)
     doc
       .font('R')

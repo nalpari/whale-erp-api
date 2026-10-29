@@ -191,7 +191,8 @@ export class MyContractViewsService {
     const jobTitle = c.jobTitle ?? c.staffMember.jobTitle;
     // 처리 완료본에 쓴 사용자 칸이 당사자 행에 있으면(날인 때 고정 · 백필) 그 값으로 — 완료본과 같게(WHALEERP-131). 점포명 ·
     // 점포 주소 · 사업장 우편번호(고정하지 않는다 — 직원 앱이 보이지 않는다)는 지금 값이다
-    const fixed = party?.employerName ? party : null;
+    const fixed =
+      party && typeof party.employerName === 'string' ? party : null;
     return {
       ...item,
       ...terms,

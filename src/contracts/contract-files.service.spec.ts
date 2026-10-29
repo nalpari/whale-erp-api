@@ -335,12 +335,14 @@ describe('ContractFilesService.fillMissing', () => {
       .spyOn(service, 'make')
       .mockResolvedValue('EXISTS')
       .mockRejectedValueOnce(new Error('서명 파일 없음'))
-      .mockResolvedValueOnce('CREATED');
+      .mockRejectedValueOnce(new Error('그릴 수 없는 이미지'));
     const now = new Date('2026-10-29T00:00:00Z');
-    await expect(service.fillMissing(now)).resolves.toBe(1);
+    await expect(service.fillMissing(now)).resolves.toBe(0);
     expect(make).toHaveBeenCalledTimes(2);
 
     await service.fillMissing(new Date(now.getTime() + 10 * 60_000));
+    // 보낸 원본 쪽도 미룬다 — 원시 쿼리 값에 미룬 계약(6)이 실린다
+    expect(prisma.$queryRaw.mock.calls[1]).toContainEqual([6]);
     expect(prisma.contract.findMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

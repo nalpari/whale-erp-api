@@ -75,7 +75,8 @@ type EmployerStore = Prisma.StoreGetPayload<{
 
 /** 점포 정보 → 사용자 칸. 상호가 없으면 점포명, 소재지는 사업자 주소, 전화번호는 점포 연락처(직원 앱 상세와 같은 칸) */
 export const employerOf = (store: EmployerStore) => ({
-  name: store.businessProfile?.bizTradeName ?? store.name,
+  // 빈 상호도 점포명으로 — 고정 값의 상호가 빈 문자열이면 「고정했는가」를 가르지 못한다(pr-review-toolkit)
+  name: store.businessProfile?.bizTradeName || store.name,
   ceoName: store.businessProfile?.bizCeoName ?? null,
   registrationNumber: store.businessProfile?.bizRegistrationNumber ?? null,
   address: store.businessProfile?.bizAddress ?? null,
@@ -101,7 +102,11 @@ export function pdfInputOf(
   { contract: c, store, signedAt }: ContractFileSource,
 ): ContractPdfInput & { employerFixed: boolean } {
   const party = c.contractParty;
-  const fixed = kind === 'SIGNED_COPY' && !!party?.employerName;
+  // 적힌 사용자 칸이 있는가 — 고정 · 백필은 상호(없으면 점포명)를 늘 적는다
+  const snapshot =
+    kind === 'SIGNED_COPY' && party && party.employerName !== null
+      ? { ...party, employerName: party.employerName }
+      : null;
   return {
     kind,
     contractId: c.contractId,
@@ -113,14 +118,14 @@ export function pdfInputOf(
       workLocation: c.workLocation,
       jobTitle: c.jobTitle ?? c.staffMember.jobTitle,
     }),
-    employer: fixed
+    employer: snapshot
       ? {
-          name: party.employerName ?? store.name,
-          ceoName: party.employerCeoName,
-          registrationNumber: party.employerRegistrationNumber,
-          address: party.employerAddress,
-          addressDetail: party.employerAddressDetail,
-          phone: party.employerPhone,
+          name: snapshot.employerName,
+          ceoName: snapshot.employerCeoName,
+          registrationNumber: snapshot.employerRegistrationNumber,
+          address: snapshot.employerAddress,
+          addressDetail: snapshot.employerAddressDetail,
+          phone: snapshot.employerPhone,
         }
       : employerOf(store),
     worker: {
@@ -134,7 +139,7 @@ export function pdfInputOf(
     },
     sentAt: c.sentAt!,
     signedAt,
-    employerFixed: fixed,
+    employerFixed: snapshot !== null,
   };
 }
 
@@ -203,7 +208,8 @@ export class ContractFilesService {
     const signed = await this.prisma.contract.findMany({
       where: {
         contractId: { notIn: skipSigned },
-        NOT: { contractMethod: 'PAPER' },
+        // 계약 방식이 빈 옛 전자계약도 — NOT(종이)만 쓰면 SQL 이 NULL 을 빼 버린다(e2e 로 확인)
+        OR: [{ contractMethod: null }, { contractMethod: { not: 'PAPER' } }],
         sentAt: { not: null },
         contractDocuments: {
           some: { kind: 'SIGNATURE' },

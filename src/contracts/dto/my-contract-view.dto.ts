@@ -134,7 +134,7 @@ export class MyContractAccountDto {
   addressDetail: string | null;
 }
 
-/** 계약에 붙은 파일 — 종이 계약 날인본 · 임금계약서 등. 직원 필기 서명은 싣지 않는다. 내려받기는 GET /me/contracts/:contractId/documents/:contractDocumentId/download-url */
+/** 계약에 붙은 파일 — 종이 계약 날인본 · 임금계약서, 전자계약의 보낸 원본 · 처리 완료본(WHALEERP-131). 직원 필기 서명은 싣지 않는다. 내려받기는 GET /me/contracts/:contractId/documents/:contractDocumentId/download-url */
 export class MyContractDocumentDto {
   contractDocumentId: number;
   @ApiProperty({ enum: ContractDocumentKind, enumName: 'ContractDocumentKind' })

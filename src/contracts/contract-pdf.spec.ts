@@ -127,4 +127,45 @@ describe('renderContractPdf', () => {
       pdf.toString('latin1').match(/\/Type \/Page[^s]/g)?.length,
     ).toBeGreaterThan(2);
   });
+
+  it('제3조 표와 체결일 · 사용자 · 근로자 · 서명 칸은 어느 길이의 본문 뒤에서도 한 장에 그린다', async () => {
+    const table = {
+      type: 'TABLE' as const,
+      header: ['요일', '시업', '종업', '휴게', '근로'],
+      tableRows: Array.from({ length: 7 }, () => ({
+        cells: ['월', '09:00', '18:00', '12:00–13:00', '8시간'],
+        off: false,
+      })),
+    };
+    // 앞 본문 길이를 한 줄씩 늘려 묶음의 시작이 쪽 아래 끝 근처 어디에든 오게 한다
+    for (let lines = 0; lines < 60; lines += 3) {
+      const events: [string, number][] = [];
+      await renderContractPdf(
+        contractPdfModel({
+          ...input,
+          articles: [
+            {
+              title: '제1조',
+              blocks: [
+                { type: 'TEXT', text: '가나다라마바사 '.repeat(lines * 8 + 1) },
+              ],
+            },
+            { title: '제3조', blocks: [{ type: 'TEXT', text: '표' }, table] },
+            {
+              title: '제4조',
+              blocks: [
+                { type: 'TEXT', text: '아자차카타파하 '.repeat(lines * 6 + 1) },
+              ],
+            },
+          ],
+          employer: { ...input.employer, address: '서울 '.repeat(lines % 40) },
+        }),
+        null,
+        (event, page) => events.push([event, page]),
+      );
+      const pageOf = (e: string) => events.find(([n]) => n === e)![1];
+      expect(pageOf('tableEnd')).toBe(pageOf('tableStart'));
+      expect(pageOf('partiesEnd')).toBe(pageOf('partiesStart'));
+    }
+  }, 60_000);
 });
