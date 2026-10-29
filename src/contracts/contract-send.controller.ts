@@ -19,6 +19,7 @@ import {
 } from '../auth/menu-permission.guard';
 import { ContractIdPipe } from './contract-id.pipe';
 import {
+  BP_FORBIDDEN_DESCRIPTION,
   BP_MISSING_DESCRIPTION,
   BP_NOT_FOUND_DESCRIPTION,
 } from './contracts-swagger';
@@ -31,8 +32,7 @@ import { SendContractResponseDto } from './dto/send-contract.response.dto';
 // 대상 BP 도 같다(`@TargetBp()`, WHALEERP-618).
 @ApiBearerAuth()
 @ApiForbiddenResponse({
-  description:
-    '근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더',
+  description: `근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
 })
 @ApiBadRequestResponse({ description: BP_MISSING_DESCRIPTION })
 @UserTypes('admin')
@@ -53,6 +53,10 @@ export class ContractSendController {
   @HttpCode(200)
   // 본문은 비워도 된다(옛 화면) — 생성 문서가 필수로 표시하지 않게(셀프 code-review)
   @ApiBody({ type: SendContractDto, required: false })
+  // 본문을 받는 경로라 클래스의 400(BP 누락)을 덮으므로 함께 다시 적는다
+  @ApiBadRequestResponse({
+    description: `본문 형식(expectedStatus · expectedSentAt) · ${BP_MISSING_DESCRIPTION}`,
+  })
   @ApiOkResponse({
     type: SendContractResponseDto,
     description:
