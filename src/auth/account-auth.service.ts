@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { AccountLoginFailureReason } from '@prisma/client';
+import { AccountLoginFailureReason, Prisma } from '@prisma/client';
 import {
   AuthSessionService,
   INVALID_SESSION_MESSAGE,
@@ -270,7 +270,6 @@ export class AccountAuthService {
           lockExpiresAt: true,
           passwordHash: true,
           status: true,
-          updatedAt: true,
         },
       });
       if (current.status === 'WITHDRAWN') return { kind: 'withdrawn' };
@@ -283,16 +282,7 @@ export class AccountAuthService {
       // 로그인에 성공하면 쌓인 실패는 연속이 끊긴 것이다. 지우지 않으면 몇 달에
       // 걸친 오타 5번이 정상 사용자를 잠근다. 지울 것이 없으면 쓰지 않는다.
       if (current.failedLoginCount > 0 || current.lockExpiresAt !== null)
-        await tx.account.update({
-          where: { accountId },
-          data: {
-            failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
-            lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
-            // 로그인은 계정 수정이 아니다. 넘기지 않으면 @updatedAt 이 수정 일시를 로그인 시각으로 바꾼다(관리자 로그인과 같다,
-            // WHALEERP-624)
-            updatedAt: current.updatedAt,
-          },
-        });
+        await writeAttemptState(tx, accountId, CLEARED_ATTEMPT_STATE);
 
       // 가입 연결이 보류된 계정(LINK_HOLD)도 막지 않는다. 막지 않는 대신
       // 상태를 응답에 담아 앱이 "관리자 확인 중"을 보여 줄 수 있게 한다.
@@ -323,26 +313,13 @@ export class AccountAuthService {
       const now = new Date();
       const stored = await tx.account.findUniqueOrThrow({
         where: { accountId },
-        select: {
-          failedLoginCount: true,
-          lockExpiresAt: true,
-          status: true,
-          updatedAt: true,
-        },
+        select: { failedLoginCount: true, lockExpiresAt: true, status: true },
       });
       if (stored.status === 'WITHDRAWN') return null;
       const current = this.stateOf(stored);
       const next = registerFailure(current, now);
       // 기다리는 사이 다른 요청이 먼저 잠갔으면 상태가 그대로 돌아온다.
-      if (next !== current)
-        await tx.account.update({
-          where: { accountId },
-          data: {
-            failedLoginCount: next.failedCount,
-            lockExpiresAt: next.lockExpiresAt,
-            updatedAt: stored.updatedAt, // 실패 횟수는 계정 수정이 아니다(WHALEERP-624)
-          },
-        });
+      if (next !== current) await writeAttemptState(tx, accountId, next);
       return next;
     });
   }
@@ -386,4 +363,20 @@ export class AccountAuthService {
       failureReason,
     };
   }
+}
+
+/**
+ * 로그인 실패 횟수 · 잠금만 쓴다 — 로그인은 계정 수정이 아니라 수정 일시(`updated_at`)를 건드리지 않는다(WHALEERP-624). Prisma
+ * `update` 는 `@updatedAt` 을 늘 바꾸고, 읽은 값을 되돌려 써도 JS `Date` 가 마이크로초를 버려 `TIMESTAMPTZ(6)` 값이 움직인다 —
+ * 그래서 두 칸만 바꾸는 UPDATE 를 쓴다. 부르는 쪽이 그 행을 FOR UPDATE 로 잡은 트랜잭션 안에서 부른다.
+ */
+function writeAttemptState(
+  tx: Prisma.TransactionClient,
+  accountId: number,
+  state: AttemptState,
+): Promise<number> {
+  return tx.$executeRaw`
+    UPDATE accounts
+    SET failed_login_count = ${state.failedCount}, lock_expires_at = ${state.lockExpiresAt}
+    WHERE account_id = ${accountId}`;
 }

@@ -395,10 +395,12 @@ rate from the second lock on.
   login clears the count, so five typos spread over months do not lock a real
   user. A password reset clears both.
 - **Logging in is not editing the account** (WHALEERP-624, 2026-10-29): a counted failure (count · lock) and
-  the success that clears them write `accounts` back with the `updated_at` read under the row lock, as
-  관리자 login does ([Admin authentication](/api/admin-auth.md)). Without that Prisma's `@updatedAt` would set the
-  account's 수정 일시 to the login time. A real account change — password reset or change, e-mail, 주소 —
-  still moves it. The e2e (`account-login-lock.e2e-spec.ts`) pins both directions on a real database.
+  the success that clears them change only `failed_login_count` · `lock_expires_at`, with a raw `UPDATE` under the
+  row lock (`writeAttemptState`), so `accounts.updated_at` stays as it was. A Prisma `update` would set it through
+  `@updatedAt`, and writing back the value read (as 관리자 login does, [Admin authentication](/api/admin-auth.md))
+  would still shift it: a JS `Date` drops the microseconds a `TIMESTAMPTZ(6)` set outside Prisma keeps (api #199
+  review). A real account change still moves it — the e2e (`account-login-lock.e2e-spec.ts`) pins the
+  microsecond value through five failures, the lock and the clearing login, and a password change moving it.
 - The 429 is the one place the response differs by account state: after five
   failures it shows the address is registered. That was weighed against a user
   who cannot tell why login stopped, and the hint was kept. `lockExpiresAt` adds
