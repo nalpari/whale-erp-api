@@ -8,6 +8,10 @@ import { ATTENDANCE_DAY_STATUS_LABELS } from '../attendance/attendance-day-statu
 import { STAFF_JOIN_STATE_LABELS } from '../staff-members/join-state';
 import { HQ_SHARING_CONSENT_STATE_LABELS } from '../admin-scope/hq-sharing';
 import {
+  IDENTITY_FIELD_LABELS,
+  IDENTITY_FIELDS,
+} from '../contracts/identity-match';
+import {
   BUSINESS_VERIFICATION_RESULT_LABELS,
   OPERATION_REQUIREMENT_LABELS,
 } from '../stores/store-format';
@@ -41,4 +45,7 @@ export const API_ENUMS: EnumSource = {
   BpHolidayPeriodState: Object.entries(PERIOD_STATE_LABELS),
   /** 관리자 웹 일별 출퇴근의 상태 — GET /attendance-records/daily (WHALEERP-217 · 219) */
   AttendanceDayStatus: Object.entries(ATTENDANCE_DAY_STATUS_LABELS),
+  /** 날인 전 본인 대조에서 다른 항목 — GET /me/contracts/{id} 의 mismatches · 날인 409 IDENTITY_MISMATCH (WHALEERP-147) */
+  // 순서는 IDENTITY_FIELDS(mismatches 순서) 하나에서 정한다
+  IdentityField: IDENTITY_FIELDS.map((f) => [f, IDENTITY_FIELD_LABELS[f]]),
 };
