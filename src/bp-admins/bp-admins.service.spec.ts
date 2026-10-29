@@ -562,7 +562,7 @@ describe('BpAdminsService', () => {
           bp,
           input({ roleTypeCode: 'FA', roleGroupId: 14, storeIds: [1] }),
         ),
-      ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다');
+      ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다.');
     });
 
     it('가맹 관리자 등록은 연결 가맹 마스터 행을 잠근 뒤 다시 읽는다 — 그사이 본사가 뺀 점포면 400, 계정은 없다', async () => {
@@ -578,7 +578,7 @@ describe('BpAdminsService', () => {
           bp,
           input({ roleTypeCode: 'FA', roleGroupId: 14, storeIds: [6] }),
         ),
-      ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다');
+      ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다.');
       expect(prisma.adminAccount.create).not.toHaveBeenCalled();
     });
 
@@ -608,7 +608,7 @@ describe('BpAdminsService', () => {
     it('잠그는 사이 BP 가 지워졌으면 404, 계정은 없다', async () => {
       whileLocked(bpRow, () => [{ ...liveBp, is_deleted: true }]);
       await expect(service.create(2, bp, input())).rejects.toThrow(
-        new NotFoundException('BP 를 찾을 수 없습니다'),
+        new NotFoundException('BP 를 찾을 수 없습니다.'),
       );
       expect(prisma.adminAccount.create).not.toHaveBeenCalled();
     });
@@ -619,7 +619,7 @@ describe('BpAdminsService', () => {
       ]);
       await expect(service.create(2, bp, input())).rejects.toThrow(
         new ConflictException(
-          'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다',
+          'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.',
         ),
       );
       expect(prisma.adminAccount.create).not.toHaveBeenCalled();
@@ -631,7 +631,7 @@ describe('BpAdminsService', () => {
       ]);
       await expect(service.create(2, bp, input())).rejects.toThrow(
         new ConflictException(
-          'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다',
+          'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.',
         ),
       );
       expect(prisma.adminAccount.create).not.toHaveBeenCalled();
@@ -640,7 +640,7 @@ describe('BpAdminsService', () => {
     it('잠글 BP 행이 없으면 404', async () => {
       whileLocked(bpRow, () => []);
       await expect(service.create(2, bp, input())).rejects.toThrow(
-        new NotFoundException('BP 를 찾을 수 없습니다'),
+        new NotFoundException('BP 를 찾을 수 없습니다.'),
       );
       expect(prisma.adminAccount.create).not.toHaveBeenCalled();
     });
@@ -673,7 +673,7 @@ describe('BpAdminsService', () => {
     it('폐점 점포를 맡기면 400', async () => {
       await expect(
         service.create(1, bp, input({ storeIds: [4] })),
-      ).rejects.toThrow('폐점한 점포는 새로 맡길 수 없습니다');
+      ).rejects.toThrow('폐점한 점포는 새로 맡길 수 없습니다.');
     });
 
     it('아이디가 이미 있으면(삭제 · 탈퇴 포함) 409', async () => {
@@ -776,7 +776,7 @@ describe('BpAdminsService', () => {
       });
       await expect(
         service.update(20, bp, 30, input(30, { storeIds: [5, 6, 7] })),
-      ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다');
+      ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다.');
       expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
     });
 
@@ -789,7 +789,7 @@ describe('BpAdminsService', () => {
       whileLocked(bpRow, () => [{ ...liveBp, is_deleted: true }]);
       await expect(
         service.update(1, bp, 2, input(2, { accountStatus: 'INACTIVE' })),
-      ).rejects.toThrow(new NotFoundException('BP 를 찾을 수 없습니다'));
+      ).rejects.toThrow(new NotFoundException('BP 를 찾을 수 없습니다.'));
       expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
     });
 
@@ -802,7 +802,7 @@ describe('BpAdminsService', () => {
         service.update(1, bp, 2, input(2, { accountStatus: 'ACTIVE' })),
       ).rejects.toThrow(
         new ConflictException(
-          'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다',
+          'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.',
         ),
       );
       expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();

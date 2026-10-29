@@ -30,7 +30,7 @@ import type {
 } from './dto/bp-code-group.response.dto';
 import type { ListBpCodeGroupsDto } from './dto/list-bp-code-groups.dto';
 
-const GROUP_NOT_FOUND = '공통코드 그룹을 찾을 수 없습니다';
+const GROUP_NOT_FOUND = '공통코드 그룹을 찾을 수 없습니다.';
 const REPEATED_IN_REQUEST = '한 요청에 같은 상세 코드가 두 번 있습니다';
 
 /**
@@ -343,9 +343,9 @@ export class BpCodeGroupsService {
       where: { bpCodeId: bp.bpCodeId, isDeleted: false },
       select: { bpCode: true, isPlatform: true },
     });
-    if (!row) throw new NotFoundException('BP 를 찾을 수 없습니다');
+    if (!row) throw new NotFoundException('BP 를 찾을 수 없습니다.');
     if (row.isPlatform)
-      throw new BadRequestException('공통코드를 볼 BP 를 골라 주세요');
+      throw new BadRequestException('공통코드를 볼 BP 를 골라 주세요.');
     return row.bpCode;
   }
 
@@ -353,7 +353,7 @@ export class BpCodeGroupsService {
   private async writableBpCodeOf(bp: TargetBpContext): Promise<string> {
     if (bp.isPlatformCaller)
       throw new ForbiddenException(
-        '플랫폼 사용자는 BP 공통코드를 조회만 할 수 있습니다',
+        '플랫폼 사용자는 BP 공통코드를 조회만 할 수 있습니다.',
       );
     return this.bpCodeOf(bp);
   }

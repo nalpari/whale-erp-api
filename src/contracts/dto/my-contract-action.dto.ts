@@ -25,9 +25,9 @@ export class SignMyContractDto {
       '직원이 본 계약의 발송 일시(ISO 8601, 시간대 표기 필수) — 다르면 409',
     example: '2026-10-21T01:00:00.000Z',
   })
-  @IsISO8601({ strict: true }, { message: '발송 일시 형식이 아닙니다' })
+  @IsISO8601({ strict: true }, { message: '발송 일시 형식이 아닙니다.' })
   @Matches(/T.*(Z|[+-]\d{2}:?\d{2})$/, {
-    message: '발송 일시에 시간대(Z · +09:00)를 넣어 주세요',
+    message: '발송 일시에 시간대(Z · +09:00)를 넣어 주세요.',
   })
   sentAt: string;
 }
@@ -41,7 +41,7 @@ export class RejectMyContractDto {
   )
   @IsString()
   @MaxLength(REJECT_REASON_MAX, {
-    message: `거부 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요`,
+    message: `거부 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요.`,
   })
   reason?: string;
 }

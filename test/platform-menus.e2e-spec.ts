@@ -480,7 +480,7 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
         name: '4단계',
       });
       expect(res.status).toBe(400);
-      expect(res.body.message).toBe('메뉴는 최대 3단계까지만 둘 수 있습니다');
+      expect(res.body.message).toBe('메뉴는 최대 3단계까지만 둘 수 있습니다.');
     });
 
     it('수정은 updatedAt 이 맞을 때만 — 옛 값으로 다시 저장하면 409, URL 을 빼면 비운다', async () => {
@@ -636,16 +636,16 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
       for (const [target, message] of [
         [
           child.menuId,
-          '메뉴를 자기 자신이나 하위 메뉴 아래로 옮길 수 없습니다',
+          '메뉴를 자기 자신이나 하위 메뉴 아래로 옮길 수 없습니다.',
         ],
-        [siblings[1].menuId, '메뉴는 최대 3단계까지만 둘 수 있습니다'],
+        [siblings[1].menuId, '메뉴는 최대 3단계까지만 둘 수 있습니다.'],
         [
           (
             await prisma.menu.findFirstOrThrow({
               where: { serviceCode: 'WHALE_ERP' },
             })
           ).menuId,
-          '같은 서비스 안에서만 옮길 수 있습니다',
+          '같은 서비스 안에서만 옮길 수 있습니다.',
         ],
       ] as const) {
         const bad = await call(

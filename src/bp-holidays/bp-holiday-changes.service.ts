@@ -46,14 +46,14 @@ type History = {
 };
 
 export const CONFLICT_MESSAGE =
-  '다른 사용자가 먼저 수정했습니다. 다시 불러온 뒤 시도해 주세요';
-const OUT_OF_SCOPE = '맡지 않은 점포는 다룰 수 없습니다';
+  '다른 사용자가 먼저 수정했습니다. 다시 불러온 뒤 시도해 주세요.';
+const OUT_OF_SCOPE = '맡지 않은 점포는 다룰 수 없습니다.';
 const ONGOING_FIXED =
-  '진행 중인 휴일은 휴일 유형 · 날짜 · 반복 · 적용 범위를 바꿀 수 없습니다 — 강제 종료하거나 새 휴일을 등록해 주세요';
+  '진행 중인 휴일은 휴일 유형 · 날짜 · 반복 · 적용 범위를 바꿀 수 없습니다 — 강제 종료하거나 새 휴일을 등록해 주세요.';
 const TERMINATE_NOT_STARTED =
-  '어제 이전에 시작한 휴일만 강제 종료할 수 있습니다 — 오늘부터 시작하는 휴일은 삭제해 주세요';
+  '어제 이전에 시작한 휴일만 강제 종료할 수 있습니다 — 오늘부터 시작하는 휴일은 삭제해 주세요.';
 const DELETE_STARTED =
-  '이미 지난 날짜가 있는 휴일은 지울 수 없습니다 — 강제 종료해 주세요';
+  '이미 지난 날짜가 있는 휴일은 지울 수 없습니다 — 강제 종료해 주세요.';
 
 /** 두 표(대상 · 예외 점포)의 같은 모양 — 기간 행 ID 칸 이름만 다르다. */
 const TABLES = {
@@ -99,7 +99,7 @@ export class BpHolidayChangesService {
       dto.isAllStores ? dto.excludedStoreIds : dto.storeIds,
     );
     if (!dto.isAllStores && !storeIds.length)
-      throw new BadRequestException('대상 점포를 하나 이상 골라 주세요');
+      throw new BadRequestException('대상 점포를 하나 이상 골라 주세요.');
     return this.prisma.$transaction(async (tx) => {
       const stores = await this.addableStores(
         tx,
@@ -356,7 +356,7 @@ export class BpHolidayChangesService {
       dto.isAllStores ? dto.excludedStoreIds : dto.storeIds,
     );
     if (!dto.isAllStores && !desired.length)
-      throw new BadRequestException('대상 점포를 하나 이상 골라 주세요');
+      throw new BadRequestException('대상 점포를 하나 이상 골라 주세요.');
     const plans: [TableKey, PeriodPlan][] = [];
     for (const key of Object.keys(TABLES) as TableKey[]) {
       const open = openPeriodsOf<

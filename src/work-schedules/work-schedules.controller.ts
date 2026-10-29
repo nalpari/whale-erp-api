@@ -52,7 +52,7 @@ export class WorkScheduleIdPipe implements PipeTransform<string, number> {
   transform(raw: string): number {
     const id = parseRouteId(raw);
     if (id === null)
-      throw new NotFoundException('근무스케줄을 찾을 수 없습니다');
+      throw new NotFoundException('근무스케줄을 찾을 수 없습니다.');
     return id;
   }
 }

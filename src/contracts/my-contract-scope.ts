@@ -20,4 +20,4 @@ export const myContractWhere = (accountId: number) =>
     staffMember: { accountId },
   }) satisfies Prisma.ContractWhereInput;
 
-export const MY_CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
+export const MY_CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다.';

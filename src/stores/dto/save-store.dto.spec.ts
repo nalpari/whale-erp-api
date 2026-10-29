@@ -22,7 +22,9 @@ describe('SaveStoreDto phone', () => {
   it.each(['02123456', '0507203313345', '0507-2033-1334'])(
     '%s 는 400 — 숫자 9~12자리만',
     (phone) => {
-      expect(phoneErrors(phone)).toEqual(['점포 연락처는 숫자 9~12자리입니다']);
+      expect(phoneErrors(phone)).toEqual([
+        '점포 연락처는 숫자 9~12자리입니다.',
+      ]);
     },
   );
 
@@ -50,7 +52,7 @@ describe('StoreBusinessInputDto ceoPhone', () => {
     '%s 는 400 — 숫자 9~12자리만',
     (ceoPhone) => {
       expect(ceoPhoneErrors(ceoPhone)).toEqual([
-        '대표자 연락처는 숫자 9~12자리입니다',
+        '대표자 연락처는 숫자 9~12자리입니다.',
       ]);
     },
   );

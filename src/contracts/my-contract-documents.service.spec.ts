@@ -83,7 +83,7 @@ describe('MyContractDocumentsService', () => {
     prisma.contract.findFirst.mockResolvedValue(null);
     const run = service(null).downloadUrl(77, 41, 5);
     await expect(run).rejects.toBeInstanceOf(NotFoundException);
-    await expect(run).rejects.toThrow('근로계약을 찾을 수 없습니다');
+    await expect(run).rejects.toThrow('근로계약을 찾을 수 없습니다.');
     expect(prisma.contractDocument.findFirst).not.toHaveBeenCalled();
   });
 
@@ -103,7 +103,7 @@ describe('MyContractDocumentsService', () => {
     prisma.contractDocument.findFirst.mockResolvedValue(null);
     const run = service(null).downloadUrl(77, 41, 5);
     await expect(run).rejects.toBeInstanceOf(NotFoundException);
-    await expect(run).rejects.toThrow('파일을 찾을 수 없습니다');
+    await expect(run).rejects.toThrow('파일을 찾을 수 없습니다.');
   });
 
   it('종료는 체결 완료에서 닫혔을 때만(SIGNED → ENDED 이력) 처리 완료본을 준다 — 날인 전 종료는 409', async () => {

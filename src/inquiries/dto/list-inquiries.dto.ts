@@ -32,7 +32,7 @@ export class ListInquiriesDto extends PageDto {
   @Transform(trimText)
   @IsString()
   @MaxLength(200)
-  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다.' })
   title?: string;
 
   /** 보낸 곳 — BP 이름 · 점포 이름 · 보낸 사람 이름 중 하나에 들어 있으면 나온다. @example 한강상회 */
@@ -40,6 +40,6 @@ export class ListInquiriesDto extends PageDto {
   @Transform(trimText)
   @IsString()
   @MaxLength(100)
-  @Matches(NO_NUL, { message: '보낸 곳에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '보낸 곳에 쓸 수 없는 문자가 있습니다.' })
   sender?: string;
 }

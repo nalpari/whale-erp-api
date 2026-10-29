@@ -9,6 +9,6 @@ export class BirthDateCorrectionDto {
    * 정정할 생년월일(YYYY-MM-DD, 한국 날짜). 오늘(KST) 뒤 날짜(내일부터)이거나 한국 오늘 기준 만 19세 미만이면 받지 않는다.
    * @example 1990-05-17
    */
-  @IsString({ message: '생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다' })
+  @IsString({ message: '생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다.' })
   birthDate: string;
 }

@@ -102,7 +102,7 @@ export class RetirementService {
       await this.assertCanRetire(tx, staffMemberId, staff);
       if (staff.retiredDate !== null)
         throw new ConflictException(
-          '이미 퇴직 예정입니다. 퇴직일을 바꾸려면 퇴직일 변경을 써 주세요',
+          '이미 퇴직 예정입니다. 퇴직일을 바꾸려면 퇴직일 변경을 써 주세요.',
         );
       this.assertDateAllowed(retiredDate, today, staff.hiredDate);
       await assertNoOpenCheckIn(tx, staffMemberId);
@@ -136,7 +136,7 @@ export class RetirementService {
         today,
       );
       if (current.getTime() === retiredDate.getTime())
-        throw new ConflictException('지금 퇴직일과 같습니다');
+        throw new ConflictException('지금 퇴직일과 같습니다.');
       this.assertDateAllowed(retiredDate, today, hiredDate);
       await assertNoOpenCheckIn(tx, staffMemberId);
       await tx.staffMemberRetirementLog.create({
@@ -449,10 +449,10 @@ export class RetirementService {
   ): void {
     if (retiredDate < addMonths(today, -MAX_PAST_MONTHS))
       throw new BadRequestException(
-        '퇴직일은 오늘 이후이거나 최근 3개월 안의 날짜여야 합니다',
+        '퇴직일은 오늘 이후이거나 최근 3개월 안의 날짜여야 합니다.',
       );
     if (hiredDate && hiredDate <= today && retiredDate < hiredDate)
-      throw new BadRequestException('퇴직일은 입사일보다 앞설 수 없습니다');
+      throw new BadRequestException('퇴직일은 입사일보다 앞설 수 없습니다.');
   }
 
   /**
@@ -472,10 +472,10 @@ export class RetirementService {
       })) === 0
     )
       throw new ConflictException(
-        '임시저장 근로계약만 있는 직원은 퇴직 처리 대신 임시저장을 지워 주세요',
+        '임시저장 근로계약만 있는 직원은 퇴직 처리 대신 임시저장을 지워 주세요.',
       );
     if (staff.employmentStatus === 'RETIRED')
-      throw new ConflictException('이미 퇴직한 직원입니다');
+      throw new ConflictException('이미 퇴직한 직원입니다.');
   }
 
   /** 퇴직 예정(재직 + 퇴직일 있음)이고 퇴직일 전날까지인지 확인한다. 지금의 퇴직일과 입사일을 돌려준다. */
@@ -486,10 +486,10 @@ export class RetirementService {
   ): Promise<{ retiredDate: Date; hiredDate: Date | null }> {
     const staff = await this.lockStaff(tx, staffMemberId);
     if (staff.employmentStatus !== 'EMPLOYED' || staff.retiredDate === null)
-      throw new ConflictException('퇴직 예정인 직원이 아닙니다');
+      throw new ConflictException('퇴직 예정인 직원이 아닙니다.');
     if (staff.retiredDate <= today)
       throw new ConflictException(
-        '퇴직일 전날까지만 취소하거나 퇴직일을 바꿀 수 있습니다',
+        '퇴직일 전날까지만 취소하거나 퇴직일을 바꿀 수 있습니다.',
       );
     return { retiredDate: staff.retiredDate, hiredDate: staff.hiredDate };
   }
@@ -521,7 +521,7 @@ export class RetirementService {
         retiredDate: true,
       },
     });
-    if (!staff) throw new NotFoundException('직원을 찾을 수 없습니다');
+    if (!staff) throw new NotFoundException('직원을 찾을 수 없습니다.');
     return staff;
   }
 }
@@ -555,7 +555,7 @@ async function assertNoOpenCheckIn(
     error: 'Conflict',
     code: 'OPEN_CHECK_IN',
     message: working
-      ? `${at} 출근이 아직 퇴근 전입니다. 퇴근이 등록된 뒤 다시 처리해 주세요`
-      : `${at} 퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 먼저 보정으로 닫아 주세요`,
+      ? `${at} 출근이 아직 퇴근 전입니다. 퇴근이 등록된 뒤 다시 처리해 주세요.`
+      : `${at} 퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 먼저 보정으로 닫아 주세요.`,
   });
 }

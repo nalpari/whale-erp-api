@@ -7,6 +7,6 @@ export class RetirementDateDto {
    * 3개월 안의 지난 날짜만 받고, 입사일보다 앞설 수 없다.
    * @example 2026-10-31
    */
-  @IsDateOnly('퇴직일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다')
+  @IsDateOnly('퇴직일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다.')
   retiredDate: string;
 }

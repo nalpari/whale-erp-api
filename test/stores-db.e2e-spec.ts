@@ -265,7 +265,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       .send({ ...formOf(after), phone: '0507203313345' })
       .expect(400);
     expect((rejected.body as { message: string[] }).message).toContain(
-      '점포 연락처는 숫자 9~12자리입니다',
+      '점포 연락처는 숫자 9~12자리입니다.',
     );
     expect((await detail(storeId)).phone).toBe('050720331334');
   });
@@ -607,7 +607,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       .expect(400);
     // BP 를 고르지 않으면(헤더 없음) 어느 경로든 400 — BP 권한 그룹과 같다. 문구까지 본다: 등록은 본문 BP 불일치도
     // 400 이라, 상태만 보면 「BP 누락」이 깨져도 통과한다.
-    const noBp = { message: '점포를 볼 BP 를 골라 주세요' };
+    const noBp = { message: '점포를 볼 BP 를 골라 주세요.' };
     await call('get', `/stores?keyword=${encodeURI(tag)}`, pmToken)
       .expect(400)
       .expect((res) => expect(res.body).toMatchObject(noBp));

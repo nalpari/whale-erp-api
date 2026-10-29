@@ -225,7 +225,7 @@ describe('BpCodeGroupsService', () => {
       prisma.codeGroup.findFirst.mockImplementation(groupLookup(fixedGroup));
 
       await expect(service.listItems(bpUser, 'ROLE_TYPE')).rejects.toThrow(
-        new NotFoundException('공통코드 그룹을 찾을 수 없습니다'),
+        new NotFoundException('공통코드 그룹을 찾을 수 없습니다.'),
       );
       expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
     });
@@ -722,7 +722,7 @@ describe('BpCodeGroupsService', () => {
       await expect(
         service.deleteItems(1, bpUser, 'EMP_TYPE', ['INTERN', 'TEMP']),
       ).rejects.toThrow(
-        '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요',
+        '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요.',
       );
     });
   });

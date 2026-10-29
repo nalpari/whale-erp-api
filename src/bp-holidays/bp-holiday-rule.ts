@@ -45,9 +45,9 @@ export function ruleOf(
 ): HolidayRule {
   const startDate = parseDateOnly(input.startDate);
   if (!startDate)
-    throw new BadRequestException('시작일을 YYYY-MM-DD 로 보내 주세요');
+    throw new BadRequestException('시작일을 YYYY-MM-DD 로 보내 주세요.');
   if (!allowPastStart && startDate < today)
-    throw new BadRequestException('시작일은 오늘 이후로 정해 주세요');
+    throw new BadRequestException('시작일은 오늘 이후로 정해 주세요.');
   const rule = shapeOf(input, startDate);
   // 목록 · 날짜 계산 · 공식 휴일이 모두 2100년에서 멈춘다 — 그 뒤 날짜는 어디에도 보이지 않으므로 받지 않는다.
   if (
@@ -55,7 +55,7 @@ export function ruleOf(
       (x) => x && x > LAST_DATE,
     )
   )
-    throw new BadRequestException('날짜는 2100-12-31 까지 정할 수 있습니다');
+    throw new BadRequestException('날짜는 2100-12-31 까지 정할 수 있습니다.');
   // 지정 횟수는 날짜 칸이 없어 위에서 걸리지 않는다 — 2100년 안에 그 횟수가 다 나오는지 센다.
   if (
     rule.repeatEndType === 'COUNT' &&
@@ -63,7 +63,7 @@ export function ruleOf(
       (rule.repeatCount ?? 0)
   )
     throw new BadRequestException(
-      '반복 횟수가 2100-12-31 을 넘습니다 — 횟수를 줄이거나 종료일을 정해 주세요',
+      '반복 횟수가 2100-12-31 을 넘습니다 — 횟수를 줄이거나 종료일을 정해 주세요.',
     );
   return rule;
 }
@@ -82,15 +82,15 @@ function shapeOf(input: RuleInput, startDate: Date): HolidayRule {
   if (input.holidayTypeCode === 'PERIOD') {
     const endDate = input.endDate ? parseDateOnly(input.endDate) : null;
     if (!endDate)
-      throw new BadRequestException('기간 휴일은 종료일을 보내 주세요');
+      throw new BadRequestException('기간 휴일은 종료일을 보내 주세요.');
     if (endDate < startDate)
-      throw new BadRequestException('종료일은 시작일 이후로 정해 주세요');
+      throw new BadRequestException('종료일은 시작일 이후로 정해 주세요.');
     return { holidayTypeCode: 'PERIOD', startDate, endDate, ...empty };
   }
   const repeatEndType = input.repeatEndType as RepeatEndType | undefined;
   if (!input.holidayRepeatTypeCode || !repeatEndType)
     throw new BadRequestException(
-      '반복 휴일은 반복 유형과 종료 조건을 보내 주세요',
+      '반복 휴일은 반복 유형과 종료 조건을 보내 주세요.',
     );
   const base = {
     holidayTypeCode: 'REPEAT',
@@ -106,12 +106,12 @@ function shapeOf(input: RuleInput, startDate: Date): HolidayRule {
       ? parseDateOnly(input.repeatEndDate)
       : null;
     if (!repeatEndDate || repeatEndDate < startDate)
-      throw new BadRequestException('반복 종료일은 시작일 이후로 보내 주세요');
+      throw new BadRequestException('반복 종료일은 시작일 이후로 보내 주세요.');
     return { ...base, repeatEndDate };
   }
   if (repeatEndType === 'COUNT') {
     if (!input.repeatCount)
-      throw new BadRequestException('반복 횟수를 보내 주세요');
+      throw new BadRequestException('반복 횟수를 보내 주세요.');
     return { ...base, repeatCount: input.repeatCount };
   }
   return base;

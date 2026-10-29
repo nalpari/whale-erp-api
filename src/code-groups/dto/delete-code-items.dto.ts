@@ -20,7 +20,7 @@ export class DeleteCodeItemsDto {
   @Matches(CODE_PATTERN, {
     each: true,
     message:
-      '상세 코드는 영문 대문자·숫자·밑줄만 쓰고 영문으로 시작하며 20자 이내입니다',
+      '상세 코드는 영문 대문자·숫자·밑줄만 쓰고 영문으로 시작하며 20자 이내입니다.',
   })
   itemCodes: string[];
 }

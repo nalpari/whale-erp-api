@@ -26,7 +26,7 @@ export class SendContractDto {
   // 시간대가 없는 시각은 서버 시간대에 따라 다른 순간이 된다 — Z 나 ±hh:mm 이 있어야 한다(셀프 code-review)
   @Matches(/T.*(Z|[+-]\d{2}:\d{2})$/, {
     message:
-      'expectedSentAt 은 시간대(Z 또는 ±hh:mm)가 있는 ISO 8601 일시여야 합니다',
+      'expectedSentAt 은 시간대(Z 또는 ±hh:mm)가 있는 ISO 8601 일시여야 합니다.',
   })
   expectedSentAt?: string;
 }

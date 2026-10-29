@@ -52,17 +52,17 @@ import { asksHqSharingConsentAt } from './hq-sharing-consent';
 import { sameName } from '../contracts/identity-match';
 
 /** 번호 · 코드가 맞는 초대가 없다 — 어느 쪽이 틀렸는지, 그 번호로 초대가 있는지 알리지 않는다(JOIN-7) */
-export const CODE_MISMATCH = '휴대전화번호나 초대 코드를 다시 확인해 주세요';
+export const CODE_MISMATCH = '휴대전화번호나 초대 코드를 다시 확인해 주세요.';
 /** 찾은 초대가 끝났다(기한 · 다시 보냄 · 번호 변경 · 퇴직 · 가입 불가) — 링크와 코드가 똑같이 무효다 */
 export const INVITATION_ENDED =
-  '초대가 만료되었거나 더 쓸 수 없습니다. 근무지에 다시 초대해 달라고 요청해 주세요';
+  '초대가 만료되었거나 더 쓸 수 없습니다. 근무지에 다시 초대해 달라고 요청해 주세요.';
 /** 운영 정책 ACC-22 문구 */
 export const UNDER_AGE =
   '만 19세 미만은 WHALE ERP로 근로계약과 출퇴근을 관리하지 않습니다. 근무지 관리자에게 알려 주세요.';
 /** 같은 번호로 5회 틀리면 30분 잠근다(JOIN-7) */
 export const CODE_LOCK_MS = 30 * 60 * 1000;
 export const CODE_LOCKED =
-  '초대 코드 입력이 잠겼습니다. 30분 뒤 다시 시도하거나, 근무지 관리자에게 재발송을 요청해 주세요';
+  '초대 코드 입력이 잠겼습니다. 30분 뒤 다시 시도하거나, 근무지 관리자에게 재발송을 요청해 주세요.';
 /** 만 19세 미만 운영 알림 템플릿(20261021103042_team3_staff_signup) */
 export const UNDER_AGE_TEMPLATE = 'NTF_SIGNUP_UNDER_AGE';
 
@@ -93,17 +93,17 @@ export const invitationNotFound = () =>
 const alreadyJoined = () =>
   conflict(
     'INVITATION_ALREADY_JOINED',
-    '이미 가입을 마친 초대입니다. 로그인해 주세요',
+    '이미 가입을 마친 초대입니다. 로그인해 주세요.',
   );
 /** 로그인한 직원의 근무지 더하기에서 이미 수락한 초대 — 같은 code 이고 「로그인해 주세요」만 뺀다(이미 로그인해 있다) */
 const alreadyAdded = () =>
   conflict(
     'INVITATION_ALREADY_JOINED',
-    '이미 가입을 마친 초대입니다. 이 근무지는 계정에 이어져 있습니다',
+    '이미 가입을 마친 초대입니다. 이 근무지는 계정에 이어져 있습니다.',
   );
 /** 그 번호로 계정이 있다 — 로그인한 뒤 앱 안에서 근무지를 더한다(WHALEERP-603 · 144) */
 const accountExists = () =>
-  conflict('ACCOUNT_EXISTS', '이미 계정이 있습니다. 로그인해 주세요');
+  conflict('ACCOUNT_EXISTS', '이미 계정이 있습니다. 로그인해 주세요.');
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -212,7 +212,10 @@ export class StaffSignupService {
     const today = kstToday().toISOString().slice(0, 10);
     // 오늘 뒤 날짜는 잘못 넣은 것이다 — 만 19세 미만으로 보고 초대를 끝내지 않게 먼저 막는다(api #81 리뷰)
     if (dto.birthDate > today)
-      throw badRequest('BIRTH_DATE_IN_FUTURE', '생년월일을 다시 확인해 주세요');
+      throw badRequest(
+        'BIRTH_DATE_IN_FUTURE',
+        '생년월일을 다시 확인해 주세요.',
+      );
     // 입력 형식을 본 뒤에 코드를 센다 — 형식 오류로 실패 횟수가 쌓이지 않게
     await this.guardCode(dto);
     const underAge = ageOn(dto.birthDate, today) < 19;
@@ -308,7 +311,7 @@ export class StaffSignupService {
       )
         throw conflict(
           'ACCOUNT_EMAIL_TAKEN',
-          '이미 가입한 이메일입니다. 다른 이메일을 쓰거나 로그인해 주세요',
+          '이미 가입한 이메일입니다. 다른 이메일을 쓰거나 로그인해 주세요.',
         );
       throw e;
     }
@@ -556,7 +559,7 @@ export class StaffSignupService {
     const byCode = lookup.phone !== undefined || lookup.code !== undefined;
     if (byToken === byCode || (byCode && (!lookup.phone || !lookup.code)))
       throw new BadRequestException(
-        '초대 링크의 토큰, 또는 휴대전화번호와 초대 코드를 함께 보내 주세요',
+        '초대 링크의 토큰, 또는 휴대전화번호와 초대 코드를 함께 보내 주세요.',
       );
 
     const rows = await db.invitation.findMany({

@@ -31,7 +31,7 @@ import {
   lockPeople,
 } from './contracts.service';
 
-const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
+const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다.';
 
 export type EndResult = { contractId: number; status: 'ENDED' };
 
@@ -50,7 +50,7 @@ export type SendResult = SendContractResponseDto;
  *   정보 수정과 같은 규칙이다. 알림톡이 없어 502 · 503 은 나지 않는다.
  * - 계정은 있고 이 점포에 가입하지 않은 번호(소속 추가 확인 · 복귀 확인)는 새 소속 추가 확인 요청(알림톡 · 메일)을 보내고 발송
  *   대기로 둔다(WHALEERP-130, 2026-10-26 재영 — 직원이 수락하면 서명 대기). 거부 · 만료도 발송 대기로 돌아간다. 날인 기한은
- *   수락한 때부터라 응답의 기한은 null 이다. 그 계정이 이 점포에 재직 중이면 판별이 409 「이 점포에 이미 재직 중인 직원입니다」
+ *   수락한 때부터라 응답의 기한은 null 이다. 그 계정이 이 점포에 재직 중이면 판별이 409 「이 점포에 이미 재직 중인 직원입니다.」
  *   (코드 없음)다.
  * 상세의 「다시 보낼 수 있는가」(canResend)와 직원 목록의 canResend(발송 대기 · 서명 대기만)가 이 판정을 따른다 — 바꾸면 함께 고친다.
  */
@@ -106,7 +106,7 @@ export class ContractSendService {
           c.staffMember.phone !== scoped.phone
         )
           throw new ConflictException(
-            '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+            '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
           );
         if (!c.status || !RESENDABLE_STATUSES.includes(c.status))
           throw statusConflict(c.status ?? 'PENDING_SEND');
@@ -195,7 +195,7 @@ export class ContractSendService {
     const dispatched = await this.delivery.dispatch(pending, adminAccountId);
     if (!dispatched)
       throw new ConflictException(
-        '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+        '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
       );
     // 그사이 직원이 소속 추가 확인 요청에 답했으면 계약은 그 답으로 서명 대기(기한은 수락부터) · 거부다 — 지금 값을 싣는다(api #164 리뷰)
     if (dispatched === 'ANSWERED') {
@@ -246,7 +246,7 @@ export class ContractSendService {
       if (!c) throw new NotFoundException(CONTRACT_NOT_FOUND);
       if (c.storeId !== scoped.storeId || c.staffMember.phone !== scoped.phone)
         throw new ConflictException(
-          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
         );
       // 발송 대기가 아니면 transition 이 지금 상태를 실어 409 다
       await transition(tx, contractId, 'ENDED', 'ADMIN', {
@@ -272,6 +272,6 @@ const resentMeanwhile = (status: ContractStatus) =>
     error: 'Conflict',
     code: 'CONTRACT_STATUS_CONFLICT',
     message:
-      '다른 요청이 먼저 근로계약서를 다시 보냈습니다. 화면을 새로 고쳐 마지막 발송 시각을 확인해 주세요',
+      '다른 요청이 먼저 근로계약서를 다시 보냈습니다. 화면을 새로 고쳐 마지막 발송 시각을 확인해 주세요.',
     status,
   });

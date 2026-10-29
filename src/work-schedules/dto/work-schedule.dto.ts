@@ -17,7 +17,7 @@ import { IsDateOnly } from '../../common/is-date-only';
 import { END_TIME_PATTERN, START_TIME_PATTERN } from '../work-schedule-rules';
 
 const MAX_ID = 2_147_483_647;
-const DATE_MESSAGE = '근무일은 YYYY-MM-DD 형식의 있는 날짜입니다';
+const DATE_MESSAGE = '근무일은 YYYY-MM-DD 형식의 있는 날짜입니다.';
 
 /** 근무일 · 시작 · 종료 · 휴게 — 등록과 수정이 같은 규칙을 쓴다. 시각은 한국 시각 */
 export class WorkScheduleFieldsDto {
@@ -27,13 +27,13 @@ export class WorkScheduleFieldsDto {
 
   /** 시작 HH:mm, 30분 단위 */
   @Matches(START_TIME_PATTERN, {
-    message: '시작은 30분 단위 HH:mm 입니다(00분 · 30분)',
+    message: '시작은 30분 단위 HH:mm 입니다(00분 · 30분).',
   })
   startTime: string;
 
   /** 종료 HH:mm, 30분 단위(24:00 까지). 시작보다 이르면 다음 날이다(자정 넘김) */
   @Matches(END_TIME_PATTERN, {
-    message: '종료는 30분 단위 HH:mm 입니다(00분 · 30분, 24:00 까지)',
+    message: '종료는 30분 단위 HH:mm 입니다(00분 · 30분, 24:00 까지).',
   })
   endTime: string;
 
@@ -93,7 +93,7 @@ export class MyWorkSchedulesQueryDto {
   /** 달 YYYY-MM. 근무일(시작 일시의 한국 날짜)이 그 달인 근무스케줄 */
   // 해 첫 자리 0 은 받지 않는다 — Date.UTC 가 0~99 년을 1900 년대로 읽는다
   @Matches(/^[1-9][0-9]{3}-(0[1-9]|1[0-2])$/, {
-    message: '달은 YYYY-MM 형식입니다',
+    message: '달은 YYYY-MM 형식입니다.',
   })
   month: string;
 }
@@ -209,12 +209,12 @@ export class BulkWorkScheduleRowDto {
   staffMemberId: number;
 
   @Matches(START_TIME_PATTERN, {
-    message: '시작은 30분 단위 HH:mm 입니다(00분 · 30분)',
+    message: '시작은 30분 단위 HH:mm 입니다(00분 · 30분).',
   })
   startTime: string;
 
   @Matches(END_TIME_PATTERN, {
-    message: '종료는 30분 단위 HH:mm 입니다(00분 · 30분, 24:00 까지)',
+    message: '종료는 30분 단위 HH:mm 입니다(00분 · 30분, 24:00 까지).',
   })
   endTime: string;
 

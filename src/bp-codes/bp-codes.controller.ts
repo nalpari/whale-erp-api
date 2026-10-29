@@ -26,7 +26,7 @@ import {
   ACCOUNT_UNAVAILABLE_MESSAGE,
 } from '../auth/access-messages';
 
-const NOT_FOUND_MESSAGE = 'BP 를 찾을 수 없습니다';
+const NOT_FOUND_MESSAGE = 'BP 를 찾을 수 없습니다.';
 const MAX_ID = 2_147_483_647;
 const NOT_FOUND_DESCRIPTION = '없거나 삭제된 BP';
 

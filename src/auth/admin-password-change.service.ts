@@ -52,7 +52,7 @@ export class AdminPasswordChangeService {
         },
       });
       if (!account.isPasswordChangeRequired)
-        throw new ConflictException('비밀번호 변경 대상이 아닙니다');
+        throw new ConflictException('비밀번호 변경 대상이 아닙니다.');
       // 로그인에 쓴 초기 · 임시 비밀번호. 만료됐거나, 다시 발급돼 끝났거나, 로그인 중에 관리자가 초기화해 처음부터
       // 없으면 이 세션으로는 바꿀 수 없다 — 다시 로그인하게 한다(갱신도 같은 경우 세션을 끝낸다).
       const issued = await tx.temporaryPassword.findFirst({

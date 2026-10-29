@@ -31,19 +31,19 @@ import { BP_ADMIN_ROLES, type BpAdminRole } from '../bp-admin-rules';
 class BpAdminProfileDto {
   /** 이름. 한글 · 영문 2~20자. @example 한지수 */
   @Transform(trimText)
-  @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다' })
+  @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다.' })
   name: string;
 
   /**
    * 휴대전화. 하이픈 없이 숫자 9~12자리 — 화면 이름은 휴대전화지만 1팀 연락처 범위(02 지역번호 9자리 · 050X
    * 평생번호 12자리)를 그대로 받는다. 중복 검사는 하지 않는다. @example 01012345678
    */
-  @Matches(PHONE_PATTERN, { message: '휴대전화는 숫자 9~12자리입니다' })
+  @Matches(PHONE_PATTERN, { message: '휴대전화는 숫자 9~12자리입니다.' })
   phone: string;
 
   /** 이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 관리자 계정끼리 겹칠 수 없다. @example jisu@whale.test */
   @Transform(lowerEmail)
-  @IsEmail({}, { message: '이메일 형식이 아닙니다' })
+  @IsEmail({}, { message: '이메일 형식이 아닙니다.' })
   @MaxLength(100)
   email: string;
 
@@ -72,7 +72,7 @@ export class CreateBpAdminDto extends BpAdminProfileDto {
   /** 아이디. 영문 또는 영문 · 숫자 4~20자. 삭제 · 탈퇴한 계정까지 포함해 겹칠 수 없고 바꿀 수 없다. @example jisu01 */
   @Transform(trimText)
   @Matches(LOGIN_ID_PATTERN, {
-    message: '아이디는 영문 또는 영문 · 숫자 조합으로 4~20자입니다',
+    message: '아이디는 영문 또는 영문 · 숫자 조합으로 4~20자입니다.',
   })
   loginId: string;
 

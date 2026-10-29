@@ -33,8 +33,8 @@ import { IsDateOnly } from '../../common/is-date-only';
 
 // 30분 단위 시각 (운영 정책 CTR-20). DB CHECK 도 같은 것을 본다.
 const HALF_HOUR = /^([01]\d|2[0-3]):(00|30)$/;
-const HALF_HOUR_MESSAGE = '시각은 HH:mm, 30분 단위입니다';
-const DATE_MESSAGE = '날짜는 YYYY-MM-DD 형식의 있는 날짜여야 합니다';
+const HALF_HOUR_MESSAGE = '시각은 HH:mm, 30분 단위입니다.';
+const DATE_MESSAGE = '날짜는 YYYY-MM-DD 형식의 있는 날짜여야 합니다.';
 // integer 컬럼의 상한. 넘는 값을 DB 에 보내면 400 이 아니라 500 이 된다.
 const MAX_INT = 2_147_483_647;
 // numeric(5,1) 의 상한을 30분 단위로 내린 값.
@@ -51,7 +51,7 @@ const HalfHours = () =>
         v <= MAX_HOURS &&
         Number.isInteger(v * 2),
       defaultMessage: () =>
-        '근로시간은 0 이상, 30분(0.5시간) 단위의 시간입니다',
+        '근로시간은 0 이상, 30분(0.5시간) 단위의 시간입니다.',
     },
   });
 
@@ -99,7 +99,9 @@ export class CreateContractDto {
   name: string;
 
   /** 숫자만 10~11자리 (예: 01090145563) */
-  @Matches(/^[0-9]{10,11}$/, { message: '휴대전화번호는 숫자 10~11자리입니다' })
+  @Matches(/^[0-9]{10,11}$/, {
+    message: '휴대전화번호는 숫자 10~11자리입니다.',
+  })
   phone: string;
 
   /** YYYY-MM-DD. 계약 시작일 기준 만 19세 미만이면 저장하지 않는다 */
@@ -143,7 +145,7 @@ export class CreateContractDto {
   })
   @unlessTemporary
   @IsEnum(ContractMethod, {
-    message: '계약 방식은 전자계약 · 종이 계약 중 하나입니다',
+    message: '계약 방식은 전자계약 · 종이 계약 중 하나입니다.',
   })
   contractMethod?: ContractMethod;
 

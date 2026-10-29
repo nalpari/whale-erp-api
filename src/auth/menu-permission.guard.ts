@@ -67,7 +67,7 @@ export const BP_HEADER = 'X-Bp-Code-Id';
 
 /** 다른 BP 를 부른 BP · 가맹 계정. */
 export const OTHER_BP_MESSAGE = '다른 BP 의 정보는 다룰 수 없습니다.';
-export const BP_NOT_FOUND_MESSAGE = 'BP 를 찾을 수 없습니다';
+export const BP_NOT_FOUND_MESSAGE = 'BP 를 찾을 수 없습니다.';
 
 /**
  * WHALE_ERP 메뉴 경로에서 가드가 정한 대상 BP. `request.user`(누가)와 따로 둔다 — 대상 BP 는 이 경로에서만 정해진다.

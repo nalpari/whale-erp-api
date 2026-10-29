@@ -17,7 +17,7 @@ sources:
   - id: affiliation-requests-service
     resource: ../../src/staff-signup/affiliation-requests.service.ts
     title: AffiliationRequestsService — 소속 추가 확인 · 복귀 확인 요청 목록 · 수락 · 거절
-    last_modified: 2026-10-29T04:33:07Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: my-invitations-controller
     resource: ../../src/staff-signup/my-invitations.controller.ts
     title: GET /me/invitations · POST /me/invitations/:invitationId/accept (account token)
@@ -33,7 +33,7 @@ sources:
   - id: staff-signup-dto
     resource: ../../src/staff-signup/dto/staff-signup.dto.ts
     title: StaffSignupDto (lookup + account + 인적사항; no phone of its own)
-    last_modified: 2026-10-21T07:07:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: hq-sharing-consent
     resource: ../../src/staff-signup/hq-sharing-consent.ts
     title: 본사 제공 동의 문구 버전 and which stores ask
@@ -82,7 +82,7 @@ Only `SIGNUP` · `REINVITE` invitations. Live = `SENT`, `expires_at` ahead, the 
 
 | Found | Answer |
 |---|---|
-| nothing | 404 `INVITATION_NOT_FOUND` — for phone + code 「휴대전화번호나 초대 코드를 다시 확인해 주세요」, never which one was wrong |
+| nothing | 404 `INVITATION_NOT_FOUND` — for phone + code 「휴대전화번호나 초대 코드를 다시 확인해 주세요.」, never which one was wrong |
 | an `ACCEPTED` one | 409 `INVITATION_ALREADY_JOINED` — the app goes to login |
 | only ended ones (past `expires_at`, `EXPIRED`, `REJECTED_UNDER_AGE`) | 404 `INVITATION_ENDED` — ask the 근무지 to invite again |
 | live, but a non-withdrawn account already has the record's phone | 409 `ACCOUNT_EXISTS` — log in, then add the 근무지 in the app (WHALEERP-603) |

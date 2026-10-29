@@ -53,7 +53,7 @@ import {
 } from './dto/list-bp-admins.dto';
 import { CreateBpAdminDto, UpdateBpAdminDto } from './dto/save-bp-admin.dto';
 
-const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
+const NOT_FOUND = '관리자 계정을 찾을 수 없습니다.';
 
 /**
  * BP 관리자 관리. 관리자 웹 메뉴(`/bp-admins`, MN000012)의 권한으로 경로마다 @MenuPermission 이 판정하고, 대상 BP 는

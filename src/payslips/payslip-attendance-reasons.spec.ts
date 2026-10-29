@@ -267,13 +267,13 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
           { date: '2026-08-22', kind: 'NONE' },
         ]),
       ).toBe(
-        '출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음',
+        '출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음.',
       );
       const many = Array.from({ length: 12 }, (_, i) => ({
         date: `2026-09-${String(i + 1).padStart(2, '0')}`,
         kind: 'NONE' as const,
       }));
-      expect(missingDetail(many)).toMatch(/12일 누락.* 외 2일$/);
+      expect(missingDetail(many)).toMatch(/12일 누락.* 외 2일\.$/);
     });
   });
 
@@ -290,7 +290,7 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
         days: ['2026-09-21', '2026-09-23'],
       });
       expect(afterEndDetail(r!)).toBe(
-        '근로계약 만료일(2026-09-20) 뒤 출퇴근 기록이 2일 있습니다 — 09-21, 09-23',
+        '근로계약 만료일(2026-09-20) 뒤 출퇴근 기록이 2일 있습니다 — 09-21, 09-23.',
       );
     });
 

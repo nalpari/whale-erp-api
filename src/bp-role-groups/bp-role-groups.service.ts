@@ -284,7 +284,7 @@ export class BpRoleGroupsService {
       });
       if (admins.length && !replacement)
         throw new BadRequestException(
-          '연결 사용자가 있어 대체 권한을 골라야 합니다',
+          '연결 사용자가 있어 대체 권한을 골라야 합니다.',
         );
 
       if (admins.length && replacement) {
@@ -394,14 +394,14 @@ async function findReplacement(
 ) {
   if (replacementId === target.roleGroupId)
     throw new BadRequestException(
-      '지우는 권한을 대체 권한으로 고를 수 없습니다',
+      '지우는 권한을 대체 권한으로 고를 수 없습니다.',
     );
   const group = await tx.roleGroup.findFirst({
     where: { ...candidateWhere(scope, target), roleGroupId: replacementId },
     select: { roleGroupId: true, roleCode: true, name: true },
   });
   if (!group)
-    throw new BadRequestException('대체 권한으로 고를 수 없는 권한입니다');
+    throw new BadRequestException('대체 권한으로 고를 수 없는 권한입니다.');
   return group;
 }
 

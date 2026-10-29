@@ -9,11 +9,11 @@ export class AgreeLocationConsentDto {
   /** 동의 시트에 보여 준 위치정보 약관 버전 — 예: v1.1. 시트를 그릴 때 시행 중인 약관이 없었으면 null */
   @ValidateIf((_, value) => value !== null)
   @IsString({
-    message: '동의 시트에 보인 약관 버전(termsVersion)을 보내 주세요',
+    message: '동의 시트에 보인 약관 버전(termsVersion)을 보내 주세요.',
   })
   @IsNotEmpty({
-    message: '동의 시트에 보인 약관 버전(termsVersion)을 보내 주세요',
+    message: '동의 시트에 보인 약관 버전(termsVersion)을 보내 주세요.',
   })
-  @MaxLength(64, { message: '약관 버전(termsVersion)은 64자 이하입니다' }) // terms_versions.version 은 길이 제한이 없다 — 운영자가 넣는 「v1.1」 꼴보다 넉넉히
+  @MaxLength(64, { message: '약관 버전(termsVersion)은 64자 이하입니다.' }) // terms_versions.version 은 길이 제한이 없다 — 운영자가 넣는 「v1.1」 꼴보다 넉넉히
   termsVersion: string | null;
 }

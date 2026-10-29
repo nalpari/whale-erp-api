@@ -74,7 +74,7 @@ describe('StaffBirthDateController', () => {
     scope.canManageStaffMember.mockResolvedValue(false);
 
     await expect(controller.correct(admin, '42', body)).rejects.toThrow(
-      '직원을 찾을 수 없습니다',
+      '직원을 찾을 수 없습니다.',
     );
     expect(birthDates.correct).not.toHaveBeenCalled();
   });

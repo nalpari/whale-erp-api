@@ -182,6 +182,6 @@ export class CodeGroupsController {
 export function groupCodeOf(raw: string): string {
   const code = toUpperCode({ value: raw }) as string;
   if (!CODE_PATTERN.test(code))
-    throw new NotFoundException('공통코드 그룹을 찾을 수 없습니다');
+    throw new NotFoundException('공통코드 그룹을 찾을 수 없습니다.');
   return code;
 }

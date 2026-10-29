@@ -4,12 +4,12 @@ title: Attendance
 description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(출퇴근 탭 진입 · 버튼 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T09:12:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
     title: 관리자 웹 일별 출퇴근 GET /attendance-records/daily(WHALEERP-217)
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: day-status
     resource: ../../src/attendance/attendance-day-status.ts
     title: 일별 출퇴근 상태 판정(API 전용 enum AttendanceDayStatus)
@@ -17,7 +17,7 @@ sources:
   - id: service
     resource: ../../src/attendance/my-attendance.service.ts
     title: MyAttendanceService — 출퇴근 화면 · 출근 · 퇴근
-    last_modified: 2026-10-28T07:20:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: rules
     resource: ../../src/attendance/attendance-rules.ts
     title: 반경 100m · 확인자료 수집 방법 · 받는 사유
@@ -170,7 +170,7 @@ sources:
 | `ACCURACY_EXCEEDED` | 위치 오차 초과 | 더 쓰지 않는다. 운영 데이터가 없고 enum 값 삭제는 타입을 다시 만들어야 해서 값만 남겼다 |
 
 확인 필요 출근 · 퇴근도 급여 계산에 그대로 들어가고, 그런 기록이 든 급여명세서에는 검토 대기 사유
-`ATTENDANCE_NEEDS_REVIEW`(확인 필요 기록 포함)를 붙인다 — 초안을 만들 때 급여 기간의 사유가 남은(검토 전) 기록을 세어 「급여 기간에 확인 필요 출퇴근 기록이 N건 있습니다」로 붙인다([Payslips](/api/payslips.md)).
+`ATTENDANCE_NEEDS_REVIEW`(확인 필요 기록 포함)를 붙인다 — 초안을 만들 때 급여 기간의 사유가 남은(검토 전) 기록을 세어 「급여 기간에 확인 필요 출퇴근 기록이 N건 있습니다.」로 붙인다([Payslips](/api/payslips.md)).
 
 근무지(`store_id`)는 자동으로 고르지 않고 직원이 고른 곳이다(운영 정책 ATT-07, 2026-10-20 재영).
 

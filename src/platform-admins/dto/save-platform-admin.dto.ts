@@ -27,16 +27,16 @@ import { ADMIN_STATUSES, type AdminStatus } from './list-platform-admins.dto';
 class PlatformAdminProfileDto {
   /** 이름. 한글 · 영문 2~20자. @example 이서준 */
   @Transform(trimText)
-  @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다' })
+  @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다.' })
   name: string;
 
   /** 연락처. 하이픈 없이 숫자 9~12자리. @example 01012345678 */
-  @Matches(PHONE_PATTERN, { message: '연락처는 숫자 9~12자리입니다' })
+  @Matches(PHONE_PATTERN, { message: '연락처는 숫자 9~12자리입니다.' })
   phone: string;
 
   /** 이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 계정끼리 겹칠 수 없다. @example seojun@whale.test */
   @Transform(lowerEmail)
-  @IsEmail({}, { message: '이메일 형식이 아닙니다' })
+  @IsEmail({}, { message: '이메일 형식이 아닙니다.' })
   @MaxLength(100)
   email: string;
 
@@ -60,7 +60,7 @@ class PlatformAdminProfileDto {
   @IsOptional()
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
-  @Matches(/^[0-9]{5}$/, { message: '우편번호는 숫자 5자리입니다' })
+  @Matches(/^[0-9]{5}$/, { message: '우편번호는 숫자 5자리입니다.' })
   zipCode?: string | null;
 
   /** 기본주소. 선택 — 주소 검색 결과로 채운다. */
@@ -92,7 +92,7 @@ export class CreatePlatformAdminDto extends PlatformAdminProfileDto {
   /** 아이디. 영문 또는 영문 · 숫자 4~20자. 삭제한 계정까지 포함해 겹칠 수 없고 바꿀 수 없다. @example seojun01 */
   @Transform(trimText)
   @Matches(LOGIN_ID_PATTERN, {
-    message: '아이디는 영문 또는 영문 · 숫자 조합으로 4~20자입니다',
+    message: '아이디는 영문 또는 영문 · 숫자 조합으로 4~20자입니다.',
   })
   loginId: string;
 }

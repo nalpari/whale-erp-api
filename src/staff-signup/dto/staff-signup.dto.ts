@@ -32,10 +32,10 @@ const trimLower = ({ value }: { value: unknown }) =>
 export class StaffSignupDto extends InvitationLookupDto {
   /** 로그인 아이디. 소문자로 맞춰 저장한다(accounts_email_lower). 핀으로 확인하지 않는다 */
   @Transform(trimLower)
-  @IsEmail({}, { message: '이메일 형식으로 입력해 주세요' })
+  @IsEmail({}, { message: '이메일 형식으로 입력해 주세요.' })
   // 비밀번호 찾기 핀 · 재설정 링크가 이 주소로 메일로 간다. @IsEmail 은 따옴표 로컬 파트(`"a"@example.com`)를 받지만
   // 메일 발송은 막아 스스로 복구할 수 없게 되므로 같이 건다(api #81 3차 리뷰, 이메일 변경 핀 요청과 같다)
-  @IsSendableEmail({ message: '메일을 보낼 수 없는 형식의 이메일입니다' })
+  @IsSendableEmail({ message: '메일을 보낼 수 없는 형식의 이메일입니다.' })
   @MaxLength(MAX_EMAIL_LENGTH)
   email: string;
 
@@ -52,7 +52,7 @@ export class StaffSignupDto extends InvitationLookupDto {
   name: string;
 
   /** YYYY-MM-DD. 가입하는 날(한국 시간) 만 19세 미만이면 가입하지 않는다(운영 정책 ACC-22). 가입한 뒤 고칠 수 없다 */
-  @IsDateOnly('생년월일은 YYYY-MM-DD 형식의 날짜입니다')
+  @IsDateOnly('생년월일은 YYYY-MM-DD 형식의 날짜입니다.')
   birthDate: string;
 
   /**
@@ -61,7 +61,7 @@ export class StaffSignupDto extends InvitationLookupDto {
    */
   // enumName 을 주면 근로계약서의 Gender 스키마와 설명을 나눠 써 한쪽 설명이 덮인다 — 여기서는 펼쳐 둔다
   @ApiProperty({ enum: Gender })
-  @IsEnum(Gender, { message: '성별을 골라 주세요' })
+  @IsEnum(Gender, { message: '성별을 골라 주세요.' })
   gender: Gender;
 
   /** 외국인 여부 — 체크하지 않으면 내국인(false) */
@@ -70,7 +70,7 @@ export class StaffSignupDto extends InvitationLookupDto {
   isForeigner?: boolean;
 
   /** 우편번호 5자리 — 주소 검색 API 값(ACC-20) */
-  @Matches(/^[0-9]{5}$/, { message: '우편번호는 숫자 5자리입니다' })
+  @Matches(/^[0-9]{5}$/, { message: '우편번호는 숫자 5자리입니다.' })
   zipCode: string;
 
   /** 기본주소(도로명) — 주소 검색 API 값 */

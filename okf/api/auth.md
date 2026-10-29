@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:47:21Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -17,7 +17,7 @@ sources:
   - id: jwt-auth-guard
     resource: ../../src/auth/jwt-auth.guard.ts
     title: Global guard (bearer parsing, token type, session check, user type)
-    last_modified: 2026-10-14T05:00:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: jwt-secret
     resource: ../../src/auth/jwt-secret.ts
     title: Signing key validation at startup
@@ -41,7 +41,7 @@ sources:
   - id: account-auth-service
     resource: ../../src/auth/account-auth.service.ts
     title: 직원 근무 앱 login · refresh · logout · me
-    last_modified: 2026-10-29T04:47:21Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: account-auth-controller
     resource: ../../src/auth/account-auth.controller.ts
     title: POST /auth/account/login · refresh · logout, GET me
@@ -53,11 +53,11 @@ sources:
   - id: password-reset-service
     resource: ../../src/auth/password-reset.service.ts
     title: PIN password reset (request · verify · reset)
-    last_modified: 2026-10-13T07:21:55Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: password-policy
     resource: ../../src/auth/password-policy.ts
     title: New-password rule (WHALEERP-192)
-    last_modified: 2026-10-08T02:05:10Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: pin
     resource: ../../src/auth/pin.ts
     title: PIN generation and normalisation
@@ -77,7 +77,7 @@ sources:
   - id: email-find-service
     resource: ../../src/auth/email-find.service.ts
     title: E-mail find with a per-phone attempt lock (WHALEERP-178)
-    last_modified: 2026-10-13T05:19:36Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: email-find-controller
     resource: ../../src/auth/email-find.controller.ts
     title: POST /auth/account/email-find-attempts
@@ -101,7 +101,7 @@ sources:
   - id: password-reset-link-service
     resource: ../../src/auth/password-reset-link.service.ts
     title: 관리자 초기화 reset link (issue · verify · reset, WHALEERP-172)
-    last_modified: 2026-10-20T10:10:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: password-reset-link-controller
     resource: ../../src/auth/password-reset-link.controller.ts
     title: POST /auth/account/password-reset-links/verify · reset
@@ -137,7 +137,7 @@ sources:
   - id: auth-session-service
     resource: ../../src/auth-session/auth-session.service.ts
     title: Per-device sessions (issue · validate · isActive · revoke · revokeAll keeping one)
-    last_modified: 2026-10-20T06:20:00Z
+    last_modified: 2026-10-29T05:17:36Z
 ---
 
 # What it is
@@ -593,9 +593,9 @@ the next send or when the staff member sets a password. If the send throws, the 
 관리자 can send again at once without the one-minute limit), nothing earlier is
 closed, and the answer depends on where it failed: an SMTP-stage failure
 (`isMailTransportError`) is 503 「재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내
-주세요」, while a failure before sending — the `EMAIL_STAFF_RESET_LINK` template
+주세요.」, while a failure before sending — the `EMAIL_STAFF_RESET_LINK` template
 switched off, a missing title, a DB error — is 500 「메일 설정 문제로 재설정 링크를
-보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요」, since pressing again will not
+보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요.」, since pressing again will not
 fix it (api review, 2026-10-20). The original error is not rethrown: its message can
 carry the recipient's address. The log line names only the account, which of the
 two it was and, for the second, the error's name and Prisma code (`errorKind`);

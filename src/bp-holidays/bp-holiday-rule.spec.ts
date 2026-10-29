@@ -68,12 +68,12 @@ describe('ruleOf — 등록 · 수정 입력을 bp_holidays 칸으로 맞춘다'
     [
       '지난 시작일',
       { holidayTypeCode: 'DAY', startDate: '2026-10-25' },
-      '시작일은 오늘 이후로 정해 주세요',
+      '시작일은 오늘 이후로 정해 주세요.',
     ],
     [
       '기간인데 종료일 없음',
       { holidayTypeCode: 'PERIOD', startDate: '2026-10-27' },
-      '기간 휴일은 종료일을 보내 주세요',
+      '기간 휴일은 종료일을 보내 주세요.',
     ],
     [
       '종료일이 시작일보다 이름',
@@ -82,7 +82,7 @@ describe('ruleOf — 등록 · 수정 입력을 bp_holidays 칸으로 맞춘다'
         startDate: '2026-10-27',
         endDate: '2026-10-26',
       },
-      '종료일은 시작일 이후로 정해 주세요',
+      '종료일은 시작일 이후로 정해 주세요.',
     ],
     [
       '반복인데 반복 유형 없음',
@@ -91,7 +91,7 @@ describe('ruleOf — 등록 · 수정 입력을 bp_holidays 칸으로 맞춘다'
         startDate: '2026-10-27',
         repeatEndType: 'NONE',
       },
-      '반복 휴일은 반복 유형과 종료 조건을 보내 주세요',
+      '반복 휴일은 반복 유형과 종료 조건을 보내 주세요.',
     ],
     [
       '특정 날짜까지인데 날짜 없음',
@@ -101,7 +101,7 @@ describe('ruleOf — 등록 · 수정 입력을 bp_holidays 칸으로 맞춘다'
         holidayRepeatTypeCode: 'DAILY',
         repeatEndType: 'UNTIL_DATE',
       },
-      '반복 종료일은 시작일 이후로 보내 주세요',
+      '반복 종료일은 시작일 이후로 보내 주세요.',
     ],
     [
       '지정 횟수인데 횟수 없음',
@@ -111,7 +111,7 @@ describe('ruleOf — 등록 · 수정 입력을 bp_holidays 칸으로 맞춘다'
         holidayRepeatTypeCode: 'DAILY',
         repeatEndType: 'COUNT',
       },
-      '반복 횟수를 보내 주세요',
+      '반복 횟수를 보내 주세요.',
     ],
   ])('%s 는 400', (_, input, message) => {
     expect(messageOf(() => ruleOf(input, today))).toBe(message);
@@ -137,7 +137,7 @@ describe('ruleOf — 등록 · 수정 입력을 bp_holidays 칸으로 맞춘다'
     ],
   ])('2100년 뒤 날짜는 400 — 목록 · 공식 휴일과 같은 상한 %#', (input) => {
     expect(messageOf(() => ruleOf(input, today))).toBe(
-      '날짜는 2100-12-31 까지 정할 수 있습니다',
+      '날짜는 2100-12-31 까지 정할 수 있습니다.',
     );
   });
 
@@ -159,7 +159,7 @@ describe('ruleOf — 등록 · 수정 입력을 bp_holidays 칸으로 맞춘다'
         ),
       ),
     ).toBe(
-      '반복 횟수가 2100-12-31 을 넘습니다 — 횟수를 줄이거나 종료일을 정해 주세요',
+      '반복 횟수가 2100-12-31 을 넘습니다 — 횟수를 줄이거나 종료일을 정해 주세요.',
     );
   });
 

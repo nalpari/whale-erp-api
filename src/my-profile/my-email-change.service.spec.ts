@@ -232,7 +232,7 @@ describe('MyEmailChangeService', () => {
         service.requestPin(12, 'new@example.com', PASSWORD),
       ).rejects.toThrow(
         new InternalServerErrorException(
-          '메일 설정 문제로 인증 메일을 보내지 못했습니다. 관리자에게 문의해 주세요',
+          '메일 설정 문제로 인증 메일을 보내지 못했습니다. 관리자에게 문의해 주세요.',
         ),
       );
       expect(tx.emailChangePin.deleteMany).toHaveBeenCalled();

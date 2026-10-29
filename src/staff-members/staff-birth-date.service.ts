@@ -13,7 +13,7 @@ import { kstToday, parseDateOnly } from './kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
 
 export const BIRTH_DATE_INVALID_FORMAT_MESSAGE =
-  '생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다';
+  '생년월일은 YYYY-MM-DD 형식의 있는 날짜여야 합니다.';
 export const BIRTH_DATE_FUTURE_MESSAGE = '오늘 이후 날짜는 넣을 수 없습니다.';
 export const BIRTH_DATE_UNDER_AGE_MESSAGE =
   '만 19세 미만으로 정정할 수 없습니다.';

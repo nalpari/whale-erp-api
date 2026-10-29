@@ -299,7 +299,7 @@ describe('BP 관리자 등록 · 수정 · BP 잠금 (e2e, DB)', () => {
     const res = await pending;
     expect(res.status).toBe(409);
     expect((res.body as { message: string }).message).toBe(
-      'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다',
+      'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.',
     );
     expect(await statusOf(newLoginId)).toBeUndefined();
   });
@@ -348,7 +348,7 @@ describe('BP 관리자 등록 · 수정 · BP 잠금 (e2e, DB)', () => {
     const res = await pending;
     expect(res.status).toBe(404);
     expect((res.body as { message: string }).message).toBe(
-      'BP 를 찾을 수 없습니다',
+      'BP 를 찾을 수 없습니다.',
     );
     expect(await statusOf(newLoginId)).toBeUndefined();
   });
@@ -405,7 +405,7 @@ describe('BP 관리자 등록 · 수정 · BP 잠금 (e2e, DB)', () => {
       const res = await pending;
       expect(res.status).toBe(409);
       expect((res.body as { message: string }).message).toBe(
-        'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다',
+        'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.',
       );
       const after = await prisma.adminAccount.findUniqueOrThrow({
         where: { adminAccountId: baId },

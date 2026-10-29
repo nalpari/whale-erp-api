@@ -27,7 +27,7 @@ export class CodeItemsQueryDto {
   @Matches(CODE_PATTERN, {
     each: true,
     message:
-      'groups 는 영문 대문자로 시작하는 그룹 코드를 쉼표로 구분해 보냅니다',
+      'groups 는 영문 대문자로 시작하는 그룹 코드를 쉼표로 구분해 보냅니다.',
   })
   groups?: string[];
 }

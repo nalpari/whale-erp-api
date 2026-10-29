@@ -20,7 +20,7 @@ export class CodeItemInputDto {
   @Transform(toUpperCode)
   @Matches(CODE_PATTERN, {
     message:
-      '상세 코드는 영문 대문자·숫자·밑줄만 쓰고 영문으로 시작하며 20자 이내입니다',
+      '상세 코드는 영문 대문자·숫자·밑줄만 쓰고 영문으로 시작하며 20자 이내입니다.',
   })
   itemCode: string;
 

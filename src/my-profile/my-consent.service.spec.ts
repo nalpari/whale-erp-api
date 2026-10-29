@@ -170,7 +170,7 @@ describe('MyConsentService', () => {
       tx.termsVersion.findFirst.mockResolvedValue({ version: 'v1.1' });
       await expect(service.agreeLocation(12, 'v1.0')).rejects.toThrow(
         new ConflictException(
-          '그사이 위치정보 약관이 바뀌었습니다. 바뀐 약관을 확인하고 다시 동의해 주세요',
+          '그사이 위치정보 약관이 바뀌었습니다. 바뀐 약관을 확인하고 다시 동의해 주세요.',
         ),
       );
       expect(tx.locationConsent.create).not.toHaveBeenCalled();
@@ -199,7 +199,7 @@ describe('MyConsentService', () => {
       tx.termsVersion.findFirst.mockResolvedValue(null);
       await expect(service.agreeLocation(12, null)).rejects.toThrow(
         new InternalServerErrorException(
-          '지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요',
+          '지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요.',
         ),
       );
       expect(tx.locationConsent.create).not.toHaveBeenCalled();

@@ -365,20 +365,20 @@ describe('PayslipSendService', () => {
             payslipId: 41,
             staffName: '하준서',
             reason: 'NO_EMAIL',
-            message: '직원 앱 계정이 없어(가입 전 · 탈퇴) 보낼 곳이 없습니다',
+            message: '직원 앱 계정이 없어(가입 전 · 탈퇴) 보낼 곳이 없습니다.',
           },
           {
             payslipId: 42,
             staffName: '최다온',
             reason: 'MAIL_FAILED',
             message:
-              '메일을 보내지 못했습니다. 발송 이력을 확인한 뒤 다시 보내 주세요',
+              '메일을 보내지 못했습니다. 발송 이력을 확인한 뒤 다시 보내 주세요.',
           },
           {
             payslipId: null,
             staffName: null,
             reason: 'MASKED',
-            message: '본사 제공 동의가 없는 직원이라 보낼 수 없습니다',
+            message: '본사 제공 동의가 없는 직원이라 보낼 수 없습니다.',
           },
         ],
       });

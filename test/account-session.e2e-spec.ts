@@ -180,7 +180,7 @@ describe('로그아웃·갱신·접속 만료 (e2e, DB)', () => {
 
       const refreshed = await refresh(refreshToken);
       expect(refreshed.status).toBe(401);
-      expect(messageOf(refreshed)).toBe('만료되었거나 종료된 접속입니다');
+      expect(messageOf(refreshed)).toBe('만료되었거나 종료된 접속입니다.');
       expect((await logout(accessToken)).status).toBe(401);
     });
   });

@@ -18,7 +18,7 @@ const digitsOnly = ({ value }: { value: unknown }): unknown =>
 export class BpBusinessVerificationDto {
   /** 사업자등록번호. 하이픈을 넣어 보내도 숫자만 남겨 받는다. @example 1058763602 */
   @Transform(digitsOnly)
-  @Matches(/^[0-9]{10}$/, { message: '사업자등록번호는 숫자 10자리입니다' })
+  @Matches(/^[0-9]{10}$/, { message: '사업자등록번호는 숫자 10자리입니다.' })
   bizRegistrationNumber: string;
 
   /** 대표자명. @example 김하늘 */

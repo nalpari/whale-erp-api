@@ -172,7 +172,7 @@ describe('LeadsService', () => {
 
     await expect(service.create(dto())).rejects.toMatchObject({
       status: HttpStatus.BAD_REQUEST,
-      message: '업종을 다시 선택해 주세요',
+      message: '업종을 다시 선택해 주세요.',
     });
     expect(prisma.codeItem.count).toHaveBeenCalledWith({
       where: {
@@ -191,7 +191,7 @@ describe('LeadsService', () => {
 
     await expect(service.create(dto())).rejects.toMatchObject({
       status: HttpStatus.BAD_REQUEST,
-      message: '도입 예정 시기를 다시 선택해 주세요',
+      message: '도입 예정 시기를 다시 선택해 주세요.',
     });
     expect(
       (prisma.codeItem.count.mock.calls as Call[])[1][0].where.groupCode,
@@ -204,7 +204,7 @@ describe('LeadsService', () => {
     await expect(service.create(dto())).rejects.toMatchObject({
       status: HttpStatus.TOO_MANY_REQUESTS,
       message:
-        '이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다',
+        '이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다.',
     });
     // 10분 기준도 DB 시계다 — created_at 을 DB 가 채우므로 앱 서버 시계를 섞지 않는다.
     const [[sql, ...params]] = tx.$queryRaw.mock.calls as [

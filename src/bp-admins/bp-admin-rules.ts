@@ -33,7 +33,7 @@ export interface BpAdminActions {
   canChangeRoleGroup: boolean;
 }
 
-export const OUT_OF_SCOPE = '점포 범위를 벗어나 저장하지 않았습니다';
+export const OUT_OF_SCOPE = '점포 범위를 벗어나 저장하지 않았습니다.';
 
 /**
  * 권한 유형과 소속으로 쪽을 정한다. 플랫폼 BP 의 PM · PA 만 플랫폼 사용자다 — 고객 BP 에 붙은 PM · PA,
@@ -132,7 +132,7 @@ export function assertSelfEdit(
     (change.roleGroupChanged || change.statusChanged || change.storesChanged)
   )
     throw new ForbiddenException(
-      '본인 계정은 이름 · 휴대전화 · 이메일만 고칠 수 있습니다',
+      '본인 계정은 이름 · 휴대전화 · 이메일만 고칠 수 있습니다.',
     );
 }
 
@@ -157,29 +157,29 @@ export function planStores(input: {
   if (requested.isAllStores) {
     if (role !== 'BA')
       throw new BadRequestException(
-        '전체 점포는 BP 관리자에게만 줄 수 있습니다',
+        '전체 점포는 BP 관리자에게만 줄 수 있습니다.',
       );
     if (!current?.isAllStores && !caller.isAllStores)
       throw new ForbiddenException(
-        '전체 점포는 전체 점포를 맡은 사람만 줄 수 있습니다',
+        '전체 점포는 전체 점포를 맡은 사람만 줄 수 있습니다.',
       );
     return { isAllStores: true, storeIds: [] };
   }
   if (current?.isAllStores && !caller.isAllStores)
     throw new ForbiddenException(
-      '전체 점포 계정의 범위는 전체 점포를 맡은 사람만 바꿀 수 있습니다',
+      '전체 점포 계정의 범위는 전체 점포를 맡은 사람만 바꿀 수 있습니다.',
     );
   if (requested.storeIds.some((id) => !allowed.has(id)))
     throw new BadRequestException(OUT_OF_SCOPE);
   const before = current?.isAllStores ? [] : (current?.storeIds ?? []);
   if (requested.storeIds.some((id) => closed.has(id) && !before.includes(id)))
-    throw new BadRequestException('폐점한 점포는 새로 맡길 수 없습니다');
+    throw new BadRequestException('폐점한 점포는 새로 맡길 수 없습니다.');
   const kept = before.filter((id) => !allowed.has(id));
   const storeIds = [...new Set([...kept, ...requested.storeIds])].sort(
     (a, b) => a - b,
   );
   if (!storeIds.length)
-    throw new BadRequestException('관리 점포를 한 곳 이상 골라 주세요');
+    throw new BadRequestException('관리 점포를 한 곳 이상 골라 주세요.');
   return { isAllStores: false, storeIds };
 }
 

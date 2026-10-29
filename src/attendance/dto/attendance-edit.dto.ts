@@ -21,7 +21,7 @@ export { AttendanceHistoryEntryDto };
 
 const MAX_ID = 2_147_483_647;
 const TIME = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
-const TIME_MESSAGE = '시각은 HH:mm 형식입니다';
+const TIME_MESSAGE = '시각은 HH:mm 형식입니다.';
 const trim = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
@@ -54,7 +54,7 @@ export class CorrectAttendanceDto {
   /** 수정 사유 — 필수, 500자까지 */
   @Transform(trim)
   @IsString()
-  @MinLength(1, { message: '수정 사유를 입력해 주세요' })
+  @MinLength(1, { message: '수정 사유를 입력해 주세요.' })
   @MaxLength(500)
   reason: string;
 
@@ -82,7 +82,7 @@ export class ProxyAttendanceDto {
   staffMemberId: number;
 
   /** 날 YYYY-MM-DD(한국). 최근 3개월 안 · 오늘까지 */
-  @IsDateOnly('날짜는 YYYY-MM-DD 형식의 있는 날짜입니다')
+  @IsDateOnly('날짜는 YYYY-MM-DD 형식의 있는 날짜입니다.')
   date: string;
 
   /** 출근 HH:mm — 필수 */
@@ -97,14 +97,14 @@ export class ProxyAttendanceDto {
   /** 사유 — 필수, 500자까지 */
   @Transform(trim)
   @IsString()
-  @MinLength(1, { message: '사유를 입력해 주세요' })
+  @MinLength(1, { message: '사유를 입력해 주세요.' })
   @MaxLength(500)
   reason: string;
 }
 
 export class ProxyStaffQueryDto extends AttendanceStoresQueryDto {
   /** 날 YYYY-MM-DD(한국) */
-  @IsDateOnly('날짜는 YYYY-MM-DD 형식의 있는 날짜입니다')
+  @IsDateOnly('날짜는 YYYY-MM-DD 형식의 있는 날짜입니다.')
   date: string;
 }
 
