@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) — front #168 리뷰 반영. `excel_download_logs.bp_code_id` 설명을 실제 저장값에 맞췄다 — 「다룬 BP. BP · 가맹 계정은 소속 BP, 플랫폼 계정은 탭 BP. BP 를 다루지 않는 화면(BP 마스터 목록)은 비움」(점포 엑셀은 `@TargetBp()` 로 정하므로 BP · 가맹 계정이면 소속 BP 가 들어간다). `attempt_count` 는 「2에서 실패하거나 4xx(권한 · 계정 · 범위로 거부)면 끝」. front 1팀 ERD 와 같은 문구로 `docs/raw` · 마이그레이션(공유 DB 적용 전) · `schema.prisma` 를 고쳤다.
 * **Update**: [Excel exports](/api/excel-exports.md) · [Store management](/api/stores.md) — PR #188 두 번째 적대적 리뷰 블로커 반영. 점포 엑셀은 받을 때 관리 범위를 다시 보지 않아, 만든 뒤 일부 점포로 좁혀진 관리자도 전 범위 파일을 받았다. `excel_download_logs.scope_key`(범위 지문)를 더해 만들 때 `ExcelExportSource.scopeKey` 로 남기고, 받을 때 지금 범위의 지문과 다르면 403 이다. 점포의 지문은 `scopeOf` 와 같은 재료 — 대상 BP · 전체(플랫폼 또는 `is_all_stores`) 또는 매핑 점포(`StoreManagementService.excelScopeKey`). 칸은 공유 DB 적용 전인 `20261028140448` 에 넣었고, `docs/raw` 는 front 1팀 ERD 가 낼 모양으로 맞췄다 — front ERD(README · `_build.py`)에 같은 줄을 더해야 한다.
 * **Update**: [Excel exports](/api/excel-exports.md) · [BP masters](/api/bp-masters.md) — PR #188 적대적 리뷰 블로커 반영. `GET /excel-downloads/:id` 가 받을 때도 그 화면의 메뉴 조회 권한(사용 중 계정 포함, `adminHasMenuAction(read)`)과 화면의 호출자 조건(`ExcelExportSource.assertRequester` — BP 목록은 플랫폼 계정)을 다시 본다 — 만들 때만 보면 그 뒤 24시간 동안 권한을 잃은 사람도 사업자정보 파일을 받았다. 403 이면 주소를 주지 않는다. 배치는 이 인스턴스에 등록된 화면의 작업만 가져간다(`ExcelExportRegistry.menuUrls`) — 소스가 없는 앱(배포가 섞인 동안의 옛 인스턴스, 다른 e2e 스위트)이 작업을 집어 「소스 없음」으로 시도를 쓰지 않게. e2e 는 두 번째 시험 화면을 BP 목록 대신 시험 소스로 바꿨다.
 

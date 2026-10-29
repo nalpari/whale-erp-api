@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 28 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T10:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T03:30:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -44,8 +44,8 @@ sources:
     last_modified: 2026-10-26T06:06:05Z
   - id: excel-download-logs-migration
     resource: ../../prisma/migrations/20261028140448_team1_excel_download_logs/migration.sql
-    title: 엑셀 다운로드 이력(부분 고유 · CHECK 2 · 외래키 3)
-    last_modified: 2026-10-28T10:30:00Z
+    title: 엑셀 다운로드 이력(부분 고유 · CHECK 4 · 외래키 3)
+    last_modified: 2026-10-29T03:30:00Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)

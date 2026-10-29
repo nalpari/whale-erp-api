@@ -3135,7 +3135,7 @@ model ExcelDownloadLog {
   requestedBy      Int                 @map("requested_by")
   /// 화면(메뉴) — menus FK — 같은 화면 판단 기준
   menuId           Int                 @map("menu_id")
-  /// 대상 BP — 플랫폼 계정이 고른 탭 BP, 없으면 비움
+  /// 대상 BP — 다룬 BP. BP · 가맹 계정은 소속 BP, 플랫폼 계정은 탭 BP. BP 를 다루지 않는 화면(BP 마스터 목록)은 비움
   bpCodeId         Int?                @map("bp_code_id")
   /// 검색 조건 — 요청 때의 조건 그대로
   searchConditions Json                @default("{}") @map("search_conditions")
@@ -3149,7 +3149,7 @@ model ExcelDownloadLog {
   fileName         String              @map("file_name")
   /// 저장소 키 — 예약 생성만, excel-exports/ 아래
   storageKey       String?             @map("storage_key")
-  /// 시도 횟수 — 예약 생성만 센다(바로 받기는 0). 시도를 시작할 때 1씩 올린다(최대 2)
+  /// 시도 횟수 — 예약 생성만 센다(바로 받기는 0). 시도를 시작할 때 1씩 올린다(최대 2). 2에서 실패하거나 4xx 거부면 끝
   attemptCount     Int                 @default(0) @map("attempt_count")
   /// 실패 사유
   failureReason    String?             @map("failure_reason")
