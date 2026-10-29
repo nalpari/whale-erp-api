@@ -114,9 +114,17 @@ export class StaffMemberSummaryService {
         sentAt: true,
       },
     });
-    const payrollAccount = await this.payrollAccount(staffMemberId);
-    if (!c) return { contract: null, payrollAccount };
+    // 기존 확인(check)이 먼저 — 본사 역할이 가맹 점포 직원이면 급여 계좌를 읽지도 풀지도 않는다(재영 2026-10-29)
+    const canViewPayrollAccount = await this.scope.canManageStaffAccount(
+      adminAccountId,
+      staffMemberId,
+    );
+    const payrollAccount = canViewPayrollAccount
+      ? await this.payrollAccount(staffMemberId)
+      : null;
+    if (!c) return { contract: null, canViewPayrollAccount, payrollAccount };
     return {
+      canViewPayrollAccount,
       payrollAccount,
       contract: {
         contractId: c.contractId,

@@ -343,6 +343,8 @@ describe('ContractDeliveryService', () => {
       async (_, draftAction) => {
         tx.invitation.findMany.mockResolvedValue([{ invitationId: 40 }]);
         tx.staffMember.update.mockResolvedValue({
+          // 입력한 이름과 계정 실명이 공백만 다르다 — 같은 사람으로 보고 메일을 보낸다(본인 대조 규칙)
+          name: '남 도현',
           employmentType: 'PART_TIME',
           candidateAccountId: 5,
         });
@@ -352,7 +354,9 @@ describe('ContractDeliveryService', () => {
         });
         Object.assign(tx, {
           account: {
-            findUnique: jest.fn().mockResolvedValue({ email: 'a@b.c' }),
+            findUnique: jest
+              .fn()
+              .mockResolvedValue({ email: 'a@b.c', realName: '남도현' }),
           },
         });
         const pending = await service().prepare(
@@ -394,6 +398,7 @@ describe('ContractDeliveryService', () => {
             bpName: '모리커피',
             employmentType: '파트타이머',
             email: 'a@b.c',
+            nameMismatch: false,
           },
         });
 
@@ -428,8 +433,63 @@ describe('ContractDeliveryService', () => {
       },
     );
 
+    it('입력한 이름이 그 번호 계정의 실명과 다르면 메일은 보내지 않고 알림톡만 입력한 번호로 보낸다 — 받지 못하면 관리자가 유선 확인(WHALEERP-140)', async () => {
+      tx.staffMember.update.mockResolvedValue({
+        name: '김철수',
+        employmentType: 'PART_TIME',
+        jobTitle: '홀',
+        candidateAccountId: 5,
+      });
+      tx.store.findUnique.mockResolvedValue({
+        name: '모리커피 연남점',
+        bpCode: { tradeName: '모리커피' },
+      });
+      Object.assign(tx, {
+        account: {
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ email: 'a@b.c', realName: '남도현' }),
+        },
+      });
+      const pending = await service().prepare(
+        t(),
+        input({ draftAction: 'AFFILIATION_CONFIRM' }),
+        NOW,
+      );
+      expect(pending?.affiliation).toMatchObject({ nameMismatch: true });
+      prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+      const mail = { send: jest.fn().mockResolvedValue({}) };
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        await new ContractDeliveryService(
+          prisma as unknown as PrismaService,
+          alimtalk as unknown as AlimtalkService,
+          {
+            get: (key: string) => (key === 'JWT_SECRET' ? SECRET : appUrl),
+          } as unknown as ConfigService,
+          mail as never,
+        ).dispatch(pending, 1);
+        expect(alimtalk.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+            to: PHONE,
+          }),
+        );
+        expect(mail.send).not.toHaveBeenCalled();
+        // 유선 확인 때 근거가 되는 로그 — 계약 id 와 사유만(이름 · 주소는 남기지 않는다)
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('name differs from the account'),
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     it('알림톡 · 메일의 고용 형태는 이 계약의 것이다 — 레코드가 옛 조건(복귀 확인 · 재계약)이어도(api #164 code-review)', async () => {
       tx.staffMember.update.mockResolvedValue({
+        name: '남도현',
         employmentType: 'PART_TIME',
         jobTitle: '홀',
         candidateAccountId: 5,
@@ -444,7 +504,9 @@ describe('ContractDeliveryService', () => {
       });
       Object.assign(tx, {
         account: {
-          findUnique: jest.fn().mockResolvedValue({ email: 'a@b.c' }),
+          findUnique: jest
+            .fn()
+            .mockResolvedValue({ email: 'a@b.c', realName: '남도현' }),
         },
       });
       const pending = await service().prepare(
@@ -494,6 +556,7 @@ describe('ContractDeliveryService', () => {
               bpName: 'B',
               employmentType: '정직원',
               email: 'a@b.c',
+              nameMismatch: false,
             },
             historyId: null,
             expired: [],
@@ -740,7 +803,12 @@ describe('ContractDeliveryService', () => {
         code: null,
         token: null,
         unlockAttemptId: null,
-        affiliation: { bpName: 'B', employmentType: '정직원', email: null },
+        affiliation: {
+          bpName: 'B',
+          employmentType: '정직원',
+          email: null,
+          nameMismatch: false,
+        },
       });
 
     it.each(['ACCEPTED', 'REJECTED'])(
@@ -1181,7 +1249,12 @@ describe('ContractDeliveryService', () => {
             code: null,
             token: null,
             unlockAttemptId: null,
-            affiliation: { bpName: 'B', employmentType: '정직원', email: null },
+            affiliation: {
+              bpName: 'B',
+              employmentType: '정직원',
+              email: null,
+              nameMismatch: false,
+            },
             expired: [40],
             historyId: null,
           }),
@@ -1269,6 +1342,7 @@ describe('ContractDeliveryService', () => {
                 bpName: 'B',
                 employmentType: '정직원',
                 email: null,
+                nameMismatch: false,
               },
               expired: [],
             }),

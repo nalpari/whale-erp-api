@@ -224,6 +224,23 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
     ]);
   });
 
+  it('입력한 이름이 그 번호 계정의 실명과 다르면 요청 · 알림톡은 입력한 대로 보내고 메일은 보내지 않는다 — 받지 못하면 관리자가 유선으로 확인(WHALEERP-140)', async () => {
+    const phone = nextPhone();
+    const accountId = await account(phone);
+    const saved = await contracts.create(
+      { ...dto(phone), name: '김철수' },
+      adminId,
+    );
+    expect(saved).toMatchObject({
+      status: 'PENDING_SEND',
+      draftAction: 'AFFILIATION_CONFIRM',
+    });
+    expect(bizppurio.sendMessage).toHaveBeenCalledTimes(1);
+    expect(mail.send).not.toHaveBeenCalled();
+    // 이름이 달라 그 계정 앱에도 보이지 않는다(#196) — 관리자가 근로자 정보에서 이름을 바로잡으면 다시 보낸다
+    expect(await requests.list(accountId)).toEqual([]);
+  });
+
   it('수락하면 계정을 잇고 서명 대기로 넘긴다 — 날인 기한은 수락부터 30일, 날인 요청 직원 알림', async () => {
     const r = await requested();
     const now = new Date();

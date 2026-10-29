@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:44:33Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -29,7 +29,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-29T05:44:42Z
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
@@ -49,7 +49,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T07:10:00Z
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
@@ -612,7 +612,13 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
   after a 판별 that changed the 초대 유형 (same phone included), the new 판별 stays (`draftAction`, `candidate_account_id`)
   and earlier invitations are not revived — the old channel no longer fits the number. An old-flow 서명 대기
   소속 확인 contract with no request row goes back to 서명 대기 with its old `sentAt` · deadline. Then mail
-  `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email — its failure, or no `MAIL_*`, is logged only.
+  `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email — its failure, or no `MAIL_*`, is logged only. The mail is
+  sent only when the staff record's name (as entered — save, 이어 쓰기 and 근로자 정보 수정 write it first) matches
+  that account's `realName` (`nameKey`, the 본인 대조 rule, also used by the 직원 앱 list through `sameName`): the mail goes to the
+  account found by the phone, not to the entered number, so on a recycled number it would tell someone else the store and
+  고용형태. The alimtalk still goes to the entered number, the request is made as entered, and there is no warning before
+  sending — a 직원 who got nothing is checked by phone and the admin fixes the name in 근로자 정보 (WHALEERP-140,
+  2026-10-29 김민식).
 - **근로자 정보 수정** runs the 판별 again for a 가입 전 직원 even when the phone is unchanged (as 재발송 does), so a
   number whose account was created — or withdrawn and re-created — since the save gets the request on the current
   account, and an old contract with no 초대 유형 gets a 가입 초대.
