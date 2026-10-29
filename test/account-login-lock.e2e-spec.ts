@@ -6,6 +6,8 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { ATTEMPT_LOCK_MS, MAX_FAILED_ATTEMPTS } from '../src/auth/attempt-lock';
+import { AuthSessionService } from '../src/auth-session/auth-session.service';
+import { applyNewPassword } from '../src/auth/apply-new-password';
 import { hashPassword } from '../src/auth/password';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -38,6 +40,7 @@ describe('로그인 실패 잠금 (e2e, DB)', () => {
     const byAccount = { accountId: { in: createdAccountIds } };
     await prisma.authSession.deleteMany({ where: byAccount });
     await prisma.loginHistory.deleteMany({ where: byAccount });
+    await prisma.accountChangeHistory.deleteMany({ where: byAccount });
     await prisma.account.deleteMany({ where: byAccount });
     await app.close();
   });
@@ -251,6 +254,17 @@ describe('로그인 실패 잠금 (e2e, DB)', () => {
       lockExpiresAt: null,
     });
     expect(await updatedAt()).toEqual(before);
+
+    // 실제 계정 수정(비밀번호 변경)은 지금처럼 수정 일시를 올린다
+    await prisma.$transaction((tx) =>
+      applyNewPassword(tx, app.get(AuthSessionService), {
+        accountId: account.accountId,
+        passwordHash,
+        now: new Date(),
+        channel: 'SELF',
+      }),
+    );
+    expect((await updatedAt()).getTime()).toBeGreaterThan(before.getTime());
   });
 
   // 목으로는 증명할 수 없는 것. 행을 잠그지 않고 읽으면 동시에 들어온 틀린 시도가

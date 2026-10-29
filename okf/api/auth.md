@@ -396,9 +396,9 @@ rate from the second lock on.
   user. A password reset clears both.
 - **Logging in is not editing the account** (WHALEERP-624, 2026-10-29): a counted failure (count · lock) and
   the success that clears them write `accounts` back with the `updated_at` read under the row lock, as
-  관리자 login does ([Admin authentication](/api/admin-auth.md)). Without that Prisma's `@updatedAt` set the
+  관리자 login does ([Admin authentication](/api/admin-auth.md)). Without that Prisma's `@updatedAt` would set the
   account's 수정 일시 to the login time. A real account change — password reset or change, e-mail, 주소 —
-  still moves it. The e2e (`account-login-lock.e2e-spec.ts`) pins it on a real database.
+  still moves it. The e2e (`account-login-lock.e2e-spec.ts`) pins both directions on a real database.
 - The 429 is the one place the response differs by account state: after five
   failures it shows the address is registered. That was weighed against a user
   who cannot tell why login stopped, and the hint was kept. `lockExpiresAt` adds
