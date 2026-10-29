@@ -25764,6 +25764,48 @@
           "fileName"
         ]
       },
+      "ContractTaxProfileState": {
+        "type": "string",
+        "enum": [
+          "OK",
+          "NONE",
+          "HIDDEN",
+          "UNAVAILABLE"
+        ]
+      },
+      "ContractTaxProfileDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractTaxProfileState"
+              }
+            ]
+          },
+          "rrnMasked": {
+            "type": "string",
+            "nullable": true,
+            "description": "가린 주민등록번호 — 앞 6자리 + 뒷자리 첫 자(예 900101-1******). 원문은 API 밖으로 나가지 않는다"
+          },
+          "bankName": {
+            "type": "string",
+            "nullable": true,
+            "description": "은행 이름(BANK 공통코드 이름, 예 KB국민은행). 공통코드에 없으면 은행 코드 그대로"
+          },
+          "accountNumber": {
+            "type": "string",
+            "nullable": true,
+            "description": "계좌번호 전체 — 하이픈 없음, 가리지 않음(직원 상세 급여 계좌와 같다)"
+          }
+        },
+        "required": [
+          "status",
+          "rrnMasked",
+          "bankName",
+          "accountNumber"
+        ]
+      },
       "ContractDetailDto": {
         "type": "object",
         "properties": {
@@ -26029,6 +26071,14 @@
           "staffJoined": {
             "type": "boolean",
             "description": "직원이 가입을 마쳤는가 — 거부 · 만료 재발송이 앱(서명 대기)으로 가는지 가입 초대(발송 대기)로 가는지 확인창 문구를 가른다"
+          },
+          "taxProfile": {
+            "description": "직원의 신고 정보(주민등록번호 · 급여 계좌) — 읽기만. 풀 수 없어도 상세는 열리고 이 칸만 UNAVAILABLE 이다",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ContractTaxProfileDto"
+              }
+            ]
           }
         },
         "required": [
@@ -26082,7 +26132,8 @@
           "isForeigner",
           "resendCount",
           "canResend",
-          "staffJoined"
+          "staffJoined",
+          "taxProfile"
         ]
       },
       "UpdateWorkerDto": {

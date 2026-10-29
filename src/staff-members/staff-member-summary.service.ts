@@ -10,6 +10,7 @@ import {
 import { Prisma, StatusChangeActor } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { requireAreaRead } from '../auth/menu-permission.guard';
+import { bankNameOf } from '../common/bank-name';
 import { dateOnly } from '../common/date-only';
 import {
   decryptPersonalData,
@@ -180,15 +181,8 @@ export class StaffMemberSummaryService {
         cause: err,
       });
     }
-    // 은행 코드는 플랫폼 원본(PLATFORM_BP_CODE)이 먼저 오도록 bpCode 오름차순으로 정렬한다 — 플랫폼 원본 BP(BP000000)가
-    // 가장 작은 BP 코드라는 가정에 기댄다. 사용 중지 · 삭제된 은행이어도 이름은 보여 준다
-    const bank = await this.prisma.codeItem.findFirst({
-      where: { groupCode: 'BANK', itemCode: profile.bankCode },
-      orderBy: { bpCode: 'asc' },
-      select: { label: true },
-    });
     return {
-      bankName: bank?.label ?? profile.bankCode,
+      bankName: await bankNameOf(this.prisma, profile.bankCode),
       accountNumber,
     };
   }

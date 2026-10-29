@@ -1,6 +1,8 @@
+import { randomBytes } from 'node:crypto';
 import {
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -8,6 +10,11 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import {
+  encryptPersonalData,
+  staffTaxProfileAad,
+} from '../common/personal-data-cipher';
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
@@ -75,13 +82,15 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       >;
     };
   };
-  let scope: { canManageStaffAt: jest.Mock };
+  let scope: { canManageStaffAt: jest.Mock; canManageStaffAccount: jest.Mock };
   let prisma: {
     $transaction: jest.Mock;
     contract: { findUnique: jest.Mock };
     contractDocument: { findMany: jest.Mock };
     store: { findFirst: jest.Mock; findUnique: jest.Mock };
     adminAccount: { findUnique: jest.Mock };
+    staffTaxProfile: { findUnique: jest.Mock };
+    codeItem: { findFirst: jest.Mock };
   };
 
   const dto = (over: Partial<CreateContractDto> = {}): CreateContractDto => ({
@@ -96,7 +105,11 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   });
 
   beforeEach(async () => {
-    scope = { canManageStaffAt: jest.fn().mockResolvedValue(true) };
+    scope = {
+      canManageStaffAt: jest.fn().mockResolvedValue(true),
+      // 신고 정보를 볼 수 있는가(WHALEERP-155) — 기본은 볼 수 있다
+      canManageStaffAccount: jest.fn().mockResolvedValue(true),
+    };
     tx = {
       // 재입사 사슬 조회(linkedRecords) — 기본은 이은 레코드가 없다
       $queryRaw: jest.fn().mockResolvedValue([]),
@@ -184,6 +197,9 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           .fn()
           .mockResolvedValue({ name: '김관리', loginId: 'bm01' }),
       },
+      // 신고 정보(WHALEERP-155) — 기본은 직원이 입력하지 않았다
+      staffTaxProfile: { findUnique: jest.fn().mockResolvedValue(null) },
+      codeItem: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -192,6 +208,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
         { provide: ContractDeliveryService, useValue: delivery },
+        { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -333,6 +350,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         canResend: false,
         renewedBy: null,
         staffJoined: false,
+        taxProfile: {
+          status: 'NONE',
+          rrnMasked: null,
+          bankName: null,
+          accountNumber: null,
+        },
         workDays: [
           {
             weekday: 'TUE',
@@ -467,6 +490,226 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       );
       expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, false);
       expect(prisma.store.findUnique).not.toHaveBeenCalled();
+    });
+
+    describe('신고 정보 (WHALEERP-155)', () => {
+      const key = randomBytes(32);
+      const RRN = '9001011876543';
+      const ACCOUNT = '12345678901234';
+      const seal = (
+        column: 'rrn_encrypted' | 'payroll_account_number_encrypted',
+        plain: string,
+        staffMemberId = 3,
+      ) =>
+        encryptPersonalData(
+          key,
+          plain,
+          staffTaxProfileAad(column, staffMemberId),
+        );
+      const profile = () => ({
+        rrnEncrypted: seal('rrn_encrypted', RRN),
+        bankCode: '004',
+        payrollAccountNumberEncrypted: seal(
+          'payroll_account_number_encrypted',
+          ACCOUNT,
+        ),
+      });
+      let errorLog: jest.SpyInstance;
+
+      /** 키를 넣어 다시 만든다 — 기본 모듈은 키가 없다(null) */
+      const serviceWith = async (k: Buffer | null) =>
+        (
+          await Test.createTestingModule({
+            providers: [
+              ContractsService,
+              { provide: PrismaService, useValue: prisma },
+              { provide: AdminScopeService, useValue: scope },
+              { provide: STORAGE, useValue: null },
+              { provide: ContractDeliveryService, useValue: delivery },
+              { provide: PERSONAL_DATA_KEY, useValue: k },
+            ],
+          }).compile()
+        ).get(ContractsService);
+
+      /** 주민번호 뒷자리(2~7번째) · 계좌번호 원문이 없다 */
+      const expectNoPlain = (value: unknown) => {
+        const text = JSON.stringify(value);
+        expect(text).not.toContain(RRN.slice(7));
+        expect(text).not.toContain(ACCOUNT);
+      };
+
+      beforeEach(() => {
+        prisma.contract.findUnique.mockResolvedValue(draftRow);
+        errorLog = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+      });
+      afterEach(() => errorLog.mockRestore());
+
+      it('있으면 가린 주민번호 · 은행 이름 · 계좌번호 전체를 준다 — 주민번호 원문은 나가지 않는다', async () => {
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+        prisma.codeItem.findFirst.mockResolvedValue({ label: 'KB국민은행' });
+
+        const detail = await (await serviceWith(key)).findOne(9, 7);
+
+        expect(detail.taxProfile).toEqual({
+          status: 'OK',
+          rrnMasked: '900101-1******',
+          bankName: 'KB국민은행',
+          accountNumber: ACCOUNT,
+        });
+        expect(JSON.stringify(detail)).not.toContain(RRN.slice(7));
+        expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 3);
+        expect(prisma.staffTaxProfile.findUnique).toHaveBeenCalledWith(
+          expect.objectContaining({ where: { staffMemberId: 3 } }),
+        );
+        expect(prisma.codeItem.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: { groupCode: 'BANK', itemCode: '004' },
+          }),
+        );
+      });
+
+      it('공통코드에 없는 은행은 은행 코드 그대로 보인다', async () => {
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+
+        await expect(
+          (await serviceWith(key)).findOne(9, 7),
+        ).resolves.toMatchObject({
+          taxProfile: { status: 'OK', bankName: '004' },
+        });
+      });
+
+      // 거부 · 만료는 재발송 판정(reopenBlockOf)이 따로 DB 를 읽어 빼 둔다 — 신고 정보는 상태를 보지 않는다
+      it('입력하지 않았으면 NONE — 상태 · 계약 방식과 상관없다', async () => {
+        const service = await serviceWith(key);
+        for (const [status, contractMethod] of [
+          ['DRAFT', 'ELECTRONIC'],
+          ['PENDING_SEND', 'ELECTRONIC'],
+          ['PENDING_SIGNATURE', 'ELECTRONIC'],
+          ['SIGNED', 'ELECTRONIC'],
+          ['SIGNED', 'PAPER'],
+          ['ENDED', 'ELECTRONIC'],
+        ] as const) {
+          prisma.contract.findUnique.mockResolvedValue({
+            ...draftRow,
+            status,
+            contractMethod,
+          });
+          await expect(service.findOne(9, 7)).resolves.toMatchObject({
+            taxProfile: {
+              status: 'NONE',
+              rrnMasked: null,
+              bankName: null,
+              accountNumber: null,
+            },
+          });
+        }
+      });
+
+      it('본사 역할이 가맹 점포 직원을 보면 HIDDEN — 신고 정보를 읽지도 풀지도 않는다', async () => {
+        scope.canManageStaffAccount.mockResolvedValue(false);
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+
+        const detail = await (await serviceWith(key)).findOne(9, 7);
+
+        expect(detail.taxProfile).toEqual({
+          status: 'HIDDEN',
+          rrnMasked: null,
+          bankName: null,
+          accountNumber: null,
+        });
+        expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 3);
+        expect(prisma.staffTaxProfile.findUnique).not.toHaveBeenCalled();
+        expect(prisma.codeItem.findFirst).not.toHaveBeenCalled();
+      });
+
+      it('키가 없어도 본사 역할의 가맹 직원 조회는 HIDDEN — 키를 보기 전에 가린다(오류 로그 없음)', async () => {
+        scope.canManageStaffAccount.mockResolvedValue(false);
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+
+        const detail = await (await serviceWith(null)).findOne(9, 7);
+
+        expect(detail.taxProfile.status).toBe('HIDDEN');
+        expect(prisma.staffTaxProfile.findUnique).not.toHaveBeenCalled();
+        expect(errorLog).not.toHaveBeenCalled();
+      });
+
+      it('키가 없으면 상세는 열리고 신고 정보만 UNAVAILABLE', async () => {
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+
+        const detail = await (await serviceWith(null)).findOne(9, 7);
+
+        expect(detail).toMatchObject({
+          contractId: 7,
+          taxProfile: {
+            status: 'UNAVAILABLE',
+            rrnMasked: null,
+            bankName: null,
+            accountNumber: null,
+          },
+        });
+        expect(errorLog).toHaveBeenCalled();
+        expectNoPlain(errorLog.mock.calls);
+      });
+
+      it.each([
+        [
+          '다른 키로 잠갔다',
+          () => ({
+            ...profile(),
+            rrnEncrypted: encryptPersonalData(
+              randomBytes(32),
+              RRN,
+              staffTaxProfileAad('rrn_encrypted', 3),
+            ),
+          }),
+          'rrn_encrypted',
+        ],
+        [
+          '다른 행의 암호문을 옮겨 왔다',
+          () => ({
+            ...profile(),
+            payrollAccountNumberEncrypted: seal(
+              'payroll_account_number_encrypted',
+              ACCOUNT,
+              4,
+            ),
+          }),
+          'payroll_account_number_encrypted',
+        ],
+        [
+          '푼 주민번호 형식이 깨졌다',
+          () => ({
+            ...profile(),
+            rrnEncrypted: seal('rrn_encrypted', '90010'),
+          }),
+          'rrn_encrypted',
+        ],
+      ])(
+        '풀 수 없으면(%s) 상세는 열리고 신고 정보만 UNAVAILABLE — 로그에 원문이 없다',
+        async (_, row, column) => {
+          prisma.staffTaxProfile.findUnique.mockResolvedValue(row());
+
+          const detail = await (await serviceWith(key)).findOne(9, 7);
+
+          expect(detail).toMatchObject({
+            contractId: 7,
+            taxProfile: {
+              status: 'UNAVAILABLE',
+              rrnMasked: null,
+              bankName: null,
+              accountNumber: null,
+            },
+          });
+          expect(errorLog).toHaveBeenCalledWith(
+            expect.stringContaining(`staffMemberId=3 칸=${column}`),
+            expect.anything(),
+          );
+          expectNoPlain(errorLog.mock.calls);
+          expectNoPlain(detail);
+        },
+      );
     });
   });
 
@@ -834,6 +1077,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: storage },
           { provide: ContractDeliveryService, useValue: delivery },
+          { provide: PERSONAL_DATA_KEY, useValue: null },
         ],
       }).compile();
       await module.get(ContractsService).update(

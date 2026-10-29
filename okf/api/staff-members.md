@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-29T06:50:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T08:20:16Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -45,7 +45,7 @@ sources:
   - id: summary-service
     resource: ../../src/staff-members/staff-member-summary.service.ts
     title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
-    last_modified: 2026-10-29T06:50:00Z
+    last_modified: 2026-10-29T08:20:16Z
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
@@ -211,7 +211,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 
 | 경로 | 영역 메뉴 | 내용 |
 |---|---|---|
-| `…/summary/contracts` | 근로계약 관리 `/contracts` | 가장 최근 계약(목록 · 상세의 `contract` 와 같은 정렬 — 연장 재계약이 임시저장이거나 거부 · 만료 · 체결 없이 종료로 끝났으면 건너뛴다, `NOT_IDLE_RENEWAL` WHALEERP-156) 하나의 유형 · 방식 · 상태 · 기간 · 최근 발송일 · 갱신 예정일. 계약이 없으면 `contract: null`. **`payrollAccount`**(`{ bankName, accountNumber } | null`) — 신고 정보(`StaffTaxProfile`)의 급여 계좌: 은행 이름(BANK 공통코드, 없으면 코드 그대로)과 계좌번호 **전체**(하이픈 없음, 가리지 않음 — 관리자에게 전체 노출, 2026-10-29 노영주). 신고 정보가 없으면 null, 계약이 없어도 · 급여 지급 방식(계좌 · 현금)과 상관없이 신고 정보에 계좌가 있으면 온다. 권한 · 범위 · 가림은 이 경로 그대로. 키(`PERSONAL_DATA_ENCRYPTION_KEY`)가 비면 503, 풀 수 없으면 500 — 직원 앱 신고 정보 조회와 같다. 계좌 오류 때 근로계약 칸 전체가 실패하는 것은 노영주 결정(2026-10-29)이다. 계좌번호는 로그 · 오류에 남기지 않는다. **`canViewPayrollAccount`**(boolean) — 이 관리자가 이 직원의 급여 계좌를 볼 수 있는가: 본사 역할(BM · BA)이 가맹 점포 직원을 보면 **false**(본사 제공 동의를 했어도 — 동의 범위에 신고 정보가 없고 계좌는 가맹 점포 사업주가 받는 정보, 운영 정책 TAX-07 v249 · TAX-08, 재영 2026-10-29), 그 밖(직영 점포 직원, 가맹마스터 · 가맹관리자)은 true. 판정은 `AdminScopeService.canManageStaffAccount`(비밀번호 재설정 링크와 같은 「동의와 상관없이 점포 단위」)를 재사용하고 기존 권한 · 범위 확인(403/404) 뒤에 본다. false 이면 `payrollAccount` 는 항상 null 이고 신고 정보를 읽지도 풀지도 않아 키가 없어도 503 이 나지 않는다 — 관리자웹은 이때 「급여 계좌」 줄을 숨긴다(노영주) |
+| `…/summary/contracts` | 근로계약 관리 `/contracts` | 가장 최근 계약(목록 · 상세의 `contract` 와 같은 정렬 — 연장 재계약이 임시저장이거나 거부 · 만료 · 체결 없이 종료로 끝났으면 건너뛴다, `NOT_IDLE_RENEWAL` WHALEERP-156) 하나의 유형 · 방식 · 상태 · 기간 · 최근 발송일 · 갱신 예정일. 계약이 없으면 `contract: null`. **`payrollAccount`**(`{ bankName, accountNumber } | null`) — 신고 정보(`StaffTaxProfile`)의 급여 계좌: 은행 이름(BANK 공통코드, 없으면 코드 그대로 — `bankNameOf`, `src/common/bank-name.ts`, 근로계약 상세 신고 정보와 함께 씀)과 계좌번호 **전체**(하이픈 없음, 가리지 않음 — 관리자에게 전체 노출, 2026-10-29 노영주). 신고 정보가 없으면 null, 계약이 없어도 · 급여 지급 방식(계좌 · 현금)과 상관없이 신고 정보에 계좌가 있으면 온다. 권한 · 범위 · 가림은 이 경로 그대로. 키(`PERSONAL_DATA_ENCRYPTION_KEY`)가 비면 503, 풀 수 없으면 500 — 직원 앱 신고 정보 조회와 같다. 계좌 오류 때 근로계약 칸 전체가 실패하는 것은 노영주 결정(2026-10-29)이다. 계좌번호는 로그 · 오류에 남기지 않는다. **`canViewPayrollAccount`**(boolean) — 이 관리자가 이 직원의 급여 계좌를 볼 수 있는가: 본사 역할(BM · BA)이 가맹 점포 직원을 보면 **false**(본사 제공 동의를 했어도 — 동의 범위에 신고 정보가 없고 계좌는 가맹 점포 사업주가 받는 정보, 운영 정책 TAX-07 v249 · TAX-08, 재영 2026-10-29), 그 밖(직영 점포 직원, 가맹마스터 · 가맹관리자)은 true. 판정은 `AdminScopeService.canManageStaffAccount`(비밀번호 재설정 링크와 같은 「동의와 상관없이 점포 단위」)를 재사용하고 기존 권한 · 범위 확인(403/404) 뒤에 본다. false 이면 `payrollAccount` 는 항상 null 이고 신고 정보를 읽지도 풀지도 않아 키가 없어도 503 이 나지 않는다 — 관리자웹은 이때 「급여 계좌」 줄을 숨긴다(노영주) |
 | `…/summary/work-schedules?weekStart=` | 근무스케줄 관리 `/work-schedules` | 한 주(월~일)의 근무스케줄과 근무시간 · 주간 합계(분). `weekStart` 는 그 주의 아무 날짜, 빼면 이번 주(한국 날짜) |
 | `…/summary/payslips` | 급여명세서 관리 `/payslips` | 최근 명세서 3건(`recent` — 상태와 관계없이 급여 기간 시작일 최신순, 기본급 · 수당 · 공제 · 실지급액 · 상태) · 미발송 건수 |
 | `…/summary/todos` | TO-DO 관리 `/todos` | 배정된 TO-DO 의 전체 · 완료 · 미완료 건수와 최근 처리 이력 5건 |
