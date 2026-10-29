@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: main 병합(api dragonair, main #193 · #200 까지): okf/log 는 양쪽 기록을 살렸다.
+* **Update**: [Auth](/api/auth.md) — 직원 앱 로그인이 `accounts` 수정 일시를 바꾸지 않는다(WHALEERP-624): 실패 횟수 · 잠금과 성공 때 초기화가 두 칸만 바꾸는 raw `UPDATE`(`writeAttemptState`)로 쓴다 — 읽은 `updated_at` 을 되돌려 쓰면(관리자 로그인 api #167 방식) JS `Date` 가 마이크로초를 버려 값이 움직인다(api #199 리뷰). 실제 계정 수정(비밀번호 · 이메일 · 주소)은 그대로 수정 일시를 올린다. 단위 · e2e. 마이그레이션 없음.
 * **Update**: main 병합(api farfetchd, main #198 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api farfetchd, main #194 까지 — 마이그레이션 20261029114945 포함): okf/log · [Payslips](/api/payslips.md) 충돌은 양쪽 기록을 살리고 시각은 늦은 값을 남겼다.
 * **Update**: [Payslips](/api/payslips.md) — PR #193 적대적 리뷰 블로커 반영: 달을 걸친 첫 주의 앞 달 날은 실근무가 이 달 계산에 늘 들어가는데(이 달이 주를 맡으면 주휴 금액, 앞 달이 맡으면 주 40시간 연장), 출퇴근 누락은 급여 기간 안의 날만 봐서 앞 달 날의 퇴근 미등록(0분)이 사유 없이 이 달 금액을 줄였다. `attendanceReviewReasons` 가 그 주 월요일부터 기간 전날까지의 퇴근 미등록도 출퇴근 누락에 넣는다(출근 · 퇴근 모두 없는 날은 넣지 않는다). 기록 없음 · 계약 만료 후 기록은 기간 안 날만 본다. 단위 테스트 · e2e(8/31 퇴근 미등록 — 고치기 전 실패 확인).
