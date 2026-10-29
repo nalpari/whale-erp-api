@@ -185,7 +185,7 @@ editable so it can be turned off, which the save accepts; tree and save judge th
 When a **PA caller** changes a **PA-type** group (every additional role),
 each changed cell — turning on **and** turning off, as the mockup's `blockOf` — must be on
 in the caller's own group for the same menu and action, or 400 「본인 권한 범위 밖 칸은
-바꿀 수 없습니다」. Group lines are exempt: they follow their children, which carried the
+바꿀 수 없습니다.」. Group lines are exempt: they follow their children, which carried the
 check. A PM has no ceiling. BM000001 · FM000001 get none either (SYSTEM-6): any platform
 user with MN000214 수정 sets them. No PA fixed role caps the additional roles
 (2026-10-06). In the tree a blocked cell shows `OUT_OF_SCOPE`; a group cell is open if
@@ -281,7 +281,7 @@ deletion are the points to record.
   A delete that locked first makes the other side re-read after its commit and answer 400; a
   registration that locked first makes the delete wait and then read that admin too — moved
   with the others when a replacement was chosen, 400 「연결 사용자가 있어 대체 권한을 골라야
-  합니다」 when none was. That second half holds only because the delete reads the linked admins
+  합니다.」 when none was. That second half holds only because the delete reads the linked admins
   **after** taking the lock — keep that order. Until 2026-10-27 they read the group without a
   lock, and one that read before the delete committed attached an admin to the deleted group
   (the foreign key passes: the row stays), leaving an account that got 403 on every menu. BP

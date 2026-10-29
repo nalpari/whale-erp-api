@@ -174,7 +174,7 @@ Service, parent, code and order are read-only here; parent and order change only
 (`planMove`) takes the service's undeleted menus and:
 
 - refuses with 400 a parent outside the service (or missing) — 「같은 서비스 안에서만 옮길 수
-  있습니다」, the menu itself or one of its descendants — 「…자기 자신이나 하위 메뉴 아래로…」,
+  있습니다.」, the menu itself or one of its descendants — 「…자기 자신이나 하위 메뉴 아래로…」,
   and a place where the subtree would pass level 3 — 「메뉴는 최대 3단계까지만 둘 수 있습니다.」;
 - renumbers the old and the new siblings 1..n, moves the subtree along and recomputes
   every `depth` in it (`login-info` returns `depth` as stored);

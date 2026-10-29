@@ -926,7 +926,7 @@ const valueOf = (checkIn: Date | null, checkOut: Date | null) => ({
   checkOutAt: checkOut?.toISOString() ?? null,
 });
 /**
- * 이력 · 「바뀐 값이 없습니다」 비교의 한 줄. 퇴근이 출근한 날 뒤면 날을 붙인다 — 「퇴근 02:00(다음날)」 · 「퇴근 10:00(+2일)」. 시각만 보면
+ * 이력 · 「바뀐 값이 없습니다.」 비교의 한 줄. 퇴근이 출근한 날 뒤면 날을 붙인다 — 「퇴근 02:00(다음날)」 · 「퇴근 10:00(+2일)」. 시각만 보면
  * 날이 바뀐 보정이 「10:00 → 10:00」으로 보인다. 직원 앱은 「퇴근 값」을 띄어쓰기로 나눠 읽으므로 값에 띄어쓰기를 넣지 않는다
  */
 const summaryOf = (checkIn: Date | null, checkOut: Date | null) => {

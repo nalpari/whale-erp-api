@@ -824,7 +824,7 @@ describe('StoreManagementService', () => {
 
     it('플랫폼 계정이 상단에서 고른 BP 와 다른 BP 를 보내면 400', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
-      // 같은 400 인 「BP 를 골라 주세요」 · 「없는 BP 입니다」와 가르려고 문구까지 본다
+      // 같은 400 인 「BP 를 골라 주세요」 · 「없는 BP 입니다.」와 가르려고 문구까지 본다
       await expect(
         service.create(PM, PICKED_BP, { ...dto, bpCodeId: 9 }),
       ).rejects.toMatchObject({

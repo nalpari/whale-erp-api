@@ -46,7 +46,7 @@ copies a 플랫폼제공 group to every active customer BP (`POST /code-groups/{
 사용자 요청 — both stay managed by 사용 상태). A 플랫폼고정 group's codes are values the system refers to —
 `SERVICE` is what `menus.service_code` holds and 플랫폼 메뉴 관리 looks up (a missing one is a 500),
 `ROLE_TYPE` · `ACCOUNT_STATUS` are what accounts carry — so deleting one is 409 「플랫폼고정 그룹의 상세 코드는
-지울 수 없습니다 — 사용 상태로 관리해 주세요」 (merge-blocker found in api #135 review). A delete sets
+지울 수 없습니다 — 사용 상태로 관리해 주세요.」 (merge-blocker found in api #135 review). A delete sets
 `is_deleted` on the 플랫폼제공 group's undeleted platform originals only, whether or not BPs use the code:
 rows already copied to a BP are that BP's and stay, and the deleted code drops out of later [BP에 적용] and
 signup copies. Creating
@@ -59,7 +59,7 @@ whose copy is still live in some BP (it was applied) cannot be registered again 
 row, so the answer is 409, not a restore. Delete is all-or-nothing: an unknown or already
 deleted code is 404, a repeated one 409, and if another admin deleted one between the check and the
 write the short `updateMany` count makes the whole request 409 「다른 관리자가 먼저 지운 상세 코드가
-있습니다 — 다시 불러온 뒤 삭제해 주세요」. Item updates are conditioned on the row still being
+있습니다 — 다시 불러온 뒤 삭제해 주세요.」. Item updates are conditioned on the row still being
 undeleted too, so an edit racing a delete is 409 「다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시
 불러온 뒤 저장해 주세요: CODE」 instead of a 204 that wrote to a deleted row. Create and update both run
 under `BULK_UPDATE_TX` (30 seconds), since a restore also writes row by row.

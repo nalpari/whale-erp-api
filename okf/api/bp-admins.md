@@ -97,7 +97,7 @@ master. Anything else is 400 「선택할 수 없는 권한입니다.」.
   request does not list them — the form shows them read-only (2026-09-29). A caller with
   some stores editing an all-stores BA keeps it all-stores; turning it partial is 403.
 - **Closed stores are not newly mapped** (2026-10-23) — 400 「폐점한 점포는 새로 맡길 수
-  없습니다」. A closed store already mapped is kept only if the request sends it again —
+  없습니다.」. A closed store already mapped is kept only if the request sends it again —
   leaving it out removes it. The form takes it from the detail's `stores`, since the
   options never list a closed store.
 - **`store-options` lists only what can be picked** (2026-10-23): no closed store, and

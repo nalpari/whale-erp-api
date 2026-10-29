@@ -109,21 +109,21 @@ const listed = (items: string[]) =>
     ? `${items.slice(0, LISTED_DAYS).join(', ')} 외 ${items.length - LISTED_DAYS}일`
     : items.join(', ');
 
-/** 「출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음」(데모 payrolls-detail) */
+/** 「출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음.」(데모 payrolls-detail) */
 export const missingDetail = (days: readonly MissingDay[]) =>
   `출퇴근 기록이 ${days.length}일 누락되었습니다 — ${listed(
     days.map(
       (d) =>
         `${mmdd(d.date)} ${d.kind === 'NONE' ? '출근·퇴근 모두 없음' : '퇴근 미등록'}`,
     ),
-  )}`;
+  )}.`;
 
 export const afterEndDetail = (r: { end: string; days: string[] }) =>
-  `근로계약 만료일(${r.end}) 뒤 출퇴근 기록이 ${r.days.length}일 있습니다 — ${listed(r.days.map(mmdd))}`;
+  `근로계약 만료일(${r.end}) 뒤 출퇴근 기록이 ${r.days.length}일 있습니다 — ${listed(r.days.map(mmdd))}.`;
 
 /**
  * 명세서 하나의 출퇴근 검토 대기 사유. 급여 기간(한국)의 그 직원 레코드 출퇴근 기록과 급여 기간에 걸친 근로계약(`contractIds`)을 본다.
- * - 출퇴근 누락: 급여 기간 안 출근이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다」, 있으면 빠진 날과 일수(오늘은 아직 끝나지 않아 어제까지).
+ * - 출퇴근 누락: 급여 기간 안 출근이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다.」, 있으면 빠진 날과 일수(오늘은 아직 끝나지 않아 어제까지).
  * - 계약 만료 후 기록: 가장 늦은 계약 종료일 뒤에 출근한 날.
  * - 확인 필요 기록 포함: 확인 필요 사유가 남은(검토 전) 기록 건수(ATT-11) — 짝 퇴근은 출근한 날로 센다(급여 계산과 같다). 확인 필요
  *   기록도 급여 계산에는 넣는다.

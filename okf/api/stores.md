@@ -124,7 +124,7 @@ of that 400.
   until then a platform account saw every BP's stores at once. Registering goes into
   the target BP. The body's `bpCodeId` is deprecated: front still sends it, so it is
   accepted when it equals the target BP and a 400 「다른 BP 에 점포를 등록할 수
-  없습니다」 otherwise — drop it once front stops sending it (the global pipe would
+  없습니다.」 otherwise — drop it once front stops sending it (the global pipe would
   400 an unknown key). The list and excel no longer take a `bpCodeId` query; the BP
   comes from the header only. A platform account is **PM or PA _and_
   belongs to the platform BP** (`bp_codes.is_platform`) — the same test as
@@ -215,7 +215,7 @@ below are pinned by the DB e2e.[^stores-db-e2e]
   the app; this headcount does not.
 - **A new contract on top of a 체결 완료** counts once. A 가입 완료 재직 직원
   cannot get a second contract at the same store (409 「이 점포에 같은 번호로 재직
-  중인 직원이 있습니다」, `checkNotEmployed`), so today this happens only on a
+  중인 직원이 있습니다.」, `checkNotEmployed`), so today this happens only on a
   가입 전 record holding a 종이 계약: a later 전자계약 draft reuses that record when
   the name matches and does not close the `SIGNED` one (only a 종이 계약 replaces a
   `SIGNED`). A different name gets a new record, which has no `SIGNED` and is not

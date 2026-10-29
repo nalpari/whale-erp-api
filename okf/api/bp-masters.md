@@ -58,7 +58,7 @@ cannot find it.
 Withdrawal (회원 탈퇴) clears that personal data from the rows but not from the history
 tables, which keep every old value — and the master's own lines lose their 변경자, since
 the name is gone. So a 탈퇴 BP's `GET /bp-masters/:id/histories` answers 409 (「탈퇴한 BP는
-변경 이력을 볼 수 없습니다」) instead of showing them, and the front is to hide the button; the
+변경 이력을 볼 수 없습니다.」) instead of showing them, and the front is to hide the button; the
 history rows are not rewritten (WHALEERP-625, 2026-10-27). What the screen shows instead is
 the detail's `withdrawal` — `{ withdrawnAt, reasonLabel, reasonDetail }`, `null` unless
 탈퇴 — read from the master's `status_changed_at` and `withdraw_reason_code` · `_detail`, the

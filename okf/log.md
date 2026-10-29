@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: 응답 문구 마침표(api slowbro) review-pr 반영: 근로계약 발송 실패 502 문구가 임시저장 꼬리가 없을 때 마침표 없이 끝나던 것을 문장 끝으로 옮겼고, 급여 검토 사유 「출퇴근 기록이 N일 누락되었습니다 — …」 · 「근로계약 만료일(…) 뒤 출퇴근 기록이 N일 있습니다 — …」 끝에도 마침표를 붙였다. 줄바꿈으로 나뉜 okf 인용 약 35곳과 [Mail](/api/mail.md) 인용, 문구를 인용한 주석 · 테스트 제목 · Swagger 설명을 맞췄다. [Admin auth](/api/admin-auth.md) 시각은 main 의 늦은 값으로 되돌렸다.
 * **Update**: main 병합(api slowbro, main #197 · #199 까지): okf/log 충돌은 양쪽 기록을 살렸고, concept 시각 충돌(auth · payslips · staff-signup · whale-erp-api)은 늦은 값을 쓰고 마침표 인용을 다시 맞췄다. 병합으로 들어온 새 문구는 이미 마침표로 끝나 더 고칠 것이 없었다.
 * **Update**: 화면에 보이는 응답 문구 끝에 마침표를 붙였다(사용자 지정 2026-10-29 — 모든 문장 뒤에 마침표). 예외 message · DTO 검증 message · 응답 안내 문구(급여 검토 사유 detail 등) 666곳, 바꾼 문구를 인용한 concept 29개의 인용과 generated · last_modified 를 맞췄다. 그대로 둔 것: 뒤에 「: 코드」가 붙는 앞부분(`SAME_AS_LIVE_ITEM` · `DELETED_BEFORE_SAVE` · `assertNoRepeat` · 휴일 점포 `reject` — front `code-drafts.ts` 가 「: 」 뒤 코드를 읽는다), 뒤에 문장이 이어지는 `NOW_STATUS`, front 가 `===` 로 비교하는 점포 404 「점포를 찾을 수 없습니다」(front `store-frame.tsx`), 로그 · `new Error` · Swagger 설명. DB 의 알림 템플릿 · 공통코드 문구는 마이그레이션이 필요해 범위 밖이다. 이미 저장된 `payslip_review_reasons.detail` 은 다시 계산할 때까지 마침표 없이 남는다(다시 계산은 `reviewReason` 으로 맞추므로 동작은 같다).
 * **Update**: main 병합(api bulbasaur, main #199 까지): okf/log 충돌은 양쪽 기록을 살렸다.

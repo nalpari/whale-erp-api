@@ -55,7 +55,7 @@ FM000001 read only.
 - **BP · 가맹 accounts** see their own BP; another BP in the header is the guard's 403.
 - **Platform users (PM · PA)** pick a BP with the header and **read only**. Without the header
   the guard leaves the platform BP, which this screen refuses with 400 「공통코드를 볼 BP 를 골라
-  주세요」 — the platform BP's codes are 플랫폼 공통코드 관리's. A create, update or delete is 403
+  주세요.」 — the platform BP's codes are 플랫폼 공통코드 관리's. A create, update or delete is 403
   「플랫폼 사용자는 BP 공통코드를 조회만 할 수 있습니다.」 even though PM000001 holds the
   rights — the policy (F-QPDEWN) is stricter than the seeded row. That 403 comes first: before
   the missing-header 400 and before any group 404 (e2e).[^bp-code-groups-service]

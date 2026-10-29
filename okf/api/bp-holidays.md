@@ -124,7 +124,7 @@ The policy's core: **a change affects only today onward.** That shapes every wri
   computation and `public_holidays` stop at 2100, and the list cannot ask for a later
   year, so such a holiday would never show anywhere.
 - A holiday that started today shows `blockedReason` 「오늘 시작한 휴일은 강제 종료할 수
-  없습니다 — 삭제해 주세요」.
+  없습니다 — 삭제해 주세요.」.
 
 ## Stores are periods
 

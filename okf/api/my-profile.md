@@ -170,7 +170,7 @@ request asks for it; `email-change` stays `{ pin }`, since a PIN exists only for
 request whose password was right — and `applyNewPassword` closes open 이메일 변경
 PINs, so a password change or reset after the PIN was sent ends it too. The DTO
 rejects an address mail cannot be sent to (400 「메일을 보낼 수
-없는 형식의 이메일입니다」 — `@IsEmail` accepts a quoted local part such as
+없는 형식의 이메일입니다.」 — `@IsEmail` accepts a quoted local part such as
 `"a"@example.com`, which `MailService` refuses, so it used to pass, lose its PIN and
 end in 500; brackets and backslashes `@IsEmail` already rejects. The DTO now checks
 the same rule as `MailService` through `IsSendableEmail`, which looks at the length
@@ -419,7 +419,7 @@ than being masked into something that looks right.
 
 **A value that cannot be opened is a 500, and the log says which.** A different
 key, a ciphertext moved from another row, a damaged value or a broken format all
-end in `500 신고 정보를 읽을 수 없습니다`, with an `error` log naming
+end in `500 신고 정보를 읽을 수 없습니다.`, with an `error` log naming
 `staffMemberId` and the column — enough to tell a key accident (every row fails)
 from one damaged row. Neither the log nor the mask errors carry the plaintext.
 

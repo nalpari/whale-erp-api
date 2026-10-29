@@ -593,9 +593,9 @@ the next send or when the staff member sets a password. If the send throws, the 
 관리자 can send again at once without the one-minute limit), nothing earlier is
 closed, and the answer depends on where it failed: an SMTP-stage failure
 (`isMailTransportError`) is 503 「재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내
-주세요」, while a failure before sending — the `EMAIL_STAFF_RESET_LINK` template
+주세요.」, while a failure before sending — the `EMAIL_STAFF_RESET_LINK` template
 switched off, a missing title, a DB error — is 500 「메일 설정 문제로 재설정 링크를
-보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요」, since pressing again will not
+보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요.」, since pressing again will not
 fix it (api review, 2026-10-20). The original error is not rethrown: its message can
 carry the recipient's address. The log line names only the account, which of the
 two it was and, for the second, the error's name and Prisma code (`errorKind`);

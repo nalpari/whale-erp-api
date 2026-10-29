@@ -226,7 +226,7 @@ function fieldsOf(dto: TemplateFieldsDto) {
     templateName: dto.templateName,
     templateCode: dto.templateCode,
     preferenceCategory: dto.preferenceCategory ?? null,
-    // 빈 제목은 없음과 같다 — 알림톡은 그대로 저장되고, 다른 채널은 검사가 「제목을 넣어 주세요」로 막는다.
+    // 빈 제목은 없음과 같다 — 알림톡은 그대로 저장되고, 다른 채널은 검사가 「제목을 넣어 주세요.」로 막는다.
     title: dto.title || null,
     body: dto.body,
     // 빈 글자도 없음과 같다 — 그대로 두면 알림톡이 아닌 채널에서 CHECK 에 걸려 500 이 된다.

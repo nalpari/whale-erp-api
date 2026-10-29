@@ -594,7 +594,7 @@ export class ContractDeliveryService {
             e instanceof BizppurioError && e.code !== undefined
               ? `${what} 알림톡을 보내지 못했습니다(비즈뿌리오 ${e.code}). 번호를 확인하고`
               : `${what} 알림톡을 보내지 못했습니다. 잠시 뒤`
-          } 다시 보내 주세요${status === 'DRAFT' && pending.before.status !== 'DRAFT' ? ' — 근로계약서는 임시저장으로 두었습니다.' : ''}`,
+          } 다시 보내 주세요${status === 'DRAFT' && pending.before.status !== 'DRAFT' ? ' — 근로계약서는 임시저장으로 두었습니다' : ''}.`,
         });
       }
       this.logger.error(

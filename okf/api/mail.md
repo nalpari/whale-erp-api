@@ -4,7 +4,7 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-21T00:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:44:33Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
@@ -96,7 +96,7 @@ wrapped — callers that already catch it see the same type — `send` only note
 failure may clear on a retry, a template switched off never will. 비밀번호 찾기, the
 관리자 초기화 reset link and the 직원 앱 e-mail change PIN all answer the first with a 503
 「잠시 후 다시」 and the second with a 500 — the reset link and the e-mail change PIN put a
-「메일 설정 문제로 … 문의해 주세요」 message on it and do not rethrow the original, whose
+「메일 설정 문제로 … 문의해 주세요.」 message on it and do not rethrow the original, whose
 message can carry the address ([Authentication](/api/auth.md), [My profile](/api/my-profile.md)).
 
 **A mail stopped before SMTP is logged by `send` itself** (2026-10-15, 도입문의 알림 · 메일 리뷰). It leaves no row, and
