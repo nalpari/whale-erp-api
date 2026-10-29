@@ -1,6 +1,6 @@
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
-/** 현재 비밀번호 확인(MY PAGE 회원 탈퇴 1단계, S-JHQQNR). */
+/** 현재 비밀번호 확인(마이페이지 회원 탈퇴 1단계, S-JHQQNR). */
 export class AdminPasswordVerificationDto {
   /** 현재 비밀번호. */
   @IsString()

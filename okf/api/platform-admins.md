@@ -4,7 +4,7 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:42:58Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:50:08Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
@@ -231,7 +231,7 @@ password whose only voided row was a 비밀번호 찾기 temporary password is l
 「미발송」 there would invite a reset that locks out the password it still uses
 (PR #163 review, 2026-10-27). The rule lives in one shared function,
 `voidTempPasswordsForEmailChange` (`admin-password.ts`), used by 플랫폼 관리자 · BP 관리자 ·
-BP 마스터 edits and MY PAGE.
+BP 마스터 edits and 마이페이지.
 
 **The clear locks the row before it checks.** It is a small transaction: lock the
 `admin_accounts` row (`FOR NO KEY UPDATE`), then — in a new statement — check the

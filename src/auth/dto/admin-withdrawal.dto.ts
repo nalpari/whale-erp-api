@@ -1,7 +1,7 @@
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import { WITHDRAW_REASON_CODES } from '../admin-withdrawal.service';
 
-/** 회원 탈퇴 실행(MY PAGE, S-JHQQNR). BP 마스터 본인이 현재 비밀번호와 탈퇴 사유를 보낸다. */
+/** 회원 탈퇴 실행(마이페이지, S-JHQQNR). BP 마스터 본인이 현재 비밀번호와 탈퇴 사유를 보낸다. */
 export class CreateWithdrawalDto {
   /** 현재 비밀번호. */
   @IsString()

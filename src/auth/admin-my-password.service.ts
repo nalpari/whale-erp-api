@@ -14,7 +14,7 @@ import { hashPassword, verifyPassword } from './password';
 const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
 
 /**
- * 내 비밀번호 변경(MY PAGE, 1팀 S-PTWREE). 로그인한 관리자 본인이 현재 비밀번호를 확인한 뒤 새 비밀번호로
+ * 내 비밀번호 변경(마이페이지, 1팀 S-PTWREE). 로그인한 관리자 본인이 현재 비밀번호를 확인한 뒤 새 비밀번호로
  * 바꾼다. 강제 비밀번호 변경(admin-password-change.service.ts AdminPasswordChangeService)과 달리 초기
  * 비밀번호 · isPasswordChangeRequired · 약관 동의는 다루지 않는다 — 다만 살아있는 찾기용 임시 비밀번호를
  * 모두 끝내는 것은 강제 경로와 같다(아래).
