@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup (직원 앱 가입)](/api/staff-signup.md) — WHALEERP-140 마무리(2026-10-29 김민식): 발송 전 이름 불일치 경고는 두지 않는다 — 입력한 대로 요청 · 알림톡을 보내고 못 받으면 관리자가 유선으로 확인한다. 소속 추가 확인 메일은 입력한 이름이 그 번호 계정 실명과 같을 때만(`nameKey`, `identity-match.ts` 에서 내보냄) 보낸다 — 번호 재활용 때 채용 정보가 옛 주인 메일로 가던 것. 번호의 새 주인이 가입하지 못하는 것은 유선 확인으로 대신한다. 마이그레이션 없음.
 * **Update**: main 병합(api bulbasaur, main #199 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api bulbasaur, main #193 · #200 까지): okf/api/payslips.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api bulbasaur, main #198 까지): okf/log 충돌은 양쪽 기록을 살렸다.

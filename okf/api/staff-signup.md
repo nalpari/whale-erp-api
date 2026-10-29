@@ -4,7 +4,7 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:33:07Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:44:33Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
@@ -262,11 +262,10 @@ no such proof, so it is 404 like anyone else's. The name rule is a copy of `cont
 making that file use `same-name.ts` is left for the 근로계약 side. On the 관리자 side it stays 소속 추가 확인 대기; if the name was the
 admin's typo, 근로자 정보 수정 (`PATCH /contracts/:id/worker`) runs 판별 again and sends a new request, which then shows.
 
-**Left for the 근로계약 side** (they need 판별 · `contract-delivery`, another work area): the 관리자 warning before
-sending (WHALEERP-140 condition 2); the 소속 추가 확인 **mail** still goes to the candidate account's e-mail without the
-name check (`prepareAffiliation` · `mailAffiliation`), so on a recycled number the old owner still gets the store ·
-고용형태 by mail — only the app list and the answers are closed here; and 판별 still picks the old account, so the
-number's new owner gets no 가입 초대 and the request expires after 30 days.
+**On the 근로계약 side** (WHALEERP-140, 2026-10-29 김민식): no warning before sending — the request and the alimtalk go as
+entered; a 직원 who got nothing is checked by phone. The 소속 추가 확인 mail is sent only when the entered name matches
+the account ([Contracts API](/api/contracts-api.md)). 판별 still picks the account by phone, so when a number moved to
+someone else, its new owner cannot sign up on it — handled by the phone check for now.
 
 - `GET /me/affiliation-requests` — live requests (`SENT`, before `expires_at`, the record still unlinked, its phone =
   the account's phone and its name the account's), newest first: `invitationId`, `invitationType`, `storeName`, `bpName`, `employmentType`

@@ -47,7 +47,7 @@ export type AccountIdentity = {
 };
 
 /** 이름은 공백을 모두 지우고 영문은 대문자로 비교한다 — 저장 값은 그대로다(2026-10-16) */
-const nameKey = (name: string) =>
+export const nameKey = (name: string) =>
   name.normalize('NFC').replace(/\s/g, '').toUpperCase();
 const digits = (phone: string) => phone.replace(/\D/g, '');
 const day = (d: Date) => d.toISOString().slice(0, 10);
