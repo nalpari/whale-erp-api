@@ -4,7 +4,7 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
@@ -13,11 +13,11 @@ sources:
   - id: platform-role-groups-service
     resource: ../../src/platform-role-groups/platform-role-groups.service.ts
     title: PlatformRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: platform-role-group-menus-service
     resource: ../../src/platform-role-groups/platform-role-group-menus.service.ts
     title: PlatformRoleGroupMenusService (tree · save · preview, revocation cascade)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: role-menu-rules
     resource: ../../src/platform-role-groups/role-menu-rules.ts
     title: Pure menu rules — visible menus, group normalisation, cell block reasons, cascade
@@ -25,7 +25,7 @@ sources:
   - id: platform-role-group-format
     resource: ../../src/platform-role-groups/platform-role-group-format.ts
     title: Role types, controller path and menu URL, code numbering, list order, lock reasons, cascade child types
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: platform-role-group-access
     resource: ../../src/platform-role-groups/platform-role-group-access.ts
     title: Target lookup, flags, and the caller's own 권한 관리 rights (callerRoleMenuRights, by PLATFORM_ROLE_MENU_URL)

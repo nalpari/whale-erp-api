@@ -4,7 +4,7 @@ title: BP code groups
 description: 관리자 웹 「BP 공통코드 관리」(MN000014) — groups are read-only and only in-use 플랫폼제공 groups are visible (플랫폼고정 is hidden, 404); every such group (applied or not) shows the BP's own rows, where the BP edits name · status · order, adds BP전용 codes and deletes its rows; platform users read a picked BP only.
 tags: [admin, codes, bp]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: bp-code-groups-controller
     resource: ../../src/bp-code-groups/bp-code-groups.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-code-groups-service
     resource: ../../src/bp-code-groups/bp-code-groups.service.ts
     title: Which groups and rows a BP sees, BP전용 creation, edits and deletion
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-code-groups-e2e
     resource: ../../test/bp-code-groups.e2e-spec.ts
     title: Real-DB proof — visibility (플랫폼고정 hidden), other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore

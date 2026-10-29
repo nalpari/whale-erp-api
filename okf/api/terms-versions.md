@@ -4,7 +4,7 @@ title: Public 약관 API
 description: GET /public-terms-versions and /public-terms-versions/{termsTypeCode} — the 약관 in force, tabbed by 공통코드 TERMS_TYPE, readable without login; it picks the same version signup records an agreement to.
 tags: [terms, public, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: terms-versions-service
     resource: ../../src/terms-versions/terms-versions.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: terms-versions-controller
     resource: ../../src/terms-versions/terms-versions.controller.ts
     title: /public-terms-versions routes (public, 404)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로

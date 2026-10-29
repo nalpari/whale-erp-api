@@ -49,6 +49,7 @@ import type {
 } from './dto/my-invitation.dto';
 import type { StaffSignupDto } from './dto/staff-signup.dto';
 import { asksHqSharingConsentAt } from './hq-sharing-consent';
+import { sameName } from './same-name';
 
 /** 번호 · 코드가 맞는 초대가 없다 — 어느 쪽이 틀렸는지, 그 번호로 초대가 있는지 알리지 않는다(JOIN-7) */
 export const CODE_MISMATCH = '휴대전화번호나 초대 코드를 다시 확인해 주세요.';
@@ -94,17 +95,6 @@ const alreadyJoined = () =>
     'INVITATION_ALREADY_JOINED',
     '이미 가입을 마친 초대입니다. 로그인해 주세요.',
   );
-/**
- * 로그인한 직원의 근무지 더하기에서 초대가 이 계정 것인지 볼 때 쓰는 이름 비교 — 날인 전 본인 대조(contracts/identity-match.ts 의
- * nameKey)와 같은 규칙이다: 공백을 모두 지우고 영문은 대문자로(저장 값은 그대로). 초대 코드 · 링크가 그 번호를 가진 증거였던 것을
- * 대신한다 — 계정 번호는 바꿀 길이 없어, 번호가 다른 사람에게 넘어가면 옛 계정이 새 주인의 초대를 받지 않게(2026-10-28 김민식,
- * api #180 리뷰). contracts 는 다른 작업 영역이라 그 함수를 내보내지 않고 같은 식을 둔다.
- */
-const sameName = (a: string, b: string) => {
-  const key = (name: string) =>
-    name.normalize('NFC').replace(/\s/g, '').toUpperCase();
-  return key(a) === key(b);
-};
 /** 로그인한 직원의 근무지 더하기에서 이미 수락한 초대 — 같은 code 이고 「로그인해 주세요」만 뺀다(이미 로그인해 있다) */
 const alreadyAdded = () =>
   conflict(

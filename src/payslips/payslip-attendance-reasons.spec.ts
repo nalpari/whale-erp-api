@@ -8,6 +8,7 @@ import {
   ContractSpan,
   missingDays,
   missingDetail,
+  NO_ATTENDANCE_DETAIL,
 } from './payslip-attendance-reasons';
 
 // 2026-09 — 9/1 화요일. 계약은 월 · 수 · 금.
@@ -116,6 +117,70 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
     });
   });
 
+  it('달을 걸친 첫 주의 앞 달 날(9/28 ~ 30)은 퇴근 미등록만 출퇴근 누락에 넣는다 — 기록 없음은 기간 안 날만 본다', async () => {
+    const findMany = jest.fn().mockResolvedValue([
+      // 9/29 출근만(퇴근 없음), 10/2 출근 · 퇴근
+      {
+        recordedAt: new Date('2026-09-29T00:00:00Z'),
+        _count: { attendanceRecordsAsCheckIn: 0 },
+      },
+      {
+        recordedAt: new Date('2026-10-02T00:00:00Z'),
+        _count: { attendanceRecordsAsCheckIn: 1 },
+      },
+    ]);
+    const db = {
+      contract: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            startDate: new Date('2026-10-01T00:00:00Z'),
+            status: 'SIGNED',
+            endDate: new Date('2026-10-02T00:00:00Z'),
+            contractStatusHistories: [],
+            contractWorkDays: [{ weekday: 'FRI' }],
+          },
+        ]),
+      },
+      staffMember: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ retiredDate: null }),
+      },
+      attendanceRecord: { findMany, count: jest.fn().mockResolvedValue(0) },
+    };
+    const basis = {
+      staffMemberId: 7,
+      contractIds: [1],
+      periodStartDate: new Date('2026-10-01T00:00:00Z'),
+      periodEndDate: new Date('2026-10-31T00:00:00Z'),
+    };
+    const now = new Date('2026-11-05T00:00:00Z');
+    expect(await attendanceReviewReasons(db as never, basis, now)).toEqual([
+      {
+        reviewReason: 'MISSING_ATTENDANCE',
+        detail: missingDetail([{ date: '2026-09-29', kind: 'NO_CHECK_OUT' }]),
+      },
+    ]);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          recordedAt: {
+            gte: new Date('2026-09-27T15:00:00Z'),
+            lt: new Date('2026-10-31T15:00:00Z'),
+          },
+        }) as unknown,
+      }),
+    );
+    // 기간 안 출근이 없으면 앞 날 기록이 있어도 「기록이 없습니다」
+    findMany.mockResolvedValueOnce([
+      {
+        recordedAt: new Date('2026-09-29T00:00:00Z'),
+        _count: { attendanceRecordsAsCheckIn: 0 },
+      },
+    ]);
+    expect(await attendanceReviewReasons(db as never, basis, now)).toEqual([
+      { reviewReason: 'MISSING_ATTENDANCE', detail: NO_ATTENDANCE_DETAIL },
+    ]);
+  });
+
   describe('missingDays', () => {
     const base = {
       periodStart: '2026-09-01',
@@ -134,6 +199,39 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
       expect(missingDays({ ...base, checkedIn })).toEqual([
         { date: '2026-09-09', kind: 'NONE' },
         { date: '2026-09-04', kind: 'NO_CHECK_OUT' },
+      ]);
+    });
+
+    it('기간 앞 날은 퇴근 미등록만 맨 뒤에 내림차순으로 — 출근 · 퇴근 모두 없는 앞 날은 넣지 않는다', () => {
+      const checkedIn = new Map([
+        ['2026-08-31', false],
+        ['2026-09-02', true],
+        ['2026-09-04', true],
+        ['2026-09-07', true],
+        ['2026-09-09', true],
+        ['2026-09-11', true],
+      ]);
+      expect(
+        missingDays({
+          ...base,
+          periodStart: '2026-09-02',
+          checkedIn,
+          leadDays: ['2026-08-31', '2026-09-01'],
+        }),
+      ).toEqual([{ date: '2026-08-31', kind: 'NO_CHECK_OUT' }]);
+      checkedIn.delete('2026-09-09');
+      checkedIn.set('2026-09-01', false);
+      expect(
+        missingDays({
+          ...base,
+          periodStart: '2026-09-02',
+          checkedIn,
+          leadDays: ['2026-08-31', '2026-09-01'],
+        }),
+      ).toEqual([
+        { date: '2026-09-09', kind: 'NONE' },
+        { date: '2026-09-01', kind: 'NO_CHECK_OUT' },
+        { date: '2026-08-31', kind: 'NO_CHECK_OUT' },
       ]);
     });
 

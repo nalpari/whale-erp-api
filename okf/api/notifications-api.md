@@ -4,7 +4,7 @@ title: Operations notifications
 description: 운영 알림 — 업무 쪽이 부르는 공통 함수 OpsNotificationService.notify와 수신자 판정 셋, 관리자 웹 운영 알림함 API(GET /notifications · 읽음 · 모두 읽음 · 선택 삭제), 직원 근무 앱 알림함(/me/notifications)과 알림 수신 설정(/me/notification-preferences).
 tags: [notifications, admin, inbox, template, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: ops-notification-service
     resource: ../../src/notifications/ops-notification.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: notifications-service
     resource: ../../src/notifications/notifications.service.ts
     title: 운영 알림함 목록 · 읽음 · 모두 읽음 · 삭제
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: notifications-controller
     resource: ../../src/notifications/notifications.controller.ts
     title: /notifications (admin only)
@@ -25,7 +25,7 @@ sources:
   - id: my-notifications-service
     resource: ../../src/notifications/my-notifications.service.ts
     title: 직원 알림함 · 수신 설정
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: my-notifications-controller
     resource: ../../src/notifications/my-notifications.controller.ts
     title: /me/notifications · /me/notification-preferences (account only)

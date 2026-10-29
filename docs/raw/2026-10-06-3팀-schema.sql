@@ -63,8 +63,8 @@ CREATE TYPE "work_schedule_change_type" AS ENUM ('CREATED', 'UPDATED', 'DELETED'
 COMMENT ON TYPE "work_schedule_change_type" IS '등록 · 수정 · 삭제';
 CREATE TYPE "attendance_kind" AS ENUM ('CHECK_IN', 'CHECK_OUT');  -- 출근 · 퇴근
 COMMENT ON TYPE "attendance_kind" IS '출근 · 퇴근';
-CREATE TYPE "attendance_review_reason" AS ENUM ('ACCURACY_EXCEEDED', 'OUT_OF_RADIUS_CHECKIN', 'OUT_OF_RADIUS_CHECKOUT', 'MOCK_LOCATION');  -- 위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지
-COMMENT ON TYPE "attendance_review_reason" IS '위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지';
+CREATE TYPE "attendance_review_reason" AS ENUM ('ACCURACY_EXCEEDED', 'OUT_OF_RADIUS_CHECKIN', 'OUT_OF_RADIUS_CHECKOUT', 'MOCK_LOCATION', 'LONG_SHIFT');  -- 위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지 · 근무 12시간 초과
+COMMENT ON TYPE "attendance_review_reason" IS '위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지 · 근무 12시간 초과';
 CREATE TYPE "attendance_entry_method" AS ENUM ('SELF', 'PROXY');  -- 직원 등록 · 대신 등록
 COMMENT ON TYPE "attendance_entry_method" IS '직원 등록 · 대신 등록';
 CREATE TYPE "todo_assignee_type" AS ENUM ('INDIVIDUAL', 'ALL');  -- 개인 · 근무지 전체
@@ -1429,7 +1429,7 @@ COMMENT ON COLUMN "attendance_records"."store_id" IS '근무지 — 여럿이면
 COMMENT ON COLUMN "attendance_records"."kind" IS '구분 — 출근·퇴근';
 COMMENT ON COLUMN "attendance_records"."recorded_at" IS '기록 시각 — 기기 시각';
 COMMENT ON COLUMN "attendance_records"."received_at" IS '서버 수신 시각 — 확정 기준';
-COMMENT ON COLUMN "attendance_records"."review_reason" IS '확인 필요 사유 — 반경 밖 출근·반경 밖 퇴근·위치 조작, 검토 후 null';
+COMMENT ON COLUMN "attendance_records"."review_reason" IS '확인 필요 사유 — 반경 밖 출근·반경 밖 퇴근·위치 조작·근무 12시간 초과, 검토 후 null';
 COMMENT ON COLUMN "attendance_records"."reviewed_by" IS '검토 관리자 — 보정 또는 이상 없음';
 COMMENT ON COLUMN "attendance_records"."reviewed_at" IS '검토 일시';
 COMMENT ON COLUMN "attendance_records"."entry_method" IS '등록 방식 — 직원 등록·대신 등록';

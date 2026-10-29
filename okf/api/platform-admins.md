@@ -4,12 +4,12 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear — moved out of the service, shared with BP admins
@@ -21,7 +21,7 @@ sources:
   - id: platform-admins-controller
     resource: ../../src/platform-admins/platform-admins.controller.ts
     title: /platform-admins routes, the menu permission per action (`/platform-admins`, MN000213 today) and the platform-account check
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: platform-admins-menu-url
     resource: ../../prisma/migrations/20261019144438_team1_menu_single_level_urls/migration.sql
     title: 1팀 메뉴 10개 url 을 한 단계로 (MN000213 /platform/system/admins → /platform-admins 등)
@@ -37,7 +37,7 @@ sources:
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action, { platformOnly }) — 경로로 찾은 메뉴의 권한 · 플랫폼 계정 가드'
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 관리자 웹 주소, the mail button target (one rule for every mail)

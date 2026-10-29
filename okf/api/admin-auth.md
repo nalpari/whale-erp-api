@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -17,7 +17,7 @@ sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: password
     resource: ../../src/auth/password.ts
     title: verifyPassword — scrypt 형식이 아닌 저장값('!')도 더미 해시로 한 번 대조
@@ -29,11 +29,11 @@ sources:
   - id: admin-profile-service
     resource: ../../src/auth/admin-profile.service.ts
     title: 마이페이지 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
     title: BpProfileService — 마이페이지 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영 · 지우기) · 사업자 번호 검사
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -41,15 +41,15 @@ sources:
   - id: admin-session-service
     resource: ../../src/admin-session/admin-session.service.ts
     title: admin_sessions (issue · find · extend · isActive · revoke)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-login-info-service
     resource: ../../src/auth/admin-login-info.service.ts
     title: Login info — account, menu tree with CRUD, managed stores, codes
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check, target BP (X-Bp-Code-Id → @TargetBp())'
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: codes-service
     resource: ../../src/codes/codes.service.ts
     title: 공통코드 per BP, for login-info, GET /public-code-items and GET /bp-codes/{bpCodeId}/code-items
@@ -61,19 +61,19 @@ sources:
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-my-password-service
     resource: ../../src/auth/admin-my-password.service.ts
     title: POST /auth/admin/me/password-change · me/password-verifications — 마이페이지 내 비밀번호 변경 · 현재 비밀번호 확인
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-password-policy
     resource: ../../src/auth/admin-password-policy.ts
     title: 1팀 비밀번호 정책(PL-QSBSYY) 검사와 문구
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 선택과 진입
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService — 직원 · 점포 판정의 탭 BP 인자(scopeAdmin)

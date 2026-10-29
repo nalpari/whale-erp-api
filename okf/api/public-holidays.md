@@ -4,7 +4,7 @@ title: Platform holidays
 description: 관리자 웹 「플랫폼 휴일 관리」(MN000217) — GET /public-holidays reads the 공식 휴일 of a year (목록) or a month (캘린더) with the synchronization status; read-only, no route changes a holiday. A monthly batch (public-holiday-sync) aligns 올해 · 다음 해 with the 공휴일 API.
 tags: [admin, holiday, platform, team1, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: public-holidays-controller
     resource: ../../src/public-holidays/public-holidays.controller.ts
@@ -17,7 +17,7 @@ sources:
   - id: public-holidays-query
     resource: ../../src/public-holidays/dto/list-public-holidays-query.dto.ts
     title: year 2000~2100 · month 1~12 query
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: holiday-api-client
     resource: ../../src/public-holidays/holiday-api.client.ts
     title: HolidayApiClient — 한국천문연구원 특일 정보 getRestDeInfo, a year at a time

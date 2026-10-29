@@ -4,12 +4,12 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
     title: TodosService — 등록 · 목록 · 상세 · 수정 · 상태 변경 · 삭제 · 내 TO-DO
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: todo-rules
     resource: ../../src/todos/todo-rules.ts
     title: 재직 직원 기준 · 정렬 · 묶음 상태 · 수행 예정 일시 계산

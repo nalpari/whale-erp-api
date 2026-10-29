@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
@@ -41,7 +41,7 @@ sources:
   - id: summary-service
     resource: ../../src/staff-members/staff-member-summary.service.ts
     title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
@@ -49,11 +49,11 @@ sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: week-query-dto
     resource: ../../src/staff-members/dto/staff-member-week.query.dto.ts
     title: 근무스케줄 영역 쿼리 — weekStart(그 주의 아무 날짜)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: work-schedule-list-controller
     resource: ../../src/staff-members/staff-member-work-schedules.controller.ts
     title: GET /staff-members/:id/work-schedules (WHALEERP-185)
@@ -61,11 +61,11 @@ sources:
   - id: work-schedule-list-service
     resource: ../../src/staff-members/staff-member-work-schedules.service.ts
     title: StaffMemberWorkSchedulesService · periodRange — 근무스케줄 관리 권한 → 범위 → 기간 · 페이지 · 합계
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: work-schedule-list-dto
     resource: ../../src/staff-members/dto/staff-member-work-schedule-list.query.dto.ts
     title: 근무스케줄 표 쿼리 — period · page · pageSize(20 · 50 · 100)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: work-schedule-list-response-dto
     resource: ../../src/staff-members/dto/staff-member-work-schedule-list.response.dto.ts
     title: 근무스케줄 표 응답 — items · total · totalWorkMinutes
@@ -93,11 +93,11 @@ sources:
   - id: birth-date-dto
     resource: ../../src/staff-members/dto/birth-date-correction.dto.ts
     title: 생년월일 정정 요청 DTO
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: birth-date-service
     resource: ../../src/staff-members/staff-birth-date.service.ts
     title: StaffBirthDateService — 생년월일 정정 + 계정 변경 이력
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: design
     resource: ../../docs/plans/2026-10-12-staff-member-list-design.md
     title: 직원 목록 조회 API 설계 (WHALEERP-329)

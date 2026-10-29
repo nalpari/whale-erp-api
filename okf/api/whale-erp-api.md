@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -16,20 +16,20 @@ sources:
     last_modified: 2026-10-13T05:12:04Z
   - id: app-module
     resource: ../../src/app.module.ts
-    title: Root module (ConfigModule registration)
-    last_modified: 2026-10-27T04:53:14Z
+    title: Root module (ConfigModule registration; BulkExportsModule before StaffMembersModule so /staff-members/bulk-exports is not taken by /staff-members/:id)
+    last_modified: 2026-10-29T02:54:57Z
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update · DELETE items
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
 ---
 
 # Status

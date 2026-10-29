@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: signup-controller
     resource: ../../src/admin-signup/admin-signup.controller.ts
     title: /auth/signup routes (public, throttled)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: signup-dto
     resource: ../../src/admin-signup/dto/signup.dto.ts
     title: SignupDto (format rules shared with the front signup screen)

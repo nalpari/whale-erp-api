@@ -7,6 +7,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { BpCodesModule } from './bp-codes/bp-codes.module';
 import { BpMastersModule } from './bp-masters/bp-masters.module';
+import { BulkExportsModule } from './bulk-exports/bulk-exports.module';
 import { CodesModule } from './codes/codes.module';
 import { TermsVersionsModule } from './terms-versions/terms-versions.module';
 import { AuthModule } from './auth/auth.module';
@@ -62,6 +63,8 @@ import { HomeModule } from './home/home.module';
     BpCodesModule,
     BpMastersModule,
     TermsVersionsModule,
+    // /staff-members/bulk-exports 가 /staff-members/:id 에 먹히지 않게 StaffMembersModule 앞
+    BulkExportsModule,
     StaffMembersModule,
     PayslipsModule,
     ContractsModule,

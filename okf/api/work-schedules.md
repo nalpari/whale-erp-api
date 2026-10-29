@@ -4,12 +4,12 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
 tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
@@ -21,7 +21,7 @@ sources:
   - id: controller
     resource: ../../src/work-schedules/work-schedules.controller.ts
     title: /work-schedules
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: notice
     resource: ../../src/work-schedules/work-schedule-notice.ts
     title: 저장 알림 — 직원 알림 · 앱 푸시 발송 대기(#201)

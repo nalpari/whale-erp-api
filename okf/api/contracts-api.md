@@ -4,32 +4,32 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: contract-status
     resource: ../../src/contracts/contract-status.ts
     title: 계약 상태 전환 (WHALEERP-151)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: contract-send
     resource: ../../src/contracts/contract-send.service.ts
     title: 근로계약 재발송 (WHALEERP-136 · 611)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
@@ -41,7 +41,7 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
@@ -53,7 +53,7 @@ sources:
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: contracts-menu
     resource: ../../src/contracts/contracts-menu.ts
     title: 근로계약 관리 메뉴 상수(CONTRACTS_MENU) — 서비스의 권한 재확인과 직원 목록 · 상세의 workDays 판정이 같이 쓴다
@@ -65,11 +65,11 @@ sources:
   - id: my-contract-scope
     resource: ../../src/contracts/my-contract-scope.ts
     title: 직원 앱 「내 계약」 기준 (145 · 610 공용)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: my-contract-documents
     resource: ../../src/contracts/my-contract-documents.service.ts
     title: 직원 앱 근로계약 파일 내려받기 주소 (WHALEERP-146 · 149)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
 ---
 
 # What it is

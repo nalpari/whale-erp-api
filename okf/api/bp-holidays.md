@@ -4,7 +4,7 @@ title: BP holidays
 description: 관리자 웹 「BP 휴일 관리」(MN000015) — rule-stored holidays whose dates are computed when read, month calendar · list, detail, change history, overlap check, create, update, force termination and deletion; past dates never change, stores join from today and leave as of yesterday.
 tags: [admin, holiday, bp, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: bp-holidays-controller
     resource: ../../src/bp-holidays/bp-holidays.controller.ts
@@ -13,11 +13,11 @@ sources:
   - id: bp-holiday-changes
     resource: ../../src/bp-holidays/bp-holiday-changes.service.ts
     title: create · update · terminate · remove under a row lock
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-holiday-access
     resource: ../../src/bp-holidays/bp-holiday-access.ts
     title: who manages what — manageAll, store scope, per-state actions
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: holiday-dates
     resource: ../../src/bp-holidays/holiday-dates.ts
     title: date computation for DAY · PERIOD · REPEAT
@@ -33,11 +33,11 @@ sources:
   - id: bp-holiday-rule
     resource: ../../src/bp-holidays/bp-holiday-rule.ts
     title: input normalization, 2100 ceiling, describeRule
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-holidays-service
     resource: ../../src/bp-holidays/bp-holidays.service.ts
     title: list · detail · histories · overlaps
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: store-periods-migration
     resource: ../../prisma/migrations/20261026135250_team1_bp_holiday_store_periods/migration.sql
     title: target · excluded stores become one row per period

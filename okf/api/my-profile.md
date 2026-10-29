@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -17,11 +17,11 @@ sources:
   - id: my-password-service
     resource: ../../src/my-profile/my-password.service.ts
     title: MyPasswordService — 지금 비밀번호 확인 뒤 변경(WHALEERP-192)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: my-consent-service
     resource: ../../src/my-profile/my-consent.service.ts
     title: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: my-profile-controller
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
@@ -33,7 +33,7 @@ sources:
   - id: my-email-change-service
     resource: ../../src/my-profile/my-email-change.service.ts
     title: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: close-unverified-email-change-pins
     resource: ../../prisma/migrations/20261021110054_team3_close_unverified_email_change_pins/migration.sql
     title: 비밀번호 확인 없이 낸 이메일 변경 핀을 배포 때 닫기(WHALEERP-607)
@@ -45,7 +45,7 @@ sources:
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
     last_modified: 2026-10-28T05:30:00Z
   - id: my-memberships-controller
     resource: ../../src/my-profile/my-memberships.controller.ts
@@ -58,7 +58,7 @@ sources:
   - id: save-my-tax-profile-dto
     resource: ../../src/my-profile/dto/save-my-tax-profile.dto.ts
     title: 신고 정보 저장 본문(rrn · bankCode · payrollAccountNumber · currentPassword)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: location-consent-state
     resource: ../../src/my-profile/location-consent-state.ts
     title: 위치정보 동의 상태 판정(API 전용 enum LocationConsentState)

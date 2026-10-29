@@ -4,7 +4,7 @@ title: Platform menus
 description: 관리자 웹 「플랫폼 메뉴 관리」(MN000215) — service tabs from 공통코드 SERVICE, the per-service menu tree, detail, create (global code numbering plus a PM000001 row), editing name · URL · status, and moving a menu with its subtree inside one service.
 tags: [admin, menu, permission]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: platform-menus-controller
     resource: ../../src/platform-menus/platform-menus.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: platform-menus-service
     resource: ../../src/platform-menus/platform-menus.service.ts
     title: PlatformMenusService (services · tree · detail · create · update · move)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: api-menu-urls
     resource: ../../src/platform-menus/api-menu-urls.service.ts
     title: API 권한 주소 — 경로 방식 @MenuPermission 컨트롤러의 경로 첫 단계(DiscoveryService)
@@ -25,15 +25,15 @@ sources:
   - id: platform-menu-rules
     resource: ../../src/platform-menus/platform-menu-rules.ts
     title: Pure rules — code numbering, URL overlap, hidden menus, move plan
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: platform-menu-format
     resource: ../../src/platform-menus/platform-menu-format.ts
     title: Menu code · URL pattern · messages
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: platform-menu-dto
     resource: ../../src/platform-menus/dto/save-platform-menu.dto.ts
     title: Input rules — name 20, URL pattern, move body
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: platform-menus-e2e
     resource: ../../test/platform-menus.e2e-spec.ts
     title: Real-DB proof — numbering, PM row, URL overlap, fixed API URLs, optimistic edit, concurrent create, move renumbering without a version bump

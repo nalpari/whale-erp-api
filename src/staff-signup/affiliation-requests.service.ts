@@ -33,6 +33,7 @@ import type {
   RejectAffiliationRequestDto,
 } from './dto/affiliation-request.dto';
 import { asksHqSharingConsentAt } from './hq-sharing-consent';
+import { sameName } from './same-name';
 
 type Db = Prisma.TransactionClient | PrismaService;
 
@@ -88,7 +89,10 @@ export class AffiliationRequestsService {
     private readonly ops: OpsNotificationService,
   ) {}
 
-  /** 내 살아 있는 요청 — 보냄 · 기한 안 · 아직 잇지 않은 레코드. 최근 보낸 것부터 */
+  /**
+   * 내 살아 있는 요청 — 보냄 · 기한 안 · 아직 잇지 않은 레코드. 최근 보낸 것부터. 번호가 같아도 근로계약서 이름이 계정 이름과
+   * 다르면 이 계정에 온 요청으로 보지 않는다(sameName, WHALEERP-140) — 번호를 넘겨받은 다른 사람 앞 요청일 수 있다
+   */
   async list(
     accountId: number,
     now = new Date(),
@@ -112,12 +116,25 @@ export class AffiliationRequestsService {
         sentAt: true,
         expiresAt: true,
         // 함께 온 계약의 고용 형태 · 직무(없으면 레코드) — pendingTermsOf
-        staffMember: { select: { storeId: true, ...PENDING_TERMS_SELECT } },
+        staffMember: {
+          select: { storeId: true, name: true, ...PENDING_TERMS_SELECT },
+        },
       },
     });
+    const mine: typeof rows = [];
+    const hidden: number[] = [];
+    for (const r of rows)
+      if (sameName(r.staffMember.name, account.realName)) mine.push(r);
+      else hidden.push(r.invitationId);
+    // 관리자 쪽은 소속 추가 확인 대기로만 남아 원인이 보이지 않는다 — 걸러진 요청 id 만 남긴다(이름은 남기지 않음). 앱이 열 때마다
+    // 읽는 목록이라 debug 로 두고, 직원이 답하려다 막힌 때(lockRequest)만 warn 으로 남긴다
+    if (hidden.length)
+      this.logger.debug(
+        `계정 ${accountId} — 근로계약서 이름이 달라 보이지 않는 소속 추가 확인 요청: ${hidden.join(', ')}`,
+      );
     const stores = await this.prisma.store.findMany({
       where: {
-        storeId: { in: [...new Set(rows.map((r) => r.staffMember.storeId))] },
+        storeId: { in: [...new Set(mine.map((r) => r.staffMember.storeId))] },
       },
       select: {
         storeId: true,
@@ -127,7 +144,7 @@ export class AffiliationRequestsService {
       },
     });
     const byId = new Map(stores.map((s) => [s.storeId, s]));
-    return rows.map((r) => {
+    return mine.map((r) => {
       const store = byId.get(r.staffMember.storeId);
       const { employmentType, jobTitle } = pendingTermsOf(
         r.staffMember,
@@ -372,10 +389,22 @@ export class AffiliationRequestsService {
       },
     });
     const s = request?.staffMember;
-    if (!request || !s || s.candidateAccountId !== accountId) {
-      // 이미 수락해 이 계정에 이어졌으면 답한 요청이다
+    // 근로계약서 이름이 계정 이름과 다르면 이 계정 요청이 아니다(sameName, WHALEERP-140) — 상태보다 먼저 봐, 번호를 넘겨받은
+    // 다른 사람 앞 요청이 답했는지 끝났는지 드러나지 않게 한다(근무지 더하기와 같다)
+    const otherName =
+      !!s &&
+      s.candidateAccountId === accountId &&
+      !sameName(s.name, account.realName);
+    if (!request || !s || s.candidateAccountId !== accountId || otherName) {
+      // 이미 수락해 이 계정에 이어졌으면 답한 요청이다 — 레코드가 이 계정에 이어진 것이 본인이 답했다는 증거라, 그 뒤 이름이
+      // 바뀌어도 409 다. 거절은 그런 증거가 없어(후보 계정만 남는다) 이름이 다르면 404 다 — 409 로 답하면 이름이 다른 계정에
+      // 남의 요청이 답했다는 것이 드러난다
       if (s?.accountId === accountId && request?.status === 'ACCEPTED')
         throw answered();
+      if (otherName)
+        this.logger.warn(
+          `계정 ${accountId} — 근로계약서 이름이 달라 소속 추가 확인 요청 ${invitationId} 에 답하지 못함`,
+        );
       throw notFound();
     }
     if (request.status === 'ACCEPTED' || request.status === 'REJECTED')
@@ -396,6 +425,7 @@ export class AffiliationRequestsService {
       where: { accountId },
       select: {
         phone: true,
+        realName: true,
         status: true,
         isHqSharingConsented: true,
         hqSharingConsentVersion: true,

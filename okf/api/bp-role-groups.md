@@ -4,7 +4,7 @@ title: BP role groups
 description: 관리자 웹 「BP 권한 그룹 관리」(MN000013) — BA · FA groups scoped by the caller's role, codes numbered per type, names unique per (BP, 관리계정), per-menu CRUD capped by the fixed role ∩ the caller's own rights, and deletion that moves linked admins.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: bp-role-groups-controller
     resource: ../../src/bp-role-groups/bp-role-groups.controller.ts
@@ -13,15 +13,15 @@ sources:
   - id: bp-role-group-access
     resource: ../../src/bp-role-groups/bp-role-group-access.ts
     title: Caller scope, visible groups, writable type, cell block reasons, ceiling intersection
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-role-groups-service
     resource: ../../src/bp-role-groups/bp-role-groups.service.ts
     title: BpRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-role-group-menus-service
     resource: ../../src/bp-role-groups/bp-role-group-menus.service.ts
     title: BpRoleGroupMenusService (tree · save · preview · franchise-master view)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-role-group-dto
     resource: ../../src/bp-role-groups/dto/bp-role-group.response.dto.ts
     title: Response shapes extending the platform DTOs (roleTypeCode narrowed)

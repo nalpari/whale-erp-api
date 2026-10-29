@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보내고, 운영자가 그 메일을 1분에 한 번 다시 보낼 수 있다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: lead-reply-mail-result
     resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
@@ -17,11 +17,11 @@ sources:
   - id: support-inquiries-service
     resource: ../../src/inquiries/support-inquiries.service.ts
     title: SupportInquiriesService (create · list · get · attachmentDownloadUrl) — 고객지원 문의하기 (#281)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: support-inquiries-controller
     resource: ../../src/inquiries/support-inquiries.controller.ts
     title: /support-inquiries (문의하기 MN000036 메뉴 권한)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: lead-reply-without-name
     resource: ../../prisma/migrations/20261015164811_team3_lead_reply_without_name/migration.sql
     title: EMAIL_LEAD_REPLY 에서 문의자이름을 뺌 (CNT-11 v134)
@@ -37,15 +37,15 @@ sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (list · get · attachmentDownloadUrl · startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /platform-inquiries (문의사항 MN000221 메뉴 권한 + 플랫폼 관리자)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: leads-admin-service
     resource: ../../src/leads/leads-admin.service.ts
     title: LeadsAdminService (list · get · startProcessing · reply · resendReplyMail · saveInternalMemo · remove)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: lead-notifications
     resource: ../../src/leads/lead-notifications.ts
     title: deleteLeadNotifications · notifyLeadOperators · leadContact — 도입문의 운영 알림 만들기와 지우기
@@ -53,7 +53,7 @@ sources:
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: LeadsService.create — 접수 뒤 운영 알림 · 접수 확인 메일 (#296)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: lead-reply-mail-migration
     resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
     title: EMAIL_LEAD_REPLY 기본 템플릿 (#588)
@@ -61,7 +61,7 @@ sources:
   - id: leads-admin-controller
     resource: ../../src/leads/leads-admin.controller.ts
     title: /platform-leads (도입문의 MN000222 메뉴 권한 + 플랫폼 관리자)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: admin-web-url
     resource: ../../src/common/admin-web-url.ts
     title: ADMIN_WEB_URL — 메일 버튼 주소(플랫폼 관리자 · BP 회원가입 메일과 같은 규칙 하나)
@@ -69,7 +69,7 @@ sources:
   - id: updated-at
     resource: ../../src/common/updated-at.ts
     title: IsUpdatedAt · sameMillisecond (공지 · FAQ 와 같이 씀)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: query-list
     resource: ../../src/common/query-list.ts
     title: toList — 목록 필터가 값을 여러 개 받게(?status=A&status=B)
@@ -93,7 +93,7 @@ sources:
   - id: save-internal-memo-dto
     resource: ../../src/common/save-internal-memo.dto.ts
     title: 내부 메모 요청 — 키 필수, null · 공백은 지움
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
 ---
 
 # What it covers

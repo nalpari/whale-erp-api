@@ -4,12 +4,20 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:44:34Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
     title: StaffSignupService (lookup, check, signup transaction, under-age notice, logged-in list · accept)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
+  - id: same-name
+    resource: ../../src/staff-signup/same-name.ts
+    title: sameName — 근무지 더하기 · 소속 추가 확인 요청의 이름 대조(본인 대조 규칙)
+    last_modified: 2026-10-29T04:33:07Z
+  - id: affiliation-requests-service
+    resource: ../../src/staff-signup/affiliation-requests.service.ts
+    title: AffiliationRequestsService — 소속 추가 확인 · 복귀 확인 요청 목록 · 수락 · 거절
+    last_modified: 2026-10-29T05:17:36Z
   - id: my-invitations-controller
     resource: ../../src/staff-signup/my-invitations.controller.ts
     title: GET /me/invitations · POST /me/invitations/:invitationId/accept (account token)
@@ -25,7 +33,7 @@ sources:
   - id: staff-signup-dto
     resource: ../../src/staff-signup/dto/staff-signup.dto.ts
     title: StaffSignupDto (lookup + account + 인적사항; no phone of its own)
-    last_modified: 2026-10-29T04:44:34Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: hq-sharing-consent
     resource: ../../src/staff-signup/hq-sharing-consent.ts
     title: 본사 제공 동의 문구 버전 and which stores ask
@@ -178,8 +186,9 @@ Name match instead of the code (2026-10-28 김민식, api #180 review): possessi
 be proven by a code · link from the 알림톡. An account's phone is fixed at signup with no change path,
 so a recycled number would let the old account see and accept the new owner's invitations. Both the
 list and accept therefore also require the record's name (근로계약서) to equal the account's
-`realName` under the 본인 대조 rule — whitespace removed, Latin upper-cased (`sameName`, same as
-`contracts/identity-match.ts` `nameKey`, kept local because contracts is another team's area). A
+`realName` under the 본인 대조 rule — whitespace removed, Latin upper-cased (`sameName` in
+`src/staff-signup/same-name.ts`, same as `contracts/identity-match.ts` `nameKey`, kept apart because contracts is
+another work area; 소속 추가 확인 · 복귀 확인 requests use it too). A
 different name is treated like another person's invitation: absent from the list, 404
 `INVITATION_NOT_FOUND` on accept, checked before the status. A same-name new owner is not caught;
 the 날인 본인 대조 (name · phone · birth date · gender · foreigner) still stands in front of signing. Accept re-reads the
@@ -242,8 +251,25 @@ a mail linking to `/affiliations` in the 직원 app ([Contracts API](/api/contra
 logs in and the app finds it. Account token only (`@UserTypes('account')`). Accept · reject are throttled per account
 like 근무지 더하기 (10 per 10 minutes); the list is not — the app reads it on every open, like `GET /auth/account/me`.
 
+**The record's name must match the account's** (WHALEERP-140, 2026-10-29 김민식): a request whose record name
+(근로계약서) differs from the account's `realName` under `sameName` is not this account's — 판별 found the account by
+the phone alone, and a recycled number would otherwise send the old owner the new owner's request and let them accept
+it. Such a request is absent from the list, and accept · reject answer 404 `AFFILIATION_REQUEST_NOT_FOUND`, checked
+before the status so its state does not show. Hidden request ids (no names) are logged so a mismatch can be traced —
+at debug on the list (the app reads it on every open), as a warning when an answer is refused. A request already
+accepted stays 409 for its account even if the name changes later (the link proves it answered); a rejected one has
+no such proof, so it is 404 like anyone else's. The name rule is a copy of `contracts/identity-match.ts` `nameKey`;
+making that file use `same-name.ts` is left for the 근로계약 side. On the 관리자 side it stays 소속 추가 확인 대기; if the name was the
+admin's typo, 근로자 정보 수정 (`PATCH /contracts/:id/worker`) runs 판별 again and sends a new request, which then shows.
+
+**Left for the 근로계약 side** (they need 판별 · `contract-delivery`, another work area): the 관리자 warning before
+sending (WHALEERP-140 condition 2); the 소속 추가 확인 **mail** still goes to the candidate account's e-mail without the
+name check (`prepareAffiliation` · `mailAffiliation`), so on a recycled number the old owner still gets the store ·
+고용형태 by mail — only the app list and the answers are closed here; and 판별 still picks the old account, so the
+number's new owner gets no 가입 초대 and the request expires after 30 days.
+
 - `GET /me/affiliation-requests` — live requests (`SENT`, before `expires_at`, the record still unlinked, its phone =
-  the account's phone), newest first: `invitationId`, `invitationType`, `storeName`, `bpName`, `employmentType`
+  the account's phone and its name the account's), newest first: `invitationId`, `invitationType`, `storeName`, `bpName`, `employmentType`
   (+ `employmentTypeLabel` 정직원 · 파트타이머), `jobTitle`, `sentAt`, `expiresAt`, `asksHqSharingConsent` (not 직영 and
   the account has not consented to an accepted wording version — `hqSharingAgreedOf`, ATT-30). The login popup and 나의 정보 - 소속 점포 read this. `employmentType` ·
   `jobTitle` come together from the request's in-progress contract when it carries terms, otherwise both from the
@@ -251,7 +277,7 @@ like 근무지 더하기 (10 per 10 minutes); the list is not — the app reads 
   `pendingTermsOf` (`contract-status.ts`), also used by the 알림톡 · 메일 고용형태 and the signup invitation check.
 - `POST /me/affiliation-requests/:invitationId/accept` `{ hqSharingConsented? }` — 번호 lock → account row `FOR UPDATE`
   (so rewriting an old-version consent cannot undo a withdrawal made meanwhile, as at 근무지 더하기, api #183) → 직원 row
-  `FOR UPDATE` → re-read; the request must be this account's (`candidate_account_id`), `SENT`, unexpired, and the record's phone the
+  `FOR UPDATE` → re-read; the request must be this account's (`candidate_account_id` and the record's name, `sameName`), `SENT`, unexpired, and the record's phone the
   account's phone. 409 if the account is already 재직 at that store. Invitation → `ACCEPTED`, optional consent written
   exactly as at 근무지 더하기, record linked (`account_id`, `JOINED`, candidate cleared), its 발송 대기 contracts →
   서명 대기 (`STAFF`) with `sign_deadline_at = now + 30 days` (the deadline starts here, not at sending) and one
@@ -262,7 +288,8 @@ like 근무지 더하기 (10 per 10 minutes); the list is not — the app reads 
   with the same `reject_reason`. After commit, ops notice `NTF_AFFILIATION_REJECTED` (related `STAFF_MEMBER`, link
   `/staff-members/:id`, event key = invitation id) to the admins who wrote those contracts (`created_by`) — only those
   still active and managing that store (`storeManagers`, with its 가맹 masking rule) — or the store's managers if none. `EMAIL_AFFILIATION_REJECTED` stays switched off — not sent. 204.
-- Errors: 404 `AFFILIATION_REQUEST_NOT_FOUND` (no such request, not this account's, not a 소속 추가 확인 type),
+- Errors: 404 `AFFILIATION_REQUEST_NOT_FOUND` (no such request, not this account's — other candidate or other name —,
+  not a 소속 추가 확인 type),
   404 `AFFILIATION_REQUEST_ENDED` (expired — also before the batch —, or the record's phone changed / got linked),
   409 `AFFILIATION_REQUEST_ANSWERED` (already accepted or rejected). An unanswered request expires after 30 days (daily
   batch) and the contract stays 발송 대기; the admin's 재발송 sends a new one.
