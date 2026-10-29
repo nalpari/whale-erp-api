@@ -39,7 +39,7 @@ with contextlib.redirect_stdout(io.StringIO()):
 
 SECTION_SLUG = {"계정과 접속": "account", "채용과 초대": "hiring", "근로계약": "contract",
                 "근무스케줄과 출퇴근": "attendance", "TO-DO": "todo", "급여명세서": "payroll",
-                "운영 알림과 직원 알림": "notify", "고객지원과 커뮤니티": "support"}
+                "운영 알림과 직원 알림": "notify", "고객지원과 커뮤니티": "support", "직원 자료 일괄 저장": "export"}
 
 
 # ─── 카탈로그 읽기 ──────────────────────────────────────────────────────────
@@ -253,7 +253,7 @@ def build_sql(model):
     o.append("")
     o.append("-- ── 고유 제약 ──")
     for t, cols, where, note in M.UNIQUES:
-        s = f"CREATE UNIQUE INDEX {q(M.key_name(t, cols))} ON {q(t)} ({', '.join(q(c) for c in cols)})"
+        s = f"CREATE UNIQUE INDEX {q(M.key_name(t, cols))} ON {q(t)} ({', '.join(M.KEY_EXPR.get((t, c), q(c)) for c in cols)})"
         o.append(s + (f" WHERE {where}" if where else "") + f";  -- {note}")
     for t, cols, where, note in M.UNIQUES_NND:
         o.append(f"CREATE UNIQUE INDEX {q(M.key_name(t, cols))} ON {q(t)} ({', '.join(q(c) for c in cols)}) "

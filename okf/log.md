@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 일괄 저장 두 테이블(`bulk_exports` · `bulk_export_download_logs`)과 enum `bulk_export_status` 를 물리 생성기에 넣었다(`_model.py`, 고유 인덱스 식 `KEY_EXPR`, `_build_prisma.py` 의 `integer[]`). 정의서 · schema.sql 을 다시 만들었고 schema.sql 이 마이그레이션 `20261029134408_team3_bulk_exports` 와 문장마다 같다(41문장). front 논리 카탈로그 PR 과 같이 머지한다.
 * **Update**: main 병합(api bulbasaur, main #199 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api bulbasaur, main #193 · #200 까지): okf/api/payslips.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api bulbasaur, main #198 까지): okf/log 충돌은 양쪽 기록을 살렸다.

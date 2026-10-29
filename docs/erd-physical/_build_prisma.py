@@ -101,6 +101,8 @@ def default_attr(table, c):
             # 값은 안 바뀌는 SET DEFAULT now() 가 한 줄 남는다 — 의도된 차이다(api #55 재리뷰).
             return '@default(dbgenerated("now()"))'
         return "@default(now())"
+    if d == "'{}'":  # 빈 배열
+        return "@default([])"
     if d in ("true", "false") or re.match(r"^-?\d+$", d):
         return f"@default({d})"
     m = re.match(r"^'([A-Z_]+)'$", d)
@@ -120,7 +122,7 @@ def ftype(c):
     t = c.type
     if t.startswith("numeric("):
         return "Decimal", "@db.Decimal" + t[len("numeric"):].replace(",", ", ")
-    return {"integer": ("Int", ""), "text": ("String", ""), "boolean": ("Boolean", ""),
+    return {"integer": ("Int", ""), "integer[]": ("Int[]", ""), "text": ("String", ""), "boolean": ("Boolean", ""),
             "timestamptz(6)": ("DateTime", "@db.Timestamptz(6)"), "date": ("DateTime", "@db.Date"),
             "jsonb": ("Json", ""), "bytea": ("Bytes", ""), "time": ("DateTime", "@db.Time(6)")}[t]
 
