@@ -20,10 +20,10 @@ export const DOWNLOAD_URL_SECONDS = 300;
 export const PUT_DEADLINE_MS = 25_000;
 
 /**
- * 저장소에 두는 파일 종류. 올린 파일의 종류(FileKind, 내용으로 판정)에 서버가 만든 엑셀(XLSX)을 더한 것이다 — XLSX 는
- * 업로드 검사의 종류가 아니어서 사용자가 첨부로 올릴 수는 없다.
+ * 저장소에 두는 파일 종류. 올린 파일의 종류(FileKind, 내용으로 판정)에 서버가 만든 엑셀(XLSX) · 직원 자료 일괄 저장 zip(ZIP)을
+ * 더한 것이다 — 둘 다 업로드 검사의 종류가 아니어서 사용자가 첨부로 올릴 수는 없다.
  */
-export type StoredFileKind = FileKind | 'XLSX';
+export type StoredFileKind = FileKind | 'XLSX' | 'ZIP';
 
 // 1차 ERP 가 쓰던 맨 앞 폴더. 같은 버킷을 쓰므로 겹치지 않게 막는다 — images/ 는 공개 버킷 정책이 걸려 있다.
 const FIRST_GEN_ROOTS = ['images', 'attachments'];
@@ -33,11 +33,12 @@ const CONTENT_TYPES: Record<StoredFileKind, string> = {
   PNG: 'image/png',
   PDF: 'application/pdf',
   XLSX: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ZIP: 'application/zip',
 };
 const DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 // newKey 가 만드는 원본 키와, 거기서 이끌어 낸 썸네일 키(.thumb.jpg). put · downloadUrl · delete 는 이 모양만 받는다.
 const KEY_PATTERN =
-  /^([a-z0-9][a-z0-9-]*)\/\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\.(?:jpg|png|pdf|xlsx)|\.thumb\.jpg)$/;
+  /^([a-z0-9][a-z0-9-]*)\/\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\.(?:jpg|png|pdf|xlsx|zip)|\.thumb\.jpg)$/;
 const IMAGE_KEY = /\.(?:jpg|png)$/;
 const THUMB_SUFFIX = '.thumb.jpg';
 
@@ -148,6 +149,18 @@ export class StorageService {
       }),
       { expiresIn: DOWNLOAD_URL_SECONDS },
     );
+  }
+
+  /** 키의 내용을 읽는다. 서버가 저장한 파일을 다시 묶을 때(직원 자료 일괄 저장) 쓴다. 권한을 확인한 뒤 부른다. */
+  async get(key: string): Promise<Buffer> {
+    StorageService.assertKey(key);
+    const { Body } = await this.s3.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      // SDK requestTimeout 은 끊지 않는다 — 기한이 없으면 응답 없는 S3 에 배치가 통째로 묶인다
+      { abortSignal: AbortSignal.timeout(PUT_DEADLINE_MS) },
+    );
+    if (!Body) throw new Error(`저장소 파일에 내용이 없습니다: ${key}`);
+    return Buffer.from(await Body.transformToByteArray());
   }
 
   /** 원본 키를 받아 썸네일의 300초 주소를 준다. PDF 는 null. 목록 · 상세의 작은 미리보기용. 권한을 확인한 뒤 부른다. */

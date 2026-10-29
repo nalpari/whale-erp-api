@@ -4,12 +4,12 @@ title: Attachment storage (S3)
 description: Shared StorageService for attachments — server-side upload after a content check, optional JPEG thumbnail, 5-minute presigned downloads, keys shaped {domain}/{id}/{uuid}.{ext} in the bucket shared with 1차 ERP; the server boots without S3 settings and only attachments return 503.
 tags: [storage, s3, attachment]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-19T08:40:24Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:54:57Z }
 sources:
   - id: storage-service
     resource: ../../src/storage/storage.service.ts
-    title: StorageService (key, put, downloadUrl, thumbnailUrl, delete)
-    last_modified: 2026-10-19T08:40:24Z
+    title: StorageService (key, put, get, downloadUrl, thumbnailUrl, delete)
+    last_modified: 2026-10-29T02:54:57Z
   - id: storage-module
     resource: ../../src/storage/storage.module.ts
     title: STORAGE token and requireStorage
@@ -53,6 +53,10 @@ keeps only `storage_key`, and the business API that owns the table receives the 
   `file.originalname` as the original name. Its violations are Korean 400s: kind
   (`JPG · PNG 파일만 …`), size in MB (`파일은 10MB까지 …`), count (`파일은 N개까지 …`),
   text fields (`텍스트 항목은 50개까지 …`, `텍스트 항목 하나는 100KB까지 …`).
+- Server-made files are `XLSX` (공통 엑셀) and `ZIP` (직원 자료 일괄 저장, `bulk-exports/{bpCodeId}/{uuid}.zip`).
+  Neither is an upload kind, so no user can attach one. `get(key)` reads an object back into
+  memory — only the bulk export uses it, to re-pack 근로계약서 files after its own permission
+  check. It has no size limit, so it is not for user-facing reads.
 - Downloads are `downloadUrl(key, fileName)` after the permission check — 300 seconds,
   saved under the original name. No public URLs.
 - Thumbnails are opt-in per business: `put(key, buffer, kind, { thumbnail: { maxPx } })` makes a
