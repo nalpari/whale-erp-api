@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-26T07:41:19Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T04:47:21Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -41,7 +41,7 @@ sources:
   - id: account-auth-service
     resource: ../../src/auth/account-auth.service.ts
     title: 직원 근무 앱 login · refresh · logout · me
-    last_modified: 2026-10-21T05:02:35Z
+    last_modified: 2026-10-29T04:47:21Z
   - id: account-auth-controller
     resource: ../../src/auth/account-auth.controller.ts
     title: POST /auth/account/login · refresh · logout, GET me
@@ -109,7 +109,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: canManageStaffAccount — 재설정 링크의 범위(관리 범위를 먼저 정한다)
-    last_modified: 2026-10-26T07:41:19Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: password-reset-link-admin-controller
     resource: ../../src/auth/password-reset-link-admin.controller.ts
     title: POST /staff-members/:id/password-reset-links (admin, 직원 정보 관리 수정 권한)
@@ -394,6 +394,13 @@ rate from the second lock on.
 - After the lock lifts the first failure counts as one again. A **successful**
   login clears the count, so five typos spread over months do not lock a real
   user. A password reset clears both.
+- **Logging in is not editing the account** (WHALEERP-624, 2026-10-29): a counted failure (count · lock) and
+  the success that clears them change only `failed_login_count` · `lock_expires_at`, with a raw `UPDATE` under the
+  row lock (`writeAttemptState`), so `accounts.updated_at` stays as it was. A Prisma `update` would set it through
+  `@updatedAt`, and writing back the value read (as 관리자 login does, [Admin authentication](/api/admin-auth.md))
+  would still shift it: a JS `Date` drops the microseconds a `TIMESTAMPTZ(6)` set outside Prisma keeps (api #199
+  review). A real account change still moves it — the e2e (`account-login-lock.e2e-spec.ts`) pins the
+  microsecond value through five failures, the lock and the clearing login, and a password change moving it.
 - The 429 is the one place the response differs by account state: after five
   failures it shows the address is registered. That was weighed against a user
   who cannot tell why login stopped, and the hint was kept. `lockExpiresAt` adds

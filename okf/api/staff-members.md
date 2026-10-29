@@ -4,16 +4,16 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T09:08:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T06:12:43Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
     title: 본사 제공 동의를 직원 레코드의 계정에서 읽는 조각
-    last_modified: 2026-10-21T09:06:34Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-27T07:26:42Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
@@ -37,15 +37,15 @@ sources:
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
-    last_modified: 2026-10-22T07:45:10Z
+    last_modified: 2026-10-29T06:04:07Z
   - id: summary-service
     resource: ../../src/staff-members/staff-member-summary.service.ts
     title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
-    last_modified: 2026-10-22T07:45:10Z
+    last_modified: 2026-10-29T06:12:43Z
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
-    last_modified: 2026-10-22T07:45:10Z
+    last_modified: 2026-10-29T06:12:43Z
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE
@@ -76,8 +76,8 @@ sources:
     last_modified: 2026-10-21T09:08:15Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
-    title: AdminScopeService.getManageableStores · hidesPersonalData
-    last_modified: 2026-10-26T07:41:19Z
+    title: AdminScopeService.getManageableStores · hidesPersonalData · consentOpensStore · hiddenStoreStaffWhere
+    last_modified: 2026-10-28T08:41:55Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 목록 필터(storeIds · storeTypes · joinState · employmentType)
@@ -207,7 +207,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 
 | 경로 | 영역 메뉴 | 내용 |
 |---|---|---|
-| `…/summary/contracts` | 근로계약 관리 `/contracts` | 가장 최근 계약(목록 · 상세의 `contract` 와 같은 정렬 — 연장 재계약이 임시저장이거나 거부 · 만료 · 체결 없이 종료로 끝났으면 건너뛴다, `NOT_IDLE_RENEWAL` WHALEERP-156) 하나의 유형 · 방식 · 상태 · 기간 · 최근 발송일 · 갱신 예정일. 계약이 없으면 `{ contract: null }` |
+| `…/summary/contracts` | 근로계약 관리 `/contracts` | 가장 최근 계약(목록 · 상세의 `contract` 와 같은 정렬 — 연장 재계약이 임시저장이거나 거부 · 만료 · 체결 없이 종료로 끝났으면 건너뛴다, `NOT_IDLE_RENEWAL` WHALEERP-156) 하나의 유형 · 방식 · 상태 · 기간 · 최근 발송일 · 갱신 예정일. 계약이 없으면 `contract: null`. **`payrollAccount`**(`{ bankName, accountNumber } | null`) — 신고 정보(`StaffTaxProfile`)의 급여 계좌: 은행 이름(BANK 공통코드, 없으면 코드 그대로)과 계좌번호 **전체**(하이픈 없음, 가리지 않음 — 관리자에게 전체 노출, 2026-10-29 노영주). 신고 정보가 없으면 null, 계약이 없어도 · 급여 지급 방식(계좌 · 현금)과 상관없이 신고 정보에 계좌가 있으면 온다. 권한 · 범위 · 가림은 이 경로 그대로. 키(`PERSONAL_DATA_ENCRYPTION_KEY`)가 비면 503, 풀 수 없으면 500 — 직원 앱 신고 정보 조회와 같다. 계좌 오류 때 근로계약 칸 전체가 실패하는 것은 노영주 결정(2026-10-29)이다. 계좌번호는 로그 · 오류에 남기지 않는다 |
 | `…/summary/work-schedules?weekStart=` | 근무스케줄 관리 `/work-schedules` | 한 주(월~일)의 근무스케줄과 근무시간 · 주간 합계(분). `weekStart` 는 그 주의 아무 날짜, 빼면 이번 주(한국 날짜) |
 | `…/summary/payslips` | 급여명세서 관리 `/payslips` | 최근 명세서 3건(`recent` — 상태와 관계없이 급여 기간 시작일 최신순, 기본급 · 수당 · 공제 · 실지급액 · 상태) · 미발송 건수 |
 | `…/summary/todos` | TO-DO 관리 `/todos` | 배정된 TO-DO 의 전체 · 완료 · 미완료 건수와 최근 처리 이력 5건 |
@@ -391,9 +391,22 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(`accounts.is_hq_sharing_consented`, #137)를
 하지 않았으면 가린 행이다(ATT-30). 동의는 계정에 하나라 그 사람의 모든 소속에 같이 적용되고(2026-10-20 노영주, 처음에는
 직원 레코드 칸), 가입 전이라 계정이 없는 직원은 동의하지 않은 것으로 보고 가린다. 동의한 직원은 직영 점포 직원처럼 다 보이고, 철회하면 칸이 false 라 다시
-가려진다. 개인 칸으로 거르면(검색 · 고용형태 · 가입 상태) 가맹 점포에서는 동의한 직원만 남긴다 — 가린 행 하나가
+가려진다. 동의한 문구 버전이 더는 받아 주는 버전(`HQ_SHARING_VALID_VERSIONS`)에 없으면 — 항목 · 목적을 넓힌 새 버전이
+나온 뒤 — 다시 동의할 때까지 동의하지 않은 것으로 보고 가린다(WHALEERP-137, [My profile](/api/my-profile.md)).
+`HQ_SHARING_SELECT` · `HQ_SHARING_CONSENTED` · `hqSharingConsentedOf` 가 버전까지 보므로 가림을 쓰는 곳은 따로 고칠 것이 없다.
+
+**폐점한 가맹 점포의 레코드는 동의해도 가린다**(운영 정책 ATT-30 v227, 2026-10-28 재영 · WHALEERP-137). 가맹 관계가 끝나면
+(폐점 — BP 회원 탈퇴로 닫힌 점포 포함) 그 레코드에는 동의를 더 적용하지 않고, 계정의 동의 자체는 끝내지 않아 다른 소속에는
+그대로 적용된다. `hidesPersonalData` 가 점포 유형 대신 점포(`MaskingStore` — 유형 · 상태, 관리 범위 `getManageableStores` 가
+함께 읽는다)를 받아 판정하고, where 로 「가려지는 점포는 동의한 직원만」을 만드는 곳은 동의 조건을 거는 점포를
+`consentOpensStore`(운영 중인 가맹 점포)로 고른다 — 폐점한 가맹 점포는 어느 갈래에도 들지 않는다. 점포 하나에 거는 곳(TO-DO ·
+근무스케줄의 직원 선택지 · 변경 이력)은 `hiddenStoreStaffWhere` 가 동의한 직원 또는 「아무도」 조건을 준다. 폐점한 직영 점포는
+동의와 상관없으므로 그대로 보인다. 점포를 모르면(관리 범위에 없음) 동의해도 가린다. 「가맹 관계가 끝남」은 폐점뿐이다 —
+미운영(`NOT_OPERATING`) 가맹 점포는 다시 운영할 수 있어 동의를 그대로 적용한다. 가맹 역할(FM · FA)이 보는 상세의
+`hqSharingConsent` 는 폐점한 가맹 점포 레코드도 계정의 동의대로 `AGREED` 다 — 계정의 동의는 끝나지 않았다(2026-10-28 김민식 결정). 개인 칸으로 거르면(검색 · 고용형태 · 가입 상태) 가맹 점포에서는 동의한 직원만 남긴다 — 가린 행 하나가
 검색에 걸리는 것만으로 그 사람이 있다는 것이 드러나기 때문이다. 그래서 점포 조건이
-`storeId ∈ 가림 대상이 아닌 점포 OR (storeId ∈ 가림 대상 점포(직영 아님) AND 동의)` 가 된다. 동의는 사람(계정)마다라
+`storeId ∈ 가림 대상이 아닌 점포 OR (storeId ∈ 동의가 열리는 점포(직영 아님 · 폐점 아님 — consentOpensStore) AND 동의)` 가
+된다(폐점한 가맹 점포는 어느 갈래에도 들지 않는다). 동의는 사람(계정)마다라
 한 가맹 점포 안에서도 동의한 직원만 남고, 고른 점포가 모두 가맹이면 첫 갈래는 빈 목록이다. 재직 상태는 화면 기본
 필터라 예외로 두었다(드러나는 것은 점포별 퇴직자 수와 어느 가린 줄이 퇴직했는지).
 

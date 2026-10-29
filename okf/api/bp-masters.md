@@ -4,12 +4,12 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:42:58Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:50:08Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excelCount · excelFile · assertExcelCaller)
-    last_modified: 2026-10-29T01:42:58Z
+    last_modified: 2026-10-29T02:50:08Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
@@ -33,7 +33,7 @@ sources:
   - id: admin-withdrawal-service
     resource: ../../src/auth/admin-withdrawal.service.ts
     title: 회원 탈퇴 — status_changed_at · 사유를 BP 마스터 본인 행에 쓴다, WITHDRAW_REASON_LABEL
-    last_modified: 2026-10-28T01:57:16Z
+    last_modified: 2026-10-29T02:50:08Z
   - id: bp-masters-e2e
     resource: ../../test/bp-masters.e2e-spec.ts
     title: e2e on a real database — 403 for BP accounts, concurrent register, code copy, history paging, cascade, delete, withdrawn BP (histories 409 · detail withdrawal)
@@ -91,13 +91,13 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
 - **The 이메일 can be checked before saving** — `GET /bp-masters/email-availability`
   (등록 권한, like the 아이디 check) uses the same rule as the save's 409: any undeleted,
   non-withdrawn 관리자 계정 holding it. It has no "except me" parameter: the edit screen
-  does not ask when the address is unchanged, as in MY PAGE and BP 관리자. It is not
+  does not ask when the address is unchanged, as in 마이페이지 and BP 관리자. It is not
   `/bp-admins/email-availability`, whose guard judges the BP 관리자 menu (MN000012).
 - **사업자등록번호 · 대표자명 · 개업일자 only come from a verification token.**
   `POST /bp-masters/business-verifications` checks (duplicate first, then 국세청) and
   returns a 10-minute token; register and edit write the three values and `biz_verified_at`
   only when the token rides along, re-checking the number inside the transaction under
-  the per-number lock `stores:biz:<번호>` that store saves, signup and MY PAGE take. The
+  the per-number lock `stores:biz:<번호>` that store saves, signup and 마이페이지 take. The
   edit screen sends its `bpCodeId` so the BP's own number (and its stores') is not a
   duplicate. Ten calls per admin per hour, plus the controller's IP · account throttle —
   the 국세청 key and daily quota are shared by every BP.

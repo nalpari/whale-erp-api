@@ -101,9 +101,9 @@ const fullTimer = (over: Over = {}): PayInput =>
 
 describe('calculatePay', () => {
   describe('파트타이머', () => {
-    it('기본급은 근무 시간 × 시급, 주휴는 이 달이 맡은 개근 주마다 1주 소정 ÷ 40 × 8 × 시급', () => {
+    it('기본급은 근무 시간 × 시급, 주휴는 이 달이 맡은 개근 주마다 그 주 실근무 ÷ 5 × 시급', () => {
       // 10월 월 · 수 · 금 13일 × 5시간 = 65시간. 9/28 주는 9월 몫(월 · 수 10시간)이 15시간에 못 미쳐 10월이 주 전체로 맡고,
-      // 10/26 주는 10월 몫(월 · 수 · 금 15시간)으로 채워 10월이 맡는다 — 개근 주 5개 × (15/40 × 8 × 10,000 = 30,000)
+      // 10/26 주는 10월 몫(월 · 수 · 금 15시간)으로 채워 10월이 맡는다 — 개근 주 5개 × (실근무 15시간 ÷ 5 × 10,000 = 30,000)
       expect(calculatePay(partTimer())).toEqual({
         basePay: 650_000,
         weeklyHolidayPay: 150_000,
@@ -129,6 +129,11 @@ describe('calculatePay', () => {
       const off = calculatePay(input);
       expect(off.overtimePay).toBe(20_000);
       expect(off.basePay).toBe(650_000);
+      // 주휴는 가산을 꺼도 같다 — 연장(10/16 의 2시간)은 1배로 주더라도 주휴 실근무에 넣지 않는다(PAY-04 v237)
+      expect(off.weeklyHolidayPay).toBe(5 * 30_000);
+      expect(off.weeklyHolidayPay).toBe(
+        calculatePay({ ...input, isPremiumApplied: true }).weeklyHolidayPay,
+      );
     });
 
     it('계약하지 않은 요일의 근무는 전부 연장이다', () => {
@@ -182,6 +187,88 @@ describe('calculatePay', () => {
       const input = partTimer({ includedOvertimeMinutes: 600 });
       input.worked['2026-10-16'] = 420;
       expect(calculatePay(input).overtimePay).toBe(30_000);
+    });
+
+    describe('주휴 금액은 그 주 실근무에서 연장을 뺀 시간으로(PAY-05 v234 · PAY-04 v237, 2026-10-28 · 29 재영 — 노무사 답 질문 1)', () => {
+      it('계약 소정근로시간을 넘긴 시간(연장)은 주휴 금액에 넣지 않는다 — 계약하지 않은 요일 · 계약 요일의 초과 모두', () => {
+        const input = partTimer();
+        input.worked['2026-10-13'] = 300; // 10/12 주 화요일(계약 없는 요일) 5시간 — 전부 연장
+        input.worked['2026-10-19'] = 420; // 10/19 주 월요일 7시간 — 계약 5시간을 넘긴 2시간은 연장
+        const r = calculatePay(input);
+        expect(r.weeklyHolidayWeeks).toBe(5);
+        // 다섯 주 모두 연장을 빼면 계약 소정 15시간 ÷ 5 × 10,000
+        expect(r.weeklyHolidayPay).toBe(5 * 30_000);
+        // 뺀 시간은 연장수당으로 받는다(7시간 × 10,000 × 1.5)
+        expect(r.overtimePay).toBe(105_000);
+      });
+
+      it('덜 일한 주(지각 · 조퇴, 퇴근 기록 없음 0 분)는 그만큼 줄어든다 — 개근이면 주휴 대상', () => {
+        const input = partTimer();
+        input.worked['2026-10-14'] = 120; // 10/12 주 수요일 2시간만 — 그 주 실근무 12시간
+        input.worked['2026-10-21'] = 0; // 10/19 주 수요일 퇴근 기록 없음 — 그 주 실근무 10시간
+        const r = calculatePay(input);
+        expect(r.weeklyHolidayWeeks).toBe(5);
+        expect(r.weeklyHolidayPay).toBe(3 * 30_000 + 24_000 + 20_000);
+      });
+
+      it('하루 8시간을 넘긴 시간은 주휴에 넣지 않는다 — 9시간 계약이어도 하루 8시간까지', () => {
+        const r = calculatePay(
+          partTimer({
+            contractDays: { MON: 540, WED: 540, FRI: 540 },
+            worked: days('2026-09-28', '2026-10-31', [1, 3, 5], 540),
+          }),
+        );
+        // 9/28 주는 9월 몫(월 · 수 18시간)으로 채워 9월이 맡는다 — 10월은 10/5 ~ 10/26 주 4개. 주 27시간이라 주 40시간 상한에 닿지 않고,
+        // 하루 1시간씩 연장을 빼 24시간 ÷ 5 × 10,000 = 48,000(하루 8시간 상한이 없으면 54,000)
+        expect(r.weeklyHolidayWeeks).toBe(4);
+        expect(r.weeklyHolidayPay).toBe(4 * 48_000);
+        // 뺀 1시간씩은 연장 — 10월의 월 · 수 · 금 13일
+        expect(r.overtimeMinutes).toBe(13 * 60);
+      });
+
+      it('하루 연장을 빼고도 40시간을 넘는 주는 40시간에서 멈춘다(8시간 × 시급)', () => {
+        const r = calculatePay(
+          partTimer({
+            contractDays: {
+              MON: 480,
+              TUE: 480,
+              WED: 480,
+              THU: 480,
+              FRI: 480,
+              SAT: 480,
+            },
+            worked: days('2026-09-28', '2026-10-31', [1, 2, 3, 4, 5, 6], 480),
+          }),
+        );
+        // 10/5 ~ 10/26 주 4개 — 하루 연장 없이 48시간, 40시간 상한으로 8 × 10,000. 넘긴 8시간은 주 40시간 연장
+        expect(r.weeklyHolidayWeeks).toBe(4);
+        expect(r.weeklyHolidayPay).toBe(4 * 80_000);
+      });
+
+      it('달을 걸친 주를 이 달이 주 전체로 맡으면 앞 달 몫의 실근무도 센다', () => {
+        const input = partTimer();
+        input.worked['2026-09-28'] = 120; // 9/28 주(앞 달 몫 10시간이라 10월이 주 전체로 맡음) 월요일 2시간만 — 그 주 12시간
+        expect(calculatePay(input).weeklyHolidayPay).toBe(4 * 30_000 + 24_000);
+      });
+
+      it('달을 걸친 주를 앞 달이 맡으면 앞 달 날의 실근무만 센다 — 다음 달이 보충하지 않는다(PAY-04 v237)', () => {
+        const fullWeek = (over: Over) =>
+          partTimer({
+            contractDays: { MON: 480, TUE: 480, WED: 480, THU: 480, FRI: 480 },
+            worked: days('2026-08-31', '2026-10-31', [1, 2, 3, 4, 5], 480),
+            ...over,
+          });
+        // 9월: 9/28 주는 9월 몫(월 ~ 수 24시간)으로 채워 9월이 맡는다 — 24 ÷ 5 × 10,000 = 48,000(10/1 · 2 는 넣지 않는다)
+        const sep = calculatePay(
+          fullWeek({ periodStart: '2026-09-01', periodEnd: '2026-09-30' }),
+        );
+        expect(sep.weeklyHolidayWeeks).toBe(5);
+        expect(sep.weeklyHolidayPay).toBe(4 * 80_000 + 48_000);
+        // 10월: 9/28 주는 빼고 10/5 ~ 10/26 주 4개 — 10/1 · 2 의 16시간은 어느 명세서의 주휴에도 들어가지 않는다
+        const oct = calculatePay(fullWeek({}));
+        expect(oct.weeklyHolidayWeeks).toBe(4);
+        expect(oct.weeklyHolidayPay).toBe(4 * 80_000);
+      });
     });
 
     it('1주 소정근로시간이 15시간 미만이면 주휴가 없다', () => {
@@ -342,6 +429,8 @@ describe('calculatePay', () => {
       };
       const r = calculatePay(partTimer({ contracts: [b, mw], worked }));
       expect(r.weeklyHolidayWeeks).toBe(3); // 10/12 · 10/19 · 10/26 주
+      // 금액은 날마다 그날 계약의 한도로 센 실근무(10/12 주 15시간) ÷ 5 × 마지막 날 계약 시급
+      expect(r.weeklyHolidayPay).toBe(3 * 30_000);
       // 거꾸로(A 15시간 → B 10시간)면 10/12 주는 마지막 날 계약 B 가 15시간에 못 미쳐 없다
       const r2 = calculatePay(
         partTimer({
@@ -413,6 +502,35 @@ describe('calculatePay', () => {
     expect(calculatePay(partTimer({ contracts: [B] })).weeklyHolidayWeeks).toBe(
       4,
     );
+  });
+
+  it('달을 걸친 주의 앞 달 날은 앞 계약의 요일 소정근로시간으로 주휴 금액을 센다', () => {
+    // 앞 계약 A(월 · 화)가 9/30 에 끝나고 B(월 · 수 · 금)가 10/1 에 시작 — 9/28 주는 9월 몫 10시간이라 10월이 주 전체로 맡는다
+    const A = {
+      start: '2025-10-01',
+      end: '2026-09-30',
+      hourlyWage: 10_000,
+      baseHours: null,
+      contractDays: { MON: 300, TUE: 300 },
+      includedOvertimeMinutes: 0,
+    } satisfies ContractTerms;
+    const B = {
+      ...A,
+      start: '2026-10-01',
+      end: null,
+      contractDays: { MON: 300, WED: 300, FRI: 300 },
+    };
+    const worked = {
+      '2026-09-28': 300,
+      '2026-09-29': 300, // 화요일 — B 에는 없는 요일이지만 그날 계약 A 의 소정이라 연장이 아니다
+      '2026-10-02': 300,
+      ...days('2026-10-05', '2026-10-31', [1, 3, 5], 300),
+    };
+    const r = calculatePay(
+      partTimer({ contracts: [B], leadingContracts: [A], worked }),
+    );
+    expect(r.weeklyHolidayWeeks).toBe(5);
+    expect(r.weeklyHolidayPay).toBe(5 * 30_000);
   });
 
   it('앞 계약은 기간 앞 날에만 쓴다 — 시급이 없어도 이 달을 막지 않고, 기간 안 공백일에 쓰이지 않는다', () => {

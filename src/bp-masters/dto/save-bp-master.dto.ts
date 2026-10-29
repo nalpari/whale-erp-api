@@ -22,7 +22,7 @@ import {
   trimText,
 } from '../../platform-admins/platform-admin-format';
 
-/** 대표자 연락처 — 숫자 9~11자리(02 지역번호 포함). MY PAGE 사업자정보와 같다. */
+/** 대표자 연락처 — 숫자 9~11자리(02 지역번호 포함). 마이페이지 사업자정보와 같다. */
 const CEO_PHONE_PATTERN = /^[0-9]{9,11}$/;
 
 /**

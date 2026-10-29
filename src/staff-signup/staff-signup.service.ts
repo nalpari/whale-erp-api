@@ -11,6 +11,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InvitationStatus, Prisma } from '@prisma/client';
 import {
+  HQ_SHARING_CONSENT_VERSION,
+  hqSharingAgreedOf,
+} from '../admin-scope/hq-sharing';
+import {
   AuthSessionService,
   INVALID_SESSION_MESSAGE,
 } from '../auth-session/auth-session.service';
@@ -44,10 +48,8 @@ import type {
   MyInvitationListResponseDto,
 } from './dto/my-invitation.dto';
 import type { StaffSignupDto } from './dto/staff-signup.dto';
-import {
-  asksHqSharingConsentAt,
-  HQ_SHARING_CONSENT_VERSION,
-} from './hq-sharing-consent';
+import { asksHqSharingConsentAt } from './hq-sharing-consent';
+import { sameName } from './same-name';
 
 /** 번호 · 코드가 맞는 초대가 없다 — 어느 쪽이 틀렸는지, 그 번호로 초대가 있는지 알리지 않는다(JOIN-7) */
 export const CODE_MISMATCH = '휴대전화번호나 초대 코드를 다시 확인해 주세요';
@@ -93,17 +95,6 @@ const alreadyJoined = () =>
     'INVITATION_ALREADY_JOINED',
     '이미 가입을 마친 초대입니다. 로그인해 주세요',
   );
-/**
- * 로그인한 직원의 근무지 더하기에서 초대가 이 계정 것인지 볼 때 쓰는 이름 비교 — 날인 전 본인 대조(contracts/identity-match.ts 의
- * nameKey)와 같은 규칙이다: 공백을 모두 지우고 영문은 대문자로(저장 값은 그대로). 초대 코드 · 링크가 그 번호를 가진 증거였던 것을
- * 대신한다 — 계정 번호는 바꿀 길이 없어, 번호가 다른 사람에게 넘어가면 옛 계정이 새 주인의 초대를 받지 않게(2026-10-28 김민식,
- * api #180 리뷰). contracts 는 다른 작업 영역이라 그 함수를 내보내지 않고 같은 식을 둔다.
- */
-const sameName = (a: string, b: string) => {
-  const key = (name: string) =>
-    name.normalize('NFC').replace(/\s/g, '').toUpperCase();
-  return key(a) === key(b);
-};
 /** 로그인한 직원의 근무지 더하기에서 이미 수락한 초대 — 같은 code 이고 「로그인해 주세요」만 뺀다(이미 로그인해 있다) */
 const alreadyAdded = () =>
   conflict(
@@ -351,7 +342,7 @@ export class StaffSignupService {
   /**
    * 로그인한 직원에게 온 가입 초대(WHALEERP-603, 2026-10-28) — 계정 번호로 나간 살아 있는 가입 초대 · 재초대(보냄 · 기한 안 ·
    * 아직 계정 없는 레코드, 가입 확인과 같은 기준)를 보낸 때 최근 순으로. 점포를 찾지 못한 초대는 뺀다. 본사 제공 동의는
-   * 직영이 아니고 계정이 아직 동의하지 않았을 때만 묻는다.
+   * 직영이 아니고 계정이 받아 주는 문구 버전에 아직 동의하지 않았을 때만 묻는다(hqSharingAgreedOf).
    */
   async listForAccount(
     accountId: number,
@@ -402,7 +393,7 @@ export class StaffSignupService {
           expiresAt: r.expiresAt,
           asksHqSharingConsent:
             asksHqSharingConsentAt(store.storeTypeCode) &&
-            !account.isHqSharingConsented,
+            !hqSharingAgreedOf(account),
         },
       ];
     });
@@ -422,6 +413,9 @@ export class StaffSignupService {
     return this.prisma.$transaction(async (tx) => {
       // 가입 · 근로계약 저장 · 재발송과 같은 순서로 번호부터 잡는다(api #81 리뷰) — 근무지 더하기와 재발송이 교착하지 않게
       await lockPeople(tx, [phone]);
+      // 계정 행도 잠그고 읽는다 — 옛 문구 버전 동의를 다시 쓰는 사이 내 정보에서 철회하면(MyConsentService 도 이 행을 잠근다)
+      // 철회가 덮여 사라진다(api #183 리뷰)
+      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
       const now = new Date();
       const account = await this.accountOf(tx, accountId);
       const { invitation, store } = await this.accountInvitation(
@@ -432,12 +426,16 @@ export class StaffSignupService {
       );
       const { staffMemberId } = invitation.staffMember;
       // 직원 행도 초대 · 계약보다 먼저 잠근다 — 퇴직 확정(직원 → 초대 → 계약)과 같은 순서라 서로 기다려 교착하지 않는다.
-      // 잠근 뒤 번호 · 이름을 다시 읽어, 그사이 근로계약 수정으로 바뀌었으면 잇지 않는다(가입과 같다, api #81 3차 리뷰 · 이름은 api #180 리뷰)
-      const [locked] = await tx.$queryRaw<{ phone: string; name: string }[]>`
-        SELECT phone, name FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
+      // 잠근 뒤 번호 · 이름 · 점포를 다시 읽어, 그사이 근로계약 수정으로 바뀌었으면 잇지 않는다(가입과 같다, api #81 3차 리뷰 · 이름은
+      // api #180 리뷰 · 점포는 응답의 storeId · storeName 이 잇는 레코드와 맞게 api #195 리뷰)
+      const [locked] = await tx.$queryRaw<
+        { phone: string; name: string; store_id: number }[]
+      >`
+        SELECT phone, name, store_id FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
       if (
         locked?.phone !== account.phone ||
-        !sameName(locked.name, account.realName)
+        !sameName(locked.name, account.realName) ||
+        locked.store_id !== invitation.staffMember.storeId
       )
         throw notFound('INVITATION_ENDED', INVITATION_ENDED);
       // 같은 초대로 동시에 더하면 뒤에 온 쪽은 바뀐 초대를 다시 읽어 0건이다 — 까닭에 맞게 답한다(가입과 같다)
@@ -453,7 +451,7 @@ export class StaffSignupService {
         );
       if (
         asksHqSharingConsentAt(store.storeTypeCode) &&
-        !account.isHqSharingConsented &&
+        !hqSharingAgreedOf(account) &&
         dto.hqSharingConsented === true
       )
         // 철회했던 계정이 다시 동의하면 철회 시각을 지운다 — 동의 중에는 철회 시각이 없다(accounts_hq_sharing_consent_fields)
@@ -478,7 +476,11 @@ export class StaffSignupService {
         'PENDING_SIGNATURE',
         'STAFF',
       );
-      return { staffMemberId, storeName: store.name };
+      return {
+        staffMemberId,
+        storeId: invitation.staffMember.storeId,
+        storeName: store.name,
+      };
     });
   }
 
@@ -491,6 +493,7 @@ export class StaffSignupService {
         realName: true,
         status: true,
         isHqSharingConsented: true,
+        hqSharingConsentVersion: true,
       },
     });
     if (!account || account.status === 'WITHDRAWN')

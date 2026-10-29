@@ -8,6 +8,7 @@ import {
 import { EmploymentType, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
+  consentOpensStore,
   hidesPersonalData,
   ManageableStores,
 } from '../admin-scope/admin-scope.service';
@@ -219,10 +220,11 @@ export class PayslipDraftService {
   ): Promise<Candidate[]> {
     if (stores.length === 0) return [];
     const period = payPeriod(month);
-    const masked = stores.filter((s) =>
-      hidesPersonalData(roleTypeCode, s.storeTypeCode, false),
+    const open = stores.filter(
+      (s) => !hidesPersonalData(roleTypeCode, s, false),
     );
-    const open = stores.filter((s) => !masked.includes(s));
+    // 가려지는 점포 가운데 동의한 직원은 보이는 점포 — 폐점한 가맹 점포는 동의해도 빠진다
+    const masked = stores.filter((s) => consentOpensStore(roleTypeCode, s));
     const ids = (list: typeof stores) => list.map((s) => s.storeId);
     const scopeWhere: Prisma.StaffMemberWhereInput = {
       OR: [

@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-/** 회원 탈퇴(MY PAGE) 전 보여줄 조건 — BP 마스터만 받는다. */
+/** 회원 탈퇴(마이페이지) 전 보여줄 조건 — BP 마스터만 받는다. */
 export class WithdrawEligibilityResponseDto {
   /** BP 상호명. */
   @ApiProperty()

@@ -42,10 +42,6 @@ RENAME = {
     ("todo_status_histories", "urgent_changed"): "is_urgent_changed",
     ("payslip_items", "entered"): "is_entered",
     ("notifications", "urgent"): "is_urgent",
-    ("accounts", "birth_date"): "본인인증 값, 직원은 수정 불가 · 관리자 정정만 된다 (WHALEERP-602)",
-    ("account_change_histories", "field"): "휴대전화번호·이메일·주소·비밀번호·생년월일",
-    ("account_change_histories", "channel"): "본인·핀 재설정·관리자 초기화·관리자 정정",
-    ("account_change_histories", "requested_by"): "관리자 초기화 · 관리자 정정일 때",
     ("notification_preferences", "enabled"): "is_enabled",
     ("posts", "pinned"): "is_pinned",
     ("payslips", "overtime_premium"): "is_premium_applied",
@@ -256,10 +252,11 @@ FK_TARGET = {
     "post_id": "posts", "inquiry_id": "inquiries", "payslip_item_master_id": "payslip_item_masters",
     "notification_template_id": "notification_templates",
     "location_consent_id": "location_consents",
+    "bulk_export_id": "bulk_exports",
     # 관리자 외래키 {역할}_by
     **{c: "admin_accounts" for c in ("created_by", "updated_by", "changed_by", "requested_by", "resolved_by",
                                      "reviewed_by", "proxy_by", "corrected_by", "confirmed_by", "sent_by",
-                                     "replied_by", "processed_by", "processing_started_by")},
+                                     "replied_by", "processed_by", "processing_started_by", "downloaded_by")},
 }
 
 # 논리 PK 를 그대로 두는 테이블 (1:1 · 복합 PK)
@@ -370,6 +367,8 @@ ENUMS = {
                              "매장운영 · 재무관리 · 프랜차이즈 · 기타"),
     ("leads", "status"): _INQ,
     ("leads", "reply_mail_result"): ("reply_mail_result", ["SUCCEEDED", "FAILED"], "성공 · 실패"),
+    # 직원 자료 일괄 저장 (WHALEERP-336, 운영 정책 RET-09)
+    ("bulk_exports", "status"): ("bulk_export_status", ["PENDING", "PROCESSING", "SUCCEEDED", "FAILED"], "대기 · 만드는 중 · 완료 · 실패"),
 }
 ENUM_ARRAY = {("leads", "interests")}  # 여러 개 고르는 값 — enum 배열
 # DB 가 채우는 시각 — Prisma 의 @default(now()) 는 앱 프로세스가 new Date 로 채운다. 이 칸을 DB now() 로 세는
@@ -404,6 +403,13 @@ PHYS = {
     ("notification_preferences", "is_enabled"): {"default": "true"},
     ("posts", "status"): {"default": "'DRAFT'"},
     ("inquiries", "status"): {"default": "'RECEIVED'"},
+    # 직원 자료 일괄 저장 — 점포 · 직원 레코드는 배열이라 외래키가 없다
+    ("bulk_exports", "status"): {"default": "'PENDING'"},
+    ("bulk_exports", "store_ids"): {"type": "integer[]"},
+    ("bulk_exports", "staff_member_ids"): {"type": "integer[]", "default": "'{}'"},
+    ("bulk_exports", "attempt_count"): {"default": "0"},
+    ("bulk_exports", "requested_at"): {"default": "CURRENT_TIMESTAMP"},
+    ("bulk_export_download_logs", "downloaded_at"): {"default": "CURRENT_TIMESTAMP"},
     ("leads", "status"): {"default": "'RECEIVED'"},
     **{(t, c): {"default": "CURRENT_TIMESTAMP"} for t, c in [
         ("identity_verifications", "verified_at"), ("auth_sessions", "issued_at"), ("auth_sessions", "last_used_at"),
@@ -481,6 +487,9 @@ REQUIRED = {
     "invitation_code_attempts": ["phone_key", "is_succeeded", "failed_count", "attempted_at"],
     "staff_tax_profile_histories": ["staff_member_id", "field", "account_id", "changed_at"],
     "location_consent_histories": ["location_consent_id", "action", "occurred_at"],
+    "bulk_exports": ["bp_code_id", "requested_by", "role_type_code", "store_ids", "scope_key", "status", "staff_count",
+                     "staff_member_ids", "file_name", "attempt_count", "requested_at"],
+    "bulk_export_download_logs": ["bulk_export_id", "downloaded_by", "downloaded_at"],
 }
 
 # 고유 제약: (테이블, 컬럼들, 조건 또는 None, 설명)
@@ -499,12 +508,17 @@ UNIQUES = [
     ("inquiry_attachments", ["inquiry_id", "sort_order"], None,
      "문의 하나에 순서 하나 — 순서 1~5 CHECK 와 함께 문의당 5개를 DB 가 막는다 (운영 정책 CNT-18)"),
     ("payslip_review_reasons", ["payslip_id", "review_reason"], None, "명세서 한 장에 같은 사유 한 건"),
+    ("bulk_exports", ["bp_code_id", "scope_key"], "\"status\" IN ('PENDING', 'PROCESSING')",
+     "같은 BP · 같은 범위는 만드는 중인 요청이 하나뿐 — scope_key 는 md5 로 묶는다(KEY_EXPR)"),
     ("notifications", ["dedupe_key"], '"dedupe_key" IS NOT NULL', "같은 사건·수신자 1회"),
     ("notification_templates", ["template_code"], None, "화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)"),
     ("alimtalk_send_logs", ["reference_key"], None, "결과 리포트의 REFKEY 로 이력 한 행을 찾는다 (PR #6 팀 리뷰)"),
 ]
 # 고유 인덱스 이름이 63바이트를 넘을 때만 따로 정한다(넘으면 PostgreSQL 이 오류 없이 자른다). 기본은 {table}_{cols}_key.
 KEY_NAMES = {}
+# 고유 인덱스에서 칸 대신 식으로 거는 것 (테이블, 칸) → 식. 길어질 수 있는 키를 btree 한 행 한도(약 2.7KB) 아래로 묶는다 —
+# 일괄 저장 범위 키는 점포 수만큼 길어진다(전체 점포면 수백 개).
+KEY_EXPR = {("bulk_exports", "scope_key"): 'md5("scope_key")'}
 
 
 def key_name(table, cols):
@@ -611,6 +625,12 @@ CHECKS = [
     ("alimtalk_send_logs", "to_phone_format", "\"to_phone\" ~ '^01[0-9]{8,9}$'"),
     ("alimtalk_send_logs", "related_pair", "num_nonnulls(\"related_type\", \"related_id\") <> 1"),
     ("posts", "publish_end_after_start", "\"publish_end_date\" IS NULL OR \"publish_end_date\" >= \"publish_start_date\""),
+    # 직원 자료 일괄 저장 (WHALEERP-336) — 요청은 BP 마스터 · 가맹마스터만, 범위는 비지 않고, 상태마다 있어야 하는 시각
+    ("bulk_exports", "role_type_code_check", "\"role_type_code\" IN ('BM', 'FM')"),
+    ("bulk_exports", "store_ids_not_empty", "cardinality(\"store_ids\") > 0"),
+    ("bulk_exports", "counts_nonnegative", "\"staff_count\" >= 0 AND \"attempt_count\" >= 0 AND (\"file_size\" IS NULL OR \"file_size\" >= 0)"),
+    ("bulk_exports", "started_when_processing", "\"status\" <> 'PROCESSING' OR \"started_at\" IS NOT NULL"),
+    ("bulk_exports", "completed_when_succeeded", "\"status\" <> 'SUCCEEDED' OR (\"completed_at\" IS NOT NULL AND \"expires_at\" IS NOT NULL)"),
 ]
 
 # 겹침 금지 (btree_gist 필요)
@@ -657,6 +677,9 @@ INDEXES = [
     ("post_attachments", ["post_id"]), ("inquiries", ["bp_code_id"]), ("inquiry_replies", ["inquiry_id"]),
     # 접수 확인 메일의 서비스 전체 시간당 상한이 최근 1시간 도입문의를 센다(api #50 리뷰).
     ("leads", ["created_at"]),
+    # 일괄 저장 목록(BP · 권한 유형 · 최근 순)과 배치가 대기 요청을 집는 순서
+    ("bulk_exports", ["bp_code_id", "role_type_code", "requested_at"]), ("bulk_exports", ["status", "requested_at"]),
+    ("bulk_export_download_logs", ["bulk_export_id"]),
 ]
 
 # 지우지 않는 기록 — is_deleted 를 두면 안 되는 테이블 (네이밍 규칙 삭제 표시)

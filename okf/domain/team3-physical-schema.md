@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T04:12:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:54:57Z }
 sources:
+  - id: bulk-exports
+    resource: ../../prisma/migrations/20261029134408_team3_bulk_exports/migration.sql
+    title: 직원 자료 일괄 저장 bulk_exports · bulk_export_download_logs (WHALEERP-336)
+    last_modified: 2026-10-29T02:54:57Z
   - id: account-birth-date-correction
     resource: ../../prisma/migrations/20261026110852_team3_account_birth_date_correction/migration.sql
     title: 계정 변경 이력에 생년월일 · 관리자 정정 값 (WHALEERP-602)
@@ -49,7 +53,7 @@ sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
     title: 본사 제공 동의를 직원 레코드의 계정에서 읽는 조각
-    last_modified: 2026-10-20T03:47:38Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: post-attachments-file-type
     resource: ../../prisma/migrations/20261019171114_team3_post_attachments_file_type/migration.sql
     title: 공지 첨부 file_type · 자리 1~5 CHECK · 지우지 않은 첨부의 자리 부분 고유 (#272)
@@ -101,7 +105,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: hidesPersonalData — 본사 제공 동의를 읽는 곳
-    last_modified: 2026-10-26T07:41:19Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: inquiry-lead-processing-start-migration
     resource: ../../prisma/migrations/20261013151714_team3_inquiry_lead_processing_start/migration.sql
     title: 문의사항 · 도입문의 처리 시작 관리자 · 일시를 더하는 마이그레이션
@@ -565,6 +569,20 @@ table document:
   keeps every earlier session at 30 days. The `expires_at` and `last_used_at`
   comments still say 30 days; correcting them takes a `COMMENT ON COLUMN` in a
   migration (and the `_model.ADD` remark for `last_used_at`), left as is for now.
+- **직원 자료 일괄 저장 tables came in by hand, then joined the generator** (WHALEERP-336,
+  2026-10-29). `bulk_exports` (one row per request: BP, requester, role type `BM`/`FM` by CHECK,
+  sorted non-empty `store_ids int[]`, `scope_key`, packed `staff_member_ids int[]`, enum `bulk_export_status`, file key/name/size,
+  attempts, timestamps) and `bulk_export_download_logs` (`bulk_export_id`, `downloaded_by`,
+  `downloaded_at`) were first written straight into `20261029134408_team3_bulk_exports` and the end of the
+  3팀 section of `schema.prisma`.[^bulk-exports] The same day they went into the front logical catalog (new
+  chapter 「직원 자료 일괄 저장」, slug `export`) and `_model.py` (ENUMS · PHYS `integer[]` · REQUIRED · FK_TARGET
+  `bulk_export_id` · `downloaded_by` · CHECKS 5 · UNIQUES · INDEXES 3). The generated `schema.sql` matches the
+  migration statement for statement (41 statements, comments included). The partial unique index needs an
+  expression, `(bp_code_id, md5(scope_key)) WHERE status IN ('PENDING','PROCESSING')`, so `_model.KEY_EXPR` maps a
+  unique-index column to an expression; an all-stores scope key can pass btree's row size limit (about 2.7KB).
+  `_build_prisma.py` now maps `integer[]` to `Int[]` and the `'{}'` default to `@default([])`. `schema.prisma` itself
+  was not regenerated: on main it already drifts from the generator (model and enum order, a few remarks), so the
+  hand-written blocks stay until someone regenerates the whole 3팀 section on purpose.
 - **The e-mail change pin is its own table, ahead of the logical ERD**
   (WHALEERP-191, 2026-10-20 노영주). `email_change_pins` keeps the same rules as
   the reset pin (hash only, five misses close it, 1-minute interval, 10 a day)
@@ -716,3 +734,4 @@ table where it has them; the rest (`invitation_channel`,
 [^email-change-pins]: 이메일 변경 핀 테이블 (WHALEERP-191)
 [^auth-session-remember-me]: 접속 상태의 자동 로그인 칸 (끄면 7일)
 [^account-status-migration]: 계정 상태에 탈퇴를 더하는 마이그레이션 (2026-10-07)
+[^bulk-exports]: 직원 자료 일괄 저장 테이블 (WHALEERP-336)

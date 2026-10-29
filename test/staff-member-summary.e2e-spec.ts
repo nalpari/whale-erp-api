@@ -1,4 +1,4 @@
-import { randomInt } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -19,10 +19,19 @@ import type {
   StaffMemberTodoSummaryResponseDto,
   StaffMemberWeekScheduleResponseDto,
 } from '../src/staff-members/dto/staff-member-summary.response.dto';
+import {
+  encryptPersonalData,
+  staffTaxProfileAad,
+} from '../src/common/personal-data-cipher';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 직원 상세 요약(WHALEERP-183)을 실제 DB 로 확인한다. 영역 메뉴 권한은 권한 그룹 · 메뉴 url 조인이라, 그리고 「한 영역이
 // 실패해도 나머지는 온다」는 경로가 실제로 나뉘어 있어야 성립하므로 목으로는 증명되지 않는다.
 describe('직원 상세 요약 (e2e, DB)', () => {
+  // 키가 비어 있으면 이 테스트용 키를 쓴다. 앱이 뜨기 전에 넣어야 ConfigService 가 읽는다.
+  process.env.PERSONAL_DATA_ENCRYPTION_KEY ||=
+    randomBytes(32).toString('base64');
+  const key = Buffer.from(process.env.PERSONAL_DATA_ENCRYPTION_KEY, 'base64');
   let app: INestApplication<App>;
   let prisma: PrismaService;
   const n = randomInt(100_000, 999_999);
@@ -215,7 +224,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
       joinStatus: 'JOINED',
       accountId: await account({
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: new Date(),
       }),
     });
@@ -436,6 +445,30 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     await todo('냉장고 정리', 'DONE');
     await todo('POP 교체', 'PENDING');
     await todo('지운 것', 'PENDING', true);
+
+    // 신고 정보 — 지안(계약 있음) · 동의 직원(계약 없음) · 미동의 직원(BM 에게 가려진다). 계좌번호는 하이픈 없는 숫자
+    const taxProfile = (id: number, account: string) =>
+      prisma.staffTaxProfile.create({
+        data: {
+          staffMemberId: id,
+          rrnEncrypted: encryptPersonalData(
+            key,
+            '9807121234567',
+            staffTaxProfileAad('rrn_encrypted', id),
+          ),
+          bankCode: 'B004',
+          payrollAccountNumberEncrypted: encryptPersonalData(
+            key,
+            account,
+            staffTaxProfileAad('payroll_account_number_encrypted', id),
+          ),
+          purpose: '취득 신고 · 원천징수 · 급여 이체',
+        },
+      });
+    await taxProfile(jianId, '12345678901234');
+    await taxProfile(consentedId, '22223333444455');
+    await taxProfile(maskedId, '99998888777766');
+    await taxProfile(otherBpStaffId, '55556666777788');
   });
 
   afterAll(async () => {
@@ -452,6 +485,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     await prisma.workSchedule.deleteMany({ where: byStaff });
     await prisma.contractParty.deleteMany({ where: { contract: byStaff } });
     await prisma.contract.deleteMany({ where: byStaff });
+    await prisma.staffTaxProfile.deleteMany({ where: byStaff });
     await prisma.staffMember.deleteMany({ where: byStaff });
     await prisma.account.deleteMany({
       where: { accountId: { in: accountIds } },
@@ -554,6 +588,54 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         renewalDate: ymd(addDays(end, -30)),
       },
     });
+  });
+
+  it('근로계약 요약의 급여 계좌 — 신고 정보의 은행 이름 · 계좌번호 전체(하이픈 없음)', async () => {
+    const res = await get(`/staff-members/${jianId}/summary/contracts`);
+    expect(res.status).toBe(200);
+    expect(
+      (res.body as StaffMemberContractSummaryResponseDto).payrollAccount,
+    ).toEqual({ bankName: 'KB국민은행', accountNumber: '12345678901234' });
+  });
+
+  it('근로계약 요약의 급여 계좌 — 계약이 없어도 신고 정보가 있으면 온다', async () => {
+    const res = await get(`/staff-members/${consentedId}/summary/contracts`);
+    expect(res.status).toBe(200);
+    expect(res.body as StaffMemberContractSummaryResponseDto).toEqual({
+      contract: null,
+      payrollAccount: {
+        bankName: 'KB국민은행',
+        accountNumber: '22223333444455',
+      },
+    });
+  });
+
+  it('근로계약 요약의 급여 계좌 — 신고 정보가 없으면 null', async () => {
+    const res = await get(`/staff-members/${draftId}/summary/contracts`);
+    expect(res.status).toBe(200);
+    expect(
+      (res.body as StaffMemberContractSummaryResponseDto).payrollAccount,
+    ).toBeNull();
+  });
+
+  it('신고 정보가 있어도 본사 역할에게 가려진 직원이면 요약 경로가 막힌다(404) — 계좌가 새지 않는다', async () => {
+    const res = await get(`/staff-members/${maskedId}/summary/contracts`);
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(res.body)).not.toContain('99998888777766');
+  });
+
+  it('신고 정보(계좌)가 있어도 근로계약 메뉴 조회 권한이 없으면 403, 범위 밖 직원이면 404 — 본문에 계좌번호가 없다', async () => {
+    const denied = await get(
+      `/staff-members/${jianId}/summary/contracts`,
+      staffOnlyId,
+    );
+    expect(denied.status).toBe(403);
+    expect(JSON.stringify(denied.body)).not.toContain('12345678901234');
+    const outOfScope = await get(
+      `/staff-members/${otherBpStaffId}/summary/contracts`,
+    );
+    expect(outOfScope.status).toBe(404);
+    expect(JSON.stringify(outOfScope.body)).not.toContain('55556666777788');
   });
 
   it('근무스케줄 — 이번 주만, 지운 것 빼고, 주간 합계', async () => {

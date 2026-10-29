@@ -32,7 +32,7 @@ const SUMMARY_SELECT = {
   },
 } satisfies Prisma.PayslipSelect;
 
-const DETAIL_SELECT = {
+export const DETAIL_SELECT = {
   ...SUMMARY_SELECT,
   isWithholdingApplied: true,
   // 상세 응답에는 싣지 않는다 — PDF 의 직원 이름 · 파일 이름에만 쓴다
@@ -191,7 +191,10 @@ export function myPayslipWhere(
   };
 }
 
-function toSummary(r: SummaryRow, storeName: string): MyPayslipSummaryDto {
+export function toSummary(
+  r: SummaryRow,
+  storeName: string,
+): MyPayslipSummaryDto {
   const correcting = r.status !== 'SENT';
   return {
     payslipId: r.payslipId,

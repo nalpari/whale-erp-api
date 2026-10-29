@@ -9,6 +9,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkSchedulesService } from './work-schedules.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_CONSENT_VERSION,
+} from '../admin-scope/hq-sharing';
 
 const ADMIN = 9;
 const d = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
@@ -414,7 +418,38 @@ describe('WorkSchedulesService', () => {
             { retiredDate: null },
             { retiredDate: { gte: d('2026-10-21') } },
           ],
-          account: { is: { isHqSharingConsented: true } },
+          account: HQ_SHARING_CONSENTED.account,
+        },
+      });
+    });
+
+    it('본사가 폐점한 가맹 점포를 보면 동의한 직원도 없다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 4, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.assignableStaff(ADMIN, 4, '2026-10-21');
+      expect(callArg(db.staffMember.findMany, 0)).toMatchObject({
+        where: { storeId: 4, account: { is: { accountId: { in: [] } } } },
+      });
+    });
+
+    it('본사가 폐점한 가맹 점포의 이력을 보면 동의한 직원 것도 없다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 4, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.histories(ADMIN, { storeId: 4 });
+      expect(callArg(db.workScheduleHistory.count, 0)).toMatchObject({
+        where: {
+          workSchedule: {
+            storeId: 4,
+            staffMember: { account: { is: { accountId: { in: [] } } } },
+          },
         },
       });
     });
@@ -497,7 +532,10 @@ describe('WorkSchedulesService', () => {
             phone: '01033334444',
             jobTitle: '바리스타',
             employmentType: 'FULL_TIME',
-            account: { isHqSharingConsented: true },
+            account: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+            },
           },
         ]);
       db.workSchedule.findMany.mockResolvedValue([
@@ -803,7 +841,10 @@ describe('WorkSchedulesService', () => {
           staffMemberId: 11,
           name: '다라',
           retiredDate: null,
-          account: { isHqSharingConsented: true },
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          },
         },
       ]);
       db.staffMember.findUnique.mockResolvedValue(staffRow({ storeId: 4 }));
@@ -938,7 +979,9 @@ describe('WorkSchedulesService', () => {
         where: {
           workSchedule: {
             storeId: 4,
-            staffMember: { account: { is: { isHqSharingConsented: true } } },
+            staffMember: {
+              account: HQ_SHARING_CONSENTED.account,
+            },
           },
         },
       });

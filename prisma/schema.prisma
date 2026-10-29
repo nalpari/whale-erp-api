@@ -1976,6 +1976,81 @@ model Lead {
   @@map("leads")
 }
 
+// 직원 자료 일괄 저장(WHALEERP-336, 20261029134408_team3_bulk_exports). 3팀 논리 카탈로그에 아직 없어 생성기 밖에서 손으로 썼다 —
+// 카탈로그에 들어오기 전에 _build_prisma.py 를 다시 돌리면 이 세 블록이 빠진다(okf domain/team3-physical-schema.md).
+// SQL 에만 있는 것: CHECK 5, 1팀 외래키 3(bp_code_id · requested_by · downloaded_by), 부분 고유 인덱스 1.
+
+/// 대기 · 만드는 중 · 완료 · 실패
+enum BulkExportStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+
+  @@map("bulk_export_status")
+}
+
+/// 직원 자료 일괄 저장 요청
+model BulkExport {
+  /// 일괄 저장 요청 ID
+  bulkExportId   Int                     @id @default(autoincrement()) @map("bulk_export_id")
+  /// 요청 BP — bp_codes FK
+  bpCodeId       Int                     @map("bp_code_id")
+  /// 요청한 관리자 — admin_accounts FK
+  requestedBy    Int                     @map("requested_by")
+  /// 요청 때 권한 유형 — BM · FM
+  roleTypeCode   String                  @map("role_type_code")
+  /// 업무 범위 점포 — 오름차순
+  storeIds       Int[]                   @map("store_ids")
+  /// 범위 키 — {role_type_code}:{store_ids}. 만드는 중인 요청이 (bp_code_id, md5(scope_key)) 마다 하나뿐(부분 고유 인덱스, SQL 에만)
+  scopeKey       String                  @map("scope_key")
+  /// 처리 상태 — 대기 · 만드는 중 · 완료 · 실패
+  status         BulkExportStatus        @default(PENDING)
+  /// 담은 직원 수
+  staffCount     Int                     @map("staff_count")
+  /// 파일에 담은 직원 레코드 ID — 다 만들 때 채운다. BP 마스터 파일은 내려받기 전에 이 직원들의 동의 · 점포 상태를 다시 본다
+  staffMemberIds Int[]                   @default([]) @map("staff_member_ids")
+  /// 저장소 키 — 기한이 지나 파일을 지우면 NULL
+  storageKey     String?                 @map("storage_key")
+  /// 파일명 — 직원자료_{BP명}_{YYYYMMDD}.zip
+  fileName       String                  @map("file_name")
+  /// 파일 크기 — 바이트
+  fileSize       Int?                    @map("file_size")
+  /// 시도 횟수 — 최대 2
+  attemptCount   Int                     @default(0) @map("attempt_count")
+  /// 실패 사유
+  failureReason  String?                 @map("failure_reason")
+  /// 요청 일시
+  requestedAt    DateTime                @default(now()) @map("requested_at") @db.Timestamptz(6)
+  /// 만들기 시작 일시 — 멈춘 작업 판단 기준
+  startedAt      DateTime?               @map("started_at") @db.Timestamptz(6)
+  /// 완료 일시
+  completedAt    DateTime?               @map("completed_at") @db.Timestamptz(6)
+  /// 받을 수 있는 기한 — 완료 + 7일
+  expiresAt      DateTime?               @map("expires_at") @db.Timestamptz(6)
+  downloadLogs   BulkExportDownloadLog[]
+
+  @@index([bpCodeId, roleTypeCode, requestedAt], map: "bulk_exports_bp_code_id_role_type_code_requested_at_idx")
+  @@index([status, requestedAt], map: "bulk_exports_status_requested_at_idx")
+  @@map("bulk_exports")
+}
+
+/// 직원 자료 일괄 저장 내려받기 이력
+model BulkExportDownloadLog {
+  /// 내려받기 이력 ID
+  bulkExportDownloadLogId Int        @id @default(autoincrement()) @map("bulk_export_download_log_id")
+  /// 일괄 저장 요청
+  bulkExportId            Int        @map("bulk_export_id")
+  /// 내려받은 관리자 — admin_accounts FK
+  downloadedBy            Int        @map("downloaded_by")
+  /// 내려받은 일시
+  downloadedAt            DateTime   @default(now()) @map("downloaded_at") @db.Timestamptz(6)
+  bulkExport              BulkExport @relation(fields: [bulkExportId], references: [bulkExportId], onDelete: Restrict, onUpdate: NoAction, map: "bulk_export_download_logs_bulk_export_id_fkey")
+
+  @@index([bulkExportId], map: "bulk_export_download_logs_bulk_export_id_idx")
+  @@map("bulk_export_download_logs")
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 1팀 1차 물리 모델 — whale-erp-new-front 의 docs/erd/team1/schema.sql 을 Prisma 로 옮긴 것.
 // 원본은 그 저장소의 docs/erd/team1/_build_physical.py 생성기다. 손으로 고치지 말고

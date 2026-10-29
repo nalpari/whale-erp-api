@@ -1,4 +1,4 @@
-/** 내 정보(MY PAGE) 조회 응답 — manyfast F-AMTDCK > S-JXKHCM. */
+/** 내 정보(마이페이지) 조회 응답 — manyfast F-AMTDCK > S-JXKHCM. */
 export class AdminProfileResponseDto {
   /** 아이디. 바꿀 수 없다. */
   loginId: string;

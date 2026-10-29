@@ -16,9 +16,9 @@ import { PrismaService } from '../src/prisma/prisma.service';
 const OWN = 'Own-pass-12!';
 const NEW = 'New-pass-12!';
 
-// MY PAGE 내 비밀번호 변경(1팀 S-PTWREE)을 실제 DB 로 본다 — 현재 비밀번호 확인이 가장 먼저, 정책 순서,
+// 마이페이지 내 비밀번호 변경(1팀 S-PTWREE)을 실제 DB 로 본다 — 현재 비밀번호 확인이 가장 먼저, 정책 순서,
 // 세션은 안 끊김, 이후 로그인은 새 비밀번호로만.
-describe('MY PAGE 내 비밀번호 변경 (e2e, DB)', () => {
+describe('마이페이지 내 비밀번호 변경 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let bpCodeId: number;

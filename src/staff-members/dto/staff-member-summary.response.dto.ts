@@ -43,9 +43,23 @@ export class StaffMemberContractSummaryDto {
   renewalDate: string | null;
 }
 
+/** 신고 정보의 급여 계좌 */
+export class StaffMemberPayrollAccountDto {
+  /** 은행 이름(BANK 공통코드 이름, 예 KB국민은행). 공통코드에 없으면 은행 코드 그대로 */
+  bankName: string;
+  /** 계좌번호 전체 — 하이픈 없음, 가리지 않음 */
+  accountNumber: string;
+}
+
 export class StaffMemberContractSummaryResponseDto {
   /** 계약이 없으면 null */
   contract: StaffMemberContractSummaryDto | null;
+  /**
+   * 신고 정보의 급여 계좌 — 은행 이름 · 계좌번호 전체(하이픈 없음, 가리지 않음). 신고 정보가 없으면 null. 계약이 없어도
+   * 신고 정보가 있으면 오고, 급여 지급 방식(계좌 · 현금)과 상관없다
+   */
+  @ApiProperty({ type: StaffMemberPayrollAccountDto, nullable: true })
+  payrollAccount: StaffMemberPayrollAccountDto | null;
 }
 
 export class StaffMemberWeekScheduleItemDto {

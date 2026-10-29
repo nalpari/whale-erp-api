@@ -14,11 +14,11 @@ import { PrismaService } from '../src/prisma/prisma.service';
 
 const PASSWORD = 'Whale-admin-1';
 
-// MY PAGE BP 사업자정보(S-UOJVUR)를 실제 DB 로 확인한다. advisory lock 이 번호별 동시 저장을
+// 마이페이지 BP 사업자정보(S-UOJVUR)를 실제 DB 로 확인한다. advisory lock 이 번호별 동시 저장을
 // 정말 한 쪽만 남기는지, BM 이 아니면 403 인지는 목으로 증명되지 않는다(CLAUDE.md
 // 「Concurrency, row locks … are only proven there」). 요청 제한 가드는 끈다 — 한도 자체는
 // bp-profile.service.spec.ts 의 countNtsCall 테스트가 다룬다.
-describe('MY PAGE BP 사업자정보 (e2e, DB)', () => {
+describe('마이페이지 BP 사업자정보 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let passwordHash: string;

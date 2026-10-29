@@ -4,16 +4,16 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T00:43:45Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:54:57Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
     title: PayslipListService (관리자 목록 · 상세, 가림 · 상태 건수)
-    last_modified: 2026-10-28T00:37:39Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
-    title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년)
-    last_modified: 2026-10-22T04:38:14Z
+    title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년). DETAIL_SELECT · toSummary 는 직원 자료 일괄 저장도 쓴다
+    last_modified: 2026-10-29T02:54:57Z
   - id: controllers
     resource: ../../src/payslips/payslips.controller.ts
     title: GET /payslips · /payslips/summary · /payslips/:id (급여명세서 관리 MN000009 조회)
@@ -25,15 +25,15 @@ sources:
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
-    last_modified: 2026-10-19T12:00:00Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-10-27T09:19:27Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
-    last_modified: 2026-10-21T05:50:00Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: pdf
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
@@ -59,7 +59,8 @@ sources:
 센다 — 그래서 상태로 거르면 `total` 과 건수 합이 다르다. 가린 줄도 센다(건수는 개인 단위가 아니다, ATT-30). **직원명으로
 거르면 건수도 그 이름으로 센다** — 이때는 아래 가림 규칙대로 가린 줄도 건수에서 빠진다.
 
-가림은 직원 목록과 같은 `hidesPersonalData` 다. 본사 역할(BM · BA)에게 가맹 점포의 본사 제공 동의 없는 직원 명세서는
+가림은 직원 목록과 같은 `hidesPersonalData` 다. 폐점한 가맹 점포는 계정이 동의했어도 동의하지 않은 것으로 본다(ATT-30 v227 — [Staff members](/api/staff-members.md) 「본사 제공 동의 가림」). 그래서 요약(`/payslips/summary`)은 폐점한 가맹 점포에서 0건이고,
+상태 · 직원명 필터와 발송 · 작성 대상에서도 그 점포 명세서는 빠진다. 본사 역할(BM · BA)에게 가맹 점포의 본사 제공 동의 없는 직원 명세서는
 근무지 · 급여 기간만 남고 `payslipId` 까지 null, `isMasked: true` 다. **상태나 직원명으로 거르면** 그 줄의 상태가 드러나거나
 이름이 맞는지 드러나므로, 가려지는 점포에서는 동의한 직원 명세서만 남긴다(직원 목록의 개인 칸 필터와 같은 규칙) — 직원명은
 목록 · 건수 모두, 상태는 목록만. 네 상태를 모두 보낸 것은 거르지 않은 것으로 본다. 점포 필터는 개인 칸이 아니라 가린 줄을
@@ -170,6 +171,10 @@ sources:
     빠진 날 — 그날을 덮는 근로계약의 근무 요일인데 출근이 없는 날(출근·퇴근 모두 없음)과 출근만 있고 퇴근이 없는 날(퇴근 미등록) —
     을 「출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음」(데모, 날짜 내림차순, 10일 넘으면 「외 N일」)
     으로 적는다. 오늘은 끝나지 않아 어제까지만 보고, 퇴직일 뒤 · 계약 기간 밖은 빼며, 근무스케줄은 보지 않는다(STAFF-40).
+    달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날)도 퇴근 미등록만 맨 뒤에 붙인다 — 그 날의 실근무는 이 달 계산에 늘
+    들어가 0분이면 이 달 금액이 줄어든다(이 달이 주를 맡으면 주휴 금액, 앞 달이 맡으면 주 40시간 연장 — `weeksOf`, PR #193 리뷰). 같은
+    날이 앞 달 명세서에도 실린다. 출근 · 퇴근 모두 없는 앞 달 날은 넣지 않는다(그 주 개근이 깨진다). 기록 없음 판정 · 계약 만료 후
+    기록은 급여 기간 안의 날만 본다.
   * **계약 만료 후 기록**(`AFTER_CONTRACT_END`): 급여 기간에 걸친 계약 가운데 가장 늦은 종료일 뒤에 출근한 날(무기한 계약이 있으면
     없음) — 「근로계약 만료일(2026-09-25) 뒤 출퇴근 기록이 2일 있습니다 — 09-28, 09-30」.
   * 기간 중 계약 변경은 아래 「유효한 계약」, 공제 미입력은 확정이 422 로 막는다(230 — 사유 줄은 만들지 않고 상세는 빨간 띠로 알린다.
@@ -203,8 +208,10 @@ sources:
   (`monthly_overtime_hours`, 포괄 연장)를 뺀 나머지에만 준다(PAY-04, 2026-10-26 재영).
 * **파트타이머** — 기본급 = 연장을 뺀 근무 시간 × 시급. 연장 = 그 요일 계약 소정근로시간(8시간 이하로 본다)을 넘긴 분, 계약하지 않은
   요일은 전부 + 주 40시간 초과(같은 시간은 한 번만). 주휴 = 이 기간이 맡은 주 가운데 주 전체가 계약 기간 안이고 1주 소정근로시간이
-  15시간 이상이며 그 주 계약 요일을 모두 출근한(지각 · 조퇴도 출근) 주마다 1주 소정근로시간(40시간까지) ÷ 40 × 8 × 시급. 월간 연장은
-  빼지 않는다.
+  15시간 이상이며 그 주 계약 요일을 모두 출근한(지각 · 조퇴도 출근) 주마다 그 주 실근무 시간(출퇴근 기록, 이 기간이 맡은 날)에서
+  연장을 뺀 시간 ÷ 5 × 시급, 40시간 상한(PAY-05 v234 · PAY-04 v237, 2026-10-28 · 29 재영 — WHALEERP-243 노무사 답 질문 1 「총근무시간 ÷
+  5」). 연장(계약 소정근로시간 · 하루 8시간 · 주 40시간 초과)을 빼므로 계약 소정근로시간 안에서 일한 시간까지만 센다. 가산을 끈 명세서도
+  같다. 대상 판정은 계약 소정 15시간 그대로다. 결근한 주는 개근이 아니라 주휴가 없다(질문 15). 월간 연장은 빼지 않는다.
 * **가산(`isPremiumApplied`, PAY-05)** — 켜면 연장수당 = 연장 분 × 시급 × 1.5, 끄면 가산 없이 × 1(2026-10-26 재영).
 * **기간 중 계약 변경(2026-10-26 재영, 우리 판단 · 노무 확인 대기)** — `PayInput.contracts` 에 기간에 걸친 계약을 모두 두고 날마다
   그날 효력이 있는 계약(늦게 시작한 것 우선, 덮는 계약이 없는 날은 그 앞 계약)으로 셈한다. 파트타이머 기본급 · 연장은 그날 계약의
@@ -218,7 +225,9 @@ sources:
   있어 … 계산하지 않았습니다. 직접 입력해 주세요」로 가른다 — 한 고용형태 식으로 기간 전체를 그럴듯하게 틀리게 셈하던 것을 막는다(PR #159 리뷰).
 * **달을 걸친 주(PAY-04, 2026-10-26 재영)** — 앞 달 몫의 날만으로 주휴 조건(그 날들의 소정근로시간 15시간 이상 · 그 날들의 계약
   요일 개근 · 계약 기간 안)을 채우면 앞 달 명세서가 맡고, 못 채우면 다음 달 명세서가 주 전체로 센다 — 앞 달 명세서는 다음 달 기록
-  없이 정해진다. 주 40시간 연장도 그 주를 맡은 달이 센다. 앞 달이 맡은 주는 다음 달이 주 전체 초과에서 앞 달 몫 초과를 뺀 만큼을
+  없이 정해진다. 주휴 금액도 그 명세서가 판정에 쓴 날로 센다 — 앞 달이 맡으면 앞 달 날의 실근무만 넣고 다음 달이 보충하지 않는다
+  (PAY-04 v237, 2026-10-29 재영 — 예: 월 ~ 금 8시간이면 9월 명세서 9/28 주 24시간 ÷ 5, 10/1 · 2 는 어느 주휴에도 들지 않는다).
+  주 40시간 연장도 그 주를 맡은 달이 센다. 앞 달이 맡은 주는 다음 달이 주 전체 초과에서 앞 달 몫 초과를 뺀 만큼을
   센다(같은 시간을 두 번 세지도, 빠뜨리지도 않는다). 원 단위 반올림은 항목마다 한 번.
 * 야간 · 휴일근무수당은 관리자가 넣는다.
 * **다시 계산** — `PUT /payslips/:id` 에서 가산 값을 바꾸면 연장수당만 그 값으로 다시 계산한다(목업 payrolls-detail — 기본급 · 주휴수당은
@@ -325,6 +334,8 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 「다시 발송」은 적지 않는다, PAY-20), 지급 항목 표(비과세 표시) · 공제 항목 표(원천징수 둘은 3.3% 적용일 때만, 그때 소득세 · 지방소득세는 뺀다 —
 원천징수 줄에 「끝자리 세무 확인 대기(PAY-7)」), 지급 합계 · 공제 합계 · 실지급액(저장된 합계 값). 줄 금액은 `adjustedAmount ??
 calculatedAmount ?? 0`, 「1,000원」 형식. 「입금」이라는 말은 쓰지 않고 끝에 「급여 지급은 이 명세서로 처리하지 않습니다」를 둔다.
+
+직원 자료 일괄 저장([Bulk exports](/api/bulk-exports.md))도 이 PDF 를 쓴다. 그 점포 범위의 발송 완료(`SENT`) 명세서를 같은 `DETAIL_SELECT` 로 읽고 `toSummary` 와 같은 상세로 바꿔 그린다. 그래서 상세의 모양을 바꾸면 zip 안의 PDF 도 바뀐다. 확정을 취소해 검토 중인 명세서는 담지 않는다.
 
 그리기는 `pdfkit`(MIT, 0.20.2 고정)로 A4 한 장(넘치면 다음 장). 한글은 직원 앱과 같은 **Pretendard 1.3.9 OTF**(Regular · Bold,
 OFL — `src/payslips/assets/fonts/Pretendard-LICENSE.txt`)를 쓰고 pdfkit 이 쓴 글자만 넣는다(표본 한 장 약 60KB). 글꼴은

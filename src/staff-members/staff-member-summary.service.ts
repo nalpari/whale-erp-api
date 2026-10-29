@@ -1,19 +1,27 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, StatusChangeActor } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { requireAreaRead } from '../auth/menu-permission.guard';
 import { dateOnly } from '../common/date-only';
+import {
+  decryptPersonalData,
+  staffTaxProfileAad,
+} from '../common/personal-data-cipher';
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { amountOf, BASE_PAY_ITEM_CODE } from '../payslips/payslip-shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstTimeOf, workDateOf } from '../work-schedules/work-schedule-rules';
 import {
   StaffMemberContractSummaryResponseDto,
+  StaffMemberPayrollAccountDto,
   StaffMemberPayslipSummaryResponseDto,
   StaffMemberRecentPayslipDto,
   StaffMemberTodoSummaryResponseDto,
@@ -79,6 +87,7 @@ export class StaffMemberSummaryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: AdminScopeService,
+    @Inject(PERSONAL_DATA_KEY) private readonly key: Buffer | null,
   ) {}
 
   /** 가장 최근 근로계약. 「가장 최근」은 직원 목록 · 상세의 contract 와 같은 정렬이다 */
@@ -105,8 +114,10 @@ export class StaffMemberSummaryService {
         sentAt: true,
       },
     });
-    if (!c) return { contract: null };
+    const payrollAccount = await this.payrollAccount(staffMemberId);
+    if (!c) return { contract: null, payrollAccount };
     return {
+      payrollAccount,
       contract: {
         contractId: c.contractId,
         employmentType: c.employmentType,
@@ -117,6 +128,57 @@ export class StaffMemberSummaryService {
         lastSentAt: c.sentAt,
         renewalDate: dateOnly(renewalDateOf(c, now)),
       },
+    };
+  }
+
+  /**
+   * 신고 정보의 급여 계좌 — 은행 이름 · 계좌번호 전체(하이픈 없음, 가리지 않음, 2026-10-29 노영주). 신고 정보가 없으면 null.
+   * 급여 지급 방식과 상관없이 준다. 키가 없으면 503, 풀 수 없으면 500 — 직원 앱 신고 정보 조회와 같다(요약 전체가 실패).
+   * 계좌번호는 로그 · 오류에 남기지 않는다.
+   */
+  private async payrollAccount(
+    staffMemberId: number,
+  ): Promise<StaffMemberPayrollAccountDto | null> {
+    const profile = await this.prisma.staffTaxProfile.findUnique({
+      where: { staffMemberId },
+      select: { bankCode: true, payrollAccountNumberEncrypted: true },
+    });
+    if (!profile) return null;
+    const key = this.key;
+    if (!key) {
+      this.logger.error(
+        `PERSONAL_DATA_ENCRYPTION_KEY 가 비어 신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId}`,
+      );
+      throw new ServiceUnavailableException(
+        '신고 정보를 지금 볼 수 없습니다. 잠시 뒤 다시 시도해 주세요',
+      );
+    }
+    let accountNumber: string;
+    try {
+      accountNumber = decryptPersonalData(
+        key,
+        profile.payrollAccountNumberEncrypted,
+        staffTaxProfileAad('payroll_account_number_encrypted', staffMemberId),
+      );
+    } catch (err) {
+      this.logger.error(
+        `신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId} 칸=payroll_account_number_encrypted: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw new InternalServerErrorException('신고 정보를 읽을 수 없습니다', {
+        cause: err,
+      });
+    }
+    // 은행 코드는 플랫폼 원본(PLATFORM_BP_CODE)이 먼저 오도록 bpCode 오름차순으로 정렬한다 — 플랫폼 원본 BP(BP000000)가
+    // 가장 작은 BP 코드라는 가정에 기댄다. 사용 중지 · 삭제된 은행이어도 이름은 보여 준다
+    const bank = await this.prisma.codeItem.findFirst({
+      where: { groupCode: 'BANK', itemCode: profile.bankCode },
+      orderBy: { bpCode: 'asc' },
+      select: { label: true },
+    });
+    return {
+      bankName: bank?.label ?? profile.bankCode,
+      accountNumber,
     };
   }
 

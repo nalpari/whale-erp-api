@@ -1,6 +1,7 @@
 import { BadRequestException, Logger } from '@nestjs/common';
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -94,6 +95,20 @@ describe('StorageService.put · delete', () => {
     expect(() => StorageService.thumbnailKey(key)).toThrow();
   });
 
+  it('서버가 만든 zip(직원 자료 일괄 저장)도 올린다 — 업로드 검사의 종류에는 없다', async () => {
+    const { s3, send } = fakeS3();
+    const key = StorageService.newKey('bulk-exports', 3, 'ZIP');
+    expect(key).toMatch(/^bulk-exports\/3\/[0-9a-f-]{36}\.zip$/);
+
+    await new StorageService(s3, BUCKET).put(key, Buffer.from('PK'), 'ZIP', {
+      thumbnail: true,
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((send.mock.calls[0][0] as PutObjectCommand).input.ContentType).toBe(
+      'application/zip',
+    );
+  });
+
   it.each([
     ['JPG', 'image/jpeg'],
     ['PNG', 'image/png'],
@@ -181,6 +196,39 @@ describe('키 검사 — put · downloadUrl · delete', () => {
       expect(send).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('StorageService.get', () => {
+  it('키의 내용을 Buffer 로 읽는다 — 서버가 파일을 묶을 때 쓴다', async () => {
+    const { s3, send } = fakeS3();
+    send.mockResolvedValue({
+      Body: {
+        transformToByteArray: () => Promise.resolve(Buffer.from('%PDF')),
+      },
+    });
+
+    const body = await new StorageService(s3, BUCKET).get(KEY);
+
+    expect(body).toEqual(Buffer.from('%PDF'));
+    const command = send.mock.calls[0][0] as GetObjectCommand;
+    expect(command).toBeInstanceOf(GetObjectCommand);
+    expect(command.input).toEqual({ Bucket: BUCKET, Key: KEY });
+    const options = send.mock.calls[0][1] as { abortSignal?: unknown };
+    expect(options.abortSignal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('형식 밖 키는 S3 를 부르기 전에 던진다', async () => {
+    const { s3, send } = fakeS3();
+    await expect(
+      new StorageService(s3, BUCKET).get('images/1/a.png'),
+    ).rejects.toThrow();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('본문이 없으면 던진다', async () => {
+    const { s3 } = fakeS3();
+    await expect(new StorageService(s3, BUCKET).get(KEY)).rejects.toThrow();
+  });
 });
 
 describe('StorageService.downloadUrl', () => {

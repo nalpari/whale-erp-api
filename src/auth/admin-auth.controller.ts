@@ -236,7 +236,7 @@ export class AdminAuthController {
   }
 
   /**
-   * MY PAGE 내 정보 (S-JXKHCM). 플랫폼 · BP 여섯 역할 모두 쓴다. AllowPasswordChangePending 을
+   * 마이페이지 내 정보 (S-JXKHCM). 플랫폼 · BP 여섯 역할 모두 쓴다. AllowPasswordChangePending 을
    * 달지 않는다 — 강제 비밀번호 변경 대상이면 이 경로도 403 이다(위 changeRequiredPassword 주석과 같다).
    */
   @ApiBearerAuth()
@@ -278,7 +278,7 @@ export class AdminAuthController {
   }
 
   /**
-   * 내 비밀번호 변경(MY PAGE, 1팀 S-PTWREE). 현재 비밀번호를 확인한 뒤 새 비밀번호로 바꾼다. 강제 비밀번호
+   * 내 비밀번호 변경(마이페이지, 1팀 S-PTWREE). 현재 비밀번호를 확인한 뒤 새 비밀번호로 바꾼다. 강제 비밀번호
    * 변경(POST password-change)과 달리 로그인한 상태에서 스스로 비밀번호를 아는 채로 바꾸는 것이라
    * AllowPasswordChangePending 을 달지 않는다 — 강제 변경 대상이면 이 경로도 403 이다(updateProfile 과
    * 같다). 바꿔도 이 기기 · 다른 기기의 로그인은 모두 이어진다(서비스 주석 참고).
@@ -303,7 +303,7 @@ export class AdminAuthController {
   }
 
   /**
-   * 현재 비밀번호 확인(MY PAGE 회원 탈퇴 1단계, S-JHQQNR). 맞아야 front 가 탈퇴 화면을 연다 — 맞으면 204, 틀리면
+   * 현재 비밀번호 확인(마이페이지 회원 탈퇴 1단계, S-JHQQNR). 맞아야 front 가 탈퇴 화면을 연다 — 맞으면 204, 틀리면
    * 400. 로그인한 관리자 아무나 받는다(지금은 탈퇴에서만 쓰지만 다른 확인에도 쓸 수 있게). 탈퇴 실행의 비밀번호
    * 확인은 그대로 둔다(이중 확인). 비밀번호를 받는 경로라 내 비밀번호 변경 · 탈퇴 실행과 같은 한도를 건다.
    */
@@ -327,7 +327,7 @@ export class AdminAuthController {
   }
 
   /**
-   * 회원 탈퇴 조건 조회(MY PAGE, S-JHQQNR). 탈퇴 버튼을 누르기 전에 보여줄 영향 범위 — BP명 · 함께 탈퇴될
+   * 회원 탈퇴 조건 조회(마이페이지, S-JHQQNR). 탈퇴 버튼을 누르기 전에 보여줄 영향 범위 — BP명 · 함께 탈퇴될
    * 하위 관리자 수 · 함께 강제 폐점될 점포 수 · 가로막는 진행 중 계약 여부. BP 마스터만 받는다 — 그 밖의
    * 권한은 403, 계정이 지워졌으면 404. 조회만 하고 실제 탈퇴는 하지 않는다.
    */
@@ -345,7 +345,7 @@ export class AdminAuthController {
   }
 
   /**
-   * 회원 탈퇴 실행(MY PAGE, S-JHQQNR). BP 마스터가 현재 비밀번호와 사유를 보내면 본인 · 같은 BP 의 하위 관리자가
+   * 회원 탈퇴 실행(마이페이지, S-JHQQNR). BP 마스터가 현재 비밀번호와 사유를 보내면 본인 · 같은 BP 의 하위 관리자가
    * 모두 탈퇴하고 점포는 모두 폐점된다. 진행 중인 근로계약이 있으면 막는다(조건 조회와 같은 기준). 비밀번호를
    * 받는 경로라 내 비밀번호 변경과 같은 한도를 건다.
    */
@@ -393,7 +393,7 @@ export class AdminAuthController {
     };
   }
 
-  /** 내 BP 사업자정보(MY PAGE, S-UOJVUR). BP 마스터만 받는다 — 그 밖의 권한은 403, 계정이 지워졌으면
+  /** 내 BP 사업자정보(마이페이지, S-UOJVUR). BP 마스터만 받는다 — 그 밖의 권한은 403, 계정이 지워졌으면
    * 404. GET me 와 같이 인증된 조회라 한도를 끈다(코드 리뷰로 찾음, 2026-10-22 — 탭 전환·저장 뒤
    * 재조회가 로그인성 한도에 걸릴 수 있었다). */
   @ApiBearerAuth()
@@ -445,7 +445,7 @@ export class AdminAuthController {
    * IP · 계정마다 시간당 10건 — 점포 사업자정보 인증(stores.controller.ts)과 같은 기준이다. 국세청을 실제로
    * 부르는 횟수는 BpProfileService 가 관리자별로 따로 센다(countNtsCall, StoreManagementService 와 같은
    * 방식) — 국세청 키 · 하루 할당량을 모든 BP 가 함께 쓰므로, 한 관리자가 반복해 부르면 그날 모든 BP 의
-   * 가입 · 점포 · MY PAGE 인증이 503 이 된다(코드 리뷰로 찾음, 2026-10-22 — 점포 쪽에만 있던 보호가
+   * 가입 · 점포 · 마이페이지 인증이 503 이 된다(코드 리뷰로 찾음, 2026-10-22 — 점포 쪽에만 있던 보호가
    * 빠져 있었다).
    */
   @ApiBearerAuth()

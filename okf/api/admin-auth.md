@@ -25,14 +25,14 @@ sources:
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
     title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts · me/password-change · me/password-verifications, GET /auth/admin/login-info · me · me/bp · me/email-availability, PATCH /auth/admin/me · me/bp, POST /auth/admin/me/bp/business-verification
-    last_modified: 2026-10-29T02:10:28Z
+    last_modified: 2026-10-29T02:50:08Z
   - id: admin-profile-service
     resource: ../../src/auth/admin-profile.service.ts
-    title: MY PAGE 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
+    title: 마이페이지 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
     last_modified: 2026-10-27T07:48:04Z
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
-    title: BpProfileService — MY PAGE 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영 · 지우기) · 사업자 번호 검사
+    title: BpProfileService — 마이페이지 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영 · 지우기) · 사업자 번호 검사
     last_modified: 2026-10-23T02:40:00Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
@@ -64,8 +64,8 @@ sources:
     last_modified: 2026-10-19T05:00:00Z
   - id: admin-my-password-service
     resource: ../../src/auth/admin-my-password.service.ts
-    title: POST /auth/admin/me/password-change · me/password-verifications — MY PAGE 내 비밀번호 변경 · 현재 비밀번호 확인
-    last_modified: 2026-10-29T02:10:28Z
+    title: POST /auth/admin/me/password-change · me/password-verifications — 마이페이지 내 비밀번호 변경 · 현재 비밀번호 확인
+    last_modified: 2026-10-29T02:50:08Z
   - id: admin-password-policy
     resource: ../../src/auth/admin-password-policy.ts
     title: 1팀 비밀번호 정책(PL-QSBSYY) 검사와 문구
@@ -92,12 +92,12 @@ sources:
 | `POST /auth/admin/login-id-find-attempts` | yes | `{ name, email }` → `{ maskedLoginId }` for an active match, else the same 404 |
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
-| `GET /auth/admin/me` | admin | MY PAGE(S-JXKHCM) — `{ loginId, name, phone, email, roleTypeCode, createdAt, lastLoginAt }` for the signed-in admin's own account only (`CurrentUser().id`, never a BP/customer context) |
+| `GET /auth/admin/me` | admin | 마이페이지(S-JXKHCM) — `{ loginId, name, phone, email, roleTypeCode, createdAt, lastLoginAt }` for the signed-in admin's own account only (`CurrentUser().id`, never a BP/customer context) |
 | `PATCH /auth/admin/me` | admin | `{ name, phone, email, updatedAt }` → 204. Changing `email` does **not** check the current password (S-JXKHCM, user decision 2026-10-22 · confirmed 2026-10-23). The check added by the 2026-10-21 adversarial review was removed knowingly — a stolen access token alone can again change the login email and intercept a mailed temp-password via `POST /auth/admin/temporary-passwords`; the user was told and accepted it. With the check gone, a token-only caller can also learn whether an email is taken from the 409 (the same is already possible through `GET /auth/admin/me/email-availability`). `currentPassword` was kept for a while as an ignored optional field so the old front build didn't hit `forbidNonWhitelisted` 400; front #125 stopped sending it and the field is now gone (2026-10-26) — sending it now gets 400. my-profile(직원 앱)'s email-change keeps its own current-password check. `updatedAt` is the optimistic-lock token from `GET /me` — `updateMany` with `sameMillisecond(updatedAt)`, 409 if another admin (e.g. via platform-admins) saved first (same review round — the original diff had no concurrency check and silently overwrote concurrent edits). Re-checks email uniqueness (excluding `WITHDRAWN`) inside the same transaction, 409 on conflict; if email changed, invalidates every live `temporary_passwords` row for the account (used ones too) (an account-takeover path via the mailed temp-password flow otherwise survives an email change) and re-arms `isInitialPasswordUnsent` if any were invalidated and the account has no usable password (`'!'`) — the shared `voidTempPasswordsForEmailChange`, so a signed-in admin (who has one) never gets it; logs changed fields to `admin_change_histories` with `updatedBy` set to the signed-in admin. Account axis throttled on the signed-in user, not the request's own `email` field (the default account tracker keys on `body.email`, which this route's caller controls) |
-| `GET /auth/admin/me/email-availability?email=` | admin | `{ available }` for MY PAGE's blur/Enter check — DTO-validated (400 on missing/malformed `email`, fixed from a prior 500). No `@SkipThrottle` (아이디 · 이메일 중복 확인은 기본 한도를 둔다는 결정, api #37 과 같다) |
-| `POST /auth/admin/me/password-change` | admin | `{ currentPassword, newPassword, newPasswordConfirm }` → 204. MY PAGE 자기 비밀번호 변경(S-PTWREE) — 강제 변경(위)과 달리 현재 비밀번호를 먼저 본다. 자세한 순서·임시 비밀번호 처리는 아래 「Self-service password change」 |
+| `GET /auth/admin/me/email-availability?email=` | admin | `{ available }` for 마이페이지's blur/Enter check — DTO-validated (400 on missing/malformed `email`, fixed from a prior 500). No `@SkipThrottle` (아이디 · 이메일 중복 확인은 기본 한도를 둔다는 결정, api #37 과 같다) |
+| `POST /auth/admin/me/password-change` | admin | `{ currentPassword, newPassword, newPasswordConfirm }` → 204. 마이페이지 자기 비밀번호 변경(S-PTWREE) — 강제 변경(위)과 달리 현재 비밀번호를 먼저 본다. 자세한 순서·임시 비밀번호 처리는 아래 「Self-service password change」 |
 | `POST /auth/admin/me/password-verifications` | admin | `{ currentPassword }` → 204, 틀리면 400 `현재 비밀번호가 올바르지 않습니다.`. 회원 탈퇴 1단계(S-JHQQNR) — 맞아야 front 가 탈퇴 화면을 연다. 아래 「Self-service password change」 |
-| `GET /auth/admin/me/bp` | admin, BP 마스터만 | MY PAGE 사업자정보 탭(S-UOJVUR) — 그 밖의 권한은 403 |
+| `GET /auth/admin/me/bp` | admin, BP 마스터만 | 마이페이지 사업자정보 탭(S-UOJVUR) — 그 밖의 권한은 403 |
 | `PATCH /auth/admin/me/bp` | admin, BP 마스터만 | 상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목 저장. `updatedAt` 필수(동시 수정 409) |
 | `POST /auth/admin/me/bp/business-verification` | admin, BP 마스터만 | 사업자등록번호 · 대표자명 · 개업일자 재인증 — 성공하면 세 값과 인증일시를 바로 반영 |
 | `GET /public-code-items?groups=A,B` | yes | the platform BP's 공통코드 — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
@@ -309,7 +309,7 @@ did not guarantee.
 
 # Self-service password change
 
-`POST /auth/admin/me/password-change` is MY PAGE's own 1팀 `S-PTWREE` — the
+`POST /auth/admin/me/password-change` is 마이페이지's own 1팀 `S-PTWREE` — the
 signed-in admin already knows the current password and types it, unlike the
 forced popup above. `AdminMyPasswordService.change` (`admin-my-password.service.ts`).
 
@@ -318,7 +318,7 @@ forced popup above. `AdminMyPasswordService.change` (`admin-my-password.service.
   path (combination/length → login id → character → same-as-current →
   confirmation) — there is no issued-password step here, nothing was issued.
   A wrong current password is 400 `현재 비밀번호가 올바르지 않습니다.`, a
-  wording 1팀 picked for MY PAGE (비밀번호 변경 · 현재 비밀번호 확인 · 회원 탈퇴);
+  wording 1팀 picked for 마이페이지 (비밀번호 변경 · 현재 비밀번호 확인 · 회원 탈퇴);
   it is not the 3팀 직원 앱 string (`지금 비밀번호가 맞지 않습니다`) despite
   meaning the same thing.
 - On success: new hash, `admin_change_histories` gets 「비밀번호 · 변경」 (no
@@ -672,7 +672,7 @@ from.
 - Both are current on every call; it is not part of the "next login" policy,
   because entering a BP is itself the moment the screen is drawn.
 
-# MY PAGE 사업자정보 (S-UOJVUR)
+# 마이페이지 사업자정보 (S-UOJVUR)
 
 BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules.ts`)는 가맹 마스터(`FM`)도
 포함해 여기 쓰면 안 된다. 그 밖의 권한은 모두 403. `BpProfileService`가 `bp_codes` 행(로그인한 관리자의
@@ -693,7 +693,7 @@ BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules
   먼저 들어왔을 수 있어서다.
 - **BP 자신의 번호와 그 BP 소속 점포(직영 · 가맹 가리지 않음)의 번호는 서로 중복으로 보지 않는다**
   (2026-10-22 사용자 결정, `PL-OCJOFP`). `isBizRegistrationNumberTaken()`/`verify()`의
-  `excludeBpCodeId` 인자가 이 BP 의 `bp_codes` 행뿐 아니라 `store.bpCodeId` 도 같이 뺀다 — MY PAGE
+  `excludeBpCodeId` 인자가 이 BP 의 `bp_codes` 행뿐 아니라 `store.bpCodeId` 도 같이 뺀다 — 마이페이지
   재인증(`BpProfileService.requestVerification`)만 넘긴다. 점포가 몇 개든 "그 번호를 쓰는 살아 있는
   점포는 전체에서 하나뿐" 규칙(기존 `isNumberTaken`, 폐점 · 삭제 제외)은 그대로라, 다른 점포가 같은 번호를
   쓰려면 먼저 기존 점포를 삭제하거나 폐점해야 한다 — 따로 구현하지 않아도 되는, 기존 중복 규칙의 자연스러운

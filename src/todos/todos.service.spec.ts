@@ -11,6 +11,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { ACTIVE_STAFF } from './todo-rules';
 import { TodosService } from './todos.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_CONSENT_VERSION,
+} from '../admin-scope/hq-sharing';
 
 const ADMIN = 9;
 const NOW = new Date('2026-10-19T03:00:00Z'); // 한국 12:00
@@ -320,7 +324,7 @@ describe('TodosService', () => {
         expect(firstArg(db.staffMember.findMany).where).toEqual({
           storeId: 4,
           ...ACTIVE_STAFF,
-          account: { is: { isHqSharingConsented: true } },
+          account: HQ_SHARING_CONSENTED.account,
           staffMemberId: { in: [11, 12] },
         });
       });
@@ -411,7 +415,22 @@ describe('TodosService', () => {
       expect(firstArg(db.staffMember.findMany).where).toEqual({
         storeId: 4,
         ...ACTIVE_STAFF,
-        account: { is: { isHqSharingConsented: true } },
+        account: HQ_SHARING_CONSENTED.account,
+      });
+    });
+
+    it('본사 역할이 폐점한 가맹 점포를 보면 동의한 직원도 없다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 4, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.assignableStaff(ADMIN, 4);
+      expect(firstArg(db.staffMember.findMany).where).toEqual({
+        storeId: 4,
+        ...ACTIVE_STAFF,
+        account: { is: { accountId: { in: [] } } },
       });
     });
 
@@ -1190,14 +1209,20 @@ describe('TodosService', () => {
         performerStaffMember: {
           staffMemberId: 21,
           name: '수행자',
-          account: { isHqSharingConsented: consented },
+          account: {
+            isHqSharingConsented: consented,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          },
         },
         todoAssignees: [
           {
             staffMemberId: 21,
             staffMember: {
               name: '수행자',
-              account: { isHqSharingConsented: consented },
+              account: {
+                isHqSharingConsented: consented,
+                hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+              },
             },
           },
         ],

@@ -13,6 +13,7 @@ import {
   StaffMemberDetailResponseDto,
   StaffMemberListResponseDto,
 } from '../src/staff-members/dto/staff-member-list.response.dto';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 직원 목록(WHALEERP-329)을 실제 DB 로 확인한다. 가입 상태 필터는 초대 · 보류 관계 조건이라 목으로는 Prisma 가
 // 그 조건을 맞게 푸는지 증명되지 않는다.
@@ -387,7 +388,7 @@ describe('직원 목록 (e2e, DB)', () => {
       'JOINED',
       await consentAccount({
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: new Date(),
       }),
     );
@@ -398,7 +399,7 @@ describe('직원 목록 (e2e, DB)', () => {
       'JOINED',
       await consentAccount({
         isHqSharingConsented: true,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: new Date(),
       }),
     );
@@ -410,7 +411,7 @@ describe('직원 목록 (e2e, DB)', () => {
       'JOINED',
       await consentAccount({
         isHqSharingConsented: false,
-        hqSharingConsentVersion: 'v1',
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
         hqSharingWithdrawnAt: new Date('2026-10-05T00:00:00Z'),
       }),
@@ -536,6 +537,62 @@ describe('직원 목록 (e2e, DB)', () => {
     const res = await get(`?keyword=${encodeURIComponent('동의직원')}`, baId);
     expect(idsOf(res.body)).toEqual([ids.consented]);
     expect(res.body.total).toBe(1);
+  });
+
+  it('더는 받아 주지 않는 문구 버전에 동의한 직원은 다시 동의할 때까지 가린다 — 검색에도 걸리지 않는다(WHALEERP-137)', async () => {
+    const { accountId } = await prisma.staffMember.findUniqueOrThrow({
+      where: { staffMemberId: ids.consented },
+      select: { accountId: true },
+    });
+    const version = (hqSharingConsentVersion: string) =>
+      prisma.account.update({
+        where: { accountId: accountId! },
+        data: { hqSharingConsentVersion },
+      });
+    await version('v0.9');
+    try {
+      const res = await get(`?pageSize=200&storeIds=${consentStoreId}`);
+      expect(res.body.items).toEqual([
+        expect.objectContaining({ staffMemberId: null, isMasked: true }),
+      ]);
+      const found = await get(
+        `?keyword=${encodeURIComponent('동의직원')}`,
+        baId,
+      );
+      expect(found.body.total).toBe(0);
+    } finally {
+      await version(HQ_SHARING_CONSENT_VERSION);
+    }
+  });
+
+  it('폐점한 가맹 점포의 직원은 동의했어도 본사 역할에게 가린다 — 상세도 404(ATT-30 v227)', async () => {
+    const status = (storeStatusCode: string) =>
+      prisma.store.update({
+        where: { storeId: consentStoreId },
+        data: { storeStatusCode },
+      });
+    const before = await prisma.store.findUniqueOrThrow({
+      where: { storeId: consentStoreId },
+      select: { storeStatusCode: true },
+    });
+    await status('CLOSED');
+    try {
+      const res = await get(`?pageSize=200&storeIds=${consentStoreId}`);
+      expect(res.body.items).toEqual([
+        expect.objectContaining({ staffMemberId: null, isMasked: true }),
+      ]);
+      const found = await get(
+        `?keyword=${encodeURIComponent('동의직원')}`,
+        baId,
+      );
+      expect(found.body.total).toBe(0);
+      await request(app.getHttpServer())
+        .get(`/staff-members/${ids.consented}`)
+        .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
+        .expect(404);
+    } finally {
+      await status(before.storeStatusCode);
+    }
   });
 
   it('한 가맹 점포 안에서도 동의는 직원마다다 — 동의한 직원은 보이고 철회한 직원은 가린다', async () => {
@@ -972,58 +1029,77 @@ describe('직원 목록 (e2e, DB)', () => {
       expect(storeIds).not.toContain(consentStoreId);
     });
 
-    // 같은 근무지면 범위를 점포 단위로 다시 묻지 않지만, 점포가 남아 있는지는 늘 본다(api #21 재리뷰).
-    it('임시저장 뒤 근무지가 폐점하면 같은 근무지로 이어 써도 근무지 404 — 계약은 그대로 임시저장이다', async () => {
-      const staff = await prisma.staffMember.findUniqueOrThrow({
-        where: { staffMemberId: ids.consented },
-        select: { name: true, phone: true },
-      });
-      const { contractId } = await prisma.contract.create({
-        data: {
-          staffMemberId: ids.consented,
-          storeId: consentStoreId,
-          createdBy: bmId,
-          status: 'DRAFT',
-        },
-        select: { contractId: true },
-      });
-      const { storeStatusCode } = await prisma.store.findUniqueOrThrow({
-        where: { storeId: consentStoreId },
-        select: { storeStatusCode: true },
-      });
-      await prisma.store.update({
-        where: { storeId: consentStoreId },
-        data: { storeStatusCode: 'CLOSED' },
-      });
-      try {
-        const res = await request(app.getHttpServer())
-          .put(`/contracts/${contractId}`)
-          .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
-          .send({
-            name: staff.name,
-            phone: staff.phone,
-            storeId: consentStoreId,
-            jobTitle: '홀',
-            employmentType: 'PART_TIME',
-            contractMethod: 'ELECTRONIC',
-            isTemporarySave: true,
-          });
-        expect(res.status).toBe(404);
-        expect((res.body as { message: string }).message).toBe(
-          '근무지 점포를 찾을 수 없습니다',
-        );
-        const after = await prisma.contract.findUniqueOrThrow({
-          where: { contractId },
-          select: { status: true },
+    // 같은 근무지면 범위를 점포 단위로 다시 묻지 않지만, 점포가 남아 있는지는 늘 본다(api #21 재리뷰) — 직영 점포 직원이면
+    // 범위는 지나 근무지 404 다. 동의한 가맹 직원이면 폐점한 가맹 점포의 레코드는 동의해도 본사 역할에게 가려(ATT-30 v227)
+    // 근무지보다 먼저 계약이 404 다. 어느 쪽이든 계약은 그대로 임시저장이다.
+    it.each([
+      [
+        '직영 점포 직원 — 근무지 404',
+        'joined',
+        () => directStoreId,
+        '근무지 점포를 찾을 수 없습니다',
+      ],
+      [
+        '동의한 가맹 점포 직원 — 계약부터 404',
+        'consented',
+        () => consentStoreId,
+        '근로계약을 찾을 수 없습니다',
+      ],
+    ] as const)(
+      '임시저장 뒤 근무지가 폐점하면 같은 근무지로 이어 써도 404 — %s',
+      async (_label, key, storeIdOf, message) => {
+        const storeId = storeIdOf();
+        const staff = await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId: ids[key] },
+          select: { name: true, phone: true },
         });
-        expect(after.status).toBe('DRAFT');
-      } finally {
+        const { contractId } = await prisma.contract.create({
+          data: {
+            staffMemberId: ids[key],
+            storeId,
+            createdBy: bmId,
+            status: 'DRAFT',
+          },
+          select: { contractId: true },
+        });
+        const { storeStatusCode } = await prisma.store.findUniqueOrThrow({
+          where: { storeId },
+          select: { storeStatusCode: true },
+        });
         await prisma.store.update({
-          where: { storeId: consentStoreId },
-          data: { storeStatusCode },
+          where: { storeId },
+          data: { storeStatusCode: 'CLOSED' },
         });
-      }
-    });
+        try {
+          const res = await request(app.getHttpServer())
+            .put(`/contracts/${contractId}`)
+            .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
+            .send({
+              name: staff.name,
+              phone: staff.phone,
+              storeId,
+              jobTitle: '홀',
+              employmentType: 'PART_TIME',
+              contractMethod: 'ELECTRONIC',
+              isTemporarySave: true,
+            });
+          expect(res.status).toBe(404);
+          expect((res.body as { message: string }).message).toBe(message);
+          const after = await prisma.contract.findUniqueOrThrow({
+            where: { contractId },
+            select: { status: true },
+          });
+          expect(after.status).toBe('DRAFT');
+        } finally {
+          await prisma.store.update({
+            where: { storeId },
+            data: { storeStatusCode },
+          });
+          // 뒤 시험의 최근 계약 · 가입 상태가 이 임시저장에 흔들리지 않게 지운다
+          await prisma.contract.delete({ where: { contractId } });
+        }
+      },
+    );
   });
   describe('직원 상세 GET /staff-members/:id (WHALEERP-599)', () => {
     /** 응답 본문은 any 라 상세 응답 DTO 모양을 붙여 돌려준다. */
@@ -1124,7 +1200,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone: `010${randomInt(10_000_000, 99_999_999)}`,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           hqSharingAgreedAt: new Date(),
         },
       });
@@ -1583,7 +1659,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           hqSharingAgreedAt: new Date('2026-10-01T00:00:00Z'),
         },
       }));
@@ -1918,7 +1994,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone: `010${n}98`,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           hqSharingAgreedAt: new Date(),
         },
       });
@@ -1947,7 +2023,7 @@ describe('직원 목록 (e2e, DB)', () => {
             phone: `010${n}97`,
             status: 'JOINED',
             isHqSharingConsented: true,
-            hqSharingConsentVersion: 'v1',
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
             hqSharingAgreedAt: new Date(),
           },
         });
@@ -2109,7 +2185,7 @@ describe('직원 목록 (e2e, DB)', () => {
           phone,
           status: 'JOINED',
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           hqSharingAgreedAt: new Date(),
         },
       }));

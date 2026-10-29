@@ -39,7 +39,7 @@ with contextlib.redirect_stdout(io.StringIO()):
 
 SECTION_SLUG = {"계정과 접속": "account", "채용과 초대": "hiring", "근로계약": "contract",
                 "근무스케줄과 출퇴근": "attendance", "TO-DO": "todo", "급여명세서": "payroll",
-                "운영 알림과 직원 알림": "notify", "고객지원과 커뮤니티": "support"}
+                "운영 알림과 직원 알림": "notify", "고객지원과 커뮤니티": "support", "직원 자료 일괄 저장": "export"}
 
 
 # ─── 카탈로그 읽기 ──────────────────────────────────────────────────────────
@@ -253,7 +253,7 @@ def build_sql(model):
     o.append("")
     o.append("-- ── 고유 제약 ──")
     for t, cols, where, note in M.UNIQUES:
-        s = f"CREATE UNIQUE INDEX {q(M.key_name(t, cols))} ON {q(t)} ({', '.join(q(c) for c in cols)})"
+        s = f"CREATE UNIQUE INDEX {q(M.key_name(t, cols))} ON {q(t)} ({', '.join(M.KEY_EXPR.get((t, c), q(c)) for c in cols)})"
         o.append(s + (f" WHERE {where}" if where else "") + f";  -- {note}")
     for t, cols, where, note in M.UNIQUES_NND:
         o.append(f"CREATE UNIQUE INDEX {q(M.key_name(t, cols))} ON {q(t)} ({', '.join(q(c) for c in cols)}) "
@@ -383,7 +383,9 @@ REL_FIX = {
     ("hiring", 5): {"sa": "right", "sb": "left", "at_a": 512, "at_b": 512},  # 계정 → 연결 보류: 직원 레코드 박스 아래로 곧게
     ("payroll", 1): {"at_a": 288, "at_b": 288},                              # 근로계약 → 급여명세서: 곧게
     ("hiring", 3): {"sa": "left", "sb": "right", "at_a": 360, "at_b": 664},  # 직원 레코드 → 신고 정보: 옮긴 박스 쪽으로 열 사이 틈을 따라
-    ("hiring", 7): {"at_a": 420, "at_b": 760, "mid": (0, 90)},              # 직원 레코드 → 퇴직 이력: 신고 정보 선보다 안쪽 틈으로 내려간다
+    ("hiring", 7): {"at_a": 380, "at_b": 760, "mid": (0, 90)},              # 직원 레코드 → 퇴직 이력: 신고 정보 선보다 안쪽 틈으로 내려간다. 직원 레코드 박스 안(바닥 412)에서 나간다
+    ("hiring", 8): {"at_a": 640, "at_b": 720, "mid": (1, 60)},              # 신고 정보 → 변경 이력: 퇴직 이력 박스 위(680)로 지나 열 사이 틈에서 내려간다
+    ("account", 9): {"at_a": 270, "at_b": 420, "mid": (2, 60)},             # 계정 → 이메일 변경 핀: 로그인 이력과 재설정 핀 사이(232~312)로 지나 열 사이 틈에서 내려간다
 }
 COMPACT_KEEP = {"name", "title", "email", "status", "kind"}
 

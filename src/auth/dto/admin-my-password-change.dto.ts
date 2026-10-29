@@ -1,6 +1,6 @@
 import { IsString, MaxLength } from 'class-validator';
 
-/** 내 비밀번호 변경(MY PAGE, 1팀 S-PTWREE). 강제 비밀번호 변경(AdminPasswordChangeDto)과 달리 현재 비밀번호를 받는다. */
+/** 내 비밀번호 변경(마이페이지, 1팀 S-PTWREE). 강제 비밀번호 변경(AdminPasswordChangeDto)과 달리 현재 비밀번호를 받는다. */
 export class AdminMyPasswordChangeDto {
   /** 현재 비밀번호. */
   @IsString()
