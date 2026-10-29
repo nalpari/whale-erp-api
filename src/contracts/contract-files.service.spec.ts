@@ -183,6 +183,14 @@ describe('pdfInputOf', () => {
     ).toBe('강남점');
   });
 
+  it('보낸 원본은 근로자 주소를 비운다 — 날인 때 고정한 값이라 보낼 때는 없었다', () => {
+    expect(pdfInputOf('SENT_ORIGINAL', source({})).worker).toMatchObject({
+      name: '홍길동',
+      address: null,
+      addressDetail: null,
+    });
+  });
+
   it('근로자 칸은 계약서에 적은 값', () => {
     expect(pdfInputOf('SIGNED_COPY', source({})).worker).toEqual({
       name: '홍길동',

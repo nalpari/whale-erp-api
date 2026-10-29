@@ -152,6 +152,20 @@ describe('contractArticles (근로계약서 조항 템플릿, WHALEERP-131)', ()
     });
   });
 
+  it('제4조 — 주휴일이 비었는데 주 15시간 이상인 옛 계약은 「15시간 미만」이라 적지 않는다', () => {
+    const fullWeek = ['MON', 'TUE', 'WED', 'THU', 'FRI'].map((weekday) => ({
+      weekday: weekday as 'MON',
+      startTime: '09:00',
+      endTime: '18:00',
+      breakStartTime: '12:00',
+      breakEndTime: '13:00',
+    }));
+    expect(
+      article({ ...base, weeklyHoliday: null, workDays: fullWeek }, 4)
+        .blocks[0],
+    ).toEqual({ type: 'TEXT', text: '주휴일이 정해지지 않았다.' });
+  });
+
   it('제5조 — 값이 있는 줄만, 수당은 월, 31일은 말일, 주휴일이 있으면 주휴수당 문장', () => {
     expect(article(base, 5).blocks).toEqual([
       { type: 'TEXT', text: '임금은 아래와 같이 지급한다.' },

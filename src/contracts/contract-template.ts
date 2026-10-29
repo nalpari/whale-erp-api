@@ -1,6 +1,10 @@
 import type { EmploymentType, Weekday } from '@prisma/client';
 import { DB_ENUMS } from '../enums/db-enums.generated';
-import type { contractTermsOf } from './contract-terms';
+import {
+  dayMinutesOf,
+  weeklyMinutesOf,
+  type contractTermsOf,
+} from './contract-terms';
 
 // 근로계약서 조항 템플릿(WHALEERP-131). 직원 앱 화면(상세 `articles`)과 보낸 원본 · 처리 완료본 PDF 가 같은 조항을 쓴다.
 // 문구는 직원 앱이 그리던 원안(whale-erp-staff contracts/_components/contract-document.tsx)을 옮긴 것이다 — 휴일 · 연차유급휴가 ·
@@ -43,19 +47,8 @@ export function dateLabel(date: string): string {
   return `${y}년 ${m}월 ${d}일`;
 }
 
-const minutes = (hm: string) =>
-  Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
-
-type WorkDay = ContractTerms['workDays'][number];
-
-/** 하루 근로시간(시간) — 종업 − 시업 − 휴게 */
-const dayHours = (d: WorkDay) =>
-  (minutes(d.endTime) -
-    minutes(d.startTime) -
-    (d.breakStartTime && d.breakEndTime
-      ? minutes(d.breakEndTime) - minutes(d.breakStartTime)
-      : 0)) /
-  60;
+/** 하루 근로시간(시간) — 저장 검사와 같은 계산(contract-terms) */
+const dayHours = (d: ContractTerms['workDays'][number]) => dayMinutesOf(d) / 60;
 
 /** 「5시간」 · 「7.5시간」 — 소수 한 자리, 끝의 0 은 지운다 */
 const hoursText = (hours: number) => `${Number(hours.toFixed(1))}시간`;
@@ -117,7 +110,7 @@ function weekdayTable(c: ContractTemplateInput): ContractBlock {
 
 function workHourBlocks(c: ContractTemplateInput): ContractBlock[] {
   if (c.workDays.length === 0) return [text('근무 요일이 정해지지 않았다.')];
-  const weekly = c.workDays.reduce((sum, d) => sum + dayHours(d), 0);
+  const weekly = weeklyMinutesOf(c.workDays) / 60;
   // 기본시간 중 휴일 · 월 추가 휴일은 관리자 작성 화면이 받지 않아 넣지 않는다(직원 앱 monthlyHourRows 와 같다)
   const monthly: [string, number | null][] = [
     ['월 기본 근로', c.baseHours],
@@ -183,7 +176,10 @@ export function contractArticles(c: ContractTemplateInput): ContractArticle[] {
         text(
           hasHoliday
             ? `주휴일은 매주 ${label('Weekday', c.weeklyHoliday!)}요일로 한다.`
-            : '1주 소정근로시간이 15시간 미만이라 주휴일을 두지 않는다.',
+            : // 15시간 이상인데 비어 있는 옛 계약(저장 검사 전)은 「15시간 미만」이라 적지 않는다 — 같은 문서 제3조와 어긋난다
+              weeklyMinutesOf(c.workDays) >= 15 * 60
+              ? '주휴일이 정해지지 않았다.'
+              : '1주 소정근로시간이 15시간 미만이라 주휴일을 두지 않는다.',
         ),
       ],
     },

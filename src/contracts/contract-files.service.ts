@@ -30,7 +30,6 @@ export type MakeResult = 'CREATED' | 'EXISTS' | 'SKIPPED';
 const SOURCE_SELECT = {
   ...CONTRACT_TERMS_SELECT,
   employmentType: true,
-  workLocation: true,
   jobTitle: true,
   storeId: true,
   sentAt: true,
@@ -133,8 +132,10 @@ export function pdfInputOf(
       birthDate: party?.enteredBirthDate
         ? dateOnly(party.enteredBirthDate)
         : null,
-      address: party?.address ?? null,
-      addressDetail: party?.addressDetail ?? null,
+      // 주소는 날인 때 고정한다 — 보낸 원본은 보낼 때 없던 값이라 비운다(날인 뒤 배치가 늦게 만들어도, code-review)
+      address: kind === 'SIGNED_COPY' ? (party?.address ?? null) : null,
+      addressDetail:
+        kind === 'SIGNED_COPY' ? (party?.addressDetail ?? null) : null,
       phone: party?.enteredPhone ?? c.staffMember.phone,
     },
     sentAt: c.sentAt!,
@@ -267,7 +268,9 @@ export class ContractFilesService {
           where: { contractId },
           select: SOURCE_SELECT,
         });
-        if (!contract) return null;
+        // 보내지 않은 저장(임시저장 · 종이 계약)은 점포 · 파일을 읽지 않고 끝낸다 — 저장마다 부르므로(code-review)
+        if (!contract?.sentAt || contract.contractMethod === 'PAPER')
+          return null;
         // 한 트랜잭션 연결에서 차례로 읽는다(동시에 보내지 않는다)
         const store = await tx.store.findUnique({
           where: { storeId: contract.storeId },
@@ -290,7 +293,7 @@ export class ContractFilesService {
     if (!read || !read.store) return 'SKIPPED';
     const { contract, store, documents } = read;
     const sentAt = contract.sentAt;
-    if (contract.contractMethod === 'PAPER' || !sentAt) return 'SKIPPED';
+    if (!sentAt) return 'SKIPPED';
     const signature = documents.find((d) => d.kind === 'SIGNATURE');
     if (kind === 'SIGNED_COPY' && !signature) return 'SKIPPED';
     if (

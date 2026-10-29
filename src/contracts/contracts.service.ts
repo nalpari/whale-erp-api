@@ -94,7 +94,12 @@ import {
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
-import { CONTRACT_TERMS_SELECT, contractTermsOf, hhmm } from './contract-terms';
+import {
+  CONTRACT_TERMS_SELECT,
+  contractTermsOf,
+  hhmm,
+  weeklyMinutesOf,
+} from './contract-terms';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 import {
   ACCESS_DENIED_MESSAGE,
@@ -313,22 +318,8 @@ function checkInput(dto: CreateContractDto): void {
   checkProbation(dto);
 }
 
-const minutesOf = (hm: string) =>
-  Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
-
-/** 주 소정근로시간(분) — 요일마다 종업 − 시업 − 휴게의 합 */
-export function weeklyMinutesOf(workDays: ContractWorkDayDto[]): number {
-  return workDays.reduce(
-    (sum, d) =>
-      sum +
-      minutesOf(d.endTime) -
-      minutesOf(d.startTime) -
-      (d.breakStartTime && d.breakEndTime
-        ? minutesOf(d.breakEndTime) - minutesOf(d.breakStartTime)
-        : 0),
-    0,
-  );
-}
+// 주 소정근로시간 계산은 계약서 조항과 같이 쓴다(contract-terms, WHALEERP-131)
+export { weeklyMinutesOf };
 
 /**
  * 주휴일(노무사 확인 2026-10-14, 질문 4) — 주 소정근로시간이 15시간 이상이면 근무하지 않는 요일 하나를 관리자가 고른다.

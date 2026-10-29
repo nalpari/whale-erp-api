@@ -1,5 +1,7 @@
 import { join } from 'node:path';
 import PDFDocument from 'pdfkit';
+import { kstDateTime } from '../common/kst-date-time';
+import { bizNumberText, phoneText } from '../stores/store-excel';
 import { dateLabel, type ContractArticle } from './contract-template';
 
 // 근로계약서 보낸 원본 · 처리 완료본 PDF(WHALEERP-131). 조항은 직원 앱 화면과 같은 템플릿(contract-template)에서 오고, 이 파일은
@@ -9,8 +11,6 @@ import { dateLabel, type ContractArticle } from './contract-template';
 const FONT_DIR = join(__dirname, '..', 'payslips', 'assets', 'fonts');
 const REGULAR = join(FONT_DIR, 'Pretendard-Regular.otf');
 const BOLD = join(FONT_DIR, 'Pretendard-Bold.otf');
-
-const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 export type ContractPdfKind = 'SENT_ORIGINAL' | 'SIGNED_COPY';
 
@@ -52,21 +52,8 @@ export interface ContractPdfModel {
   note: string | null;
 }
 
-const kstIso = (at: Date) =>
-  new Date(at.getTime() + KST_OFFSET_MS).toISOString();
-const kstDate = (at: Date) => dateLabel(kstIso(at).slice(0, 10));
-
-/** 사업자등록번호 10자리 → 123-45-67890 */
-const bizNumberText = (n: string) =>
-  /^\d{10}$/.test(n) ? `${n.slice(0, 3)}-${n.slice(3, 5)}-${n.slice(5)}` : n;
-
-/** 숫자만 저장한 전화번호를 끊어 쓴다 — 서울(02) · 휴대전화 · 지역 번호. 모양이 다르면 그대로 */
-function phoneText(p: string): string {
-  const m = p.startsWith('02')
-    ? /^(02)(\d{3,4})(\d{4})$/.exec(p)
-    : /^(0\d{2}|050\d)(\d{3,4})(\d{4})$/.exec(p);
-  return m ? `${m[1]}-${m[2]}-${m[3]}` : p;
-}
+// 한국 날짜 · 시각은 공통 kstDateTime(YYYY-MM-DD HH:mm), 번호 끊어 쓰기는 점포 엑셀과 같은 함수
+const kstDate = (at: Date) => dateLabel(kstDateTime(at).slice(0, 10));
 
 const joinAddress = (a: string | null, detail: string | null) =>
   a ? [a, detail].filter(Boolean).join(' ') : null;
@@ -86,18 +73,15 @@ export function contractPdfModel(input: ContractPdfInput): ContractPdfModel {
     employer: [
       ['상호', e.name],
       ['대표자', or(e.ceoName)],
-      [
-        '사업자등록번호',
-        or(e.registrationNumber && bizNumberText(e.registrationNumber)),
-      ],
+      ['사업자등록번호', or(bizNumberText(e.registrationNumber))],
       ['소재지', or(joinAddress(e.address, e.addressDetail))],
-      ['전화번호', or(e.phone && phoneText(e.phone))],
+      ['전화번호', or(phoneText(e.phone))],
     ],
     worker: [
       ['성명', w.name],
       ['생년월일', or(w.birthDate && dateLabel(w.birthDate))],
       ['주소', or(joinAddress(w.address, w.addressDetail))],
-      ['연락처', or(w.phone && phoneText(w.phone))],
+      ['연락처', or(phoneText(w.phone))],
     ],
     signed,
     note: signed
@@ -112,7 +96,7 @@ export function contractPdfFileName(
 ): string {
   if (input.kind === 'SIGNED_COPY')
     return `근로계약서-처리완료본-${input.contractId}.pdf`;
-  const at = kstIso(input.sentAt).slice(0, 16).replace(/\D/g, '');
+  const at = kstDateTime(input.sentAt).replace(/\D/g, '');
   return `근로계약서-보낸원본-${input.contractId}-${at}.pdf`;
 }
 
