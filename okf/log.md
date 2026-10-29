@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Staff signup](/api/staff-signup.md) — 받은 초대 수락(`POST /me/invitations/:invitationId/accept`) 응답에 `storeId` 를 더했다. 직원앱이 수락 뒤 그 근무지 근로계약서만(`/contracts?store=`) 연다(staff #40 후속 리뷰, Plane WHALEERP-604).
 * **Update**: main 병합(api omastar, main #187 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #186 재리뷰 참고: 상태 전환 표를 `TRANSITIONS` 에 맞춤(임시저장 → 발송 대기에 소속 추가 확인 요청, 발송 대기 → 거부(요청 거절), 서명 대기 → 발송 대기에 옛 소속 확인 계약 재발송). #186 줄의 템플릿 건수(44 → 46건) 서술을 바로잡음.
 * **Update**: main 병합(api seadra, base golduck → main, main #194 까지): [Admin auth](/api/admin-auth.md) 시각 충돌은 늦은 값을 남겼다. admin-scope.service.ts 는 자동 병합(main 의 listBps withMaster · 정렬과 seadra 의 가림 판정이 다른 곳).

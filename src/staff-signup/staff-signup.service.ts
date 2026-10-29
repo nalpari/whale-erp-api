@@ -436,12 +436,16 @@ export class StaffSignupService {
       );
       const { staffMemberId } = invitation.staffMember;
       // 직원 행도 초대 · 계약보다 먼저 잠근다 — 퇴직 확정(직원 → 초대 → 계약)과 같은 순서라 서로 기다려 교착하지 않는다.
-      // 잠근 뒤 번호 · 이름을 다시 읽어, 그사이 근로계약 수정으로 바뀌었으면 잇지 않는다(가입과 같다, api #81 3차 리뷰 · 이름은 api #180 리뷰)
-      const [locked] = await tx.$queryRaw<{ phone: string; name: string }[]>`
-        SELECT phone, name FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
+      // 잠근 뒤 번호 · 이름 · 점포를 다시 읽어, 그사이 근로계약 수정으로 바뀌었으면 잇지 않는다(가입과 같다, api #81 3차 리뷰 · 이름은
+      // api #180 리뷰 · 점포는 응답의 storeId · storeName 이 잇는 레코드와 맞게 api #195 리뷰)
+      const [locked] = await tx.$queryRaw<
+        { phone: string; name: string; store_id: number }[]
+      >`
+        SELECT phone, name, store_id FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
       if (
         locked?.phone !== account.phone ||
-        !sameName(locked.name, account.realName)
+        !sameName(locked.name, account.realName) ||
+        locked.store_id !== invitation.staffMember.storeId
       )
         throw notFound('INVITATION_ENDED', INVITATION_ENDED);
       // 같은 초대로 동시에 더하면 뒤에 온 쪽은 바뀐 초대를 다시 읽어 0건이다 — 까닭에 맞게 답한다(가입과 같다)
@@ -482,7 +486,11 @@ export class StaffSignupService {
         'PENDING_SIGNATURE',
         'STAFF',
       );
-      return { staffMemberId, storeName: store.name };
+      return {
+        staffMemberId,
+        storeId: invitation.staffMember.storeId,
+        storeName: store.name,
+      };
     });
   }
 

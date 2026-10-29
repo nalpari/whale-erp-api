@@ -449,6 +449,7 @@ describe('직원 가입 (e2e, DB)', () => {
       .expect(200)
       .expect({
         staffMemberId: second.staffMemberId,
+        storeId: franchiseStoreId,
         storeName: '가입 테스트 가맹점',
       });
 
