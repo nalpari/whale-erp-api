@@ -9,6 +9,7 @@ import { AlimtalkService } from './../src/alimtalk/alimtalk.service';
 import { fakeAlimtalk } from './fake-alimtalk';
 import { BizppurioError } from './../src/alimtalk/bizppurio.client';
 import { AppModule } from './../src/app.module';
+import { HQ_SHARING_CONSENT_VERSION } from './../src/my-profile/my-consent.service';
 import { AdminSessionService } from './../src/admin-session/admin-session.service';
 import { AuthSessionService } from './../src/auth-session/auth-session.service';
 import { UserType } from './../src/auth/auth.types';
@@ -393,7 +394,13 @@ describe('근로계약 목록 (e2e)', () => {
         status: 'PENDING_SEND',
         staffMember: {
           phone: '01090145563',
-          account: { isHqSharingConsented: consented },
+          // 동의는 받아 주는 문구 버전까지 있어야 동의로 본다(api #183) — 지금 버전으로 둔다
+          account: {
+            isHqSharingConsented: consented,
+            hqSharingConsentVersion: consented
+              ? HQ_SHARING_CONSENT_VERSION
+              : null,
+          },
         },
       });
       // 본사 역할 × 가맹 점포 — 동의했을 때만 맡는다(ATT-30 규칙처럼 답한다)
