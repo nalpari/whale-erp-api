@@ -370,6 +370,56 @@ describe('내 정보 (e2e, DB)', () => {
     });
   });
 
+  it('소속 근무지 includeRetired — true 면 퇴직한 소속도 지금 소속 뒤에 퇴직일 최근 순, false · 없음은 그대로, 다른 값은 400', async () => {
+    // 이 시험에서만 쓰는 퇴직 레코드 둘 — 하나는 퇴직일이 더 늦고, 하나는 임시저장 계약만 있어 퇴직 포함이어도 빠진다
+    const laterRetiredId = await staff(meId, franchiseStoreId, {
+      employmentStatus: 'RETIRED',
+      hiredDate: new Date('2026-01-01'),
+      retiredDate: new Date('2026-10-15'),
+    });
+    await staff(meId, franchiseStoreId, {
+      employmentStatus: 'RETIRED',
+      retiredDate: new Date('2026-10-20'),
+      contractStatus: 'DRAFT',
+    });
+    const token = await accountToken(meId);
+    const ids = async (query: string) =>
+      (
+        (await get(`/me/memberships${query}`, token).expect(200))
+          .body as MyMembershipListResponseDto
+      ).items.map((m) => m.staffMemberId);
+
+    const current = [directStaffId, franchiseStaffId];
+    expect(await ids('')).toEqual(current);
+    expect(await ids('?includeRetired=false')).toEqual(current);
+    expect(await ids('?includeRetired=true')).toEqual([
+      ...current,
+      laterRetiredId,
+      retiredStaffId,
+    ]);
+    const res = await get('/me/memberships?includeRetired=true', token).expect(
+      200,
+    );
+    const body = res.body as MyMembershipListResponseDto;
+    expect(body.total).toBe(4);
+    // 응답 모양은 같다 — 퇴직일이 오늘보다 앞이면 퇴직
+    expect(body.items[3]).toEqual({
+      staffMemberId: retiredStaffId,
+      store: {
+        storeId: directStoreId,
+        storeName: '내정보 DIRECT',
+        storeTypeCode: 'DIRECT',
+      },
+      employmentType: 'PART_TIME',
+      jobTitle: '홀',
+      hiredDate: null,
+      retiredDate: '2026-09-30',
+    });
+    await get('/me/memberships?includeRetired=yes', token).expect(400);
+    // 신고 정보는 퇴직 포함과 상관없이 지금 소속만
+    await get(taxPath(laterRetiredId), token).expect(404);
+  });
+
   it('소속의 신고 정보 — 가린 값만, 원문은 응답에 없다. 내지 않은 소속은 null', async () => {
     const token = await accountToken(meId);
     const res = await get(taxPath(franchiseStaffId), token).expect(200);

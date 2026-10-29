@@ -1679,7 +1679,7 @@ model NotificationTemplate {
   variables                     Json
   /// 카카오 템플릿 코드 — 알림톡만
   kakaoTemplateCode             String?                       @map("kakao_template_code")
-  /// 기본 제목 — 기본 문구로 되돌리기의 원본. 처음 넣은 40건만 (NOTIFY-17, 2026-10-13 재영)
+  /// 기본 제목 — 기본 문구로 되돌리기의 원본. 마이그레이션으로 넣은 기본 템플릿 46건만 (NOTIFY-17, 2026-10-13 재영)
   defaultTitle                  String?                       @map("default_title")
   /// 기본 본문 — 기본 문구로 되돌리기의 원본. 없으면 등록한 템플릿이라 되돌리기가 없다
   defaultBody                   String?                       @map("default_body")
@@ -2068,6 +2068,24 @@ enum PublicHolidaySource {
 
   // 3팀 수정 · 2026-10-07 재영 승인 · 1팀 전달 사항 16번
   @@map("public_holiday_source")
+}
+
+/// 바로 받기 · 예약 생성
+enum ExcelDeliveryMethod {
+  DIRECT
+  SCHEDULED
+
+  @@map("excel_delivery_method")
+}
+
+/// 대기 · 생성 중 · 완료 · 실패
+enum ExcelDownloadStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+
+  @@map("excel_download_status")
 }
 
 /// 약관 버전
@@ -3106,4 +3124,51 @@ model PublicHolidaySynchronizationLog {
   result            ProcessResult
 
   @@map("public_holiday_synchronization_logs")
+}
+
+/// 엑셀 다운로드 이력 — 20261028140448_team1_excel_download_logs. 손으로 맞춘 모델이다(ERD 생성기 출력과 같은 칸).
+/// 외래키(requested_by · menu_id · bp_code_id)와 「생성 중 하나만」 부분 고유 인덱스 · CHECK 4 는 마이그레이션 SQL 에만 있다.
+model ExcelDownloadLog {
+  /// 다운로드 이력 ID
+  excelDownloadId  Int                 @id @default(autoincrement()) @map("excel_download_id")
+  /// 요청자 — admin_accounts FK
+  requestedBy      Int                 @map("requested_by")
+  /// 화면(메뉴) — menus FK — 같은 화면 판단 기준
+  menuId           Int                 @map("menu_id")
+  /// 대상 BP — 다룬 BP. BP · 가맹 계정은 소속 BP, 플랫폼 계정은 탭 BP. BP 를 다루지 않는 화면(BP 마스터 목록)은 비움
+  bpCodeId         Int?                @map("bp_code_id")
+  /// 검색 조건 — 요청 때의 조건 그대로
+  searchConditions Json                @default("{}") @map("search_conditions")
+  /// 건수
+  rowCount         Int                 @map("row_count")
+  /// 생성 방식 — 바로 받기·예약 생성
+  deliveryMethod   ExcelDeliveryMethod @map("delivery_method")
+  /// 처리 상태 — 대기·생성 중·완료·실패
+  status           ExcelDownloadStatus
+  /// 파일명 — 예) 점포목록_20261028.xlsx
+  fileName         String              @map("file_name")
+  /// 저장소 키 — 예약 생성만, excel-exports/ 아래
+  storageKey       String?             @map("storage_key")
+  /// 시도 횟수 — 예약 생성만 센다(바로 받기는 0). 시도를 시작할 때 1씩 올린다(최대 2). 2에서 실패하거나 4xx 거부면 끝
+  attemptCount     Int                 @default(0) @map("attempt_count")
+  /// 실패 사유
+  failureReason    String?             @map("failure_reason")
+  /// 메일 발송 일시 — 완료·실패 메일
+  notifiedAt       DateTime?           @map("notified_at") @db.Timestamptz(6)
+  /// 만료 일시 — 완료 + 24시간
+  expiresAt        DateTime?           @map("expires_at") @db.Timestamptz(6)
+  /// 최근 내려받은 일시 — 링크로 받은 시각
+  downloadedAt     DateTime?           @map("downloaded_at") @db.Timestamptz(6)
+  /// 요청 일시 — 2년 보존
+  requestedAt      DateTime            @default(now()) @map("requested_at") @db.Timestamptz(6)
+  /// 생성 시작 일시 — 이번 시도를 시작한 시각. 멈춘 작업 판단 기준
+  startedAt        DateTime?           @map("started_at") @db.Timestamptz(6)
+  /// 완료 일시
+  completedAt      DateTime?           @map("completed_at") @db.Timestamptz(6)
+  /// 범위 지문 — 만들 때 요청자가 볼 수 있던 범위(플랫폼 여부 · 대상 BP · 전체 점포 · 매핑 점포). 받을 때 지금 범위와 다르면 막는다
+  scopeKey         String?             @map("scope_key")
+
+  @@index([requestedBy, menuId, requestedAt], map: "excel_download_logs_requested_by_menu_id_requested_at_idx")
+  @@index([status, requestedAt], map: "excel_download_logs_status_requested_at_idx")
+  @@map("excel_download_logs")
 }

@@ -12,6 +12,8 @@ import {
 } from '../auth/menu-permission.guard';
 import { USER_TYPES } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
+import type { ExcelExportsService } from '../excel-exports/excel-exports.service';
+import type { StoreExcelSource } from './store-excel.source';
 import type { StoreManagementService } from './store-management.service';
 import { StoresController } from './stores.controller';
 import type { StoresService } from './stores.service';
@@ -55,14 +57,21 @@ describe('StoresController', () => {
     verifyBusiness: jest.fn(),
     putImage: jest.fn(),
     removeImage: jest.fn(),
-    excel: jest.fn().mockResolvedValue({
+  };
+  const excelExports = {
+    request: jest.fn().mockResolvedValue({
+      kind: 'file',
       fileName: '점포목록_20261014.xlsx',
       buffer: Buffer.from('PK'),
     }),
   };
+  const excelSource = { menuUrl: '/stores' };
+  const res = { status: jest.fn() };
   const controller = new StoresController(
     options as unknown as StoresService,
     management as unknown as StoreManagementService,
+    excelExports as unknown as ExcelExportsService,
+    excelSource as unknown as StoreExcelSource,
   );
 
   beforeEach(() => {
@@ -114,7 +123,6 @@ describe('StoresController', () => {
 
   it.each([
     ['list', () => controller.list(USER, BP, { page: 1, pageSize: 20 })],
-    ['excel', () => controller.excel(USER, BP, {})],
     ['detail', () => controller.detail(USER, BP, '11')],
     [
       'histories',
@@ -215,13 +223,34 @@ describe('StoresController', () => {
     expect(management.verifyBusiness).toHaveBeenCalledWith(5, BP, body);
   });
 
-  it('엑셀은 xlsx 형식과 한글 파일 이름(RFC 5987)으로 내려보낸다', async () => {
-    const file = await controller.excel(USER, BP, {});
+  it('엑셀은 공통 엑셀에 점포 소스 · 관리자 계정 id · 대상 BP · 조건을 넘기고, 파일이면 xlsx 로 내려보낸다', async () => {
+    const query = { statuses: ['CLOSED'] } as never;
+    const file = (await controller.excel(USER, BP, query, res as never)) as {
+      getHeaders(): object;
+    };
+    expect(excelExports.request).toHaveBeenCalledWith(
+      excelSource,
+      { adminAccountId: 5, bp: BP },
+      query,
+    );
     expect(file.getHeaders()).toMatchObject({
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       disposition:
         "attachment; filename*=UTF-8''%EC%A0%90%ED%8F%AC%EB%AA%A9%EB%A1%9D_20261014.xlsx",
       length: 2,
     });
+    expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it('1만 건 이상이면 202 와 안내를 준다 — 파일은 메일 링크로 간다', async () => {
+    excelExports.request.mockResolvedValueOnce({
+      kind: 'scheduled',
+      excelDownloadId: 41,
+      rowCount: 12_480,
+    });
+    await expect(
+      controller.excel(USER, BP, {}, res as never),
+    ).resolves.toMatchObject({ excelDownloadId: 41, rowCount: 12_480 });
+    expect(res.status).toHaveBeenCalledWith(202);
   });
 });
