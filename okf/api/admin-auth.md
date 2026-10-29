@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:10:28Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:24:11Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -316,8 +316,9 @@ forced popup above. `AdminMyPasswordService.change` (`admin-my-password.service.
   path (combination/length → login id → character → same-as-current →
   confirmation) — there is no issued-password step here, nothing was issued.
   A wrong current password is 400 `현재 비밀번호가 올바르지 않습니다.`, a
-  wording 1팀 picked for this screen only; it is not the 3팀 직원 앱 string
-  (`지금 비밀번호가 맞지 않습니다`) despite meaning the same thing.
+  wording 1팀 picked for MY PAGE (비밀번호 변경 · 현재 비밀번호 확인 · 회원 탈퇴);
+  it is not the 3팀 직원 앱 string (`지금 비밀번호가 맞지 않습니다`) despite
+  meaning the same thing.
 - On success: new hash, `admin_change_histories` gets 「비밀번호 · 변경」 (no
   value, same no-value rule as the forced path). **No session is touched** —
   this spec's outcome keeps every device signed in (the forced path *does*
@@ -329,6 +330,8 @@ forced popup above. `AdminMyPasswordService.change` (`admin-my-password.service.
   password is itself a reason to kill a still-live reset code.
 - Not `AllowPasswordChangePending()` — a forced-change account gets 403 here
   too, same as `PATCH me`.
+- Does not touch terms agreement or `isPasswordChangeRequired` at all; those
+  two only exist on the forced path's account state.
 
 `POST /auth/admin/me/password-verifications` (`AdminMyPasswordService.verify`,
 2026-10-29 재영) only checks the current password: 204 when it matches, 400 with the
@@ -340,9 +343,9 @@ checks the password itself — the first check is a gate for the screen, not a t
 the withdrawal trusts. Any signed-in admin may call it, not only a BP 마스터, so
 another screen can reuse it. A wrong password is **not** counted toward the login
 lock; guessing is held by the route's account-axis limit instead (10 per 10 minutes
-per signed-in account, the same as `me/password-change` and `me/withdraw`).
-- Does not touch terms agreement or `isPasswordChangeRequired` at all; those
-  two only exist on the forced path's account state.
+per signed-in account, the same as `me/password-change` and `me/withdraw`). Like
+`me/password-change` it is not `AllowPasswordChangePending()`, so a forced-change
+account gets 403.
 
 # Temporary passwords live only in `temporary_passwords`
 
