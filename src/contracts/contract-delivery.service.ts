@@ -172,6 +172,44 @@ function notSent(e: unknown): boolean {
   return e.code !== undefined || e.path === '/v1/token';
 }
 
+/** 가입 초대 · 소속 추가 확인 요청 알림톡의 관련 업무 유형(alimtalk_send_logs.related_type) — 직원 상세 발송 이력이 이 값으로 찾는다 */
+export const CONTRACT_RELATED_TYPE = 'contract';
+
+export type SendFailure = {
+  result: 'FAILED' | 'UNCONFIRMED';
+  /** 관리자에게 보일 사유 — 비즈뿌리오 원문(번호가 섞일 수 있다)은 싣지 않는다 */
+  reason: string;
+  retryable: boolean;
+};
+
+/**
+ * 발송 이력의 실패 한 줄(alimtalk_send_logs.failure_reason — `code=… http=…: 메시지`, AlimtalkService)을 notSent 와 같은
+ * 기준으로 가른다. 비즈뿌리오 코드가 있으면 거절, 토큰 단계면 보내지 않음이라 다시 보낼 수 있다(502 SEND_FAILED). 그 밖은
+ * 메시지 요청 뒤 응답이 끊겨 접수 여부를 몰라 다시 보내면 두 번 갈 수 있다(502 SEND_UNCONFIRMED). 문구는 dispatch 의 502 와 같게 둔다.
+ */
+export function sendFailureOf(failureReason: string | null): SendFailure {
+  const code = /^code=(-?\d+) /.exec(failureReason ?? '')?.[1];
+  if (code !== undefined)
+    return {
+      result: 'FAILED',
+      reason: `비즈뿌리오가 받지 않았습니다(코드 ${code}). 번호를 확인하고 다시 보내 주세요`,
+      retryable: true,
+    };
+  if (failureReason?.includes('/v1/token'))
+    return {
+      result: 'FAILED',
+      reason:
+        '비즈뿌리오에 연결하지 못해 보내지 않았습니다. 잠시 뒤 다시 보내 주세요',
+      retryable: true,
+    };
+  return {
+    result: 'UNCONFIRMED',
+    reason:
+      '접수됐는지 알 수 없습니다. 직원에게 받았는지 확인한 뒤 다시 보내 주세요 — 다시 보내면 두 번 갈 수 있습니다',
+    retryable: false,
+  };
+}
+
 /**
  * 근로계약 보내기(WHALEERP-136, 2026-10-19 재영 정정 — 저장하면 곧바로 보낸다). 초안 저장 · 수정 요청 계약 고침 · 날인
  * 전 당사자 정보 수정 · 재발송이 모두 같은 길로 보낸다.
@@ -546,7 +584,7 @@ export class ContractDeliveryService {
           },
           // 코드 · 링크 모두 가입 열쇠라 발송 이력에서 가린다
           maskedVariables: ['초대코드', '링크'],
-          related: { type: 'contract', id: contractId },
+          related: { type: CONTRACT_RELATED_TYPE, id: contractId },
           sentBy,
         });
       else
@@ -554,7 +592,7 @@ export class ContractDeliveryService {
           templateCode: AFFILIATION_TEMPLATE,
           to: pending.phone,
           variables: this.affiliationVariables(pending),
-          related: { type: 'contract', id: contractId },
+          related: { type: CONTRACT_RELATED_TYPE, id: contractId },
           sentBy,
         });
     } catch (e) {

@@ -1,7 +1,7 @@
 ---
 type: API
 title: Staff member list, detail and detail summary
-description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-29T06:12:43Z }
@@ -22,6 +22,10 @@ sources:
     resource: ../../src/contracts/contracts-menu.ts
     title: 근로계약 관리 메뉴(CONTRACTS_MENU) — 직원 목록 · 상세의 workDays 노출 판정과 근로계약 서비스가 같이 쓴다
     last_modified: 2026-10-27T07:26:42Z
+  - id: send-logs
+    resource: ../../src/staff-members/send-logs.ts
+    title: 직원 상세 발송 이력 — 알림톡 발송 이력을 종류 · 재발송 · 결과로 바꾸는 toSendLogs
+    last_modified: 2026-10-29T07:00:00Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -211,6 +215,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 | `…/summary/work-schedules?weekStart=` | 근무스케줄 관리 `/work-schedules` | 한 주(월~일)의 근무스케줄과 근무시간 · 주간 합계(분). `weekStart` 는 그 주의 아무 날짜, 빼면 이번 주(한국 날짜) |
 | `…/summary/payslips` | 급여명세서 관리 `/payslips` | 최근 명세서 3건(`recent` — 상태와 관계없이 급여 기간 시작일 최신순, 기본급 · 수당 · 공제 · 실지급액 · 상태) · 미발송 건수 |
 | `…/summary/todos` | TO-DO 관리 `/todos` | 배정된 TO-DO 의 전체 · 완료 · 미완료 건수와 최근 처리 이력 5건 |
+| `…/summary/send-logs` | 근로계약 관리 `/contracts` | 발송 이력(WHALEERP-136) — 이 직원 레코드의 모든 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡, 최근 순. 줄마다 종류(`StaffSendKind` — 복귀 확인도 소속 추가 확인 요청) · 재발송 여부 · 결과(`StaffSendResult` 성공 · 실패 · 접수 여부 모름) · 실패 사유 · 재시도 가능 여부 · 보낸 시각 · 계약 ID. 계약이 없으면 빈 목록 |
 
 **권한은 둘이다.** 컨트롤러가 `/staff-members` 라 가드가 직원 정보 관리(`MN000005`) 조회를 보고, 서비스가 그 영역 메뉴의
 조회 권한을 다시 본다(`adminHasMenuAction`, 가드와 같은 판정). 영역 권한이 없으면 **그 영역만 403 「조회 권한이 없습니다.」**
@@ -252,6 +257,18 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
   다른 배정자의 퇴직 배정 해제 행(`unassigned_staff_member_id`, 같은 상태 그대로)은 이 직원의 일이 아니라 뺀다. 이력의 「바꾼 쪽」은
   `ADMIN` · `STAFF` · `SYSTEM` 만 낸다(관리자와 직원이 함께 있으면 관리자, 둘 다 없으면 퇴직 배치 등 시스템). 한 명
   수행이면 바꾼 직원이 다른 사람일 수 있어 누구인지는 내지 않는다.
+
+- **발송 이력**은 따로 쌓지 않고 알림톡 발송 이력(`alimtalk_send_logs`)에서 읽는다(2026-10-29 김민식 — 마이그레이션 없이).
+  근로계약 발송(`ContractDeliveryService.dispatch`)이 남기는 줄 — 관련 업무 `contract`(`CONTRACT_RELATED_TYPE`) · 그 직원
+  레코드의 계약 · 템플릿 `TALK_STAFF_INVITATION`(가입 초대) · `TALK_STAFF_AFFILIATION_REQUEST`(소속 추가 확인 요청)만이다.
+  **재발송**은 같은 계약에 앞서 나간(성공 · 접수 여부 모름) 발송이 있을 때다 — 확실히 나가지 않은 실패는 발송을 되돌려 다음
+  발송이 첫 발송이 되므로(계약 `resend_count` 와 같은 기준) 재발송으로 세지 않는다. **실패 사유 · 재시도 가능 여부**는
+  `failure_reason`(`code=… http=…: 메시지`)을 `sendFailureOf`(`src/contracts/contract-delivery.service.ts`)가 `notSent` 와 같은
+  기준으로 가른다 — 비즈뿌리오 코드가 있으면 거절 · 토큰 단계면 보내지 않음이라 다시 보낼 수 있고(502 `SEND_FAILED`), 그 밖은
+  접수 여부 모름이라 다시 보내면 두 번 갈 수 있다(502 `SEND_UNCONFIRMED`). 사유에는 비즈뿌리오 원문(번호가 섞일 수 있다)을
+  싣지 않고 코드만 싣는다. 재시도 가능 여부는 그 발송 한 번의 판정이다 — 지금 재발송 버튼을 누를 수 있는지는 계약 상태가
+  정한다. 소속 추가 확인 요청 **메일**은 메일 발송 이력(`mail_send_logs`)에 관련 계약이 없어 담지 않는다. 앱으로 받는 가입한
+  직원(직원 알림 `PUSH_CONTRACT_SENT`)도 알림톡이 아니라 담지 않는다. 지운 계약(임시저장 삭제)의 발송은 빠진다.
 
 **하지 않은 것.** 출퇴근 현황 영역(이번 주 출근 · 지각 · 결근 · 조기 퇴근 횟수)은 없다 — `attendance_records` 에 쓰는
 곳이 아직 없고(급여 초안이 읽기만 한다) 지각 · 결근 판정 규칙도 정해지지 않았다. 183 에서 떼어 출퇴근 작업과 함께 따로 한다(2026-10-21 재영). **본인인증 상태**도 내지 않는다 — 가입에

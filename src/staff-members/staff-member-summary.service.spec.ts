@@ -29,7 +29,8 @@ describe('StaffMemberSummaryService', () => {
   let prisma: {
     adminAccount: { findFirst: jest.Mock };
     roleGroupMenu: { count: jest.Mock };
-    contract: { findFirst: jest.Mock };
+    contract: { findFirst: jest.Mock; findMany: jest.Mock };
+    alimtalkSendLog: { findMany: jest.Mock };
     staffTaxProfile: { findUnique: jest.Mock };
     codeItem: { findFirst: jest.Mock };
     workSchedule: { findMany: jest.Mock };
@@ -50,7 +51,11 @@ describe('StaffMemberSummaryService', () => {
         findFirst: jest.fn().mockResolvedValue({ roleGroupId: 3 }),
       },
       roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
-      contract: { findFirst: jest.fn().mockResolvedValue(null) },
+      contract: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
+      alimtalkSendLog: { findMany: jest.fn().mockResolvedValue([]) },
       staffTaxProfile: { findUnique: jest.fn().mockResolvedValue(null) },
       codeItem: { findFirst: jest.fn().mockResolvedValue(null) },
       workSchedule: { findMany: jest.fn().mockResolvedValue([]) },
@@ -79,7 +84,7 @@ describe('StaffMemberSummaryService', () => {
     (mock.mock.calls[n] as [Record<string, any>])[0];
   const firstArg = (mock: jest.Mock) => nthArg(mock, 0);
 
-  describe('영역 권한 · 범위 — 네 영역 공통', () => {
+  describe('영역 권한 · 범위 — 다섯 영역 공통', () => {
     const areas = [
       ['contract', '/contracts', () => service.contract(9, 30, NOW)],
       [
@@ -89,6 +94,7 @@ describe('StaffMemberSummaryService', () => {
       ],
       ['payslips', '/payslips', () => service.payslips(9, 30)],
       ['todos', '/todos', () => service.todos(9, 30)],
+      ['sendLogs', '/contracts', () => service.sendLogs(9, 30)],
     ] as const;
 
     it.each(areas)(
@@ -124,6 +130,8 @@ describe('StaffMemberSummaryService', () => {
         expect(scope.canManageStaffMember).toHaveBeenCalledWith(9, 30);
         for (const m of [
           prisma.contract.findFirst,
+          prisma.contract.findMany,
+          prisma.alimtalkSendLog.findMany,
           prisma.workSchedule.findMany,
           prisma.payslip.findMany,
           prisma.payslip.count,
@@ -367,6 +375,55 @@ describe('StaffMemberSummaryService', () => {
         lastSentAt: null,
         renewalDate: null,
       });
+    });
+  });
+
+  describe('sendLogs — 발송 이력 (WHALEERP-136)', () => {
+    it('이 직원 레코드의 모든 계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡을 오래된 순으로 읽어 최근 순으로 낸다', async () => {
+      prisma.contract.findMany.mockResolvedValue([
+        { contractId: 7 },
+        { contractId: 8 },
+      ]);
+      prisma.alimtalkSendLog.findMany.mockResolvedValue([
+        {
+          alimtalkSendLogId: 1,
+          templateCode: 'TALK_STAFF_INVITATION',
+          relatedId: 7,
+          result: 'SUCCEEDED',
+          failureReason: null,
+          sentAt: NOW,
+        },
+        {
+          alimtalkSendLogId: 2,
+          templateCode: 'TALK_STAFF_INVITATION',
+          relatedId: 7,
+          result: 'FAILED',
+          failureReason: 'code=3018 http=200: x',
+          sentAt: NOW,
+        },
+      ]);
+      const { items } = await service.sendLogs(9, 30);
+      expect(firstArg(prisma.contract.findMany).where).toEqual({
+        staffMemberId: 30,
+      });
+      const query = firstArg(prisma.alimtalkSendLog.findMany);
+      expect(query.where).toEqual({
+        relatedType: 'contract',
+        relatedId: { in: [7, 8] },
+        templateCode: {
+          in: ['TALK_STAFF_INVITATION', 'TALK_STAFF_AFFILIATION_REQUEST'],
+        },
+      });
+      expect(query.orderBy).toEqual({ alimtalkSendLogId: 'asc' });
+      expect(items.map((i) => [i.sendLogId, i.isResend, i.result])).toEqual([
+        [2, true, 'FAILED'],
+        [1, false, 'SUCCEEDED'],
+      ]);
+    });
+
+    it('계약이 없으면 발송 이력을 읽지 않고 빈 목록', async () => {
+      await expect(service.sendLogs(9, 30)).resolves.toEqual({ items: [] });
+      expect(prisma.alimtalkSendLog.findMany).not.toHaveBeenCalled();
     });
   });
 

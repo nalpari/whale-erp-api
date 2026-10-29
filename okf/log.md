@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Staff members](/api/staff-members.md) — 직원 상세 발송 이력 영역 `GET /staff-members/:id/summary/send-logs`(WHALEERP-136). 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡을 알림톡 발송 이력에서 읽어 종류 · 재발송 · 결과 · 실패 사유 · 재시도 가능 여부로 낸다. API 전용 enum `StaffSendKind` · `StaffSendResult` 추가, 실패 판정 `sendFailureOf` 를 [근로계약 발송](/api/contracts-api.md) 옆에 두었다. 마이그레이션 없음.
 * **Update**: [Staff members](/api/staff-members.md) — 직원 상세 요약 근로계약(`GET /staff-members/:id/summary/contracts`)에 `payrollAccount`(신고 정보의 은행 이름 · 계좌번호 전체, 하이픈 없음 · 가리지 않음, 없으면 null) 추가(WHALEERP-183, 노영주 결정). 계약이 없어도 · 지급 방식과 상관없이 온다. 마이그레이션 없음. 2차 리뷰: `bankName` 은 공통코드에 없으면 은행 코드 그대로(DTO 주석), 은행 이름 조회는 `bpCode` 오름차순으로 플랫폼 원본(BP000000)을 먼저 잡는다는 가정을 주석 · 테스트로 밝혔다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 일괄 저장 두 테이블(`bulk_exports` · `bulk_export_download_logs`)과 enum `bulk_export_status` 를 물리 생성기에 넣었다(`_model.py`, 고유 인덱스 식 `KEY_EXPR`, `_build_prisma.py` 의 `integer[]`). 정의서 · schema.sql 을 다시 만들었고 schema.sql 이 마이그레이션 `20261029134408_team3_bulk_exports` 와 문장마다 같다(41문장). front 논리 카탈로그 PR 과 같이 머지한다.
 * **Update**: main 병합(api bulbasaur, main #199 까지): okf/log 충돌은 양쪽 기록을 살렸다.

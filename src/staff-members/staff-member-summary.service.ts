@@ -24,6 +24,7 @@ import {
   StaffMemberPayrollAccountDto,
   StaffMemberPayslipSummaryResponseDto,
   StaffMemberRecentPayslipDto,
+  StaffMemberSendLogResponseDto,
   StaffMemberTodoSummaryResponseDto,
   StaffMemberWeekScheduleResponseDto,
 } from './dto/staff-member-summary.response.dto';
@@ -32,6 +33,8 @@ import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
 // 갱신 예정일 — 근로계약 목록과 같은 규칙(종료일 30일 전, 갱신 예정 알림 배치와 같은 날수)
 import { renewalDateOf } from '../contracts/contract-renewal';
 import { NOT_IDLE_RENEWAL } from '../contracts/signed-contract';
+import { CONTRACT_RELATED_TYPE } from '../contracts/contract-delivery.service';
+import { SEND_KIND_OF_TEMPLATE, toSendLogs } from './send-logs';
 
 /** TO-DO 최근 처리 이력 건수 */
 const RECENT_TODO_HISTORIES = 5;
@@ -343,6 +346,40 @@ export class StaffMemberSummaryService {
   }
 
   /** 그 영역 메뉴의 조회 권한(없으면 403) → 직원 범위(없으면 404) 순이다 */
+  /**
+   * 발송 이력(WHALEERP-136) — 이 직원 레코드의 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡, 최근 순. 따로 쌓지 않고
+   * 알림톡 발송 이력(alimtalk_send_logs, 관련 업무 = 계약)에서 읽는다. 근로계약 관리 조회 권한(근로계약 영역과 같다)
+   */
+  async sendLogs(
+    adminAccountId: number,
+    staffMemberId: number,
+  ): Promise<StaffMemberSendLogResponseDto> {
+    await this.check(adminAccountId, staffMemberId, '/contracts');
+    const contracts = await this.prisma.contract.findMany({
+      where: { staffMemberId },
+      select: { contractId: true },
+    });
+    if (!contracts.length) return { items: [] };
+    const rows = await this.prisma.alimtalkSendLog.findMany({
+      where: {
+        relatedType: CONTRACT_RELATED_TYPE,
+        relatedId: { in: contracts.map((c) => c.contractId) },
+        templateCode: { in: Object.keys(SEND_KIND_OF_TEMPLATE) },
+      },
+      // 재발송 판정이 오래된 순으로 본다 — toSendLogs 가 최근 순으로 뒤집는다
+      orderBy: { alimtalkSendLogId: 'asc' },
+      select: {
+        alimtalkSendLogId: true,
+        templateCode: true,
+        relatedId: true,
+        result: true,
+        failureReason: true,
+        sentAt: true,
+      },
+    });
+    return { items: toSendLogs(rows) };
+  }
+
   private async check(
     adminAccountId: number,
     staffMemberId: number,

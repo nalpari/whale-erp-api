@@ -7,6 +7,12 @@ import {
   StatusChangeActor,
   TodoStatus,
 } from '@prisma/client';
+import {
+  STAFF_SEND_KINDS,
+  STAFF_SEND_RESULTS,
+  type StaffSendKind,
+  type StaffSendResult,
+} from '../send-logs';
 
 /** 가장 최근 근로계약의 요약. 직원 목록 · 상세의 contract 와 같은 계약이다 */
 export class StaffMemberContractSummaryDto {
@@ -142,4 +148,29 @@ export class StaffMemberTodoSummaryResponseDto {
    * 담는다(2026-10-21 노영주). 다른 배정자의 퇴직 배정 해제 행은 담지 않는다
    */
   recentHistories: StaffMemberTodoHistoryDto[];
+}
+
+/** 발송 이력 한 줄 — 근로계약 발송이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡 한 번(WHALEERP-136) */
+export class StaffMemberSendLogDto {
+  /** 알림톡 발송 이력 ID(alimtalk_send_logs) */
+  sendLogId: number;
+  /** 보낸 근로계약 */
+  contractId: number;
+  @ApiProperty({ enum: STAFF_SEND_KINDS, enumName: 'StaffSendKind' })
+  kind: StaffSendKind;
+  /** 같은 계약에 앞서 나간 발송이 있었다(재발송 · 고쳐 다시 보냄) */
+  isResend: boolean;
+  /** 비즈뿌리오 접수 기준. 접수 여부 모름(UNCONFIRMED)은 다시 보내면 두 번 갈 수 있다 */
+  @ApiProperty({ enum: STAFF_SEND_RESULTS, enumName: 'StaffSendResult' })
+  result: StaffSendResult;
+  /** 관리자에게 보일 실패 사유. 성공이면 null */
+  failureReason: string | null;
+  /** 다시 보내도 되는가 — 확실히 나가지 않은 실패만 true, 접수 여부 모름은 false. 성공이면 null */
+  retryable: boolean | null;
+  sentAt: Date;
+}
+
+export class StaffMemberSendLogResponseDto {
+  /** 이 직원 레코드의 모든 근로계약 발송, 최근 순 */
+  items: StaffMemberSendLogDto[];
 }
