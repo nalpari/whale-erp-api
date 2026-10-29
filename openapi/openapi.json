@@ -25599,13 +25599,13 @@
           "WAGE_CONTRACT",
           "SIGNATURE"
         ],
-        "description": "종이 계약 근로계약서 · 임금계약서"
+        "description": "종이 계약 근로계약서 · 임금계약서 · 보낸 원본 · 처리 완료본"
       },
       "ContractDocumentDto": {
         "type": "object",
         "properties": {
           "kind": {
-            "description": "종이 계약 근로계약서 · 임금계약서",
+            "description": "종이 계약 근로계약서 · 임금계약서 · 보낸 원본 · 처리 완료본",
             "allOf": [
               {
                 "$ref": "#/components/schemas/ContractDocumentKind"
