@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — api #179 리뷰 참고: 세 초기화의 잠금 해제 값을 `CLEARED_ATTEMPT_STATE` 로 쓴다(다른 잠금 해제와 같은 출처). e2e `admin-password-reset-unlock` — 잠긴 플랫폼 관리자 · BP 마스터를 초기화하면 메일로 받은 비밀번호로 바로 로그인된다(잠금 해제를 빼면 429 로 실패하는 것을 확인). 동작 변화 없음.
 * **Update**: [BP admins](/api/bp-admins.md) — api #179 review-pr 반영: 잠금이 풀리는 길에 운영자 비밀번호 초기화를 더했다(같은 문서 아래 · 코드와 맞춤). `resetPassword` 주석의 「잠금을 풀고」 중복을 지웠다. 계획서(2026-10-13 관리자 로그인) 6번은 원래 결정 문구를 두고 10-28 변경을 덧붙였다. 동작 변화 없음.
 
 ## 2026-10-28
