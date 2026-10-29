@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T06:53:49Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:13:28Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -66,6 +66,10 @@ sources:
     resource: ../../src/contracts/my-contract-scope.ts
     title: 직원 앱 「내 계약」 기준 (145 · 610 공용)
     last_modified: 2026-10-22T00:21:08Z
+  - id: my-contract-documents
+    resource: ../../src/contracts/my-contract-documents.service.ts
+    title: 직원 앱 근로계약 파일 내려받기 주소 (WHALEERP-146 · 149)
+    last_modified: 2026-10-28T06:10:30Z
 ---
 
 # What it is
@@ -985,12 +989,33 @@ apply to reading.
     (`EMPTY_CONTRACT_IDENTITY` when there is no party row); `signable` = `awaitingSignature` and no
     mismatches.
   - `documents` — `{ contractDocumentId, kind, fileName }`, without the 직원 필기 서명 (`SIGNATURE`).
-    There is no download route for the 직원 yet — it comes with the 처리 완료본 (WHALEERP-131).
+    Each one downloads through the route below.
   - `sentAt` is what the app sends back on 날인 (a different value is 409 `CONTRACT_RESENT`).
 - **Clause text** is not built here: there is no clause template yet (노무사 검토 중, mockup
   `contract.html`), so the API gives values and the app lays out 제1~10조; the template moves to
   WHALEERP-131.
 - Reads run in one transaction only so Prisma sends the relation queries one after another (PGlite e2e).
+- **`GET /me/contracts/:contractId/documents/:contractDocumentId/download-url`** (WHALEERP-146 종이 계약
+  날인본 · 임금계약서, 149 처리 완료본 내보내기; `MyContractDocumentsController`, its own controller so the 날인
+  request limit does not apply) — `{ url }` (`DownloadUrlResponseDto`), the same 300-second signed URL as the
+  관리자 `…/download-url`; it saves under the original `fileName` (`Content-Disposition: attachment;
+  filename*=UTF-8''…` is set on the S3 response, not by this API). The app hands that file to the share sheet.
+  The path ends in `/download-url` like every other download route here, because the reply is a URL, not the file.
+  - Not mine (same `myContractWhere`) → the detail's 404 body. Then the file must belong to that contract and be
+    one `documents` lists (`kind ≠ SIGNATURE`) → else 404 「파일을 찾을 수 없습니다」 — so another contract's
+    file id under my contract is 404 too.
+  - **처리 완료본 (`SIGNED_COPY`) only for executed contracts** — `SIGNED`, or `ENDED` with a `SIGNED → ENDED`
+    status history row (any actor: the nightly end or an admin replacement), or an old `ENDED` with no history at
+    all (the same fallback as the admin detail's paper registration date). `ENDED` also comes from 임시저장 · 발송
+    대기 · 서명 대기 · 수정 요청, so the status alone is not enough. Otherwise **409 `CONTRACT_STATUS_CONFLICT`**
+    with the current `status` — the same code and fields as a refused transition, with its own message (「처리 완료본은
+    체결이 끝난 근로계약에서만 받을 수 있습니다」, not 「새로 고쳐 상태를 확인」). 409 rather than 404 because the detail
+    does list the file; it is the state that refuses. The detail still lists a `SIGNED_COPY` whatever the status (no
+    such rows exist yet — WHALEERP-131); the app should offer it only for executed contracts. This is a third
+    "executed" rule next to `SIGNED_ONCE` and `contractCovers`; unifying them waits for the open contracts PRs. `SENT_ORIGINAL` · `PAPER_EMPLOYMENT_CONTRACT` · `WAGE_CONTRACT` have no state gate.
+  - 404 · 409 come before the storage check; storage not configured → 503 (as 날인). A failure building the URL
+    propagates (500), as in the 관리자 route.
+  - Nothing writes `SIGNED_COPY` yet (WHALEERP-131); the gate is tested with rows written directly.
 
 # GET /stores/options
 
