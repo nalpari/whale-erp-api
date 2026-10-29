@@ -473,13 +473,13 @@ export class PayslipEditService {
     if (!EDITABLE.includes(current.status))
       throw statusConflict(current.status);
     const now = new Date();
-    const periodEnd = dateOnly(current.periodEndDate);
-    if (dateOnly(kstToday(now)) <= periodEnd)
+    const confirmableFrom = dateOnly(addDays(current.periodEndDate, 1));
+    if (dateOnly(kstToday(now)) < confirmableFrom)
       throw new UnprocessableEntityException({
         statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
         error: 'Unprocessable Entity',
         code: 'PERIOD_NOT_ENDED',
-        message: `급여 기간이 끝나지 않아 확정할 수 없습니다. ${dateOnly(addDays(current.periodEndDate, 1))} 부터 확정할 수 있습니다`,
+        message: `급여 기간이 끝나지 않아 확정할 수 없습니다. ${confirmableFrom} 부터 확정할 수 있습니다`,
       });
     await this.prisma.$transaction(async (tx) => {
       await this.claim(tx, payslipId, current.status, dto.updatedAt, {
