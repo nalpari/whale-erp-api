@@ -624,6 +624,17 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         expect(prisma.codeItem.findFirst).not.toHaveBeenCalled();
       });
 
+      it('키가 없어도 본사 역할의 가맹 직원 조회는 HIDDEN — 키를 보기 전에 가린다(오류 로그 없음)', async () => {
+        scope.canManageStaffAccount.mockResolvedValue(false);
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+
+        const detail = await (await serviceWith(null)).findOne(9, 7);
+
+        expect(detail.taxProfile.status).toBe('HIDDEN');
+        expect(prisma.staffTaxProfile.findUnique).not.toHaveBeenCalled();
+        expect(errorLog).not.toHaveBeenCalled();
+      });
+
       it('키가 없으면 상세는 열리고 신고 정보만 UNAVAILABLE', async () => {
         prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
 
