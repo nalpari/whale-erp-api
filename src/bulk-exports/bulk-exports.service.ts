@@ -20,7 +20,13 @@ import { dateOnly, storeNames } from '../payslips/payslip-shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE, type OptionalStorage } from '../storage/storage.module';
 import { StorageService } from '../storage/storage.service';
-import { archivePlan, zipArchive } from './bulk-export-archive';
+import {
+  archivePlan,
+  MISSING_CSV,
+  missingCsv,
+  zipArchive,
+  type Cell,
+} from './bulk-export-archive';
 import {
   BULK_EXPORT_MAX_ATTEMPTS,
   BULK_EXPORT_MAX_BYTES,
@@ -441,8 +447,22 @@ export class BulkExportsService {
         throw new PayloadTooLargeException(TOO_LARGE_MESSAGE);
       entries.push({ path, data });
     };
-    // 차례로 읽는다 — 한꺼번에 받으면 동시 요청 · 메모리가 한 번에 솟는다
-    for (const f of plan.files) add(f.path, await storage.get(f.storageKey));
+    // 차례로 읽는다 — 한꺼번에 받으면 동시 요청 · 메모리가 한 번에 솟는다. 저장소가 4xx(없음 · 거부)로 답한 파일은 다시 해도
+    // 같으므로 건너뛰고 누락_파일.csv 에 적는다 — 한 파일 때문에 범위 전체가 실패로 남지 않게. 끊김 · 5xx 는 던져 다시 시도한다
+    const missing: Cell[][] = [];
+    for (const f of plan.files) {
+      const data = await storage.get(f.storageKey).catch((error: unknown) => {
+        if (!isRejectedByStorage(error)) throw error;
+        this.logger.warn(
+          `bulk export FILE SKIPPED key=${f.storageKey}: ${reasonOf(error)}`,
+        );
+        missing.push(f.missing);
+        return null;
+      });
+      if (data) add(f.path, data);
+    }
+    if (missing.length)
+      entries.push({ path: MISSING_CSV, data: missingCsv(missing) });
     const payslipById = new Map(payslips.map((p) => [p.payslipId, p]));
     const names = await storeNames(
       this.prisma,
@@ -534,11 +554,15 @@ export class BulkExportsService {
       this.logger.warn(
         `bulk export STUCK id=${job.bulkExportId} attempt=${job.attemptCount}`,
       );
-      await this.fail(job, FAILED_MESSAGE).catch((e: unknown) =>
+      try {
+        // 그 시도가 올려 둔 파일 — 정리가 이 행을 가져온 뒤에만 지운다(그 사이 늦게 끝난 시도의 완성본을 지우지 않게)
+        if ((await this.fail(job, FAILED_MESSAGE)) && job.storageKey)
+          await this.discard(job.storageKey);
+      } catch (e) {
         this.logger.error(
           `bulk export STUCK RECOVER ERROR id=${job.bulkExportId}: ${reasonOf(e)}`,
-        ),
-      );
+        );
+      }
     }
   }
 
@@ -571,7 +595,15 @@ export class BulkExportsService {
         stores,
         new Date(),
       );
-      key = StorageService.newKey('bulk-exports', job.bpCodeId, 'ZIP');
+      // 올리기 전에 키를 행에 먼저 적는다 — 올린 뒤 마무리 전에 죽어도 멈춘 작업 정리 · 실패 처리가 이 키를 지운다
+      const newKey = StorageService.newKey('bulk-exports', job.bpCodeId, 'ZIP');
+      if (!(await this.settle(job, { storageKey: newKey }))) {
+        this.logger.warn(
+          `bulk export SETTLE LOST id=${job.bulkExportId} attempt=${job.attemptCount} — 올리기 전에 다른 시도가 가져갔다`,
+        );
+        return;
+      }
+      key = newKey;
       await this.requireStorage().put(key, buffer, 'ZIP');
       const completedAt = new Date();
       settled = await this.settle(job, {
@@ -636,8 +668,14 @@ export class BulkExportsService {
     return count > 0;
   }
 
-  private async fail(job: BulkExport, reason: string, final = false) {
+  /** 실패로(또는 다시 대기로) 돌리고 이 시도의 키를 비운다. 이 시도가 아직 자기 것이었으면 true */
+  private async fail(
+    job: BulkExport,
+    reason: string,
+    final = false,
+  ): Promise<boolean> {
     const settled = await this.settle(job, {
+      storageKey: null,
       status:
         final || job.attemptCount >= BULK_EXPORT_MAX_ATTEMPTS
           ? 'FAILED'
@@ -648,6 +686,7 @@ export class BulkExportsService {
       this.logger.warn(
         `bulk export FAIL LOST id=${job.bulkExportId} attempt=${job.attemptCount} — 다른 시도가 가져갔다`,
       );
+    return settled;
   }
 
   private async discard(key: string): Promise<void> {
@@ -670,6 +709,13 @@ export class BulkExportsService {
 function storesOf(viewer: Viewer, ids: readonly number[]): ScopeStore[] {
   const wanted = new Set(ids);
   return viewer.stores.filter((s) => wanted.has(s.storeId));
+}
+
+/** 저장소가 요청을 거절했다(4xx — 없는 키 · 권한) — 다시 해도 같다. 기한 · 끊김 · 5xx 는 아니다 */
+function isRejectedByStorage(error: unknown): boolean {
+  const status = (error as { $metadata?: { httpStatusCode?: number } })
+    ?.$metadata?.httpStatusCode;
+  return status !== undefined && status >= 400 && status < 500;
 }
 
 function reasonOf(error: unknown): string {

@@ -679,6 +679,48 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
       });
     });
 
+    it('저장소가 없다고 답한 계약서 파일은 건너뛰고 누락_파일.csv 에 적어 완료한다', async () => {
+      const { bulkExportId } = await prisma.bulkExport.create({
+        data: row(),
+      });
+      storage.get.mockRejectedValueOnce(
+        Object.assign(new Error('NoSuchKey'), {
+          $metadata: { httpStatusCode: 404 },
+        }),
+      );
+      await app.get(BulkExportsService).processPending();
+      expect(
+        await prisma.bulkExport.findUniqueOrThrow({ where: { bulkExportId } }),
+      ).toMatchObject({ status: 'SUCCEEDED', attemptCount: 1 });
+      const [, buffer] = storage.put.mock.calls[0] as [string, Buffer];
+      const files = unzipSync(buffer);
+      expect(Object.keys(files).some((p) => p.includes('근로계약서/'))).toBe(
+        false,
+      );
+      const csv = Buffer.from(files['누락_파일.csv']).toString();
+      expect(csv).toContain(`재직`);
+      expect(csv).toContain(String(contractIds[0]));
+      expect(csv).toContain('날인 완료본');
+    });
+
+    it('올려 둔 키가 있는 채 멈춘 작업은 정리하면서 그 파일을 지운다 — 개인 자료 zip 이 버킷에 남지 않게', async () => {
+      const now = new Date();
+      const storageKey = `bulk-exports/${bpCodeId}/0b8f3c1e-5d2a-4f6b-9c7d-1a2b3c4d5e6f.zip`;
+      const { bulkExportId } = await prisma.bulkExport.create({
+        data: row({
+          status: 'PROCESSING',
+          attemptCount: 2,
+          startedAt: new Date(now.getTime() - 2 * 60 * 60_000),
+          storageKey,
+        }),
+      });
+      await app.get(BulkExportsService).processPending(now);
+      expect(storage.delete).toHaveBeenCalledWith(storageKey);
+      expect(
+        await prisma.bulkExport.findUniqueOrThrow({ where: { bulkExportId } }),
+      ).toMatchObject({ status: 'FAILED', storageKey: null });
+    });
+
     it('요청자가 그 권한 유형 · 범위를 더 이상 관리하지 않으면 다시 시도하지 않고 바로 실패 — 사유는 내려받기에도 그대로', async () => {
       // 가맹마스터가 BP 마스터 범위의 요청자인 행 — 만들 때 다시 보는 권한 확인(requesterStores)이 403 을 낸다
       const { bulkExportId } = await prisma.bulkExport.create({

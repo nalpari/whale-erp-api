@@ -18,6 +18,8 @@ export const DOWNLOAD_URL_SECONDS = 300;
  * 쓰기 트랜잭션(60초) 안에 끝나는 값이다.
  */
 export const PUT_DEADLINE_MS = 25_000;
+/** zip(직원 자료 일괄 저장, 최대 200MB) 올리기의 기한 — 일반 첨부보다 크다. 배치 안이라 쓰기 트랜잭션에 묶이지 않는다 */
+export const ZIP_PUT_DEADLINE_MS = 10 * 60_000;
 
 /**
  * 저장소에 두는 파일 종류. 올린 파일의 종류(FileKind, 내용으로 판정)에 서버가 만든 엑셀(XLSX) · 직원 자료 일괄 저장 zip(ZIP)을
@@ -117,7 +119,12 @@ export class StorageService {
         ? await makeThumbnail(body, option === true ? undefined : option.maxPx)
         : null;
     const thumbKey = thumbnail ? StorageService.thumbnailKey(key) : null;
-    await this.putObject(key, body, CONTENT_TYPES[kind]);
+    await this.putObject(
+      key,
+      body,
+      CONTENT_TYPES[kind],
+      kind === 'ZIP' ? ZIP_PUT_DEADLINE_MS : PUT_DEADLINE_MS,
+    );
     if (!thumbnail || !thumbKey) return;
     try {
       await this.putObject(thumbKey, thumbnail, 'image/jpeg');
@@ -160,7 +167,9 @@ export class StorageService {
       { abortSignal: AbortSignal.timeout(PUT_DEADLINE_MS) },
     );
     if (!Body) throw new Error(`저장소 파일에 내용이 없습니다: ${key}`);
-    return Buffer.from(await Body.transformToByteArray());
+    // 받은 바이트를 복사하지 않고 감싼다 — 일괄 저장이 파일을 모두 메모리에 쥐므로 사본이 두 배로 든다
+    const bytes = await Body.transformToByteArray();
+    return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   }
 
   /** 원본 키를 받아 썸네일의 300초 주소를 준다. PDF 는 null. 목록 · 상세의 작은 미리보기용. 권한을 확인한 뒤 부른다. */
@@ -196,7 +205,12 @@ export class StorageService {
     await this.deleteObject(key);
   }
 
-  private async putObject(key: string, body: Buffer, contentType: string) {
+  private async putObject(
+    key: string,
+    body: Buffer,
+    contentType: string,
+    deadlineMs = PUT_DEADLINE_MS,
+  ) {
     await this.s3.send(
       new PutObjectCommand({
         Bucket: this.bucket,
@@ -204,7 +218,7 @@ export class StorageService {
         Body: body,
         ContentType: contentType,
       }),
-      { abortSignal: AbortSignal.timeout(PUT_DEADLINE_MS) },
+      { abortSignal: AbortSignal.timeout(deadlineMs) },
     );
   }
 

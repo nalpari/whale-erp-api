@@ -127,10 +127,19 @@ describe('archivePlan — zip 구성', () => {
       {
         path: '판교점/유하람_10/근로계약서/100_종이 계약 근로계약서.pdf',
         storageKey: 'contracts/100/a.pdf',
+        missing: [
+          '판교점',
+          10,
+          '유하람',
+          '01012345678',
+          100,
+          '종이 계약 근로계약서',
+        ],
       },
       {
         path: '판교점/유하람_10/근로계약서/100_임금계약서.jpg',
         storageKey: 'contracts/100/b.jpg',
+        missing: ['판교점', 10, '유하람', '01012345678', 100, '임금계약서'],
       },
     ]);
     expect(plan.payslips).toEqual([

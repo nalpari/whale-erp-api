@@ -89,8 +89,16 @@ list. Empty means every store the caller manages.
   A duplicate path gets ` (2)`.
 - **Everything is in memory** (`ponytail:` in `zipArchive`). The upgrade path is fflate's streaming `Zip`
   piped into an S3 multipart upload. Until then `buildArchive` adds up the bytes of fetched contract files and
-  rendered payslip PDFs. Past `BULK_EXPORT_MAX_BYTES` (500 MB) it throws 413, which ends the job at once with
-  「파일이 너무 큽니다. 점포를 나눠 다시 요청해 주세요.」.
+  rendered payslip PDFs. Past `BULK_EXPORT_MAX_BYTES` (200 MB) it throws 413, which ends the job at once with
+  「파일이 너무 큽니다. 점포를 나눠 다시 요청해 주세요.」. `StorageService.get` wraps the fetched bytes without a
+  copy, and the zip upload gets its own `ZIP_PUT_DEADLINE_MS` (10 minutes) instead of the 25-second attachment
+  deadline.
+- **A contract file the store refuses (4xx: missing key, access) is skipped**, so one bad file cannot fail the
+  whole scope forever. It is listed in `누락_파일.csv` at the zip root (staff, contract id, file kind). Timeouts,
+  dropped connections and 5xx still throw and retry.
+- **The key is written to the row before the upload.** If the server dies between upload and the final update,
+  stuck-job recovery (after it wins the row) or `fail()` deletes that key and clears `storage_key`, so a zip of
+  personal data does not stay in the bucket.
 - **The failure reason is shown on screen**, so it holds only messages we raised (`HttpException`). Any other
   error (DB, S3, a stuck job) is stored as 「일괄 저장 파일을 만들지 못했습니다. 다시 요청해 주세요.」 and
   the original goes to the log only.

@@ -8,7 +8,7 @@ import { safeName } from './bulk-export-policy';
 // 여기서 정하고(archivePlan), 저장소 파일 읽기 · 급여명세서 PDF 그리기는 서비스가 한다. 직원은 이름 · 휴대전화번호까지만 담는다 —
 // 주민등록번호 · 신고 정보 · 확인자료 · 동의 기록은 입력에 없다.
 
-type Cell = string | number | null;
+export type Cell = string | number | null;
 
 export interface ArchiveInput {
   storeNames: ReadonlyMap<number, string>;
@@ -73,7 +73,8 @@ export interface ArchivePlan {
   /** 맨 위 CSV — 이름 → 내용 */
   csv: Map<string, Buffer>;
   /** 저장소에서 읽어 넣을 근로계약서 파일 */
-  files: { path: string; storageKey: string }[];
+  /** 계약서 파일 — missing 은 못 읽었을 때 누락_파일.csv 에 적는 줄(직원 · 계약 ID · 파일 구분) */
+  files: { path: string; storageKey: string; missing: Cell[] }[];
   /** 그려 넣을 급여명세서 PDF */
   payslips: { path: string; payslipId: number; staffName: string }[];
 }
@@ -263,6 +264,11 @@ export function archivePlan(input: ArchiveInput): ArchivePlan {
         `${folder(c.staffMemberId)}/근로계약서/${c.contractId}_${label('ContractDocumentKind', d.kind)}.${d.storageKey.split('.').pop()}`,
       ),
       storageKey: d.storageKey,
+      missing: [
+        ...who(c.staffMemberId),
+        c.contractId,
+        label('ContractDocumentKind', d.kind),
+      ],
     })),
   );
   const payslips = input.payslips.map((p) => {
@@ -277,6 +283,11 @@ export function archivePlan(input: ArchiveInput): ArchivePlan {
   });
   return { csv, files, payslips };
 }
+
+/** 저장소에서 못 읽어 건너뛴 계약서 파일 목록 — 있을 때만 zip 맨 위에 넣는다 */
+export const MISSING_CSV = '누락_파일.csv';
+export const missingCsv = (rows: Cell[][]) =>
+  toCsv([...STAFF_HEADER, '계약 ID', '파일 구분'], rows);
 
 /**
  * zip 하나로 묶는다. PDF · 이미지는 이미 압축된 형식이라 그대로 넣고(level 0), CSV 는 압축한다.

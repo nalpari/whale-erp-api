@@ -14,7 +14,7 @@ export const BULK_EXPORT_MAX_ATTEMPTS = 2;
  * 한 파일에 담는 계약서 파일 · 명세서 PDF 의 합 상한. zip 을 메모리에 한 번에 만들어서(zipArchive 의 ponytail) 넘으면 힙이 모자란다.
  * 넘으면 다시 해도 같으므로 바로 실패로 끝내고 점포를 나눠 다시 요청하게 한다.
  */
-export const BULK_EXPORT_MAX_BYTES = 500 * 1024 * 1024;
+export const BULK_EXPORT_MAX_BYTES = 200 * 1024 * 1024;
 export const TOO_LARGE_MESSAGE =
   '파일이 너무 큽니다. 점포를 나눠 다시 요청해 주세요.';
 /** 퇴직자는 퇴직일 다음 날부터 3년이 지나지 않은 사람까지 담는다(2026-10-29 재영) */
