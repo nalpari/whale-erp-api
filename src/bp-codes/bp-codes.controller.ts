@@ -46,7 +46,7 @@ export class BpCodesController {
 
   /**
    * 플랫폼 계정이 고를 고객 BP — 서비스 바로가기 「웨일ERP」의 BP 선택. 미삭제 고객 BP 를 사용 · 미사용 · 탈퇴 모두
-   * BP코드순으로 나눠 준다. 사용 중인 플랫폼 관리자(PM · PA)만 부르고, 그 밖의 관리자 · 직원 앱은 403.
+   * 최신 등록순으로 나눠 준다. withMaster 면 BP 마스터 계정이 있는 BP 만(BP 마스터 계정 목록과 같은 범위 · 순서). 사용 중인 플랫폼 관리자(PM · PA)만 부르고, 그 밖의 관리자 · 직원 앱은 403.
    */
   @ApiForbiddenResponse({
     description:
