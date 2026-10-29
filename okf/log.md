@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Admin signup](/api/admin-signup.md) — api #189 review-pr 반영: 영문만인 아이디(`abcd` 등)를 받는 단위 테스트를 더했다. 아이디 형식 문구 「영문 또는 영문·숫자 조합」이 기대는 동작이라, 정규식이 숫자를 요구하게 바뀌면 실패한다. 동작 변화 없음.
 * **Update**: main 병합(api grovyle, main #179 · #186 까지): okf/log · [Admin auth](/api/admin-auth.md) 충돌은 양쪽 기록을 살리고 시각은 늦은 값을 남겼다. #179 가 관리자 로그인 문구에 마침표를 붙여, 아래 「로그인 화면 오류 문구는 모두 마침표」가 코드와 맞는다.
 * **Update**: main 병합(api grovyle, origin/main 최신): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Admin signup](/api/admin-signup.md) — 회원가입 · 아이디 중복 확인의 아이디 형식 400 문구를 「영문 또는 영문·숫자 조합으로 4~20자로 입력해 주세요.」로 바꿨다(재영 결정). 영문만으로 된 아이디도 되는데 「영문·숫자 조합」이라 숫자를 꼭 섞어야 하는 것처럼 읽혔다. 두 DTO 가 같은 문구인지 단위 테스트가 고정한다.
