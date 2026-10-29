@@ -6,6 +6,10 @@ import { LOCATION_CONSENT_STATE_LABELS } from '../my-profile/location-consent-st
 import { PERIOD_STATE_LABELS } from '../bp-holidays/store-periods';
 import { ATTENDANCE_DAY_STATUS_LABELS } from '../attendance/attendance-day-status';
 import { STAFF_JOIN_STATE_LABELS } from '../staff-members/join-state';
+import {
+  STAFF_SEND_KIND_LABELS,
+  STAFF_SEND_RESULT_LABELS,
+} from '../staff-members/send-logs';
 import { HQ_SHARING_CONSENT_STATE_LABELS } from '../admin-scope/hq-sharing';
 import {
   IDENTITY_FIELD_LABELS,
@@ -27,6 +31,9 @@ export const API_ENUMS: EnumSource = {
   StaffJoinState: Object.entries(STAFF_JOIN_STATE_LABELS),
   /** 직원 상세의 본사 제공 동의 상태 — 가맹 점포 직원만 (WHALEERP-184) */
   HqSharingConsentState: Object.entries(HQ_SHARING_CONSENT_STATE_LABELS),
+  /** 직원 상세 발송 이력의 종류 · 결과 (WHALEERP-136) */
+  StaffSendKind: Object.entries(STAFF_SEND_KIND_LABELS),
+  StaffSendResult: Object.entries(STAFF_SEND_RESULT_LABELS),
   /** 커뮤니티 관리 문의사항 · 도입문의 목록의 답변 상태 거르기 (WHALEERP-332) */
   InquiryAnswerStatus: Object.entries(ANSWER_STATUS_LABELS),
   /** 점포를 운영으로 바꾸는 데 모자란 것 — 점포 상세 · 전환 확인의 missingForOperation (MN000002) */

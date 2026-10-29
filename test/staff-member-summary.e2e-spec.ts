@@ -16,6 +16,7 @@ import type { StaffMemberDetailResponseDto } from '../src/staff-members/dto/staf
 import type {
   StaffMemberContractSummaryResponseDto,
   StaffMemberPayslipSummaryResponseDto,
+  StaffMemberSendLogResponseDto,
   StaffMemberTodoSummaryResponseDto,
   StaffMemberWeekScheduleResponseDto,
 } from '../src/staff-members/dto/staff-member-summary.response.dto';
@@ -257,6 +258,32 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         contractParty: { create: { enteredBirthDate: new Date('2001-05-05') } },
       },
     });
+    // 발송 이력 — 가입 전 직원의 계약에 나간 가입 초대 알림톡(성공 → 거절 → 성공)과, 이력에 들지 않는 다른 알림톡 하나
+    const sendLog = (
+      minute: number,
+      templateCode: string,
+      result: 'SUCCEEDED' | 'FAILED',
+      failureReason: string | null = null,
+    ) => ({
+      templateCode,
+      kakaoTemplateCode: 'E2E',
+      toPhone: '01000000000',
+      relatedType: 'contract',
+      relatedId: draftContract.contractId,
+      body: '-',
+      result,
+      failureReason,
+      referenceKey: `e2e${n}${minute}`,
+      sentAt: new Date(Date.UTC(2026, 9, 1, 0, minute)),
+    });
+    await prisma.alimtalkSendLog.createMany({
+      data: [
+        sendLog(1, 'TALK_STAFF_INVITATION', 'SUCCEEDED'),
+        sendLog(2, 'TALK_STAFF_INVITATION', 'FAILED', 'code=3018 http=200: x'),
+        sendLog(3, 'TALK_CONTRACT_REMINDER', 'SUCCEEDED'),
+        sendLog(4, 'TALK_STAFF_INVITATION', 'SUCCEEDED'),
+      ],
+    });
     // 더 새 임시저장 계약은 생년월일이 없다 — 예전 계약에 적은 값이 그대로 보여야 한다
     await prisma.contract.create({
       data: {
@@ -484,6 +511,15 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     await prisma.payslipItem.deleteMany({ where: { payslip: byStaff } });
     await prisma.payslip.deleteMany({ where: byStaff });
     await prisma.workSchedule.deleteMany({ where: byStaff });
+    const contractIds = (
+      await prisma.contract.findMany({
+        where: byStaff,
+        select: { contractId: true },
+      })
+    ).map((c) => c.contractId);
+    await prisma.alimtalkSendLog.deleteMany({
+      where: { relatedType: 'contract', relatedId: { in: contractIds } },
+    });
     await prisma.contractParty.deleteMany({ where: { contract: byStaff } });
     await prisma.contract.deleteMany({ where: byStaff });
     await prisma.staffTaxProfile.deleteMany({ where: byStaff });
@@ -526,7 +562,13 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     request(app.getHttpServer())
       .get(path)
       .set('Authorization', `Bearer ${await tokenOf(sub)}`);
-  const AREAS = ['contracts', 'work-schedules', 'payslips', 'todos'];
+  const AREAS = [
+    'contracts',
+    'work-schedules',
+    'payslips',
+    'todos',
+    'send-logs',
+  ];
 
   it('본사 제공 동의 상태 — 직영 점포 직원은 null, 가맹 점포는 동의 · 미동의(가입 전은 미동의)', async () => {
     const direct = await get(`/staff-members/${jianId}`);
@@ -667,6 +709,30 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     );
     expect(outOfScope.status).toBe(404);
     expect(JSON.stringify(outOfScope.body)).not.toContain('55556666777788');
+  });
+
+  it('발송 이력 — 그 직원 계약의 가입 초대 알림톡만 최근 순, 재발송 · 실패 사유 · 재시도 가능 여부', async () => {
+    const res = await get(`/staff-members/${draftId}/summary/send-logs`);
+    expect(res.status).toBe(200);
+    const { items } = res.body as StaffMemberSendLogResponseDto;
+    expect(
+      items.map((i) => [i.kind, i.isResend, i.result, i.retryable]),
+    ).toEqual([
+      ['SIGNUP_INVITE', true, 'SUCCEEDED', null],
+      ['SIGNUP_INVITE', true, 'FAILED', true],
+      ['SIGNUP_INVITE', false, 'SUCCEEDED', null],
+    ]);
+    expect(items[1].failureReason).toContain('코드 3018');
+    expect(
+      (
+        (await get(`/staff-members/${jianId}/summary/send-logs`))
+          .body as StaffMemberSendLogResponseDto
+      ).items,
+    ).toEqual([]);
+    expect(
+      (await get(`/staff-members/${draftId}/summary/send-logs`, staffOnlyId))
+        .status,
+    ).toBe(403);
   });
 
   it('근무스케줄 — 이번 주만, 지운 것 빼고, 주간 합계', async () => {

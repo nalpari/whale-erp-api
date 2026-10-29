@@ -25,6 +25,7 @@ import {
   StaffMemberPayrollAccountDto,
   StaffMemberPayslipSummaryResponseDto,
   StaffMemberRecentPayslipDto,
+  StaffMemberSendLogResponseDto,
   StaffMemberTodoSummaryResponseDto,
   StaffMemberWeekScheduleResponseDto,
 } from './dto/staff-member-summary.response.dto';
@@ -33,6 +34,8 @@ import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
 // 갱신 예정일 — 근로계약 목록과 같은 규칙(종료일 30일 전, 갱신 예정 알림 배치와 같은 날수)
 import { renewalDateOf } from '../contracts/contract-renewal';
 import { NOT_IDLE_RENEWAL } from '../contracts/signed-contract';
+import { CONTRACT_RELATED_TYPE } from '../contracts/contract-send-log';
+import { SEND_KIND_OF_TEMPLATE, toSendLogs } from './send-logs';
 
 /** TO-DO 최근 처리 이력 건수 */
 const RECENT_TODO_HISTORIES = 5;
@@ -76,7 +79,7 @@ const toRecentPayslip = (p: PayslipRow): StaffMemberRecentPayslipDto => {
 };
 
 /**
- * 직원 상세 요약(WHALEERP-183)의 영역들 — 근로계약 · 근무스케줄 · 급여명세서 · TO-DO. 영역마다 경로가 따로라 한 영역이
+ * 직원 상세 요약(WHALEERP-183)의 영역들 — 근로계약 · 근무스케줄 · 급여명세서 · TO-DO · 발송 이력(WHALEERP-136). 영역마다 경로가 따로라 한 영역이
  * 실패해도 나머지는 그대로 온다. 경로는 직원 정보 관리 조회 권한(컨트롤러)을 거치고, 여기서 그 영역 메뉴의 조회 권한을
  * 다시 본다 — 없으면 그 영역만 403(2026-10-21 노영주). 권한을 범위보다 먼저 봐서 권한이 없으면 어떤 ID 든 같은 403 이다.
  * 범위는 직원 상세와 같다(canManageStaffMember) — 없는 직원 · 관리 범위 밖 · 가려지는 직원은 같은 404.
@@ -342,6 +345,40 @@ export class StaffMemberSummaryService {
         changedAt: h.changedAt,
       })),
     };
+  }
+
+  /**
+   * 발송 이력(WHALEERP-136) — 이 직원 레코드의 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡, 최근 순. 따로 쌓지 않고
+   * 알림톡 발송 이력(alimtalk_send_logs, 관련 업무 = 계약)에서 읽는다. 근로계약 관리 조회 권한(근로계약 영역과 같다)
+   */
+  async sendLogs(
+    adminAccountId: number,
+    staffMemberId: number,
+  ): Promise<StaffMemberSendLogResponseDto> {
+    await this.check(adminAccountId, staffMemberId, '/contracts');
+    const contracts = await this.prisma.contract.findMany({
+      where: { staffMemberId },
+      select: { contractId: true },
+    });
+    if (!contracts.length) return { items: [] };
+    const rows = await this.prisma.alimtalkSendLog.findMany({
+      where: {
+        relatedType: CONTRACT_RELATED_TYPE,
+        relatedId: { in: contracts.map((c) => c.contractId) },
+        templateCode: { in: Object.keys(SEND_KIND_OF_TEMPLATE) },
+      },
+      // 재발송 판정이 오래된 순으로 본다 — toSendLogs 가 최근 순으로 뒤집는다
+      orderBy: { alimtalkSendLogId: 'asc' },
+      select: {
+        alimtalkSendLogId: true,
+        templateCode: true,
+        relatedId: true,
+        result: true,
+        failureReason: true,
+        sentAt: true,
+      },
+    });
+    return { items: toSendLogs(rows) };
   }
 
   /** 그 영역 메뉴의 조회 권한(없으면 403) → 직원 범위(없으면 404) 순이다 */

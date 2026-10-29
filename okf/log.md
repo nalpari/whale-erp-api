@@ -1,6 +1,11 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: main 병합(api doduo, main #209 까지): okf 충돌은 양쪽 기록을 살렸다.
+* **Update**: main 병합(api doduo, main #202 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Staff members](/api/staff-members.md) · [Alimtalk](/api/alimtalk.md) — api #208 판정 커밋 재리뷰: 단계를 모르는 실패는 `path=unknown` 으로 남겨 발송 이력에서 접수 여부 모름으로 읽는다(`local` · 보내기 전 실패로 보던 것을 걷음). 단계 이름 `TOKEN_PATH` · `MESSAGE_PATH` 를 import 없는 `failure-reason.ts` 하나에 두고 클라이언트도 쓴다. 비즈뿌리오 200 응답 본문이 `null` 이면 `returned no body`(단계 포함)로 던진다. `path=undefined` 옛 행은 칸이 없는 것처럼 본다.
+* **Update**: [Staff members](/api/staff-members.md) · [Alimtalk](/api/alimtalk.md) — api #208 code-review: 알림톡 실패 사유 머리에 실패 단계 `path=` 를 더해(`failure-reason.ts`) 발송 이력이 메시지 글자 대신 단계로 실패 갈래를 되읽는다. 발송(dispatch)과 발송 이력이 같은 갈래 `sendFailureKindOf`(`contracts/contract-send-log.ts`, 의존 없는 모듈로 템플릿 이름 · 관련 업무 유형과 함께 옮김)를 쓴다. 재발송은 직원이 받은 기준이라 `resend_count` 와 다를 수 있다고 고쳐 적었다.
+* **Update**: [Staff members](/api/staff-members.md) — 직원 상세 발송 이력 영역 `GET /staff-members/:id/summary/send-logs`(WHALEERP-136). 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡을 알림톡 발송 이력에서 읽어 종류 · 재발송 · 결과 · 실패 사유 · 재시도 가능 여부로 낸다. API 전용 enum `StaffSendKind` · `StaffSendResult` 추가, 실패 판정 `sendFailureOf` 를 [근로계약 발송](/api/contracts-api.md) 옆에 두었다. 마이그레이션 없음.
 * **Update**: [Auth](/api/auth.md) · [Contracts API](/api/contracts-api.md) — api #209 code-review: `canManageStaffAccount` JSDoc 에 세 번째 쓰임(근로계약 상세 신고 정보)과 직원 레코드 점포 기준을 적었다 — 재설정 링크 정책만 바꾸려면 나눠야 두 신고 정보 화면이 함께 열리지 않는다. 코드 동작 변경 없음.
 * **Update**: [Contracts API](/api/contracts-api.md) — 근로계약 상세(`GET /contracts/:contractId`)에 `taxProfile`(직원 신고 정보: 가린 주민번호 · 은행 이름 · 계좌번호 전체, 상태 `OK` · `NONE` · `HIDDEN` · `UNAVAILABLE`) 추가(WHALEERP-155 · 326, 2026-10-29 김민식). 본사 역할 + 가맹 점포 직원은 `canManageStaffAccount` 로 읽지 않고 HIDDEN, 키 없음 · 복호화 실패는 상세 200 에 이 칸만 UNAVAILABLE. 은행 이름 조회를 `bankNameOf`(`src/common/bank-name.ts`)로 꺼내 [Staff members](/api/staff-members.md) 직원 상세 요약도 같이 쓴다(동작 같음). `ContractsModule` 에 `personalDataKeyProvider`. 단위 · e2e(직원 상세 요약 픽스처로 BM · FM · 미입력 · 복호화 실패). 마이그레이션 없음.
 * **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인 잠김 429 문구를 「로그인이 잠겼습니다. 5분 뒤에 다시 시도해 주세요.」로 띄웠다(사용자 지정 2026-10-29 — 「…해주세요」는 「…해 주세요」). api 화면 문구에서 붙여 쓴 곳은 이 하나였다. 단위 테스트 기대값도 맞췄다.
