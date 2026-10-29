@@ -4,16 +4,24 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { randomBytes } from 'node:crypto';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { READ_DENIED_MESSAGE } from '../auth/access-messages';
+import {
+  encryptPersonalData,
+  staffTaxProfileAad,
+} from '../common/personal-data-cipher';
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { StaffMemberSummaryService } from './staff-member-summary.service';
 
 const date = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
 // 2026-10-21(수) 한국 시각 오전 — UTC 로는 전날 밤이라 한국 날짜로 정하는지 함께 본다
 const NOW = new Date('2026-10-20T23:30:00Z');
+const KEY = randomBytes(32);
 
 describe('StaffMemberSummaryService', () => {
   let service: StaffMemberSummaryService;
@@ -22,6 +30,8 @@ describe('StaffMemberSummaryService', () => {
     adminAccount: { findFirst: jest.Mock };
     roleGroupMenu: { count: jest.Mock };
     contract: { findFirst: jest.Mock };
+    staffTaxProfile: { findUnique: jest.Mock };
+    codeItem: { findFirst: jest.Mock };
     workSchedule: { findMany: jest.Mock };
     store: { findMany: jest.Mock };
     payslip: { findMany: jest.Mock; count: jest.Mock };
@@ -29,6 +39,9 @@ describe('StaffMemberSummaryService', () => {
     menu: { count: jest.Mock };
     todoStatusHistory: { findMany: jest.Mock };
   };
+
+  // Logger spy 가 실패한 테스트에서도 다음 테스트로 새지 않게
+  afterEach(() => jest.restoreAllMocks());
 
   beforeEach(async () => {
     scope = { canManageStaffMember: jest.fn().mockResolvedValue(true) };
@@ -38,6 +51,8 @@ describe('StaffMemberSummaryService', () => {
       },
       roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
       contract: { findFirst: jest.fn().mockResolvedValue(null) },
+      staffTaxProfile: { findUnique: jest.fn().mockResolvedValue(null) },
+      codeItem: { findFirst: jest.fn().mockResolvedValue(null) },
       workSchedule: { findMany: jest.fn().mockResolvedValue([]) },
       store: { findMany: jest.fn().mockResolvedValue([]) },
       payslip: {
@@ -53,6 +68,7 @@ describe('StaffMemberSummaryService', () => {
         StaffMemberSummaryService,
         { provide: PrismaService, useValue: prisma },
         { provide: AdminScopeService, useValue: scope },
+        { provide: PERSONAL_DATA_KEY, useValue: KEY },
       ],
     }).compile();
     service = module.get(StaffMemberSummaryService);
@@ -131,7 +147,6 @@ describe('StaffMemberSummaryService', () => {
         where: { url: '/payslips', isDeleted: false, status: 'ACTIVE' },
       });
       expect(error).toHaveBeenCalledWith(expect.stringContaining('/payslips'));
-      error.mockRestore();
     });
 
     it('메뉴는 있고 권한만 없으면 로그를 남기지 않는다', async () => {
@@ -141,7 +156,6 @@ describe('StaffMemberSummaryService', () => {
       prisma.roleGroupMenu.count.mockResolvedValue(0);
       await expect(service.payslips(9, 30)).rejects.toThrow(ForbiddenException);
       expect(error).not.toHaveBeenCalled();
-      error.mockRestore();
     });
 
     it('사용 중인 관리자 계정이 아니면 권한이 없는 것과 같은 403', async () => {
@@ -165,6 +179,124 @@ describe('StaffMemberSummaryService', () => {
     it('계약이 없으면 null', async () => {
       await expect(service.contract(9, 30, NOW)).resolves.toEqual({
         contract: null,
+        payrollAccount: null,
+      });
+    });
+
+    describe('payrollAccount — 신고 정보의 급여 계좌', () => {
+      const sealed = (plain: string, staffId = 30, key = KEY) =>
+        encryptPersonalData(
+          key,
+          plain,
+          staffTaxProfileAad('payroll_account_number_encrypted', staffId),
+        );
+      const profile = (over: object = {}) => ({
+        bankCode: 'B004',
+        payrollAccountNumberEncrypted: sealed('12345678901234'),
+        ...over,
+      });
+
+      it('신고 정보가 있으면 은행 이름 · 계좌번호 전체(가리지 않음) — 계약이 없어도', async () => {
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+        prisma.codeItem.findFirst.mockResolvedValue({ label: 'KB국민은행' });
+        await expect(service.contract(9, 30, NOW)).resolves.toEqual({
+          contract: null,
+          payrollAccount: {
+            bankName: 'KB국민은행',
+            accountNumber: '12345678901234',
+          },
+        });
+        expect(firstArg(prisma.staffTaxProfile.findUnique)).toMatchObject({
+          where: { staffMemberId: 30 },
+        });
+        expect(firstArg(prisma.codeItem.findFirst)).toMatchObject({
+          where: { groupCode: 'BANK', itemCode: 'B004' },
+          // 플랫폼 원본(BP000000, PLATFORM_BP_CODE)이 가장 작은 BP 코드라 먼저 온다는 가정
+          orderBy: { bpCode: 'asc' },
+        });
+      });
+
+      it('계약이 있어도 같이 온다', async () => {
+        prisma.contract.findFirst.mockResolvedValue({
+          contractId: 70,
+          employmentType: 'FULL_TIME',
+          contractMethod: 'ELECTRONIC',
+          status: 'SIGNED',
+          startDate: date('2026-03-01'),
+          endDate: null,
+          sentAt: null,
+        });
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+        prisma.codeItem.findFirst.mockResolvedValue({ label: 'KB국민은행' });
+        const res = await service.contract(9, 30, NOW);
+        expect(res.contract?.contractId).toBe(70);
+        expect(res.payrollAccount).toEqual({
+          bankName: 'KB국민은행',
+          accountNumber: '12345678901234',
+        });
+      });
+
+      it('신고 정보가 없으면 null — 계약이 있어도', async () => {
+        prisma.contract.findFirst.mockResolvedValue({
+          contractId: 70,
+          employmentType: null,
+          contractMethod: null,
+          status: null,
+          startDate: null,
+          endDate: null,
+          sentAt: null,
+        });
+        const res = await service.contract(9, 30, NOW);
+        expect(res.payrollAccount).toBeNull();
+        expect(prisma.codeItem.findFirst).not.toHaveBeenCalled();
+      });
+
+      it('은행 코드가 공통코드에 없으면 코드를 그대로 준다', async () => {
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(
+          profile({ bankCode: 'B999' }),
+        );
+        const res = await service.contract(9, 30, NOW);
+        expect(res.payrollAccount).toEqual({
+          bankName: 'B999',
+          accountNumber: '12345678901234',
+        });
+      });
+
+      it('풀 수 없으면(다른 직원 암호문) 500 — 계좌번호는 오류 · 로그에 남지 않는다', async () => {
+        const errors = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation();
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(
+          profile({
+            payrollAccountNumberEncrypted: sealed('99998888777766', 31),
+          }),
+        );
+        const err = await service.contract(9, 30, NOW).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(InternalServerErrorException);
+        expect(
+          JSON.stringify([(err as Error).message, errors.mock.calls]),
+        ).not.toMatch(/99998888777766|12345678901234/);
+      });
+
+      it('키가 비어 있으면 503 — 신고 정보가 있을 때만', async () => {
+        const keyless = await Test.createTestingModule({
+          providers: [
+            StaffMemberSummaryService,
+            { provide: PrismaService, useValue: prisma },
+            { provide: AdminScopeService, useValue: scope },
+            { provide: PERSONAL_DATA_KEY, useValue: null },
+          ],
+        }).compile();
+        const svc = keyless.get(StaffMemberSummaryService);
+        await expect(svc.contract(9, 30, NOW)).resolves.toEqual({
+          contract: null,
+          payrollAccount: null,
+        });
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+        jest.spyOn(Logger.prototype, 'error').mockImplementation();
+        await expect(svc.contract(9, 30, NOW)).rejects.toBeInstanceOf(
+          ServiceUnavailableException,
+        );
       });
     });
 
@@ -182,6 +314,7 @@ describe('StaffMemberSummaryService', () => {
     it('유형 · 기간 · 상태 · 최근 발송일 · 갱신 예정일(종료일 30일 전)', async () => {
       prisma.contract.findFirst.mockResolvedValue(contract());
       await expect(service.contract(9, 30, NOW)).resolves.toEqual({
+        payrollAccount: null,
         contract: {
           contractId: 70,
           employmentType: 'FULL_TIME',

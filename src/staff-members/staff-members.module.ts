@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AdminScopeModule } from '../admin-scope/admin-scope.module';
+import { personalDataKeyProvider } from '../common/personal-data-key.provider';
 import { BatchModule } from '../batch/batch.module';
 import { RetirementController } from './retirement.controller';
 import { RetirementScheduler } from './retirement.scheduler';
@@ -23,6 +24,7 @@ import { StaffMembersController } from './staff-members.controller';
     StaffBirthDateController,
   ],
   providers: [
+    personalDataKeyProvider,
     RetirementService,
     RetirementScheduler,
     StaffBirthDateService,
