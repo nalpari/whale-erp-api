@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-29
+* **Update**: [Admin auth](/api/admin-auth.md) — 임시 비밀번호 발급 1시간 5회 초과 429 문구 끝에 마침표를 붙였다(「임시 비밀번호는 1시간에 5번까지 받을 수 있습니다.」, 재영 결정 — 찾기 · 로그인 화면 오류 문구는 모두 마침표로 끝낸다). 단위 테스트 기대값도 맞췄다.
+
 ## 2026-10-28
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — api #164 리뷰 참고: 거절한 소속 추가 확인 요청의 계약도 재발송으로 발송 대기 · 새 요청(e2e), 요청 · 계정 초대 확인의 고용 형태 · 직무가 계약 값인지(e2e · 단위). 한 번 거절한 직원은 뒤 요청이 만료돼도 직원 목록에서 다시 보내지 않는다 — 근로계약 상세에서 보낸다(의도).
 * **Update**: main 병합(api #164, WHALEERP-130) — #157 · #158 머지 반영. 재발송은 거부 · 만료(#158)와 소속 추가 확인 요청(#164)을 함께 받는다 — 계정이 있는 번호의 거부 · 만료는 발송 대기로 되살리고 새 요청을 보낸다. SEND_CHANNEL_NOT_READY 없음. 직원 목록 재발송은 발송 대기 · 서명 대기만(INVITE_RESENDABLE), canResendContract 는 없앰.
