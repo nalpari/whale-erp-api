@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T06:10:30Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:13:28Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -922,7 +922,9 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   `sentAt` (differs → 409 `CONTRACT_RESENT`, the 관리자 fixed and re-sent meanwhile) · **본인 대조**
   (`identity-match.ts`): 이름 (spaces removed, upper-cased), 휴대전화번호 (digits), 생년월일, 성별, 외국인
   여부 of the contract party against the account — any difference is 409 `IDENTITY_MISMATCH` with
-  `mismatches` and the 직원 sends a 수정 요청. An empty contract value is a mismatch, and so is an empty
+  `mismatches` and the 직원 sends a 수정 요청. The items' Korean names come from `GET /enums` →
+  `IdentityField` (`IDENTITY_FIELD_LABELS`, registered in `API_ENUMS` for the 직원 앱 날인 화면,
+  WHALEERP-147). An empty contract value is a mismatch, and so is an empty
   account 성별 — signup requires 성별 (api #107, 운영 정책 ACC-23 · JOI-10, 2026-10-21 재영), so all five are
   always compared. An account made before that (signup with 성별 optional, migration
   `20261021103042_team3_staff_signup` added the column with no default) has none and **cannot sign** — there
