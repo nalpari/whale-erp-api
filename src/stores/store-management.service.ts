@@ -89,7 +89,7 @@ const CHANGED_MEANWHILE =
   '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요';
 const BP_INACTIVE =
   '소속 BP가 미사용 상태여서 이 업무를 할 수 없습니다. 조회는 그대로 됩니다';
-/** 번호를 쓰는 것이 점포인지 BP 인지 드러내지 않는다 — 가입 · MY PAGE 와 같은 문구(PL-OCJOFP). */
+/** 번호를 쓰는 것이 점포인지 BP 인지 드러내지 않는다 — 가입 · 마이페이지와 같은 문구(PL-OCJOFP). */
 const NUMBER_TAKEN = '이미 등록된 사업자등록번호입니다.';
 
 /**
@@ -1194,7 +1194,7 @@ export class StoreManagementService implements OnModuleInit {
   /**
    * 이 번호를 미운영 · 운영 점포(지우지 않은)나 소속 BP 가 아닌 다른 고객 BP(사용 · 미사용)가 쓰는가. 폐점 ·
    * 삭제한 점포와 탈퇴 · 삭제한 BP 의 번호는 다시 쓸 수 있고, 소속 BP 의 번호는 점포도 쓸 수 있다(PL-OCJOFP).
-   * BP 조건은 가입 · MY PAGE 의 BusinessVerificationService.isBizRegistrationNumberTaken 과 같다.
+   * BP 조건은 가입 · 마이페이지의 BusinessVerificationService.isBizRegistrationNumberTaken 과 같다.
    */
   private async isNumberTaken(
     db: Tx | PrismaService,

@@ -150,7 +150,7 @@ describe('BpProfileService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    // 국세청 키 · 하루 할당량을 가입 · 점포 · MY PAGE 가 함께 쓴다 — StoreManagementService
+    // 국세청 키 · 하루 할당량을 가입 · 점포 · 마이페이지가 함께 쓴다 — StoreManagementService
     // .countNtsCall 과 같은 한도를 관리자별로 따로 센다(store-management.service.spec.ts
     // '국세청 호출 한도'와 같은 모양).
     describe('국세청 호출 한도', () => {

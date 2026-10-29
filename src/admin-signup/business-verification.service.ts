@@ -51,7 +51,7 @@ export class BusinessVerificationService {
    * .isNumberTaken)과 같다 — 다르면 점포에서는 다시 쓰는 번호가 가입에서만 막힌다. 플랫폼 BP 는 bp_codes 부분
    * 고유 인덱스처럼 뺀다. 가입은 트랜잭션 안에서 한 번 더 부르려고 db 를 받는다.
    * excludeBpCodeId — 재인증(이미 그 번호를 쓰고 있는 자기 자신)을 중복으로 보지 않는다. 그 BP 소속 점포의
-   * 번호도 BP 가 쓸 수 있어 점포 조건에서 뺀다(PL-OCJOFP). MY PAGE BP 사업자정보 재인증(BpProfileService)만
+   * 번호도 BP 가 쓸 수 있어 점포 조건에서 뺀다(PL-OCJOFP). 마이페이지 BP 사업자정보 재인증(BpProfileService)만
    * 쓴다 — 가입은 BP 가 아직 없어 소속 점포도 없다.
    */
   async isBizRegistrationNumberTaken(
@@ -121,7 +121,7 @@ export class BusinessVerificationService {
     return this.jwt.signAsync(payload, { expiresIn: '10m' });
   }
 
-  /** 받은 토큰을 푼다 — 가입과 MY PAGE BP 사업자정보 저장(BpProfileService.update)이 함께 쓴다.
+  /** 받은 토큰을 푼다 — 가입과 마이페이지 BP 사업자정보 저장(BpProfileService.update)이 함께 쓴다.
    * 서명 · 만료 · 용도 중 하나라도 틀리면 다시 인증하라고 한다. 흔한 「시간
    * 지남(TokenExpiredError)」은 로그에 남기지 않는다 — 다른 실패(서명 불일치 등)는 비밀키 교체 같은
    * 배포 문제를 가리킬 수 있어 원인만 남긴다(토큰 안 값은 남기지 않는다, 코드 리뷰로 찾음, 2026-10-22). */

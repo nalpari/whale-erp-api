@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Public 약관 API](/api/terms-versions.md) · [Admin auth](/api/admin-auth.md) · [Admin signup](/api/admin-signup.md) · [BP masters](/api/bp-masters.md) · [Platform admins](/api/platform-admins.md) · [Store management](/api/stores.md) — 「MY PAGE」를 「마이페이지」로 바꿨다(사용자 결정 — 화면 이름이 「마이페이지」). 약관 본문은 새 마이그레이션 `20261029114945_team1_terms_mypage_label` 이 v1.0 행을 그 자리에서 고친다(`TERMS_SERVICE` 제12조 · `PRIVACY_COLLECT`, 새 버전 없음 — 출시 전 초안). src · test 주석과 Swagger 설명(openapi.json 다시 생성), okf 본문도 맞췄다. 코드 동작 변화는 없고, 약관 두 건의 본문(공개 약관 API 응답)만 바뀐다.
 * **Update**: [Admin signup](/api/admin-signup.md) — api #189 review-pr 반영: 영문만인 아이디(`abcd` 등)를 받는 단위 테스트를 더했다. 아이디 형식 문구 「영문 또는 영문·숫자 조합」이 기대는 동작이라, 정규식이 숫자를 요구하게 바뀌면 실패한다. 동작 변화 없음.
 * **Update**: main 병합(api grovyle, main #179 · #186 까지): okf/log · [Admin auth](/api/admin-auth.md) 충돌은 양쪽 기록을 살리고 시각은 늦은 값을 남겼다. #179 가 관리자 로그인 문구에 마침표를 붙여, 아래 「로그인 화면 오류 문구는 모두 마침표」가 코드와 맞는다.
 * **Update**: main 병합(api grovyle, origin/main 최신): okf/log 충돌은 양쪽 기록을 살렸다.
