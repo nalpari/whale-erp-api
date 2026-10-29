@@ -10,6 +10,7 @@ import {
   ApiBearerAuth,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
@@ -50,8 +51,11 @@ const idOf = (raw: string): number => {
 export class StaffMemberSummaryController {
   constructor(private readonly summary: StaffMemberSummaryService) {}
 
-  /** 근로계약 영역 — 가장 최근 계약의 유형 · 기간 · 상태 · 최근 발송일 · 갱신 예정일. 근로계약 관리 조회 권한 */
+  /** 근로계약 영역 — 가장 최근 계약의 유형 · 기간 · 상태 · 최근 발송일 · 갱신 예정일 · 신고 정보의 급여 계좌(전체 번호, 가리지 않음). 근로계약 관리 조회 권한 */
   @Get(':id/summary/contracts')
+  @ApiServiceUnavailableResponse({
+    description: '서버에 암호화 키가 없음(신고 정보가 있을 때만)',
+  })
   async contract(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
