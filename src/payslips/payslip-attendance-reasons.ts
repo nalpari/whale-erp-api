@@ -118,11 +118,44 @@ export const missingDetail = (days: readonly MissingDay[]) =>
     ),
   )}`;
 
+/**
+ * 「급여 기간에 확인 필요 출퇴근 기록이 2건 있습니다」. 달을 걸친 첫 주의 앞 달 날에 센 기록이 있으면(`fromLeadDays` > 0) 그 날짜
+ * 범위를 밝힌다 — 그 달 출퇴근 화면에서 찾지 못하지 않게. 앞 달 날이 하루면 그 날 하나만.
+ */
+export const flaggedDetail = (
+  count: number,
+  fromLeadDays: number,
+  leadDays: readonly string[],
+) => {
+  const lead = leadDays.length
+    ? [...new Set([leadDays[0], leadDays.at(-1)!])].map(mmdd).join(' ~ ')
+    : '';
+  return `${fromLeadDays > 0 && lead ? `급여 기간과 첫 주 앞 달 날(${lead})` : '급여 기간'}에 확인 필요 출퇴근 기록이 ${count}건 있습니다`;
+};
+
+/**
+ * 확인 필요 사유가 남은 기록 — 급여 계산과 같은 기준이다. 짝은 출근한 날의 것이라(자정을 넘긴 퇴근도) 짝 퇴근은 그 출근이 범위
+ * 안일 때, 출근 없는 퇴근은 자기 시각으로. 퇴근 시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지
+ * 않는 다음 달에 붙고, 지급하는 달 명세서는 검토 없이 확정된다(PR #159 리뷰)
+ */
+const flaggedWhere = (
+  staffMemberId: number,
+  recordedAt: { gte: Date; lt: Date },
+): Prisma.AttendanceRecordWhereInput => ({
+  staffMemberId,
+  reviewReason: { not: null },
+  OR: [
+    { kind: 'CHECK_IN', recordedAt },
+    { kind: 'CHECK_OUT', checkInAttendanceRecordId: null, recordedAt },
+    { kind: 'CHECK_OUT', checkInAttendanceRecord: { recordedAt } },
+  ],
+});
+
 export const afterEndDetail = (r: { end: string; days: string[] }) =>
   `근로계약 만료일(${r.end}) 뒤 출퇴근 기록이 ${r.days.length}일 있습니다 — ${listed(r.days.map(mmdd))}`;
 
 /**
- * 명세서 하나의 출퇴근 검토 대기 사유. 급여 기간(한국)의 그 직원 레코드 출퇴근 기록과 급여 기간에 걸친 근로계약(`contractIds`)을 본다.
+ * 명세서 하나의 출퇴근 검토 대기 사유. 급여 기간(한국, 달을 걸친 첫 주는 그 주 월요일부터)의 그 직원 레코드 출퇴근 기록과 급여 기간에 걸친 근로계약(`contractIds`)을 본다.
  * - 출퇴근 누락: 급여 기간 안 출근이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다」, 있으면 빠진 날과 일수(오늘은 아직 끝나지 않아 어제까지).
  * - 계약 만료 후 기록: 가장 늦은 계약 종료일 뒤에 출근한 날.
  * - 확인 필요 기록 포함: 확인 필요 사유가 남은(검토 전) 기록 건수(ATT-11) — 짝 퇴근은 출근한 날로 센다(급여 계산과 같다). 확인 필요
@@ -145,11 +178,12 @@ export async function attendanceReviewReasons(
   const leadDays: string[] = [];
   for (let d = mondayOf(periodStart); d < periodStart; d = addDay(d, 1))
     leadDays.push(d);
+  const from = kstDayStart(basis.periodStartDate);
   const checkInFrom = kstDayStart(
     new Date(`${mondayOf(periodStart)}T00:00:00Z`),
   );
   const to = kstDayStart(addDays(basis.periodEndDate, 1));
-  const [contracts, staff, checkIns, flagged] = await Promise.all([
+  const [contracts, staff, checkIns, flagged, flaggedLead] = await Promise.all([
     db.contract.findMany({
       where: { contractId: { in: [...basis.contractIds] } },
       select: {
@@ -173,29 +207,18 @@ export async function attendanceReviewReasons(
         _count: { select: { attendanceRecordsAsCheckIn: true } },
       },
     }),
-    // 급여 계산과 같은 기준으로 센다 — 짝은 출근한 날의 것이라(자정을 넘긴 퇴근도) 짝 퇴근은 그 출근이 기간 안일 때, 출근 없는
-    // 퇴근은 자기 시각으로. 퇴근 시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지 않는 다음 달에 붙고,
-    // 지급하는 달 명세서는 검토 없이 확정된다(PR #159 리뷰)
     db.attendanceRecord.count({
-      where: {
-        staffMemberId: basis.staffMemberId,
-        reviewReason: { not: null },
-        OR: [
-          { kind: 'CHECK_IN', recordedAt: { gte: checkInFrom, lt: to } },
-          {
-            kind: 'CHECK_OUT',
-            checkInAttendanceRecordId: null,
-            recordedAt: { gte: checkInFrom, lt: to },
-          },
-          {
-            kind: 'CHECK_OUT',
-            checkInAttendanceRecord: {
-              recordedAt: { gte: checkInFrom, lt: to },
-            },
-          },
-        ],
-      },
+      where: flaggedWhere(basis.staffMemberId, { gte: checkInFrom, lt: to }),
     }),
+    // 그중 앞 달 날 것 — 문구에 그 날짜를 밝힐지 정한다
+    leadDays.length
+      ? db.attendanceRecord.count({
+          where: flaggedWhere(basis.staffMemberId, {
+            gte: checkInFrom,
+            lt: from,
+          }),
+        })
+      : 0,
   ]);
 
   const checkedIn = new Map<string, boolean>();
@@ -243,7 +266,7 @@ export async function attendanceReviewReasons(
   if (flagged > 0)
     reasons.push({
       reviewReason: 'ATTENDANCE_NEEDS_REVIEW',
-      detail: `급여 기간에 확인 필요 출퇴근 기록이 ${flagged}건 있습니다`,
+      detail: flaggedDetail(flagged, flaggedLead, leadDays),
     });
   return reasons;
 }

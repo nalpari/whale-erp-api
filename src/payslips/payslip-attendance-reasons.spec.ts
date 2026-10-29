@@ -7,6 +7,7 @@ import {
   afterEndDetail,
   ContractSpan,
   missingDays,
+  flaggedDetail,
   missingDetail,
   NO_ATTENDANCE_DETAIL,
 } from './payslip-attendance-reasons';
@@ -111,14 +112,58 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
         ],
       },
     });
-    // 10/1 은 목요일 — 그 주 월요일 9/28 부터
-    expect(count).toHaveBeenLastCalledWith(
-      where({
-        gte: new Date('2026-09-27T15:00:00Z'),
-        lt: new Date('2026-10-31T15:00:00Z'),
-      }),
-    );
-    // 6/1 은 월요일 — 앞 달 날이 없어 급여 기간만
+    // 10/1 은 목요일 — 그 주 월요일 9/28 부터 세고, 그중 앞 달 날(9/28 ~ 30) 것을 따로 센다
+    expect(count.mock.calls).toEqual([
+      [
+        where({
+          gte: new Date('2026-09-27T15:00:00Z'),
+          lt: new Date('2026-10-31T15:00:00Z'),
+        }),
+      ],
+      [
+        where({
+          gte: new Date('2026-09-27T15:00:00Z'),
+          lt: new Date('2026-09-30T15:00:00Z'),
+        }),
+      ],
+    ]);
+    const october = (now = new Date('2026-11-05T00:00:00Z')) =>
+      attendanceReviewReasons(
+        db as never,
+        {
+          staffMemberId: 7,
+          contractIds: [],
+          periodStartDate: new Date('2026-10-01T00:00:00Z'),
+          periodEndDate: new Date('2026-10-31T00:00:00Z'),
+        },
+        now,
+      );
+    // 기간 안에만 있으면 「급여 기간에」
+    count.mockResolvedValueOnce(2).mockResolvedValueOnce(0);
+    expect(await october()).toContainEqual({
+      reviewReason: 'ATTENDANCE_NEEDS_REVIEW',
+      detail: '급여 기간에 확인 필요 출퇴근 기록이 2건 있습니다',
+    });
+    // 앞 달 날에만 있어도 이 달 사유로 붙고, 문구가 그 날짜를 밝힌다
+    count.mockResolvedValueOnce(2).mockResolvedValueOnce(2);
+    expect(
+      await attendanceReviewReasons(
+        db as never,
+        {
+          staffMemberId: 7,
+          contractIds: [],
+          periodStartDate: new Date('2026-10-01T00:00:00Z'),
+          periodEndDate: new Date('2026-10-31T00:00:00Z'),
+        },
+        new Date('2026-11-05T00:00:00Z'),
+      ),
+    ).toContainEqual({
+      reviewReason: 'ATTENDANCE_NEEDS_REVIEW',
+      detail:
+        '급여 기간과 첫 주 앞 달 날(09-28 ~ 09-30)에 확인 필요 출퇴근 기록이 2건 있습니다',
+    });
+    // 6/1 은 월요일 — 앞 달 날이 없어 급여 기간만 한 번 센다
+    count.mockClear();
     await attendanceReviewReasons(
       db as never,
       {
@@ -129,11 +174,22 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
       },
       new Date('2026-11-05T00:00:00Z'),
     );
-    expect(count).toHaveBeenLastCalledWith(
-      where({
-        gte: new Date('2026-05-31T15:00:00Z'),
-        lt: new Date('2026-06-30T15:00:00Z'),
-      }),
+    expect(count.mock.calls).toEqual([
+      [
+        where({
+          gte: new Date('2026-05-31T15:00:00Z'),
+          lt: new Date('2026-06-30T15:00:00Z'),
+        }),
+      ],
+    ]);
+  });
+
+  it('확인 필요 문구 — 앞 달 날이 하루면 그 날 하나만, 앞 달 날 것이 없으면 「급여 기간에」', () => {
+    expect(flaggedDetail(1, 1, ['2026-09-30'])).toBe(
+      '급여 기간과 첫 주 앞 달 날(09-30)에 확인 필요 출퇴근 기록이 1건 있습니다',
+    );
+    expect(flaggedDetail(3, 0, ['2026-09-28', '2026-09-29'])).toBe(
+      '급여 기간에 확인 필요 출퇴근 기록이 3건 있습니다',
     );
   });
 
