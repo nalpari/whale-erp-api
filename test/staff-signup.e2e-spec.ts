@@ -253,6 +253,7 @@ describe('직원 가입 (e2e, DB)', () => {
     const joined = await post('/auth/account/signup', payload).expect(201);
     expect(joined.body).toMatchObject({
       account: { email: payload.email, realName: '홍길동', status: 'JOINED' },
+      hqSharingConsentRecorded: null, // 직영점이라 묻지 않았다
     });
     // 받은 토큰으로 바로 들어간다
     await request(app.getHttpServer())
@@ -319,8 +320,15 @@ describe('직원 가입 (e2e, DB)', () => {
           asksHqSharingConsent: true,
         }),
       );
-    const payload = body({ token: s.token }, { hqSharingConsented: true });
-    await post('/auth/account/signup', payload).expect(201);
+    const payload = body(
+      { token: s.token },
+      {
+        hqSharingConsented: true,
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+      },
+    );
+    const joined = await post('/auth/account/signup', payload).expect(201);
+    expect(joined.body).toMatchObject({ hqSharingConsentRecorded: true });
     const account = await prisma.account.findUniqueOrThrow({
       where: { email: payload.email },
     });
@@ -445,12 +453,16 @@ describe('직원 가입 (e2e, DB)', () => {
       400,
     );
 
-    await accept(second.invitationId, { hqSharingConsented: true })
+    await accept(second.invitationId, {
+      hqSharingConsented: true,
+      hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+    })
       .expect(200)
       .expect({
         staffMemberId: second.staffMemberId,
         storeId: franchiseStoreId,
         storeName: '가입 테스트 가맹점',
+        hqSharingConsentRecorded: true,
       });
 
     const account = await prisma.account.findFirstOrThrow({
@@ -504,6 +516,72 @@ describe('직원 가입 (e2e, DB)', () => {
       invitationId: franchiseAgain.invitationId,
       asksHqSharingConsent: false,
     });
+  });
+
+  it('보인 동의 문구 버전이 지금과 다르면 가입 · 근무지 더하기는 마치고 동의만 남기지 않는다, 버전 없이 동의하면 400(ATT-30 v252 · v253)', async () => {
+    const s = await invited(franchiseStoreId);
+    // 동의했는데 버전이 없으면 400 — 계정을 만들지 않고 초대도 그대로다
+    await post(
+      '/auth/account/signup',
+      body({ token: s.token }, { hqSharingConsented: true }),
+    ).expect(400);
+    expect(
+      await prisma.invitation.findUniqueOrThrow({
+        where: { invitationId: s.invitationId },
+      }),
+    ).toMatchObject({ status: 'SENT' });
+
+    const payload = body(
+      { token: s.token },
+      { hqSharingConsented: true, hqSharingConsentVersion: 'v0.9' },
+    );
+    const joined = await post('/auth/account/signup', payload).expect(201);
+    expect(joined.body).toMatchObject({
+      account: { email: payload.email, status: 'JOINED' },
+      hqSharingConsentRecorded: false,
+    });
+    const notConsented = {
+      isHqSharingConsented: false,
+      hqSharingConsentVersion: null,
+      hqSharingAgreedAt: null,
+    };
+    const account = await prisma.account.findUniqueOrThrow({
+      where: { email: payload.email },
+    });
+    expect(account).toMatchObject(notConsented);
+    expect(
+      await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: s.staffMemberId },
+      }),
+    ).toMatchObject({ accountId: account.accountId, joinStatus: 'JOINED' });
+
+    // 근무지 더하기도 같다 — 동의를 묻는 가맹점 초대
+    const more = await invited(franchiseStoreId, { phone: s.phone });
+    const { accessToken } = joined.body as { accessToken: string };
+    const accept = (payload: object) =>
+      request(app.getHttpServer())
+        .post(`/me/invitations/${more.invitationId}/accept`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send(payload);
+    await accept({ hqSharingConsented: true }).expect(400);
+    await accept({ hqSharingConsented: true, hqSharingConsentVersion: 'v0.9' })
+      .expect(200)
+      .expect({
+        staffMemberId: more.staffMemberId,
+        storeId: franchiseStoreId,
+        storeName: '가입 테스트 가맹점',
+        hqSharingConsentRecorded: false,
+      });
+    expect(
+      await prisma.account.findUniqueOrThrow({
+        where: { accountId: account.accountId },
+      }),
+    ).toMatchObject(notConsented);
+    expect(
+      await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: more.staffMemberId },
+      }),
+    ).toMatchObject({ accountId: account.accountId, joinStatus: 'JOINED' });
   });
 
   it('내 초대 목록 · 더하기 — 토큰이 없으면 401, 관리자 토큰은 403', async () => {

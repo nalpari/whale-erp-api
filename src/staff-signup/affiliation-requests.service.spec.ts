@@ -1,4 +1,4 @@
-import { HttpException } from '@nestjs/common';
+import { HttpException, Logger } from '@nestjs/common';
 import { SEND_VALID_MS } from '../contracts/contract-delivery.service';
 import type { OpsNotificationService } from '../notifications/ops-notification.service';
 import { storeManagers } from '../notifications/recipients';
@@ -131,6 +131,7 @@ describe('AffiliationRequestsService', () => {
         staffMemberId: 19,
         storeName: '모리커피 연남점',
         contractIds: [7],
+        hqSharingConsentRecorded: null,
       });
       expect(tx.invitation.updateMany).toHaveBeenCalledWith({
         where: { invitationId: 41, status: 'SENT' },
@@ -169,7 +170,15 @@ describe('AffiliationRequestsService', () => {
         name: '모리커피 합정점',
         storeTypeCode: 'FRANCHISE',
       });
-      await service().accept(5, 41, { hqSharingConsented: true }, NOW);
+      await service().accept(
+        5,
+        41,
+        {
+          hqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        },
+        NOW,
+      );
       expect(tx.account.update).toHaveBeenCalledWith({
         where: { accountId: 5 },
         data: {
@@ -179,6 +188,32 @@ describe('AffiliationRequestsService', () => {
           hqSharingWithdrawnAt: null,
         },
       });
+    });
+
+    it('보인 문구 버전이 지금과 다르면 수락은 마치고 동의만 남기지 않는다 — 응답 false · 경고 로그(ATT-30 v253)', async () => {
+      request();
+      tx.store.findUnique.mockResolvedValue({
+        name: '모리커피 합정점',
+        storeTypeCode: 'FRANCHISE',
+      });
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      await expect(
+        service().accept(
+          5,
+          41,
+          { hqSharingConsented: true, hqSharingConsentVersion: 'v0.9' },
+          NOW,
+        ),
+      ).resolves.toMatchObject({
+        staffMemberId: 19,
+        hqSharingConsentRecorded: false,
+      });
+      expect(tx.account.update).not.toHaveBeenCalled();
+      expect(tx.staffMember.updateMany).toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('shown=v0.9'));
+      warn.mockRestore();
     });
 
     it('가맹 점포여도 동의하지 않았거나(false) 이미 동의한 계정이면 쓰지 않는다', async () => {
@@ -196,7 +231,15 @@ describe('AffiliationRequestsService', () => {
         hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
       });
       request();
-      await service().accept(5, 41, { hqSharingConsented: true }, NOW);
+      await service().accept(
+        5,
+        41,
+        {
+          hqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        },
+        NOW,
+      );
       expect(tx.account.update).not.toHaveBeenCalled();
     });
 
@@ -213,7 +256,15 @@ describe('AffiliationRequestsService', () => {
         hqSharingConsentVersion: 'v0.9',
       });
       request();
-      await service().accept(5, 41, { hqSharingConsented: true }, NOW);
+      await service().accept(
+        5,
+        41,
+        {
+          hqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        },
+        NOW,
+      );
       expect(tx.account.update).toHaveBeenCalledWith({
         where: { accountId: 5 },
         data: expect.objectContaining({

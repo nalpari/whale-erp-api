@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 import {
   BizppurioClient,
   BizppurioError,
@@ -254,6 +255,7 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       staffMemberId: r.staffMemberId,
       storeName: '소속 추가 점포',
       contractIds: [r.contractId],
+      hqSharingConsentRecorded: null, // 직영점이라 묻지 않았다
     });
     const c = await contractOf(r.contractId);
     expect(c.status).toBe('PENDING_SIGNATURE');
@@ -578,6 +580,71 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
         status: 'REJECTED',
         rejectReason: 'ㄱ'.repeat(500),
       });
+    });
+
+    it('가맹점 요청 — 동의에 버전이 없으면 400, 보인 문구 버전이 지금과 다르면 수락은 마치고 동의만 남기지 않는다(ATT-30 v252 · v253)', async () => {
+      // 이 파일의 점포는 직영이다 — 요청을 만든 뒤(관리자 범위는 직영 기준으로 맞춰 두었다) 본사 제공 동의를 묻게 잠시 가맹으로 바꾼다
+      const stale = await requested();
+      const fresh = await requested();
+      await prisma.store.update({
+        where: { storeId },
+        data: { storeTypeCode: 'FRANCHISE' },
+      });
+      try {
+        const accept = async (accountId: number, invitationId: number) => {
+          const auth = `Bearer ${await accountToken(accountId)}`;
+          return (payload: object) =>
+            http()
+              .post(`/me/affiliation-requests/${invitationId}/accept`)
+              .set('Authorization', auth)
+              .send(payload);
+        };
+        const consentOf = (accountId: number) =>
+          prisma.account.findUniqueOrThrow({
+            where: { accountId },
+            select: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: true,
+            },
+          });
+
+        const answerStale = await accept(stale.accountId, stale.invitationId);
+        await answerStale({ hqSharingConsented: true }).expect(400);
+        expect((await contractOf(stale.contractId)).status).toBe(
+          'PENDING_SEND',
+        );
+        const res = await answerStale({
+          hqSharingConsented: true,
+          hqSharingConsentVersion: 'v0.9',
+        }).expect(200);
+        expect(res.body).toMatchObject({
+          staffMemberId: stale.staffMemberId,
+          hqSharingConsentRecorded: false,
+        });
+        expect((await contractOf(stale.contractId)).status).toBe(
+          'PENDING_SIGNATURE',
+        );
+        expect(await consentOf(stale.accountId)).toEqual({
+          isHqSharingConsented: false,
+          hqSharingConsentVersion: null,
+        });
+
+        const answerFresh = await accept(fresh.accountId, fresh.invitationId);
+        const ok = await answerFresh({
+          hqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        }).expect(200);
+        expect(ok.body).toMatchObject({ hqSharingConsentRecorded: true });
+        expect(await consentOf(fresh.accountId)).toEqual({
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        });
+      } finally {
+        await prisma.store.update({
+          where: { storeId },
+          data: { storeTypeCode: 'DIRECT' },
+        });
+      }
     });
   });
 });

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [My profile](/api/my-profile.md) · [Staff signup (직원 앱 가입)](/api/staff-signup.md) — 사업자(본사) 제공 동의 문구 버전 대조(WHALEERP-137 후속, 운영 정책 ATT-30 v252 · v253, 2026-10-29 재영). `POST /me/hq-sharing-consent` 는 본문 `{ consentVersion }`(필수)을 받아 지금 버전과 다르면 409 「사업자 제공 동의 내용이 바뀌었습니다. 화면을 새로 고쳐 …」(빼면 400). 가입 · 근무지 더하기 · 소속 추가 수락은 동의할 때 `hqSharingConsentVersion` 이 필수(없으면 400)이고, 다르면 가입 · 수락은 마치고 동의만 남기지 않는다 — 응답에 `hqSharingConsentRecorded`(true · false · null, 가입은 `StaffSignupResponseDto`)와 경고 로그. 트랜잭션 · 잠금 순서는 그대로. 마이그레이션 없음.
 * **Update**: main 병합(api doduo, main #209 까지): okf 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api doduo, main #202 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Staff members](/api/staff-members.md) · [Alimtalk](/api/alimtalk.md) — api #208 판정 커밋 재리뷰: 단계를 모르는 실패는 `path=unknown` 으로 남겨 발송 이력에서 접수 여부 모름으로 읽는다(`local` · 보내기 전 실패로 보던 것을 걷음). 단계 이름 `TOKEN_PATH` · `MESSAGE_PATH` 를 import 없는 `failure-reason.ts` 하나에 두고 클라이언트도 쓴다. 비즈뿌리오 200 응답 본문이 `null` 이면 `returned no body`(단계 포함)로 던진다. `path=undefined` 옛 행은 칸이 없는 것처럼 본다.
