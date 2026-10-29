@@ -4,16 +4,16 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T02:06:15Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:30:00Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
-    title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excel)
-    last_modified: 2026-10-28T01:57:16Z
+    title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excelCount · excelFile · assertExcelCaller)
+    last_modified: 2026-10-29T01:30:00Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
-    last_modified: 2026-10-28T02:06:15Z
+    last_modified: 2026-10-29T01:30:00Z
   - id: bp-master-excel
     resource: ../../src/bp-masters/bp-master-excel.ts
     title: BP 목록 엑셀 — columns, both phone numbers masked
@@ -38,6 +38,10 @@ sources:
     resource: ../../test/bp-masters.e2e-spec.ts
     title: e2e on a real database — 403 for BP accounts, concurrent register, code copy, history paging, cascade, delete, withdrawn BP (histories 409 · detail withdrawal)
     last_modified: 2026-10-28T01:57:16Z
+  - id: bp-master-excel-source
+    resource: ../../src/bp-masters/bp-master-excel.source.ts
+    title: BpMasterExcelSource — 공통 엑셀에 주는 건수 · 파일(/bp-masters)
+    last_modified: 2026-10-29T01:30:00Z
 ---
 
 # What it is
@@ -137,17 +141,21 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
 
 # Excel
 
-`GET /bp-masters/excel` takes the list's filters and follows 점포 엑셀: one file per admin
-per minute (429, counted in process memory), 10,000 rows or more is 400 (no scheduled
-generation yet), and both the master's 연락처 and the 대표자 연락처 have their middle part
-masked.[^bp-master-excel] **Downloads are not logged** — the same as 점포 엑셀
-(2026-10-23 decision); the front plan's "who · when · conditions · count" line was dropped
-rather than adding a table for this screen alone.
+`GET /bp-masters/excel` takes the list's filters, and both the master's 연락처 and the
+대표자 연락처 have their middle part masked.[^bp-master-excel] Since 2026-10-28 it follows the
+common [Excel exports](/api/excel-exports.md) like 점포 엑셀: 10,000 rows or more is 예약
+생성 (202, mailed link), 409 while one is being made, once a minute otherwise, and **every
+download is logged** (`excel_download_logs`, two years) — the front plan's "who · when ·
+conditions · count" line, dropped on 2026-10-23 for want of a table, is back as one table for
+every screen. `BpMasterExcelSource` supplies `excelCount` · `excelFile`; it uses no target BP.
+Before building it calls `assertExcelCaller` — the requester must still be an active platform
+account (the guard's `platformOnly` judgement, 403 otherwise): a scheduled file is built a minute
+or more after the request, and an account blocked or moved off the platform in between gets
+no file. The same check runs again as `assertRequester` when the file is downloaded, so losing the platform role in the 24 hours after it is built also blocks the link.
 
 # Not yet
 
 - 소속 점포 수 is a number only; linking it to the store list waits for the front.
-- Scheduled generation for 10,000+ rows, together with 점포 엑셀.
 - Withdrawal itself is not here — it is the BP master's own 회원 탈퇴 (PR #162); this screen only reads it.
 
 [^bp-masters-service]: BpMastersService

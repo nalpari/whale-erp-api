@@ -45,7 +45,7 @@ import type { InvitationLookupDto } from './dto/invitation-lookup.dto';
 import type {
   AcceptMyInvitationDto,
   AcceptMyInvitationResponseDto,
-  MyInvitationLookupDto,
+  MyInvitationListResponseDto,
 } from './dto/my-invitation.dto';
 import type { StaffSignupDto } from './dto/staff-signup.dto';
 import { asksHqSharingConsentAt } from './hq-sharing-consent';
@@ -86,10 +86,30 @@ const badRequest = (code: string, message: string) =>
     code,
     message,
   });
+/** 그런 초대가 없다 — 로그인한 직원의 근무지 더하기에서는 남의 초대 · 가입 초대가 아닌 것도 이것이다(상태를 드러내지 않는다) */
+export const invitationNotFound = () =>
+  notFound('INVITATION_NOT_FOUND', INVITATION_ENDED);
 const alreadyJoined = () =>
   conflict(
     'INVITATION_ALREADY_JOINED',
     '이미 가입을 마친 초대입니다. 로그인해 주세요',
+  );
+/**
+ * 로그인한 직원의 근무지 더하기에서 초대가 이 계정 것인지 볼 때 쓰는 이름 비교 — 날인 전 본인 대조(contracts/identity-match.ts 의
+ * nameKey)와 같은 규칙이다: 공백을 모두 지우고 영문은 대문자로(저장 값은 그대로). 초대 코드 · 링크가 그 번호를 가진 증거였던 것을
+ * 대신한다 — 계정 번호는 바꿀 길이 없어, 번호가 다른 사람에게 넘어가면 옛 계정이 새 주인의 초대를 받지 않게(2026-10-28 김민식,
+ * api #180 리뷰). contracts 는 다른 작업 영역이라 그 함수를 내보내지 않고 같은 식을 둔다.
+ */
+const sameName = (a: string, b: string) => {
+  const key = (name: string) =>
+    name.normalize('NFC').replace(/\s/g, '').toUpperCase();
+  return key(a) === key(b);
+};
+/** 로그인한 직원의 근무지 더하기에서 이미 수락한 초대 — 같은 code 이고 「로그인해 주세요」만 뺀다(이미 로그인해 있다) */
+const alreadyAdded = () =>
+  conflict(
+    'INVITATION_ALREADY_JOINED',
+    '이미 가입을 마친 초대입니다. 이 근무지는 계정에 이어져 있습니다',
   );
 /** 그 번호로 계정이 있다 — 로그인한 뒤 앱 안에서 근무지를 더한다(WHALEERP-603 · 144) */
 const accountExists = () =>
@@ -145,9 +165,10 @@ type SignupOutcome =
  *   계정 번호는 초대(근로계약서)의 번호다. 만 19세 미만이면 계정을 만들지 않고 초대를 「가입 불가」로 두며, 커밋 뒤 그
  *   점포 관리자에게 운영 알림을 보낸다(ACC-22).
  *
- * - 로그인한 직원은 다른 근무지의 초대 코드(또는 링크)로 그 근무지를 더한다(WHALEERP-603, 2026-10-20 김민식 — 두 점포에서 같은
- *   때 가입 초대를 받은 경우). 번호는 계정의 번호로 찾고, 링크도 초대의 번호가 계정 번호와 같아야 한다 — 남의 초대를 내 계정에
- *   잇지 못하게. 계정 정보 · 인적사항 · 약관은 다시 받지 않고 나이도 보지 않는다(기존 계정, WHALEERP-137).
+ * - 로그인한 직원은 계정의 번호로 온 가입 초대 목록에서 골라 그 근무지를 더한다(WHALEERP-603, 2026-10-20 김민식 — 두 점포에서
+ *   같은 때 가입 초대를 받은 경우. 2026-10-28 초대 코드 · 링크 입력 대신 목록으로). 초대 id 로 찾되 초대의 번호가 계정 번호와
+ *   같아야 한다 — 남의 초대를 내 계정에 잇지 못하게. 계정 정보 · 인적사항 · 약관은 다시 받지 않고 나이도 보지 않는다(기존
+ *   계정, WHALEERP-137).
  * - 번호 + 코드는 같은 번호로 5회 틀리면 30분 잠근다(JOIN-7, `invitation_code_attempts`). 초대가 없는 번호도 같은 기준으로
  *   세어 잠금 여부로 초대가 있는지 드러나지 않는다. 관리자가 그 번호로 다시 보내면 풀린다(ContractDeliveryService). 링크
  *   토큰은 32바이트라 대입 대상이 아니어서 세지 않는다.
@@ -328,44 +349,77 @@ export class StaffSignupService {
     );
   }
 
-  /** 로그인한 직원의 초대 확인(WHALEERP-603) — 본사 제공 동의는 직영이 아니고 계정이 아직 동의하지 않았을 때만 묻는다 */
-  async checkForAccount(
+  /**
+   * 로그인한 직원에게 온 가입 초대(WHALEERP-603, 2026-10-28) — 계정 번호로 나간 살아 있는 가입 초대 · 재초대(보냄 · 기한 안 ·
+   * 아직 계정 없는 레코드, 가입 확인과 같은 기준)를 보낸 때 최근 순으로. 점포를 찾지 못한 초대는 뺀다. 본사 제공 동의는
+   * 직영이 아니고 계정이 받아 주는 문구 버전에 아직 동의하지 않았을 때만 묻는다(hqSharingAgreedOf).
+   */
+  async listForAccount(
     accountId: number,
-    lookup: MyInvitationLookupDto,
-  ): Promise<InvitationCheckResponseDto> {
+  ): Promise<MyInvitationListResponseDto> {
     const account = await this.accountOf(this.prisma, accountId);
-    await this.guardAccountCode(account.phone, lookup);
-    const { invitation, store } = await this.accountInvitation(
-      this.prisma,
-      account.phone,
-      lookup,
-      new Date(),
+    const rows = await this.prisma.invitation.findMany({
+      where: {
+        invitationType: { in: ['SIGNUP', 'REINVITE'] },
+        status: 'SENT',
+        expiresAt: { gt: new Date() },
+        staffMember: { phone: account.phone, accountId: null },
+      },
+      select: {
+        invitationId: true,
+        sentAt: true,
+        expiresAt: true,
+        staffMember: {
+          select: { storeId: true, name: true, ...PENDING_TERMS_SELECT },
+        },
+      },
+      orderBy: [{ sentAt: 'desc' }, { invitationId: 'desc' }],
+    });
+    // 번호가 같아도 근로계약서 이름이 계정 이름과 다르면 이 계정에 온 초대로 보지 않는다(sameName)
+    const mine = rows.filter((r) =>
+      sameName(r.staffMember.name, account.realName),
     );
-    return {
-      storeName: store.name,
-      employmentType: pendingTermsOf(
-        invitation.staffMember,
-        invitation.staffMember.contracts[0],
-      ).employmentType,
-      expiresAt: invitation.expiresAt,
-      phone: account.phone,
-      asksHqSharingConsent:
-        asksHqSharingConsentAt(store.storeTypeCode) &&
-        !hqSharingAgreedOf(account),
-    };
+    if (mine.length === 0) return { items: [], total: 0 };
+    // 직원 레코드의 store_id 는 1팀 점포를 가리키지만 Prisma 관계가 없다(팀 경계) — 따로 한 번에 읽는다
+    const stores = await this.prisma.store.findMany({
+      where: {
+        storeId: { in: [...new Set(mine.map((r) => r.staffMember.storeId))] },
+      },
+      select: { storeId: true, name: true, storeTypeCode: true },
+    });
+    const storeById = new Map(stores.map((st) => [st.storeId, st]));
+    const items = mine.flatMap((r) => {
+      const store = storeById.get(r.staffMember.storeId);
+      if (!store) return [];
+      // 고용 형태 · 직무는 함께 온 아직 시작 전 계약의 것, 없으면 레코드(가입 초대 확인 · 소속 추가 확인과 같다, pendingTermsOf)
+      const terms = pendingTermsOf(r.staffMember, r.staffMember.contracts[0]);
+      return [
+        {
+          invitationId: r.invitationId,
+          storeName: store.name,
+          employmentType: terms.employmentType,
+          jobTitle: terms.jobTitle,
+          sentAt: r.sentAt,
+          expiresAt: r.expiresAt,
+          asksHqSharingConsent:
+            asksHqSharingConsentAt(store.storeTypeCode) &&
+            !hqSharingAgreedOf(account),
+        },
+      ];
+    });
+    return { items, total: items.length };
   }
 
   /**
-   * 근무지 더하기(WHALEERP-603) — 한 트랜잭션으로 초대 수락 · 그 직원 레코드를 이 계정에 잇기(가입 완료) · 발송 대기 계약 →
-   * 서명 대기. 가맹 점포이고 계정이 아직 동의하지 않았는데 동의를 보냈으면 계정에 동의를 남긴다.
+   * 근무지 더하기(WHALEERP-603) — 목록에서 고른 초대로, 한 트랜잭션으로 초대 수락 · 그 직원 레코드를 이 계정에 잇기(가입
+   * 완료) · 발송 대기 계약 → 서명 대기. 가맹 점포이고 계정이 아직 동의하지 않았는데 동의를 보냈으면 계정에 동의를 남긴다.
    */
   async acceptForAccount(
     accountId: number,
+    invitationId: number,
     dto: AcceptMyInvitationDto,
   ): Promise<AcceptMyInvitationResponseDto> {
-    // 잠금은 업무 트랜잭션 밖에서 센다 — 뒤에서 되돌아가도 실패 횟수는 남는다
     const { phone } = await this.accountOf(this.prisma, accountId);
-    await this.guardAccountCode(phone, dto);
     return this.prisma.$transaction(async (tx) => {
       // 가입 · 근로계약 저장 · 재발송과 같은 순서로 번호부터 잡는다(api #81 리뷰) — 근무지 더하기와 재발송이 교착하지 않게
       await lockPeople(tx, [phone]);
@@ -376,16 +430,19 @@ export class StaffSignupService {
       const account = await this.accountOf(tx, accountId);
       const { invitation, store } = await this.accountInvitation(
         tx,
-        account.phone,
-        dto,
+        account,
+        invitationId,
         now,
       );
       const { staffMemberId } = invitation.staffMember;
       // 직원 행도 초대 · 계약보다 먼저 잠근다 — 퇴직 확정(직원 → 초대 → 계약)과 같은 순서라 서로 기다려 교착하지 않는다.
-      // 잠근 뒤 번호를 다시 읽어, 그사이 근로계약 수정으로 번호가 바뀌었으면 잇지 않는다(가입과 같다, api #81 3차 리뷰)
-      const [locked] = await tx.$queryRaw<{ phone: string }[]>`
-        SELECT phone FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
-      if (locked?.phone !== account.phone)
+      // 잠근 뒤 번호 · 이름을 다시 읽어, 그사이 근로계약 수정으로 바뀌었으면 잇지 않는다(가입과 같다, api #81 3차 리뷰 · 이름은 api #180 리뷰)
+      const [locked] = await tx.$queryRaw<{ phone: string; name: string }[]>`
+        SELECT phone, name FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR UPDATE`;
+      if (
+        locked?.phone !== account.phone ||
+        !sameName(locked.name, account.realName)
+      )
         throw notFound('INVITATION_ENDED', INVITATION_ENDED);
       // 같은 초대로 동시에 더하면 뒤에 온 쪽은 바뀐 초대를 다시 읽어 0건이다 — 까닭에 맞게 답한다(가입과 같다)
       const accepted = await tx.invitation.updateMany({
@@ -393,7 +450,11 @@ export class StaffSignupService {
         data: { status: 'ACCEPTED', respondedAt: now },
       });
       if (accepted.count === 0)
-        throw await this.endedOrJoined(tx, invitation.invitationId);
+        throw await this.endedOrJoined(
+          tx,
+          invitation.invitationId,
+          alreadyAdded,
+        );
       if (
         asksHqSharingConsentAt(store.storeTypeCode) &&
         !hqSharingAgreedOf(account) &&
@@ -413,7 +474,7 @@ export class StaffSignupService {
         where: { staffMemberId, accountId: null },
         data: { accountId, joinStatus: 'JOINED', candidateAccountId: null },
       });
-      if (linked.count === 0) throw alreadyJoined();
+      if (linked.count === 0) throw alreadyAdded();
       await transitionMany(
         tx,
         { staffMemberId },
@@ -425,22 +486,13 @@ export class StaffSignupService {
     });
   }
 
-  /** 로그인한 직원이 넣은 코드도 계정 번호로 잠금을 센다(JOIN-7) — 토큰이면 세지 않는다 */
-  private guardAccountCode(
-    phone: string,
-    lookup: MyInvitationLookupDto,
-  ): Promise<void> {
-    if (lookup.token !== undefined || lookup.code === undefined)
-      return Promise.resolve();
-    return this.guardCode({ phone, code: lookup.code });
-  }
-
   /** 로그인한 계정 — 가드가 접속을 확인한 뒤 탈퇴했을 수 있다 */
   private async accountOf(db: Db, accountId: number) {
     const account = await db.account.findUnique({
       where: { accountId },
       select: {
         phone: true,
+        realName: true,
         status: true,
         isHqSharingConsented: true,
         hqSharingConsentVersion: true,
@@ -452,29 +504,42 @@ export class StaffSignupService {
   }
 
   /**
-   * 계정의 번호로 초대를 찾는다 — 코드면 계정 번호 + 코드, 링크면 토큰으로 찾은 뒤 초대의 번호가 계정 번호와 같아야 한다
-   * (다르면 없는 초대와 같은 404). 둘 다 없거나 둘 다 있으면 400.
+   * 로그인한 직원이 고른 초대(id)를 찾는다. 없거나 · 가입 초대 · 재초대가 아니거나 · 초대의 번호가 계정 번호와 다르거나 · 근로계약서
+   * 이름이 계정 이름과 다르면(sameName) 404 INVITATION_NOT_FOUND — 번호 · 이름을 상태보다 먼저 봐 남의 초대가 수락됐는지 끝났는지
+   * 드러나지 않는다. 내 초대가 수락됐으면 409
+   * INVITATION_ALREADY_JOINED, 살아 있지 않으면(보냄이 아님 · 기한 지남 · 레코드에 이미 계정) 404 INVITATION_ENDED.
    */
   private async accountInvitation(
     db: Db,
-    phone: string,
-    lookup: MyInvitationLookupDto,
+    { phone, realName }: { phone: string; realName: string },
+    invitationId: number,
     now: Date,
   ): Promise<LiveInvitation> {
-    if ((lookup.token === undefined) === (lookup.code === undefined))
-      throw new BadRequestException(
-        '초대 링크의 토큰이나 초대 코드 가운데 하나를 보내 주세요',
-      );
-    const found = await this.liveInvitation(
-      db,
-      lookup.token !== undefined
-        ? { token: lookup.token }
-        : { phone, code: lookup.code },
-      now,
-    );
-    if (found.invitation.staffMember.phone !== phone)
-      throw notFound('INVITATION_NOT_FOUND', INVITATION_ENDED);
-    return found;
+    const invitation = await db.invitation.findUnique({
+      where: { invitationId },
+      select: { ...INVITATION_SELECT, invitationType: true },
+    });
+    if (
+      !invitation ||
+      (invitation.invitationType !== 'SIGNUP' &&
+        invitation.invitationType !== 'REINVITE') ||
+      invitation.staffMember.phone !== phone ||
+      !sameName(invitation.staffMember.name, realName)
+    )
+      throw invitationNotFound();
+    if (invitation.status === 'ACCEPTED') throw alreadyAdded();
+    if (
+      invitation.status !== 'SENT' ||
+      invitation.expiresAt <= now ||
+      invitation.staffMember.accountId !== null
+    )
+      throw notFound('INVITATION_ENDED', INVITATION_ENDED);
+    const store = await db.store.findUnique({
+      where: { storeId: invitation.staffMember.storeId },
+      select: { name: true, storeTypeCode: true },
+    });
+    if (!store) throw notFound('INVITATION_ENDED', INVITATION_ENDED);
+    return { invitation, store };
   }
 
   /**
@@ -617,13 +682,17 @@ export class StaffSignupService {
    * 조건을 건 수락이 0건이면 그사이 초대가 바뀐 것이다 — 다른 가입이 먼저 수락했으면 409(로그인으로), 재발송 · 번호 변경 ·
    * 퇴직 · 대체로 끝났으면 404 INVITATION_ENDED. 계정이 없는 사람을 로그인으로 보내지 않게(api #81 리뷰)
    */
-  private async endedOrJoined(db: Db, invitationId: number) {
+  private async endedOrJoined(
+    db: Db,
+    invitationId: number,
+    joined: () => Error = alreadyJoined,
+  ) {
     const now = await db.invitation.findUnique({
       where: { invitationId },
       select: { status: true },
     });
     return now?.status === 'ACCEPTED'
-      ? alreadyJoined()
+      ? joined()
       : notFound('INVITATION_ENDED', INVITATION_ENDED);
   }
 

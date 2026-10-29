@@ -84,7 +84,7 @@ describe('MyConsentService', () => {
   describe('위치정보 동의 (ATT-23 · ATT-26)', () => {
     it('철회하지 않은 동의가 없으면 지금 시행 중인 LOCATION 약관 버전으로 새 동의를 만든다', async () => {
       const service = await build();
-      await service.agreeLocation(12);
+      await service.agreeLocation(12, 'v1.0');
       expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
       expect(tx.termsVersion.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -120,7 +120,7 @@ describe('MyConsentService', () => {
       tx.locationConsent.findFirst.mockResolvedValue(
         activeRow({ consentVersion: 'v0.9', pausedAt }),
       );
-      await service.agreeLocation(12);
+      await service.agreeLocation(12, 'v1.0');
       const closed = (
         tx.locationConsent.update.mock.calls[0] as [
           { where: unknown; data: { withdrawnAt: Date } },
@@ -152,17 +152,52 @@ describe('MyConsentService', () => {
     it('이미 지금 버전에 동의 중이면 409 이고 새 행을 만들지 않는다 — 철회 안 한 동의는 계정에 하나', async () => {
       const service = await build();
       tx.locationConsent.findFirst.mockResolvedValue(activeRow());
-      await expect(service.agreeLocation(12)).rejects.toBeInstanceOf(
+      await expect(service.agreeLocation(12, 'v1.0')).rejects.toBeInstanceOf(
         ConflictException,
       );
       expect(tx.locationConsent.create).not.toHaveBeenCalled();
       expect(tx.locationConsentHistory.create).not.toHaveBeenCalled();
     });
 
+    it('화면이 보여 준 약관 버전이 시행 중인 것과 같으면 받는다 (WHALEERP-628)', async () => {
+      const service = await build();
+      await service.agreeLocation(12, 'v1.0');
+      expect(tx.locationConsent.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('화면이 보여 준 약관 버전이 그사이 바뀌었으면 409 이고 동의를 남기지 않는다 (WHALEERP-628)', async () => {
+      const service = await build();
+      tx.termsVersion.findFirst.mockResolvedValue({ version: 'v1.1' });
+      await expect(service.agreeLocation(12, 'v1.0')).rejects.toThrow(
+        new ConflictException(
+          '그사이 위치정보 약관이 바뀌었습니다. 바뀐 약관을 확인하고 다시 동의해 주세요',
+        ),
+      );
+      expect(tx.locationConsent.create).not.toHaveBeenCalled();
+      expect(tx.locationConsent.update).not.toHaveBeenCalled();
+      expect(tx.locationConsentHistory.create).not.toHaveBeenCalled();
+    });
+
+    it('화면에 보인 약관이 없었는데(null) 그사이 시행된 약관이 있으면 409 — 고지 없이 동의를 남기지 않는다', async () => {
+      const service = await build();
+      await expect(service.agreeLocation(12, null)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(tx.locationConsent.create).not.toHaveBeenCalled();
+    });
+
+    it('시행 중인 약관이 없으면 화면이 버전을 보냈어도 500 이 먼저다 — 운영 장애를 「약관 바뀜」으로 가리지 않는다', async () => {
+      const service = await build();
+      tx.termsVersion.findFirst.mockResolvedValue(null);
+      await expect(service.agreeLocation(12, 'v1.0')).rejects.toBeInstanceOf(
+        InternalServerErrorException,
+      );
+    });
+
     it('시행 중인 위치정보 약관이 없으면 500 과 안내 문구 — 버전 없는 동의를 남기지 않는다', async () => {
       const service = await build();
       tx.termsVersion.findFirst.mockResolvedValue(null);
-      await expect(service.agreeLocation(12)).rejects.toThrow(
+      await expect(service.agreeLocation(12, null)).rejects.toThrow(
         new InternalServerErrorException(
           '지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요',
         ),
@@ -323,8 +358,11 @@ describe('MyConsentService', () => {
     'withdrawHqSharing',
   ] as const)('탈퇴 계정은 %s 가 401', async (method) => {
     const service = await build({ status: 'WITHDRAWN' });
-    await expect(service[method](12)).rejects.toBeInstanceOf(
-      UnauthorizedException,
-    );
+    // agreeLocation 만 보인 약관 버전을 받는다
+    const run = () =>
+      method === 'agreeLocation'
+        ? service.agreeLocation(12, 'v1.0')
+        : service[method](12);
+    await expect(run()).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

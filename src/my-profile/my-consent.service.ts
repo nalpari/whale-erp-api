@@ -49,8 +49,10 @@ export class MyConsentService {
    * 받는다). 버전은 지금 시행 중인 위치정보 약관(`LOCATION`)이다. 다시 받을 때는 앞 행을 닫고(withdrawn_at) 새 행을 만든다 —
    * 버전마다 동의한 기록이 남는다. 닫은 행은 철회와 같은 꼴이지만 바로 뒤에 살아 있는 새 행이 있어 상태는 동의다.
    * 일시 중지 중이었으면 새 행도 멈춘 채로 둔다 — 다시 켜기는 직원이 따로 고른다(ATT-26).
+   * `shownVersion`(화면이 동의 시트에 보여 준 버전, 보인 약관이 없었으면 null)은 시행 중인 버전과 같아야 한다 — 시트를 연 사이
+   * 약관이 바뀌었으면 409 로 거절해 보인 고지와 남는 버전이 어긋나지 않게 한다(WHALEERP-628).
    */
-  agreeLocation(accountId: number): Promise<void> {
+  agreeLocation(accountId: number, shownVersion: string | null): Promise<void> {
     return this.locked(accountId, async (tx) => {
       const version = await currentLocationTermsVersion(tx);
       if (!version) {
@@ -62,6 +64,10 @@ export class MyConsentService {
           '지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요',
         );
       }
+      if (shownVersion !== version)
+        throw new ConflictException(
+          '그사이 위치정보 약관이 바뀌었습니다. 바뀐 약관을 확인하고 다시 동의해 주세요',
+        );
       const active = await this.activeLocationConsent(tx, accountId);
       if (active?.consentVersion === version)
         throw new ConflictException('이미 위치정보 수집에 동의했습니다');

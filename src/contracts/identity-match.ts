@@ -10,6 +10,15 @@ export const IDENTITY_FIELDS = [
 ] as const;
 export type IdentityField = (typeof IDENTITY_FIELDS)[number];
 
+/** 본인 대조 항목의 화면 한글 — GET /enums 의 IdentityField(직원 앱 날인 화면이 다른 항목을 알린다, WHALEERP-147) */
+export const IDENTITY_FIELD_LABELS: Record<IdentityField, string> = {
+  name: '이름',
+  phone: '휴대전화번호',
+  birthDate: '생년월일',
+  gender: '성별',
+  isForeigner: '외국인 여부',
+};
+
 /** 계약서 당사자 칸(관리자 입력분) */
 export type ContractIdentity = {
   enteredName: string | null;

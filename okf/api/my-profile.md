@@ -1,10 +1,10 @@
 ---
 type: API
 title: My profile (staff app)
-description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
+description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T04:52:10Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:13:48Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: my-consent-service
     resource: ../../src/my-profile/my-consent.service.ts
     title: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
-    last_modified: 2026-10-28T04:52:10Z
+    last_modified: 2026-10-28T08:22:00Z
   - id: my-profile-controller
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
@@ -29,7 +29,7 @@ sources:
   - id: my-consent-controller
     resource: ../../src/my-profile/my-consent.controller.ts
     title: 위치정보 · 본사 제공 동의 경로
-    last_modified: 2026-10-28T04:52:10Z
+    last_modified: 2026-10-28T08:22:00Z
   - id: my-email-change-service
     resource: ../../src/my-profile/my-email-change.service.ts
     title: MyEmailChangeService — 이메일 변경 핀 요청 · 확인(WHALEERP-191)
@@ -45,11 +45,16 @@ sources:
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
-    last_modified: 2026-10-23T02:20:00Z
+    last_modified: 2026-10-28T08:30:00Z
+    last_modified: 2026-10-28T05:30:00Z
   - id: my-memberships-controller
     resource: ../../src/my-profile/my-memberships.controller.ts
     title: 소속 · 신고 정보 경로, 신고 정보 저장의 요청 한도
-    last_modified: 2026-10-23T01:48:54Z
+    last_modified: 2026-10-28T05:30:00Z
+  - id: my-membership-list-query-dto
+    resource: ../../src/my-profile/dto/my-membership-list.query.dto.ts
+    title: 소속 근무지 목록 조건(includeRetired)
+    last_modified: 2026-10-28T05:30:00Z
   - id: save-my-tax-profile-dto
     resource: ../../src/my-profile/dto/save-my-tax-profile.dto.ts
     title: 신고 정보 저장 본문(rrn · bankCode · payrollAccountNumber · currentPassword)
@@ -85,7 +90,7 @@ ever taken from the path.
 | 호출 | 내용 |
 |---|---|
 | `GET /me/profile` | 계정 칸, 본사 제공 동의, 위치정보 동의[^my-profile-service] |
-| `GET /me/memberships` | 소속 근무지 `{ items, total }`[^my-memberships-service] |
+| `GET /me/memberships` | 소속 근무지 `{ items, total }`, `?includeRetired=true` 면 퇴직한 소속도[^my-memberships-service] |
 | `GET /me/memberships/:staffMemberId/tax-profile` | 그 소속의 신고 정보 |
 | `PUT /me/memberships/:staffMemberId/tax-profile` | 신고 정보 작성 · 수정 (WHALEERP-334) |
 
@@ -117,7 +122,7 @@ after each one.
 | `POST /me/profile/password-change` | `{ currentPassword, newPassword }` — 192[^my-password-service] |
 | `POST /me/profile/email-change-pins` | `{ newEmail, currentPassword }` — 191, 지금 비밀번호가 맞으면 새 이메일로 핀[^my-email-change-service] |
 | `POST /me/profile/email-change` | `{ pin }` — 191, 맞으면 이메일을 바꿈 |
-| `POST /me/location-consent` · `/pause` · `/resume` · `/withdraw` | 위치정보 동의 · 잠시 멈춤 · 다시 켜기 · 철회[^my-consent-service] |
+| `POST /me/location-consent` · `/pause` · `/resume` · `/withdraw` | 위치정보 동의 · 잠시 멈춤 · 다시 켜기 · 철회. 동의는 본문에 화면이 보여 준 약관 버전 `{ termsVersion }`(필수, 보인 약관이 없었으면 null)을 싣고, 시행 중인 버전과 다르면 409 — 시트를 연 사이 약관이 바뀌어도 보인 고지와 남는 버전이 어긋나지 않게(WHALEERP-628). 빼면 400[^my-consent-service] |
 | `POST /me/hq-sharing-consent` · `/withdraw` | 본사 제공 동의(다시 동의) · 철회[^my-consent-controller] |
 
 **The address lives on the account, so "every 소속" is free.** `accounts`
@@ -236,7 +241,16 @@ version of the `LOCATION` 약관 in force today (same pick as the public 약관 
 for an older version, 동의 is accepted again (ATT-23 — a new version is agreed at
 the next 출퇴근 등록): the old row is closed with `withdrawn_at` and a new row is
 created at the same instant, carrying over `paused_at`, so each version keeps its
-own evidence (2026-10-22, 효준). Agreeing to the version already held is 409.
+own evidence (2026-10-22, 효준). Agreeing to the version already held is 409. 동의 carries `{ termsVersion }` (required, null when the sheet showed
+none), the version the screen showed in its sheet; if it differs from the one in force, 동의 is 409
+「그사이 위치정보 약관이 바뀌었습니다 …」 and nothing is written (WHALEERP-628 — a sheet
+left open across a 약관 change, e.g. a deploy or the KST midnight a new version takes
+effect, would otherwise record a version the person never saw). The check runs in
+the lock, after the 500 for no 약관 in force and before the already-agreed 409.
+The field is required — omitting it is 400, so an app
+loaded before #45 (an open tab or PWA) cannot turn a consent taken with the old
+wording into the new version; `null` means the sheet showed no 약관 and is 409 when
+one is in force.
 Every 동의 · 철회 · 잠시 멈춤 · 다시 켜기 writes one `location_consent_histories` row
 (`AGREE` · `WITHDRAW` · `PAUSE` · `RESUME`, same transaction and instant; a version
 change writes 철회 on the old row and 동의 on the new one) — 운영 정책 ATT-26,
@@ -270,7 +284,21 @@ Consequences:
 - 퇴직 예정 is a 소속, with `retiredDate` set;
 - retired records and records not yet joined are absent.
 
-Ordered by 입사일 (missing last) then `staffMemberId`. An account with none — 연결
+Ordered by 입사일 (missing last) then `staffMemberId`.
+
+**`includeRetired=true` adds the retired ones** (2026-10-28, WHALEERP-603 follow-up — the
+app's 근무지 list shows past 근무지 too). Only the `employmentStatus` part of `ACTIVE_STAFF`
+is relaxed (`EMPLOYED` or `RETIRED`); a 체결 완료 contract and 가입 완료 are still required, so a
+retired record with only a 임시저장 contract stays out. The current ones keep the order above
+and come first; the retired ones follow, latest `retiredDate` first (ties keep the read order).
+The response shape is unchanged — a `retiredDate` before today (KST) means 퇴직, today or later
+means 퇴직 예정 (RETIRED is set by the midnight batch the day after the date, and the
+`staff_members_retired_date_required` CHECK guarantees the date). Records of a deleted store (`stores.is_deleted`) are left out — a store can only be deleted with no contract in progress, so only retired ones could match. The grouping follows
+`employmentStatus`, so on a day the batch is late a record past its `retiredDate` can still sit in
+the current group while the app reads the date as 퇴직. `false` or absent is exactly
+the old list — attendance, home and the 근무지 selector keep calling it that way; anything but
+`true` · `false` is 400. The tax-profile route does **not** follow the flag: a retired record is
+still 404 there. An account with none — 연결
 보류, or everything retired — gets `{ items: [], total: 0 }`. Deleted stores are
 not filtered, and need not be: a store can be deleted only while 미운영 and with no
 contract in progress, so no 소속 of this rule can point at one.
