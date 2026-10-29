@@ -482,7 +482,11 @@ export class StaffSignupService {
         'PENDING_SIGNATURE',
         'STAFF',
       );
-      return { staffMemberId, storeName: store.name };
+      return {
+        staffMemberId,
+        storeId: invitation.staffMember.storeId,
+        storeName: store.name,
+      };
     });
   }
 

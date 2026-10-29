@@ -57,6 +57,9 @@ export class AcceptMyInvitationResponseDto {
   /** 이 계정에 이어진 직원 레코드 */
   staffMemberId: number;
 
+  /** 근무지(점포) — 앱이 그 근무지의 근로계약서만 연다(`/me/contracts` 항목의 storeId 와 같다) */
+  storeId: number;
+
   /** 근무지(점포) 이름 */
   storeName: string;
 }

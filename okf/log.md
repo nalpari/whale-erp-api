@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Staff signup](/api/staff-signup.md) — 받은 초대 수락(`POST /me/invitations/:invitationId/accept`) 응답에 `storeId` 를 더했다. 직원앱이 수락 뒤 그 근무지 근로계약서만(`/contracts?store=`) 연다(staff #40 후속 리뷰, Plane WHALEERP-604).
 * **Update**: [Public 약관 API](/api/terms-versions.md) · [Admin auth](/api/admin-auth.md) · [Admin signup](/api/admin-signup.md) · [BP masters](/api/bp-masters.md) · [Platform admins](/api/platform-admins.md) · [Store management](/api/stores.md) — 「MY PAGE」를 「마이페이지」로 바꿨다(사용자 결정 — 화면 이름이 「마이페이지」). 약관 본문은 새 마이그레이션 `20261029114945_team1_terms_mypage_label` 이 v1.0 행을 그 자리에서 고친다(`TERMS_SERVICE` 제12조 · `PRIVACY_COLLECT`, 새 버전 없음 — 출시 전 초안). src · test 주석과 Swagger 설명(openapi.json 다시 생성), okf 본문도 맞췄다. 코드 동작 변화는 없고, 약관 두 건의 본문(공개 약관 API 응답)만 바뀐다.
 * **Update**: main 병합(api primeape, main #190 까지): okf/api/admin-auth.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Admin auth](/api/admin-auth.md) — api primeape(#192): `GET /bp-codes` 를 최신 등록순(`created_at` desc, `bp_code_id` desc)으로, 선택 쿼리 `withMaster=true` 면 BP 마스터 계정(BM, 미삭제)이 있는 BP 만 — BP 선택 팝업이 BP 마스터 계정 목록과 같은 건수를 보인다. 없거나 false 면 거르지 않는다(front 의 탭 BP 찾기 · 상태 확인).

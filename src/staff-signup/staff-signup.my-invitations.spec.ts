@@ -279,7 +279,11 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
     it('초대 id 로 찾아 수락 · 레코드를 이 계정에 잇기 · 서명 대기, 동의를 보내면 계정에 남긴다', async () => {
       await expect(
         service().acceptForAccount(77, 41, { hqSharingConsented: true }),
-      ).resolves.toEqual({ staffMemberId: 19, storeName: '모리커피 합정점' });
+      ).resolves.toEqual({
+        staffMemberId: 19,
+        storeId: 4,
+        storeName: '모리커피 합정점',
+      });
       expect(argOf(tx.invitation.findUnique).where).toEqual({
         invitationId: 41,
       });
@@ -313,6 +317,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
       );
       await expect(service().acceptForAccount(77, 41, {})).resolves.toEqual({
         staffMemberId: 19,
+        storeId: 4,
         storeName: '모리커피 합정점',
       });
     });
