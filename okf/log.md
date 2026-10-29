@@ -2,7 +2,7 @@
 
 ## 2026-10-29
 * **Update**: main 병합(api farfetchd, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션 없음.
-* **Update**: [Payslips](/api/payslips.md) — 재영 답(2026-10-28 PAY-05 v234 · 2026-10-29 PAY-04 v237, WHALEERP-243 노무사 답 · WHALEERP-630) 반영: 파트타이머 주휴수당을 계약 소정시간이 아니라 그 주 실근무에서 연장을 뺀 시간 ÷ 5 × 시급(40시간 상한)으로. 대상 판정(계약 소정 15시간 · 개근)과 달을 걸친 주(앞 달이 맡으면 앞 달 날만, 보충 없음)는 그대로. 정직원 결근은 자동 공제하지 않는다(관리자가 고침). 단위 테스트.
+* **Update**: [Payslips](/api/payslips.md) — 재영 답(2026-10-28 PAY-05 v234 · 2026-10-29 PAY-04 v237, WHALEERP-243 노무사 답 · WHALEERP-630) 반영: 파트타이머 주휴수당을 계약 소정시간이 아니라 그 주 실근무에서 연장을 뺀 시간 ÷ 5 × 시급(40시간 상한)으로. 대상 판정(계약 소정 15시간 · 개근)과 달을 걸친 주(앞 달이 맡으면 앞 달 날만, 보충 없음)는 그대로. 정직원 결근은 자동 공제하지 않는다(관리자가 고침 — 코드 변경 없음). 단위 테스트.
 * **Update**: main 병합(api monferno, main #177 · #178 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #182 · #184 까지): okf/log · [Employment Contract Batch](/api/employment-contract-batch.md) 충돌은 양쪽 기록을 살리고 생성 시각은 늦은 값을 썼다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #180 까지): okf/log 충돌은 양쪽 기록을 살렸다. #180 에는 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
