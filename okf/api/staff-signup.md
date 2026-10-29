@@ -203,8 +203,10 @@ token lookup, with the per-phone code lock counted on the account's phone) are g
   counts as not yet (`hqSharingAgreedOf`, [My profile](/api/my-profile.md)), and accept then
   overwrites it with the current version.
 - `POST /me/invitations/:invitationId/accept` with `{ hqSharingConsented? }` → 200 `{ staffMemberId,
-  storeId, storeName }` — the app goes to that 소속's waiting contract (`storeId` is the same as on
-  `GET /me/contracts` items, so the app opens that store's contracts only; staff #40 follow-up). The id goes through `InvitationIdPipe`
+  storeId, storeName }` — the app goes to that 소속's waiting contract (`storeId` is the linked record's
+  store; the app filters `GET /me/contracts` items by it to open that store's contracts only, staff #40
+  follow-up). The 직원 row re-read under `FOR UPDATE` also checks the store — if a contract edit moved
+  the record meanwhile it is 404 `INVITATION_ENDED`, so the response never names a stale store (api #195). The id goes through `InvitationIdPipe`
   (`parseRouteId`: outside `1..2147483647` or not digits is 404 `INVITATION_NOT_FOUND` before any
   query). Then, inside the transaction, the invitation is read by id and judged **phone first**:
 
