@@ -242,20 +242,27 @@ export class AdminScopeService {
 
   /**
    * 플랫폼 계정이 고를 고객 BP — 미삭제 · 플랫폼이 아닌 BP 를 사용 · 미사용 · 탈퇴 모두(2026-10-19, 서비스 바로가기
-   * 「웨일ERP」의 BP 선택). keyword 는 상호 · BP코드 부분 일치다. 누가 불러도 되는지는 부르는 쪽이 정한다.
+   * 「웨일ERP」의 BP 선택). keyword 는 상호 · BP코드 부분 일치, withMaster 면 BP 마스터 계정이 있는 BP 만. 누가 불러도 되는지는 부르는 쪽이 정한다.
    */
   async listBps({
     keyword,
+    withMaster,
     page,
     pageSize,
   }: {
     keyword?: string;
+    withMaster?: boolean;
     page: number;
     pageSize: number;
   }) {
     const where: Prisma.BpCodeWhereInput = {
       isDeleted: false,
       isPlatform: false,
+      // BP 선택 팝업은 BP 마스터 계정이 있는 BP 만 — BP 마스터 계정 목록(bp-masters listWhere)과 같은 범위라 두 화면 건수가 같다(2026-10-29 사용자 지정).
+      // 탭 BP 찾기 · 상태 확인은 같은 api 를 거르지 않고 부른다 — 계정이 없는 BP 도 열려야 한다
+      ...(withMaster && {
+        adminAccounts: { some: { roleTypeCode: 'BM', isDeleted: false } },
+      }),
       ...(keyword && {
         OR: [
           { tradeName: containsText(keyword) },
@@ -272,7 +279,8 @@ export class AdminScopeService {
           tradeName: true,
           accountStatusCode: true,
         },
-        orderBy: [{ bpCode: 'asc' }, { bpCodeId: 'asc' }],
+        // 최신 등록이 위 — BP 마스터 계정 목록(bp-masters ORDER_BY)과 같은 순서(2026-10-29 사용자 지정, 전엔 BP 코드 오름차순)
+        orderBy: [{ createdAt: 'desc' }, { bpCodeId: 'desc' }],
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),

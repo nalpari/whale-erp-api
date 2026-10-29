@@ -1,6 +1,18 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: main 병합(api seadra, base golduck → main, main #194 까지): [Admin auth](/api/admin-auth.md) 시각 충돌은 늦은 값을 남겼다. admin-scope.service.ts 는 자동 병합(main 의 listBps withMaster · 정렬과 seadra 의 가림 판정이 다른 곳).
+* **Update**: [Public 약관 API](/api/terms-versions.md) · [Admin auth](/api/admin-auth.md) · [Admin signup](/api/admin-signup.md) · [BP masters](/api/bp-masters.md) · [Platform admins](/api/platform-admins.md) · [Store management](/api/stores.md) — 「MY PAGE」를 「마이페이지」로 바꿨다(사용자 결정 — 화면 이름이 「마이페이지」). 약관 본문은 새 마이그레이션 `20261029114945_team1_terms_mypage_label` 이 v1.0 행을 그 자리에서 고친다(`TERMS_SERVICE` 제12조 · `PRIVACY_COLLECT`, 새 버전 없음 — 출시 전 초안). src · test 주석과 Swagger 설명(openapi.json 다시 생성), okf 본문도 맞췄다. 코드 동작 변화는 없고, 약관 두 건의 본문(공개 약관 API 응답)만 바뀐다.
+* **Update**: main 병합(api primeape, main #190 까지): okf/api/admin-auth.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin auth](/api/admin-auth.md) — api primeape(#192): `GET /bp-codes` 를 최신 등록순(`created_at` desc, `bp_code_id` desc)으로, 선택 쿼리 `withMaster=true` 면 BP 마스터 계정(BM, 미삭제)이 있는 BP 만 — BP 선택 팝업이 BP 마스터 계정 목록과 같은 건수를 보인다. 없거나 false 면 거르지 않는다(front 의 탭 BP 찾기 · 상태 확인).
+* **Update**: main 병합(api shinx, origin/main 최신): okf/api/admin-auth.md 시각 충돌은 늦은 값을, okf/log 는 양쪽 기록을 살렸다.
+* **Update**: [Admin auth](/api/admin-auth.md) — api #190 review-pr 반영: 현재 비밀번호 확인 문단을 비밀번호 변경 목록 뒤로 옮겼고(목록 마지막 항목이 확인 API 설명처럼 읽혔다), 강제 변경 대상 403 을 적었다. 「현재 비밀번호가 올바르지 않습니다.」가 이 화면 전용이라던 문장을 MY PAGE 세 경로(변경 · 확인 · 탈퇴)가 같이 쓴다로 고쳤다. 확인 경로의 계정 축 한도(10분 10건 · signedInUserTracker)를 컨트롤러 spec 이 고정한다.
+* **Update**: [Admin auth](/api/admin-auth.md) — 회원 탈퇴 1단계용 현재 비밀번호 확인 `POST /auth/admin/me/password-verifications` 를 만들었다(재영 결정, S-JHQQNR). `{ currentPassword }` 가 맞으면 204, 틀리면 400 「현재 비밀번호가 올바르지 않습니다.」(내 비밀번호 변경 · 탈퇴 실행과 같은 비교 · 문구), 빈 값 400, 지운 계정 404. 아무것도 쓰지 않고 로그인 잠금에도 세지 않으며, 계정 축 10분 10건 한도를 건다. 로그인한 관리자 아무나 부를 수 있다. 탈퇴 실행의 비밀번호 확인은 그대로다(이중 확인). openapi 갱신.
+* **Update**: [Admin signup](/api/admin-signup.md) — api #189 review-pr 반영: 영문만인 아이디(`abcd` 등)를 받는 단위 테스트를 더했다. 아이디 형식 문구 「영문 또는 영문·숫자 조합」이 기대는 동작이라, 정규식이 숫자를 요구하게 바뀌면 실패한다. 동작 변화 없음.
+* **Update**: main 병합(api grovyle, main #179 · #186 까지): okf/log · [Admin auth](/api/admin-auth.md) 충돌은 양쪽 기록을 살리고 시각은 늦은 값을 남겼다. #179 가 관리자 로그인 문구에 마침표를 붙여, 아래 「로그인 화면 오류 문구는 모두 마침표」가 코드와 맞는다.
+* **Update**: main 병합(api grovyle, origin/main 최신): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin signup](/api/admin-signup.md) — 회원가입 · 아이디 중복 확인의 아이디 형식 400 문구를 「영문 또는 영문·숫자 조합으로 4~20자로 입력해 주세요.」로 바꿨다(재영 결정). 영문만으로 된 아이디도 되는데 「영문·숫자 조합」이라 숫자를 꼭 섞어야 하는 것처럼 읽혔다. 두 DTO 가 같은 문구인지 단위 테스트가 고정한다.
+* **Update**: [Admin auth](/api/admin-auth.md) — 임시 비밀번호 발급 1시간 5회 초과 429 문구 끝에 마침표를 붙였다(「임시 비밀번호는 1시간에 5번까지 받을 수 있습니다.」, 재영 결정 — 찾기 · 로그인 화면 오류 문구는 모두 마침표로 끝낸다). 단위 테스트 기대값도 맞췄다.
 * **Update**: main 병합(api treecko, main #186 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션 없음.
 * **Update**: main 병합(api treecko, main #185 · #188 까지 — 마이그레이션 20261028140448 · 20261028160701): okf/log · [BP masters](/api/bp-masters.md) 충돌은 양쪽 기록을 살렸다(BP masters 출처 제목은 main 의 엑셀 메서드, 시각은 늦은 값).
 * **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — api #179 리뷰 참고: 세 초기화의 잠금 해제 값을 `CLEARED_ATTEMPT_STATE` 로 쓴다(다른 잠금 해제와 같은 출처). e2e `admin-password-reset-unlock` — 잠긴 플랫폼 관리자 · BP 마스터를 초기화하면 메일로 받은 비밀번호로 바로 로그인된다(잠금 해제를 빼면 429 로 실패하는 것을 확인). 동작 변화 없음.

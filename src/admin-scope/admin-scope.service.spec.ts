@@ -737,12 +737,18 @@ describe('AdminScopeService', () => {
       prisma.bpCode.count.mockResolvedValue(31);
     });
 
-    it('미삭제 고객 BP 를 상태와 상관없이 BP코드순으로 나눠 준다', async () => {
-      await expect(scope.listBps({ page: 3, pageSize: 10 })).resolves.toEqual({
+    it('withMaster 면 BP 마스터 계정이 있는 미삭제 고객 BP 를 상태와 상관없이 최신 등록 순으로 나눠 준다', async () => {
+      await expect(
+        scope.listBps({ withMaster: true, page: 3, pageSize: 10 }),
+      ).resolves.toEqual({
         items: [{ bpCodeId: 7 }],
         total: 31,
       });
-      const where = { isDeleted: false, isPlatform: false };
+      const where = {
+        isDeleted: false,
+        isPlatform: false,
+        adminAccounts: { some: { roleTypeCode: 'BM', isDeleted: false } },
+      };
       expect(prisma.bpCode.findMany).toHaveBeenCalledWith({
         where,
         select: {
@@ -751,14 +757,14 @@ describe('AdminScopeService', () => {
           tradeName: true,
           accountStatusCode: true,
         },
-        orderBy: [{ bpCode: 'asc' }, { bpCodeId: 'asc' }],
+        orderBy: [{ createdAt: 'desc' }, { bpCodeId: 'desc' }],
         skip: 20,
         take: 10,
       });
       expect(prisma.bpCode.count).toHaveBeenCalledWith({ where });
     });
 
-    it('keyword 는 상호 · BP코드 부분 일치(대소문자 무시)를 목록과 total 에 같이 건다', async () => {
+    it('keyword 는 상호 · BP코드 부분 일치(대소문자 무시)를 목록과 total 에 같이 건다 — withMaster 가 없으면 BP 마스터 계정으로 거르지 않는다', async () => {
       await scope.listBps({ keyword: 'bp0001', page: 1, pageSize: 20 });
       const where = {
         isDeleted: false,
