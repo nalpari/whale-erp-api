@@ -152,8 +152,10 @@ export class AdminScopeService {
    * 범위를 먼저 정하고 찾는다(staffInScope).
    *
    * 두 번째 쓰임: 직원 상세 근로계약 요약의 급여 계좌 보기(canViewPayrollAccount)도 이 판정을 쓴다 — 가맹 직원의
-   * 급여 계좌는 본사 역할에게 동의와 상관없이 보이지 않는다(운영 정책 TAX-07 · TAX-08, 재영 2026-10-29). 재설정 링크
-   * 정책만 바꾸려면 이 함수를 고치지 말고 나눌 것.
+   * 급여 계좌는 본사 역할에게 동의와 상관없이 보이지 않는다(운영 정책 TAX-07 · TAX-08, 재영 2026-10-29).
+   * 세 번째 쓰임: 근로계약 상세의 신고 정보(주민등록번호 · 급여 계좌, ContractsService.taxProfileOf — WHALEERP-155)도 같은
+   * 기준이다. 신고 정보는 직원 레코드에 붙어 있어 계약 근무지가 아니라 직원 레코드의 점포로 본다. 재설정 링크 정책만
+   * 바꾸려면 이 함수를 고치지 말고 나눌 것 — 고치면 두 신고 정보 화면이 함께 열린다.
    */
   async canManageStaffAccount(
     adminAccountId: number,

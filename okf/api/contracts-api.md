@@ -596,7 +596,8 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   - `NONE` — the 직원 has not entered it, whatever the contract's status or method.
   - `HIDDEN` — 본사 역할(BM · BA) looking at a 가맹 점포 직원's contract (they can open it with 본사 제공 동의). Judged
     by `AdminScopeService.canManageStaffAccount`, the same rule as the 직원 상세 급여 계좌 (재영 2026-10-29, TAX-07 ·
-    TAX-08); the row is neither read nor decrypted.
+    TAX-08); the row is neither read nor decrypted. It is judged on the 직원 record's store, not the contract's — the 신고
+    정보 belongs to the record (the two can differ when a 가입한 직원's 임시저장 moves to another 근무지).
   - `UNAVAILABLE` — no `PERSONAL_DATA_ENCRYPTION_KEY`, or a column will not decrypt / the decrypted 주민번호 is malformed.
     Unlike the 직원 상세 요약 (503/500 for the whole area), **the detail still returns 200** — only this field fails.
     The log names the record and column, never the value.
