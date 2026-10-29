@@ -55,6 +55,10 @@ describe('공통 엑셀 (e2e, DB)', () => {
     count: jest.fn<Promise<number>, [ExcelExportCaller, TestQuery]>(),
     build: jest.fn<Promise<Buffer>, [ExcelExportCaller, TestQuery]>(),
     assertRequester: jest.fn<Promise<void>, [number]>(),
+    // 볼 수 있는 범위의 지문 — 만들 때 남기고 받을 때 견준다
+    scopeKey: jest
+      .fn<Promise<string>, [ExcelExportCaller]>()
+      .mockResolvedValue('scope-A'),
   } satisfies ExcelExportSource<TestQuery>;
   // 두 번째 시험 화면 — 같은 사람의 대기 작업을 하나 더 두려면 다른 메뉴가 필요하다(생성 중 하나만은 화면마다).
   // 다른 e2e 스위트의 앱에는 이 두 소스가 없어 그 앱의 크론이 이 작업들을 가져가지 않는다.
@@ -461,6 +465,19 @@ describe('공통 엑셀 (e2e, DB)', () => {
       new ForbiddenException('플랫폼 계정이 아님'),
     );
     storage.downloadUrl.mockClear();
+    expect(await statusOf(() => exports.download(adminId, id, before))).toBe(
+      403,
+    );
+    expect(storage.downloadUrl).not.toHaveBeenCalled();
+    // 만든 때의 범위 지문이 이력에 남고, 받을 때 범위가 달라졌으면(예: 일부 점포로 좁혀짐) 403
+    expect(
+      (
+        await prisma.excelDownloadLog.findUniqueOrThrow({
+          where: { excelDownloadId: id },
+        })
+      ).scopeKey,
+    ).toBe('scope-A');
+    source.scopeKey.mockResolvedValueOnce('scope-B');
     expect(await statusOf(() => exports.download(adminId, id, before))).toBe(
       403,
     );

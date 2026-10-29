@@ -42,6 +42,11 @@ export class StoreExcelSource
     );
   }
 
+  /** 지금 볼 수 있는 점포 범위의 지문 — 예약 생성 파일을 받을 때 만든 때와 견준다. */
+  async scopeKey(caller: ExcelExportCaller): Promise<string> {
+    return this.management.excelScopeKey(caller.adminAccountId, bpOf(caller));
+  }
+
   async build(
     caller: ExcelExportCaller,
     query: StoreExcelQueryDto,

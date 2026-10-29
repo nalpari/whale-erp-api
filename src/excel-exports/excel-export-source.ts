@@ -29,4 +29,10 @@ export interface ExcelExportSource<Q extends object = object> {
    * 메뉴 권한과 함께 다시 부른다 — 만든 뒤 24시간 안에 조건을 잃으면 받지 못하게. 없으면 메뉴 권한만 본다.
    */
   assertRequester?(adminAccountId: number): Promise<void>;
+  /**
+   * 요청자가 지금 볼 수 있는 데이터 범위의 지문(예: 점포 — 대상 BP · 전체 점포 · 매핑 점포). 예약 생성 파일을 만들 때
+   * 남기고, 받을 때 다시 물어 다르면 403 이다 — 만든 뒤 범위가 좁아진 사람이 그 전 범위의 파일을 받지 않게. 범위가 없는
+   * 화면(BP 목록 — 플랫폼 전체)은 두지 않는다.
+   */
+  scopeKey?(caller: ExcelExportCaller): Promise<string>;
 }

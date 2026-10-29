@@ -1775,6 +1775,49 @@ describe('StoreManagementService', () => {
       expect(args.select.businessProfile).toBeTruthy();
     });
 
+    // 예약 생성 파일은 24시간 받을 수 있다 — 받을 때 지금 범위가 만든 때와 같은지 이 지문으로 견준다.
+    describe('범위 지문(excelScopeKey)', () => {
+      beforeEach(() => {
+        (prisma.adminStoreMapping as Record<string, jest.Mock>).findMany = jest
+          .fn()
+          .mockResolvedValue([{ storeId: 12 }, { storeId: 4 }]);
+      });
+
+      it('전체 점포 계정은 대상 BP 와 「전체」만 — 매핑은 읽지 않는다', async () => {
+        await expect(service.excelScopeKey(BM, OWN_BP)).resolves.toBe(
+          JSON.stringify({ bp: 3, all: true }),
+        );
+        expect(prisma.adminStoreMapping.findMany).not.toHaveBeenCalled();
+      });
+
+      it('일부 점포 계정은 지운 것을 뺀 매핑 점포를 정렬해 담는다 — 매핑이 줄면 지문이 바뀐다', async () => {
+        prisma.adminAccount.findFirst.mockResolvedValueOnce(
+          account(BM, { isAllStores: false }),
+        );
+        await expect(service.excelScopeKey(BM, OWN_BP)).resolves.toBe(
+          JSON.stringify({ bp: 3, all: false, stores: [4, 12] }),
+        );
+        expect(prisma.adminStoreMapping.findMany).toHaveBeenCalledWith({
+          where: { adminAccountId: BM, isDeleted: false },
+          select: { storeId: true },
+        });
+      });
+
+      it('플랫폼 계정은 고른 BP 의 전체다', async () => {
+        prisma.adminAccount.findFirst.mockResolvedValueOnce(platformAccount());
+        await expect(service.excelScopeKey(PM, PICKED_BP)).resolves.toBe(
+          JSON.stringify({ bp: 8, all: true }),
+        );
+      });
+
+      it('사용 중인 계정이 아니면 403', async () => {
+        prisma.adminAccount.findFirst.mockResolvedValueOnce(null);
+        await expect(service.excelScopeKey(BM, OWN_BP)).rejects.toBeInstanceOf(
+          ForbiddenException,
+        );
+      });
+    });
+
     it('사용 중인 관리자 계정이 아니면 403 — 건수 · 파일 모두', async () => {
       prisma.adminAccount.findFirst.mockResolvedValueOnce(null);
       await expect(service.excelCount(BM, OWN_BP, {})).rejects.toBeInstanceOf(

@@ -3165,6 +3165,8 @@ model ExcelDownloadLog {
   startedAt        DateTime?           @map("started_at") @db.Timestamptz(6)
   /// 완료 일시
   completedAt      DateTime?           @map("completed_at") @db.Timestamptz(6)
+  /// 범위 지문 — 만들 때 요청자가 볼 수 있던 범위(플랫폼 여부 · 대상 BP · 전체 점포 · 매핑 점포). 받을 때 지금 범위와 다르면 막는다
+  scopeKey         String?             @map("scope_key")
 
   @@index([requestedBy, menuId, requestedAt], map: "excel_download_logs_requested_by_menu_id_requested_at_idx")
   @@index([status, requestedAt], map: "excel_download_logs_status_requested_at_idx")

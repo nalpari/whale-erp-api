@@ -9,6 +9,7 @@ describe('StoreExcelSource', () => {
   const management = {
     excelCount: jest.fn().mockResolvedValue(12),
     excelFile: jest.fn().mockResolvedValue(Buffer.from('PK')),
+    excelScopeKey: jest.fn().mockResolvedValue('{"bp":8,"all":true}'),
   };
   const registry = new ExcelExportRegistry();
   const source = new StoreExcelSource(
@@ -39,6 +40,13 @@ describe('StoreExcelSource', () => {
     );
     expect(management.excelCount).toHaveBeenCalledWith(5, BP, query);
     expect(management.excelFile).toHaveBeenCalledWith(5, BP, query);
+  });
+
+  it('범위 지문은 점포 관리가 지금 계정으로 정한다 — 대상 BP 를 그대로 넘긴다', async () => {
+    await expect(source.scopeKey({ adminAccountId: 5, bp: BP })).resolves.toBe(
+      '{"bp":8,"all":true}',
+    );
+    expect(management.excelScopeKey).toHaveBeenCalledWith(5, BP);
   });
 
   it('대상 BP 가 없는 호출자는 설정 잘못이라 던진다 — 점포 화면은 늘 탭 BP 를 정한다', async () => {

@@ -4,32 +4,32 @@ title: Excel exports
 description: 모든 화면의 엑셀 공통 — 1만 건 미만은 바로 파일, 이상은 예약 생성(S3 24시간 · 등록한 이메일로 링크 · 요청한 본인만), 같은 사람 · 같은 화면은 생성 중이면 409 · 1분에 한 번, 모든 요청을 excel_download_logs 에 2년 남긴다. GET /excel-downloads/:id 가 예약 생성한 파일의 주소를 준다.
 tags: [admin, excel, batch, storage, mail, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:30:00Z }
 sources:
   - id: excel-exports-service
     resource: ../../src/excel-exports/excel-exports.service.ts
     title: ExcelExportsService — request · processPending · download · purgeExpired
-    last_modified: 2026-10-29T01:30:00Z
+    last_modified: 2026-10-29T02:30:00Z
   - id: excel-export-policy
     resource: ../../src/excel-exports/excel-export-policy.ts
     title: 1만 건 · 1분 · 24시간 · 두 번 시도 · 2년, 판단 규칙과 메일 변수
-    last_modified: 2026-10-29T01:30:00Z
+    last_modified: 2026-10-29T02:30:00Z
   - id: excel-export-source
     resource: ../../src/excel-exports/excel-export-source.ts
     title: ExcelExportSource — 화면이 주는 건수 · 파일 · 메뉴 URL
-    last_modified: 2026-10-29T01:30:00Z
+    last_modified: 2026-10-29T02:30:00Z
   - id: excel-exports-scheduler
     resource: ../../src/excel-exports/excel-exports.scheduler.ts
     title: excel-export(1분) · excel-download-purge(매일 04:30)
-    last_modified: 2026-10-29T01:30:00Z
+    last_modified: 2026-10-29T02:30:00Z
   - id: excel-downloads-controller
     resource: ../../src/excel-exports/excel-downloads.controller.ts
     title: GET /excel-downloads/:id
-    last_modified: 2026-10-29T01:30:00Z
+    last_modified: 2026-10-29T02:30:00Z
   - id: excel-download-logs-migration
     resource: ../../prisma/migrations/20261028140448_team1_excel_download_logs/migration.sql
     title: excel_download_logs · 메일 템플릿 2건
-    last_modified: 2026-10-29T01:30:00Z
+    last_modified: 2026-10-29T02:30:00Z
 ---
 
 # Status
@@ -142,7 +142,15 @@ asks `adminHasMenuAction(read)` on that menu — which also needs an active acco
 source's `assertRequester` (BP 목록: still a platform account); either failing is 403 and no URL
 is issued. Checking only when the file is built would leave the 24 hours after it open: a role
 group that lost the menu, or an account set to 미사용, could still fetch the 사업자정보 file
-(PR #188 review). Each success sets `downloaded_at`. The admin web page behind the mail link calls this and opens the URL — that
+(PR #188 review). Permission is not the whole of it: **a screen with a data scope also compares
+a scope fingerprint**. `ExcelExportSource.scopeKey(caller)` is asked when the file is built and
+stored in `scope_key`, and asked again — with the caller rebuilt from the row — when it is
+downloaded; any difference is 403 (「볼 수 있는 범위가 바뀌어…다시 요청해 주세요」). 점포 목록's
+fingerprint is what `scopeOf` uses: the target BP and either 「all」 (platform or `is_all_stores`)
+or the sorted non-deleted `admin_store_mappings` store ids — so a manager narrowed from all stores
+to some, or losing a mapping, cannot fetch the wider file. A widened scope is also a difference
+and is refused too; asking again builds the file for the current scope. BP 목록 has no scope (the
+platform sees every BP) and keeps `assertRequester` only. Each success sets `downloaded_at`. The admin web page behind the mail link calls this and opens the URL — that
 page is front work.
 
 **The API deletes the files.** The files carry 사업자정보 and 대표자명, so 「24 hours」 has to be
@@ -161,7 +169,8 @@ adding; the bucket is shared with 1차 ERP, so it must be limited to that prefix
 `excel_download_logs` (1팀, `20261028140448_team1_excel_download_logs`): requester, menu,
 target BP, the query as JSON, row count, `DIRECT` · `SCHEDULED`, `PENDING` · `PROCESSING` ·
 `SUCCEEDED` · `FAILED`, file name, storage key, attempts, failure reason, mail time, expiry,
-last download, request, attempt start (`started_at`) and completion time.[^excel-download-logs-migration]
+last download, request, attempt start (`started_at`) and completion time, and the scope fingerprint
+taken when the file was built (`scope_key`).[^excel-download-logs-migration]
 It is an event log (`_logs`, no `is_deleted`): **kept two years** (사용자 결정 — the 개인정보
 접속기록 retention of the 안전성 확보조치 기준, which counts downloads) and then deleted by
 `excel-download-purge` at **04:30 KST daily** under `runExclusive`; the S3 sweep above runs

@@ -310,6 +310,22 @@ export class StoreManagementService implements OnModuleInit {
     return this.prisma.store.count({ where: listWhere(caller, query) });
   }
 
+  /**
+   * 지금 볼 수 있는 점포 범위의 지문 — scopeOf 와 같은 재료(대상 BP · 전체 여부 · 매핑 점포). 예약 생성 파일을 만들 때
+   * 남기고 받을 때 견줘, 그 사이 일부 점포로 좁혀졌거나 매핑이 줄어든 사람이 전 범위의 파일을 받지 않게 한다.
+   */
+  async excelScopeKey(callerId: number, bp: TargetBpContext): Promise<string> {
+    const caller = await this.loadCaller(callerId, bp);
+    const all = caller.isPlatform || caller.isAllStores;
+    if (all) return JSON.stringify({ bp: caller.targetBpCodeId, all });
+    const mappings = await this.prisma.adminStoreMapping.findMany({
+      where: { adminAccountId: callerId, isDeleted: false },
+      select: { storeId: true },
+    });
+    const stores = mappings.map((m) => m.storeId).sort((a, b) => a - b);
+    return JSON.stringify({ bp: caller.targetBpCodeId, all, stores });
+  }
+
   /** 엑셀 파일(xlsx) — 목록과 같은 조건 · 순서로 전부. 예약 생성 배치도 저장해 둔 조건으로 이것을 부른다. */
   async excelFile(
     callerId: number,

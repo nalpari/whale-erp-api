@@ -50,6 +50,7 @@ function job(overrides: Record<string, unknown> = {}) {
     requestedAt: NOW,
     startedAt: NOW,
     completedAt: null,
+    scopeKey: 'scope-A',
     ...overrides,
   };
 }
@@ -62,11 +63,12 @@ describe('ExcelExportsService', () => {
   let mail: any;
   let source: Omit<
     ExcelExportSource<Query>,
-    'count' | 'build' | 'assertRequester'
+    'count' | 'build' | 'assertRequester' | 'scopeKey'
   > & {
     count: jest.Mock;
     build: jest.Mock;
     assertRequester: jest.Mock;
+    scopeKey: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -120,6 +122,7 @@ describe('ExcelExportsService', () => {
       count: jest.fn().mockResolvedValue(3),
       build: jest.fn().mockResolvedValue(Buffer.from('PK')),
       assertRequester: jest.fn().mockResolvedValue(undefined),
+      scopeKey: jest.fn().mockResolvedValue('scope-A'),
     };
     const registry = new ExcelExportRegistry();
     registry.register(source);
@@ -317,6 +320,11 @@ describe('ExcelExportsService', () => {
         status: 'PROCESSING',
         attemptCount: 1,
       });
+      // 만들 때의 범위 지문을 함께 남긴다 — 만들기 전에 물어, 파일과 같은 시점의 범위다
+      expect(done.data.scopeKey).toBe('scope-A');
+      expect(source.scopeKey.mock.invocationCallOrder[0]).toBeLessThan(
+        source.build.mock.invocationCallOrder[0],
+      );
       // 기한은 실제로 다 만든 시각부터 24시간 — 배치가 시작한 시각(NOW)이 아니다.
       expect(done.data.completedAt.getTime()).toBeGreaterThanOrEqual(before);
       expect(
@@ -595,6 +603,32 @@ describe('ExcelExportsService', () => {
       );
       expect(storage.downloadUrl).not.toHaveBeenCalled();
       expect(prisma.excelDownloadLog.update).not.toHaveBeenCalled();
+    });
+
+    it('받을 때 지금 범위의 지문이 만든 때와 다르면 403 — 일부 점포로 좁혀진 사람이 전체 파일을 받지 않게', async () => {
+      prisma.excelDownloadLog.findFirst.mockResolvedValueOnce(
+        job({
+          status: 'SUCCEEDED',
+          bpCodeId: 3,
+          storageKey: 'excel-exports/7/a.xlsx',
+          expiresAt: new Date(NOW.getTime() + HOUR),
+          scopeKey: 'scope-A',
+        }),
+      );
+      prisma.adminAccount.findUniqueOrThrow.mockResolvedValue({
+        roleTypeCode: 'BM',
+        bpCode: { isPlatform: false },
+      });
+      source.scopeKey.mockResolvedValueOnce('scope-B');
+      await expect(service.download(7, 31, NOW)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      // 저장해 둔 대상 BP 로 호출자를 다시 만들어 지금 범위를 묻는다
+      expect(source.scopeKey).toHaveBeenCalledWith({
+        adminAccountId: 7,
+        bp: { bpCodeId: 3, isPlatformCaller: false },
+      });
+      expect(storage.downloadUrl).not.toHaveBeenCalled();
     });
 
     it('받을 때 화면의 호출자 검사도 부른다(예: BP 목록은 지금도 플랫폼 계정이어야 한다)', async () => {

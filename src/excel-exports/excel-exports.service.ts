@@ -243,7 +243,7 @@ export class ExcelExportsService {
       throw new GoneException(
         '내려받기 기한(24시간)이 지났습니다. 다시 요청해 주세요',
       );
-    await this.assertCanStillView(adminAccountId, log.menuId);
+    await this.assertCanStillView(log);
     const url = await this.requireStorage().downloadUrl(
       log.storageKey,
       log.fileName,
@@ -338,15 +338,14 @@ export class ExcelExportsService {
 
   /**
    * 파일은 만든 뒤 24시간 받을 수 있다 — 받는 때에도 그 화면의 메뉴 가드를 다시 본다. 조회 권한을 잃었거나 계정이
-   * 막혔거나(adminHasMenuAction 이 사용 중 계정만 본다) 화면의 호출자 조건(assertRequester)을 잃었으면 403.
-   * 내려받기 경로에는 메뉴 가드가 없다 — 메뉴가 경로가 아니라 이력의 menu_id 로 정해지기 때문이다.
+   * 막혔거나(adminHasMenuAction 이 사용 중 계정만 본다) 화면의 호출자 조건(assertRequester)을 잃었거나, 볼 수 있는
+   * 범위의 지문(scopeKey)이 만든 때와 다르면 403. 내려받기 경로에는 메뉴 가드가 없다 — 메뉴가 경로가 아니라 이력의
+   * menu_id 로 정해지기 때문이다.
    */
-  private async assertCanStillView(
-    adminAccountId: number,
-    menuId: number,
-  ): Promise<void> {
+  private async assertCanStillView(log: ExcelDownloadLog): Promise<void> {
+    const adminAccountId = log.requestedBy;
     const menu = await this.prisma.menu.findUnique({
-      where: { menuId },
+      where: { menuId: log.menuId },
       select: { url: true },
     });
     if (
@@ -361,7 +360,17 @@ export class ExcelExportsService {
       throw new ForbiddenException(
         '이 화면을 볼 권한이 없어 엑셀 파일을 받을 수 없습니다',
       );
-    await this.registry.find(menu.url)?.assertRequester?.(adminAccountId);
+    const source = this.registry.find(menu.url);
+    await source?.assertRequester?.(adminAccountId);
+    // 만든 뒤 볼 수 있는 범위가 바뀌었으면(일부 점포로 좁혀짐 · 매핑 축소 등) 그 전 범위의 파일을 주지 않는다. 넓어진
+    // 경우도 다르다고 보고 막는다 — 다시 요청하면 지금 범위로 만든다.
+    if (
+      source?.scopeKey &&
+      (await source.scopeKey(await this.callerOf(log))) !== log.scopeKey
+    )
+      throw new ForbiddenException(
+        '볼 수 있는 범위가 바뀌어 이 엑셀 파일을 받을 수 없습니다. 다시 요청해 주세요',
+      );
   }
 
   private async menuIdOf(menuUrl: string): Promise<number> {
@@ -502,6 +511,8 @@ export class ExcelExportsService {
           '이 화면을 볼 권한이 없어 엑셀을 만들지 않았습니다',
         );
       const caller = await this.callerOf(job);
+      // 만들 때의 범위 지문 — 파일과 같은 시점으로 남겨, 받을 때 지금 범위와 견준다.
+      const scopeKey = source.scopeKey ? await source.scopeKey(caller) : null;
       const query = plainToInstance(source.queryType, job.searchConditions);
       const buffer = await source.build(caller, query);
       const storage = this.requireStorage();
@@ -515,6 +526,7 @@ export class ExcelExportsService {
         storageKey: key,
         completedAt,
         expiresAt,
+        scopeKey,
         failureReason: null,
       });
       if (!settled) {

@@ -4,20 +4,20 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T05:36:27Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:30:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
-    title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile)
-    last_modified: 2026-10-28T05:36:27Z
+    title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile · excelScopeKey)
+    last_modified: 2026-10-29T02:30:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-10-28T05:36:27Z
+    last_modified: 2026-10-29T02:30:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
-    last_modified: 2026-10-28T05:36:27Z
+    last_modified: 2026-10-29T02:30:00Z
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
@@ -45,7 +45,7 @@ sources:
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
     title: StoresModule — StorageModule, NtsModule verifier provider
-    last_modified: 2026-10-28T05:36:27Z
+    last_modified: 2026-10-29T02:30:00Z
   - id: api-enums
     resource: ../../src/enums/api-enums.ts
     title: API 전용 enum — StoreOperationRequirement · StoreBusinessVerificationResult
@@ -61,7 +61,7 @@ sources:
   - id: store-excel-source
     resource: ../../src/stores/store-excel.source.ts
     title: StoreExcelSource — 공통 엑셀에 주는 건수 · 파일(/stores)
-    last_modified: 2026-10-28T05:36:27Z
+    last_modified: 2026-10-29T02:30:00Z
 ---
 
 # What it covers
@@ -262,7 +262,7 @@ has no separate download action.[^store-excel]
   rows or more is 예약 생성 (202, a link to the registered e-mail, 24 hours, the requester
   only), the same admin's 점포 export is 409 while one is being made and once a minute
   otherwise, and every request is logged in `excel_download_logs` for two years.
-  `StoreExcelSource` supplies `excelCount` (the list's `where`) and `excelFile`;
+  `StoreExcelSource` supplies `excelCount` (the list's `where`), `excelFile` and `excelScopeKey` (the scope fingerprint — a scheduled file is refused at download if the requester's store scope changed since it was built);
   the old in-memory minute map and the 400 for 10,000 rows are gone.
 - The query takes the list's filters only. `page` · `pageSize` are a 400 (the global
   validation pipe forbids unknown keys), so the screen must not forward the list's
@@ -446,7 +446,7 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
   messages it throws: the service logs that stack. The number itself is logged, and a
   개인사업자 number identifies a person — keep that in mind for log retention.
 
-[^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile)
+[^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile · excelScopeKey)
 [^store-excel]: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
 [^stores-controller]: /stores routes and the menu permission per action (`/stores`, MN000002 today)
 [^store-format]: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨

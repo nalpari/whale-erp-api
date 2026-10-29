@@ -34,6 +34,7 @@ CREATE TABLE "excel_download_logs" (
     "requested_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "started_at" TIMESTAMPTZ(6),
     "completed_at" TIMESTAMPTZ(6),
+    "scope_key" TEXT,
 
     CONSTRAINT "excel_download_logs_pkey" PRIMARY KEY ("excel_download_id")
 );
@@ -67,6 +68,7 @@ COMMENT ON COLUMN "excel_download_logs"."downloaded_at" IS '최근 내려받은 
 COMMENT ON COLUMN "excel_download_logs"."requested_at" IS '요청 일시 — 2년 보존';
 COMMENT ON COLUMN "excel_download_logs"."started_at" IS '생성 시작 일시 — 이번 시도를 시작한 시각. 멈춘 작업 판단 기준';
 COMMENT ON COLUMN "excel_download_logs"."completed_at" IS '완료 일시';
+COMMENT ON COLUMN "excel_download_logs"."scope_key" IS '범위 지문 — 만들 때 요청자가 볼 수 있던 범위(플랫폼 여부 · 대상 BP · 전체 점포 · 매핑 점포). 받을 때 지금 범위와 다르면 막는다';
 
 -- 완료 · 실패 메일. 버튼은 메일 공통 틀이 「링크」 변수로 붙인다(isButtonLink). 기본 문구로 되돌리기 원본도 같은 값이다.
 INSERT INTO "notification_templates"
