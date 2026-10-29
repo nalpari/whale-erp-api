@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:44:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T08:20:16Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-29T08:20:16Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -33,7 +33,7 @@ sources:
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
-    last_modified: 2026-10-23T09:40:00Z
+    last_modified: 2026-10-29T08:20:16Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -586,6 +586,22 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   app notice).
   Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503) or the account being 재직 at this
   store already (409) still fail when sent.
+- `taxProfile` — the 직원's 신고 정보, read-only (WHALEERP-155, 2026-10-29 김민식): `{ status, rrnMasked, bankName,
+  accountNumber }`. It hangs on the 직원 record (`StaffTaxProfile` is 1:1 by `staffMemberId`), not the contract, so an
+  old contract shows the 직원's **current** values. `status`:
+  - `OK` — `rrnMasked` is 앞 6자리 + 뒷자리 첫 자 (`900101-1******`, `maskRrn` — masked **here**, the raw number never
+    leaves the API), `bankName` the BANK 공통코드 label (`bankNameOf`, `src/common/bank-name.ts`, shared with the 직원
+    상세 급여 계좌; the code itself when missing), `accountNumber` the full number (no hyphen, not masked — same as
+    WHALEERP-183).
+  - `NONE` — the 직원 has not entered it, whatever the contract's status or method.
+  - `HIDDEN` — 본사 역할(BM · BA) looking at a 가맹 점포 직원's contract (they can open it with 본사 제공 동의). Judged
+    by `AdminScopeService.canManageStaffAccount`, the same rule as the 직원 상세 급여 계좌 (재영 2026-10-29, TAX-07 ·
+    TAX-08); the row is neither read nor decrypted.
+  - `UNAVAILABLE` — no `PERSONAL_DATA_ENCRYPTION_KEY`, or a column will not decrypt / the decrypted 주민번호 is malformed.
+    Unlike the 직원 상세 요약 (503/500 for the whole area), **the detail still returns 200** — only this field fails.
+    The log names the record and column, never the value.
+
+  Every value field is null unless `status` is `OK`. The 관리자웹 shows `NONE` and `HIDDEN` alike as 「-」.
 
 # 소속 추가 확인 요청 (WHALEERP-130 · 144, 2026-10-26 재영)
 
