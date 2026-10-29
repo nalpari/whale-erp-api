@@ -216,6 +216,33 @@ describe('PayslipListService', () => {
       });
     });
 
+    it('상태 필터가 있으면 폐점한 가맹 점포의 명세서는 동의한 직원 것도 뺀다 — 어느 갈래에도 없다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 5, storeTypeCode: 'DIRECT', storeStatusCode: 'OPERATING' },
+          {
+            storeId: 6,
+            storeTypeCode: 'FRANCHISE',
+            storeStatusCode: 'OPERATING',
+          },
+          { storeId: 7, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.list(9, { month, status: ['SENT'] });
+      expect(where().AND).toContainEqual({
+        OR: [
+          { storeId: { in: [5] } },
+          {
+            storeId: { in: [6] },
+            staffMember: {
+              account: HQ_SHARING_CONSENTED.account,
+            },
+          },
+        ],
+      });
+    });
+
     it('네 상태를 모두 고르면 필터가 없는 것과 같아 가린 줄을 빼지 않는다', async () => {
       await service.list(9, {
         month,
@@ -715,6 +742,25 @@ describe('PayslipListService', () => {
           account: HQ_SHARING_CONSENTED.account,
         },
       });
+    });
+
+    it('본사 역할에게 폐점한 가맹 점포는 동의한 직원 것도 세지 않는다 — 0건, 묻지도 않는다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 5, storeTypeCode: 'DIRECT', storeStatusCode: 'OPERATING' },
+          {
+            storeId: 6,
+            storeTypeCode: 'FRANCHISE',
+            storeStatusCode: 'OPERATING',
+          },
+          { storeId: 7, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await expect(
+        service.summary(9, { month, storeId: 7 }),
+      ).resolves.toMatchObject({ total: { count: 0, grossPayAmount: 0 } });
+      expect(prisma.payslip.groupBy).not.toHaveBeenCalled();
     });
 
     it('가맹 쪽 역할은 가맹 점포도 모두 센다', async () => {

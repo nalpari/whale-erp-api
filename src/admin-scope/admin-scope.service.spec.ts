@@ -1,7 +1,12 @@
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
-import { AdminScopeService, hidesPersonalData } from './admin-scope.service';
-import { HQ_SHARING_CONSENT_VERSION } from './hq-sharing';
+import {
+  AdminScopeService,
+  consentOpensStore,
+  hiddenStoreStaffWhere,
+  hidesPersonalData,
+} from './admin-scope.service';
+import { HQ_SHARING_CONSENT_VERSION, HQ_SHARING_CONSENTED } from './hq-sharing';
 
 describe('AdminScopeService', () => {
   let scope: AdminScopeService;
@@ -295,9 +300,57 @@ describe('AdminScopeService', () => {
     ] as const)(
       '%s · %s · 동의 %s → %s',
       (role, storeType, consented, hidden) => {
-        expect(hidesPersonalData(role, storeType, consented)).toBe(hidden);
+        const store = storeType && {
+          storeTypeCode: storeType,
+          storeStatusCode: 'OPERATING',
+        };
+        expect(hidesPersonalData(role, store, consented)).toBe(hidden);
       },
     );
+
+    it.each([
+      ['BM', 'FRANCHISE', true, true],
+      ['BA', 'FRANCHISE', true, true],
+      ['BM', 'DIRECT', false, false],
+      ['FA', 'FRANCHISE', false, false],
+    ] as const)(
+      '폐점 점포 — %s · %s · 동의 %s → %s (가맹 관계가 끝난 레코드에는 동의를 적용하지 않는다, ATT-30 v227)',
+      (role, storeTypeCode, consented, hidden) => {
+        const closed = { storeTypeCode, storeStatusCode: 'CLOSED' };
+        expect(hidesPersonalData(role, closed, consented)).toBe(hidden);
+      },
+    );
+
+    it('consentOpensStore — 동의한 직원은 보이는 점포는 운영 중인 가맹 점포뿐', () => {
+      const store = (storeTypeCode: string, storeStatusCode: string) => ({
+        storeTypeCode,
+        storeStatusCode,
+      });
+      expect(consentOpensStore('BM', store('FRANCHISE', 'OPERATING'))).toBe(
+        true,
+      );
+      expect(consentOpensStore('BM', store('FRANCHISE', 'CLOSED'))).toBe(false);
+      expect(consentOpensStore('BM', store('DIRECT', 'OPERATING'))).toBe(false);
+      expect(consentOpensStore('FA', store('FRANCHISE', 'OPERATING'))).toBe(
+        false,
+      );
+      expect(consentOpensStore('BM', undefined)).toBe(false);
+    });
+
+    it('hiddenStoreStaffWhere — 운영 중인 가맹 점포는 동의한 직원, 폐점이면 아무도 걸리지 않는다', () => {
+      expect(
+        hiddenStoreStaffWhere('BM', {
+          storeTypeCode: 'FRANCHISE',
+          storeStatusCode: 'OPERATING',
+        }),
+      ).toBe(HQ_SHARING_CONSENTED);
+      expect(
+        hiddenStoreStaffWhere('BM', {
+          storeTypeCode: 'FRANCHISE',
+          storeStatusCode: 'CLOSED',
+        }),
+      ).toEqual({ account: { is: { accountId: { in: [] } } } });
+    });
   });
 
   describe('getManageableStores', () => {
@@ -320,7 +373,7 @@ describe('AdminScopeService', () => {
           isDeleted: false,
           adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
         },
-        select: { storeId: true, storeTypeCode: true },
+        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -335,7 +388,7 @@ describe('AdminScopeService', () => {
       await get();
       expect(prisma.store.findMany).toHaveBeenCalledWith({
         where: { bpCodeId: 2, isDeleted: false },
-        select: { storeId: true, storeTypeCode: true },
+        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -375,7 +428,7 @@ describe('AdminScopeService', () => {
       });
       expect(prisma.store.findMany).toHaveBeenCalledWith({
         where: { bpCodeId: 7, isDeleted: false },
-        select: { storeId: true, storeTypeCode: true },
+        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -390,14 +443,14 @@ describe('AdminScopeService', () => {
           isDeleted: false,
           adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
         },
-        select: { storeId: true, storeTypeCode: true },
+        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
         orderBy: { storeId: 'asc' },
       });
 
       await scope.canManageStore(9, 5, otherBp);
       expect(prisma.store.findFirst).toHaveBeenCalledWith({
         where: { storeId: 5, bpCodeId: 2, isDeleted: false },
-        select: { storeTypeCode: true },
+        select: { storeTypeCode: true, storeStatusCode: true },
       });
       expect(prisma.adminStoreMapping.count).toHaveBeenCalled();
     });
@@ -473,7 +526,7 @@ describe('AdminScopeService', () => {
           isDeleted: false,
           adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
         },
-        select: { storeId: true, storeTypeCode: true },
+        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -495,7 +548,7 @@ describe('AdminScopeService', () => {
       await expect(scope.canManageStore(9, 5, platformBp)).resolves.toBe(true);
       expect(prisma.store.findFirst).toHaveBeenCalledWith({
         where: { storeId: 5, bpCodeId: 7, isDeleted: false },
-        select: { storeTypeCode: true },
+        select: { storeTypeCode: true, storeStatusCode: true },
       });
       expect(prisma.adminStoreMapping.count).not.toHaveBeenCalled();
     });

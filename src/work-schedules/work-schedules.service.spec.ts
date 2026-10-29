@@ -423,6 +423,37 @@ describe('WorkSchedulesService', () => {
       });
     });
 
+    it('본사가 폐점한 가맹 점포를 보면 동의한 직원도 없다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 4, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.assignableStaff(ADMIN, 4, '2026-10-21');
+      expect(callArg(db.staffMember.findMany, 0)).toMatchObject({
+        where: { storeId: 4, account: { is: { accountId: { in: [] } } } },
+      });
+    });
+
+    it('본사가 폐점한 가맹 점포의 이력을 보면 동의한 직원 것도 없다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 4, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.histories(ADMIN, { storeId: 4 });
+      expect(callArg(db.workScheduleHistory.count, 0)).toMatchObject({
+        where: {
+          workSchedule: {
+            storeId: 4,
+            staffMember: { account: { is: { accountId: { in: [] } } } },
+          },
+        },
+      });
+    });
+
     it('범위 밖 점포는 404', async () => {
       await expect(
         service.assignableStaff(ADMIN, 99, '2026-10-21'),

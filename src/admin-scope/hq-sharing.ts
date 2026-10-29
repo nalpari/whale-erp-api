@@ -85,8 +85,10 @@ export const HQ_SHARING_CONSENT_STATES = Object.keys(
 ) as readonly HqSharingConsentState[];
 
 /**
- * 그 직원 레코드의 본사 제공 동의 상태. 직영 점포 직원은 동의가 쓰이지 않으므로 null 이다. 직영이 아니면(모르는 유형 포함 —
- * hidesPersonalData 와 같은 기준) 계정의 동의 칸이고, 가입 전(계정 없음)은 동의하지 않은 것이다(hqSharingConsentedOf).
+ * 그 직원 레코드의 본사 제공 동의 상태 — 계정의 동의를 보여 준다. 직영 점포 직원은 동의가 쓰이지 않으므로 null 이다.
+ * 직영이 아니면(모르는 유형 포함) 계정의 동의 칸이고, 가입 전(계정 없음)은 동의하지 않은 것이다(hqSharingConsentedOf).
+ * 가림 판정이 아니다 — 폐점한 가맹 점포의 레코드는 계정이 동의했어도(여기서는 AGREED) 본사 역할에게 가린다(hidesPersonalData,
+ * ATT-30 v227). 가림에는 hidesPersonalData 를 쓴다.
  */
 export function hqSharingConsentStateOf(
   storeTypeCode: string | undefined,

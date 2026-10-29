@@ -434,6 +434,34 @@ describe('ContractsService', () => {
     });
   });
 
+  it('본사 역할에게 폐점한 가맹 점포의 계약은 동의한 직원 것도 읽지 않는다 — 폐점한 직영 점포는 그대로(ATT-30 v227)', async () => {
+    scope.getManageableStores.mockResolvedValue({
+      roleTypeCode: 'BM',
+      stores: [
+        { storeId: 11, storeTypeCode: 'DIRECT', storeStatusCode: 'CLOSED' },
+        {
+          storeId: 12,
+          storeTypeCode: 'FRANCHISE',
+          storeStatusCode: 'OPERATING',
+        },
+        { storeId: 13, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+      ],
+    });
+
+    await service.list(9, { page: 1, pageSize: 20 });
+
+    const [{ where }] = prisma.contract.findMany.mock.calls[0];
+    expect(where).toEqual({
+      OR: [
+        { storeId: { in: [11] } },
+        {
+          storeId: { in: [12] },
+          staffMember: { account: HQ_SHARING_CONSENTED.account },
+        },
+      ],
+    });
+  });
+
   it('점포 유형 · 고른 점포로 좁혀도 본사 역할의 가맹 점포에는 동의 조건이 걸린다 — 좁히는 조건이 동의 조건을 비켜 가지 않게(ATT-30)', async () => {
     scope.getManageableStores.mockResolvedValue({
       roleTypeCode: 'BM',

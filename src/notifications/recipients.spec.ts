@@ -76,7 +76,7 @@ describe('운영 알림 수신자 판정', () => {
       });
       expect(prisma.store.findFirst).toHaveBeenCalledWith({
         where: { storeId: 5, isDeleted: false },
-        select: { bpCodeId: true, storeTypeCode: true },
+        select: { bpCodeId: true, storeTypeCode: true, storeStatusCode: true },
       });
       expect(prisma.adminAccount.findMany).toHaveBeenCalledWith({
         where: {
