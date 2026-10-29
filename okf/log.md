@@ -1,6 +1,10 @@
 # Directory Update Log
 
+## 2026-10-29
+* **Update**: [Payslips](/api/payslips.md) — 재영 답(2026-10-28 PAY-05 v234 · 2026-10-29 PAY-04 v237, WHALEERP-243 노무사 답 · WHALEERP-630) 반영: 파트타이머 주휴수당을 계약 소정시간이 아니라 그 주 실근무에서 연장을 뺀 시간 ÷ 5 × 시급(40시간 상한)으로. 대상 판정(계약 소정 15시간 · 개근)과 달을 걸친 주(앞 달이 맡으면 앞 달 날만, 보충 없음)는 그대로. 정직원 결근은 자동 공제하지 않는다(관리자가 고침). 단위 테스트.
+
 ## 2026-10-28
+
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — api #164 리뷰 참고: 거절한 소속 추가 확인 요청의 계약도 재발송으로 발송 대기 · 새 요청(e2e), 요청 · 계정 초대 확인의 고용 형태 · 직무가 계약 값인지(e2e · 단위). 한 번 거절한 직원은 뒤 요청이 만료돼도 직원 목록에서 다시 보내지 않는다 — 근로계약 상세에서 보낸다(의도).
 * **Update**: main 병합(api #164, WHALEERP-130) — #157 · #158 머지 반영. 재발송은 거부 · 만료(#158)와 소속 추가 확인 요청(#164)을 함께 받는다 — 계정이 있는 번호의 거부 · 만료는 발송 대기로 되살리고 새 요청을 보낸다. SEND_CHANNEL_NOT_READY 없음. 직원 목록 재발송은 발송 대기 · 서명 대기만(INVITE_RESENDABLE), canResendContract 는 없앰.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #158 셀프 code-review: 보낸 적 없는 계약에 `expectedSentAt` 이 오면 「먼저 다시 보냄」이 아니라 상태 충돌 409, `hasOverlappingSigned` 는 볼 계약 조건(`SIGNED_NOW` · `SIGNED_ONCE`)을 받는다(불 값 인자 대신). gyarados(#157 입사일) 병합.

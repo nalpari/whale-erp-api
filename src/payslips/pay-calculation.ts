@@ -194,6 +194,19 @@ function weeksOf(
   return out;
 }
 
+/** 하루 연장이 아닌 한도 — 정직원은 8시간, 파트타이머는 그날 계약의 그 요일 소정근로시간(8시간 이하, 계약하지 않은 요일은 0) */
+const dailyCapOf = (input: PayInput, day: string) =>
+  input.employmentType === 'FULL_TIME'
+    ? DAILY_LIMIT
+    : Math.min(
+        termsOn(input, day)?.contractDays[weekdayOf(day)] ?? 0,
+        DAILY_LIMIT,
+      );
+
+/** 그날 근무 가운데 하루 연장을 뺀 분 */
+const withinDailyCap = (input: PayInput, day: string) =>
+  Math.min(input.worked[day] ?? 0, dailyCapOf(input, day));
+
 /**
  * 날별 연장 분.
  * - 하루 — 정직원은 8시간을 넘긴 분. 파트타이머는 그날 계약의 그 요일 소정근로시간(8시간 이하로 본다)을 넘긴 분이고, 계약하지
@@ -202,14 +215,8 @@ function weeksOf(
  *   40시간을 넘긴 것은 그 주 뒤쪽 근무라 마지막 날부터 거꾸로 그날 몫에 매긴다 — 그날 계약의 시급으로 셈하려고.
  */
 function overtimeByDay(input: PayInput): Map<string, number> {
-  const capOf = (day: string) =>
-    input.employmentType === 'FULL_TIME'
-      ? DAILY_LIMIT
-      : Math.min(
-          termsOn(input, day)?.contractDays[weekdayOf(day)] ?? 0,
-          DAILY_LIMIT,
-        );
-  const within = (day: string) => Math.min(input.worked[day] ?? 0, capOf(day));
+  const capOf = (day: string) => dailyCapOf(input, day);
+  const within = (day: string) => withinDailyCap(input, day);
   const weeklyOver = (days: readonly string[]) =>
     Math.max(0, days.reduce((s, day) => s + within(day), 0) - WEEKLY_LIMIT);
   const out = new Map<string, number>();
@@ -233,19 +240,28 @@ function overtimeByDay(input: PayInput): Map<string, number> {
 }
 
 /**
- * 주휴를 받는 주의 계약 — 이 기간이 맡은 주 가운데 주휴 조건을 채우고, 그 주 마지막 날(맡은 몫의 마지막 날) 계약의 1주
+ * 주휴를 받는 주 — 이 기간이 맡은 주 가운데 주휴 조건을 채우고, 그 주 마지막 날(맡은 몫의 마지막 날) 계약의 1주
  * 소정근로시간이 15시간 이상인 주(PAY-02). 한 주가 두 계약에 걸치면 마지막 날 계약으로 센다(1주 소정 · 시급) — 개근은 날마다 그날
- * 계약 요일로 본다. 우리 판단 · 노무 확인 대기(2026-10-26).
+ * 계약 요일로 본다. 우리 판단 · 노무 확인 대기(2026-10-26). `workedMinutes` 는 그 주(맡은 날)의 실근무에서 하루 연장을 뺀 분이다 —
+주휴 금액을 센다(주 40시간 초과는 금액에서 40시간 상한으로 뺀다, PAY-04 v237 2026-10-29 재영).
  */
-function holidayWeeksOf(input: PayInput): ContractTerms[] {
+function holidayWeeksOf(
+  input: PayInput,
+): { terms: ContractTerms; workedMinutes: number }[] {
   return weeksOf(input).flatMap(({ days }) => {
     if (days.length === 0) return [];
     const terms = termsOn(input, days[days.length - 1]);
-    return terms &&
-      weeklyMinutesOf(terms) >= WEEKLY_HOLIDAY_MIN &&
-      holidayQualifies(input, days)
-      ? [terms]
-      : [];
+    if (
+      !terms ||
+      weeklyMinutesOf(terms) < WEEKLY_HOLIDAY_MIN ||
+      !holidayQualifies(input, days)
+    )
+      return [];
+    const workedMinutes = days.reduce(
+      (s, d) => s + withinDailyCap(input, d),
+      0,
+    );
+    return [{ terms, workedMinutes }];
   });
 }
 
@@ -277,8 +293,11 @@ function daysByContract(
  *   지금까지의 일할과 같다. 계약별로 나누는 것은 우리 판단 · 노무 확인 대기. 연장수당은 계약마다 그 계약이 효력인 날의 연장 분에서
  *   그 계약 월간 연장(포괄)을 기본급처럼 그 계약이 효력인 재직 역일 비율로 나눈 만큼을 뺀 분 × 그 시급 × 1.5 다(PAY-04, 포괄 일할은
  *   우리 판단 · 노무 확인 대기).
- * - 파트타이머: 기본급은 날마다 연장을 뺀 근무 시간 × 그날 시급, 연장수당은 연장 분 × 그날 시급 × 1.5. 주휴수당은 주마다 1주
- *   소정근로시간 ÷ 40 × 8시간 × 시급(40시간을 넘기지 않는다, 그 주 마지막 날 계약으로).
+ * - 파트타이머: 기본급은 날마다 연장을 뺀 근무 시간 × 그날 시급, 연장수당은 연장 분 × 그날 시급 × 1.5. 주휴수당은 주마다 그 주
+ *   실근무 시간(출퇴근 기록)에서 연장을 뺀 시간 ÷ 5 × 시급이고 40시간 상한이다(그 주 마지막 날 계약 시급으로, PAY-05 v234 · PAY-04
+ *   v237, 2026-10-28 · 29 재영 — 노무사 답 「총근무시간 ÷ 5」). 연장은 계약 소정근로시간 · 하루 8시간 · 주 40시간을 넘긴 시간이라
+ *   계약 소정근로시간 안에서 일한 시간까지만 센다. 가산을 끈 명세서도 같다. 주휴 대상은 그대로 계약 소정 15시간 · 개근으로 본다.
+ *   달을 걸친 주를 앞 달이 맡으면 앞 달 날의 실근무만 센다(다음 달 보충 없음, PAY-04 v237).
  * - 가산을 끈 명세서는 연장수당을 가산 없이 1배로 계산한다(PAY-05).
  * - 시급이 없는 계약이 하나라도 있으면 셋 다 계산하지 않는다.
  */
@@ -354,11 +373,9 @@ export function calculatePay(input: PayInput): PayResult {
     basePay: won(Math.max(0, basePay - overtimePay) / 60),
     weeklyHolidayPay: won(
       holidayWeeks.reduce(
-        (s, terms) =>
+        (s, { terms, workedMinutes }) =>
           s +
-          (Math.min(weeklyMinutesOf(terms), WEEKLY_LIMIT) / WEEKLY_LIMIT) *
-            8 *
-            terms.hourlyWage!,
+          (Math.min(workedMinutes, WEEKLY_LIMIT) / 5 / 60) * terms.hourlyWage!,
         0,
       ),
     ),
