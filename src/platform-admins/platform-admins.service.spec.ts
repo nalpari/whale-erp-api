@@ -1207,6 +1207,9 @@ describe('PlatformAdminsService', () => {
           passwordHash: '!',
           isPasswordChangeRequired: true,
           isInitialPasswordUnsent: true,
+          // 잠긴 계정도 받은 비밀번호로 바로 들어온다(BP 관리자 초기화와 같다)
+          failedLoginCount: 0,
+          lockExpiresAt: null,
           updatedBy: 1,
         },
       });

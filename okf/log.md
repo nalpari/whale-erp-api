@@ -1,8 +1,14 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: main 병합(api farfetchd, main #186 까지 — #185 머지 포함): okf/log 충돌은 양쪽 기록을 살렸다. 이 브랜치는 새 마이그레이션 없음.
 * **Update**: main 병합(api farfetchd, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션 없음.
 * **Update**: [Payslips](/api/payslips.md) — 재영 답(2026-10-28 PAY-05 v234 · 2026-10-29 PAY-04 v237, WHALEERP-243 노무사 답 · WHALEERP-630) 반영: 파트타이머 주휴수당을 계약 소정시간이 아니라 그 주 실근무에서 연장을 뺀 시간 ÷ 5 × 시급(40시간 상한)으로. 대상 판정(계약 소정 15시간 · 개근)과 달을 걸친 주(앞 달이 맡으면 앞 달 날만, 보충 없음)는 그대로. 정직원 결근은 자동 공제하지 않는다(관리자가 고침 — 코드 변경 없음). 단위 테스트.
+* **Update**: main 병합(api treecko, main #186 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션 없음.
+* **Update**: main 병합(api treecko, main #185 · #188 까지 — 마이그레이션 20261028140448 · 20261028160701): okf/log · [BP masters](/api/bp-masters.md) 충돌은 양쪽 기록을 살렸다(BP masters 출처 제목은 main 의 엑셀 메서드, 시각은 늦은 값).
+* **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — api #179 리뷰 참고: 세 초기화의 잠금 해제 값을 `CLEARED_ATTEMPT_STATE` 로 쓴다(다른 잠금 해제와 같은 출처). e2e `admin-password-reset-unlock` — 잠긴 플랫폼 관리자 · BP 마스터를 초기화하면 메일로 받은 비밀번호로 바로 로그인된다(잠금 해제를 빼면 429 로 실패하는 것을 확인). 동작 변화 없음.
+* **Update**: [BP admins](/api/bp-admins.md) — api #179 review-pr 반영: 잠금이 풀리는 길에 운영자 비밀번호 초기화를 더했다(같은 문서 아래 · 코드와 맞춤). `resetPassword` 주석의 「잠금을 풀고」 중복을 지웠다. 계획서(2026-10-13 관리자 로그인) 6번은 원래 결정 문구를 두고 10-28 변경을 덧붙였다. 동작 변화 없음.
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — api #164 후속(#186): 저장 · 전환 표 · 재발송 응답 status 설명을 계정 있는 번호(소속 추가 확인 요청 · 발송 대기)와 거부 · 만료 되살리기에 맞추고, 거절한 요청의 계약은 상세 재발송으로 되살아남을 적음. 기본 알림 템플릿 e2e 기대 목록에 소속 추가 확인 요청 알림톡 · 메일(44건).
 * **Update**: main 병합(api monferno, main #177 · #178 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #182 · #184 까지): okf/log · [Employment Contract Batch](/api/employment-contract-batch.md) 충돌은 양쪽 기록을 살리고 생성 시각은 늦은 값을 썼다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #180 까지): okf/log 충돌은 양쪽 기록을 살렸다. #180 에는 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
@@ -11,6 +17,11 @@
 * **Update**: [Excel exports](/api/excel-exports.md) · [BP masters](/api/bp-masters.md) — PR #188 적대적 리뷰 블로커 반영. `GET /excel-downloads/:id` 가 받을 때도 그 화면의 메뉴 조회 권한(사용 중 계정 포함, `adminHasMenuAction(read)`)과 화면의 호출자 조건(`ExcelExportSource.assertRequester` — BP 목록은 플랫폼 계정)을 다시 본다 — 만들 때만 보면 그 뒤 24시간 동안 권한을 잃은 사람도 사업자정보 파일을 받았다. 403 이면 주소를 주지 않는다. 배치는 이 인스턴스에 등록된 화면의 작업만 가져간다(`ExcelExportRegistry.menuUrls`) — 소스가 없는 앱(배포가 섞인 동안의 옛 인스턴스, 다른 e2e 스위트)이 작업을 집어 「소스 없음」으로 시도를 쓰지 않게. e2e 는 두 번째 시험 화면을 BP 목록 대신 시험 소스로 바꿨다.
 
 ## 2026-10-28
+* **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인 잠김 429 문구를 「로그인이 잠겼습니다. 5분 뒤에 다시 시도해주세요.」로 바꿨다(재영 결정 — 「임시 비밀번호를 발급받아 주세요」는 빼고, 로그인 실패 문구는 모두 마침표로 끝낸다). 단위 테스트가 문구를 고정한다. 위 주석의 「풀리는 길」에 운영자 비밀번호 초기화를 더했다. 직원 앱 잠김 문구는 그대로다.
+* **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인 실패 공통 문구에 마침표를 붙였다(「아이디 또는 비밀번호가 올바르지 않습니다.」, 화면 정의 S-XJDKSI, 재영 결정). 미사용 문구와 맞춘다. 잠김 문구 · 직원 앱 문구는 그대로다.
+* **Update**: main 병합(api treecko, main #164 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인의 미사용 계정 403 문구를 「사용이 제한된 계정입니다. 관리자에게 문의해 주세요.」로 바꿨다(「이용이」→「사용이」, 마침표, 재영 결정). front 정책 · 목업과 맞춘다. 문의처가 「관리자」인 것은 미사용으로 바꾸는 사람이 계정마다 달라서다. 단위 테스트가 문구를 고정한다. 직원 앱 문구는 그대로다.
+* **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — 플랫폼 관리자 · BP 마스터 비밀번호 초기화도 BP 관리자처럼 로그인 잠금을 푼다(`failed_login_count = 0`, `lock_expires_at = NULL`, 재영 결정). 잠긴 계정을 초기화하면 받은 비밀번호로도 잠금이 끝날 때까지 「로그인이 잠겼습니다」가 나오고, 그 사이 비밀번호 찾기로 받으면 운영자가 보낸 것이 무효가 되던 것. BP 관리자 쪽 「플랫폼과 달리」 주석 · 문서를 셋이 같다로 고쳤다. 단위 테스트는 두 초기화의 쓰기 값에 잠금 해제를 더해 확인한다.
 * **Update**: main 병합(api dewgong, main 최신까지 — PR #185 충돌 풀기): okf/log 충돌은 양쪽 기록을 살렸고, [My profile](/api/my-profile.md) 시각은 늦은 값을 남겼다.
 * **Update**: [Public 약관 API](/api/terms-versions.md) · [Attendance](/api/attendance.md) — 재영 답(2026-10-28, ATT-22 v236): LOCATION v1.1 시행일을 박은 날짜가 아니라 마이그레이션을 적용한 한국 날짜로(`(now() AT TIME ZONE 'Asia/Seoul')::date`) — 머지 · db:deploy 시점은 재영이 정한다.
 * **Update**: [My profile](/api/my-profile.md) — api #185 머지 블로커: `POST /me/location-consent` 의 `termsVersion` 을 필수로(빼면 400, null 은 「보인 약관 없음」 — 시행 중인 약관이 있으면 409). 예전 앱이 버전 없이 보낸 동의가 새 버전으로 남지 않게(WHALEERP-628).

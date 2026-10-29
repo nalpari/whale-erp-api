@@ -24,12 +24,13 @@ import { SIGNED_ONCE } from './signed-contract';
  * 않고 같은 규칙(진행 중 계약 → 종료 + 이력)을 직접 쓴다.
  */
 export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
-  // 초안 저장하면 곧바로 보낸다 — 가입 초대면 발송 대기, 앱으로 받는 직원(가입 · 계정 있음)이면 서명 대기(2026-10-19 재영).
+  // 초안 저장하면 곧바로 보낸다 — 가입 초대 · 소속 추가 확인 요청(계정만 있는 번호, WHALEERP-130)이면 발송 대기, 가입한 직원이면
+  // 서명 대기(2026-10-19 재영).
   // 종이 계약으로 등록하거나(날인본을 올리면 발송 · 날인 없이 체결 완료, CTR-23), 대체 · 퇴직으로 닫는다
   DRAFT: ['PENDING_SEND', 'PENDING_SIGNATURE', 'SIGNED', 'ENDED'],
-  // 가입 초대가 나가 가입을 기다린다. 가입하면 서명 대기(직원 앱, WHALEERP-141). 당사자 정보를 고쳐 그 번호에 계정이
-  // 있으면 곧바로 서명 대기다. 대체 · 퇴직, 또는 채용을 접어 관리자가 종료로 닫는다(WHALEERP-327). 30일 안에 가입하지 않아도
-  // 만료하지 않는다 — 초대만 만료되고 계약은 재발송할 수 있게 둔다(만료 재발송 WHALEERP-153 미정, api #150 리뷰)
+  // 가입 초대 · 소속 추가 확인 요청이 나가 가입 · 수락을 기다린다. 가입 · 수락하면 서명 대기(직원 앱, WHALEERP-141 · 130).
+  // 대체 · 퇴직, 또는 채용을 접어 관리자가 종료로 닫는다(WHALEERP-327). 30일 안에 가입 · 수락하지 않아도 만료하지 않는다 —
+  // 초대 · 요청만 만료되고 계약은 재발송할 수 있게 둔다(api #150 리뷰)
   // 소속 추가 확인 요청을 직원이 거절하면 함께 온 계약은 거부로 닫는다(WHALEERP-130, 2026-10-26 재영 — 거절 사유를 계약에도 남김)
   PENDING_SEND: ['PENDING_SIGNATURE', 'REJECTED', 'ENDED'],
   // 직원이 날인 · 거부하거나, 가입 값과 계약서 값이 달라 수정을 요청하거나(본인 대조, WHALEERP-125), 기한이 지나
@@ -50,7 +51,7 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
   // 계약 기간이 끝나거나 재계약 · 퇴직으로 닫는다. 내용은 고치지 않는다 — 바꾸려면 새 계약으로 대체한다
   SIGNED: ['ENDED'],
   // 거부 · 만료 계약은 같은 조건으로 다시 보낼 수 있다(WHALEERP-153, 운영 정책 CTR-10 · 2026-10-26 재영) — 앱으로 받는
-  // 직원이면 서명 대기, 가입 초대면 발송 대기로 새 기한과 함께 돌아간다
+  // 직원이면 서명 대기, 가입 초대 · 소속 추가 확인 요청이면 발송 대기로 새 기한과 함께 돌아간다
   REJECTED: ['PENDING_SIGNATURE', 'PENDING_SEND'],
   EXPIRED: ['PENDING_SIGNATURE', 'PENDING_SEND'],
   ENDED: [],
