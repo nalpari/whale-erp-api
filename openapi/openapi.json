@@ -6378,6 +6378,9 @@
           },
           "404": {
             "description": "없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류"
+          },
+          "503": {
+            "description": "서버에 암호화 키가 없음(신고 정보가 있을 때만)"
           }
         },
         "security": [
@@ -6385,7 +6388,7 @@
             "bearer": []
           }
         ],
-        "summary": "근로계약 영역 — 가장 최근 계약의 유형 · 기간 · 상태 · 최근 발송일 · 갱신 예정일. 근로계약 관리 조회 권한",
+        "summary": "근로계약 영역 — 가장 최근 계약의 유형 · 기간 · 상태 · 최근 발송일 · 갱신 예정일 · 신고 정보의 급여 계좌(전체 번호, 가리지 않음). 근로계약 관리 조회 권한",
         "tags": [
           "StaffMemberSummary"
         ]
@@ -23134,6 +23137,23 @@
           "retiredDate"
         ]
       },
+      "StaffMemberPayrollAccountDto": {
+        "type": "object",
+        "properties": {
+          "bankName": {
+            "type": "string",
+            "description": "은행 이름(BANK 공통코드 이름, 예 KB국민은행). 공통코드에 없으면 은행 코드 그대로"
+          },
+          "accountNumber": {
+            "type": "string",
+            "description": "계좌번호 전체 — 하이픈 없음, 가리지 않음"
+          }
+        },
+        "required": [
+          "bankName",
+          "accountNumber"
+        ]
+      },
       "ContractMethod": {
         "type": "string",
         "enum": [
@@ -23208,6 +23228,16 @@
       "StaffMemberContractSummaryResponseDto": {
         "type": "object",
         "properties": {
+          "payrollAccount": {
+            "nullable": true,
+            "description": "신고 정보의 급여 계좌 — 은행 이름 · 계좌번호 전체(하이픈 없음, 가리지 않음). 신고 정보가 없으면 null. 계약이 없어도\n신고 정보가 있으면 오고, 급여 지급 방식(계좌 · 현금)과 상관없다",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/StaffMemberPayrollAccountDto"
+              }
+            ]
+          },
           "contract": {
             "nullable": true,
             "description": "계약이 없으면 null",
@@ -23220,6 +23250,7 @@
           }
         },
         "required": [
+          "payrollAccount",
           "contract"
         ]
       },

@@ -1,7 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: main 병합(api electabuzz, main #203 이후 최신): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Payslips](/api/payslips.md) — 재영 답(2026-10-29 운영 정책 v247 PAY-06, WHALEERP-634): ① 「확인 필요 기록 포함」이 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날) 기록도 센다 — 그 근무가 이 달 주휴나 연장에 들어가서다(#193 의 출퇴근 누락과 같은 기준). ② 확정은 급여 기간 마지막 날(한국)이 지난 뒤에만 — 그 전이면 422 `PERIOD_NOT_ENDED`. 초안 · 임시저장 · 다시 계산은 그대로 된다(미리 보기). Swagger 설명(openapi.json 다시 생성). 단위 테스트 · e2e(PERIOD_NOT_ENDED — 고치기 전 실패 확인). 마이그레이션 없음.
+* **Update**: [Staff members](/api/staff-members.md) — 직원 상세 요약 근로계약(`GET /staff-members/:id/summary/contracts`)에 `payrollAccount`(신고 정보의 은행 이름 · 계좌번호 전체, 하이픈 없음 · 가리지 않음, 없으면 null) 추가(WHALEERP-183, 노영주 결정). 계약이 없어도 · 지급 방식과 상관없이 온다. 마이그레이션 없음. 2차 리뷰: `bankName` 은 공통코드에 없으면 은행 코드 그대로(DTO 주석), 은행 이름 조회는 `bpCode` 오름차순으로 플랫폼 원본(BP000000)을 먼저 잡는다는 가정을 주석 · 테스트로 밝혔다.
 * **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 일괄 저장 두 테이블(`bulk_exports` · `bulk_export_download_logs`)과 enum `bulk_export_status` 를 물리 생성기에 넣었다(`_model.py`, 고유 인덱스 식 `KEY_EXPR`, `_build_prisma.py` 의 `integer[]`). 정의서 · schema.sql 을 다시 만들었고 schema.sql 이 마이그레이션 `20261029134408_team3_bulk_exports` 와 문장마다 같다(41문장). front 논리 카탈로그 PR 과 같이 머지한다.
 * **Update**: main 병합(api bulbasaur, main #199 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api bulbasaur, main #193 · #200 까지): okf/api/payslips.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.

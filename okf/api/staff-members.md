@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} — the 상세 요약 areas, each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:41:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T06:12:43Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -37,15 +37,15 @@ sources:
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
-    last_modified: 2026-10-22T07:45:10Z
+    last_modified: 2026-10-29T06:04:07Z
   - id: summary-service
     resource: ../../src/staff-members/staff-member-summary.service.ts
     title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
-    last_modified: 2026-10-22T07:45:10Z
+    last_modified: 2026-10-29T06:12:43Z
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
-    last_modified: 2026-10-22T07:45:10Z
+    last_modified: 2026-10-29T06:12:43Z
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE
@@ -207,7 +207,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 
 | 경로 | 영역 메뉴 | 내용 |
 |---|---|---|
-| `…/summary/contracts` | 근로계약 관리 `/contracts` | 가장 최근 계약(목록 · 상세의 `contract` 와 같은 정렬 — 연장 재계약이 임시저장이거나 거부 · 만료 · 체결 없이 종료로 끝났으면 건너뛴다, `NOT_IDLE_RENEWAL` WHALEERP-156) 하나의 유형 · 방식 · 상태 · 기간 · 최근 발송일 · 갱신 예정일. 계약이 없으면 `{ contract: null }` |
+| `…/summary/contracts` | 근로계약 관리 `/contracts` | 가장 최근 계약(목록 · 상세의 `contract` 와 같은 정렬 — 연장 재계약이 임시저장이거나 거부 · 만료 · 체결 없이 종료로 끝났으면 건너뛴다, `NOT_IDLE_RENEWAL` WHALEERP-156) 하나의 유형 · 방식 · 상태 · 기간 · 최근 발송일 · 갱신 예정일. 계약이 없으면 `contract: null`. **`payrollAccount`**(`{ bankName, accountNumber } | null`) — 신고 정보(`StaffTaxProfile`)의 급여 계좌: 은행 이름(BANK 공통코드, 없으면 코드 그대로)과 계좌번호 **전체**(하이픈 없음, 가리지 않음 — 관리자에게 전체 노출, 2026-10-29 노영주). 신고 정보가 없으면 null, 계약이 없어도 · 급여 지급 방식(계좌 · 현금)과 상관없이 신고 정보에 계좌가 있으면 온다. 권한 · 범위 · 가림은 이 경로 그대로. 키(`PERSONAL_DATA_ENCRYPTION_KEY`)가 비면 503, 풀 수 없으면 500 — 직원 앱 신고 정보 조회와 같다. 계좌 오류 때 근로계약 칸 전체가 실패하는 것은 노영주 결정(2026-10-29)이다. 계좌번호는 로그 · 오류에 남기지 않는다 |
 | `…/summary/work-schedules?weekStart=` | 근무스케줄 관리 `/work-schedules` | 한 주(월~일)의 근무스케줄과 근무시간 · 주간 합계(분). `weekStart` 는 그 주의 아무 날짜, 빼면 이번 주(한국 날짜) |
 | `…/summary/payslips` | 급여명세서 관리 `/payslips` | 최근 명세서 3건(`recent` — 상태와 관계없이 급여 기간 시작일 최신순, 기본급 · 수당 · 공제 · 실지급액 · 상태) · 미발송 건수 |
 | `…/summary/todos` | TO-DO 관리 `/todos` | 배정된 TO-DO 의 전체 · 완료 · 미완료 건수와 최근 처리 이력 5건 |
