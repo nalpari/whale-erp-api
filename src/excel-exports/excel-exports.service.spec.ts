@@ -223,7 +223,7 @@ describe('ExcelExportsService', () => {
         .catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ConflictException);
       expect((error as Error).message).toBe(
-        '엑셀 파일을 만드는 중입니다. 잠시 뒤 다시 받아 주세요',
+        '엑셀 파일을 만드는 중입니다. 잠시 뒤 다시 받아 주세요.',
       );
     });
 
@@ -569,7 +569,7 @@ describe('ExcelExportsService', () => {
         job({ status: 'FAILED' }),
       );
       await expect(service.download(7, 31, NOW)).rejects.toThrow(
-        '엑셀 파일을 만들지 못했습니다. 다시 요청해 주세요',
+        '엑셀 파일을 만들지 못했습니다. 다시 요청해 주세요.',
       );
       const registry = new ExcelExportRegistry();
       const noStorage = new ExcelExportsService(prisma, registry, null, mail, {
