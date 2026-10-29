@@ -1228,7 +1228,7 @@ export class ContractsService {
                 candidateAccountId: sameRecord.candidateAccountId,
               }
             : await decideInvitation(tx, dto.storeId, dto.phone);
-      // 초안 저장(전자계약)은 보낸 뒤의 상태로 만든다 — 가입 초대면 발송 대기, 계정이 있는 번호면 서명 대기
+      // 초안 저장(전자계약)은 보낸 뒤의 상태로 만든다 — 가입 초대 · 소속 추가 확인 요청이면 발송 대기, 가입한 직원이면 서명 대기
       const sends = fields.status === 'PENDING_SEND';
       const status = sends
         ? deliveredStatusOf(joined, invite.draftAction)

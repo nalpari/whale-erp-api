@@ -214,7 +214,7 @@ describe('AdminAuthService', () => {
     it('없는 아이디는 같은 문구 401, 계정 없이 남긴다', async () => {
       prisma.adminAccount.findUnique.mockResolvedValue(null);
       await expect(login()).rejects.toThrow(
-        new UnauthorizedException('아이디 또는 비밀번호가 올바르지 않습니다'),
+        new UnauthorizedException('아이디 또는 비밀번호가 올바르지 않습니다.'),
       );
       expect(logged()).toEqual([
         {
@@ -251,6 +251,9 @@ describe('AdminAuthService', () => {
         (e: unknown) => e,
       )) as HttpException;
       expect(error.getStatus()).toBe(HttpStatus.TOO_MANY_REQUESTS);
+      expect(error.getResponse()).toMatchObject({
+        message: '로그인이 잠겼습니다. 5분 뒤에 다시 시도해주세요.',
+      });
     });
 
     it('잠겨 있으면 맞는 비밀번호도 429, 세지 않는다', async () => {
@@ -272,7 +275,9 @@ describe('AdminAuthService', () => {
       async (_, over, reason) => {
         prisma.adminAccount.findUnique.mockResolvedValue(account(over));
         await expect(login()).rejects.toThrow(
-          new UnauthorizedException('아이디 또는 비밀번호가 올바르지 않습니다'),
+          new UnauthorizedException(
+            '아이디 또는 비밀번호가 올바르지 않습니다.',
+          ),
         );
         expect(sessions.issue).not.toHaveBeenCalled();
         expect(logged()[0]).toMatchObject({
@@ -286,7 +291,11 @@ describe('AdminAuthService', () => {
       prisma.adminAccount.findUnique.mockResolvedValue(
         account({ accountStatusCode: 'INACTIVE' }),
       );
-      await expect(login()).rejects.toThrow(ForbiddenException);
+      await expect(login()).rejects.toThrow(
+        new ForbiddenException(
+          '사용이 제한된 계정입니다. 관리자에게 문의해 주세요.',
+        ),
+      );
       expect(logged()[0]).toMatchObject({ failureReason: 'INACTIVE' });
       await expect(login('wrong')).rejects.toThrow(UnauthorizedException);
     });

@@ -1,6 +1,11 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: main 병합(api treecko, main #186 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션 없음.
+* **Update**: main 병합(api treecko, main #185 · #188 까지 — 마이그레이션 20261028140448 · 20261028160701): okf/log · [BP masters](/api/bp-masters.md) 충돌은 양쪽 기록을 살렸다(BP masters 출처 제목은 main 의 엑셀 메서드, 시각은 늦은 값).
+* **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — api #179 리뷰 참고: 세 초기화의 잠금 해제 값을 `CLEARED_ATTEMPT_STATE` 로 쓴다(다른 잠금 해제와 같은 출처). e2e `admin-password-reset-unlock` — 잠긴 플랫폼 관리자 · BP 마스터를 초기화하면 메일로 받은 비밀번호로 바로 로그인된다(잠금 해제를 빼면 429 로 실패하는 것을 확인). 동작 변화 없음.
+* **Update**: [BP admins](/api/bp-admins.md) — api #179 review-pr 반영: 잠금이 풀리는 길에 운영자 비밀번호 초기화를 더했다(같은 문서 아래 · 코드와 맞춤). `resetPassword` 주석의 「잠금을 풀고」 중복을 지웠다. 계획서(2026-10-13 관리자 로그인) 6번은 원래 결정 문구를 두고 10-28 변경을 덧붙였다. 동작 변화 없음.
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — api #164 후속(#186): 저장 · 전환 표 · 재발송 응답 status 설명을 계정 있는 번호(소속 추가 확인 요청 · 발송 대기)와 거부 · 만료 되살리기에 맞추고, 거절한 요청의 계약은 상세 재발송으로 되살아남을 적음. 기본 알림 템플릿 e2e 기대 목록에 소속 추가 확인 요청 알림톡 · 메일(44건).
 * **Update**: main 병합(api monferno, main #177 · #178 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #182 · #184 까지): okf/log · [Employment Contract Batch](/api/employment-contract-batch.md) 충돌은 양쪽 기록을 살리고 생성 시각은 늦은 값을 썼다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #180 까지): okf/log 충돌은 양쪽 기록을 살렸다. #180 에는 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
@@ -16,6 +21,11 @@
 * **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) — main 병합(#164 소속 추가 확인)과 #183(문구 버전 판정) 맞춤: 소속 추가 확인 목록 · 수락의 동의 질문이 `hqSharingAgreedOf` 로 판정하고(옛 문구 버전 동의는 다시 묻고 수락에서 지금 버전으로 덮는다), 수락은 번호 잠금 다음 계정 행을 `FOR UPDATE` 로 잠근다(번호 → 계정 → 직원 행). 버전 상수는 `src/admin-scope/hq-sharing.ts` 에서 읽는다.
 * **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) — api #183 code-review 반영: 근무지 더하기 수락이 계정 행을 `FOR UPDATE` 로 잠근 뒤 동의를 판정한다(번호 → 계정 → 직원 행 순). 옛 문구 버전 동의를 다시 쓰는 사이 내 정보 철회가 들어오면 철회가 덮이던 경합. `hqSharingConsented` 설명을 「받아 주는 버전에 이미 동의했으면 바꾸지 않는다」로 고치고, `HQ_SHARING_CONSENT_VERSION` 재내보내기를 지웠다. openapi 갱신.
 * **Update**: [My profile](/api/my-profile.md) · [Staff members](/api/staff-members.md) · [Staff signup](/api/staff-signup.md) — 본사 제공 동의의 문구 버전 판정(WHALEERP-137, ATT-30 2026-10-15 재영). 받아 주는 버전 목록 `HQ_SHARING_VALID_VERSIONS`(`src/admin-scope/hq-sharing.ts`)을 두고, 글자만 고치면 앞 버전을 남기고 항목 · 목적을 넓히면 새 버전만 남긴다. 목록에 없는 버전으로 동의한 계정은 가림(`HQ_SHARING_SELECT` · `HQ_SHARING_CONSENTED` · `hqSharingConsentedOf`)에서 미동의이고, 내 정보 `hqSharingConsent.needsReconsent` 가 true 라 앱이 다시 묻는다. 다시 동의(`POST /me/hq-sharing-consent`)와 근무지 더하기의 동의 질문도 같은 판정을 쓴다. 지금 목록은 `v1.0` 하나라 동작 변화는 없다. 마이그레이션 없음. openapi 갱신.
+* **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인 잠김 429 문구를 「로그인이 잠겼습니다. 5분 뒤에 다시 시도해주세요.」로 바꿨다(재영 결정 — 「임시 비밀번호를 발급받아 주세요」는 빼고, 로그인 실패 문구는 모두 마침표로 끝낸다). 단위 테스트가 문구를 고정한다. 위 주석의 「풀리는 길」에 운영자 비밀번호 초기화를 더했다. 직원 앱 잠김 문구는 그대로다.
+* **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인 실패 공통 문구에 마침표를 붙였다(「아이디 또는 비밀번호가 올바르지 않습니다.」, 화면 정의 S-XJDKSI, 재영 결정). 미사용 문구와 맞춘다. 잠김 문구 · 직원 앱 문구는 그대로다.
+* **Update**: main 병합(api treecko, main #164 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인의 미사용 계정 403 문구를 「사용이 제한된 계정입니다. 관리자에게 문의해 주세요.」로 바꿨다(「이용이」→「사용이」, 마침표, 재영 결정). front 정책 · 목업과 맞춘다. 문의처가 「관리자」인 것은 미사용으로 바꾸는 사람이 계정마다 달라서다. 단위 테스트가 문구를 고정한다. 직원 앱 문구는 그대로다.
+* **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — 플랫폼 관리자 · BP 마스터 비밀번호 초기화도 BP 관리자처럼 로그인 잠금을 푼다(`failed_login_count = 0`, `lock_expires_at = NULL`, 재영 결정). 잠긴 계정을 초기화하면 받은 비밀번호로도 잠금이 끝날 때까지 「로그인이 잠겼습니다」가 나오고, 그 사이 비밀번호 찾기로 받으면 운영자가 보낸 것이 무효가 되던 것. BP 관리자 쪽 「플랫폼과 달리」 주석 · 문서를 셋이 같다로 고쳤다. 단위 테스트는 두 초기화의 쓰기 값에 잠금 해제를 더해 확인한다.
 * **Update**: main 병합(api dewgong, main 최신까지 — PR #185 충돌 풀기): okf/log 충돌은 양쪽 기록을 살렸고, [My profile](/api/my-profile.md) 시각은 늦은 값을 남겼다.
 * **Update**: [Public 약관 API](/api/terms-versions.md) · [Attendance](/api/attendance.md) — 재영 답(2026-10-28, ATT-22 v236): LOCATION v1.1 시행일을 박은 날짜가 아니라 마이그레이션을 적용한 한국 날짜로(`(now() AT TIME ZONE 'Asia/Seoul')::date`) — 머지 · db:deploy 시점은 재영이 정한다.
 * **Update**: [My profile](/api/my-profile.md) — api #185 머지 블로커: `POST /me/location-consent` 의 `termsVersion` 을 필수로(빼면 400, null 은 「보인 약관 없음」 — 시행 중인 약관이 있으면 409). 예전 앱이 버전 없이 보낸 동의가 새 버전으로 남지 않게(WHALEERP-628).
