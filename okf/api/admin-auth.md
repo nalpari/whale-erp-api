@@ -17,7 +17,7 @@ sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
-    last_modified: 2026-10-27T05:11:09Z
+    last_modified: 2026-10-28T09:05:49Z
   - id: password
     resource: ../../src/auth/password.ts
     title: verifyPassword — scrypt 형식이 아닌 저장값('!')도 더미 해시로 한 번 대조
@@ -57,7 +57,7 @@ sources:
   - id: admin-temporary-password-service
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
-    last_modified: 2026-10-27T05:11:09Z
+    last_modified: 2026-10-29T00:19:02Z
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
@@ -162,7 +162,9 @@ admin does not retype a password they chose seconds ago.
   the front cannot distinguish "expired" from "forged" from "wrong token kind".
 - The account must still exist and not be deleted or 탈퇴 (401, same message —
   the token outlived the account). An existing but 미사용 account is 403, the
-  same `INACTIVE_MESSAGE` as a login attempt.
+  same `INACTIVE_MESSAGE` as a login attempt — 「사용이 제한된 계정입니다. 관리자에게
+  문의해 주세요.」. It says 관리자, not 플랫폼 운영자: who turns an account 미사용
+  differs per account (플랫폼 운영자 · BP 마스터 · 가맹 마스터, 2026-10-28 재영).
 - On success it issues a session exactly like `login`'s success path
   (`AdminSessionService.issue`, same response shape, `account.isPasswordChangeRequired`
   read as-is — signup never sets it) and writes one `admin_login_logs` row with

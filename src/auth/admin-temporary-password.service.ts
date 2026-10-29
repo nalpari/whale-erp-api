@@ -104,7 +104,7 @@ export class AdminTemporaryPasswordService {
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: `임시 비밀번호는 1시간에 ${MAX_PER_HOUR}번까지 받을 수 있습니다`,
+          message: `임시 비밀번호는 1시간에 ${MAX_PER_HOUR}번까지 받을 수 있습니다.`,
           error: 'Too Many Requests',
         },
         HttpStatus.TOO_MANY_REQUESTS,

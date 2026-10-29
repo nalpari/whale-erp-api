@@ -18,6 +18,7 @@ import {
   OTHER_BP_MESSAGE,
   type TargetBpContext,
 } from '../auth/menu-permission.guard';
+import { CLEARED_ATTEMPT_STATE } from '../auth/attempt-lock';
 import { hashPassword } from '../auth/password';
 import { sameMillisecond } from '../common/updated-at';
 import {
@@ -767,8 +768,8 @@ export class BpAdminsService {
   }
 
   /**
-   * 비밀번호 초기화. 기존 비밀번호 · 앞서 낸 임시 비밀번호를 막고 잠금을 풀고, 새 1시간짜리 임시 비밀번호를 계정
-   * 이메일로만 보낸다. 미사용 계정도 된다(플랫폼 관리자 관리와 같다). 플랫폼과 달리 로그인 잠금도 푼다. 계정 상태와 세션은 그대로다.
+   * 비밀번호 초기화. 기존 비밀번호 · 앞서 낸 임시 비밀번호를 막고, 새 1시간짜리 임시 비밀번호를 계정
+   * 이메일로만 보낸다. 미사용 계정도 된다(플랫폼 관리자 관리와 같다). 로그인 잠금도 푼다(BP 마스터 · 플랫폼 관리자 초기화와 같다). 계정 상태와 세션은 그대로다.
    */
   async resetPassword(
     callerId: number,
@@ -814,8 +815,8 @@ export class BpAdminsService {
           passwordHash: LOCKED_PASSWORD,
           isPasswordChangeRequired: true,
           isInitialPasswordUnsent: true,
-          failedLoginCount: 0,
-          lockExpiresAt: null,
+          failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
+          lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
           updatedBy: by,
         },
       });
