@@ -34,8 +34,9 @@ describe('근로계약 api 메뉴 권한', () => {
     expect(guards).toContain(MenuPermissionGuard);
   });
 
-  it('재발송은 수정 권한이다', () => {
-    const { meta, guards } = permissionOf(ContractSendController, 'send');
+  // 재발송 · 종료는 상태를 바꾸는 동작이라 수정 권한이다(WHALEERP-157 — 역할이 아니라 메뉴 권한으로 막는다)
+  it.each(['send', 'end'])('ContractSendController.%s → update', (method) => {
+    const { meta, guards } = permissionOf(ContractSendController, method);
     expect(meta).toEqual({ action: 'update' });
     expect(guards).toContain(MenuPermissionGuard);
   });

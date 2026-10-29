@@ -12,6 +12,7 @@ import {
   ACCOUNT_UNAVAILABLE_MESSAGE,
 } from './../src/auth/access-messages';
 import { UserType } from './../src/auth/auth.types';
+import { ExcelExportsService } from './../src/excel-exports/excel-exports.service';
 import { PrismaService } from './../src/prisma/prisma.service';
 import { StoreManagementService } from './../src/stores/store-management.service';
 
@@ -114,7 +115,11 @@ describe('점포 정보 관리 (e2e)', () => {
     verifyBusiness: jest.fn().mockResolvedValue({ result: 'VERIFIED' }),
     putImage: jest.fn(),
     removeImage: jest.fn().mockResolvedValue(undefined),
-    excel: jest.fn().mockResolvedValue({
+  };
+  /** 1분 제한 · 1만 건 · 이력은 공통 엑셀 e2e(excel-exports.e2e-spec)가 실제 DB 로 본다. 여기서는 경로 · 조건만. */
+  const excelExports = {
+    request: jest.fn().mockResolvedValue({
+      kind: 'file',
       fileName: '점포목록_20261014.xlsx',
       buffer: Buffer.from('PK'),
     }),
@@ -185,6 +190,8 @@ describe('점포 정보 관리 (e2e)', () => {
       })
       .overrideProvider(StoreManagementService)
       .useValue(management)
+      .overrideProvider(ExcelExportsService)
+      .useValue(excelExports)
       .compile();
     app = fixture.createNestApplication();
     await app.init();
@@ -344,9 +351,9 @@ describe('점포 정보 관리 (e2e)', () => {
     );
     expect((res.body as Buffer).toString()).toBe('PK');
     expect(management.detail).not.toHaveBeenCalled();
-    expect(management.excel).toHaveBeenCalledWith(
-      expect.anything(),
-      OWN_BP,
+    expect(excelExports.request).toHaveBeenCalledWith(
+      expect.objectContaining({ menuUrl: '/stores' }),
+      { adminAccountId: 1, bp: OWN_BP },
       expect.objectContaining({
         statuses: ['OPERATING', 'CLOSED'],
         bizRegistrationNumber: '12345',
@@ -354,10 +361,20 @@ describe('점포 정보 관리 (e2e)', () => {
     );
   });
 
+  it('1만 건 이상이면 202 와 안내 JSON 이다 — 파일은 메일 링크로 간다', async () => {
+    excelExports.request.mockResolvedValueOnce({
+      kind: 'scheduled',
+      excelDownloadId: 41,
+      rowCount: 12_480,
+    });
+    const res = await send('get', '/stores/excel', 'admin').expect(202);
+    expect(res.body).toMatchObject({ excelDownloadId: 41, rowCount: 12_480 });
+  });
+
   // 쪽 칸과 뺀 bpCodeId 는 엑셀 쿼리에 없다 — 전역 파이프가 400 으로 막는다(목록 쿼리를 그대로 넘기면 안 된다).
   it.each(['page=1', 'bpCodeId=3'])('엑셀 쿼리 %s 는 400', async (query) => {
     await send('get', `/stores/excel?${query}`, 'admin').expect(400);
-    expect(management.excel).not.toHaveBeenCalled();
+    expect(excelExports.request).not.toHaveBeenCalled();
   });
 
   describe('대표 이미지', () => {

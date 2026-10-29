@@ -1,10 +1,10 @@
 ---
 type: API
 title: My profile (staff app)
-description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
+description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T02:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:13:48Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -45,11 +45,16 @@ sources:
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
-    last_modified: 2026-10-23T02:20:00Z
+    last_modified: 2026-10-28T08:30:00Z
+    last_modified: 2026-10-28T05:30:00Z
   - id: my-memberships-controller
     resource: ../../src/my-profile/my-memberships.controller.ts
     title: 소속 · 신고 정보 경로, 신고 정보 저장의 요청 한도
-    last_modified: 2026-10-23T01:48:54Z
+    last_modified: 2026-10-28T05:30:00Z
+  - id: my-membership-list-query-dto
+    resource: ../../src/my-profile/dto/my-membership-list.query.dto.ts
+    title: 소속 근무지 목록 조건(includeRetired)
+    last_modified: 2026-10-28T05:30:00Z
   - id: save-my-tax-profile-dto
     resource: ../../src/my-profile/dto/save-my-tax-profile.dto.ts
     title: 신고 정보 저장 본문(rrn · bankCode · payrollAccountNumber · currentPassword)
@@ -85,7 +90,7 @@ ever taken from the path.
 | 호출 | 내용 |
 |---|---|
 | `GET /me/profile` | 계정 칸, 본사 제공 동의, 위치정보 동의[^my-profile-service] |
-| `GET /me/memberships` | 소속 근무지 `{ items, total }`[^my-memberships-service] |
+| `GET /me/memberships` | 소속 근무지 `{ items, total }`, `?includeRetired=true` 면 퇴직한 소속도[^my-memberships-service] |
 | `GET /me/memberships/:staffMemberId/tax-profile` | 그 소속의 신고 정보 |
 | `PUT /me/memberships/:staffMemberId/tax-profile` | 신고 정보 작성 · 수정 (WHALEERP-334) |
 
@@ -268,7 +273,21 @@ Consequences:
 - 퇴직 예정 is a 소속, with `retiredDate` set;
 - retired records and records not yet joined are absent.
 
-Ordered by 입사일 (missing last) then `staffMemberId`. An account with none — 연결
+Ordered by 입사일 (missing last) then `staffMemberId`.
+
+**`includeRetired=true` adds the retired ones** (2026-10-28, WHALEERP-603 follow-up — the
+app's 근무지 list shows past 근무지 too). Only the `employmentStatus` part of `ACTIVE_STAFF`
+is relaxed (`EMPLOYED` or `RETIRED`); a 체결 완료 contract and 가입 완료 are still required, so a
+retired record with only a 임시저장 contract stays out. The current ones keep the order above
+and come first; the retired ones follow, latest `retiredDate` first (ties keep the read order).
+The response shape is unchanged — a `retiredDate` before today (KST) means 퇴직, today or later
+means 퇴직 예정 (RETIRED is set by the midnight batch the day after the date, and the
+`staff_members_retired_date_required` CHECK guarantees the date). Records of a deleted store (`stores.is_deleted`) are left out — a store can only be deleted with no contract in progress, so only retired ones could match. The grouping follows
+`employmentStatus`, so on a day the batch is late a record past its `retiredDate` can still sit in
+the current group while the app reads the date as 퇴직. `false` or absent is exactly
+the old list — attendance, home and the 근무지 selector keep calling it that way; anything but
+`true` · `false` is 400. The tax-profile route does **not** follow the flag: a retired record is
+still 404 there. An account with none — 연결
 보류, or everything retired — gets `{ items: [], total: 0 }`. Deleted stores are
 not filtered, and need not be: a store can be deleted only while 미운영 and with no
 contract in progress, so no 소속 of this rule can point at one.

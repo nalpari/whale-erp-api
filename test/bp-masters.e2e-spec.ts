@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { INestApplication } from '@nestjs/common';
+import { ConflictException, INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
@@ -13,6 +13,7 @@ import type {
   BpMasterListResponseDto,
   CreateBpMasterResponseDto,
 } from '../src/bp-masters/dto/bp-master.response.dto';
+import { ExcelExportsService } from '../src/excel-exports/excel-exports.service';
 import { PLATFORM_ADMIN_MAIL } from '../src/platform-admins/platform-admin-mail';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -31,6 +32,14 @@ describe('BP 마스터 계정 관리 (e2e, DB)', () => {
   const bpCodeIds: number[] = [];
   let pmId: number;
   let bmCallerId: number;
+  /** 1분 제한 · 1만 건 · 이력은 공통 엑셀 e2e(excel-exports.e2e-spec)가 실제 DB 로 본다. 여기서는 경로 · 응답 모양만. */
+  const excelExports = {
+    request: jest.fn().mockResolvedValue({
+      kind: 'file',
+      fileName: 'BP목록_20261028.xlsx',
+      buffer: Buffer.from('PK'),
+    }),
+  };
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -38,6 +47,8 @@ describe('BP 마스터 계정 관리 (e2e, DB)', () => {
     })
       .overrideProvider(PLATFORM_ADMIN_MAIL)
       .useValue(null)
+      .overrideProvider(ExcelExportsService)
+      .useValue(excelExports)
       .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
@@ -163,6 +174,58 @@ describe('BP 마스터 계정 관리 (e2e, DB)', () => {
     phone: '01012345678',
     email: `bpm${suffix}${n}@whale.test`,
     tradeName: `한강상회 ${suffix}${n}`,
+  });
+
+  describe('엑셀 — 공통 엑셀을 거친다', () => {
+    beforeEach(() => excelExports.request.mockClear());
+
+    it(':id 로 잡히지 않고 xlsx 로 내려오며, 대상 BP 없이 조건을 넘긴다', async () => {
+      // 파일 몸통을 받으려면 supertest 체인에 buffer · parse 를 걸어야 해 call 대신 직접 부른다
+      const res = await request(app.getHttpServer())
+        .get('/bp-masters/excel?statuses=ACTIVE')
+        .set('Authorization', `Bearer ${await tokenOf(pmId)}`)
+        .buffer(true)
+        .parse((r, done) => {
+          const chunks: Buffer[] = [];
+          r.on('data', (c: Buffer) => chunks.push(c));
+          r.on('end', () => done(null, Buffer.concat(chunks)));
+        });
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      expect((res.body as Buffer).toString()).toBe('PK');
+      expect(excelExports.request).toHaveBeenCalledWith(
+        expect.objectContaining({ menuUrl: '/bp-masters' }),
+        { adminAccountId: pmId, bp: null },
+        expect.objectContaining({ statuses: ['ACTIVE'] }),
+      );
+    });
+
+    it('1만 건 이상이면 202 와 안내 JSON — 응답이 끝까지 온다(passthrough)', async () => {
+      excelExports.request.mockResolvedValueOnce({
+        kind: 'scheduled',
+        excelDownloadId: 52,
+        rowCount: 10_050,
+      });
+      const res = await call('get', '/bp-masters/excel');
+      expect(res.status).toBe(202);
+      expect(res.body).toMatchObject({ excelDownloadId: 52, rowCount: 10_050 });
+    });
+
+    it('같은 화면이 만드는 중이면 409', async () => {
+      excelExports.request.mockRejectedValueOnce(
+        new ConflictException('엑셀 파일을 만드는 중입니다'),
+      );
+      const res = await call('get', '/bp-masters/excel');
+      expect(res.status).toBe(409);
+    });
+
+    it('BP 계정은 엑셀도 403 — 공통 엑셀까지 가지 않는다', async () => {
+      const res = await call('get', '/bp-masters/excel', undefined, bmCallerId);
+      expect(res.status).toBe(403);
+      expect(excelExports.request).not.toHaveBeenCalled();
+    });
   });
 
   it('BP 계정은 403', async () => {

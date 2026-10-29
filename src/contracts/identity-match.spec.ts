@@ -1,6 +1,8 @@
+import { API_ENUMS } from '../enums/api-enums';
 import {
   type AccountIdentity,
   type ContractIdentity,
+  IDENTITY_FIELDS,
   identityMismatches,
 } from './identity-match';
 
@@ -93,5 +95,20 @@ describe('identityMismatches', () => {
         account({ gender: null }),
       ),
     ).toEqual(['gender']);
+  });
+});
+
+describe('IdentityField — 화면 한글은 GET /enums 로', () => {
+  it('본인 대조 항목마다 한글이 있고 API 전용 enum 으로 등록돼 있다', () => {
+    expect(API_ENUMS.IdentityField).toEqual([
+      ['name', '이름'],
+      ['phone', '휴대전화번호'],
+      ['birthDate', '생년월일'],
+      ['gender', '성별'],
+      ['isForeigner', '외국인 여부'],
+    ]);
+    expect(API_ENUMS.IdentityField.map(([v]) => v)).toEqual([
+      ...IDENTITY_FIELDS,
+    ]);
   });
 });

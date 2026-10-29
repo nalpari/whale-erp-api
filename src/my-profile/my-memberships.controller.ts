@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
@@ -15,6 +23,7 @@ import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { signedInUserTracker } from '../auth/throttle';
+import { MyMembershipListQueryDto } from './dto/my-membership-list.query.dto';
 import {
   MyMembershipListResponseDto,
   MyTaxProfileResponseDto,
@@ -35,11 +44,22 @@ import { StaffMemberIdPipe } from './staff-member-id.pipe';
 export class MyMembershipsController {
   constructor(private readonly memberships: MyMembershipsService) {}
 
-  /** 내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은 퇴직일과 함께 */
+  /**
+   * 내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은
+   * 퇴직일과 함께. `includeRetired=true` 면 퇴직한 레코드도 지금 소속 뒤에 퇴직일 최근 순으로 넣는다 — 퇴직일(retiredDate)이
+   * 오늘보다 앞이면 퇴직, 오늘 · 뒤면 퇴직 예정이다(2026-10-28). 묶음은 재직 상태로 가르므로 퇴직 배치가 늦은 날에는 날짜와
+   * 어긋날 수 있다.
+   */
   @Get()
   @ApiOkResponse({ type: MyMembershipListResponseDto })
-  list(@CurrentUser() user: AuthUser): Promise<MyMembershipListResponseDto> {
-    return this.memberships.list(user.id);
+  @ApiBadRequestResponse({
+    description: 'includeRetired 가 true · false 가 아님',
+  })
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: MyMembershipListQueryDto,
+  ): Promise<MyMembershipListResponseDto> {
+    return this.memberships.list(user.id, query.includeRetired ?? false);
   }
 
   /** 그 소속의 신고 정보 (TAX-8). 주민등록번호 · 계좌번호는 가린 값만 준다 */
