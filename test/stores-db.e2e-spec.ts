@@ -226,6 +226,10 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       await prisma.store.deleteMany({ where: byStore });
       await prisma.adminLoginLog.deleteMany({ where: byAdmin });
       await prisma.adminSession.deleteMany({ where: byAdmin });
+      // 엑셀 요청은 공통 엑셀 이력을 남긴다(요청자 외래키) — 계정보다 먼저 지운다.
+      await prisma.excelDownloadLog.deleteMany({
+        where: { requestedBy: { in: adminIds } },
+      });
       await prisma.adminAccount.deleteMany({ where: byAdmin });
       if (emptyRoleGroupId !== undefined)
         await prisma.roleGroup.deleteMany({

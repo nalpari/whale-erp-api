@@ -14,6 +14,8 @@ CREATE TYPE "use_status" AS ENUM ('ACTIVE', 'INACTIVE');  -- 사용 · 사용중
 CREATE TYPE "repeat_end_type" AS ENUM ('NONE', 'UNTIL_DATE', 'COUNT');  -- 없음 · 날짜 · 횟수
 CREATE TYPE "store_image_file_type" AS ENUM ('JPG', 'PNG');  -- JPG · PNG
 CREATE TYPE "public_holiday_source" AS ENUM ('RULE', 'PUBLIC_API');  -- 규칙 계산 · 공식 API
+CREATE TYPE "excel_delivery_method" AS ENUM ('DIRECT', 'SCHEDULED');  -- 바로 받기 · 예약 생성
+CREATE TYPE "excel_download_status" AS ENUM ('PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED');  -- 대기 · 생성 중 · 완료 · 실패
 
 -- 약관 버전
 CREATE TABLE "terms_versions" (
@@ -436,8 +438,10 @@ CREATE TABLE "bp_holidays" (
 
 -- 휴일 점포 매핑
 CREATE TABLE "holiday_store_mappings" (
+    "holiday_store_mapping_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "bp_holiday_id" INTEGER NOT NULL,
     "store_id" INTEGER NOT NULL,
+    "effective_start_date" DATE NOT NULL,
     "effective_end_date" DATE,
     "is_deleted" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -445,21 +449,23 @@ CREATE TABLE "holiday_store_mappings" (
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_by" INTEGER,
 
-    CONSTRAINT "holiday_store_mappings_pkey" PRIMARY KEY ("bp_holiday_id", "store_id")
+    CONSTRAINT "holiday_store_mappings_pkey" PRIMARY KEY ("holiday_store_mapping_id")
 );
 
 -- 휴일 예외 점포
 CREATE TABLE "holiday_excluded_stores" (
+    "holiday_excluded_store_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
     "bp_holiday_id" INTEGER NOT NULL,
     "store_id" INTEGER NOT NULL,
     "effective_start_date" DATE NOT NULL,
+    "effective_end_date" DATE,
     "is_deleted" BOOLEAN NOT NULL DEFAULT false,
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "created_by" INTEGER,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_by" INTEGER,
 
-    CONSTRAINT "holiday_excluded_stores_pkey" PRIMARY KEY ("bp_holiday_id", "store_id")
+    CONSTRAINT "holiday_excluded_stores_pkey" PRIMARY KEY ("holiday_excluded_store_id")
 );
 
 -- BP 휴일 변경 이력
@@ -504,6 +510,31 @@ CREATE TABLE "public_holiday_synchronization_logs" (
     CONSTRAINT "public_holiday_synchronization_logs_pkey" PRIMARY KEY ("synchronization_id")
 );
 
+-- 엑셀 다운로드 이력
+CREATE TABLE "excel_download_logs" (
+    "excel_download_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
+    "requested_by" INTEGER NOT NULL,
+    "menu_id" INTEGER NOT NULL,
+    "bp_code_id" INTEGER,
+    "search_conditions" JSONB NOT NULL DEFAULT '{}'::jsonb,
+    "row_count" INTEGER NOT NULL,
+    "delivery_method" "excel_delivery_method" NOT NULL,
+    "status" "excel_download_status" NOT NULL,
+    "file_name" TEXT NOT NULL,
+    "storage_key" TEXT,
+    "attempt_count" INTEGER NOT NULL DEFAULT 0,
+    "failure_reason" TEXT,
+    "notified_at" TIMESTAMPTZ(6),
+    "expires_at" TIMESTAMPTZ(6),
+    "downloaded_at" TIMESTAMPTZ(6),
+    "requested_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "started_at" TIMESTAMPTZ(6),
+    "completed_at" TIMESTAMPTZ(6),
+    "scope_key" TEXT,
+
+    CONSTRAINT "excel_download_logs_pkey" PRIMARY KEY ("excel_download_id")
+);
+
 -- ── CHECK 제약 ──
 ALTER TABLE "bp_codes" ADD CONSTRAINT "bp_codes_bp_code_format" CHECK ("bp_code" ~ '^BP[0-9]{6}$');
 ALTER TABLE "bp_codes" ADD CONSTRAINT "bp_codes_trade_name_length" CHECK (char_length("trade_name") BETWEEN 1 AND 50);
@@ -517,7 +548,7 @@ ALTER TABLE "admin_accounts" ADD CONSTRAINT "admin_accounts_withdraw_reason_deta
 ALTER TABLE "admin_accounts" ADD CONSTRAINT "admin_accounts_failed_login_count_nonnegative" CHECK ("failed_login_count" >= 0);
 ALTER TABLE "stores" ADD CONSTRAINT "stores_store_code_format" CHECK ("store_code" ~ '^ST[0-9]{6}$');
 ALTER TABLE "stores" ADD CONSTRAINT "stores_name_length" CHECK (char_length("name") BETWEEN 1 AND 50);
-ALTER TABLE "stores" ADD CONSTRAINT "stores_phone_format" CHECK ("phone" ~ '^[0-9]{9,11}$');
+ALTER TABLE "stores" ADD CONSTRAINT "stores_phone_format" CHECK ("phone" ~ '^[0-9]{9,12}$');
 ALTER TABLE "stores" ADD CONSTRAINT "stores_latitude_range" CHECK ("latitude" BETWEEN -90 AND 90);
 ALTER TABLE "stores" ADD CONSTRAINT "stores_longitude_range" CHECK ("longitude" BETWEEN -180 AND 180);
 ALTER TABLE "store_floors" ADD CONSTRAINT "store_floors_seat_count_nonnegative" CHECK ("seat_count" >= 0);
@@ -535,8 +566,14 @@ ALTER TABLE "menus" ADD CONSTRAINT "menus_depth_range" CHECK ("depth" BETWEEN 1 
 ALTER TABLE "bp_holidays" ADD CONSTRAINT "bp_holidays_name_length" CHECK (char_length("name") BETWEEN 1 AND 30);
 ALTER TABLE "bp_holidays" ADD CONSTRAINT "bp_holidays_end_date_after_start" CHECK ("end_date" >= "start_date");
 ALTER TABLE "bp_holidays" ADD CONSTRAINT "bp_holidays_repeat_count_positive" CHECK ("repeat_count" > 0);
+ALTER TABLE "holiday_store_mappings" ADD CONSTRAINT "holiday_store_mappings_effective_end_after_start" CHECK ("effective_end_date" >= "effective_start_date");
+ALTER TABLE "holiday_excluded_stores" ADD CONSTRAINT "holiday_excluded_stores_effective_end_after_start" CHECK ("effective_end_date" >= "effective_start_date");
 ALTER TABLE "public_holidays" ADD CONSTRAINT "public_holidays_year_range" CHECK ("year" BETWEEN 2000 AND 2100);
 ALTER TABLE "public_holiday_synchronization_logs" ADD CONSTRAINT "public_holiday_synchronization_logs_counts_nonnegative" CHECK ("created_count" >= 0 AND "updated_count" >= 0 AND "deleted_count" >= 0 AND "failed_count" >= 0);
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_counts_nonnegative" CHECK ("row_count" >= 0 AND "attempt_count" >= 0);
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_scheduled_file_when_succeeded" CHECK ("delivery_method" <> 'SCHEDULED' OR "status" <> 'SUCCEEDED' OR ("storage_key" IS NOT NULL AND "expires_at" IS NOT NULL));
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_started_when_processing" CHECK ("status" <> 'PROCESSING' OR "started_at" IS NOT NULL);
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_direct_not_pending" CHECK ("delivery_method" <> 'DIRECT' OR "status" <> 'PENDING');
 
 -- ── 고유 제약 ──
 CREATE UNIQUE INDEX "bp_codes_bp_code_key" ON "bp_codes" ("bp_code");  -- BP 코드 고유
@@ -550,6 +587,10 @@ CREATE UNIQUE INDEX "store_image_files_store_id_key" ON "store_image_files" ("st
 CREATE UNIQUE INDEX "role_groups_role_code_key" ON "role_groups" ("role_code");  -- 권한 코드 고유
 CREATE UNIQUE INDEX "menus_menu_code_key" ON "menus" ("menu_code");  -- 메뉴 코드 고유
 CREATE UNIQUE INDEX "public_holidays_holiday_date_key" ON "public_holidays" ("holiday_date");  -- 한 날짜에 한 건
+CREATE UNIQUE INDEX "menus_url_key" ON "menus" ("url") WHERE "is_deleted" = false AND "status" = 'ACTIVE' AND "url" IS NOT NULL;  -- 사용 중 메뉴끼리 url 고유 — api 가드가 url 로 메뉴 권한을 찾는다(api 마이그레이션 menus_url_active_key)
+CREATE UNIQUE INDEX "holiday_store_mappings_bp_holiday_id_store_id_key" ON "holiday_store_mappings" ("bp_holiday_id", "store_id") WHERE "is_deleted" = false AND "effective_end_date" IS NULL;  -- 열린 기간(종료일 없음)은 휴일 · 점포마다 하나 — api 이름 holiday_store_mappings_open_period_key
+CREATE UNIQUE INDEX "holiday_excluded_stores_bp_holiday_id_store_id_key" ON "holiday_excluded_stores" ("bp_holiday_id", "store_id") WHERE "is_deleted" = false AND "effective_end_date" IS NULL;  -- 열린 예외 기간은 휴일 · 점포마다 하나 — api 이름 holiday_excluded_stores_open_period_key
+CREATE UNIQUE INDEX "excel_download_logs_requested_by_menu_id_key" ON "excel_download_logs" ("requested_by", "menu_id") WHERE "status" IN ('PENDING', 'PROCESSING');  -- 같은 사람 · 같은 화면은 생성 중(바로 받기 · 예약 생성)인 요청이 하나뿐 — 앱이 409 로 먼저 막고 이 인덱스가 마지막 방어선이다
 CREATE UNIQUE INDEX "role_groups_bp_code_id_manager_admin_account_id_name_key" ON "role_groups" ("bp_code_id", "manager_admin_account_id", "name") NULLS NOT DISTINCT WHERE "is_deleted" = false;  -- 같은 BP·같은 관리계정ID 안 권한명 고유. 관리계정이 없는 그룹끼리도 겹치지 않게 NULLS NOT DISTINCT
 
 -- ── 외래키 (모두 ON DELETE RESTRICT — 삭제는 논리 삭제다) ──
@@ -627,6 +668,9 @@ ALTER TABLE "holiday_excluded_stores" ADD CONSTRAINT "holiday_excluded_stores_cr
 ALTER TABLE "holiday_excluded_stores" ADD CONSTRAINT "holiday_excluded_stores_updated_by_fkey" FOREIGN KEY ("updated_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "bp_holiday_change_histories" ADD CONSTRAINT "bp_holiday_change_histories_bp_holiday_id_fkey" FOREIGN KEY ("bp_holiday_id") REFERENCES "bp_holidays" ("bp_holiday_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "bp_holiday_change_histories" ADD CONSTRAINT "bp_holiday_change_histories_changed_by_fkey" FOREIGN KEY ("changed_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_requested_by_fkey" FOREIGN KEY ("requested_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_menu_id_fkey" FOREIGN KEY ("menu_id") REFERENCES "menus" ("menu_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "excel_download_logs" ADD CONSTRAINT "excel_download_logs_bp_code_id_fkey" FOREIGN KEY ("bp_code_id") REFERENCES "bp_codes" ("bp_code_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 
 -- ── 조회 인덱스 ──
 CREATE INDEX "admin_accounts_bp_code_id_idx" ON "admin_accounts" ("bp_code_id");
@@ -648,8 +692,12 @@ CREATE INDEX "menus_parent_menu_id_idx" ON "menus" ("parent_menu_id");
 CREATE INDEX "bp_holidays_bp_code_id_start_date_idx" ON "bp_holidays" ("bp_code_id", "start_date");
 CREATE INDEX "holiday_store_mappings_store_id_idx" ON "holiday_store_mappings" ("store_id");
 CREATE INDEX "holiday_excluded_stores_store_id_idx" ON "holiday_excluded_stores" ("store_id");
+CREATE INDEX "holiday_store_mappings_bp_holiday_id_idx" ON "holiday_store_mappings" ("bp_holiday_id");
+CREATE INDEX "holiday_excluded_stores_bp_holiday_id_idx" ON "holiday_excluded_stores" ("bp_holiday_id");
 CREATE INDEX "bp_holiday_change_histories_bp_holiday_id_changed_at_idx" ON "bp_holiday_change_histories" ("bp_holiday_id", "changed_at");
 CREATE INDEX "public_holidays_year_idx" ON "public_holidays" ("year");
+CREATE INDEX "excel_download_logs_requested_by_menu_id_requested_at_idx" ON "excel_download_logs" ("requested_by", "menu_id", "requested_at");
+CREATE INDEX "excel_download_logs_status_requested_at_idx" ON "excel_download_logs" ("status", "requested_at");
 
 -- ── 주석 ──
 COMMENT ON TABLE "terms_versions" IS '약관 버전';
@@ -793,7 +841,7 @@ COMMENT ON COLUMN "stores"."store_code" IS '점포코드 — ST+6자리, 고유,
 COMMENT ON COLUMN "stores"."bp_code_id" IS 'BP — 소속 BP, bp_codes FK';
 COMMENT ON COLUMN "stores"."store_type_code" IS '점포 유형 코드 — 공통코드 `STORE_TYPE`(DIRECT 직영점포·FRANCHISE 가맹점포), 변경 불가';
 COMMENT ON COLUMN "stores"."name" IS '점포명 — 1~50자, 필수';
-COMMENT ON COLUMN "stores"."phone" IS '점포 연락처 — 숫자 9~11자리';
+COMMENT ON COLUMN "stores"."phone" IS '점포 연락처 — 숫자 9~12자리(050X 평생번호 12자리 · api 마이그레이션 `20261023103403_team1_stores_phone_twelve_digits`)';
 COMMENT ON COLUMN "stores"."zip_code" IS '우편번호';
 COMMENT ON COLUMN "stores"."address" IS '기본주소';
 COMMENT ON COLUMN "stores"."address_detail" IS '상세주소';
@@ -933,7 +981,7 @@ COMMENT ON COLUMN "menus"."menu_code" IS '메뉴 코드 — MN+6자리, 고유, 
 COMMENT ON COLUMN "menus"."service_code" IS '서비스 코드 — 공통코드 `SERVICE`';
 COMMENT ON COLUMN "menus"."parent_menu_id" IS '상위 메뉴 — 최대 3단계';
 COMMENT ON COLUMN "menus"."name" IS '노출 메뉴명 — 필수';
-COMMENT ON COLUMN "menus"."url" IS '메뉴 URL';
+COMMENT ON COLUMN "menus"."url" IS '메뉴 URL — 사용 중 · 지우지 않은 메뉴끼리 고유 — api 가드가 url 로 메뉴 권한을 찾는다(api 마이그레이션 `20261021112158_team1_menus_active_url_unique`)';
 COMMENT ON COLUMN "menus"."sort_order" IS '메뉴 순서';
 COMMENT ON COLUMN "menus"."depth" IS '단계 — 1~3';
 COMMENT ON COLUMN "menus"."status" IS '사용 상태 — 사용·사용중지';
@@ -955,26 +1003,30 @@ COMMENT ON COLUMN "bp_holidays"."repeat_end_date" IS '반복 종료일';
 COMMENT ON COLUMN "bp_holidays"."repeat_count" IS '반복 횟수';
 COMMENT ON COLUMN "bp_holidays"."name" IS '휴일명 — 30자';
 COMMENT ON COLUMN "bp_holidays"."description" IS '설명';
-COMMENT ON COLUMN "bp_holidays"."origin_bp_holiday_id" IS '원래 휴일 — bp_holidays 자기 참조, ''이후 모두'' 수정으로 분할된 경우';
+COMMENT ON COLUMN "bp_holidays"."origin_bp_holiday_id" IS '원래 휴일 — bp_holidays 자기 참조. 쓰지 않음 — 「이후 모두」 분할 수정을 없앴다(BP 휴일 변경 · 종료 정책, 2026-10-26). 그전에 나뉜 휴일만 값이 있다';
 COMMENT ON COLUMN "bp_holidays"."is_deleted" IS '삭제 여부';
 COMMENT ON COLUMN "bp_holidays"."created_at" IS '등록 일시';
 COMMENT ON COLUMN "bp_holidays"."created_by" IS '등록자';
 COMMENT ON COLUMN "bp_holidays"."updated_at" IS '최근 수정 일시';
 COMMENT ON COLUMN "bp_holidays"."updated_by" IS '수정자';
 COMMENT ON TABLE "holiday_store_mappings" IS '휴일 점포 매핑';
+COMMENT ON COLUMN "holiday_store_mappings"."holiday_store_mapping_id" IS '휴일 점포 매핑 ID — 한 행이 한 적용 기간';
 COMMENT ON COLUMN "holiday_store_mappings"."bp_holiday_id" IS '휴일 — bp_holidays FK';
 COMMENT ON COLUMN "holiday_store_mappings"."store_id" IS '대상 점포 — stores FK';
-COMMENT ON COLUMN "holiday_store_mappings"."effective_end_date" IS '적용 종료일 — 일부 점포를 빼거나 떼어 고칠 때 행을 지우지 않고 고른 날짜 전날을 넣는다 — 지난 날짜 보존';
-COMMENT ON COLUMN "holiday_store_mappings"."is_deleted" IS '삭제 여부';
+COMMENT ON COLUMN "holiday_store_mappings"."effective_start_date" IS '적용 시작일 — 점포를 더한 날(시작 전 휴일이면 휴일 시작일). 시작 전 휴일의 시작일을 옮기면 함께 옮긴다';
+COMMENT ON COLUMN "holiday_store_mappings"."effective_end_date" IS '적용 종료일 — 점포를 뺀 날의 전날. 비어 있으면 휴일이 끝날 때까지 — 지난 날짜 보존';
+COMMENT ON COLUMN "holiday_store_mappings"."is_deleted" IS '삭제 여부 — 적용된 날이 없는 기간(오늘 더하고 오늘 뺌 · 시작 전 휴일에서 뺌)';
 COMMENT ON COLUMN "holiday_store_mappings"."created_at" IS '등록 일시';
 COMMENT ON COLUMN "holiday_store_mappings"."created_by" IS '등록자 — admin_accounts FK';
 COMMENT ON COLUMN "holiday_store_mappings"."updated_at" IS '최근 수정 일시';
 COMMENT ON COLUMN "holiday_store_mappings"."updated_by" IS '수정자 — admin_accounts FK';
 COMMENT ON TABLE "holiday_excluded_stores" IS '휴일 예외 점포';
+COMMENT ON COLUMN "holiday_excluded_stores"."holiday_excluded_store_id" IS '휴일 예외 점포 ID — 한 행이 한 예외 기간';
 COMMENT ON COLUMN "holiday_excluded_stores"."bp_holiday_id" IS '휴일 — bp_holidays FK';
 COMMENT ON COLUMN "holiday_excluded_stores"."store_id" IS '예외 점포 — stores FK';
-COMMENT ON COLUMN "holiday_excluded_stores"."effective_start_date" IS '적용 시작일 — 이 날짜부터 예외 — 지난 날짜 보존';
-COMMENT ON COLUMN "holiday_excluded_stores"."is_deleted" IS '삭제 여부';
+COMMENT ON COLUMN "holiday_excluded_stores"."effective_start_date" IS '적용 시작일 — 이 날짜부터 예외(시작 전 휴일이면 휴일 시작일) — 지난 날짜 보존';
+COMMENT ON COLUMN "holiday_excluded_stores"."effective_end_date" IS '적용 종료일 — 예외를 푼 날의 전날. 비어 있으면 휴일이 끝날 때까지 예외';
+COMMENT ON COLUMN "holiday_excluded_stores"."is_deleted" IS '삭제 여부 — 적용된 날이 없는 기간(오늘 더하고 오늘 뺌 · 시작 전 휴일에서 뺌)';
 COMMENT ON COLUMN "holiday_excluded_stores"."created_at" IS '등록 일시';
 COMMENT ON COLUMN "holiday_excluded_stores"."created_by" IS '등록자 — admin_accounts FK';
 COMMENT ON COLUMN "holiday_excluded_stores"."updated_at" IS '최근 수정 일시';
@@ -1006,3 +1058,23 @@ COMMENT ON COLUMN "public_holiday_synchronization_logs"."deleted_count" IS '삭�
 COMMENT ON COLUMN "public_holiday_synchronization_logs"."failed_count" IS '실패 건수';
 COMMENT ON COLUMN "public_holiday_synchronization_logs"."error" IS '오류 정보';
 COMMENT ON COLUMN "public_holiday_synchronization_logs"."result" IS '결과 — 성공·실패';
+COMMENT ON TABLE "excel_download_logs" IS '엑셀 다운로드 이력';
+COMMENT ON COLUMN "excel_download_logs"."excel_download_id" IS '다운로드 이력 ID';
+COMMENT ON COLUMN "excel_download_logs"."requested_by" IS '요청자 — admin_accounts FK';
+COMMENT ON COLUMN "excel_download_logs"."menu_id" IS '화면(메뉴) — menus FK — 같은 화면 판단 기준';
+COMMENT ON COLUMN "excel_download_logs"."bp_code_id" IS '대상 BP — 다룬 BP. BP · 가맹 계정은 소속 BP, 플랫폼 계정은 탭 BP. BP 를 다루지 않는 화면(BP 마스터 목록)은 비움';
+COMMENT ON COLUMN "excel_download_logs"."search_conditions" IS '검색 조건 — 요청 때의 조건 그대로';
+COMMENT ON COLUMN "excel_download_logs"."row_count" IS '건수';
+COMMENT ON COLUMN "excel_download_logs"."delivery_method" IS '생성 방식 — 바로 받기·예약 생성';
+COMMENT ON COLUMN "excel_download_logs"."status" IS '처리 상태 — 대기·생성 중·완료·실패';
+COMMENT ON COLUMN "excel_download_logs"."file_name" IS '파일명 — 예) 점포목록_20261028.xlsx';
+COMMENT ON COLUMN "excel_download_logs"."storage_key" IS '저장소 키 — 예약 생성만, excel-exports/ 아래';
+COMMENT ON COLUMN "excel_download_logs"."attempt_count" IS '시도 횟수 — 예약 생성만 센다(바로 받기는 0). 시도를 시작할 때 1씩 올린다(최대 2 — 처음 1번 + 재시도 1번). 2에서 실패하거나 4xx(권한 · 계정 · 범위로 거부)면 끝';
+COMMENT ON COLUMN "excel_download_logs"."failure_reason" IS '실패 사유';
+COMMENT ON COLUMN "excel_download_logs"."notified_at" IS '메일 발송 일시 — 완료·실패 메일';
+COMMENT ON COLUMN "excel_download_logs"."expires_at" IS '만료 일시 — 완료 + 24시간';
+COMMENT ON COLUMN "excel_download_logs"."downloaded_at" IS '최근 내려받은 일시 — 링크로 받은 시각';
+COMMENT ON COLUMN "excel_download_logs"."requested_at" IS '요청 일시 — 2년 보존';
+COMMENT ON COLUMN "excel_download_logs"."started_at" IS '생성 시작 일시 — 이번 시도를 시작한 시각. 멈춘 작업 판단 기준';
+COMMENT ON COLUMN "excel_download_logs"."completed_at" IS '완료 일시';
+COMMENT ON COLUMN "excel_download_logs"."scope_key" IS '범위 지문 — 만들 때 요청자가 볼 수 있던 범위(플랫폼 여부 · 대상 BP · 전체 점포 · 매핑 점포). 받을 때 지금 범위와 다르면 막는다';

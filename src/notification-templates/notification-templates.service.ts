@@ -46,7 +46,7 @@ type Snapshot = Pick<
 /**
  * 알림 템플릿 관리(WHALEERP-572 · 573 · 581). 플랫폼 운영자만 부른다 — 권한은 컨트롤러가 본다. 고칠 때마다
  * 바뀌기 전 행 전체를 이력에 남기고(지우지 않음), 읽은 updatedAt 이 다르면 409 다. 지우는 길은 없고 사용 여부로 끈다
- * (운영 정책 NTF-21). 기본 문구(default_*)는 마이그레이션으로 넣은 기본 템플릿 42건에만 있다(NOTIFY-17).
+ * (운영 정책 NTF-21). 기본 문구(default_*)는 마이그레이션으로 넣은 기본 템플릿 46건에만 있다(NOTIFY-17).
  */
 @Injectable()
 export class NotificationTemplatesService {

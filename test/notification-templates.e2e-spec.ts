@@ -14,7 +14,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 
 // 알림 템플릿 관리(WHALEERP-572 · 573 · 581)를 실제 DB 로 확인한다. 기본값 복사 마이그레이션, 채널별 CHECK,
 // 템플릿 코드 고유, 이력 · 되돌리기는 목으로 증명되지 않는다.
-// 마이그레이션으로 넣은 기본 템플릿 코드(okf conventions/naming.md 「기본 템플릿 코드」) — 운영 알림 11 · 앱 푸시 5 · 메일 26 · 알림톡 2.
+// 마이그레이션으로 넣은 기본 템플릿 코드(okf conventions/naming.md 「기본 템플릿 코드」) — 운영 알림 11 · 앱 푸시 5 · 메일 28 · 알림톡 2.
 // 메일 10건은 처음 운영 알림 10건과 같은 이름이다(NTF-03) — 나중에 더한 NTF_SIGNUP_UNDER_AGE 는 메일 짝이 없다.
 const FIRST_NOTIFICATION_CODES = [
   'NTF_INQUIRY_RECEIVED',
@@ -57,9 +57,12 @@ const DEFAULT_TEMPLATE_CODES = [
   'EMAIL_PASSWORD_RESET',
   'EMAIL_TEMP_PASSWORD',
   'EMAIL_WITHDRAW_DONE',
-  'TALK_STAFF_INVITATION',
-  // 소속 추가 확인 요청(WHALEERP-130, 20261027154954)
+  // 소속 추가 확인 요청(20261027154954, WHALEERP-130)
   'EMAIL_STAFF_AFFILIATION_REQUEST',
+  // 공통 엑셀 완료 · 실패(20261028140448)
+  'EMAIL_EXCEL_READY',
+  'EMAIL_EXCEL_FAILED',
+  'TALK_STAFF_INVITATION',
   'TALK_STAFF_AFFILIATION_REQUEST',
 ];
 
@@ -181,10 +184,11 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       .body as TemplateDetailDto;
 
   // 처음 넣은 40건은 20261013153521 이 복사했고, 41번째 EMAIL_LEAD_REPLY(WHALEERP-588) · 42번째 NTF_SIGNUP_UNDER_AGE
-  // (20261021103042, 가입 불가 — 만 19세 미만), 43 · 44번째 소속 추가 확인 요청 알림톡 · 메일(20261027154954)은 자기 INSERT 에서
-  // 채운다. 건수가 아니라 코드로 본다 — 기본 템플릿을 더하면
-  // okf naming 「기본 템플릿 코드」 표와 함께 이 목록에 더한다(WHALEERP-617).
-  it('마이그레이션으로 넣은 기본 템플릿 44건에 기본 문구가 있다 (NOTIFY-17)', async () => {
+  // (20261021103042, 가입 불가 — 만 19세 미만) · 43 · 44번째 EMAIL_ · TALK_STAFF_AFFILIATION_REQUEST(20261027154954, 소속
+  // 추가 확인 요청) · 45 · 46번째 EMAIL_EXCEL_READY · EMAIL_EXCEL_FAILED(20261028140448, 공통 엑셀)는 자기 INSERT 에서
+  // 채운다. 건수가 아니라 코드로 본다 — 기본 템플릿을 더하면 okf naming 「기본 템플릿 코드」 표와 함께 이 목록에 더한다
+  // (WHALEERP-617).
+  it('마이그레이션으로 넣은 기본 템플릿 46건에 기본 문구가 있다 (NOTIFY-17)', async () => {
     const rows = await prisma.notificationTemplate.findMany({
       where: { defaultBody: { not: null } },
       select: { templateCode: true },

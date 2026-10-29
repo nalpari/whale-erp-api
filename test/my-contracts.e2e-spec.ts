@@ -576,6 +576,39 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       404,
     );
     expect(a.body).toEqual(b.body);
+    // 거부 · 수정 요청도 남의 계약이면 같은 404 — 그 계약은 그대로다(WHALEERP-157)
+    const c = await post(`/me/contracts/${othersContract}/reject`, auth).expect(
+      404,
+    );
+    const d = await post(
+      `/me/contracts/${othersContract}/correction-request`,
+      auth,
+    ).expect(404);
+    // 후보 계정으로만 이어진 계약에 수정 요청해도 같은 404
+    const e = await post(
+      `/me/contracts/${candidateOnly}/correction-request`,
+      auth,
+    ).expect(404);
+    expect(c.body).toEqual(a.body);
+    expect(d.body).toEqual(a.body);
+    expect(e.body).toEqual(a.body);
+    // 두 계약 모두 상태 · 거부 사유 · 상태 이력이 그대로다
+    for (const contractId of [othersContract, candidateOnly]) {
+      expect(
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId },
+          select: { status: true, rejectReason: true },
+        }),
+      ).toEqual({ status: 'PENDING_SIGNATURE', rejectReason: null });
+      expect(
+        await prisma.contractStatusHistory.count({
+          where: {
+            contractId,
+            toStatus: { in: ['REJECTED', 'CORRECTION_REQUESTED'] },
+          },
+        }),
+      ).toBe(0);
+    }
   });
 
   it('거부 사유는 선택이다 — 비우면 남기지 않는다', async () => {
