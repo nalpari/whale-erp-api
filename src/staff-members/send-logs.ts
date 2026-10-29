@@ -3,7 +3,7 @@ import {
   AFFILIATION_TEMPLATE,
   INVITATION_TEMPLATE,
   sendFailureOf,
-} from '../contracts/contract-delivery.service';
+} from '../contracts/contract-send-log';
 
 /** 발송 이력의 종류(API 전용 enum). 복귀 확인도 같은 소속 추가 확인 요청 알림톡이라 소속 추가 확인 요청이다 */
 export const STAFF_SEND_KIND_LABELS = {
@@ -53,10 +53,10 @@ export type SendLog = {
 };
 
 /**
- * 알림톡 발송 이력(오래된 순)을 직원 상세 발송 이력(최근 순)으로 바꾼다. 재발송은 같은 계약에 앞서 나간(성공 · 접수 여부 모름)
- * 발송이 있을 때다 — 확실히 나가지 않은 실패는 발송을 되돌리므로(계약 발송 일시가 비워진다) 다음 발송은 재발송이 아니다. 계약의
- * 재발송 횟수(resendCount)와 같은 기준이다. 다만 알림톡 이력 기준이라 이력 INSERT 가 빠졌거나(AlimtalkService.record 는 실패를 삼킨다)
- * 앱으로 나간 발송(판별값 없는 옛 계약)이 섞이면 resendCount 와 다를 수 있다.
+ * 알림톡 발송 이력(오래된 순)을 직원 상세 발송 이력(최근 순)으로 바꾼다. 재발송은 같은 계약으로 앞서 직원에게 나갔을 수 있는(성공 ·
+ * 접수 여부 모름) 발송이 있을 때다 — 확실히 나가지 않은 실패(거절 · 보내기 전 실패)는 세지 않는다. 직원이 받은 기준이라 계약의
+ * 재발송 횟수(resendCount)와는 다를 수 있다 — 보낸 계약이 되돌리기로 임시저장이 된 뒤 다시 보내면 resendCount 는 세지 않지만 직원은
+ * 앞 초대를 받았고, 이력 행이 빠졌거나(AlimtalkService.record 는 INSERT 실패를 삼킨다) 앱으로 나간 발송(판별값 없는 옛 계약)은 이력에 없다.
  */
 export function toSendLogs(rows: readonly SendLogRow[]): SendLog[] {
   const delivered = new Set<number>();

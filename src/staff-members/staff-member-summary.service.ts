@@ -33,7 +33,7 @@ import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
 // 갱신 예정일 — 근로계약 목록과 같은 규칙(종료일 30일 전, 갱신 예정 알림 배치와 같은 날수)
 import { renewalDateOf } from '../contracts/contract-renewal';
 import { NOT_IDLE_RENEWAL } from '../contracts/signed-contract';
-import { CONTRACT_RELATED_TYPE } from '../contracts/contract-delivery.service';
+import { CONTRACT_RELATED_TYPE } from '../contracts/contract-send-log';
 import { SEND_KIND_OF_TEMPLATE, toSendLogs } from './send-logs';
 
 /** TO-DO 최근 처리 이력 건수 */

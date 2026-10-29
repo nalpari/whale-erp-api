@@ -1,7 +1,7 @@
 import {
   AFFILIATION_TEMPLATE,
   INVITATION_TEMPLATE,
-} from '../contracts/contract-delivery.service';
+} from '../contracts/contract-send-log';
 import { type SendLogRow, toSendLogs } from './send-logs';
 
 const at = (minute: number) => new Date(Date.UTC(2026, 9, 29, 0, minute));

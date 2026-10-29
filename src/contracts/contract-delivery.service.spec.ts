@@ -23,7 +23,6 @@ import {
   newInvitationToken,
   type PendingInvite,
   restoredStatusOf,
-  sendFailureOf,
   SEND_VALID_MS,
 } from './contract-delivery.service';
 
@@ -1298,80 +1297,5 @@ describe('ContractDeliveryService', () => {
         draftAction: 'AFFILIATION_CONFIRM',
       });
     });
-  });
-});
-
-describe('sendFailureOf — 발송 이력의 실패 사유 (WHALEERP-136)', () => {
-  // AlimtalkService.send 가 남기는 failure_reason 모양 — `code=… http=…: 메시지`
-  const reasonOf = (e: BizppurioError) =>
-    `code=${e.code} http=${e.httpStatus}: ${e.message}`;
-
-  it('비즈뿌리오 코드가 있으면 거절 — 다시 보낼 수 있다', () => {
-    const f = sendFailureOf(
-      reasonOf(
-        new BizppurioError('sendMessage failed: code=3018', 3018, 200, {
-          path: '/v3/message',
-        }),
-      ),
-    );
-    expect(f).toMatchObject({ result: 'FAILED', retryable: true });
-    expect(f.reason).toContain('코드 3018');
-  });
-
-  it('토큰 단계 실패는 보내지 않은 것 — 다시 보낼 수 있다', () => {
-    const f = sendFailureOf(
-      reasonOf(
-        new BizppurioError(
-          '/v1/token failed: fetch failed',
-          undefined,
-          undefined,
-          { path: '/v1/token' },
-        ),
-      ),
-    );
-    expect(f).toMatchObject({ result: 'FAILED', retryable: true });
-  });
-
-  it('메시지 요청 뒤 코드 없는 실패는 접수 여부 모름 — 다시 보내면 두 번 갈 수 있다', () => {
-    for (const e of [
-      new BizppurioError('/v3/message failed: aborted', undefined, undefined, {
-        path: '/v3/message',
-      }),
-      new BizppurioError(
-        '/v3/message failed: http=502 code=undefined',
-        undefined,
-        502,
-        { path: '/v3/message' },
-      ),
-    ])
-      expect(sendFailureOf(reasonOf(e))).toMatchObject({
-        result: 'UNCONFIRMED',
-        retryable: false,
-      });
-  });
-
-  it('사유가 비어 있으면 접수 여부 모름으로 본다', () => {
-    expect(sendFailureOf(null)).toMatchObject({
-      result: 'UNCONFIRMED',
-      retryable: false,
-    });
-  });
-});
-
-describe('sendFailureOf — 토큰 단계 (api 리뷰)', () => {
-  it('토큰 단계는 코드가 있어도 번호 탓이 아니라 연결 실패 문구다', () => {
-    const f = sendFailureOf(
-      'code=3001 http=401: /v1/token failed: http=401 code=3001',
-    );
-    expect(f).toMatchObject({ result: 'FAILED', retryable: true });
-    expect(f.reason).not.toContain('번호를 확인');
-  });
-
-  it('메시지 머리가 아닌 자리에 섞인 /v1/token 은 토큰 단계로 보지 않는다 — 접수 여부 모름 그대로', () => {
-    expect(
-      sendFailureOf(
-        'code=undefined http=undefined: /v3/message failed: aborted (after /v1/token ok)',
-      ),
-    ).toMatchObject({ result: 'UNCONFIRMED', retryable: false });
   });
 });

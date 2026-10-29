@@ -117,7 +117,7 @@ matched on.
 # Every attempt leaves one row in alimtalk_send_logs
 
 Each call that reaches Bizppurio writes one row: `SUCCEEDED` with
-`message_key` when accepted, `FAILED` with `code=… http=…: message` when not —
+`message_key` when accepted, `FAILED` with `code=… http=… path=…: message` when not (`path` is the failed step — `/v1/token` · `/v3/message`, or `local` for a non-Bizppurio error; head built by `src/alimtalk/failure-reason.ts`, read back by the 근로계약 발송 이력) —
 the full message in the row, cut to 1000 characters in the log line. A network
 failure carries the underlying code and message (`fetch failed (ECONNREFUSED: …)`),
 so a refused connection, a DNS failure and a bad certificate read differently. A thrown

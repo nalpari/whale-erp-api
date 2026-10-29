@@ -158,7 +158,7 @@ export class StaffMemberSendLogDto {
   contractId: number;
   @ApiProperty({ enum: STAFF_SEND_KINDS, enumName: 'StaffSendKind' })
   kind: StaffSendKind;
-  /** 같은 계약에 앞서 나간 발송이 있었다(재발송 · 고쳐 다시 보냄) */
+  /** 같은 계약으로 앞서 직원에게 나갔을 수 있는 발송(성공 · 접수 여부 모름)이 있었다 — 재발송 · 고쳐 다시 보냄. 계약 재발송 횟수와는 다를 수 있다 */
   isResend: boolean;
   /** 비즈뿌리오 접수 기준. 접수 여부 모름(UNCONFIRMED)은 다시 보내면 두 번 갈 수 있다 */
   @ApiProperty({ enum: STAFF_SEND_RESULTS, enumName: 'StaffSendResult' })
