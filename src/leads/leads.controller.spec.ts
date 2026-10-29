@@ -17,13 +17,13 @@ describe('LeadsController', () => {
     expect(meta('THROTTLER:TTLip')).toBe(3_600_000);
   });
 
-  it('한도를 넘으면 「잠시 후 다시 시도해 주세요」로 알린다 (2026-10-13 재영)', async () => {
+  it('한도를 넘으면 「잠시 후 다시 시도해 주세요.」로 알린다 (2026-10-13 재영)', async () => {
     const guard = Object.create(
       LeadsThrottlerGuard.prototype,
     ) as LeadsThrottlerGuard;
 
     await expect(guard['getErrorMessage']()).resolves.toBe(
-      '잠시 후 다시 시도해 주세요',
+      '잠시 후 다시 시도해 주세요.',
     );
   });
 

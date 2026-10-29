@@ -44,7 +44,7 @@ export class AdminLoginInfoService {
     });
     // 세션은 살아 있어도(삭제 뒤 최대 1시간) 삭제된 계정의 화면 정보는 주지 않는다.
     if (!account || account.isDeleted)
-      throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
+      throw new UnauthorizedException('만료되었거나 종료된 접속입니다.');
 
     const temporary = account.isPasswordChangeRequired
       ? await this.prisma.temporaryPassword.findFirst({

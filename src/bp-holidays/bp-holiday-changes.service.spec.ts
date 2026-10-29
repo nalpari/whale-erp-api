@@ -214,7 +214,7 @@ describe('BpHolidayChangesService', () => {
     it('특정 점포 휴일은 대상 점포가 하나 이상이어야 한다', async () => {
       await expect(
         service.create(full, { ...dto, storeIds: [] }, today),
-      ).rejects.toThrow('대상 점포를 하나 이상 골라 주세요');
+      ).rejects.toThrow('대상 점포를 하나 이상 골라 주세요.');
     });
   });
 
@@ -248,7 +248,7 @@ describe('BpHolidayChangesService', () => {
           form({ repeatEndType: 'UNTIL_DATE', repeatEndDate: '2026-10-19' }),
           today,
         ),
-      ).rejects.toThrow('끝난 휴일은 고칠 수 없습니다');
+      ).rejects.toThrow('끝난 휴일은 고칠 수 없습니다.');
     });
 
     it('진행 중인 휴일의 날짜 · 반복 · 적용 범위는 바꾸지 못한다(409)', async () => {
@@ -317,7 +317,7 @@ describe('BpHolidayChangesService', () => {
       // 범위 밖(11)을 빼려 하면 403
       await expect(
         service.update(limited, 3, form({ storeIds: [10] }), today),
-      ).rejects.toThrow('맡지 않은 점포는 다룰 수 없습니다');
+      ).rejects.toThrow('맡지 않은 점포는 다룰 수 없습니다.');
       // 맡은 점포(10)만 빼는 것은 된다
       await service.update(limited, 3, form({ storeIds: [11] }), today);
       expect(tx.holidayStoreMapping.updateMany).toHaveBeenCalledWith({
@@ -528,7 +528,7 @@ describe('BpHolidayChangesService', () => {
       await expect(
         service.terminate(full, 3, UPDATED_AT, today),
       ).rejects.toThrow(
-        '어제 이전에 시작한 휴일만 강제 종료할 수 있습니다 — 오늘부터 시작하는 휴일은 삭제해 주세요',
+        '어제 이전에 시작한 휴일만 강제 종료할 수 있습니다 — 오늘부터 시작하는 휴일은 삭제해 주세요.',
       );
     });
 
@@ -548,7 +548,7 @@ describe('BpHolidayChangesService', () => {
   describe('remove — 삭제', () => {
     it('오늘 이후에 시작하는 휴일만 지운다', async () => {
       await expect(service.remove(full, 3, UPDATED_AT, today)).rejects.toThrow(
-        '이미 지난 날짜가 있는 휴일은 지울 수 없습니다 — 강제 종료해 주세요',
+        '이미 지난 날짜가 있는 휴일은 지울 수 없습니다 — 강제 종료해 주세요.',
       );
       tx.bpHoliday.findFirst.mockResolvedValue(weekly({ startDate: today }));
       await service.remove(full, 3, UPDATED_AT, today);

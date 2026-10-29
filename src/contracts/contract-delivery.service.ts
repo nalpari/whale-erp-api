@@ -27,6 +27,7 @@ import {
   OPTIONAL_MAIL_SERVICE,
   type OptionalMailService,
 } from '../mail/mail.module';
+import { sameName } from './identity-match';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
 import { PrismaService } from '../prisma/prisma.service';
@@ -35,16 +36,21 @@ import {
   lockStaffMember,
   pendingTermsOf,
 } from './contract-status';
+import {
+  AFFILIATION_MAIL_TEMPLATE,
+  AFFILIATION_TEMPLATE,
+  CONTRACT_RELATED_TYPE,
+  INVITATION_TEMPLATE,
+  sendFailureKindOf,
+  type SendFailureKind,
+} from './contract-send-log';
 
-/** 가입 초대 알림톡 템플릿(근무지 · 초대코드 · 링크=초대 링크). 카카오 템플릿 WHALE_INVITE_01 */
-export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
-/**
- * 소속 추가 확인 요청 알림톡 · 메일(사업자 · 근무지 · 고용형태 · 링크=직원 앱 요청 화면, WHALEERP-130 · 2026-10-26 재영). 카카오
- * 템플릿 WHALE_AFFILIATION_01 은 등록 · 검수 전이라 알림톡이 거절되고 대체 문자로 간다(가입 초대와 같다). 메일은 계정의 이메일로 —
- * 알림톡과 따로 가고 실패해도 저장을 되돌리지 않는다.
- */
-export const AFFILIATION_TEMPLATE = 'TALK_STAFF_AFFILIATION_REQUEST';
-export const AFFILIATION_MAIL_TEMPLATE = 'EMAIL_STAFF_AFFILIATION_REQUEST';
+// 템플릿 이름 · 관련 업무 유형 · 실패 판정은 발송 이력과 같이 쓰는 contract-send-log.ts 에 둔다
+export {
+  AFFILIATION_MAIL_TEMPLATE,
+  AFFILIATION_TEMPLATE,
+  INVITATION_TEMPLATE,
+} from './contract-send-log';
 /** 초대 코드 · 서명 기한 — 보낸 날로부터 30일(WHALEERP-136, 물리 ERD sign_deadline_at) */
 export const SEND_VALID_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -154,11 +160,15 @@ export type PendingInvite = DeliveryInput & {
   invitationId: number;
   /** 이 발송이 쌓은 초대 코드 입력 잠금 해제 행 — 되돌릴 때 지운다. 소속 추가 확인 요청은 null */
   unlockAttemptId: number | null;
-  /** 소속 추가 확인 요청에만 — 알림톡 · 메일 변수와 받을 이메일(계정에 없으면 null) */
+  /**
+   * 소속 추가 확인 요청에만 — 알림톡 · 메일 변수와 받을 이메일(계정에 없으면 null). nameMismatch 면 그 계정 실명이 입력한 이름과
+   * 달라 메일을 보내지 않는다
+   */
   affiliation: {
     bpName: string;
     employmentType: string;
     email: string | null;
+    nameMismatch: boolean;
   } | null;
   historyId: number | null;
   expired: number[];
@@ -166,11 +176,14 @@ export type PendingInvite = DeliveryInput & {
   now: Date;
 };
 
-/** 알림톡이 확실히 나가지 않은 실패인가 — 비즈뿌리오 오류가 아니면 요청 전 검사, 코드가 있으면 거절, 토큰 단계면 보내지 않음 */
-function notSent(e: unknown): boolean {
-  if (!(e instanceof BizppurioError)) return true;
-  return e.code !== undefined || e.path === '/v1/token';
-}
+/**
+ * 알림톡 실패의 갈래와 비즈뿌리오 코드(contract-send-log.ts) — 비즈뿌리오 오류가 아니면 알림톡을 부르기 전 검사(번호 · 템플릿)라 보내기 전
+ * 실패다. 발송 이력은 클라이언트를 부른 뒤의 행만 보므로 그런 예외를 접수 여부 모름으로 읽는다(sendFailureKindOfReason).
+ */
+const failureOf = (e: unknown): { kind: SendFailureKind; code?: number } =>
+  e instanceof BizppurioError
+    ? { kind: sendFailureKindOf(e), code: e.code }
+    : { kind: 'NOT_SENT' };
 
 /**
  * 근로계약 보내기(WHALEERP-136, 2026-10-19 재영 정정 — 저장하면 곧바로 보낸다). 초안 저장 · 수정 요청 계약 고침 · 날인
@@ -224,13 +237,13 @@ export class ContractDeliveryService {
     const what = kind === 'INVITE' ? '가입 초대' : '소속 추가 확인 요청';
     if (!this.appUrl)
       throw new ServiceUnavailableException(
-        `직원 앱 주소(STAFF_APP_URL)가 없어 ${what} 링크를 보낼 수 없습니다`,
+        `직원 앱 주소(STAFF_APP_URL)가 없어 ${what} 링크를 보낼 수 없습니다.`,
       );
     // 링크는 알림톡 버튼 변수에만 있는데 버튼을 아직 보내지 않고, 바뀐 본문은 카카오 재검수 전이다 — 대체 문자가 없으면
     // 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다(api #59 · #74 리뷰).
     if (!this.alimtalk.hasSmsFallback())
       throw new ServiceUnavailableException(
-        `대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없어 ${what}를 보낼 수 없습니다`,
+        `대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없어 ${what}를 보낼 수 없습니다.`,
       );
     // 유선번호는 계약서에는 저장되지만 알림톡이 받지 않는다
     if (!isMobilePhone(phone))
@@ -238,14 +251,14 @@ export class ContractDeliveryService {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'SEND_PHONE_NOT_MOBILE',
-        message: `휴대폰 번호가 아니라 ${what} 알림톡을 보낼 수 없습니다. 휴대전화번호를 고쳐 주세요`,
+        message: `휴대폰 번호가 아니라 ${what} 알림톡을 보낼 수 없습니다. 휴대전화번호를 고쳐 주세요.`,
       });
     const template =
       kind === 'INVITE' ? INVITATION_TEMPLATE : AFFILIATION_TEMPLATE;
     await findSendableTemplate(tx, template, 'ALIMTALK').catch((e: unknown) => {
       this.logger.error(`${what} 템플릿을 쓸 수 없음: ${String(e)}`);
       throw new ServiceUnavailableException(
-        `${what} 알림톡 템플릿이 없거나 꺼져 있어 보낼 수 없습니다`,
+        `${what} 알림톡 템플릿이 없거나 꺼져 있어 보낼 수 없습니다.`,
       );
     });
   }
@@ -399,6 +412,7 @@ export class ContractDeliveryService {
       where: { staffMemberId },
       data: { joinStatus: 'INVITED' },
       select: {
+        name: true,
         employmentType: true,
         jobTitle: true,
         candidateAccountId: true,
@@ -411,8 +425,13 @@ export class ContractDeliveryService {
         ? null
         : await tx.account.findUnique({
             where: { accountId: staff.candidateAccountId },
-            select: { email: true },
+            select: { email: true, realName: true },
           });
+    // 메일은 입력한 번호가 아니라 그 번호로 찾은 계정의 이메일로 간다 — 입력한 이름이 그 계정 실명과 다르면(번호를 넘겨받은
+    // 다른 사람일 수 있다) 채용 정보(근무지 · 고용 형태)가 남에게 가지 않게 보내지 않는다. 알림톡은 입력한 번호로 그대로 간다 —
+    // 받지 못한 직원은 관리자가 유선으로 확인한다(WHALEERP-140, 2026-10-29 김민식). 본인 대조와 같은 이름 규칙(nameKey)
+    const nameMismatch =
+      account !== null && !sameName(staff.name, account.realName);
     const historyId = input.statusChanged
       ? ((
           await tx.contractStatusHistory.findFirst({
@@ -438,6 +457,7 @@ export class ContractDeliveryService {
         // 알림톡 · 메일 변수는 빈 문자열이어도 렌더된다
         employmentType: employmentTypeLabel(employmentType) ?? '',
         email: account?.email ?? null,
+        nameMismatch,
       },
       historyId,
       expired: previous.map((p) => p.invitationId),
@@ -546,7 +566,7 @@ export class ContractDeliveryService {
           },
           // 코드 · 링크 모두 가입 열쇠라 발송 이력에서 가린다
           maskedVariables: ['초대코드', '링크'],
-          related: { type: 'contract', id: contractId },
+          related: { type: CONTRACT_RELATED_TYPE, id: contractId },
           sentBy,
         });
       else
@@ -554,11 +574,12 @@ export class ContractDeliveryService {
           templateCode: AFFILIATION_TEMPLATE,
           to: pending.phone,
           variables: this.affiliationVariables(pending),
-          related: { type: 'contract', id: contractId },
+          related: { type: CONTRACT_RELATED_TYPE, id: contractId },
           sentBy,
         });
     } catch (e) {
-      if (notSent(e)) {
+      const failure = failureOf(e);
+      if (failure.kind !== 'UNCONFIRMED') {
         if (!(e instanceof BizppurioError))
           this.logger.error(
             `알림톡을 보내기 전에 실패 contract=${contractId}`,
@@ -581,7 +602,7 @@ export class ContractDeliveryService {
             code: 'SEND_UNCONFIRMED',
             retryable: false,
             contractId,
-            message: `${what} 알림톡을 보내지 못했는데 되돌리지 못했습니다. 상세를 다시 열어 상태를 확인한 뒤 재발송해 주세요`,
+            message: `${what} 알림톡을 보내지 못했는데 되돌리지 못했습니다. 상세를 다시 열어 상태를 확인한 뒤 재발송해 주세요.`,
           });
         throw new BadGatewayException({
           statusCode: HttpStatus.BAD_GATEWAY,
@@ -591,10 +612,10 @@ export class ContractDeliveryService {
           contractId,
           status,
           message: `${
-            e instanceof BizppurioError && e.code !== undefined
-              ? `${what} 알림톡을 보내지 못했습니다(비즈뿌리오 ${e.code}). 번호를 확인하고`
+            failure.kind === 'REJECTED'
+              ? `${what} 알림톡을 보내지 못했습니다(비즈뿌리오 ${failure.code}). 번호를 확인하고`
               : `${what} 알림톡을 보내지 못했습니다. 잠시 뒤`
-          } 다시 보내 주세요${status === 'DRAFT' && pending.before.status !== 'DRAFT' ? ' — 근로계약서는 임시저장으로 두었습니다' : ''}`,
+          } 다시 보내 주세요${status === 'DRAFT' && pending.before.status !== 'DRAFT' ? ' — 근로계약서는 임시저장으로 두었습니다' : ''}.`,
         });
       }
       this.logger.error(
@@ -607,7 +628,7 @@ export class ContractDeliveryService {
         code: 'SEND_UNCONFIRMED',
         retryable: false,
         contractId,
-        message: `${what} 알림톡이 접수됐는지 알 수 없습니다. 직원에게 받았는지 확인한 뒤 다시 보내 주세요 — 다시 보내면 두 번 갈 수 있습니다`,
+        message: `${what} 알림톡이 접수됐는지 알 수 없습니다. 직원에게 받았는지 확인한 뒤 다시 보내 주세요 — 다시 보내면 두 번 갈 수 있습니다.`,
       });
     }
 
@@ -628,9 +649,16 @@ export class ContractDeliveryService {
 
   private async mailAffiliation(p: PendingInvite): Promise<void> {
     const email = p.affiliation?.email;
-    if (!this.mail || !email) {
+    // 이름이 다른 계정에는 메일을 보내지 않는다 — 그 사유는 메일 설정이 없는 환경에서도 남긴다(유선 확인 때 근거)
+    const nameMismatch = p.affiliation?.nameMismatch === true;
+    if (nameMismatch || !this.mail || !email) {
+      const why = nameMismatch
+        ? 'name differs from the account'
+        : !this.mail
+          ? 'no MAIL_*'
+          : 'no email';
       this.logger.warn(
-        `affiliation request mail SKIPPED contract=${p.contractId}: ${!this.mail ? 'no MAIL_*' : 'no email'}`,
+        `affiliation request mail SKIPPED contract=${p.contractId}: ${why}`,
       );
       return;
     }

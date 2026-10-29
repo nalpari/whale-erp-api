@@ -353,7 +353,7 @@ describe('SupportInquiriesService', () => {
 
     it('썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 400 그대로이고 올린 파일을 지운다', async () => {
       storage!.put.mockRejectedValueOnce(
-        new BadRequestException('이미지를 읽을 수 없습니다'),
+        new BadRequestException('이미지를 읽을 수 없습니다.'),
       );
       await expect(
         service.create(21, dto, [file('a.png')]),
@@ -364,7 +364,7 @@ describe('SupportInquiriesService', () => {
 
     it('여러 파일 중 하나만 썸네일을 못 만들어도 모두 끝난 뒤 400 이고 모두 지운다', async () => {
       storage!.put.mockRejectedValueOnce(
-        new BadRequestException('이미지를 읽을 수 없습니다'),
+        new BadRequestException('이미지를 읽을 수 없습니다.'),
       );
       await expect(
         service.create(21, dto, [file('a.png'), file('b.png')]),
@@ -379,7 +379,7 @@ describe('SupportInquiriesService', () => {
     it('깨진 이미지(400)와 저장소 장애가 섞이면 503 이고 장애를 로그로 남긴다', async () => {
       storage!.put
         .mockRejectedValueOnce(
-          new BadRequestException('이미지를 읽을 수 없습니다'),
+          new BadRequestException('이미지를 읽을 수 없습니다.'),
         )
         .mockRejectedValueOnce(new Error('AccessDenied'));
       await expect(

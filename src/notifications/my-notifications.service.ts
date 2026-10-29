@@ -13,7 +13,7 @@ import type {
 import type { NotificationListQueryDto } from './dto/notification-list.query.dto';
 import { retentionStart, targetOf } from './staff-notification-target';
 
-const NOT_FOUND = '알림을 찾을 수 없습니다';
+const NOT_FOUND = '알림을 찾을 수 없습니다.';
 
 const ITEM_SELECT = {
   notificationRecipientId: true,

@@ -75,7 +75,7 @@ export async function storeNames(
     const name = byId.get(storeId);
     if (name === undefined)
       throw new InternalServerErrorException(
-        `점포 ${storeId} 를 찾을 수 없습니다`,
+        `점포 ${storeId} 를 찾을 수 없습니다.`,
       );
     return name;
   };

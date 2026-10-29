@@ -15,7 +15,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { currentLocationTermsVersion } from './location-terms';
 
-const NOT_AGREED_MESSAGE = '위치정보 수집에 동의한 상태가 아닙니다';
+const NOT_AGREED_MESSAGE = '위치정보 수집에 동의한 상태가 아닙니다.';
 
 /**
  * 직원 앱 내 정보의 동의 두 가지 (WHALEERP-193). 위치정보 동의(ATT-23 · ATT-26)는 `location_consents` 의 행이고, 철회하지
@@ -61,16 +61,16 @@ export class MyConsentService {
           `사용 중인 위치정보 약관 버전이 없어 동의를 남기지 못했다 accountId=${accountId}`,
         );
         throw new InternalServerErrorException(
-          '지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요',
+          '지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요.',
         );
       }
       if (shownVersion !== version)
         throw new ConflictException(
-          '그사이 위치정보 약관이 바뀌었습니다. 바뀐 약관을 확인하고 다시 동의해 주세요',
+          '그사이 위치정보 약관이 바뀌었습니다. 바뀐 약관을 확인하고 다시 동의해 주세요.',
         );
       const active = await this.activeLocationConsent(tx, accountId);
       if (active?.consentVersion === version)
-        throw new ConflictException('이미 위치정보 수집에 동의했습니다');
+        throw new ConflictException('이미 위치정보 수집에 동의했습니다.');
       const now = new Date();
       if (active) {
         await tx.locationConsent.update({
@@ -97,7 +97,7 @@ export class MyConsentService {
     return this.locked(accountId, async (tx) => {
       const row = await this.activeLocationConsent(tx, accountId);
       if (!row) throw new ConflictException(NOT_AGREED_MESSAGE);
-      if (row.pausedAt) throw new ConflictException('이미 잠시 멈췄습니다');
+      if (row.pausedAt) throw new ConflictException('이미 잠시 멈췄습니다.');
       const now = new Date();
       await tx.locationConsent.update({
         where: { locationConsentId: row.locationConsentId },
@@ -112,7 +112,7 @@ export class MyConsentService {
     return this.locked(accountId, async (tx) => {
       const row = await this.activeLocationConsent(tx, accountId);
       if (!row) throw new ConflictException(NOT_AGREED_MESSAGE);
-      if (!row.pausedAt) throw new ConflictException('멈춘 상태가 아닙니다');
+      if (!row.pausedAt) throw new ConflictException('멈춘 상태가 아닙니다.');
       await tx.locationConsent.update({
         where: { locationConsentId: row.locationConsentId },
         data: { pausedAt: null },
@@ -142,7 +142,7 @@ export class MyConsentService {
   agreeHqSharing(accountId: number): Promise<void> {
     return this.locked(accountId, async (tx, account) => {
       if (hqSharingAgreedOf(account))
-        throw new ConflictException('이미 본사 제공에 동의했습니다');
+        throw new ConflictException('이미 본사 제공에 동의했습니다.');
       await tx.account.update({
         where: { accountId },
         data: {
@@ -159,7 +159,7 @@ export class MyConsentService {
   withdrawHqSharing(accountId: number): Promise<void> {
     return this.locked(accountId, async (tx, account) => {
       if (!account.isHqSharingConsented)
-        throw new ConflictException('본사 제공에 동의한 상태가 아닙니다');
+        throw new ConflictException('본사 제공에 동의한 상태가 아닙니다.');
       await tx.account.update({
         where: { accountId },
         data: { isHqSharingConsented: false, hqSharingWithdrawnAt: new Date() },

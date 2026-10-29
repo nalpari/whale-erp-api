@@ -43,31 +43,31 @@ export class JwtAuthGuard implements CanActivate {
     const [scheme, token] = (request.headers.authorization ?? '').split(' ');
     // RFC 7235 §2.1 의 auth-scheme 은 대소문자를 구분하지 않는다.
     if (scheme?.toLowerCase() !== 'bearer' || !token)
-      throw new UnauthorizedException('인증 토큰이 필요합니다');
+      throw new UnauthorizedException('인증 토큰이 필요합니다.');
 
     let payload: JwtPayload;
     try {
       payload = await this.jwt.verifyAsync<JwtPayload>(token);
     } catch {
-      throw new UnauthorizedException('토큰이 유효하지 않습니다');
+      throw new UnauthorizedException('토큰이 유효하지 않습니다.');
     }
     // 리프레시 토큰은 갱신에만 쓴다. 수명이 길어 탈취 시 피해가 크다.
     if (payload.typ !== 'access')
-      throw new UnauthorizedException('액세스 토큰이 아닙니다');
+      throw new UnauthorizedException('액세스 토큰이 아닙니다.');
 
     // 두 종류 모두 토큰이 살아 있어도 그 접속이 종료됐거나 만료됐으면 거부한다. 서명만 보면
     // 로그아웃하거나 비밀번호를 재설정한 뒤에도 남은 유효시간(account 15분, admin 1시간) 동안
     // 통과한다. 인증을 끝낸 뒤에 허용 종류를 따진다.
     const { sid } = payload;
     if (typeof sid !== 'number')
-      throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
+      throw new UnauthorizedException('만료되었거나 종료된 접속입니다.');
     let user: AuthUser;
     if (payload.type === 'account') {
       if (
         typeof payload.email !== 'string' ||
         !(await this.sessions.isActive(sid, payload.sub))
       )
-        throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
+        throw new UnauthorizedException('만료되었거나 종료된 접속입니다.');
       user = { type: 'account', id: payload.sub, email: payload.email, sid };
     } else {
       const { loginId } = payload;
@@ -76,7 +76,7 @@ export class JwtAuthGuard implements CanActivate {
           ? await this.adminSessions.findActive(sid, payload.sub)
           : null;
       if (!session || typeof loginId !== 'string')
-        throw new UnauthorizedException('만료되었거나 종료된 접속입니다');
+        throw new UnauthorizedException('만료되었거나 종료된 접속입니다.');
       // 초기 · 임시 비밀번호로 들어와 아직 바꾸지 않았으면 팝업 경로만 연다(1팀 S-VFGQLI).
       if (
         session.isPasswordChangeRequired &&

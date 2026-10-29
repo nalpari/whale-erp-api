@@ -79,7 +79,7 @@ async function parseContractData(raw: unknown): Promise<CreateContractDto> {
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
     throw new BadRequestException(
-      'data 칸에 근로계약서 내용을 JSON 으로 보내 주세요',
+      'data 칸에 근로계약서 내용을 JSON 으로 보내 주세요.',
     );
   return (await bodyPipe.transform(parsed, {
     type: 'body',

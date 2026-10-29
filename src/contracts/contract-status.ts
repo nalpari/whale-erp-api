@@ -96,7 +96,7 @@ export function statusConflict(now: ContractStatus): ConflictException {
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
     code: 'CONTRACT_STATUS_CONFLICT',
-    message: `${NOW_STATUS[now]}. 화면을 새로 고쳐 지금 상태를 확인해 주세요`,
+    message: `${NOW_STATUS[now]}. 화면을 새로 고쳐 지금 상태를 확인해 주세요.`,
     status: now,
   });
 }
@@ -124,7 +124,7 @@ export async function transition(
     where: { contractId },
     select: { status: true },
   });
-  if (!current) throw new NotFoundException('근로계약을 찾을 수 없습니다');
+  if (!current) throw new NotFoundException('근로계약을 찾을 수 없습니다.');
   // status 는 스키마상 NULL 을 허락하지만 기본값(발송 대기)이 있어 비는 일이 없다. 비었으면 바꾸지 않는다.
   const from = current.status;
   if (
@@ -497,7 +497,7 @@ async function checkSignDeadline(
       startDate: true,
     },
   });
-  if (!c) throw new NotFoundException('근로계약을 찾을 수 없습니다');
+  if (!c) throw new NotFoundException('근로계약을 찾을 수 없습니다.');
   if (signDeadlinePassed(c, now)) throw signDeadlineConflict();
   return c;
 }
@@ -517,7 +517,7 @@ export const signDeadlineConflict = () =>
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
     code: 'SIGN_DEADLINE_PASSED',
-    message: '날인 기한이 지났습니다. 관리자에게 재발송을 요청해 주세요',
+    message: '날인 기한이 지났습니다. 관리자에게 재발송을 요청해 주세요.',
     status: 'PENDING_SIGNATURE',
   });
 
@@ -551,7 +551,7 @@ export async function rejectContract(
   const rejectReason = reason?.trim() || null;
   if (rejectReason && rejectReason.length > REJECT_REASON_MAX)
     throw new BadRequestException(
-      `거부 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요`,
+      `거부 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요.`,
     );
   await checkSignDeadline(db, contractId, now);
   await transition(db, contractId, 'REJECTED', 'STAFF', {

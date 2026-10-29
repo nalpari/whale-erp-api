@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService, type PaperDocument } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
@@ -162,6 +163,7 @@ describe('ContractsService.create', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: storage },
         { provide: ContractDeliveryService, useValue: delivery },
+        { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -664,7 +666,7 @@ describe('ContractsService.create', () => {
     scope.canManageStaffAt.mockResolvedValue(false);
 
     await expect(service.create(dto(), 5)).rejects.toThrow(
-      '근무지 점포를 찾을 수 없습니다',
+      '근무지 점포를 찾을 수 없습니다.',
     );
     expect(scope.canManageStaffAt).toHaveBeenCalledWith(5, 11, false);
     expect(prisma.staffMember.create).not.toHaveBeenCalled();
@@ -866,6 +868,7 @@ describe('ContractsService.create', () => {
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: null },
           { provide: ContractDeliveryService, useValue: delivery },
+          { provide: PERSONAL_DATA_KEY, useValue: null },
         ],
       }).compile();
       await expect(
@@ -1005,7 +1008,7 @@ describe('ContractsService.create', () => {
       await expect(
         service.create(dto({ correctSignedContracts: true }), 1),
       ).rejects.toThrow(
-        '잘못 올린 계약 바로잡기는 종이 계약을 등록할 때만 할 수 있습니다',
+        '잘못 올린 계약 바로잡기는 종이 계약을 등록할 때만 할 수 있습니다.',
       );
       await expect(
         service.create(
@@ -1014,7 +1017,7 @@ describe('ContractsService.create', () => {
           [employment],
         ),
       ).rejects.toThrow(
-        '잘못 올린 계약 바로잡기는 재계약과 함께 할 수 없습니다',
+        '잘못 올린 계약 바로잡기는 재계약과 함께 할 수 없습니다.',
       );
     });
 
@@ -1082,6 +1085,7 @@ describe('ContractsService.create', () => {
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: null },
           { provide: ContractDeliveryService, useValue: delivery },
+          { provide: PERSONAL_DATA_KEY, useValue: null },
         ],
       }).compile();
       prisma.contract.findUnique.mockResolvedValueOnce({

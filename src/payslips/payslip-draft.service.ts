@@ -73,7 +73,7 @@ const exists = (payslipId?: number) =>
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
     code: 'PAYSLIP_EXISTS',
-    message: '이 직원의 이 달 급여명세서가 이미 있습니다',
+    message: '이 직원의 이 달 급여명세서가 이미 있습니다.',
     ...(payslipId && { payslipId }),
   });
 
@@ -136,14 +136,14 @@ export class PayslipDraftService {
       month,
       staffMemberId,
     );
-    if (!candidate) throw new NotFoundException('직원을 찾을 수 없습니다');
+    if (!candidate) throw new NotFoundException('직원을 찾을 수 없습니다.');
     if (candidate.payslipId !== null) throw exists(candidate.payslipId);
     if (candidate.contractIds.length === 0)
       throw new UnprocessableEntityException({
         statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
         error: 'Unprocessable Entity',
         code: 'NO_VALID_CONTRACT',
-        message: '급여 기간에 유효한 근로계약이 없어 초안을 만들 수 없습니다',
+        message: '급여 기간에 유효한 근로계약이 없어 초안을 만들 수 없습니다.',
       });
     const masters = await this.loadMasters();
     try {

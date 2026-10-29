@@ -73,7 +73,7 @@ export class LeadsService {
       // 안내 문구는 Manyfast 「도입문의 등록」 · 운영 정책 CNT-14 (2026-10-13 재영).
       if (recent.length > 0)
         throw new HttpException(
-          '이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다',
+          '이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다.',
           HttpStatus.TOO_MANY_REQUESTS,
         );
 
@@ -196,8 +196,8 @@ export class LeadsService {
       // 값이 화면 캐시에 남아 있을 때 나는 오류다.
       throw new BadRequestException(
         groupCode === 'INDUSTRY'
-          ? '업종을 다시 선택해 주세요'
-          : '도입 예정 시기를 다시 선택해 주세요',
+          ? '업종을 다시 선택해 주세요.'
+          : '도입 예정 시기를 다시 선택해 주세요.',
       );
   }
 }

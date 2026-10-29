@@ -27,13 +27,13 @@ const REISSUE_INTERVAL_MS = 60 * 1000;
 const ISSUE_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_ISSUES_PER_WINDOW = 10;
 
-export const EMAIL_IN_USE_MESSAGE = '이미 쓰고 있는 이메일입니다';
+export const EMAIL_IN_USE_MESSAGE = '이미 쓰고 있는 이메일입니다.';
 // 틀림 · 만료 · 5회로 닫힘 · 새 핀으로 대체 · 없음을 가르지 않는다. 본인 토큰으로만 닿는 경로라 숨길 것은 없지만, 화면이
 // 할 일(새 핀 받기)이 모두 같다.
 export const INVALID_EMAIL_CHANGE_PIN_MESSAGE =
-  '핀이 올바르지 않거나 만료되었습니다';
+  '핀이 올바르지 않거나 만료되었습니다.';
 const UNAVAILABLE_MESSAGE =
-  '지금은 인증 메일을 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요';
+  '지금은 인증 메일을 보낼 수 없습니다. 잠시 뒤에 다시 시도해 주세요.';
 
 type Outcome =
   | { kind: 'ok' }
@@ -97,7 +97,7 @@ export class MyEmailChangeService {
     if (!(await verifyPassword(currentPassword, account.passwordHash)))
       throw new BadRequestException(CURRENT_PASSWORD_MISMATCH_MESSAGE);
     if (account.email === newEmail)
-      throw new BadRequestException('지금 쓰는 이메일과 같습니다');
+      throw new BadRequestException('지금 쓰는 이메일과 같습니다.');
     await this.assertNotInUse(this.prisma, newEmail, accountId);
 
     const pin = generatePin();
@@ -120,7 +120,7 @@ export class MyEmailChangeService {
         now.getTime() - recent.issuedAt.getTime() < REISSUE_INTERVAL_MS
       )
         throw new HttpException(
-          '1분 뒤에 다시 받을 수 있습니다',
+          '1분 뒤에 다시 받을 수 있습니다.',
           HttpStatus.TOO_MANY_REQUESTS,
         );
       const count = await tx.emailChangePin.count({
@@ -134,7 +134,7 @@ export class MyEmailChangeService {
           `이메일 변경 핀 하루 발급 한도 도달 accountId=${accountId}`,
         );
         throw new HttpException(
-          '오늘은 더 받을 수 없습니다. 내일 다시 시도해 주세요',
+          '오늘은 더 받을 수 없습니다. 내일 다시 시도해 주세요.',
           HttpStatus.TOO_MANY_REQUESTS,
         );
       }
@@ -181,7 +181,7 @@ export class MyEmailChangeService {
       // 알린다. 원래 오류는 던지지 않는다 — 그 메시지에 주소가 섞일 수 있고, 원인은 위 줄과 MailService 가 남겼다.
       if (!transient)
         throw new InternalServerErrorException(
-          '메일 설정 문제로 인증 메일을 보내지 못했습니다. 관리자에게 문의해 주세요',
+          '메일 설정 문제로 인증 메일을 보내지 못했습니다. 관리자에게 문의해 주세요.',
         );
       throw new ServiceUnavailableException(UNAVAILABLE_MESSAGE);
     }

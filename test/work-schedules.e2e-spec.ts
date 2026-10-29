@@ -1773,7 +1773,7 @@ describe('근무스케줄 (e2e, DB)', () => {
       for (const id of [direct2Id, retiredRecordId, 2147483647]) {
         const res = await mine(`staffMemberId=${id}&month=${month}`);
         expect([id, res.status]).toEqual([id, 404]);
-        expect(res.body).toMatchObject({ message: '소속을 찾을 수 없습니다' });
+        expect(res.body).toMatchObject({ message: '소속을 찾을 수 없습니다.' });
       }
       for (const query of [
         `staffMemberId=${directId}&month=2026-13`,

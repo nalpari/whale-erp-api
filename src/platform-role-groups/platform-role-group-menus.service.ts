@@ -300,7 +300,7 @@ export async function loadCatalog(
   // 엉뚱한 400 이 난다.
   if (services.length === 0)
     throw new InternalServerErrorException(
-      '공통코드 SERVICE 가 없거나 사용 중인 서비스(또는 이 화면의 서비스)가 없습니다 — 플랫폼 공통코드를 확인해 주세요',
+      '공통코드 SERVICE 가 없거나 사용 중인 서비스(또는 이 화면의 서비스)가 없습니다 — 플랫폼 공통코드를 확인해 주세요.',
     );
   const menus = await db.menu.findMany({
     where: { isDeleted: false },
@@ -399,12 +399,12 @@ export function submittedCells(
   for (const row of menus) {
     if (seen.has(row.menuId))
       throw new BadRequestException(
-        `같은 메뉴가 두 번 있습니다(menuId ${row.menuId})`,
+        `같은 메뉴가 두 번 있습니다(menuId ${row.menuId}).`,
       );
     seen.add(row.menuId);
     if (!visibleIds.has(row.menuId))
       throw new BadRequestException(
-        `메뉴 트리에 없는 메뉴입니다(menuId ${row.menuId}) — 사용중지 · 삭제된 메뉴는 권한을 줄 수 없습니다`,
+        `메뉴 트리에 없는 메뉴입니다(menuId ${row.menuId}) — 사용중지 · 삭제된 메뉴는 권한을 줄 수 없습니다.`,
       );
     if (catalog.groups.has(row.menuId)) continue;
     const flags: CellFlags = {
@@ -415,7 +415,7 @@ export function submittedCells(
     };
     if (hasWriteWithoutRead(flags))
       throw new BadRequestException(
-        '등록 · 수정 · 삭제를 켜려면 조회도 켜야 합니다',
+        '등록 · 수정 · 삭제를 켜려면 조회도 켜야 합니다.',
       );
     out.set(row.menuId, flags);
   }
@@ -447,7 +447,7 @@ export function assertAllowed(
       c.to
     )
       throw new BadRequestException(
-        'BP 마스터·가맹 마스터 권한에는 플랫폼 관리 메뉴를 줄 수 없습니다',
+        'BP 마스터·가맹 마스터 권한에는 플랫폼 관리 메뉴를 줄 수 없습니다.',
       );
     // 묶음 칸은 하위에서 따라 바뀌므로 하위 칸이 상한을 대신 받는다.
     if (
@@ -455,7 +455,7 @@ export function assertAllowed(
       !catalog.groups.has(c.menuId) &&
       !ceiling.get(c.menuId)?.[c.op]
     )
-      throw new BadRequestException('본인 권한 범위 밖 칸은 바꿀 수 없습니다');
+      throw new BadRequestException('본인 권한 범위 밖 칸은 바꿀 수 없습니다.');
   }
 }
 
@@ -463,7 +463,7 @@ export function assertAllowed(
 function assertMenusSavable(target: Target): void {
   if (target.roleTypeCode === 'PM')
     throw new ConflictException(
-      '플랫폼 마스터 권한은 전체 메뉴 허용으로 고정되어 바꿀 수 없습니다',
+      '플랫폼 마스터 권한은 전체 메뉴 허용으로 고정되어 바꿀 수 없습니다.',
     );
 }
 

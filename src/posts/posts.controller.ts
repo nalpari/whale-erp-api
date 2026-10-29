@@ -184,7 +184,7 @@ export class PlatformNoticesController {
     const postId = postIdOf(rawId);
     const attachmentId = parseRouteId(rawAttachmentId);
     if (attachmentId === null)
-      throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+      throw new NotFoundException('첨부파일을 찾을 수 없습니다.');
     return this.posts.attachmentDownloadUrl('NOTICE', postId, attachmentId);
   }
 }
@@ -252,7 +252,7 @@ export class PlatformFaqsController {
 /** 정수 범위 밖이면 DB 에 묻기 전에 404 — 그대로 보내면 PostgreSQL 오류로 500 이 된다. */
 function postIdOf(rawId: string): number {
   const id = parseRouteId(rawId);
-  if (id === null) throw new NotFoundException('게시물을 찾을 수 없습니다');
+  if (id === null) throw new NotFoundException('게시물을 찾을 수 없습니다.');
   return id;
 }
 
@@ -260,7 +260,7 @@ function postIdOf(rawId: string): number {
 function checkedUploads(files: UploadedPostFile[] | undefined): PostUpload[] {
   const allowed = Object.values(AttachmentFileType);
   if (files?.some((f) => !NO_NUL.test(f.originalname)))
-    throw new BadRequestException('파일 이름에 쓸 수 없는 문자가 있습니다');
+    throw new BadRequestException('파일 이름에 쓸 수 없는 문자가 있습니다.');
   return (files ?? []).map((f) => ({
     fileName: f.originalname,
     buffer: f.buffer,

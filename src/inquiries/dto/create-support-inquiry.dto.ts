@@ -8,20 +8,20 @@ export class CreateSupportInquiryDto {
   /** 문의 유형 — 공통코드 `INQUIRY_CATEGORY` 의 상세 코드. @example STAFF_LABOR */
   @IsString()
   @MaxLength(20)
-  @Matches(NO_NUL, { message: '문의 유형에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '문의 유형에 쓸 수 없는 문자가 있습니다.' })
   inquiryCategoryCode: string;
 
   /** 제목. 200자까지. */
   @IsString()
   @MaxLength(200)
-  @Matches(/\S/, { message: '제목을 입력해 주세요' })
-  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다' })
+  @Matches(/\S/, { message: '제목을 입력해 주세요.' })
+  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다.' })
   title: string;
 
   /** 문의 내용. 평문이고 20,000자까지. */
   @IsString()
   @MaxLength(20_000)
-  @Matches(/\S/, { message: '문의 내용을 입력해 주세요' })
-  @Matches(NO_NUL, { message: '문의 내용에 쓸 수 없는 문자가 있습니다' })
+  @Matches(/\S/, { message: '문의 내용을 입력해 주세요.' })
+  @Matches(NO_NUL, { message: '문의 내용에 쓸 수 없는 문자가 있습니다.' })
   body: string;
 }

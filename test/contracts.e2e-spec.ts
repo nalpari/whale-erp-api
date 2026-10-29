@@ -1433,10 +1433,14 @@ describe('근로계약 목록 (e2e)', () => {
     const affiliation = () => {
       prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
       prisma.staffMember.update.mockResolvedValue({
+        name: '남도현',
         employmentType: 'PART_TIME',
         candidateAccountId: 42,
       });
-      prisma.account.findUnique.mockResolvedValue({ email: 'a@b.c' });
+      prisma.account.findUnique.mockResolvedValue({
+        email: 'a@b.c',
+        realName: '남도현',
+      });
       prisma.store.findUnique.mockResolvedValue({
         name: '모리커피 연남점',
         bpCode: { tradeName: '모리커피' },
@@ -1544,10 +1548,14 @@ describe('근로계약 목록 (e2e)', () => {
     it('계정이 있는 직원이면 소속 추가 확인 요청을 새로 보낸다 — 날인 기한은 수락 뒤라 null(WHALEERP-130)', async () => {
       prisma.account.findMany.mockResolvedValue([{ accountId: 42 }]);
       prisma.staffMember.update.mockResolvedValue({
+        name: '남도현',
         employmentType: 'PART_TIME',
         candidateAccountId: 42,
       });
-      prisma.account.findUnique.mockResolvedValue({ email: 'a@b.c' });
+      prisma.account.findUnique.mockResolvedValue({
+        email: 'a@b.c',
+        realName: '남도현',
+      });
       prisma.store.findUnique.mockResolvedValue({
         name: '모리커피 연남점',
         bpCode: { tradeName: '모리커피' },

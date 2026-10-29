@@ -20,8 +20,8 @@ import type { BpProfileUpdateDto } from './dto/bp-profile-update.dto';
 import type { BpProfileResponseDto } from './dto/bp-profile.response.dto';
 
 type Tx = Prisma.TransactionClient;
-const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
-const NOT_BP_MASTER = 'BP 마스터만 사업자정보를 볼 수 있습니다';
+const NOT_FOUND = '관리자 계정을 찾을 수 없습니다.';
+const NOT_BP_MASTER = 'BP 마스터만 사업자정보를 볼 수 있습니다.';
 const BP_MASTER = 'BM';
 // 국세청 키 · 하루 할당량은 가입 · 점포 · 마이페이지가 함께 쓴다 — 점포(StoreManagementService
 // .countNtsCall)와 같은 한도를 관리자별로 따로 센다(코드 리뷰로 찾음, 2026-10-22 — 점포에만 있던
@@ -100,7 +100,7 @@ export class BpProfileService {
   ): Promise<void> {
     if (input.businessVerificationToken && input.clearBusinessVerification)
       throw new BadRequestException(
-        '사업자정보를 새로 반영하는 것과 지우는 것을 함께 요청할 수 없습니다',
+        '사업자정보를 새로 반영하는 것과 지우는 것을 함께 요청할 수 없습니다.',
       );
     const biz = input.businessVerificationToken
       ? await this.verifier.readToken(input.businessVerificationToken)
@@ -156,7 +156,7 @@ export class BpProfileService {
       });
       if (count === 0)
         throw new ConflictException(
-          '다른 곳에서 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요',
+          '다른 곳에서 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.',
         );
 
       const changes = [
@@ -218,7 +218,7 @@ export class BpProfileService {
     );
     if (recent.length >= NTS_CALLS_PER_HOUR)
       throw new HttpException(
-        `사업자 인증은 한 시간에 ${NTS_CALLS_PER_HOUR}번까지 할 수 있습니다. 잠시 후 다시 시도해 주세요`,
+        `사업자 인증은 한 시간에 ${NTS_CALLS_PER_HOUR}번까지 할 수 있습니다. 잠시 후 다시 시도해 주세요.`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     recent.push(now);

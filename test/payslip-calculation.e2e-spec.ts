@@ -390,12 +390,12 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
         expect.objectContaining({
           reviewReason: 'MISSING_ATTENDANCE',
           detail:
-            '출퇴근 기록이 2일 누락되었습니다 — 09-04 출근·퇴근 모두 없음, 09-02 퇴근 미등록',
+            '출퇴근 기록이 2일 누락되었습니다 — 09-04 출근·퇴근 모두 없음, 09-02 퇴근 미등록.',
         }),
         expect.objectContaining({
           reviewReason: 'AFTER_CONTRACT_END',
           detail:
-            '근로계약 만료일(2026-09-25) 뒤 출퇴근 기록이 2일 있습니다 — 09-28, 09-30',
+            '근로계약 만료일(2026-09-25) 뒤 출퇴근 기록이 2일 있습니다 — 09-28, 09-30.',
         }),
       ]),
     );
@@ -560,7 +560,7 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     expect(
       d.reviewReasons.find((r) => r.reviewReason === 'MISSING_ATTENDANCE')
         ?.detail,
-    ).toMatch(/08-31 퇴근 미등록$/);
+    ).toMatch(/08-31 퇴근 미등록\.$/);
   });
 
   it('급여 기간 마지막 날(한국)이 지나기 전에는 확정이 422 PERIOD_NOT_ENDED 다 — 그 전에 퇴직했으면 퇴직일 다음 날부터 된다(운영 정책 PAY-06 v247 · v251)', async () => {

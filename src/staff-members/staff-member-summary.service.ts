@@ -10,6 +10,7 @@ import {
 import { Prisma, StatusChangeActor } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { requireAreaRead } from '../auth/menu-permission.guard';
+import { bankNameOf } from '../common/bank-name';
 import { dateOnly } from '../common/date-only';
 import {
   decryptPersonalData,
@@ -24,6 +25,7 @@ import {
   StaffMemberPayrollAccountDto,
   StaffMemberPayslipSummaryResponseDto,
   StaffMemberRecentPayslipDto,
+  StaffMemberSendLogResponseDto,
   StaffMemberTodoSummaryResponseDto,
   StaffMemberWeekScheduleResponseDto,
 } from './dto/staff-member-summary.response.dto';
@@ -32,6 +34,8 @@ import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
 // 갱신 예정일 — 근로계약 목록과 같은 규칙(종료일 30일 전, 갱신 예정 알림 배치와 같은 날수)
 import { renewalDateOf } from '../contracts/contract-renewal';
 import { NOT_IDLE_RENEWAL } from '../contracts/signed-contract';
+import { CONTRACT_RELATED_TYPE } from '../contracts/contract-send-log';
+import { SEND_KIND_OF_TEMPLATE, toSendLogs } from './send-logs';
 
 /** TO-DO 최근 처리 이력 건수 */
 const RECENT_TODO_HISTORIES = 5;
@@ -75,7 +79,7 @@ const toRecentPayslip = (p: PayslipRow): StaffMemberRecentPayslipDto => {
 };
 
 /**
- * 직원 상세 요약(WHALEERP-183)의 영역들 — 근로계약 · 근무스케줄 · 급여명세서 · TO-DO. 영역마다 경로가 따로라 한 영역이
+ * 직원 상세 요약(WHALEERP-183)의 영역들 — 근로계약 · 근무스케줄 · 급여명세서 · TO-DO · 발송 이력(WHALEERP-136). 영역마다 경로가 따로라 한 영역이
  * 실패해도 나머지는 그대로 온다. 경로는 직원 정보 관리 조회 권한(컨트롤러)을 거치고, 여기서 그 영역 메뉴의 조회 권한을
  * 다시 본다 — 없으면 그 영역만 403(2026-10-21 노영주). 권한을 범위보다 먼저 봐서 권한이 없으면 어떤 ID 든 같은 403 이다.
  * 범위는 직원 상세와 같다(canManageStaffMember) — 없는 직원 · 관리 범위 밖 · 가려지는 직원은 같은 404.
@@ -158,7 +162,7 @@ export class StaffMemberSummaryService {
         `PERSONAL_DATA_ENCRYPTION_KEY 가 비어 신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId}`,
       );
       throw new ServiceUnavailableException(
-        '신고 정보를 지금 볼 수 없습니다. 잠시 뒤 다시 시도해 주세요',
+        '신고 정보를 지금 볼 수 없습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     }
     let accountNumber: string;
@@ -173,19 +177,12 @@ export class StaffMemberSummaryService {
         `신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId} 칸=payroll_account_number_encrypted: ${(err as Error).message}`,
         (err as Error).stack,
       );
-      throw new InternalServerErrorException('신고 정보를 읽을 수 없습니다', {
+      throw new InternalServerErrorException('신고 정보를 읽을 수 없습니다.', {
         cause: err,
       });
     }
-    // 은행 코드는 플랫폼 원본(PLATFORM_BP_CODE)이 먼저 오도록 bpCode 오름차순으로 정렬한다 — 플랫폼 원본 BP(BP000000)가
-    // 가장 작은 BP 코드라는 가정에 기댄다. 사용 중지 · 삭제된 은행이어도 이름은 보여 준다
-    const bank = await this.prisma.codeItem.findFirst({
-      where: { groupCode: 'BANK', itemCode: profile.bankCode },
-      orderBy: { bpCode: 'asc' },
-      select: { label: true },
-    });
     return {
-      bankName: bank?.label ?? profile.bankCode,
+      bankName: await bankNameOf(this.prisma, profile.bankCode),
       accountNumber,
     };
   }
@@ -207,7 +204,7 @@ export class StaffMemberSummaryService {
       weekStart === undefined ? kstToday(now) : parseDateOnly(weekStart);
     if (!day)
       throw new BadRequestException(
-        'weekStart 는 YYYY-MM-DD 형식의 있는 날짜입니다',
+        'weekStart 는 YYYY-MM-DD 형식의 있는 날짜입니다.',
       );
     // getUTCDay 는 일요일이 0 — 월요일로부터 며칠 지났는지로 바꾼다
     const monday = addDays(day, -((day.getUTCDay() + 6) % 7));
@@ -242,7 +239,7 @@ export class StaffMemberSummaryService {
       // 근무스케줄의 점포는 외래키로 묶여 있다. 못 찾으면 데이터가 깨진 것이라 빈 칸으로 내보내지 않는다(직원 목록과 같다)
       if (storeName === undefined)
         throw new InternalServerErrorException(
-          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다`,
+          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다.`,
         );
       return {
         workScheduleId: r.workScheduleId,
@@ -348,6 +345,40 @@ export class StaffMemberSummaryService {
         changedAt: h.changedAt,
       })),
     };
+  }
+
+  /**
+   * 발송 이력(WHALEERP-136) — 이 직원 레코드의 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡, 최근 순. 따로 쌓지 않고
+   * 알림톡 발송 이력(alimtalk_send_logs, 관련 업무 = 계약)에서 읽는다. 근로계약 관리 조회 권한(근로계약 영역과 같다)
+   */
+  async sendLogs(
+    adminAccountId: number,
+    staffMemberId: number,
+  ): Promise<StaffMemberSendLogResponseDto> {
+    await this.check(adminAccountId, staffMemberId, '/contracts');
+    const contracts = await this.prisma.contract.findMany({
+      where: { staffMemberId },
+      select: { contractId: true },
+    });
+    if (!contracts.length) return { items: [] };
+    const rows = await this.prisma.alimtalkSendLog.findMany({
+      where: {
+        relatedType: CONTRACT_RELATED_TYPE,
+        relatedId: { in: contracts.map((c) => c.contractId) },
+        templateCode: { in: Object.keys(SEND_KIND_OF_TEMPLATE) },
+      },
+      // 재발송 판정이 오래된 순으로 본다 — toSendLogs 가 최근 순으로 뒤집는다
+      orderBy: { alimtalkSendLogId: 'asc' },
+      select: {
+        alimtalkSendLogId: true,
+        templateCode: true,
+        relatedId: true,
+        result: true,
+        failureReason: true,
+        sentAt: true,
+      },
+    });
+    return { items: toSendLogs(rows) };
   }
 
   /** 그 영역 메뉴의 조회 권한(없으면 403) → 직원 범위(없으면 404) 순이다 */

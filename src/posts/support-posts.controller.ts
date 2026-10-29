@@ -71,7 +71,7 @@ export class SupportNoticesController {
   ): Promise<SupportPostResponseDto> {
     const postId = parseRouteId(rawId);
     if (postId === null)
-      throw new NotFoundException('게시물을 찾을 수 없습니다');
+      throw new NotFoundException('게시물을 찾을 수 없습니다.');
     const audiences = await audiencesOf(this.posts, user);
     const post = await this.posts.get(audiences, 'NOTICE', postId);
     return { ...post, ...(await this.posts.neighbors(audiences, postId)) };
@@ -92,7 +92,7 @@ export class SupportNoticesController {
     const postId = parseRouteId(rawId);
     const attachmentId = parseRouteId(rawAttachmentId);
     if (postId === null || attachmentId === null)
-      throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+      throw new NotFoundException('첨부파일을 찾을 수 없습니다.');
     return this.posts.attachmentDownloadUrl(
       await audiencesOf(this.posts, user),
       postId,

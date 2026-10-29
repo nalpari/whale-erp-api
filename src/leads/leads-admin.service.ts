@@ -39,14 +39,15 @@ import type { LeadStateResponseDto } from './dto/lead-state.response.dto';
 import type { ListLeadsDto } from './dto/list-leads.dto';
 import type { SaveLeadReplyDto } from './dto/save-lead-reply.dto';
 
-const NOT_FOUND = '도입문의를 찾을 수 없습니다';
+const NOT_FOUND = '도입문의를 찾을 수 없습니다.';
 const STATE = { leadId: true, status: true, updatedAt: true } as const;
-const STALE = '그사이 다른 운영자가 저장했습니다. 다시 불러온 뒤 저장해 주세요';
-const RESEND_TOO_SOON = '방금 답변 메일을 보냈습니다. 1분 뒤 다시 보내 주세요';
+const STALE =
+  '그사이 다른 운영자가 저장했습니다. 다시 불러온 뒤 저장해 주세요.';
+const RESEND_TOO_SOON = '방금 답변 메일을 보냈습니다. 1분 뒤 다시 보내 주세요.';
 const RESEND_NOT_ANSWERED =
-  '답변완료 도입문의만 답변 메일을 다시 보낼 수 있습니다';
+  '답변완료 도입문의만 답변 메일을 다시 보낼 수 있습니다.';
 const MAIL_UNAVAILABLE =
-  '메일 발송이 설정되지 않아 답변 메일을 보낼 수 없습니다. 운영자에게 문의해 주세요';
+  '메일 발송이 설정되지 않아 답변 메일을 보낼 수 없습니다. 운영자에게 문의해 주세요.';
 
 /**
  * 커뮤니티 관리 도입문의 — 목록 · 상세(WHALEERP-332), 처리중 · 답변 · 내부 메모(WHALEERP-274), 지우기(WHALEERP-590). 플랫폼 관리자만
@@ -166,8 +167,8 @@ export class LeadsAdminService {
     const current = await this.stateOf(leadId);
     throw new ConflictException(
       current.status === 'ANSWERED'
-        ? '이미 답변한 도입문의입니다'
-        : '이미 처리중인 도입문의입니다',
+        ? '이미 답변한 도입문의입니다.'
+        : '이미 처리중인 도입문의입니다.',
     );
   }
 
@@ -299,7 +300,7 @@ export class LeadsAdminService {
         select: { leadId: true },
       });
       if (!found) throw new NotFoundException(NOT_FOUND);
-      throw new ConflictException('상담을 마친 도입문의는 지울 수 없습니다');
+      throw new ConflictException('상담을 마친 도입문의는 지울 수 없습니다.');
     }
     this.logger.log(`lead deleted lead=${leadId} admin=${adminId}`);
   }

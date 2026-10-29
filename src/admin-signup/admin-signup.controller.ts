@@ -42,7 +42,7 @@ import { SignupResponseDto } from './dto/signup.response.dto';
 @Injectable()
 export class SignupThrottlerGuard extends ThrottlerGuard {
   protected getErrorMessage(): Promise<string> {
-    return Promise.resolve('잠시 후 다시 시도해 주세요');
+    return Promise.resolve('잠시 후 다시 시도해 주세요.');
   }
 }
 

@@ -470,7 +470,7 @@ export class StaffMemberListService {
       // 직원 레코드의 점포는 외래키로 묶여 있다. 못 찾으면 데이터가 깨진 것이라 빈 칸으로 내보내지 않는다.
       if (!store)
         throw new InternalServerErrorException(
-          `직원 ${r.staffMemberId} 의 점포 ${r.storeId} 를 찾을 수 없습니다`,
+          `직원 ${r.staffMemberId} 의 점포 ${r.storeId} 를 찾을 수 없습니다.`,
         );
       const storeDto = {
         storeId: r.storeId,

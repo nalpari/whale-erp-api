@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService } from './contracts.service';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
@@ -152,6 +153,7 @@ describe('ContractsService.updateWorker', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
         { provide: ContractDeliveryService, useValue: delivery },
+        { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -499,7 +501,7 @@ describe('ContractsService.updateWorker', () => {
     await expect(
       service.updateWorker(9, 7, dto({ phone: '01011112222' })),
     ).rejects.toThrow(
-      '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+      '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다.',
     );
     expect(tx.contractParty.upsert).not.toHaveBeenCalled();
   });

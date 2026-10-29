@@ -4,7 +4,7 @@ title: Platform holidays
 description: 관리자 웹 「플랫폼 휴일 관리」(MN000217) — GET /public-holidays reads the 공식 휴일 of a year (목록) or a month (캘린더) with the synchronization status; read-only, no route changes a holiday. A monthly batch (public-holiday-sync) aligns 올해 · 다음 해 with the 공휴일 API.
 tags: [admin, holiday, platform, team1, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T01:59:07Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: public-holidays-controller
     resource: ../../src/public-holidays/public-holidays.controller.ts
@@ -17,7 +17,7 @@ sources:
   - id: public-holidays-query
     resource: ../../src/public-holidays/dto/list-public-holidays-query.dto.ts
     title: year 2000~2100 · month 1~12 query
-    last_modified: 2026-10-26T00:43:12Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: holiday-api-client
     resource: ../../src/public-holidays/holiday-api.client.ts
     title: HolidayApiClient — 한국천문연구원 특일 정보 getRestDeInfo, a year at a time
@@ -54,7 +54,7 @@ paging — a year is at most a few dozen rows. `total` is the count shown next t
 heading (「공식 휴일 N일」). `month` is `null` for a year query.
 
 `year` is required and must be 2000~2100, `month` 1~12; anything else is 400 with
-「연도는 2000~2100 사이로 보내 주세요」 / 「월은 1~12 사이로 보내 주세요」.[^public-holidays-query]
+「연도는 2000~2100 사이로 보내 주세요.」 / 「월은 1~12 사이로 보내 주세요.」.[^public-holidays-query]
 An empty `month=` is not "no month": the query string is coerced to `0` and gets the
 month 400, like the other query DTOs (none of them maps `''` to absent). **The 목록 view
 leaves `month` out of the URL** rather than sending it empty (사용자 결정, 2026-10-26).

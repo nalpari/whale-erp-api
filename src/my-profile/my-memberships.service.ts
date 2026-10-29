@@ -187,7 +187,7 @@ export class MyMembershipsService {
         },
       },
     });
-    if (!staff) throw new NotFoundException('소속을 찾을 수 없습니다');
+    if (!staff) throw new NotFoundException('소속을 찾을 수 없습니다.');
     return {
       staffMemberId: staff.staffMemberId,
       taxProfile: staff.staffTaxProfile
@@ -227,21 +227,21 @@ export class MyMembershipsService {
     const hasAccount =
       dto.bankCode !== undefined || dto.payrollAccountNumber !== undefined;
     if (!hasRrn && !hasAccount)
-      throw badRequest('TAX_PROFILE_EMPTY', '바꿀 값을 보내 주세요');
+      throw badRequest('TAX_PROFILE_EMPTY', '바꿀 값을 보내 주세요.');
     if (
       hasAccount &&
       (dto.bankCode === undefined || dto.payrollAccountNumber === undefined)
     )
       throw badRequest(
         'TAX_PROFILE_ACCOUNT_INCOMPLETE',
-        '급여 계좌는 은행과 계좌번호를 함께 보내 주세요',
+        '급여 계좌는 은행과 계좌번호를 함께 보내 주세요.',
       );
     const key = this.requireKey(staffMemberId);
 
     const mine = { staffMemberId, accountId, ...ACTIVE_STAFF };
     // 내 소속인지 먼저 본다 — 남의 레코드면 비밀번호를 보지 않고 404, 남의 직원 행도 잠그지 않는다.
     if (!(await this.prisma.staffMember.count({ where: mine })))
-      throw new NotFoundException('소속을 찾을 수 없습니다');
+      throw new NotFoundException('소속을 찾을 수 없습니다.');
     // 고치는 경우에만 지금 비밀번호를 본다. 확인한 해시는 잠근 뒤 다시 본다
     const verifiedHash = (await this.prisma.staffTaxProfile.count({
       where: { staffMemberId },
@@ -261,7 +261,7 @@ export class MyMembershipsService {
         where: mine,
         select: { account: { select: { birthDate: true } } },
       });
-      if (!staff) throw new NotFoundException('소속을 찾을 수 없습니다');
+      if (!staff) throw new NotFoundException('소속을 찾을 수 없습니다.');
       const select = {
         rrnEncrypted: true,
         bankCode: true,
@@ -289,7 +289,7 @@ export class MyMembershipsService {
       if (creating && !(hasRrn && hasAccount))
         throw badRequest(
           'TAX_PROFILE_INCOMPLETE',
-          '처음 낼 때는 주민등록번호와 급여 계좌(은행 · 계좌번호)를 모두 보내 주세요',
+          '처음 낼 때는 주민등록번호와 급여 계좌(은행 · 계좌번호)를 모두 보내 주세요.',
         );
       if (
         hasRrn &&
@@ -299,7 +299,7 @@ export class MyMembershipsService {
       )
         throw badRequest(
           'RRN_BIRTH_MISMATCH',
-          '주민등록번호 앞자리가 가입한 생년월일과 다릅니다. 근무지 관리자에게 정정을 요청해 주세요',
+          '주민등록번호 앞자리가 가입한 생년월일과 다릅니다. 근무지 관리자에게 정정을 요청해 주세요.',
         );
       if (hasAccount) {
         const bank = await tx.codeItem.count({
@@ -311,7 +311,7 @@ export class MyMembershipsService {
           },
         });
         if (!bank)
-          throw badRequest('BANK_CODE_UNKNOWN', '은행을 다시 골라 주세요');
+          throw badRequest('BANK_CODE_UNKNOWN', '은행을 다시 골라 주세요.');
       }
 
       // 보낸 칸은 풀어서 비교한다 — 풀 수 없으면 500(reveal), 덮어쓰지 않는다
@@ -407,7 +407,7 @@ export class MyMembershipsService {
       `PERSONAL_DATA_ENCRYPTION_KEY 가 비어 신고 정보를 다룰 수 없습니다 — staffMemberId=${staffMemberId}`,
     );
     throw new ServiceUnavailableException(
-      '신고 정보를 지금 다룰 수 없습니다. 잠시 뒤 다시 시도해 주세요',
+      '신고 정보를 지금 다룰 수 없습니다. 잠시 뒤 다시 시도해 주세요.',
     );
   }
 
@@ -422,7 +422,7 @@ export class MyMembershipsService {
         `PERSONAL_DATA_ENCRYPTION_KEY 가 비어 신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId}`,
       );
       throw new ServiceUnavailableException(
-        '신고 정보를 지금 볼 수 없습니다. 잠시 뒤 다시 시도해 주세요',
+        '신고 정보를 지금 볼 수 없습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     }
     return {
@@ -472,7 +472,7 @@ export class MyMembershipsService {
         `신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId} 칸=${column}: ${(err as Error).message}`,
         (err as Error).stack,
       );
-      throw new InternalServerErrorException('신고 정보를 읽을 수 없습니다', {
+      throw new InternalServerErrorException('신고 정보를 읽을 수 없습니다.', {
         cause: err,
       });
     }

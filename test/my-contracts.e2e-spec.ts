@@ -660,7 +660,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       .field('sentAt', sentAt.toISOString())
       .expect(400);
     expect(res.body).toMatchObject({
-      message: '서명 이미지(signature)를 보내 주세요',
+      message: '서명 이미지(signature)를 보내 주세요.',
     });
     const adminToken = await admin();
     await post(`/me/contracts/${contractId}/reject`, adminToken).expect(403);

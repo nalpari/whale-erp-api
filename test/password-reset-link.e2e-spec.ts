@@ -390,7 +390,7 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     }
     expect(failed.status).toBe(503);
     expect((failed.body as { message: string }).message).toBe(
-      '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요',
+      '재설정 링크를 보내지 못했습니다. 잠시 뒤에 다시 보내 주세요.',
     );
     await verify(first).expect(204);
     await api()
@@ -415,7 +415,7 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     links.failNext = false;
     expect(failed.status).toBe(500);
     expect((failed.body as { message: string }).message).toBe(
-      '메일 설정 문제로 재설정 링크를 보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요',
+      '메일 설정 문제로 재설정 링크를 보내지 못했습니다. 플랫폼 관리자에게 문의해 주세요.',
     );
     expect(
       await prisma.passwordResetLink.count({

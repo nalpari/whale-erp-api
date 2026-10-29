@@ -64,7 +64,7 @@ export class PasswordResetLinkAdminController {
   })
   @ApiInternalServerErrorResponse({
     description:
-      '보내기 전에 막힘(메일 템플릿 꺼짐 · 제목 없음 · DB 오류) — 「메일 설정 문제로 … 플랫폼 관리자에게 문의해 주세요」',
+      '보내기 전에 막힘(메일 템플릿 꺼짐 · 제목 없음 · DB 오류) — 「메일 설정 문제로 … 플랫폼 관리자에게 문의해 주세요.」',
   })
   async issue(
     @CurrentUser() user: AuthUser,

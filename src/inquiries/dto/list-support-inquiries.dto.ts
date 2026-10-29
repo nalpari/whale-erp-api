@@ -36,6 +36,6 @@ export class ListSupportInquiriesDto extends PageDto {
   @Transform(trimText)
   @IsString()
   @MaxLength(200)
-  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다.' })
   title?: string;
 }

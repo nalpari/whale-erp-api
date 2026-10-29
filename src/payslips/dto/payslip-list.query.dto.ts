@@ -29,7 +29,7 @@ const MAX_ID = 2_147_483_647;
 export class PayslipListQueryDto {
   /** 급여 월(YYYY-MM). 급여 기간 시작일이 그 달인 명세서다 */
   @ApiProperty({ example: '2026-09' })
-  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'month 는 YYYY-MM 입니다' })
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'month 는 YYYY-MM 입니다.' })
   month: string;
 
   /**
@@ -125,7 +125,7 @@ export class PayslipListQueryDto {
 export class PayslipSummaryQueryDto {
   /** 급여 월(YYYY-MM). 목록의 month 와 같다 — 급여 기간 시작일이 그 달인 명세서다 */
   @ApiProperty({ example: '2026-09' })
-  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'month 는 YYYY-MM 입니다' })
+  @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, { message: 'month 는 YYYY-MM 입니다.' })
   month: string;
 
   /** 점포 ID */

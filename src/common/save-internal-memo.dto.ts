@@ -12,7 +12,7 @@ export class SaveInternalMemoDto {
   @ValidateIf((dto: SaveInternalMemoDto) => dto.internalMemo !== null)
   @IsString()
   @MaxLength(2_000)
-  @Matches(NO_NUL, { message: '메모에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '메모에 쓸 수 없는 문자가 있습니다.' })
   internalMemo: string | null;
 
   /**

@@ -26,7 +26,7 @@ import {
   REPEAT_TYPES,
 } from '../bp-holiday-rule';
 
-const DATE = '날짜는 YYYY-MM-DD 로 보내 주세요';
+const DATE = '날짜는 YYYY-MM-DD 로 보내 주세요.';
 
 /**
  * BP 휴일 등록 양식(WHALEERP-557). 유형과 맞지 않는 칸은 보내도 무시하고 비운다 — 하루는 종료일 = 시작일, 반복은
@@ -36,21 +36,21 @@ export class SaveBpHolidayDto {
   /** 휴일명 1~30자. @example 정기휴무 */
   @IsString()
   @Transform(trimText)
-  @Length(1, 30, { message: '휴일명은 1~30자로 보내 주세요' })
-  @Matches(NO_NUL, { message: '쓸 수 없는 문자가 있습니다' })
+  @Length(1, 30, { message: '휴일명은 1~30자로 보내 주세요.' })
+  @Matches(NO_NUL, { message: '쓸 수 없는 문자가 있습니다.' })
   name: string;
 
   /** 설명 500자까지. 비우면 null. @example 월요일마다 쉬는 정기 휴무 */
   @IsOptional()
   @IsString()
   @Transform(trimText)
-  @MaxLength(500, { message: '설명은 500자까지 보내 주세요' })
-  @Matches(NO_NUL, { message: '쓸 수 없는 문자가 있습니다' })
+  @MaxLength(500, { message: '설명은 500자까지 보내 주세요.' })
+  @Matches(NO_NUL, { message: '쓸 수 없는 문자가 있습니다.' })
   description?: string | null;
 
   /** 휴일 유형(공통코드 HOLIDAY_TYPE) — DAY 하루 · PERIOD 기간 · REPEAT 반복. @example REPEAT */
   @IsIn(HOLIDAY_TYPES, {
-    message: '휴일 유형은 DAY · PERIOD · REPEAT 중 하나입니다',
+    message: '휴일 유형은 DAY · PERIOD · REPEAT 중 하나입니다.',
   })
   holidayTypeCode: (typeof HOLIDAY_TYPES)[number];
 
@@ -66,14 +66,14 @@ export class SaveBpHolidayDto {
   /** 반복 유형(공통코드 HOLIDAY_REPEAT_TYPE) — 반복일 때만. @example WEEKLY */
   @IsOptional()
   @IsIn(REPEAT_TYPES, {
-    message: '반복 유형은 DAILY · WEEKLY · MONTHLY · YEARLY 중 하나입니다',
+    message: '반복 유형은 DAILY · WEEKLY · MONTHLY · YEARLY 중 하나입니다.',
   })
   holidayRepeatTypeCode?: (typeof REPEAT_TYPES)[number] | null;
 
   /** 반복 종료 조건 — NONE 없음 · UNTIL_DATE 특정 날짜까지 · COUNT 지정 횟수만큼. @example NONE */
   @IsOptional()
   @IsIn(REPEAT_END_TYPES, {
-    message: '종료 조건은 NONE · UNTIL_DATE · COUNT 중 하나입니다',
+    message: '종료 조건은 NONE · UNTIL_DATE · COUNT 중 하나입니다.',
   })
   repeatEndType?: (typeof REPEAT_END_TYPES)[number] | null;
 
@@ -85,9 +85,9 @@ export class SaveBpHolidayDto {
   /** 반복 횟수 1~9999 — COUNT 일 때만. 없는 날짜(31일 · 2월 29일)는 세지 않는다. @example 10 */
   @IsOptional()
   @Type(() => Number)
-  @IsInt({ message: '반복 횟수는 1~9999 로 보내 주세요' })
-  @Min(1, { message: '반복 횟수는 1~9999 로 보내 주세요' })
-  @Max(9999, { message: '반복 횟수는 1~9999 로 보내 주세요' })
+  @IsInt({ message: '반복 횟수는 1~9999 로 보내 주세요.' })
+  @Min(1, { message: '반복 횟수는 1~9999 로 보내 주세요.' })
+  @Max(9999, { message: '반복 횟수는 1~9999 로 보내 주세요.' })
   repeatCount?: number | null;
 
   /** 전체 점포 휴일인가. true 면 예외 점포(excludedStoreIds), false 면 대상 점포(storeIds)를 받는다. @example false */

@@ -146,6 +146,6 @@ export class LeadsAdminController {
 /** 정수 범위 밖이면 DB 에 묻기 전에 404 — 그대로 보내면 PostgreSQL 오류로 500 이 된다. 권한 가드 뒤라 권한이 없으면 403 이다. */
 function leadIdOf(rawId: string): number {
   const id = parseRouteId(rawId);
-  if (id === null) throw new NotFoundException('도입문의를 찾을 수 없습니다');
+  if (id === null) throw new NotFoundException('도입문의를 찾을 수 없습니다.');
   return id;
 }

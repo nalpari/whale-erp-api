@@ -144,7 +144,7 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
     count.mockResolvedValueOnce(2).mockResolvedValueOnce(0);
     expect(await october()).toContainEqual({
       reviewReason: 'ATTENDANCE_NEEDS_REVIEW',
-      detail: '급여 기간에 확인 필요 출퇴근 기록이 2건 있습니다',
+      detail: '급여 기간에 확인 필요 출퇴근 기록이 2건 있습니다.',
     });
     // 앞 달 날에만 있어도 이 달 사유로 붙고, 문구가 그 날짜를 밝힌다
     count.mockResolvedValueOnce(2).mockResolvedValueOnce(2);
@@ -162,7 +162,7 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
     ).toContainEqual({
       reviewReason: 'ATTENDANCE_NEEDS_REVIEW',
       detail:
-        '급여 기간과 첫 주 앞 달 날(09-28 ~ 09-30)에 확인 필요 출퇴근 기록이 2건 있습니다',
+        '급여 기간과 첫 주 앞 달 날(09-28 ~ 09-30)에 확인 필요 출퇴근 기록이 2건 있습니다.',
     });
     // 6/1 은 월요일 — 앞 달 날이 없어 급여 기간만 한 번 센다
     count.mockClear();
@@ -279,10 +279,10 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
 
   it('확인 필요 문구 — 앞 달 날이 하루면 그 날 하나만, 앞 달 날 것이 없으면 「급여 기간에」', () => {
     expect(flaggedDetail(1, 1, ['2026-09-30'])).toBe(
-      '급여 기간과 첫 주 앞 달 날(09-30)에 확인 필요 출퇴근 기록이 1건 있습니다',
+      '급여 기간과 첫 주 앞 달 날(09-30)에 확인 필요 출퇴근 기록이 1건 있습니다.',
     );
     expect(flaggedDetail(3, 0, ['2026-09-28', '2026-09-29'])).toBe(
-      '급여 기간에 확인 필요 출퇴근 기록이 3건 있습니다',
+      '급여 기간에 확인 필요 출퇴근 기록이 3건 있습니다.',
     );
   });
 
@@ -436,13 +436,13 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
           { date: '2026-08-22', kind: 'NONE' },
         ]),
       ).toBe(
-        '출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음',
+        '출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음.',
       );
       const many = Array.from({ length: 12 }, (_, i) => ({
         date: `2026-09-${String(i + 1).padStart(2, '0')}`,
         kind: 'NONE' as const,
       }));
-      expect(missingDetail(many)).toMatch(/12일 누락.* 외 2일$/);
+      expect(missingDetail(many)).toMatch(/12일 누락.* 외 2일\.$/);
     });
   });
 
@@ -459,7 +459,7 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
         days: ['2026-09-21', '2026-09-23'],
       });
       expect(afterEndDetail(r!)).toBe(
-        '근로계약 만료일(2026-09-20) 뒤 출퇴근 기록이 2일 있습니다 — 09-21, 09-23',
+        '근로계약 만료일(2026-09-20) 뒤 출퇴근 기록이 2일 있습니다 — 09-21, 09-23.',
       );
     });
 

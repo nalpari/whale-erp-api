@@ -89,7 +89,7 @@ describe('MyPasswordService', () => {
   it('새 비밀번호가 규칙에 어긋나면 400 과 그 사유를 주고 바꾸지 않는다', async () => {
     const service = await build();
     await expect(service.change(user, CURRENT, 'short1!')).rejects.toThrow(
-      new BadRequestException('3가지 이상 섞어도 8자 이상이어야 합니다'),
+      new BadRequestException('3가지 이상 섞어도 8자 이상이어야 합니다.'),
     );
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
