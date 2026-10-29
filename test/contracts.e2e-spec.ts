@@ -234,6 +234,7 @@ describe('근로계약 목록 (e2e)', () => {
     ['put', '/contracts/5/paper', ['isCreatable', 'isUpdatable']],
     ['patch', '/contracts/5/worker', ['isUpdatable']],
     ['post', '/contracts/5/send', ['isUpdatable']],
+    ['post', '/contracts/5/end', ['isUpdatable']],
     ['delete', '/contracts/5', ['isDeletable']],
   ])(
     '%s %s — 근로계약 관리 권한이 없으면 403, 서비스까지 가지 않는다(WHALEERP-592)',
@@ -366,6 +367,65 @@ describe('근로계약 목록 (e2e)', () => {
     await get('/contracts/7', 'admin').expect(404);
     expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, false);
   });
+
+  // 상태를 바꾸는 경로도 같은 범위 검사를 거친다 — 본사 역할에게 본사 제공에 동의하지 않은 가맹 점포 직원이면 404 이고 아무것도
+  // 바꾸지 않는다. 동의했으면 범위 검사를 지나 쓰기 트랜잭션으로 간다(WHALEERP-157, ATT-30). 판정 규칙 자체(본사 역할 × 가맹 ×
+  // 동의)는 admin-scope.service.spec 이 보고, 여기서는 그 규칙처럼 동의 값으로만 답하는 목으로 동의 값이 판정에 그대로 실리는지 본다
+  const workerBody = {
+    name: '남도현',
+    phone: '01090145563',
+    birthDate: '1998-07-12',
+    gender: 'FEMALE',
+    isForeigner: false,
+  };
+  it.each<[string, string, boolean, object | undefined]>([
+    ['post', '/contracts/7/send', false, undefined],
+    ['post', '/contracts/7/end', false, undefined],
+    ['patch', '/contracts/7/worker', false, workerBody],
+    ['post', '/contracts/7/send', true, undefined],
+    ['post', '/contracts/7/end', true, undefined],
+    ['patch', '/contracts/7/worker', true, workerBody],
+  ])(
+    '%s %s — 본사 제공 동의 %s: 미동의면 404 · 아무것도 바꾸지 않고, 동의면 범위 검사를 지난다(WHALEERP-157)',
+    async (method, path, consented, body) => {
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 12,
+        status: 'PENDING_SEND',
+        staffMember: {
+          phone: '01090145563',
+          account: { isHqSharingConsented: consented },
+        },
+      });
+      // 본사 역할 × 가맹 점포 — 동의했을 때만 맡는다(ATT-30 규칙처럼 답한다)
+      scope.canManageStaffAt.mockImplementation(
+        (_admin: number, _store: number, hqConsented: boolean) =>
+          Promise.resolve(hqConsented),
+      );
+      prisma.$transaction.mockClear();
+      prisma.contract.update.mockClear();
+      prisma.contractStatusHistory.create.mockClear();
+      prisma.invitation.updateMany.mockClear();
+      const req = request(app.getHttpServer());
+      const call = method === 'post' ? req.post(path) : req.patch(path);
+      const res = await call
+        .set('Authorization', `Bearer ${token('admin')}`)
+        .send(body ?? {});
+      expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, consented);
+      if (consented) {
+        // 범위 검사를 지나 쓰기 트랜잭션까지 간다(그다음 결과는 이 표가 보지 않는다)
+        expect(res.status).not.toBe(404);
+        expect(prisma.$transaction).toHaveBeenCalled();
+        return;
+      }
+      expect(res.status).toBe(404);
+      // 범위 검사는 쓰기 앞이다 — 트랜잭션을 열지 않고, 계약 · 이력 · 초대를 쓰지 않는다
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.contract.update).not.toHaveBeenCalled();
+      expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+      expect(prisma.contractStatusHistory.create).not.toHaveBeenCalled();
+      expect(prisma.invitation.updateMany).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['pageSize 가 200 을 넘으면', '/contracts?pageSize=201'],
