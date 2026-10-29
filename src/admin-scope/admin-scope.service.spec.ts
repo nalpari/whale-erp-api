@@ -668,12 +668,12 @@ describe('AdminScopeService', () => {
       prisma.bpCode.count.mockResolvedValue(31);
     });
 
-    it('미삭제 고객 BP 를 상태와 상관없이 BP코드순으로 나눠 준다', async () => {
+    it('미삭제 고객 BP(BP 마스터 계정이 있는) 를 상태와 상관없이 최신 등록 순으로 나눠 준다', async () => {
       await expect(scope.listBps({ page: 3, pageSize: 10 })).resolves.toEqual({
         items: [{ bpCodeId: 7 }],
         total: 31,
       });
-      const where = { isDeleted: false, isPlatform: false };
+      const where = { isDeleted: false, isPlatform: false, adminAccounts: { some: { roleTypeCode: 'BM', isDeleted: false } } };
       expect(prisma.bpCode.findMany).toHaveBeenCalledWith({
         where,
         select: {
@@ -694,6 +694,7 @@ describe('AdminScopeService', () => {
       const where = {
         isDeleted: false,
         isPlatform: false,
+        adminAccounts: { some: { roleTypeCode: 'BM', isDeleted: false } },
         OR: [
           { tradeName: { contains: 'bp0001', mode: 'insensitive' } },
           { bpCode: { contains: 'bp0001', mode: 'insensitive' } },
@@ -711,6 +712,7 @@ describe('AdminScopeService', () => {
         where: {
           isDeleted: false,
           isPlatform: false,
+          adminAccounts: { some: { roleTypeCode: 'BM', isDeleted: false } },
           OR: [
             { tradeName: { contains: 'BP\\_1\\%', mode: 'insensitive' } },
             { bpCode: { contains: 'BP\\_1\\%', mode: 'insensitive' } },
