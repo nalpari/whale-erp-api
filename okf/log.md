@@ -3,6 +3,7 @@
 ## 2026-10-29
 * **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) · [Contracts API](/api/contracts-api.md) — api #201 code-review: `sameName` 을 `src/contracts/identity-match.ts` 로 옮기고 `src/staff-signup/same-name.ts` 를 지웠다(근무지 더하기 · 소속 추가 확인 요청 · 메일이 한 함수). 메일을 건너뛸지는 `nameMismatch` 하나로 정하고, 메일 설정이 없어도 이름 불일치 사유를 남긴다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup (직원 앱 가입)](/api/staff-signup.md) — WHALEERP-140 마무리(2026-10-29 김민식): 발송 전 이름 불일치 경고는 두지 않는다 — 입력한 대로 요청 · 알림톡을 보내고 못 받으면 관리자가 유선으로 확인한다. 소속 추가 확인 메일은 입력한 이름이 그 번호 계정 실명과 같을 때만(`nameKey`, `identity-match.ts` 에서 내보냄) 보낸다 — 번호 재활용 때 채용 정보가 옛 주인 메일로 가던 것. 번호의 새 주인이 가입하지 못하는 것은 유선 확인으로 대신한다. 마이그레이션 없음.
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) — 일괄 저장 두 테이블(`bulk_exports` · `bulk_export_download_logs`)과 enum `bulk_export_status` 를 물리 생성기에 넣었다(`_model.py`, 고유 인덱스 식 `KEY_EXPR`, `_build_prisma.py` 의 `integer[]`). 정의서 · schema.sql 을 다시 만들었고 schema.sql 이 마이그레이션 `20261029134408_team3_bulk_exports` 와 문장마다 같다(41문장). front 논리 카탈로그 PR 과 같이 머지한다.
 * **Update**: main 병합(api bulbasaur, main #199 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api bulbasaur, main #193 · #200 까지): okf/api/payslips.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api bulbasaur, main #198 까지): okf/log 충돌은 양쪽 기록을 살렸다.
