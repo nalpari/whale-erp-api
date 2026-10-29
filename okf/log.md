@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Test**: WHALEERP-157 계약 상태 권한 점검(문서 변경 없음, 테스트만): 다섯 조건(점포 범위 · 메뉴 권한 · 직원 자기 계약 · 진입점 · 본사 제공 미동의)이 코드에 막혀 있음을 확인하고 빠진 테스트를 채웠다 — 종료도 수정 권한(권한 표 · e2e 403), 재발송 · 종료 · 근로자 정보 수정이 범위 밖 · 미동의면 404, 바로잡기도 수정 권한 없으면 403, 직원 앱 거부 · 수정 요청도 남의 계약이면 404. 요건 2번은 역할이 아니라 메뉴 권한으로 고침(2026-10-28 김민식, Plane 157).
 * **Update**: [Contracts API](/api/contracts-api.md) — 본인 대조 항목의 한글(`IDENTITY_FIELD_LABELS`)을 `GET /enums` 의 `IdentityField` 로 등록했다(직원 앱 날인 화면이 다른 항목을 알린다, WHALEERP-147 — 화면에 상수 대응표를 두지 않게).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #182 code-review 반영: 이력이 아예 없는 옛 종료 계약은 체결된 것으로 본다(관리자 상세와 같은 기준), 처리 완료본 409 문구를 내려받기에 맞춤(code · status 는 같음), Swagger 409 설명, 상태가 빈 행은 404.
 * **Update**: [Contracts API](/api/contracts-api.md) — 직원 계약 파일 내려받기 PR 전 리뷰 반영: 처리 완료본은 체결 완료이거나 체결 완료에서 닫힌 종료(SIGNED → ENDED 이력)만 — 날인 전 종료는 409. e2e 에 임시저장 404 · 날인 전 종료 409 를 더했다.
