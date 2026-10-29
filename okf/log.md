@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — api #164 후속(#186): 저장 · 전환 표 · 재발송 응답 status 설명을 계정 있는 번호(소속 추가 확인 요청 · 발송 대기)와 거부 · 만료 되살리기에 맞추고, 거절한 요청의 계약은 상세 재발송으로 되살아남을 적음. 기본 알림 템플릿 e2e 기대 목록에 소속 추가 확인 요청 알림톡 · 메일(44건).
 * **Update**: main 병합(api monferno, main #177 · #178 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #182 · #184 까지): okf/log · [Employment Contract Batch](/api/employment-contract-batch.md) 충돌은 양쪽 기록을 살리고 생성 시각은 늦은 값을 썼다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #180 까지): okf/log 충돌은 양쪽 기록을 살렸다. #180 에는 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
