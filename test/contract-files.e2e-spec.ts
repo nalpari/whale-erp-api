@@ -122,7 +122,7 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
   async function contract(o: {
     sentAt: Date;
     signed?: boolean;
-    method?: 'ELECTRONIC' | 'PAPER';
+    method?: 'ELECTRONIC' | 'PAPER' | null;
   }) {
     const n = randomInt(10_000_000, 99_999_999);
     const staff = await prisma.staffMember.create({
@@ -141,7 +141,7 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
         staffMemberId: staff.staffMemberId,
         storeId,
         employmentType: 'PART_TIME',
-        contractMethod: o.method ?? 'ELECTRONIC',
+        contractMethod: o.method === undefined ? 'ELECTRONIC' : o.method,
         startDate: new Date('2026-11-01'),
         status: o.signed ? 'SIGNED' : 'PENDING_SIGNATURE',
         sentAt: o.sentAt,
@@ -192,6 +192,12 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
       signed: true,
       method: 'PAPER',
     });
+    // 계약 방식이 빈 옛 전자계약도 대상이다(두 조회 모두 NULL 을 종이 계약으로 보지 않는다)
+    const noMethod = await contract({
+      sentAt: minutesAgo(10),
+      signed: true,
+      method: null,
+    });
 
     await files.fillMissing(now);
     // 다른 테스트 행과 상관없이 이 계약들만 본다
@@ -209,14 +215,21 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
     expect(stored.get(b[0].storageKey)!.toString('latin1')).toContain(
       '/Subtype /Image',
     );
-    // 고정 전에 체결된 계약 — 사용자 칸은 지금 점포 정보로 만들었고, 고정 일시는 비어 있는 채다(그 기록)
+    expect((await docs(noMethod)).map((d) => d.kind)).toEqual([
+      'SENT_ORIGINAL',
+      'SIGNED_COPY',
+    ]);
+    // 고정 전에 체결된 계약 — 지금 점포 정보로 만들고 그 값을 당사자 행에 적었다. 고정 일시는 비어 있는 채다(그 기록)
     expect(
-      (
-        await prisma.contractParty.findUniqueOrThrow({
-          where: { contractId: backfill },
-        })
-      ).employerFixedAt,
-    ).toBeNull();
+      await prisma.contractParty.findUniqueOrThrow({
+        where: { contractId: backfill },
+      }),
+    ).toMatchObject({
+      employerName: '지금 상호',
+      employerCeoName: '김대표',
+      employerPhone: '0212345678',
+      employerFixedAt: null,
+    });
 
     await files.fillMissing(now);
     expect(await docs(backfill)).toHaveLength(1);

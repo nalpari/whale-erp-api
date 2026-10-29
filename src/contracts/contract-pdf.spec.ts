@@ -107,4 +107,24 @@ describe('renderContractPdf', () => {
     expect(sent.subarray(0, 5).toString()).toBe('%PDF-');
     expect(sent.toString('latin1')).not.toContain('/Subtype /Image');
   });
+
+  it('긴 조항 · 긴 주소는 다음 장으로 넘긴다 — 던지지 않는다', async () => {
+    const long = '근로기준법에서 정한 바에 따라 연차유급휴가를 준다. '.repeat(
+      80,
+    );
+    const pdf = await renderContractPdf(
+      contractPdfModel({
+        ...input,
+        articles: Array.from({ length: 10 }, (_, i) => ({
+          title: `제${i + 1}조`,
+          blocks: [{ type: 'TEXT' as const, text: long }],
+        })),
+        employer: { ...input.employer, address: '서울 '.repeat(60) },
+      }),
+      null,
+    );
+    expect(
+      pdf.toString('latin1').match(/\/Type \/Page[^s]/g)?.length,
+    ).toBeGreaterThan(2);
+  });
 });

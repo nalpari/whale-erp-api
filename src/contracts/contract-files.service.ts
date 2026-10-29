@@ -21,6 +21,8 @@ export const SENT_ORIGINAL_GRACE_MS = 5 * 60_000;
 export const SENT_ORIGINAL_RETRY_MS = 24 * 60 * 60_000;
 /** 배치 한 번에 만드는 파일 수 — PDF 는 한 장에 수백 ms 라 10분 주기 안에 끝나게 둔다 */
 export const FILL_BATCH_SIZE = 50;
+/** 채우기에 실패한 계약을 이만큼 뒤로 미룬다 — 늘 실패하는 계약(서명 파일이 사라짐 등)이 앞 자리를 차지해 뒤 계약이 막히지 않게 */
+export const FILL_RETRY_AFTER_MS = 60 * 60_000;
 
 export type MakeResult = 'CREATED' | 'EXISTS' | 'SKIPPED';
 
@@ -90,16 +92,16 @@ export type ContractFileSource = {
 };
 
 /**
- * 읽은 값 → PDF 칸. 처리 완료본의 사용자 칸은 날인 때 고정한 값이고, 고정 전에 체결된 계약(employer_fixed_at NULL)과 보낸
- * 원본은 지금 점포 정보다(WHALEERP-131, 2026-10-29 김민식). 근로자 칸은 계약서 값 — 주소는 날인 때 고정한 값이라 보낸 원본에는
- * 보통 없다.
+ * 읽은 값 → PDF 칸. 처리 완료본의 사용자 칸은 계약 당사자 행에 적힌 값(날인 때 고정, 또는 백필로 만들 때 적은 값)이고, 적힌 값이
+ * 없으면(고정 전에 체결되고 아직 완료본이 없는 계약) 지금 점포 정보다. 보낸 원본은 늘 지금 점포 정보다(WHALEERP-131, 2026-10-29
+ * 김민식). 근로자 칸은 계약서 값 — 주소는 날인 때 고정한 값이라 보낸 원본에는 보통 없다.
  */
 export function pdfInputOf(
   kind: ContractPdfKind,
   { contract: c, store, signedAt }: ContractFileSource,
 ): ContractPdfInput & { employerFixed: boolean } {
   const party = c.contractParty;
-  const fixed = kind === 'SIGNED_COPY' && !!party?.employerFixedAt;
+  const fixed = kind === 'SIGNED_COPY' && !!party?.employerName;
   return {
     kind,
     contractId: c.contractId,
@@ -152,6 +154,8 @@ const isUniqueViolation = (e: unknown) =>
 @Injectable()
 export class ContractFilesService {
   private readonly logger = new Logger(ContractFilesService.name);
+  /** 채우기에 실패한 「종류:계약」 → 다시 해 볼 시각(ms). 프로세스 메모리 — 재시작하면 다시 해 본다 */
+  private readonly retryAt = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -184,8 +188,21 @@ export class ContractFilesService {
    */
   async fillMissing(now = new Date()): Promise<number> {
     if (!this.storage) return 0;
+    // 실패해 미뤄 둔 계약은 빼고 고른다 — 늘 실패하는 계약 50건이 다른 계약의 자리를 계속 차지하지 않게(PR 전 리뷰)
+    const deferred = (kind: ContractPdfKind) => {
+      const ids: number[] = [];
+      for (const [key, at] of this.retryAt) {
+        if (at <= now.getTime()) this.retryAt.delete(key);
+        else if (key.startsWith(`${kind}:`))
+          ids.push(Number(key.slice(kind.length + 1)));
+      }
+      return ids;
+    };
+    const skipSigned = deferred('SIGNED_COPY');
+    const skipSent = deferred('SENT_ORIGINAL');
     const signed = await this.prisma.contract.findMany({
       where: {
+        contractId: { notIn: skipSigned },
         NOT: { contractMethod: 'PAPER' },
         sentAt: { not: null },
         contractDocuments: {
@@ -203,6 +220,7 @@ export class ContractFilesService {
       WHERE c."sent_at" BETWEEN ${new Date(now.getTime() - SENT_ORIGINAL_RETRY_MS)}
                             AND ${new Date(now.getTime() - SENT_ORIGINAL_GRACE_MS)}
         AND c."contract_method" IS DISTINCT FROM 'PAPER'
+        AND c."contract_id" <> ALL(${skipSent}::int[])
         AND NOT EXISTS (
           SELECT 1 FROM "contract_documents" d
           WHERE d."contract_id" = c."contract_id" AND d."kind" = 'SENT_ORIGINAL' AND d."sent_at" = c."sent_at")
@@ -219,13 +237,16 @@ export class ContractFilesService {
       ]),
     ];
     for (const [kind, contractId] of jobs) {
+      const key = `${kind}:${contractId}`;
       const result = await this.make(kind, contractId).catch((e: unknown) => {
         this.logger.error(
-          `${kind} 채우기 실패 contract=${contractId}`,
+          `${kind} 채우기 실패 contract=${contractId} — ${FILL_RETRY_AFTER_MS / 60_000}분 뒤 다시 해 본다`,
           e instanceof Error ? e.stack : String(e),
         );
-        return 'SKIPPED' as const;
+        this.retryAt.set(key, now.getTime() + FILL_RETRY_AFTER_MS);
+        return null;
       });
+      if (result !== null) this.retryAt.delete(key);
       if (result === 'CREATED') made += 1;
     }
     return made;
@@ -282,7 +303,10 @@ export class ContractFilesService {
       store,
       signedAt: read.signedAt ?? null,
     });
-    if (kind === 'SIGNED_COPY' && !input.employerFixed)
+    // 고정 전에 체결된 계약 — 지금 점포 정보로 만들고, 그 값을 당사자 행에 적어 앱 상세가 완료본과 같은 값을 보이게 한다.
+    // employer_fixed_at 은 비워 둔다 — 날인 시점 값이 아니라는 기록이다
+    const backfill = kind === 'SIGNED_COPY' && !input.employerFixed;
+    if (backfill)
       this.logger.warn(
         `처리 완료본 사용자 칸을 날인 시점 값이 없어 지금 점포 정보로 만든다 contract=${contractId}`,
       );
@@ -293,15 +317,30 @@ export class ContractFilesService {
     const key = StorageService.newKey('contracts', contractId, 'PDF');
     await storage.put(key, pdf, 'PDF');
     try {
-      await this.prisma.contractDocument.create({
-        data: {
-          contractId,
-          kind,
-          storageKey: key,
-          fileName: contractPdfFileName({ kind, contractId, sentAt }),
-          checksum: createHash('sha256').update(pdf).digest('hex'),
-          sentAt,
-        },
+      await this.prisma.$transaction(async (tx) => {
+        await tx.contractDocument.create({
+          data: {
+            contractId,
+            kind,
+            storageKey: key,
+            fileName: contractPdfFileName({ kind, contractId, sentAt }),
+            checksum: createHash('sha256').update(pdf).digest('hex'),
+            sentAt,
+          },
+        });
+        if (backfill)
+          // 당사자 행이 없는 옛 계약은 적을 곳이 없다(0건)
+          await tx.contractParty.updateMany({
+            where: { contractId, employerName: null },
+            data: {
+              employerName: input.employer.name,
+              employerCeoName: input.employer.ceoName,
+              employerRegistrationNumber: input.employer.registrationNumber,
+              employerAddress: input.employer.address,
+              employerAddressDetail: input.employer.addressDetail,
+              employerPhone: input.employer.phone,
+            },
+          });
       });
       return 'CREATED';
     } catch (error) {

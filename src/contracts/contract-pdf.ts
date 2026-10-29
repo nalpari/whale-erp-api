@@ -154,12 +154,16 @@ export function renderContractPdf(
       .strokeColor(color)
       .stroke();
   };
-  const row = (labelText: string, value: string, labelWidth = 110) => {
+  /** 값 줄 하나의 높이 — 긴 주소는 여러 줄로 접힌다 */
+  const rowHeight = (labelText: string, value: string, labelWidth = 110) => {
     doc.font('R').fontSize(10);
-    const height = Math.max(
+    return Math.max(
       doc.heightOfString(value, { width: width - labelWidth }),
       doc.heightOfString(labelText, { width: labelWidth - 8 }),
     );
+  };
+  const row = (labelText: string, value: string, labelWidth = 110) => {
+    const height = rowHeight(labelText, value, labelWidth);
     ensure(height + 4);
     const top = doc.y;
     doc.fillColor(MUTED).text(labelText, left, top, { width: labelWidth - 8 });
@@ -218,6 +222,8 @@ export function renderContractPdf(
           });
           doc.y = top + 15;
         };
+        // 머리글만 앞 장에 남지 않게 표 전체(머리글 + 일곱 줄)가 들어갈 자리를 먼저 본다
+        ensure(15 * (block.tableRows.length + 1) + 4);
         line(block.header, MUTED, true);
         rule();
         doc.y += 3;
@@ -227,7 +233,13 @@ export function renderContractPdf(
   }
 
   doc.moveDown(1.2);
-  ensure(300);
+  // 체결일 · 사용자 · 근로자 칸 · 서명 칸은 한 장에 둔다 — 줄 높이를 재서 모자라면 통째로 다음 장으로(긴 주소는 여러 줄)
+  const parties = [model.dateLine, ...model.employer, ...model.worker];
+  ensure(
+    parties.reduce((sum, [l, v]) => sum + rowHeight(l, v) + 4, 0) +
+      // 구분선 · 칸 사이 여백 · 머리글 둘 · 서명 칸 · 안내문
+      160,
+  );
   rule(INK);
   doc.moveDown(0.6);
   row(model.dateLine[0], model.dateLine[1]);

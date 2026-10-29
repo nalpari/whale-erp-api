@@ -233,7 +233,8 @@ describe('MyContractsService', () => {
           employerAddress: '서울 강남구 테헤란로 1',
           employerAddressDetail: null,
           employerPhone: '0212345678',
-          employerFixedAt: NOW,
+          // 체결 이력의 처리 시각(DB 시계) — 응답의 signedAt 과 같다
+          employerFixedAt: HISTORY_AT,
         },
       });
       expect(tx.store.findUniqueOrThrow).toHaveBeenCalledWith(

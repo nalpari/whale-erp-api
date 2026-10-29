@@ -1003,7 +1003,7 @@ apply to reading.
     shows the 직원 레코드's 이름 · 번호 like the 관리자 detail; the 대조 still uses an empty contract.
   - `employer` — the 사용자 칸: the store's name · phone · address and its `store_business_profiles` 상호 ·
     사업자등록번호 · 대표자 · 사업장 주소 (null until registered). A missing store row is broken data → 500. Once
-    signed with the 사용자 칸 fixed (`employer_fixed_at`), `tradeName` · `ceoName` · `registrationNumber` · `bizAddress` ·
+    the party row holds the 사용자 칸 (fixed at 날인, or written by the backfill), `tradeName` · `ceoName` · `registrationNumber` · `bizAddress` ·
     `bizAddressDetail` · `storePhone` are the fixed values (the 처리 완료본's), `tradeName` holding the 점포명 when the
     store had no 상호; `storeName`, the store address and `bizZipCode` stay live.
   - `account` — 「본인인증으로 확인된 정보」: the account's 이름 · 번호 · 생년월일 · 성별 · 외국인 여부 ·
@@ -1055,8 +1055,11 @@ only — a 종이 계약 has no body.
   근로자 주소 is usually empty (fixed at 날인); the 서명 칸 is empty and a note says it is the pre-signature copy.
   A re-send makes a new one; earlier ones stay. File `근로계약서-보낸원본-{id}-{KST yyyymmddHHMM}.pdf`.
 - **처리 완료본 (`SIGNED_COPY`)** — one per contract, needs the `SIGNATURE` row; the PNG is read back from storage
-  and drawn in the 서명 칸. 사용자 칸 = the values fixed at 날인. A contract signed before those columns existed
-  (`employer_fixed_at` NULL) is made with the store's current values and logged — the NULL is the record of that.
+  and drawn in the 서명 칸. 사용자 칸 = the values on the party row (`employer_*`, fixed at 날인). A contract signed
+  before those columns existed is made with the store's current values, logged, and those values are written to
+  `employer_*` in the same transaction as the file row so the app detail shows what the PDF shows; `employer_fixed_at`
+  stays NULL — that NULL is the record that they are not 날인 시점 값. `employer_fixed_at` is the `→ SIGNED` history
+  row's time (DB clock), the same as `signedAt`.
   계약 체결일 = the latest `→ SIGNED` history row (KST date). File `근로계약서-처리완료본-{id}.pdf`.
 - **One copy each**: partial unique index `(contract_id, kind, sent_at) WHERE kind IN ('SENT_ORIGINAL', 'SIGNED_COPY')`
   plus a CHECK that those kinds carry `sent_at`. `make` reads under REPEATABLE READ (the terms and `sent_at` of one
@@ -1067,7 +1070,13 @@ only — a 종이 계약 has no body.
   `SIGNATURE` but no `SIGNED_COPY` (the **백필** for contracts signed before this shipped, and retries of a failed
   `afterSigned`), and up to 50 contracts sent **5 minutes to 24 hours ago** with no 보낸 원본 for that `sent_at`. The
   lower bound skips sends still being dispatched or undone; older sends are not filled — the store values of that
-  moment are unknown. Storage not configured → nothing.
+  moment are unknown, and a 보낸 원본 the batch makes late carries the store values of the batch run. A contract whose
+  make throws is left out of the next runs for an hour (in process memory, `FILL_RETRY_AFTER_MS`) so a few contracts
+  that always fail (a lost signature object, an image pdfkit cannot read) cannot hold the first 50 places forever.
+  Storage not configured → nothing.
+- **Known limits**: 제2조 uses the 점포명 when 근무 장소 is empty, so renaming a store changes the app's 제2조 of a signed
+  contract (its PDF does not). Before running the migration on a database, check that no `SENT_ORIGINAL` · `SIGNED_COPY`
+  row exists (nothing wrote them before; the new CHECK would refuse such rows without `sent_at`).
 - Admins see both kinds in `GET /contracts/:id` `documents` and download them through the existing route.
 
 # GET /stores/options

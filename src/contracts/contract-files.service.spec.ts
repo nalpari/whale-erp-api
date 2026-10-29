@@ -101,8 +101,11 @@ function setup(
     contractStatusHistory: {
       findFirst: jest.fn().mockResolvedValue({ changedAt: SIGNED_AT }),
     },
+    contractParty: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
   };
   const create = over.create ?? jest.fn().mockResolvedValue({});
+  // 파일 행 쓰기(와 백필 값 적기)도 트랜잭션 안이다
+  Object.assign(tx.contractDocument, { create });
   const prisma = {
     $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
     contractDocument: {
@@ -118,7 +121,7 @@ function setup(
     delete: jest.fn().mockResolvedValue(undefined),
   };
   const service = new ContractFilesService(prisma as never, storage as never);
-  return { service, prisma, storage, create };
+  return { service, prisma, storage, create, tx };
 }
 
 describe('pdfInputOf', () => {
@@ -215,6 +218,34 @@ describe('ContractFilesService.make', () => {
     });
   });
 
+  it('고정 전 체결 계약(백필)이면 만든 점포 정보를 당사자 행에 적는다 — 고정 일시는 비운 채(그 기록)', async () => {
+    const { service, tx } = setup();
+    await service.make('SIGNED_COPY', 1);
+    expect(tx.contractParty.updateMany).toHaveBeenCalledWith({
+      where: { contractId: 1, employerName: null },
+      data: {
+        employerName: '고래상회',
+        employerCeoName: '김대표',
+        employerRegistrationNumber: '1234567890',
+        employerAddress: '서울 강남구',
+        employerAddressDetail: '2층',
+        employerPhone: '0212345678',
+      },
+    });
+
+    const fixed = setup({
+      contract: {
+        contractParty: {
+          ...party,
+          employerName: '날인 때 상호',
+          employerFixedAt: SIGNED_AT,
+        },
+      },
+    });
+    await fixed.service.make('SIGNED_COPY', 1);
+    expect(fixed.tx.contractParty.updateMany).not.toHaveBeenCalled();
+  });
+
   it('서명이 없거나 종이 계약 · 발송 전이면 만들지 않는다', async () => {
     for (const s of [
       setup({ documents: [] }),
@@ -285,6 +316,47 @@ describe('ContractFilesService.make', () => {
     const { service, storage } = setup({ create });
     await expect(service.make('SIGNED_COPY', 1)).rejects.toThrow('db down');
     expect(storage.delete).toHaveBeenCalled();
+  });
+});
+
+describe('ContractFilesService.fillMissing', () => {
+  it('실패한 계약은 한 시간 미뤄 다음 실행에서 빼고 고른다 — 늘 실패하는 계약이 자리를 차지하지 않게', async () => {
+    const prisma = {
+      contract: {
+        findMany: jest
+          .fn()
+          .mockResolvedValueOnce([{ contractId: 5 }])
+          .mockResolvedValue([]),
+      },
+      $queryRaw: jest.fn().mockResolvedValue([{ contract_id: 6 }]),
+    };
+    const service = new ContractFilesService(prisma as never, {} as never);
+    const make = jest
+      .spyOn(service, 'make')
+      .mockResolvedValue('EXISTS')
+      .mockRejectedValueOnce(new Error('서명 파일 없음'))
+      .mockResolvedValueOnce('CREATED');
+    const now = new Date('2026-10-29T00:00:00Z');
+    await expect(service.fillMissing(now)).resolves.toBe(1);
+    expect(make).toHaveBeenCalledTimes(2);
+
+    await service.fillMissing(new Date(now.getTime() + 10 * 60_000));
+    expect(prisma.contract.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          contractId: { notIn: [5] },
+        }) as unknown,
+      }),
+    );
+    // 한 시간이 지나면 다시 고른다
+    await service.fillMissing(new Date(now.getTime() + 61 * 60_000));
+    expect(prisma.contract.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          contractId: { notIn: [] },
+        }) as unknown,
+      }),
+    );
   });
 });
 

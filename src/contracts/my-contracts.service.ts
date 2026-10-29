@@ -228,7 +228,8 @@ export class MyContractsService {
             employerAddress: employer.address,
             employerAddressDetail: employer.addressDetail,
             employerPhone: employer.phone,
-            employerFixedAt: lockedAt,
+            // 체결 이력의 처리 시각(DB 시계) — 응답 · 처리 완료본의 체결일과 같은 시각
+            employerFixedAt: signedAt,
           },
         });
       });

@@ -171,6 +171,7 @@ export function contractArticles(c: ContractTemplateInput): ContractArticle[] {
       title: '제2조(근무장소와 업무)',
       blocks: [
         text(
+          // 직무가 빈 옛 계약은 「-」 — 원안은 빈칸으로 그려 「…에서  업무를 한다」가 됐다
           `${c.workLocation ?? c.storeName}에서 ${c.jobTitle ?? '-'} 업무를 한다.`,
         ),
       ],
