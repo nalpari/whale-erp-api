@@ -1,6 +1,8 @@
-import { Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
   ApiConflictResponse,
   ApiForbiddenResponse,
   ApiInternalServerErrorResponse,
@@ -10,10 +12,12 @@ import {
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AccountUser } from '../auth/auth.types';
+import { AgreeLocationConsentDto } from './dto/agree-location-consent.dto';
 import { MyConsentService } from './my-consent.service';
 
 /**
- * 직원 앱 내 정보의 위치정보 동의 · 본사 제공 동의 (WHALEERP-193). 모두 본문 없이 토큰의 계정에 쓴다. 지금 상태와 맞지
+ * 직원 앱 내 정보의 위치정보 동의 · 본사 제공 동의 (WHALEERP-193). 토큰의 계정에 쓴다 — 위치정보 동의만 보여 준 약관 버전을
+ * 본문에 싣고(필수), 나머지는 본문이 없다. 지금 상태와 맞지
  * 않으면(이미 철회 등) 409 이고, 화면은 `GET /me/profile` 을 다시 받는다
  */
 @ApiBearerAuth()
@@ -25,16 +29,31 @@ import { MyConsentService } from './my-consent.service';
 export class MyConsentController {
   constructor(private readonly consents: MyConsentService) {}
 
-  /** 위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23) */
+  /**
+   * 위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23). 본문의
+   * `termsVersion`(화면이 보여 준 버전, 필수 · null 가능)이 그와 다르면 409 — 화면은 다시 받아 새 약관을 보인다. 빼면 400
+   */
   @Post('location-consent')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBody({ type: AgreeLocationConsentDto })
   @ApiNoContentResponse({ description: '동의함' })
+  @ApiConflictResponse({
+    description:
+      '이미 같은 버전에 동의함 · 화면이 보여 준 약관 버전(termsVersion)이 시행 중인 것과 다름(그사이 바뀜, 보인 약관이 없었는데(null) 시행 중인 약관이 있음 — 화면은 다시 받는다)',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'termsVersion 없음 · 빈 문자열 · 문자열 아님 · 64자 초과 · 모르는 칸',
+  })
   @ApiInternalServerErrorResponse({
     description:
       '시행 중인 위치정보 약관이 없음(운영자가 모두 끄거나 지움) — 「지금은 위치정보 동의를 받을 수 없습니다 …」',
   })
-  agreeLocation(@CurrentUser() user: AccountUser): Promise<void> {
-    return this.consents.agreeLocation(user.id);
+  agreeLocation(
+    @CurrentUser() user: AccountUser,
+    @Body() dto: AgreeLocationConsentDto,
+  ): Promise<void> {
+    return this.consents.agreeLocation(user.id, dto.termsVersion);
   }
 
   /** 위치정보 잠시 멈춤 (ATT-26) */
