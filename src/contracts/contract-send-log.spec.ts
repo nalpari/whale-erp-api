@@ -8,7 +8,7 @@ import {
 
 // AlimtalkService.send 가 남기는 failure_reason 그대로 — 머리(failureHeadOf) + `: 메시지`
 const reasonOf = (e: unknown) =>
-  `${failureHeadOf(e)}: ${e instanceof Error ? e.message : String(e)}`;
+  `${failureHeadOf(e instanceof BizppurioError ? e : null)}: ${e instanceof Error ? e.message : String(e)}`;
 const bizppurio = (
   message: string,
   code: number | undefined,
@@ -16,9 +16,8 @@ const bizppurio = (
   path: string,
 ) => new BizppurioError(message, code, http, { path });
 
-describe('sendFailureKindOf — 발송(dispatch)이 되돌릴지 · 502 문구를 정하는 갈래', () => {
+describe('sendFailureKindOf — 발송(dispatch)이 되돌릴지 · 502 문구를 정하는 갈래(비즈뿌리오 오류)', () => {
   it.each([
-    ['비즈뿌리오 오류가 아님(요청 전 검사)', null, 'NOT_SENT'],
     ['토큰 단계', { path: '/v1/token' }, 'NOT_SENT'],
     [
       '토큰 단계 계정 오류(코드 있음)',
@@ -67,11 +66,23 @@ describe('sendFailureOf — 발송 이력의 실패 사유 (WHALEERP-136)', () =
     }
   });
 
-  it('비즈뿌리오 오류가 아닌 실패는 보내기 전 실패 — dispatch 가 되돌린 것과 같다', () => {
-    expect(sendFailureOf(reasonOf(new TypeError('boom')))).toMatchObject({
-      result: 'FAILED',
-      retryable: true,
-    });
+  it('단계를 모르는 실패(비즈뿌리오 오류가 아닌 예외 · 단계 없는 오류)는 접수 여부 모름 — 메시지가 나간 뒤일 수 있다', () => {
+    for (const e of [
+      new TypeError('boom'),
+      new BizppurioError('x', undefined, 200),
+    ])
+      expect(sendFailureOf(reasonOf(e))).toMatchObject({
+        result: 'UNCONFIRMED',
+        retryable: false,
+      });
+  });
+
+  it('path=undefined 로 남은 행은 칸이 없는 것처럼 메시지 머리로 본다 — 토큰 단계 계정 오류가 「번호를 확인」이 되지 않게', () => {
+    expect(
+      sendFailureKindOfReason(
+        'code=3001 http=401 path=undefined: /v1/token failed: http=401 code=3001',
+      ).kind,
+    ).toBe('NOT_SENT');
   });
 
   it('메시지 요청 뒤 코드 없는 실패는 접수 여부 모름 — 다시 보내면 두 번 갈 수 있다', () => {

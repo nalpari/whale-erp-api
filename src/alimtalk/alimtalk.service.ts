@@ -3,7 +3,11 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { renderTemplate } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
-import { BizppurioClient, type BizppurioMessage } from './bizppurio.client';
+import {
+  BizppurioClient,
+  BizppurioError,
+  type BizppurioMessage,
+} from './bizppurio.client';
 import { BIZPPURIO_CONFIG, type BizppurioConfig } from './bizppurio.config';
 import { failureHeadOf } from './failure-reason';
 
@@ -131,7 +135,7 @@ export class AlimtalkService {
     } catch (e) {
       // 네트워크 실패는 code 가 없어, 원인은 메시지로만 남는다. 로그 한 줄에는 메시지를
       // 1000자까지만 싣고, 이력에는 전부 둔다. 머리 형식은 failure-reason.ts(근로계약 발송 이력이 되읽는다).
-      const head = failureHeadOf(e);
+      const head = failureHeadOf(e instanceof BizppurioError ? e : null);
       const message = e instanceof Error ? e.message : String(e);
       this.logger.warn(
         `alimtalk FAILED template=${templateCode} referenceKey=${referenceKey} ${head} to=${maskPhone(phone)}: ${message.slice(0, LOG_REASON_LENGTH)}`,

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Staff members](/api/staff-members.md) · [Alimtalk](/api/alimtalk.md) — api #208 판정 커밋 재리뷰: 단계를 모르는 실패는 `path=unknown` 으로 남겨 발송 이력에서 접수 여부 모름으로 읽는다(`local` · 보내기 전 실패로 보던 것을 걷음). 단계 이름 `TOKEN_PATH` · `MESSAGE_PATH` 를 import 없는 `failure-reason.ts` 하나에 두고 클라이언트도 쓴다. 비즈뿌리오 200 응답 본문이 `null` 이면 `returned no body`(단계 포함)로 던진다. `path=undefined` 옛 행은 칸이 없는 것처럼 본다.
 * **Update**: [Staff members](/api/staff-members.md) · [Alimtalk](/api/alimtalk.md) — api #208 code-review: 알림톡 실패 사유 머리에 실패 단계 `path=` 를 더해(`failure-reason.ts`) 발송 이력이 메시지 글자 대신 단계로 실패 갈래를 되읽는다. 발송(dispatch)과 발송 이력이 같은 갈래 `sendFailureKindOf`(`contracts/contract-send-log.ts`, 의존 없는 모듈로 템플릿 이름 · 관련 업무 유형과 함께 옮김)를 쓴다. 재발송은 직원이 받은 기준이라 `resend_count` 와 다를 수 있다고 고쳐 적었다.
 * **Update**: [Staff members](/api/staff-members.md) — 직원 상세 발송 이력 영역 `GET /staff-members/:id/summary/send-logs`(WHALEERP-136). 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡을 알림톡 발송 이력에서 읽어 종류 · 재발송 · 결과 · 실패 사유 · 재시도 가능 여부로 낸다. API 전용 enum `StaffSendKind` · `StaffSendResult` 추가, 실패 판정 `sendFailureOf` 를 [근로계약 발송](/api/contracts-api.md) 옆에 두었다. 마이그레이션 없음.
 * **Update**: [Staff members](/api/staff-members.md) — 직원 상세 요약 근로계약(`GET /staff-members/:id/summary/contracts`)에 `payrollAccount`(신고 정보의 은행 이름 · 계좌번호 전체, 하이픈 없음 · 가리지 않음, 없으면 null) 추가(WHALEERP-183, 노영주 결정). 계약이 없어도 · 지급 방식과 상관없이 온다. 마이그레이션 없음. 2차 리뷰: `bankName` 은 공통코드에 없으면 은행 코드 그대로(DTO 주석), 은행 이름 조회는 `bpCode` 오름차순으로 플랫폼 원본(BP000000)을 먼저 잡는다는 가정을 주석 · 테스트로 밝혔다.
