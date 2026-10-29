@@ -7960,7 +7960,7 @@
             "bearer": []
           }
         ],
-        "summary": "근로계약서 초안 저장 — 직원 레코드와 계약을 만들고 곧바로 보낸다(2026-10-19 재영). 계정이 없는 번호면 가입 초대\n알림톡과 발송 대기, 계정이 있는 번호면 서명 대기(앱 알림은 아직 없다). 임시저장은 보내지 않는다.",
+        "summary": "근로계약서 초안 저장 — 직원 레코드와 계약을 만들고 곧바로 보낸다(2026-10-19 재영). 계정이 없는 번호면 가입 초대\n알림톡과 발송 대기, 계정이 있는 번호면 소속 추가 확인 요청과 발송 대기(직원이 수락하면 서명 대기, WHALEERP-130). 임시저장은\n보내지 않는다.",
         "tags": [
           "Contracts"
         ]
@@ -14503,7 +14503,7 @@
             "bearer": []
           }
         ],
-        "summary": "위치 읽음(ATT-22) — 출근 · 퇴근 버튼을 눌러 위치를 읽을 때마다 부른다. 확인자료(수집 · 이용)를 남기고, 받은 locationReadId 를\n이어서 보내는 출근 · 퇴근에 넣는다. 위치는 보내지 않는다",
+        "summary": "위치 읽음(ATT-22 v229) — 출퇴근 탭에 들어오거나 출근 · 퇴근 버튼을 눌러 위치를 읽을 때마다 부른다. 확인자료(수집 · 이용)를\n남기고, 버튼을 눌러 받은 locationReadId 를 이어서 보내는 출근 · 퇴근에 넣는다. 위치는 보내지 않는다",
         "tags": [
           "MyAttendance"
         ]
@@ -15555,9 +15555,22 @@
       "post": {
         "operationId": "MyConsentController_agreeLocation",
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgreeLocationConsentDto"
+              }
+            }
+          }
+        },
         "responses": {
           "204": {
             "description": "동의함"
+          },
+          "400": {
+            "description": "termsVersion 없음 · 빈 문자열 · 문자열 아님 · 64자 초과 · 모르는 칸"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -15566,7 +15579,7 @@
             "description": "관리자 토큰"
           },
           "409": {
-            "description": "지금 동의 상태에서 할 수 없는 동작"
+            "description": "이미 같은 버전에 동의함 · 화면이 보여 준 약관 버전(termsVersion)이 시행 중인 것과 다름(그사이 바뀜, 보인 약관이 없었는데(null) 시행 중인 약관이 있음 — 화면은 다시 받는다)"
           },
           "500": {
             "description": "시행 중인 위치정보 약관이 없음(운영자가 모두 끄거나 지움) — 「지금은 위치정보 동의를 받을 수 없습니다 …」"
@@ -15577,7 +15590,7 @@
             "bearer": []
           }
         ],
-        "summary": "위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23)",
+        "summary": "위치정보 동의 — 미동의 · 철회 상태에서. 지금 시행 중인 위치정보 약관 버전에 동의한 것으로 남는다 (ATT-23). 본문의\n`termsVersion`(화면이 보여 준 버전, 필수 · null 가능)이 그와 다르면 409 — 화면은 다시 받아 새 약관을 보인다. 빼면 400",
         "tags": [
           "MyConsent"
         ]
@@ -25518,7 +25531,7 @@
         "type": "object",
         "properties": {
           "status": {
-            "description": "보낸 뒤의 상태 — 가입 초대는 그대로(발송 대기 · 서명 대기), 가입한 직원은 서명 대기, 소속 추가 확인 요청은 발송 대기(직원이\n수락하면 서명 대기)",
+            "description": "보낸 뒤의 상태 — 가입 초대는 그대로(발송 대기 · 서명 대기), 가입한 직원은 서명 대기, 소속 추가 확인 요청은 발송 대기(직원이\n수락하면 서명 대기). 거부 · 만료를 되살리면 가입한 직원은 서명 대기, 그 밖에는 발송 대기다(WHALEERP-153). 보내는 사이 직원이\n소속 추가 확인 요청에 먼저 답했으면 그 답의 상태(서명 대기 · 거부)를 그대로 싣는다",
             "enum": [
               "DRAFT",
               "PENDING_SEND",
@@ -32182,6 +32195,20 @@
             "maxLength": 128
           }
         }
+      },
+      "AgreeLocationConsentDto": {
+        "type": "object",
+        "properties": {
+          "termsVersion": {
+            "type": "string",
+            "nullable": true,
+            "description": "동의 시트에 보여 준 위치정보 약관 버전 — 예: v1.1. 시트를 그릴 때 시행 중인 약관이 없었으면 null",
+            "maxLength": 64
+          }
+        },
+        "required": [
+          "termsVersion"
+        ]
       },
       "InvitationLookupDto": {
         "type": "object",
