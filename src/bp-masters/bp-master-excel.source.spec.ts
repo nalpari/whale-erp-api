@@ -40,6 +40,12 @@ describe('BpMasterExcelSource', () => {
     expect(bpMasters.excelFile).toHaveBeenCalledWith(query);
   });
 
+  it('내려받기의 호출자 검사도 플랫폼 계정 판정을 쓴다 — 만든 뒤 플랫폼 권한을 잃으면 받지 못한다', async () => {
+    bpMasters.assertExcelCaller.mockRejectedValueOnce(new Error('403'));
+    await expect(source.assertRequester(9)).rejects.toThrow('403');
+    expect(bpMasters.assertExcelCaller).toHaveBeenCalledWith(9);
+  });
+
   it('파일을 만들기 전에 요청자가 지금도 쓸 수 있는 플랫폼 계정인지 다시 본다 — 예약 생성은 요청 뒤에 만든다', async () => {
     bpMasters.excelFile.mockClear();
     bpMasters.assertExcelCaller.mockRejectedValueOnce(new Error('403'));

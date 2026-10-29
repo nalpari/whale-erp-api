@@ -60,9 +60,13 @@ describe('ExcelExportsService', () => {
   let tx: any;
   let storage: any;
   let mail: any;
-  let source: Omit<ExcelExportSource<Query>, 'count' | 'build'> & {
+  let source: Omit<
+    ExcelExportSource<Query>,
+    'count' | 'build' | 'assertRequester'
+  > & {
     count: jest.Mock;
     build: jest.Mock;
+    assertRequester: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -115,6 +119,7 @@ describe('ExcelExportsService', () => {
       fileName: jest.fn().mockReturnValue('BP목록_20261028.xlsx'),
       count: jest.fn().mockResolvedValue(3),
       build: jest.fn().mockResolvedValue(Buffer.from('PK')),
+      assertRequester: jest.fn().mockResolvedValue(undefined),
     };
     const registry = new ExcelExportRegistry();
     registry.register(source);
@@ -455,6 +460,19 @@ describe('ExcelExportsService', () => {
       });
     });
 
+    it('등록한 화면이 하나도 없으면 대기 작업을 가져가지 않는다 — 만들 수 없는 작업을 집어 실패시키지 않게', async () => {
+      const empty = new ExcelExportsService(
+        prisma,
+        new ExcelExportRegistry(),
+        storage,
+        mail,
+        { get: () => 'https://admin.example.com' } as unknown as ConfigService,
+      );
+      prisma.$queryRaw.mockClear();
+      await expect(empty.processPending(NOW)).resolves.toBe(0);
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    });
+
     it('마지막 시도에서 멈춘 작업은 실패로 끝내고 화면 이름을 찾아 실패 메일을 보낸다', async () => {
       prisma.$queryRaw.mockReset();
       prisma.$queryRaw.mockResolvedValue([]);
@@ -560,6 +578,41 @@ describe('ExcelExportsService', () => {
         ServiceUnavailableException,
       );
       expect(prisma.excelDownloadLog.update).not.toHaveBeenCalled();
+    });
+
+    // 파일은 24시간 받을 수 있다 — 만든 뒤 권한을 잃거나 계정이 막혔으면 받지 못한다(만들 때만 보면 그 사이가 열린다).
+    it('받을 때 그 화면의 조회 권한을 다시 본다 — 잃었으면 403 이고 주소를 주지 않는다', async () => {
+      prisma.excelDownloadLog.findFirst.mockResolvedValueOnce(
+        job({
+          status: 'SUCCEEDED',
+          storageKey: 'excel-exports/7/a.xlsx',
+          expiresAt: new Date(NOW.getTime() + HOUR),
+        }),
+      );
+      prisma.roleGroupMenu.count.mockResolvedValue(0);
+      await expect(service.download(7, 31, NOW)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(storage.downloadUrl).not.toHaveBeenCalled();
+      expect(prisma.excelDownloadLog.update).not.toHaveBeenCalled();
+    });
+
+    it('받을 때 화면의 호출자 검사도 부른다(예: BP 목록은 지금도 플랫폼 계정이어야 한다)', async () => {
+      prisma.excelDownloadLog.findFirst.mockResolvedValueOnce(
+        job({
+          status: 'SUCCEEDED',
+          storageKey: 'excel-exports/7/a.xlsx',
+          expiresAt: new Date(NOW.getTime() + HOUR),
+        }),
+      );
+      source.assertRequester.mockRejectedValueOnce(
+        new ForbiddenException('플랫폼 계정이 아님'),
+      );
+      await expect(service.download(7, 31, NOW)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(source.assertRequester).toHaveBeenCalledWith(7);
+      expect(storage.downloadUrl).not.toHaveBeenCalled();
     });
 
     it('기한 안이면 짧은 주소를 주고 받은 시각을 남긴다', async () => {

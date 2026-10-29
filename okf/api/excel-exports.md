@@ -4,32 +4,32 @@ title: Excel exports
 description: 모든 화면의 엑셀 공통 — 1만 건 미만은 바로 파일, 이상은 예약 생성(S3 24시간 · 등록한 이메일로 링크 · 요청한 본인만), 같은 사람 · 같은 화면은 생성 중이면 409 · 1분에 한 번, 모든 요청을 excel_download_logs 에 2년 남긴다. GET /excel-downloads/:id 가 예약 생성한 파일의 주소를 준다.
 tags: [admin, excel, batch, storage, mail, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T10:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:30:00Z }
 sources:
   - id: excel-exports-service
     resource: ../../src/excel-exports/excel-exports.service.ts
     title: ExcelExportsService — request · processPending · download · purgeExpired
-    last_modified: 2026-10-28T10:30:00Z
+    last_modified: 2026-10-29T01:30:00Z
   - id: excel-export-policy
     resource: ../../src/excel-exports/excel-export-policy.ts
     title: 1만 건 · 1분 · 24시간 · 두 번 시도 · 2년, 판단 규칙과 메일 변수
-    last_modified: 2026-10-28T10:30:00Z
+    last_modified: 2026-10-29T01:30:00Z
   - id: excel-export-source
     resource: ../../src/excel-exports/excel-export-source.ts
     title: ExcelExportSource — 화면이 주는 건수 · 파일 · 메뉴 URL
-    last_modified: 2026-10-28T10:30:00Z
+    last_modified: 2026-10-29T01:30:00Z
   - id: excel-exports-scheduler
     resource: ../../src/excel-exports/excel-exports.scheduler.ts
     title: excel-export(1분) · excel-download-purge(매일 04:30)
-    last_modified: 2026-10-28T10:30:00Z
+    last_modified: 2026-10-29T01:30:00Z
   - id: excel-downloads-controller
     resource: ../../src/excel-exports/excel-downloads.controller.ts
     title: GET /excel-downloads/:id
-    last_modified: 2026-10-28T10:30:00Z
+    last_modified: 2026-10-29T01:30:00Z
   - id: excel-download-logs-migration
     resource: ../../prisma/migrations/20261028140448_team1_excel_download_logs/migration.sql
     title: excel_download_logs · 메일 템플릿 2건
-    last_modified: 2026-10-28T10:30:00Z
+    last_modified: 2026-10-29T01:30:00Z
 ---
 
 # Status
@@ -83,7 +83,9 @@ All per **(requester, screen)**, the screen being the menu (`menu_id`):[^excel-e
 `excel-export` runs **every minute**, and a run that is still going makes the next minute skip
 (`waitForCompletion`).[^excel-exports-scheduler] It takes `PENDING` rows one by one with
 `FOR UPDATE SKIP LOCKED` (several instances share the queue — the e2e runs two at once; up to
-five per run; only `SCHEDULED` rows), setting `PROCESSING`, `attempt_count + 1` and
+five per run; only `SCHEDULED` rows, and **only for screens registered in this instance** — an
+instance without the source, such as an old one during a rolling deploy or another e2e suite's
+app, leaves the job instead of burning an attempt on 「소스 없음」), setting `PROCESSING`, `attempt_count + 1` and
 **`started_at`** — not under `runExclusive`, whose 60-second transaction would also hold
 building, the S3 upload and the mail. A run that has work logs `processed=N`. One job throwing
 (a DB error while recording its failure) is logged with its id and the run goes on to the next;
@@ -131,12 +133,16 @@ is 409 for good), and a 바로 받기 can never be `PENDING` (the queue would bu
 
 # Downloading
 
-`GET /excel-downloads/:id` (admin token, no menu permission — the permission is **being the
-requester**; the menu was checked when the export was requested) returns
-`{ url, fileName, expiresAt }`, `url` being a 5-minute S3 presigned GET named with the file
-name.[^excel-downloads-controller] Someone else's row, a direct download or an unknown id is 404;
-not yet made or `FAILED` is 409; after `expires_at` it is **410**. Each success sets
-`downloaded_at`. The admin web page behind the mail link calls this and opens the URL — that
+`GET /excel-downloads/:id` (admin token) returns `{ url, fileName, expiresAt }`, `url` being a
+5-minute S3 presigned GET named with the file name.[^excel-downloads-controller] Someone else's
+row, a direct download or an unknown id is 404; not yet made or `FAILED` is 409; after
+`expires_at` it is **410**. **The screen's permission is checked again when downloading**: the
+route has no menu guard (the menu comes from the log's `menu_id`, not the path), so the service
+asks `adminHasMenuAction(read)` on that menu — which also needs an active account — and the
+source's `assertRequester` (BP 목록: still a platform account); either failing is 403 and no URL
+is issued. Checking only when the file is built would leave the 24 hours after it open: a role
+group that lost the menu, or an account set to 미사용, could still fetch the 사업자정보 file
+(PR #188 review). Each success sets `downloaded_at`. The admin web page behind the mail link calls this and opens the URL — that
 page is front work.
 
 **The API deletes the files.** The files carry 사업자정보 and 대표자명, so 「24 hours」 has to be

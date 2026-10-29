@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-29
+* **Update**: [Excel exports](/api/excel-exports.md) · [BP masters](/api/bp-masters.md) — PR #188 적대적 리뷰 블로커 반영. `GET /excel-downloads/:id` 가 받을 때도 그 화면의 메뉴 조회 권한(사용 중 계정 포함, `adminHasMenuAction(read)`)과 화면의 호출자 조건(`ExcelExportSource.assertRequester` — BP 목록은 플랫폼 계정)을 다시 본다 — 만들 때만 보면 그 뒤 24시간 동안 권한을 잃은 사람도 사업자정보 파일을 받았다. 403 이면 주소를 주지 않는다. 배치는 이 인스턴스에 등록된 화면의 작업만 가져간다(`ExcelExportRegistry.menuUrls`) — 소스가 없는 앱(배포가 섞인 동안의 옛 인스턴스, 다른 e2e 스위트)이 작업을 집어 「소스 없음」으로 시도를 쓰지 않게. e2e 는 두 번째 시험 화면을 BP 목록 대신 시험 소스로 바꿨다.
+
 ## 2026-10-28
 * **Update**: [Excel exports](/api/excel-exports.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) · [Notification templates](/api/notification-templates.md) · [naming](/conventions/naming.md) — review-pr(5관점) 반영. 예약 생성 배치는 만들기 전에 그 화면의 조회 권한을 다시 보고(`adminHasMenuAction(read)`), 4xx(권한 · 계정 · 범위)는 다시 시도하지 않고 바로 실패(`[403] …`). 메일 실패 로그는 오류 종류만(SMTP 문구의 받는 주소를 싣지 않게). 바로 받기 중 409 는 메일 안내를 하지 않는 문구로, 바로 받기 실패는 원래 오류를 stack 과 함께 남기고 실패 기록이 실패해도 원래 오류를 던진다. 배치는 한 작업이 던져도 다음 작업을 만들고, 정리 배치는 이력 파기가 실패해도 S3 파일을 지운다. 미등록 소스 · 부분 고유 인덱스(P2002 → 409) · 꺼진 예약 생성 설정(기동 경고)을 드러낸다. CHECK 2개(`started_when_processing` · `direct_not_pending`)를 front 1팀 ERD 생성기에 넣고 마이그레이션을 다시 만들었다(공유 DB 적용 전). main 병합 뒤 기본 문구가 있는 기본 템플릿은 46건 — 20261027154954 의 소속 추가 확인 요청 2건도 기본 문구가 있는데 알림 템플릿 e2e 목록에 빠져 있던 것을 더했다. 1팀 모델 28개(CLAUDE.md 포함). 테스트: 서비스 단위 · 내려받기 컨트롤러 · 스케줄러, e2e 는 배치 동시 실행 · CHECK · BP 목록 엑셀 HTTP(200 · 202 · 409 · 403).
 * **Update**: main 병합(api monferno, main #164 까지): okf/log 충돌은 양쪽 기록을 살렸다. main 의 소속 추가 확인 요청 템플릿 2건(20261027154954)과 이 브랜치의 엑셀 메일 2건이 겹쳐 기본 템플릿은 46건(메일 28 · 알림톡 2)이다 — naming 표와 알림 템플릿 주석 · e2e 건수를 맞췄다.

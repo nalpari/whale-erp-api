@@ -24,4 +24,9 @@ export interface ExcelExportSource<Q extends object = object> {
   count(caller: ExcelExportCaller, query: Q): Promise<number>;
   /** 목록과 같은 조건 · 순서로 전부 담은 xlsx. */
   build(caller: ExcelExportCaller, query: Q): Promise<Buffer>;
+  /**
+   * 메뉴 조회 권한 밖의, 화면만의 호출자 조건(예: BP 목록은 플랫폼 계정만). 예약 생성 파일을 내려받을 때 공통 엑셀이
+   * 메뉴 권한과 함께 다시 부른다 — 만든 뒤 24시간 안에 조건을 잃으면 받지 못하게. 없으면 메뉴 권한만 본다.
+   */
+  assertRequester?(adminAccountId: number): Promise<void>;
 }

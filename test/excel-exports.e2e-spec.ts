@@ -1,6 +1,10 @@
 // expect.objectContaining · stringMatching 은 any 를 돌려준다 — 메일 인자 일부만 보는 검사라 그대로 둔다.
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
-import { HttpException, INestApplication } from '@nestjs/common';
+import {
+  ForbiddenException,
+  HttpException,
+  INestApplication,
+} from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { Test } from '@nestjs/testing';
 import { AppModule } from './../src/app.module';
@@ -19,6 +23,9 @@ import { STORAGE } from '../src/storage/storage.module';
 // 파기는 목으로 증명되지 않는다. 화면 대신 건수와 파일을 정할 수 있는 시험용 소스를 플랫폼 휴일 관리 메뉴(/public-holidays,
 // 엑셀이 없는 화면)에 등록하고, S3 · 메일은 가짜로 바꾼다.
 const MENU_URL = '/public-holidays';
+const OTHER_MENU_URL = '/products';
+// 이 앱에도 소스가 없는 화면 — 배치가 이 화면의 작업은 가져가지 않아야 한다
+const UNREGISTERED_MENU_URL = '/sales';
 const T0 = new Date('2099-03-02T00:00:00.000Z');
 const at = (ms: number) => new Date(T0.getTime() + ms);
 const MINUTE = 60_000;
@@ -46,6 +53,15 @@ describe('공통 엑셀 (e2e, DB)', () => {
     queryType: TestQuery,
     fileName: () => '시험목록_20990302.xlsx',
     count: jest.fn<Promise<number>, [ExcelExportCaller, TestQuery]>(),
+    build: jest.fn<Promise<Buffer>, [ExcelExportCaller, TestQuery]>(),
+    assertRequester: jest.fn<Promise<void>, [number]>(),
+  } satisfies ExcelExportSource<TestQuery>;
+  // 두 번째 시험 화면 — 같은 사람의 대기 작업을 하나 더 두려면 다른 메뉴가 필요하다(생성 중 하나만은 화면마다).
+  // 다른 e2e 스위트의 앱에는 이 두 소스가 없어 그 앱의 크론이 이 작업들을 가져가지 않는다.
+  const otherSource = {
+    ...source,
+    menuUrl: OTHER_MENU_URL,
+    screenName: '시험 목록 2',
     build: jest.fn<Promise<Buffer>, [ExcelExportCaller, TestQuery]>(),
   } satisfies ExcelExportSource<TestQuery>;
 
@@ -87,6 +103,7 @@ describe('공통 엑셀 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
     exports = app.get(ExcelExportsService);
     app.get(ExcelExportRegistry).register(source);
+    app.get(ExcelExportRegistry).register(otherSource);
     ({ adminAccountId: adminId } = await prisma.adminAccount.findFirstOrThrow({
       where: { loginId: 'whaleadmin' },
     }));
@@ -277,9 +294,9 @@ describe('공통 엑셀 (e2e, DB)', () => {
       status: 'PENDING' as const,
       fileName: 'x.xlsx',
     };
-    // 생성 중 하나만(부분 고유 인덱스)이라 같은 화면엔 대기 하나 — 다른 화면 메뉴로 하나 더 둔다
+    // 생성 중 하나만(부분 고유 인덱스)이라 같은 화면엔 대기 하나 — 두 번째 시험 화면으로 하나 더 둔다
     const other = await prisma.menu.findFirstOrThrow({
-      where: { url: '/bp-masters' },
+      where: { url: OTHER_MENU_URL },
     });
     await prisma.excelDownloadLog.createMany({
       data: [
@@ -287,11 +304,13 @@ describe('공통 엑셀 (e2e, DB)', () => {
         { ...base, menuId: other.menuId, requestedAt: at(1) },
       ],
     });
-    // 두 실행이 겹치게 만들기를 늦춘다. 다른 화면 작업은 그 메뉴의 소스(BP 목록)가 만든다 — 여기선 실패해도 된다.
-    source.build.mockImplementation(async () => {
+    // 두 실행이 겹치게 만들기를 늦춘다. 두 번째 화면 작업은 권한에 따라 실패할 수 있다 — 여기선 몇 번 집혔는지만 본다.
+    const slow = async () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
       return Buffer.from('x');
-    });
+    };
+    source.build.mockImplementation(slow);
+    otherSource.build.mockImplementation(slow);
 
     // 실제 시각으로 돌린다 — 가져갈 때 적는 started_at 은 실제 시각이라, 미래 시각(T0)을 넘기면 다른 실행의 멈춘 작업
     // 정리가 막 시작한 작업을 「1시간 넘게 멈춤」으로 보고 다시 가져간다(운영에서는 같은 시계라 생기지 않는다).
@@ -303,13 +322,45 @@ describe('공통 엑셀 (e2e, DB)', () => {
     // 각 실행은 자기가 가져간 것만 센다 — 합이 2(작업 수)이고, 이 화면 작업은 한 번만 만들었다
     expect(counts[0] + counts[1]).toBe(2);
     expect(source.build).toHaveBeenCalledTimes(1);
+    expect(otherSource.build.mock.calls.length).toBeLessThanOrEqual(1);
     const mine = await logs();
     expect(mine).toHaveLength(1);
     expect(mine[0]).toMatchObject({ status: 'SUCCEEDED', attemptCount: 1 });
+    const [second] = await prisma.excelDownloadLog.findMany({
+      where: { requestedBy: adminId, menuId: other.menuId },
+    });
+    expect(second.attemptCount).toBe(1);
     await prisma.excelDownloadLog.deleteMany({
       where: { requestedBy: adminId, menuId: other.menuId },
     });
   }, 15_000);
+
+  it('이 앱에 소스가 없는 화면의 대기 작업은 가져가지 않는다 — 만들 수 없는 작업에 시도를 쓰지 않게', async () => {
+    const unregistered = await prisma.menu.findFirstOrThrow({
+      where: { url: UNREGISTERED_MENU_URL },
+    });
+    const { excelDownloadId } = await prisma.excelDownloadLog.create({
+      data: {
+        requestedBy: adminId,
+        menuId: unregistered.menuId,
+        rowCount: 10_000,
+        deliveryMethod: 'SCHEDULED',
+        status: 'PENDING',
+        fileName: 'x.xlsx',
+        requestedAt: T0,
+      },
+    });
+    try {
+      await expect(exports.processPending()).resolves.toBe(0);
+      expect(
+        await prisma.excelDownloadLog.findUniqueOrThrow({
+          where: { excelDownloadId },
+        }),
+      ).toMatchObject({ status: 'PENDING', attemptCount: 0 });
+    } finally {
+      await prisma.excelDownloadLog.delete({ where: { excelDownloadId } });
+    }
+  });
 
   it('배치가 파일을 만들어 S3 에 올리고 24시간 기한으로 완료 · 준비 메일을 보낸다', async () => {
     source.count.mockResolvedValue(12_480);
@@ -405,6 +456,15 @@ describe('공통 엑셀 (e2e, DB)', () => {
     expect(
       await statusOf(() => exports.download(adminId, id, expiresAt!)),
     ).toBe(410);
+    // 만든 뒤 화면의 호출자 조건을 잃으면(예: 플랫폼 계정이 아니게 됨) 기한 안이어도 403 — 주소를 주지 않는다
+    source.assertRequester.mockRejectedValueOnce(
+      new ForbiddenException('플랫폼 계정이 아님'),
+    );
+    storage.downloadUrl.mockClear();
+    expect(await statusOf(() => exports.download(adminId, id, before))).toBe(
+      403,
+    );
+    expect(storage.downloadUrl).not.toHaveBeenCalled();
   });
 
   it('생성이 실패하면 한 번 다시 시도하고, 두 번째도 실패면 실패로 끝내고 실패 메일을 보낸다', async () => {

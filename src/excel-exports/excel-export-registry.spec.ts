@@ -19,6 +19,14 @@ describe('ExcelExportRegistry', () => {
     expect(registry.find('/bp-masters')).toBeNull();
   });
 
+  it('등록한 메뉴 URL 목록 — 배치는 이 화면들의 작업만 가져간다', () => {
+    const registry = new ExcelExportRegistry();
+    expect(registry.menuUrls()).toEqual([]);
+    registry.register(source('/stores'));
+    registry.register(source('/bp-masters'));
+    expect(registry.menuUrls()).toEqual(['/stores', '/bp-masters']);
+  });
+
   it('같은 메뉴 URL 을 두 번 등록하면 던진다 — 배치가 어느 쪽을 부를지 모르게 되므로', () => {
     const registry = new ExcelExportRegistry();
     registry.register(source('/stores'));

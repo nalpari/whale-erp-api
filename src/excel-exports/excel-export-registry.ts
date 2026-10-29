@@ -18,4 +18,9 @@ export class ExcelExportRegistry {
   find(menuUrl: string): ExcelExportSource | null {
     return this.sources.get(menuUrl) ?? null;
   }
+
+  /** 등록한 화면의 메뉴 URL — 배치는 이 화면들의 예약 생성만 가져간다(만들 소스가 없는 작업을 집지 않게). */
+  menuUrls(): string[] {
+    return [...this.sources.keys()];
+  }
 }

@@ -216,7 +216,10 @@ export class ExcelExportsService {
     return handled.length;
   }
 
-  /** 예약 생성한 파일의 짧은 주소. 요청한 본인 · 완료 · 기한 안일 때만. 받은 시각을 남긴다. */
+  /**
+   * 예약 생성한 파일의 짧은 주소. 요청한 본인 · 완료 · 기한 안이고, 지금도 그 화면을 볼 수 있을 때만(메뉴 조회 권한 ·
+   * 쓸 수 있는 계정 · 화면의 호출자 조건). 받은 시각을 남긴다.
+   */
   async download(
     adminAccountId: number,
     excelDownloadId: number,
@@ -240,6 +243,7 @@ export class ExcelExportsService {
       throw new GoneException(
         '내려받기 기한(24시간)이 지났습니다. 다시 요청해 주세요',
       );
+    await this.assertCanStillView(adminAccountId, log.menuId);
     const url = await this.requireStorage().downloadUrl(
       log.storageKey,
       log.fileName,
@@ -332,6 +336,34 @@ export class ExcelExportsService {
       );
   }
 
+  /**
+   * 파일은 만든 뒤 24시간 받을 수 있다 — 받는 때에도 그 화면의 메뉴 가드를 다시 본다. 조회 권한을 잃었거나 계정이
+   * 막혔거나(adminHasMenuAction 이 사용 중 계정만 본다) 화면의 호출자 조건(assertRequester)을 잃었으면 403.
+   * 내려받기 경로에는 메뉴 가드가 없다 — 메뉴가 경로가 아니라 이력의 menu_id 로 정해지기 때문이다.
+   */
+  private async assertCanStillView(
+    adminAccountId: number,
+    menuId: number,
+  ): Promise<void> {
+    const menu = await this.prisma.menu.findUnique({
+      where: { menuId },
+      select: { url: true },
+    });
+    if (
+      !menu?.url ||
+      !(await adminHasMenuAction(
+        this.prisma,
+        adminAccountId,
+        { url: menu.url },
+        ['read'],
+      ))
+    )
+      throw new ForbiddenException(
+        '이 화면을 볼 권한이 없어 엑셀 파일을 받을 수 없습니다',
+      );
+    await this.registry.find(menu.url)?.assertRequester?.(adminAccountId);
+  }
+
   private async menuIdOf(menuUrl: string): Promise<number> {
     const menu = await this.prisma.menu.findFirst({
       where: { url: menuUrl, isDeleted: false, status: 'ACTIVE' },
@@ -420,6 +452,10 @@ export class ExcelExportsService {
 
   /** 대기 중인 예약 하나를 생성 중으로 바꿔 가져온다. 다른 인스턴스가 잡은 행과 except 는 건너뛴다. */
   private async claim(except: number[]): Promise<ExcelDownloadLog | null> {
+    // 이 인스턴스에 등록된 화면의 작업만 — 소스가 없는 작업을 집으면 「소스 없음」으로 시도만 쓰고 실패한다(배포가 섞인
+    // 동안의 옛 인스턴스, 화면을 다르게 등록한 다른 앱). 운영에서는 인스턴스마다 등록부가 같다.
+    const menuUrls = this.registry.menuUrls();
+    if (!menuUrls.length) return null;
     const ids = await this.prisma.$queryRaw<{ id: number }[]>`
       UPDATE "excel_download_logs"
          SET "status" = 'PROCESSING', "attempt_count" = "attempt_count" + 1, "started_at" = ${new Date()}
@@ -427,6 +463,7 @@ export class ExcelExportsService {
              SELECT "excel_download_id" FROM "excel_download_logs"
               WHERE "status" = 'PENDING'
                 AND "delivery_method" = 'SCHEDULED'
+                AND "menu_id" IN (SELECT "menu_id" FROM "menus" WHERE "url" = ANY(${menuUrls}::text[]))
                 AND NOT ("excel_download_id" = ANY(${except}::int[]))
               ORDER BY "requested_at", "excel_download_id"
               LIMIT 1

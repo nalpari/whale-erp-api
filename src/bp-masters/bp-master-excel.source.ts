@@ -34,6 +34,11 @@ export class BpMasterExcelSource
     return this.bpMasters.excelCount(query);
   }
 
+  /** 플랫폼 화면이다 — 예약 생성 파일을 받을 때도 지금 플랫폼 계정이어야 한다. */
+  assertRequester(adminAccountId: number): Promise<void> {
+    return this.bpMasters.assertExcelCaller(adminAccountId);
+  }
+
   // 예약 생성은 요청 뒤(배치)에 만든다 — 그 사이 계정이 막히거나 플랫폼 권한을 잃었으면 만들지 않는다.
   async build(
     caller: ExcelExportCaller,
