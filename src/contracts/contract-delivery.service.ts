@@ -188,18 +188,19 @@ export type SendFailure = {
  * 메시지 요청 뒤 응답이 끊겨 접수 여부를 몰라 다시 보내면 두 번 갈 수 있다(502 SEND_UNCONFIRMED). 문구는 dispatch 의 502 와 같게 둔다.
  */
 export function sendFailureOf(failureReason: string | null): SendFailure {
-  const code = /^code=(-?\d+) /.exec(failureReason ?? '')?.[1];
-  if (code !== undefined)
-    return {
-      result: 'FAILED',
-      reason: `비즈뿌리오가 받지 않았습니다(코드 ${code}). 번호를 확인하고 다시 보내 주세요`,
-      retryable: true,
-    };
+  // 토큰 단계는 코드가 있어도(계정 · 설정 오류) 번호 탓이 아니라 먼저 본다 — dispatch 의 502 문구와 같다
   if (failureReason?.includes('/v1/token'))
     return {
       result: 'FAILED',
       reason:
         '비즈뿌리오에 연결하지 못해 보내지 않았습니다. 잠시 뒤 다시 보내 주세요',
+      retryable: true,
+    };
+  const code = /^code=(-?\d+) /.exec(failureReason ?? '')?.[1];
+  if (code !== undefined)
+    return {
+      result: 'FAILED',
+      reason: `비즈뿌리오가 받지 않았습니다(코드 ${code}). 번호를 확인하고 다시 보내 주세요`,
       retryable: true,
     };
   return {
@@ -629,7 +630,9 @@ export class ContractDeliveryService {
           contractId,
           status,
           message: `${
-            e instanceof BizppurioError && e.code !== undefined
+            e instanceof BizppurioError &&
+            e.code !== undefined &&
+            e.path !== '/v1/token'
               ? `${what} 알림톡을 보내지 못했습니다(비즈뿌리오 ${e.code}). 번호를 확인하고`
               : `${what} 알림톡을 보내지 못했습니다. 잠시 뒤`
           } 다시 보내 주세요${status === 'DRAFT' && pending.before.status !== 'DRAFT' ? ' — 근로계약서는 임시저장으로 두었습니다' : ''}`,

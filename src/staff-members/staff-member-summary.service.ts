@@ -345,7 +345,6 @@ export class StaffMemberSummaryService {
     };
   }
 
-  /** 그 영역 메뉴의 조회 권한(없으면 403) → 직원 범위(없으면 404) 순이다 */
   /**
    * 발송 이력(WHALEERP-136) — 이 직원 레코드의 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡, 최근 순. 따로 쌓지 않고
    * 알림톡 발송 이력(alimtalk_send_logs, 관련 업무 = 계약)에서 읽는다. 근로계약 관리 조회 권한(근로계약 영역과 같다)
@@ -380,6 +379,7 @@ export class StaffMemberSummaryService {
     return { items: toSendLogs(rows) };
   }
 
+  /** 그 영역 메뉴의 조회 권한(없으면 403) → 직원 범위(없으면 404) 순이다 */
   private async check(
     adminAccountId: number,
     staffMemberId: number,

@@ -135,7 +135,7 @@ export class AlimtalkService {
       const { code, httpStatus } =
         e instanceof BizppurioError ? e : ({} as BizppurioError);
       // 네트워크 실패는 code 가 없어, 원인은 메시지로만 남는다. 로그 한 줄에는 메시지를
-      // 1000자까지만 싣고, 이력에는 전부 둔다.
+      // 1000자까지만 싣고, 이력에는 전부 둔다. 직원 상세 발송 이력(sendFailureOf)이 이 형식을 읽는다 — 바꾸면 함께 고친다.
       const head = `code=${code} http=${httpStatus}`;
       const message = e instanceof Error ? e.message : String(e);
       this.logger.warn(

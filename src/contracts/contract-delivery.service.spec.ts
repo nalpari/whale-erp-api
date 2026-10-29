@@ -1347,3 +1347,13 @@ describe('sendFailureOf — 발송 이력의 실패 사유 (WHALEERP-136)', () =
     });
   });
 });
+
+describe('sendFailureOf — 토큰 단계 (api 리뷰)', () => {
+  it('토큰 단계는 코드가 있어도 번호 탓이 아니라 연결 실패 문구다', () => {
+    const f = sendFailureOf(
+      'code=3001 http=401: /v1/token failed: http=401 code=3001',
+    );
+    expect(f).toMatchObject({ result: 'FAILED', retryable: true });
+    expect(f.reason).not.toContain('번호를 확인');
+  });
+});
