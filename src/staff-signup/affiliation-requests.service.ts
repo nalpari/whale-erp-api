@@ -33,7 +33,7 @@ import type {
   RejectAffiliationRequestDto,
 } from './dto/affiliation-request.dto';
 import { asksHqSharingConsentAt } from './hq-sharing-consent';
-import { sameName } from './same-name';
+import { sameName } from '../contracts/identity-match';
 
 type Db = Prisma.TransactionClient | PrismaService;
 

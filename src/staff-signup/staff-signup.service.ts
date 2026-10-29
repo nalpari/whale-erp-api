@@ -49,7 +49,7 @@ import type {
 } from './dto/my-invitation.dto';
 import type { StaffSignupDto } from './dto/staff-signup.dto';
 import { asksHqSharingConsentAt } from './hq-sharing-consent';
-import { sameName } from './same-name';
+import { sameName } from '../contracts/identity-match';
 
 /** 번호 · 코드가 맞는 초대가 없다 — 어느 쪽이 틀렸는지, 그 번호로 초대가 있는지 알리지 않는다(JOIN-7) */
 export const CODE_MISMATCH = '휴대전화번호나 초대 코드를 다시 확인해 주세요';

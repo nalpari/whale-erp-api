@@ -27,6 +27,7 @@ import {
   OPTIONAL_MAIL_SERVICE,
   type OptionalMailService,
 } from '../mail/mail.module';
+import { sameName } from './identity-match';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
 import { PrismaService } from '../prisma/prisma.service';
@@ -154,11 +155,15 @@ export type PendingInvite = DeliveryInput & {
   invitationId: number;
   /** 이 발송이 쌓은 초대 코드 입력 잠금 해제 행 — 되돌릴 때 지운다. 소속 추가 확인 요청은 null */
   unlockAttemptId: number | null;
-  /** 소속 추가 확인 요청에만 — 알림톡 · 메일 변수와 받을 이메일(계정에 없으면 null) */
+  /**
+   * 소속 추가 확인 요청에만 — 알림톡 · 메일 변수와 받을 이메일(계정에 없으면 null). nameMismatch 면 그 계정 실명이 입력한 이름과
+   * 달라 메일을 보내지 않는다
+   */
   affiliation: {
     bpName: string;
     employmentType: string;
     email: string | null;
+    nameMismatch: boolean;
   } | null;
   historyId: number | null;
   expired: number[];
@@ -399,6 +404,7 @@ export class ContractDeliveryService {
       where: { staffMemberId },
       data: { joinStatus: 'INVITED' },
       select: {
+        name: true,
         employmentType: true,
         jobTitle: true,
         candidateAccountId: true,
@@ -411,8 +417,13 @@ export class ContractDeliveryService {
         ? null
         : await tx.account.findUnique({
             where: { accountId: staff.candidateAccountId },
-            select: { email: true },
+            select: { email: true, realName: true },
           });
+    // 메일은 입력한 번호가 아니라 그 번호로 찾은 계정의 이메일로 간다 — 입력한 이름이 그 계정 실명과 다르면(번호를 넘겨받은
+    // 다른 사람일 수 있다) 채용 정보(근무지 · 고용 형태)가 남에게 가지 않게 보내지 않는다. 알림톡은 입력한 번호로 그대로 간다 —
+    // 받지 못한 직원은 관리자가 유선으로 확인한다(WHALEERP-140, 2026-10-29 김민식). 본인 대조와 같은 이름 규칙(nameKey)
+    const nameMismatch =
+      account !== null && !sameName(staff.name, account.realName);
     const historyId = input.statusChanged
       ? ((
           await tx.contractStatusHistory.findFirst({
@@ -438,6 +449,7 @@ export class ContractDeliveryService {
         // 알림톡 · 메일 변수는 빈 문자열이어도 렌더된다
         employmentType: employmentTypeLabel(employmentType) ?? '',
         email: account?.email ?? null,
+        nameMismatch,
       },
       historyId,
       expired: previous.map((p) => p.invitationId),
@@ -628,9 +640,16 @@ export class ContractDeliveryService {
 
   private async mailAffiliation(p: PendingInvite): Promise<void> {
     const email = p.affiliation?.email;
-    if (!this.mail || !email) {
+    // 이름이 다른 계정에는 메일을 보내지 않는다 — 그 사유는 메일 설정이 없는 환경에서도 남긴다(유선 확인 때 근거)
+    const nameMismatch = p.affiliation?.nameMismatch === true;
+    if (nameMismatch || !this.mail || !email) {
+      const why = nameMismatch
+        ? 'name differs from the account'
+        : !this.mail
+          ? 'no MAIL_*'
+          : 'no email';
       this.logger.warn(
-        `affiliation request mail SKIPPED contract=${p.contractId}: ${!this.mail ? 'no MAIL_*' : 'no email'}`,
+        `affiliation request mail SKIPPED contract=${p.contractId}: ${why}`,
       );
       return;
     }
