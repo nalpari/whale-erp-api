@@ -12,9 +12,9 @@ import { Prisma } from '@prisma/client';
 import {
   AdminScopeService,
   hidesPersonalData,
+  hiddenStoreStaffWhere,
 } from '../admin-scope/admin-scope.service';
 import {
-  HQ_SHARING_CONSENTED,
   HQ_SHARING_SELECT,
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
@@ -74,6 +74,8 @@ type Scope = {
   storeIds: number[];
   hide: (storeId: number, isHqSharingConsented: boolean) => boolean;
   storeHides: (storeId: number) => boolean | null;
+  /** 가려지는 점포에서 보이는 직원 — 동의한 직원, 폐점한 가맹 점포면 아무도(hiddenStoreStaffWhere) */
+  hiddenWhere: (storeId: number) => Prisma.StaffMemberWhereInput;
 };
 
 /**
@@ -469,7 +471,9 @@ export class WorkSchedulesService {
         ...(query.staffMemberId !== undefined
           ? { staffMemberId: query.staffMemberId }
           : {}),
-        ...(hidesStore ? { staffMember: HQ_SHARING_CONSENTED } : {}),
+        ...(hidesStore
+          ? { staffMember: scope.hiddenWhere(query.storeId) }
+          : {}),
       },
       changedAt: {
         ...(query.from ? { gte: kstDayStart(toDate(query.from)) } : {}),
@@ -530,13 +534,14 @@ export class WorkSchedulesService {
     storeId: number,
     workDate: string,
   ): Promise<WorkScheduleStaffResponseDto> {
-    const hidesStore = (await this.scopeOf(adminAccountId)).storeHides(storeId);
+    const scope = await this.scopeOf(adminAccountId);
+    const hidesStore = scope.storeHides(storeId);
     if (hidesStore === null) throw new NotFoundException(STORE_NOT_FOUND);
     const rows = await this.prisma.staffMember.findMany({
       where: {
         storeId,
         ...schedulable(toDate(workDate)),
-        ...(hidesStore ? HQ_SHARING_CONSENTED : {}),
+        ...(hidesStore ? scope.hiddenWhere(storeId) : {}),
       },
       select: { staffMemberId: true, name: true, phone: true, jobTitle: true },
       orderBy: [{ name: 'asc' }, { staffMemberId: 'asc' }],
@@ -1189,21 +1194,21 @@ export class WorkSchedulesService {
   private async scopeOf(adminAccountId: number): Promise<Scope> {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    const typeOf = new Map(
-      manageable.stores.map((s) => [s.storeId, s.storeTypeCode]),
-    );
+    const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
 
     const hide = (storeId: number, isHqSharingConsented: boolean) =>
       hidesPersonalData(
         manageable.roleTypeCode,
-        typeOf.get(storeId),
+        storeOf.get(storeId),
         isHqSharingConsented,
       );
     return {
-      storeIds: [...typeOf.keys()],
+      storeIds: [...storeOf.keys()],
       hide,
       storeHides: (storeId: number): boolean | null =>
-        typeOf.has(storeId) ? hide(storeId, false) : null,
+        storeOf.has(storeId) ? hide(storeId, false) : null,
+      hiddenWhere: (storeId: number) =>
+        hiddenStoreStaffWhere(manageable.roleTypeCode, storeOf.get(storeId)),
     };
   }
 }

@@ -7,14 +7,13 @@ import {
 } from '@nestjs/common';
 import { LocationConsentAction, Prisma } from '@prisma/client';
 import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
+import {
+  HQ_SHARING_CONSENT_VERSION,
+  type HqSharingAccount,
+  hqSharingAgreedOf,
+} from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
 import { currentLocationTermsVersion } from './location-terms';
-
-/**
- * 본사 제공 동의 문구의 버전. 문구는 직원 앱에 있고 api 는 버전만 저장한다 — 문구를 바꾸면 앱과 이 값을 같이 고친다
- * (2026-10-20 노영주).
- */
-export const HQ_SHARING_CONSENT_VERSION = 'v1.0';
 
 const NOT_AGREED_MESSAGE = '위치정보 수집에 동의한 상태가 아닙니다';
 
@@ -137,12 +136,12 @@ export class MyConsentService {
   }
 
   /**
-   * 본사 제공 동의 — 처음이든 철회 뒤든. 앞의 동의 · 철회를 덮는다(A안, 2026-10-13 재영). 계정에 하나라 소속 가맹 점포
-   * 모두에 같이 적용된다
+   * 본사 제공 동의 — 처음이든 철회 뒤든, 더는 받아 주지 않는 문구 버전에 동의했던 뒤든(ATT-30). 앞의 동의 · 철회를
+   * 덮는다(A안, 2026-10-13 재영). 계정에 하나라 소속 가맹 점포 모두에 같이 적용된다
    */
   agreeHqSharing(accountId: number): Promise<void> {
     return this.locked(accountId, async (tx, account) => {
-      if (account.isHqSharingConsented)
+      if (hqSharingAgreedOf(account))
         throw new ConflictException('이미 본사 제공에 동의했습니다');
       await tx.account.update({
         where: { accountId },
@@ -172,14 +171,18 @@ export class MyConsentService {
     accountId: number,
     work: (
       tx: Prisma.TransactionClient,
-      account: { isHqSharingConsented: boolean },
+      account: HqSharingAccount,
     ) => Promise<void>,
   ): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id = ${accountId} FOR UPDATE`;
       const account = await tx.account.findUniqueOrThrow({
         where: { accountId },
-        select: { status: true, isHqSharingConsented: true },
+        select: {
+          status: true,
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: true,
+        },
       });
       if (account.status === 'WITHDRAWN')
         throw new UnauthorizedException(INVALID_SESSION_MESSAGE);

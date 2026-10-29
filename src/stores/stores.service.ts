@@ -30,8 +30,7 @@ export class StoresService {
     const storeIds = manageable.stores
       .filter(
         // 근무지 선택지라 직원이 아직 없다 — 동의 없음으로 점포 단위 판단(새 근로계약과 같다).
-        (s) =>
-          !hidesPersonalData(manageable.roleTypeCode, s.storeTypeCode, false),
+        (s) => !hidesPersonalData(manageable.roleTypeCode, s, false),
       )
       .map((s) => s.storeId);
     const where: Prisma.StoreWhereInput = {

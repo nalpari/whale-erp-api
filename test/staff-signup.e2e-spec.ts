@@ -16,8 +16,8 @@ import {
 import { ContractSendService } from '../src/contracts/contract-send.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 import type { MyInvitationListResponseDto } from '../src/staff-signup/dto/my-invitation.dto';
-import { HQ_SHARING_CONSENT_VERSION } from '../src/staff-signup/hq-sharing-consent';
 
 // 직원 앱 진입 · 가입(WHALEERP-601, 진입 · 가입 화면 가이드 JOIN-7)을 실제 DB 로 확인한다. 초대 수락 · 계정 생성 · 레코드
 // 연결 · 근로계약 서명 대기 · 접속 상태가 한 흐름이고, 만 19세 미만의 가입 불가 · 운영 알림과 이메일 고유 제약은 목으로는

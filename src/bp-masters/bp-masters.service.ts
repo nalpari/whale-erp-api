@@ -81,7 +81,7 @@ const CHANGED_MEANWHILE =
 const LOGIN_ID_TAKEN =
   '이미 사용 중인 아이디입니다. 삭제 · 탈퇴한 계정의 아이디도 다시 쓸 수 없습니다';
 const EMAIL_TAKEN = '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다';
-// 국세청 키 · 하루 할당량은 가입 · 점포 · MY PAGE 와 함께 쓴다 — 같은 한도를 관리자별로 센다(BpProfileService 와 같다).
+// 국세청 키 · 하루 할당량은 가입 · 점포 · 마이페이지와 함께 쓴다 — 같은 한도를 관리자별로 센다(BpProfileService 와 같다).
 const NTS_CALLS_PER_HOUR = 10;
 const NTS_WINDOW_MS = 3_600_000;
 
@@ -815,7 +815,7 @@ export class BpMastersService {
 
   /**
    * 사업자등록번호가 아직 비었는가 — 트랜잭션 안에서 본다. 인증과 저장 사이에 다른 BP · 점포가 같은 번호로 먼저
-   * 들어왔을 수 있다. 점포 저장 · 가입 · MY PAGE 와 같은 번호별 잠금(stores:biz:<번호>)으로 줄을 선다.
+   * 들어왔을 수 있다. 점포 저장 · 가입 · 마이페이지와 같은 번호별 잠금(stores:biz:<번호>)으로 줄을 선다.
    */
   private async assertNumberFree(
     tx: Tx,

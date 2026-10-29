@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-27T07:26:42Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -45,11 +45,11 @@ sources:
   - id: stores-service
     resource: ../../src/stores/stores.service.ts
     title: StoresService (근무지 선택지)
-    last_modified: 2026-10-14T08:11:55Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-26T07:41:19Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
@@ -85,7 +85,8 @@ ANDed and always inside the admin scope below. `storeIds` · `storeTypes` are wh
 and the header store scope send (WHALEERP-326 · 133, 2026-10-22 — same shape as 점포 정보 관리 `GET /stores`).
 An empty `storeIds=` (or an empty piece such as `storeIds=3,`) is 400, like `GET /stores`, so the 관리자웹 leaves the
 parameter out for 「전체」 instead of sending it empty. Narrowing by `storeIds` · `storeTypes` never skips the ATT-30
-consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff. The condition is `hqVisibleWhere` in `src/admin-scope/hq-visible.ts`, shared with 로그인 후 홈 so both screens count the same contracts.[^contracts-service]
+consent condition — 본사 역할 still sees a 가맹 store's contracts only for 본사 제공 동의 staff, and none at a closed 가맹 store
+(가맹 관계가 끝난 레코드에는 동의를 적용하지 않는다, ATT-30 v227 — [Staff members](/api/staff-members.md)). The condition is `hqVisibleWhere` in `src/admin-scope/hq-visible.ts`, shared with 로그인 후 홈 so both screens count the same contracts.[^contracts-service]
 
 It also returns `statusCounts` — contracts per status (all eight, zeros included; WHALEERP-133, 2026-10-23): the same
 conditions as the list with only the `status` filter dropped, so the store · store name · staff name filters apply and

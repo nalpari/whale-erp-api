@@ -23,7 +23,7 @@ type Tx = Prisma.TransactionClient;
 const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
 const NOT_BP_MASTER = 'BP 마스터만 사업자정보를 볼 수 있습니다';
 const BP_MASTER = 'BM';
-// 국세청 키 · 하루 할당량은 가입 · 점포 · MY PAGE 가 함께 쓴다 — 점포(StoreManagementService
+// 국세청 키 · 하루 할당량은 가입 · 점포 · 마이페이지가 함께 쓴다 — 점포(StoreManagementService
 // .countNtsCall)와 같은 한도를 관리자별로 따로 센다(코드 리뷰로 찾음, 2026-10-22 — 점포에만 있던
 // 보호가 여기엔 없었다). 컨트롤러의 @Throttle 은 호출 자체를 막는다. BusinessVerificationService
 // .verify() 가 중복 확인과 국세청 호출을 한 메서드 안에서 같이 하므로, 점포처럼 국세청 호출 직전이
@@ -38,7 +38,7 @@ type History = {
 };
 
 /**
- * 내 정보(MY PAGE) 사업자정보 조회 · 수정 · 인증(manyfast F-AMTDCK > S-UOJVUR). BP 마스터 본인의
+ * 내 정보(마이페이지) 사업자정보 조회 · 수정 · 인증(manyfast F-AMTDCK > S-UOJVUR). BP 마스터 본인의
  * bp_codes 행만 다룬다 — 다른 BP 는 다루지 않는다(플랫폼 쪽 BP 수정은 F-EHHJLV, 아직 없음).
  *
  * 사업자등록번호 · 대표자명 · 개업일자는 점포 사업자정보와 같은 두 단계다(2026-10-22 사용자 결정 —

@@ -648,8 +648,7 @@ export class PayslipEditService {
       !found ||
       hidesPersonalData(
         manageable.roleTypeCode,
-        manageable.stores.find((s) => s.storeId === found.storeId)
-          ?.storeTypeCode,
+        manageable.stores.find((s) => s.storeId === found.storeId),
         hqSharingConsentedOf(found.staffMember),
       )
     )

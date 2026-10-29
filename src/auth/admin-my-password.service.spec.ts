@@ -49,6 +49,7 @@ describe('AdminMyPasswordService', () => {
     };
     const prisma = {
       $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
+      adminAccount: tx.adminAccount,
     };
     service = (
       await Test.createTestingModule({
@@ -155,5 +156,29 @@ describe('AdminMyPasswordService', () => {
         change({ newPasswordConfirm: 'Other-pass-1!' }),
         ADMIN_PASSWORD_MESSAGES.confirmMismatch,
       ));
+  });
+
+  // 회원 탈퇴 1단계(S-JHQQNR) — 맞아야 탈퇴 화면이 열린다. 비교 방식 · 문구는 위 변경 · 탈퇴 실행과 같다.
+  describe('verify', () => {
+    it('현재 비밀번호가 맞으면 아무것도 쓰지 않고 끝난다', async () => {
+      await expect(service.verify(7, OWN)).resolves.toBeUndefined();
+      expect(tx.adminAccount.findFirst).toHaveBeenCalledWith({
+        where: { adminAccountId: 7, isDeleted: false },
+        select: { passwordHash: true },
+      });
+      expect(tx.adminAccount.update).not.toHaveBeenCalled();
+    });
+
+    it('틀리면 400 · 현재 비밀번호 불일치 문구', () =>
+      expect(service.verify(7, 'Wrong-pass-1!')).rejects.toThrow(
+        new BadRequestException(ADMIN_PASSWORD_MESSAGES.currentMismatch),
+      ));
+
+    it('지운 계정이면 404', async () => {
+      tx.adminAccount.findFirst.mockResolvedValue(null);
+      await expect(service.verify(7, OWN)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
   });
 });

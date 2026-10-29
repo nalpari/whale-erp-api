@@ -3,6 +3,10 @@ import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayslipListService } from './payslip-list.service';
+import {
+  HQ_SHARING_CONSENTED,
+  HQ_SHARING_CONSENT_VERSION,
+} from '../admin-scope/hq-sharing';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
@@ -205,7 +209,34 @@ describe('PayslipListService', () => {
           {
             storeId: { in: [6] },
             staffMember: {
-              account: { is: { isHqSharingConsented: true } },
+              account: HQ_SHARING_CONSENTED.account,
+            },
+          },
+        ],
+      });
+    });
+
+    it('상태 필터가 있으면 폐점한 가맹 점포의 명세서는 동의한 직원 것도 뺀다 — 어느 갈래에도 없다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 5, storeTypeCode: 'DIRECT', storeStatusCode: 'OPERATING' },
+          {
+            storeId: 6,
+            storeTypeCode: 'FRANCHISE',
+            storeStatusCode: 'OPERATING',
+          },
+          { storeId: 7, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.list(9, { month, status: ['SENT'] });
+      expect(where().AND).toContainEqual({
+        OR: [
+          { storeId: { in: [5] } },
+          {
+            storeId: { in: [6] },
+            staffMember: {
+              account: HQ_SHARING_CONSENTED.account,
             },
           },
         ],
@@ -312,7 +343,7 @@ describe('PayslipListService', () => {
           {
             storeId: { in: [6] },
             staffMember: {
-              account: { is: { isHqSharingConsented: true } },
+              account: HQ_SHARING_CONSENTED.account,
             },
           },
         ],
@@ -543,7 +574,9 @@ describe('PayslipListService', () => {
           { storeId: { in: [5] } },
           {
             storeId: { in: [6] },
-            staffMember: { account: { is: { isHqSharingConsented: true } } },
+            staffMember: {
+              account: HQ_SHARING_CONSENTED.account,
+            },
           },
         ],
       };
@@ -567,7 +600,9 @@ describe('PayslipListService', () => {
           { storeId: { in: [5] } },
           {
             storeId: { in: [6] },
-            staffMember: { account: { is: { isHqSharingConsented: true } } },
+            staffMember: {
+              account: HQ_SHARING_CONSENTED.account,
+            },
           },
         ],
       };
@@ -622,7 +657,10 @@ describe('PayslipListService', () => {
           storeId: 6,
           staffMember: {
             name: '이도윤',
-            account: { isHqSharingConsented: true },
+            account: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+            },
           },
         }),
       ]);
@@ -700,8 +738,29 @@ describe('PayslipListService', () => {
       expect(firstArg(prisma.payslip.groupBy).where).toEqual({
         storeId: 6,
         ...SEPTEMBER,
-        staffMember: { account: { is: { isHqSharingConsented: true } } },
+        staffMember: {
+          account: HQ_SHARING_CONSENTED.account,
+        },
       });
+    });
+
+    it('본사 역할에게 폐점한 가맹 점포는 동의한 직원 것도 세지 않는다 — 0건, 묻지도 않는다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 5, storeTypeCode: 'DIRECT', storeStatusCode: 'OPERATING' },
+          {
+            storeId: 6,
+            storeTypeCode: 'FRANCHISE',
+            storeStatusCode: 'OPERATING',
+          },
+          { storeId: 7, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await expect(
+        service.summary(9, { month, storeId: 7 }),
+      ).resolves.toMatchObject({ total: { count: 0, grossPayAmount: 0 } });
+      expect(prisma.payslip.groupBy).not.toHaveBeenCalled();
     });
 
     it('가맹 쪽 역할은 가맹 점포도 모두 센다', async () => {
@@ -733,7 +792,12 @@ describe('PayslipListService', () => {
           storeId: true,
           staffMember: {
             select: {
-              account: { select: { isHqSharingConsented: true } },
+              account: {
+                select: {
+                  isHqSharingConsented: true,
+                  hqSharingConsentVersion: true,
+                },
+              },
             },
           },
         },

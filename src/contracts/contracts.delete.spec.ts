@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService } from './contracts.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 // 임시저장만 지운다. 발송한 적이 없어 남길 기록이 없다고 보고 행을 지운다(2026-10-12 결정, 이력 · 근무 요일 · 당사자 포함).
 // 보내기(ContractDeliveryService)는 따로 시험한다 — 여기서는 무엇을 넘기는지만 본다. 기본은 앱으로 받음(보낼 것 없음)
@@ -162,7 +163,12 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
   it('계약 직원의 본사 제공 동의로 범위를 묻는다', async () => {
     prisma.contract.findUnique.mockResolvedValue({
       storeId: 11,
-      staffMember: { account: { isHqSharingConsented: true } },
+      staffMember: {
+        account: {
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        },
+      },
     });
     await service.remove(9, 7);
     expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, true);

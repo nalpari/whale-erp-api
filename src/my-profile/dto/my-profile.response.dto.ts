@@ -16,6 +16,12 @@ export class MyHqSharingConsentDto {
   agreedAt: Date | null;
   /** 철회 일시. 철회하지 않았으면 null */
   withdrawnAt: Date | null;
+  /**
+   * 동의한 문구 버전을 더는 받아 주지 않아(항목 · 목적이 넓어짐) 다시 동의해야 하는지(ATT-30). 동의일 때만 true 일 수 있고,
+   * 그동안 본사에는 미동의로 보여 가려진다 — 앱은 들어올 때 동의 시트를 다시 띄우고 `POST /me/hq-sharing-consent` 로 새
+   * 버전에 동의한다.
+   */
+  needsReconsent: boolean;
 }
 
 /** 위치정보 동의 (ATT-23 · ATT-26) */

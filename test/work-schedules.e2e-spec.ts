@@ -10,6 +10,7 @@ import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, addMonths, kstToday } from '../src/staff-members/kst-date';
 import { purgeExpiredWorkSchedules } from '../src/work-schedules/work-schedule-purge';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 근무스케줄 등록 · 수정 · 삭제를 실제 DB 로 확인한다(#198) — 겹침 금지 EXCLUDE 와 맞닿는 근무, 자정 넘김, 계약 기간 ·
 // 가입 · 퇴직일 · 본사 제공 동의 판정, 변경 이력. 목으로는 쿼리 모양만 보인다.
@@ -929,7 +930,7 @@ describe('근무스케줄 (e2e, DB)', () => {
         where: { accountId: accountId! },
         data: {
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           hqSharingAgreedAt: new Date(),
         },
       });
@@ -1483,7 +1484,7 @@ describe('근무스케줄 (e2e, DB)', () => {
         where: { staffMembers: { some: { staffMemberId: otherStaffId } } },
         data: {
           isHqSharingConsented: true,
-          hqSharingConsentVersion: 'v1',
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
           hqSharingAgreedAt: new Date(),
         },
       });
