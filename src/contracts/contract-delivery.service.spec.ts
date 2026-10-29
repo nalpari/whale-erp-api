@@ -871,9 +871,19 @@ describe('ContractDeliveryService', () => {
           path: '/v1/token',
         }),
       ],
+      [
+        '토큰 단계 계정 오류(코드 있음)',
+        new BizppurioError('/v1/token failed: http=401 code=3001', 3001, 401, {
+          path: '/v1/token',
+        }),
+      ],
     ])('%s 는 나가지 않았다 — 되돌리고 502 SEND_FAILED', async (_, failure) => {
       const body = await failWith(failure);
       expect(body).toMatchObject({ code: 'SEND_FAILED', retryable: true });
+      // 토큰 단계는 코드가 있어도 번호 탓이 아니다 — 발송 이력(sendFailureOf)과 같은 문구
+      expect((body as { message: string }).message).not.toContain(
+        '번호를 확인',
+      );
       expect(tx.invitation.delete).toHaveBeenCalled();
     });
 
@@ -1355,5 +1365,13 @@ describe('sendFailureOf — 토큰 단계 (api 리뷰)', () => {
     );
     expect(f).toMatchObject({ result: 'FAILED', retryable: true });
     expect(f.reason).not.toContain('번호를 확인');
+  });
+
+  it('메시지 머리가 아닌 자리에 섞인 /v1/token 은 토큰 단계로 보지 않는다 — 접수 여부 모름 그대로', () => {
+    expect(
+      sendFailureOf(
+        'code=undefined http=undefined: /v3/message failed: aborted (after /v1/token ok)',
+      ),
+    ).toMatchObject({ result: 'UNCONFIRMED', retryable: false });
   });
 });

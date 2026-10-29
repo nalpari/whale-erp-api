@@ -189,7 +189,9 @@ export type SendFailure = {
  */
 export function sendFailureOf(failureReason: string | null): SendFailure {
   // 토큰 단계는 코드가 있어도(계정 · 설정 오류) 번호 탓이 아니라 먼저 본다 — dispatch 의 502 문구와 같다
-  if (failureReason?.includes('/v1/token'))
+  // AlimtalkService 가 남기는 `code=… http=…: 메시지` 의 메시지 머리만 본다 — 다른 자리(원인 문구 등)에 섞인 글자로 접수 여부 모름을
+  // 「다시 보내도 됨」으로 바꾸지 않게. BizppurioClient 의 토큰 단계 메시지는 모두 `/v1/token ` 으로 시작한다
+  if (/^code=\S+ http=\S+: \/v1\/token /.test(failureReason ?? ''))
     return {
       result: 'FAILED',
       reason:
