@@ -150,6 +150,10 @@ export class AdminScopeService {
    * 된다(2026-10-14 재영, api #21, 운영 정책 ATT-30). 없거나 관리 범위 밖 직원이면 false.
    *
    * 범위를 먼저 정하고 찾는다(staffInScope).
+   *
+   * 두 번째 쓰임: 직원 상세 근로계약 요약의 급여 계좌 보기(canViewPayrollAccount)도 이 판정을 쓴다 — 가맹 직원의
+   * 급여 계좌는 본사 역할에게 동의와 상관없이 보이지 않는다(운영 정책 TAX-07 · TAX-08, 재영 2026-10-29). 재설정 링크
+   * 정책만 바꾸려면 이 함수를 고치지 말고 나눌 것.
    */
   async canManageStaffAccount(
     adminAccountId: number,
