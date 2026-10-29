@@ -62,10 +62,10 @@ const SCHEDULED_STUCK_MS = 60 * 60_000;
 // 화면 · 로그가 읽을 만한 길이로 자른다(TEXT 칸).
 const REASON_MAX = 1_000;
 const BUSY_MESSAGE =
-  '엑셀 파일을 만드는 중입니다. 다 만들어지면 등록한 이메일로 알려 드립니다';
+  '엑셀 파일을 만드는 중입니다. 다 만들어지면 등록한 이메일로 알려 드립니다.';
 // 바로 받기는 메일을 보내지 않는다 — 같은 화면에서 받는 중이면 잠시 뒤 다시.
 const DIRECT_BUSY_MESSAGE =
-  '엑셀 파일을 만드는 중입니다. 잠시 뒤 다시 받아 주세요';
+  '엑셀 파일을 만드는 중입니다. 잠시 뒤 다시 받아 주세요.';
 
 /**
  * 모든 화면의 엑셀 공통(2026-10-28, 사용자 결정 — okf api/excel-exports.md). 화면은 ExcelExportSource 로 건수 · 파일만
@@ -232,16 +232,16 @@ export class ExcelExportsService {
         deliveryMethod: 'SCHEDULED',
       },
     });
-    if (!log) throw new NotFoundException('엑셀 파일을 찾을 수 없습니다');
+    if (!log) throw new NotFoundException('엑셀 파일을 찾을 수 없습니다.');
     if (log.status !== 'SUCCEEDED' || !log.storageKey || !log.expiresAt)
       throw new ConflictException(
         log.status === 'FAILED'
-          ? '엑셀 파일을 만들지 못했습니다. 다시 요청해 주세요'
+          ? '엑셀 파일을 만들지 못했습니다. 다시 요청해 주세요.'
           : BUSY_MESSAGE,
       );
     if (log.expiresAt.getTime() <= now.getTime())
       throw new GoneException(
-        '내려받기 기한(24시간)이 지났습니다. 다시 요청해 주세요',
+        '내려받기 기한(24시간)이 지났습니다. 다시 요청해 주세요.',
       );
     await this.assertCanStillView(log);
     const url = await this.requireStorage().downloadUrl(
@@ -331,7 +331,7 @@ export class ExcelExportsService {
       );
     if (admission.kind === 'wait')
       throw new HttpException(
-        `엑셀은 1분에 한 번 받을 수 있습니다. ${admission.seconds}초 뒤 다시 받아 주세요`,
+        `엑셀은 1분에 한 번 받을 수 있습니다. ${admission.seconds}초 뒤 다시 받아 주세요.`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
   }
@@ -358,7 +358,7 @@ export class ExcelExportsService {
       ))
     )
       throw new ForbiddenException(
-        '이 화면을 볼 권한이 없어 엑셀 파일을 받을 수 없습니다',
+        '이 화면을 볼 권한이 없어 엑셀 파일을 받을 수 없습니다.',
       );
     const source = this.registry.find(menu.url);
     await source?.assertRequester?.(adminAccountId);
@@ -369,7 +369,7 @@ export class ExcelExportsService {
       (await source.scopeKey(await this.callerOf(log))) !== log.scopeKey
     )
       throw new ForbiddenException(
-        '볼 수 있는 범위가 바뀌어 이 엑셀 파일을 받을 수 없습니다. 다시 요청해 주세요',
+        '볼 수 있는 범위가 바뀌어 이 엑셀 파일을 받을 수 없습니다. 다시 요청해 주세요.',
       );
   }
 
@@ -390,7 +390,7 @@ export class ExcelExportsService {
   ): Promise<void> {
     if (!this.mail || !this.adminWebUrl || !this.storage)
       throw new ServiceUnavailableException(
-        '지금은 1만 건 이상 엑셀을 만들 수 없습니다. 검색 조건을 좁혀 주세요',
+        '지금은 1만 건 이상 엑셀을 만들 수 없습니다. 검색 조건을 좁혀 주세요.',
       );
     const admin = await tx.adminAccount.findUnique({
       where: { adminAccountId },
@@ -398,7 +398,7 @@ export class ExcelExportsService {
     });
     if (!admin?.email)
       throw new BadRequestException(
-        '등록한 이메일이 없어 1만 건 이상 엑셀을 받을 수 없습니다. 검색 조건을 좁혀 주세요',
+        '등록한 이메일이 없어 1만 건 이상 엑셀을 받을 수 없습니다. 검색 조건을 좁혀 주세요.',
       );
   }
 

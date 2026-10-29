@@ -41,7 +41,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: isPlatformRole — 가드의 platformOnly 가 쓰는 플랫폼 계정 판정
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T07:10:00Z
   - id: admin-names
     resource: ../../src/common/admin-names.ts
     title: adminNames — 관리자 ID → 이름(문의사항 · 도입문의와 같이 씀)

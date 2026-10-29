@@ -42,7 +42,7 @@ export class ExcelDownloadsController {
   ): Promise<ExcelDownloadLinkResponseDto> {
     const id = parseRouteId(rawId);
     if (id === null)
-      throw new NotFoundException('엑셀 파일을 찾을 수 없습니다');
+      throw new NotFoundException('엑셀 파일을 찾을 수 없습니다.');
     return this.exports.download(user.id, id);
   }
 }
