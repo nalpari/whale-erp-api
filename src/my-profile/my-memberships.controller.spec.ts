@@ -34,8 +34,10 @@ describe('MyMembershipsController', () => {
       list,
       taxProfile,
     } as unknown as MyMembershipsService);
-    await controller.list(user);
-    expect(list).toHaveBeenCalledWith(12);
+    await controller.list(user, {});
+    expect(list).toHaveBeenCalledWith(12, false);
+    await controller.list(user, { includeRetired: true });
+    expect(list).toHaveBeenLastCalledWith(12, true);
     await controller.taxProfile(31, user);
     expect(taxProfile).toHaveBeenCalledWith(12, 31);
   });

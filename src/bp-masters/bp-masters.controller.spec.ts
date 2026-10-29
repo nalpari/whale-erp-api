@@ -1,4 +1,6 @@
 import { NotFoundException, StreamableFile } from '@nestjs/common';
+import { ExcelExportsService } from '../excel-exports/excel-exports.service';
+import { BpMasterExcelSource } from './bp-master-excel.source';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
@@ -16,7 +18,6 @@ describe('BpMastersController', () => {
   let controller: BpMastersController;
   let bpMasters: Record<
     | 'list'
-    | 'excel'
     | 'detail'
     | 'histories'
     | 'isLoginIdAvailable'
@@ -42,14 +43,20 @@ describe('BpMastersController', () => {
     bizCeoName: '김하늘',
     bizOpenDate: '2020-03-02',
   };
+  const excelSource = { menuUrl: '/bp-masters' };
+  let excelExports: { request: jest.Mock };
+  const res = { status: jest.fn() };
 
   beforeEach(async () => {
-    bpMasters = {
-      list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
-      excel: jest.fn().mockResolvedValue({
+    excelExports = {
+      request: jest.fn().mockResolvedValue({
+        kind: 'file',
         fileName: 'BP목록_20261023.xlsx',
         buffer: Buffer.from('x'),
       }),
+    };
+    bpMasters = {
+      list: jest.fn().mockResolvedValue({ items: [], total: 0 }),
       detail: jest.fn().mockResolvedValue({}),
       histories: jest.fn().mockResolvedValue({ items: [], total: 0 }),
       isLoginIdAvailable: jest.fn().mockResolvedValue(true),
@@ -63,7 +70,11 @@ describe('BpMastersController', () => {
     };
     const module = await Test.createTestingModule({
       controllers: [BpMastersController],
-      providers: [{ provide: BpMastersService, useValue: bpMasters }],
+      providers: [
+        { provide: BpMastersService, useValue: bpMasters },
+        { provide: ExcelExportsService, useValue: excelExports },
+        { provide: BpMasterExcelSource, useValue: excelSource },
+      ],
     })
       // 가드는 따로 시험한다(menu-permission.guard.spec). 여기서는 붙은 표시만 본다.
       .overrideGuard(MenuPermissionGuard)
@@ -130,11 +141,33 @@ describe('BpMastersController', () => {
     expect(bpMasters.remove).toHaveBeenCalledWith(9, 12);
   });
 
-  it('엑셀은 파일 이름을 붙여 xlsx 로 돌려준다', async () => {
-    const file = await controller.excel(user, { statuses: ['ACTIVE'] });
-    expect(bpMasters.excel).toHaveBeenCalledWith(9, { statuses: ['ACTIVE'] });
+  it('엑셀은 공통 엑셀에 BP 소스 · 호출자(대상 BP 없음) · 조건을 넘기고 파일이면 xlsx 로 돌려준다', async () => {
+    const file = await controller.excel(
+      user,
+      { statuses: ['ACTIVE'] },
+      res as never,
+    );
+    expect(excelExports.request).toHaveBeenCalledWith(
+      excelSource,
+      { adminAccountId: 9, bp: null },
+      { statuses: ['ACTIVE'] },
+    );
     expect(file).toBeInstanceOf(StreamableFile);
-    expect(file.getHeaders().disposition).toContain('.xlsx');
+    expect((file as StreamableFile).getHeaders().disposition).toContain(
+      '.xlsx',
+    );
+  });
+
+  it('1만 건 이상이면 202 — 메일 링크로 받는다', async () => {
+    excelExports.request.mockResolvedValueOnce({
+      kind: 'scheduled',
+      excelDownloadId: 3,
+      rowCount: 10_000,
+    });
+    await expect(
+      controller.excel(user, {}, res as never),
+    ).resolves.toMatchObject({ excelDownloadId: 3 });
+    expect(res.status).toHaveBeenCalledWith(202);
   });
 
   it.each(['abc', '0', '-1', '1.5', '2147483648'])(

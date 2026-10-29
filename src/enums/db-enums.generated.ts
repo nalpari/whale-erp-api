@@ -84,6 +84,16 @@ export const DB_ENUMS: EnumSource = {
     ['FULL_TIME', '정직원'],
     ['PART_TIME', '파트타이머'],
   ],
+  ExcelDeliveryMethod: [
+    ['DIRECT', '바로 받기'],
+    ['SCHEDULED', '예약 생성'],
+  ],
+  ExcelDownloadStatus: [
+    ['PENDING', '대기'],
+    ['PROCESSING', '생성 중'],
+    ['SUCCEEDED', '완료'],
+    ['FAILED', '실패'],
+  ],
   Gender: [
     ['MALE', '남'],
     ['FEMALE', '여'],

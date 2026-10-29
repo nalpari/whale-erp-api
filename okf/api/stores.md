@@ -1,23 +1,23 @@
 ---
 type: API
 title: Store management
-description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 바로 받기 (`GET /stores/excel`) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
+description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:37:14Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:30:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
-    title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-    last_modified: 2026-10-27T05:57:17Z
+    title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile · excelScopeKey)
+    last_modified: 2026-10-29T02:30:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-10-22T06:15:21Z
+    last_modified: 2026-10-29T02:30:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
-    title: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
-    last_modified: 2026-10-27T04:12:31Z
+    title: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
+    last_modified: 2026-10-29T02:30:00Z
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
@@ -45,7 +45,7 @@ sources:
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
     title: StoresModule — StorageModule, NtsModule verifier provider
-    last_modified: 2026-10-20T06:55:00Z
+    last_modified: 2026-10-29T02:30:00Z
   - id: api-enums
     resource: ../../src/enums/api-enums.ts
     title: API 전용 enum — StoreOperationRequirement · StoreBusinessVerificationResult
@@ -58,6 +58,10 @@ sources:
     resource: ../../test/stores.e2e-spec.ts
     title: DB 없는 e2e — 쿼리 · 본문 변환, 가드 연동, 뺀 bpCodeId 쿼리의 400
     last_modified: 2026-10-22T06:15:21Z
+  - id: store-excel-source
+    resource: ../../src/stores/store-excel.source.ts
+    title: StoreExcelSource — 공통 엑셀에 주는 건수 · 파일(/stores)
+    last_modified: 2026-10-29T02:30:00Z
 ---
 
 # What it covers
@@ -75,10 +79,10 @@ exists only there is not here.
 
 Out of the first cut, each for want of infrastructure rather than a decision:
 
-- **엑셀 예약 생성** for 10,000 rows and more (a stored file, kept 24 hours, mailed
-  as a link) — it needs a request table, a background job and a mail template.
-  Until then that size is a 400.
 - The 주소 검색 / 좌표 계산, which the screen does on its own.
+
+(엑셀 예약 생성 for 10,000+ rows was on this list until 2026-10-28; it is now the common
+[Excel exports](/api/excel-exports.md).)
 
 # Who sees which stores
 
@@ -254,14 +258,12 @@ has no separate download action.[^store-excel]
   its middle group starred; the screen shows it whole and the file has no password
   (front okf, S-BAYAJS). The image is not in the file. Cells are plain strings and
   numbers, so a name starting with `=` stays text.
-- **10,000 rows or more is a 400** asking to narrow the search — that size is meant
-  for 예약 생성, which does not exist yet. It is counted with the same `where` first,
-  so nothing is read.
-- **One download a minute per admin** (429 with the seconds left). The time is set
-  before the file is built, so a double click yields one file. A 4xx (too many rows)
-  does not use the minute; a server error does, so retrying a failing export cannot
-  read up to 10,000 rows again and again. It is counted in process memory, like the
-  login limits — more instances multiply it.
+- **The rest is the common [Excel exports](/api/excel-exports.md)** (2026-10-28): 10,000
+  rows or more is 예약 생성 (202, a link to the registered e-mail, 24 hours, the requester
+  only), the same admin's 점포 export is 409 while one is being made and once a minute
+  otherwise, and every request is logged in `excel_download_logs` for two years.
+  `StoreExcelSource` supplies `excelCount` (the list's `where`), `excelFile` and `excelScopeKey` (the scope fingerprint — a scheduled file is refused at download if the requester's store scope changed since it was built);
+  the old in-memory minute map and the 400 for 10,000 rows are gone.
 - The query takes the list's filters only. `page` · `pageSize` are a 400 (the global
   validation pipe forbids unknown keys), so the screen must not forward the list's
   query string as is.
@@ -444,8 +446,8 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
   messages it throws: the service logs that stack. The number itself is logged, and a
   개인사업자 number identifies a person — keep that in mind for log retention.
 
-[^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excel)
-[^store-excel]: 점포 목록 엑셀 — 열 · 연락처 가림 · 1만 건 · 1분 1회
+[^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile · excelScopeKey)
+[^store-excel]: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
 [^stores-controller]: /stores routes and the menu permission per action (`/stores`, MN000002 today)
 [^store-format]: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
 [^store-business-verifier]: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot

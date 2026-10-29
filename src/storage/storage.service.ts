@@ -19,18 +19,25 @@ export const DOWNLOAD_URL_SECONDS = 300;
  */
 export const PUT_DEADLINE_MS = 25_000;
 
+/**
+ * 저장소에 두는 파일 종류. 올린 파일의 종류(FileKind, 내용으로 판정)에 서버가 만든 엑셀(XLSX)을 더한 것이다 — XLSX 는
+ * 업로드 검사의 종류가 아니어서 사용자가 첨부로 올릴 수는 없다.
+ */
+export type StoredFileKind = FileKind | 'XLSX';
+
 // 1차 ERP 가 쓰던 맨 앞 폴더. 같은 버킷을 쓰므로 겹치지 않게 막는다 — images/ 는 공개 버킷 정책이 걸려 있다.
 const FIRST_GEN_ROOTS = ['images', 'attachments'];
 // 확장자와 Content-Type 은 클라이언트가 보낸 값을 믿지 않고 내용으로 판정한 종류에서 만든다.
-const CONTENT_TYPES: Record<FileKind, string> = {
+const CONTENT_TYPES: Record<StoredFileKind, string> = {
   JPG: 'image/jpeg',
   PNG: 'image/png',
   PDF: 'application/pdf',
+  XLSX: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 const DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 // newKey 가 만드는 원본 키와, 거기서 이끌어 낸 썸네일 키(.thumb.jpg). put · downloadUrl · delete 는 이 모양만 받는다.
 const KEY_PATTERN =
-  /^([a-z0-9][a-z0-9-]*)\/\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\.(?:jpg|png|pdf)|\.thumb\.jpg)$/;
+  /^([a-z0-9][a-z0-9-]*)\/\d+\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\.(?:jpg|png|pdf|xlsx)|\.thumb\.jpg)$/;
 const IMAGE_KEY = /\.(?:jpg|png)$/;
 const THUMB_SUFFIX = '.thumb.jpg';
 
@@ -64,7 +71,7 @@ export class StorageService {
   ) {}
 
   /** `{도메인}/{ID}/{UUID}.{확장자}`. 도메인은 첨부가 붙는 업무 이름(예: inquiries)이다. */
-  static newKey(domain: string, ownerId: number, kind: FileKind): string {
+  static newKey(domain: string, ownerId: number, kind: StoredFileKind): string {
     if (!DOMAIN_PATTERN.test(domain) || FIRST_GEN_ROOTS.includes(domain))
       throw new Error(`저장소 키에 쓸 수 없는 도메인 이름입니다: ${domain}`);
     if (!Number.isSafeInteger(ownerId) || ownerId < 0)
@@ -88,14 +95,14 @@ export class StorageService {
   }
 
   /**
-   * 원본을 올린다. thumbnail 이 켜져 있고 JPG · PNG 면 줄인 사본(.thumb.jpg)도 올린다 — PDF 는 건너뛴다.
+   * 원본을 올린다. thumbnail 이 켜져 있고 JPG · PNG 면 줄인 사본(.thumb.jpg)도 올린다 — PDF · XLSX 는 건너뛴다.
    * thumbnail: true 면 기본 크기, { maxPx } 면 업무가 정한 긴 변(px).
    * 사본을 먼저 만들어 깨진 이미지면 아무것도 올리지 않고, 사본 올리기가 실패하면 사본 → 원본 순으로 지운다.
    */
   async put(
     key: string,
     body: Buffer,
-    kind: FileKind,
+    kind: StoredFileKind,
     options: { thumbnail?: ThumbnailOption } = {},
   ): Promise<void> {
     StorageService.assertKey(key);
@@ -105,7 +112,7 @@ export class StorageService {
       throw new Error(`키 확장자와 파일 종류가 다릅니다: ${key} (${kind})`);
     const { thumbnail: option } = options;
     const thumbnail =
-      option && kind !== 'PDF'
+      option && (kind === 'JPG' || kind === 'PNG')
         ? await makeThumbnail(body, option === true ? undefined : option.maxPx)
         : null;
     const thumbKey = thumbnail ? StorageService.thumbnailKey(key) : null;
