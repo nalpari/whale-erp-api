@@ -749,6 +749,42 @@
         ]
       }
     },
+    "/auth/admin/me/password-verifications": {
+      "post": {
+        "operationId": "AdminAuthController_verifyMyPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminPasswordVerificationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "400": {
+            "description": "현재 비밀번호 불일치 · 빈 값"
+          },
+          "404": {
+            "description": "관리자 계정을 찾을 수 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "현재 비밀번호 확인(마이페이지 회원 탈퇴 1단계, S-JHQQNR). 맞아야 front 가 탈퇴 화면을 연다 — 맞으면 204, 틀리면\n400. 로그인한 관리자 아무나 받는다(지금은 탈퇴에서만 쓰지만 다른 확인에도 쓸 수 있게). 탈퇴 실행의 비밀번호\n확인은 그대로 둔다(이중 확인). 비밀번호를 받는 경로라 내 비밀번호 변경 · 탈퇴 실행과 같은 한도를 건다.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
     "/auth/admin/me/withdraw-eligibility": {
       "get": {
         "operationId": "AdminAuthController_getWithdrawEligibility",
@@ -4754,6 +4790,26 @@
         "operationId": "BpCodesController_list",
         "parameters": [
           {
+            "name": "withMaster",
+            "required": false,
+            "in": "query",
+            "description": "true 면 BP 마스터 계정이 있는 BP 만 — BP 선택 팝업이 BP 마스터 계정 목록과 같은 범위 · 건수를 보이려고 준다(2026-10-29 사용자 지정).\n없거나 false 면 거르지 않는다 — BP 탭 · 상태 확인은 BP 마스터 계정이 없는 BP 도 찾아야 한다. 'true' · 'false' 밖의 값은 400.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "keyword",
+            "required": false,
+            "in": "query",
+            "description": "상호 · BP코드 중 하나에 들어 있으면 나온다(대소문자 무시). 앞뒤 공백은 자른다.",
+            "schema": {
+              "maxLength": 50,
+              "example": "고래",
+              "type": "string"
+            }
+          },
+          {
             "name": "page",
             "required": true,
             "in": "query",
@@ -4775,17 +4831,6 @@
               "maximum": 200,
               "default": 20,
               "type": "number"
-            }
-          },
-          {
-            "name": "keyword",
-            "required": false,
-            "in": "query",
-            "description": "상호 · BP코드 중 하나에 들어 있으면 나온다(대소문자 무시). 앞뒤 공백은 자른다.",
-            "schema": {
-              "maxLength": 50,
-              "example": "고래",
-              "type": "string"
             }
           }
         ],
@@ -4809,7 +4854,7 @@
             "bearer": []
           }
         ],
-        "summary": "플랫폼 계정이 고를 고객 BP — 서비스 바로가기 「웨일ERP」의 BP 선택. 미삭제 고객 BP 를 사용 · 미사용 · 탈퇴 모두\nBP코드순으로 나눠 준다. 사용 중인 플랫폼 관리자(PM · PA)만 부르고, 그 밖의 관리자 · 직원 앱은 403.",
+        "summary": "플랫폼 계정이 고를 고객 BP — 서비스 바로가기 「웨일ERP」의 BP 선택. 미삭제 고객 BP 를 사용 · 미사용 · 탈퇴 모두\n최신 등록순으로 나눠 준다. withMaster 면 BP 마스터 계정이 있는 BP 만(BP 마스터 계정 목록과 같은 범위 · 순서). 사용 중인 플랫폼 관리자(PM · PA)만 부르고, 그 밖의 관리자 · 직원 앱은 403.",
         "tags": [
           "BpCodes"
         ]
@@ -17604,6 +17649,19 @@
           "newPasswordConfirm"
         ]
       },
+      "AdminPasswordVerificationDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "현재 비밀번호.",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "currentPassword"
+        ]
+      },
       "WithdrawEligibilityResponseDto": {
         "type": "object",
         "properties": {
@@ -21273,7 +21331,7 @@
         "type": "object",
         "properties": {
           "items": {
-            "description": "BP코드순. 미삭제 고객 BP 를 상태와 상관없이.",
+            "description": "최신 등록순. 미삭제 고객 BP 를 상태와 상관없이(withMaster 면 BP 마스터 계정이 있는 BP 만).",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/BpListItemResponseDto"

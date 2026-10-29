@@ -48,6 +48,7 @@ import {
 } from './dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
 import { AdminMyPasswordChangeDto } from './dto/admin-my-password-change.dto';
+import { AdminPasswordVerificationDto } from './dto/admin-password-verification.dto';
 import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
 import { AdminProfileEmailAvailabilityQueryDto } from './dto/admin-profile-email-availability-query.dto';
 import { AdminProfileEmailAvailabilityResponseDto } from './dto/admin-profile-email-availability.response.dto';
@@ -299,6 +300,30 @@ export class AdminAuthController {
   ): Promise<void> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return this.myPassword.change(user.id, dto);
+  }
+
+  /**
+   * 현재 비밀번호 확인(마이페이지 회원 탈퇴 1단계, S-JHQQNR). 맞아야 front 가 탈퇴 화면을 연다 — 맞으면 204, 틀리면
+   * 400. 로그인한 관리자 아무나 받는다(지금은 탈퇴에서만 쓰지만 다른 확인에도 쓸 수 있게). 탈퇴 실행의 비밀번호
+   * 확인은 그대로 둔다(이중 확인). 비밀번호를 받는 경로라 내 비밀번호 변경 · 탈퇴 실행과 같은 한도를 건다.
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @ApiBadRequestResponse({
+    description: '현재 비밀번호 불일치 · 빈 값',
+  })
+  @ApiNotFoundResponse({ description: '관리자 계정을 찾을 수 없음' })
+  @Throttle({
+    account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
+  })
+  @Post('me/password-verifications')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  verifyMyPassword(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: AdminPasswordVerificationDto,
+  ): Promise<void> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.myPassword.verify(user.id, dto.currentPassword);
   }
 
   /**

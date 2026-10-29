@@ -41,13 +41,14 @@ describe('BP 선택 목록 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
     const passwordHash = await hashPassword(PASSWORD);
 
-    // BP코드 역순으로 만든다 — id · 넣은 순서와 BP코드 순서가 어긋나야 정렬을 본다.
-    for (const [i, accountStatusCode, isDeleted] of [
-      [4, 'ACTIVE', false],
-      [3, 'ACTIVE', true],
-      [2, 'WITHDRAWN', false],
-      [1, 'INACTIVE', false],
-      [0, 'ACTIVE', false],
+    // 등록 시각을 BP코드 · 넣은 순서와 어긋나게 준다 — 최신 등록순(2 → 0 → 4 → 1)을 BP코드순 · id 순과 가려 본다.
+    const base = Date.UTC(2020, 0, 1);
+    for (const [i, accountStatusCode, isDeleted, seconds] of [
+      [4, 'ACTIVE', false, 20],
+      [3, 'ACTIVE', true, 0],
+      [2, 'WITHDRAWN', false, 40],
+      [1, 'INACTIVE', false, 10],
+      [0, 'ACTIVE', false, 30],
     ] as const) {
       const bp = await prisma.bpCode.create({
         data: {
@@ -55,6 +56,7 @@ describe('BP 선택 목록 (e2e, DB)', () => {
           tradeName: `고래커피 ${tag}-${i}`,
           accountStatusCode,
           isDeleted,
+          createdAt: new Date(base + seconds * 1000),
         },
       });
       bpIds[i] = bp.bpCodeId;
@@ -125,14 +127,14 @@ describe('BP 선택 목록 (e2e, DB)', () => {
     return token ? req.set('Authorization', `Bearer ${token}`) : req;
   };
 
-  it('플랫폼 마스터 · 관리자는 미삭제 고객 BP 를 사용 · 미사용 · 탈퇴 모두 BP코드순으로 받는다', async () => {
+  it('플랫폼 마스터 · 관리자는 미삭제 고객 BP 를 사용 · 미사용 · 탈퇴 모두 최신 등록순으로 받는다', async () => {
     for (const role of ['PM', 'PA']) {
       const res = await list(tokens[role], { keyword: tag });
       expect(res.status).toBe(200);
       const body = res.body as BpListResponseDto;
       expect(body.total).toBe(4);
       expect(body.items).toEqual(
-        [0, 1, 2, 4].map((i) => ({
+        [2, 0, 4, 1].map((i) => ({
           bpCodeId: bpIds[i],
           bpCode: `BP${n + i}`,
           tradeName: `고래커피 ${tag}-${i}`,
@@ -142,6 +144,23 @@ describe('BP 선택 목록 (e2e, DB)', () => {
         })),
       );
     }
+  });
+
+  it('withMaster=true 면 BP 마스터 계정이 있는 BP 만, false · 없음은 거르지 않고, 그 밖의 값은 400', async () => {
+    // BP 마스터 계정은 bpIds[0] 에만 있다(beforeAll 의 BM 로그인).
+    const only = await list(tokens.PM, { keyword: tag, withMaster: 'true' });
+    expect(only.status).toBe(200);
+    expect(only.body).toMatchObject({
+      items: [{ bpCodeId: bpIds[0] }],
+      total: 1,
+    });
+    for (const query of [{ withMaster: 'false' }, {}]) {
+      const all = await list(tokens.PM, { keyword: tag, ...query });
+      expect((all.body as BpListResponseDto).total).toBe(4);
+    }
+    expect(
+      (await list(tokens.PM, { keyword: tag, withMaster: 'yes' })).status,
+    ).toBe(400);
   });
 
   it('BP · 가맹 관리자는 403, 직원 앱은 403, 로그인하지 않으면 401', async () => {
@@ -205,7 +224,7 @@ describe('BP 선택 목록 (e2e, DB)', () => {
     });
     expect(second.status).toBe(200);
     expect(second.body).toMatchObject({
-      items: [{ bpCodeId: bpIds[4] }],
+      items: [{ bpCodeId: bpIds[1] }],
       total: 4,
     });
     const beyond = await list(tokens.PM, {

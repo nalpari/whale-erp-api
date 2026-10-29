@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:50:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T09:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -24,16 +24,16 @@ sources:
     last_modified: 2026-10-22T04:31:00Z
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
-    title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts · me/password-change, GET /auth/admin/login-info · me · me/bp · me/email-availability, PATCH /auth/admin/me · me/bp, POST /auth/admin/me/bp/business-verification
+    title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts · me/password-change · me/password-verifications, GET /auth/admin/login-info · me · me/bp · me/email-availability, PATCH /auth/admin/me · me/bp, POST /auth/admin/me/bp/business-verification
     last_modified: 2026-10-29T02:50:08Z
   - id: admin-profile-service
     resource: ../../src/auth/admin-profile.service.ts
     title: 마이페이지 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
-    last_modified: 2026-10-29T02:50:08Z
+    last_modified: 2026-10-27T07:48:04Z
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
     title: BpProfileService — 마이페이지 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영 · 지우기) · 사업자 번호 검사
-    last_modified: 2026-10-29T02:50:08Z
+    last_modified: 2026-10-23T02:40:00Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -64,7 +64,7 @@ sources:
     last_modified: 2026-10-19T05:00:00Z
   - id: admin-my-password-service
     resource: ../../src/auth/admin-my-password.service.ts
-    title: POST /auth/admin/me/password-change — 마이페이지 내 비밀번호 변경
+    title: POST /auth/admin/me/password-change · me/password-verifications — 마이페이지 내 비밀번호 변경 · 현재 비밀번호 확인
     last_modified: 2026-10-29T02:50:08Z
   - id: admin-password-policy
     resource: ../../src/auth/admin-password-policy.ts
@@ -73,11 +73,11 @@ sources:
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 선택과 진입
-    last_modified: 2026-10-21T09:00:00Z
+    last_modified: 2026-10-29T09:00:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService — 직원 · 점포 판정의 탭 BP 인자(scopeAdmin)
-    last_modified: 2026-10-26T07:41:19Z
+    last_modified: 2026-10-29T09:00:00Z
 ---
 
 # Routes
@@ -94,13 +94,14 @@ sources:
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
 | `GET /auth/admin/me` | admin | 마이페이지(S-JXKHCM) — `{ loginId, name, phone, email, roleTypeCode, createdAt, lastLoginAt }` for the signed-in admin's own account only (`CurrentUser().id`, never a BP/customer context) |
 | `PATCH /auth/admin/me` | admin | `{ name, phone, email, updatedAt }` → 204. Changing `email` does **not** check the current password (S-JXKHCM, user decision 2026-10-22 · confirmed 2026-10-23). The check added by the 2026-10-21 adversarial review was removed knowingly — a stolen access token alone can again change the login email and intercept a mailed temp-password via `POST /auth/admin/temporary-passwords`; the user was told and accepted it. With the check gone, a token-only caller can also learn whether an email is taken from the 409 (the same is already possible through `GET /auth/admin/me/email-availability`). `currentPassword` was kept for a while as an ignored optional field so the old front build didn't hit `forbidNonWhitelisted` 400; front #125 stopped sending it and the field is now gone (2026-10-26) — sending it now gets 400. my-profile(직원 앱)'s email-change keeps its own current-password check. `updatedAt` is the optimistic-lock token from `GET /me` — `updateMany` with `sameMillisecond(updatedAt)`, 409 if another admin (e.g. via platform-admins) saved first (same review round — the original diff had no concurrency check and silently overwrote concurrent edits). Re-checks email uniqueness (excluding `WITHDRAWN`) inside the same transaction, 409 on conflict; if email changed, invalidates every live `temporary_passwords` row for the account (used ones too) (an account-takeover path via the mailed temp-password flow otherwise survives an email change) and re-arms `isInitialPasswordUnsent` if any were invalidated and the account has no usable password (`'!'`) — the shared `voidTempPasswordsForEmailChange`, so a signed-in admin (who has one) never gets it; logs changed fields to `admin_change_histories` with `updatedBy` set to the signed-in admin. Account axis throttled on the signed-in user, not the request's own `email` field (the default account tracker keys on `body.email`, which this route's caller controls) |
-| `GET /auth/admin/me/email-availability?email=` | admin | `{ available }` for the 마이페이지 blur/Enter check — DTO-validated (400 on missing/malformed `email`, fixed from a prior 500). No `@SkipThrottle` (아이디 · 이메일 중복 확인은 기본 한도를 둔다는 결정, api #37 과 같다) |
+| `GET /auth/admin/me/email-availability?email=` | admin | `{ available }` for 마이페이지's blur/Enter check — DTO-validated (400 on missing/malformed `email`, fixed from a prior 500). No `@SkipThrottle` (아이디 · 이메일 중복 확인은 기본 한도를 둔다는 결정, api #37 과 같다) |
 | `POST /auth/admin/me/password-change` | admin | `{ currentPassword, newPassword, newPasswordConfirm }` → 204. 마이페이지 자기 비밀번호 변경(S-PTWREE) — 강제 변경(위)과 달리 현재 비밀번호를 먼저 본다. 자세한 순서·임시 비밀번호 처리는 아래 「Self-service password change」 |
+| `POST /auth/admin/me/password-verifications` | admin | `{ currentPassword }` → 204, 틀리면 400 `현재 비밀번호가 올바르지 않습니다.`. 회원 탈퇴 1단계(S-JHQQNR) — 맞아야 front 가 탈퇴 화면을 연다. 아래 「Self-service password change」 |
 | `GET /auth/admin/me/bp` | admin, BP 마스터만 | 마이페이지 사업자정보 탭(S-UOJVUR) — 그 밖의 권한은 403 |
 | `PATCH /auth/admin/me/bp` | admin, BP 마스터만 | 상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목 저장. `updatedAt` 필수(동시 수정 409) |
 | `POST /auth/admin/me/bp/business-verification` | admin, BP 마스터만 | 사업자등록번호 · 대표자명 · 개업일자 재인증 — 성공하면 세 값과 인증일시를 바로 반영 |
 | `GET /public-code-items?groups=A,B` | yes | the platform BP's 공통코드 — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
-| `GET /bp-codes?keyword=&page=&pageSize=` | PM · PA only | customer BPs to pick from, `{ items: [{ bpCodeId, bpCode, tradeName, accountStatusCode }], total }` (below) |
+| `GET /bp-codes?keyword=&withMaster=&page=&pageSize=` | PM · PA only | customer BPs to pick from, `{ items: [{ bpCodeId, bpCode, tradeName, accountStatusCode }], total }` (below) |
 | `GET /bp-codes/{bpCodeId}/stores` | any signed-in user, by BP | every undeleted store of a customer BP, `{ items, total }`. PM · PA see any customer BP; everyone else only their own (below) |
 | `GET /bp-codes/{bpCodeId}/code-items?groups=A,B` | any signed-in user, by BP | the same `codes` for a BP the caller may see — PM · PA any undeleted BP (the platform BP included); BP · 가맹 관리자 their own; 직원 앱 a BP with a joined, employed staff record; else 404 (below) |
 
@@ -308,7 +309,7 @@ did not guarantee.
 
 # Self-service password change
 
-`POST /auth/admin/me/password-change` is the 마이페이지 screen's own 1팀 `S-PTWREE` — the
+`POST /auth/admin/me/password-change` is 마이페이지's own 1팀 `S-PTWREE` — the
 signed-in admin already knows the current password and types it, unlike the
 forced popup above. `AdminMyPasswordService.change` (`admin-my-password.service.ts`).
 
@@ -317,8 +318,9 @@ forced popup above. `AdminMyPasswordService.change` (`admin-my-password.service.
   path (combination/length → login id → character → same-as-current →
   confirmation) — there is no issued-password step here, nothing was issued.
   A wrong current password is 400 `현재 비밀번호가 올바르지 않습니다.`, a
-  wording 1팀 picked for this screen only; it is not the 3팀 직원 앱 string
-  (`지금 비밀번호가 맞지 않습니다`) despite meaning the same thing.
+  wording 1팀 picked for 마이페이지 (비밀번호 변경 · 현재 비밀번호 확인 · 회원 탈퇴);
+  it is not the 3팀 직원 앱 string (`지금 비밀번호가 맞지 않습니다`) despite
+  meaning the same thing.
 - On success: new hash, `admin_change_histories` gets 「비밀번호 · 변경」 (no
   value, same no-value rule as the forced path). **No session is touched** —
   this spec's outcome keeps every device signed in (the forced path *does*
@@ -332,6 +334,20 @@ forced popup above. `AdminMyPasswordService.change` (`admin-my-password.service.
   too, same as `PATCH me`.
 - Does not touch terms agreement or `isPasswordChangeRequired` at all; those
   two only exist on the forced path's account state.
+
+`POST /auth/admin/me/password-verifications` (`AdminMyPasswordService.verify`,
+2026-10-29 재영) only checks the current password: 204 when it matches, 400 with the
+same `현재 비밀번호가 올바르지 않습니다.` otherwise, 404 for a deleted account, and
+it writes nothing. It exists for 회원 탈퇴's first step (S-JHQQNR): the screen showing
+account and store counts opens only after the password matches, where before the
+front had no way to check and opened it for any password. `POST me/withdraw` still
+checks the password itself — the first check is a gate for the screen, not a token
+the withdrawal trusts. Any signed-in admin may call it, not only a BP 마스터, so
+another screen can reuse it. A wrong password is **not** counted toward the login
+lock; guessing is held by the route's account-axis limit instead (10 per 10 minutes
+per signed-in account, the same as `me/password-change` and `me/withdraw`). Like
+`me/password-change` it is not `AllowPasswordChangePending()`, so a forced-change
+account gets 403.
 
 # Temporary passwords live only in `temporary_passwords`
 
@@ -706,7 +722,11 @@ BP 선택 팝업). Only an active PM or PA of the platform BP may call it
 없습니다…」, an account not in use 403 「사용할 수 없는 계정입니다…」, and a 직원 앱
 token 403. It lists undeleted customer BPs — **사용 · 미사용 · 탈퇴 alike**, since
 a withdrawn BP's records stay viewable and the stores · 공통코드 routes above answer
-for it (200, proven by e2e) — in `bp_code` order then `bp_code_id`, paged by the list rule. `keyword`
+for it (200, proven by e2e) — newest first (`created_at` desc, then `bp_code_id` desc, the same order as
+the BP 마스터 계정 list — 2026-10-29, was `bp_code` order), paged by the list rule. `withMaster=true`
+keeps only BPs with an undeleted BM account (the BP 마스터 계정 list scope, so the popup count matches it);
+absent or `false` filters nothing, because the front also calls this route to find the tab BP and the
+current BP status, which must still open a BP without a master account. Any other value is 400. `keyword`
 (trimmed, at most 50) matches 상호 or BP코드 as a case-insensitive substring,
 with `%` and `_` taken literally (`containsText`).
 `accountStatusCode` is the raw `ACCOUNT_STATUS` value; the screen labels it from
