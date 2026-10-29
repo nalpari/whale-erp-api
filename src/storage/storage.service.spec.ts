@@ -76,6 +76,24 @@ describe('StorageService.put · delete', () => {
     expect(options.abortSignal.aborted).toBe(false);
   });
 
+  it('서버가 만든 엑셀(XLSX)도 올리고 내려받고 지운다 — 업로드 검사의 종류에는 없다', async () => {
+    const { s3, send } = fakeS3();
+    const storage = new StorageService(s3, BUCKET);
+    const key = StorageService.newKey('excel-exports', 7, 'XLSX');
+    expect(key).toMatch(/^excel-exports\/7\/[0-9a-f-]{36}\.xlsx$/);
+
+    await storage.put(key, Buffer.from('PK'), 'XLSX', { thumbnail: true });
+    expect(send).toHaveBeenCalledTimes(1); // 썸네일은 만들지 않는다
+    expect((send.mock.calls[0][0] as PutObjectCommand).input.ContentType).toBe(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    await storage.delete(key);
+    expect((send.mock.calls.at(-1)?.[0] as DeleteObjectCommand).input.Key).toBe(
+      key,
+    );
+    expect(() => StorageService.thumbnailKey(key)).toThrow();
+  });
+
   it.each([
     ['JPG', 'image/jpeg'],
     ['PNG', 'image/png'],
@@ -183,6 +201,17 @@ describe('StorageService.downloadUrl', () => {
     expect(url.searchParams.get('response-content-disposition')).toBe(
       contentDisposition('계약서.pdf'),
     );
+  });
+
+  it('서버가 만든 엑셀 키도 받는다', async () => {
+    const key = StorageService.newKey('excel-exports', 7, 'XLSX');
+    const url = new URL(
+      await new StorageService(s3, BUCKET).downloadUrl(
+        key,
+        '점포목록_20261028.xlsx',
+      ),
+    );
+    expect(url.pathname).toBe(`/${key}`);
   });
 });
 

@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T09:23:20Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T05:36:27Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
@@ -361,7 +361,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 게시 상태 | `PUBLISHED` · `DRAFT` · `PRIVATE` | 게시 · 임시저장 · 비공개 |
 | 문의 답변 상태 | `RECEIVED` · `IN_PROGRESS` · `ANSWERED` | 접수 · 처리중 · 답변완료 |
 | 운영 알림 · 앱 푸시 | `notification` · `push` | |
-| 알림 템플릿 | `notification_template` | 발송 채널 + 템플릿 이름 + 템플릿 코드로 구분하는 제목·본문 틀. 변경 이력은 `notification_template_history`. 기본 템플릿 42건은 기본 제목 · 본문 · 변수 목록(`default_title` · `default_body` · `default_variables`)을 따로 두어 되돌리기에 쓴다. 운영자가 등록한 것은 비어 있다(NOTIFY-17 · 18, 2026-10-13) |
+| 알림 템플릿 | `notification_template` | 발송 채널 + 템플릿 이름 + 템플릿 코드로 구분하는 제목·본문 틀. 변경 이력은 `notification_template_history`. 기본 템플릿 46건은 기본 제목 · 본문 · 변수 목록(`default_title` · `default_body` · `default_variables`)을 따로 두어 되돌리기에 쓴다. 운영자가 등록한 것은 비어 있다(NOTIFY-17 · 18, 2026-10-13) |
 | 발송 채널 4종 | `NOTIFICATION` · `PUSH` · `EMAIL` · `ALIMTALK` | 운영 알림 · 앱 푸시 · 메일 · 알림톡. enum `NotificationTemplateChannel` |
 | 템플릿 코드 | `template_code` | 등록할 때 채널 접두(`NTF` · `PUSH` · `EMAIL` · `TALK`)를 채우고 플랫폼 운영자가 정하며 고칠 수 있다. 형식 `^[A-Z][A-Z0-9_]*$`, 고유. 개발자는 이 코드로 템플릿을 불러 발송하고, 알림 기록(`notifications.template_code`)과 1팀 `mail_send_logs.mail_type_code` 도 이 값을 담는다. 알림톡의 카카오 템플릿 코드는 `kakao_template_code` 로 따로 둔다 |
 | 템플릿 사용 여부 · 변수 목록 | `is_active` · `variables` | 지우지 않고 `is_active = false` 로 끈다. 변수 목록은 JSON 배열 `[{ name, label, isRequired, sampleValue, isButtonLink? }]`. `isButtonLink: true` 인 변수는 메일 공통 틀의 버튼이나 알림톡 버튼이 붙이므로 「필수 변수는 제목·본문에 있어야 한다」 검사에서 뺀다. 키가 없으면 false. 변수 이름이 아니라 이 표시로 가른다 (2026-10-07 재영) |
@@ -370,7 +370,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 
 ### 기본 템플릿 코드 (2026-10-07 재영)
 
-마이그레이션으로 넣는 기본 템플릿 44건의 코드다(운영 알림 11 · 앱 푸시 5 · 메일 26 · 알림톡 2). 운영자가 고칠 수 있지만, 발송 코드는 이 값으로 부르므로 고치면 발송 코드도 바꿔야 한다. 화면·문서에서 지어 쓰지 말고 이 값을 쓴다.
+마이그레이션으로 넣는 기본 템플릿 46건의 코드다(운영 알림 11 · 앱 푸시 5 · 메일 28 · 알림톡 2). 운영자가 고칠 수 있지만, 발송 코드는 이 값으로 부르므로 고치면 발송 코드도 바꿔야 한다. 화면·문서에서 지어 쓰지 말고 이 값을 쓴다.
 
 | 채널 | 템플릿 코드 | 템플릿 이름 |
 |---|---|---|
@@ -379,6 +379,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 메일 · 운영 알림과 같은 이름 10 | `EMAIL_` + 운영 알림 열 코드(예 `EMAIL_CONTRACT_SIGNED`) | 운영 알림과 같은 이름. 운영 알림이 붙여 보내지 않고 업무 쪽이 필요할 때 따로 부른다(운영 정책 NTF-03, 2026-10-13) |
 | 메일 · 3팀 8 | `EMAIL_STAFF_PASSWORD_PIN` · `EMAIL_STAFF_RESET_LINK` · `EMAIL_CHANGE_PIN` · `EMAIL_LEAD_CONFIRMATION` · `EMAIL_LEAD_REPLY` · `EMAIL_PAYSLIP_SENT` · `EMAIL_PAYSLIP_RESENT` · `EMAIL_STAFF_AFFILIATION_REQUEST` | 비밀번호 찾기 핀 · 관리자 초기화 재설정 링크 · 로그인 이메일 변경 핀 · 도입문의 접수 확인 · 도입문의 답변 메일 · 급여명세서 발송 메일 · 급여명세서 다시 발송 메일 · 소속 추가 확인 요청(직원에게, WHALEERP-130) |
 | 메일 · 1팀 8 | `EMAIL_SIGNUP_DONE` · `EMAIL_SIGNUP_ALERT` · `EMAIL_BP_REGISTER` · `EMAIL_PLAT_ADMIN_CREATE` · `EMAIL_BP_ADMIN_CREATE` · `EMAIL_PASSWORD_RESET` · `EMAIL_TEMP_PASSWORD` · `EMAIL_WITHDRAW_DONE` | 회원가입 완료 · 신규 BP 가입 알림 · BP 신규 등록 · 플랫폼 관리자 계정 생성 · BP 관리자 계정 생성 · 비밀번호 초기화 · 임시 비밀번호 발급 · 회원 탈퇴 완료. 뒤 코드는 1팀 옛 MAIL_TYPE 값 그대로 |
+| 메일 · 공통 엑셀 2 | `EMAIL_EXCEL_READY` · `EMAIL_EXCEL_FAILED` | 엑셀 파일 준비 완료 · 엑셀 파일 생성 실패(1만 건 이상 예약 생성, 2026-10-28) |
 | 알림톡 2 | `TALK_STAFF_INVITATION` · `TALK_STAFF_AFFILIATION_REQUEST` | 가입 초대 · 소속 추가 확인 요청(카카오 `WHALE_AFFILIATION_01` 등록 전 — 대체 문자로 간다, WHALEERP-130) |
 
 ## 인증 · 계정
@@ -446,6 +447,7 @@ match another.
 | 플랫폼 공식 휴일 | `public_holiday` | 출처 `source`(규칙 계산 · 공식 API) |
 | 공식 휴일 동기화 이력 | `public_holiday_synchronization_log` | |
 | BP 휴일 변경 이력 | `bp_holiday_change_history` | 보존 5년 |
+| 엑셀 다운로드 이력 | `excel_download_log` | 모든 화면 공통 한 테이블. 생성 방식 `DIRECT`(바로 받기) · `SCHEDULED`(예약 생성), 상태 `PENDING` · `PROCESSING` · `SUCCEEDED` · `FAILED`. 보존 2년 (2026-10-28) |
 
 # Changing it
 

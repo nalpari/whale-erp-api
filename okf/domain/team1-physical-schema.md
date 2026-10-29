@@ -1,10 +1,10 @@
 ---
 type: Reference
 title: Team 1 physical schema
-description: The PostgreSQL schema for 1팀's 27 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
+description: The PostgreSQL schema for 1팀's 28 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T00:50:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T03:30:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -16,7 +16,7 @@ sources:
     last_modified: 2026-10-07T00:30:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
-    title: Prisma 스키마 (3팀 48개 + 1팀 27개)
+    title: Prisma 스키마 (3팀 48개 + 1팀 28개)
     last_modified: 2026-10-27T04:12:31Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
@@ -42,6 +42,10 @@ sources:
     resource: ../../prisma/migrations/20261026135250_team1_bp_holiday_store_periods/migration.sql
     title: BP 휴일 대상 · 예외 점포를 기간 행으로(기본키 · 부분 고유 · CHECK)
     last_modified: 2026-10-26T06:06:05Z
+  - id: excel-download-logs-migration
+    resource: ../../prisma/migrations/20261028140448_team1_excel_download_logs/migration.sql
+    title: 엑셀 다운로드 이력(부분 고유 · CHECK 4 · 외래키 3)
+    last_modified: 2026-10-29T03:30:00Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -50,7 +54,8 @@ sources:
 
 # Status
 
-27 models are in `prisma/schema.prisma`, and three migrations carry them —
+27 models are in `prisma/schema.prisma` from the start — 28 since the excel download log
+(`20261028140448`, below) — and three migrations carry the first 27 —
 `20261006000000_team1_initial` for the DDL, `20261006000100_team1_initial_data`
 for the 245 constant rows, and `20261006000200_team1_public_holidays` for the 1346
 public holidays.[^team1-migration][^team1-data-migration][^holiday-migration]
@@ -82,8 +87,9 @@ edited by hand to match the migration, not regenerated.
 
 # What Prisma will not carry
 
-42 constraints exist only in the migration SQL — 37 from the initial DDL, one partial
-unique index added later and four from the holiday period migration; three CHECKs were
+47 constraints exist only in the migration SQL — 37 from the initial DDL, one partial
+unique index added later, four from the holiday period migration and five from the excel
+download log (foreign keys not counted; the excel log's three are SQL-only too); three CHECKs were
 later widened in place, not added
 (the `schema.prisma` header still counts the initial DDL's
 37).[^team1-migration][^menus-url-unique-migration][^holiday-periods-migration] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
@@ -115,16 +121,15 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   `^[0-9]{9,12}$` for 050X 평생번호 (`20261023103403_team1_stores_phone_twelve_digits`,
   dropped and re-added under the same name, with the column comment). The initial DDL
   still shows the old range; the newer migration is the truth.[^stores-phone-migration]
-  So do the raw DDL and 물리 ERD in `docs/raw` and 1팀's generator in front, which this
-  repository does not edit — 1팀 has to carry 9–12 into the ERD, or the next regenerated
-  DDL brings 9–11 back.
+  1팀's generator in front has carried 9–12 since, and the raw DDL and 물리 ERD in `docs/raw`
+  were regenerated from it on 2026-10-28.
 - **Two more phone CHECKs widened to match** — `admin_accounts_phone_format` and
   `store_business_profiles_biz_ceo_phone_format` went from `^[0-9]{10,11}$` to
   `^[0-9]{9,12}$` (`20261027131104_team1_phone_twelve_digits`, same names, with column
   comments), so every 1팀 연락처 — 회원가입, 내 정보, BP · 플랫폼 관리자, BP · 점포 대표자 —
   takes the 점포 연락처 range.[^phone-twelve-migration] `bp_codes.biz_ceo_phone` has no
-  CHECK; only its DTO changed. The same caveat applies: the raw DDL, 물리 ERD and 1팀's
-  generator still say 10–11.
+  CHECK; only its DTO changed. Unlike `stores_phone_format`, 1팀's generator has not carried
+  these two yet, so the raw DDL and 물리 ERD regenerated on 2026-10-28 still say 10–11 for them.
 - **The holiday link tables became period rows** —
   `20261026135250_team1_bp_holiday_store_periods` gave `holiday_store_mappings` an
   `effective_start_date` and `holiday_excluded_stores` an `effective_end_date`, replaced
@@ -133,8 +138,19 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   indexes (one open period per holiday and store) and two CHECKs (end not before start) —
   four more SQL-only constraints. Past dates of a BP holiday never change, so re-adding a
   store is a new row ([BP holidays](/api/bp-holidays.md)).[^holiday-periods-migration]
-  The raw DDL, 물리 ERD and 1팀's generator in front still show the old keys; 1팀 has to
-  carry this into the ERD.
+  1팀's generator in front carries the period rows, and `docs/raw` was regenerated from it on
+  2026-10-28.
+- **엑셀 다운로드 이력 `excel_download_logs`** (`20261028140448_team1_excel_download_logs`,
+  [Excel exports](/api/excel-exports.md)) — added to 1팀's ERD in front first and copied
+  from the regenerated DDL. Five SQL-only constraints: the partial unique index
+  `excel_download_logs_requested_by_menu_id_key (requested_by, menu_id) WHERE status IN
+  ('PENDING', 'PROCESSING')` (one export in progress per admin and screen — the app's lock
+  answers 409 first, the index is the last line) and four CHECKs: counts not negative; a
+  finished 예약 생성 has its storage key and expiry; **a `PROCESSING` row has `started_at`**
+  (without it the stuck-job cleanup never matches the row and that screen stays 409 for good);
+  a 바로 받기 is never `PENDING` (the queue would build it as a 예약 생성 and mail it). Its three
+  foreign keys (`admin_accounts`, `menus`, `bp_codes`) are SQL-only too — the Prisma model
+  keeps plain `Int` columns so the three referenced models need no back-relation fields.
 
 The `'WITHDRAWN'` literal in two of those was a placeholder while the
 `ACCOUNT_STATUS` code value was undecided; the initial-data migration fixes it as
@@ -303,7 +319,7 @@ must be absent, and no lunar holiday may appear after 2050.
 
 [^team1-migration]: 1팀 27 테이블 마이그레이션 (제약의 진실)
 [^team1-data-migration]: 1팀 초기 기준 데이터 245행 (마이그레이션 INSERT)
-[^prisma-schema]: Prisma 스키마 (3팀 48개 + 1팀 27개)
+[^prisma-schema]: Prisma 스키마 (3팀 48개 + 1팀 28개)
 [^holiday-migration]: 공식 휴일 1346행 (규칙 명세는 머리말에)
 [^menus-url-unique-migration]: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)
 [^terms-demo-migration]: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
