@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T07:20:30Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T07:54:36Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: controllers
     resource: ../../src/payslips/payslips.controller.ts
     title: GET /payslips · /payslips/summary · /payslips/:id (급여명세서 관리 MN000009 조회)
-    last_modified: 2026-10-29T07:20:38Z
+    last_modified: 2026-10-29T07:54:36Z
   - id: my-controller
     resource: ../../src/payslips/my-payslips.controller.ts
     title: GET /me/payslips · /me/payslips/:id (직원 근무 앱 토큰)
@@ -29,7 +29,7 @@ sources:
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-10-29T07:20:30Z
+    last_modified: 2026-10-29T07:54:36Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
@@ -263,7 +263,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
   급여 기간 마지막 날 가운데 가장 빠른 날의 다음 날, 한국) 전이면 422 `PERIOD_NOT_ENDED`(「아직 확정할 수 없습니다. YYYY-MM-DD 부터
   확정할 수 있습니다 — …」) — 남은 날의 근무가 빠진 명세서가 발송되지 않게 막는다(판정은 확정 트랜잭션 안에서 해 막히면 되돌린다). 기간 중 퇴직 · 계약 종료한 직원은 그 다음 날부터
   확정할 수 있어 퇴직 후 14일 청산 기한(근로기준법 제36조)을 막지 않는다. 계약 종료일은 급여 기간 계약의 효력 끝(`effectiveEnd`) 중 가장
-  늦은 날이고, 무기한 계약이 하나라도 있거나 계약이 없으면 보지 않는다. 초안 작성 · 임시저장 · 다시 계산은 그 전에도 된다(미리 보기, 운영 정책 PAY-06 v247 ·
+  늦은 날이고, 무기한 계약이 하나라도 있거나 계약이 없거나, 그 계약들의 진행 중 갱신(임시저장 ~ 수정 요청 — 체결 전, `previousContractId`)이 급여 기간 마지막 날까지 시작하면(시작일 없는 것 포함) 보지 않는다(계약이 끝나도 이어서 일할 수 있어서, api #206 리뷰). 퇴직일은 그래도 본다. 초안 작성 · 임시저장 · 다시 계산은 그 전에도 된다(미리 보기, 운영 정책 PAY-06 v247 ·
   v251, 2026-10-29 재영, WHALEERP-634). 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를
   켜면 소득세 · 지방소득세 대신 원천징수)가 하나라도 미입력이면 422 `DEDUCTION_MISSING`(본문 `items: [{ payslipItemId, itemName }]`).
   검토 사유가 있어도 확정하는 것이 「확인」이다 — 확인하지 않은 사유의 `acknowledged_at` 에 확정 시각을 남긴다. `confirmed_at` ·

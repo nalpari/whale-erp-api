@@ -1,5 +1,6 @@
 import { EmploymentType, Prisma, PrismaClient, Weekday } from '@prisma/client';
 import { addDays, kstDayStart, kstToday } from '../staff-members/kst-date';
+import { IN_PROGRESS } from '../contracts/signed-contract';
 import { addDay, mondayOf } from './pay-calculation';
 
 // 급여명세서 검토 대기 분류 가운데 출퇴근에서 나오는 셋(WHALEERP-229) — 출퇴근 누락(빠진 날 · 일수), 계약 만료 후 기록,
@@ -378,7 +379,9 @@ export function effectiveEnd(
  * 명세서를 확정할 수 있는 첫날(한국 날짜) — 퇴직일 · 마지막 계약 종료일 · 급여 기간 마지막 날 가운데 가장 빠른 날의 다음 날
  * (운영 정책 PAY-06 v251, 2026-10-29 재영). 기간 중 퇴직 · 계약 종료한 직원도 퇴직 후 14일 청산 기한(근로기준법 제36조) 안에
  * 확정 · 발송할 수 있게. 계약 종료일은 급여 기간 계약(`contractIds`)의 효력 끝(`effectiveEnd`) 중 가장 늦은 날이고, 무기한
- * 계약이 하나라도 있거나 계약이 없으면 보지 않는다.
+ * 계약이 하나라도 있거나 계약이 없으면 보지 않는다. 그 계약들의 진행 중 갱신(`IN_PROGRESS` — 임시저장 ~ 수정 요청, 체결 전)이
+ * 급여 기간 마지막 날까지 시작하면(시작일 없는 것 포함) 그때도 보지 않는다 — 계약이 끝나도 이어서 일할 수 있어, 남은 날 근무가 빠진 채 확정되지 않게(api #206 리뷰).
+ * 퇴직일은 그래도 본다.
  */
 export async function confirmableFrom(
   db: Db,
@@ -388,7 +391,7 @@ export async function confirmableFrom(
     periodEndDate: Date;
   },
 ): Promise<string> {
-  const [contracts, staff] = await Promise.all([
+  const [contracts, staff, renewing] = await Promise.all([
     db.contract.findMany({
       where: { contractId: { in: [...basis.contractIds] } },
       select: CONTRACT_END_SELECT,
@@ -397,11 +400,21 @@ export async function confirmableFrom(
       where: { staffMemberId: basis.staffMemberId },
       select: { retiredDate: true },
     }),
+    // 급여 기간 계약의 갱신(직전 계약)만 — 무관하게 남은 옛 임시저장이 앞당김을 끄지 않게. 급여 기간 마지막 날까지 시작하는 것
+    // (시작일 없는 것 포함)만 — 다음 달에 시작하는 갱신은 남은 날을 메우지 않는다
+    db.contract.count({
+      where: {
+        staffMemberId: basis.staffMemberId,
+        status: { in: IN_PROGRESS },
+        previousContractId: { in: [...basis.contractIds] },
+        OR: [{ startDate: null }, { startDate: { lte: basis.periodEndDate } }],
+      },
+    }),
   ]);
   const ends = contracts.map(effectiveEnd);
   const candidates = [ymd(basis.periodEndDate)];
   if (staff.retiredDate) candidates.push(ymd(staff.retiredDate));
-  if (ends.length && !ends.includes(null))
+  if (renewing === 0 && ends.length && !ends.includes(null))
     candidates.push((ends as string[]).sort().at(-1)!);
   return addDay(candidates.sort()[0], 1);
 }

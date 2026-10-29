@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Payslips](/api/payslips.md) — api #206 최종 리뷰 블로커: 확정 가능일의 계약 종료일 앞당김을 그 계약들의 진행 중 갱신(`IN_PROGRESS` · `previousContractId`, 체결 전)이 급여 기간 마지막 날까지 시작하면(시작일 없는 것 포함) 쓰지 않는다 — 무관하게 남은 옛 임시저장은 치지 않는다 — 갱신 계약이 서명 대기인데 기간 중에 확정되어 남은 날 근무가 빠지던 것. 퇴직일은 그대로 본다. 422 문구 · Swagger 설명도 맞췄다. 단위 · e2e(계약 종료 다음 날 확정 200 · 갱신 서명 대기면 422 · 다음 달 시작 갱신이면 200).
 * **Update**: [Payslips](/api/payslips.md) — api #206 리뷰(재영, 운영 정책 PAY-06 v251): 확정할 수 있는 날을 퇴직일 · 마지막 계약 종료일 · 급여 기간 마지막 날 가운데 가장 빠른 날의 다음 날로(`confirmableFrom`) — 기간 중 퇴직자가 14일 청산 기한(근로기준법 제36조) 안에 확정 · 발송할 수 있게. 422 문구도 「아직 확정할 수 없습니다. … 부터」로. 참고 지적 반영: 출근 없는 퇴근은 급여 기간 안의 것만 확인 필요 건수에 센다(앞 달 날의 것은 앞 달 명세서가 알린다). 단위 · e2e(어제 퇴직 → 기간 중 확정 200).
 * **Update**: main 병합(api electabuzz, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Payslips](/api/payslips.md) · [Attendance](/api/attendance.md) — api #206 code-review 반영: 두 문서의 `generated.at` 과 payslips 의 controller · edit-service `last_modified` 를 맞췄다.

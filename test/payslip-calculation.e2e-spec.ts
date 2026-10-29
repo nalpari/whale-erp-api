@@ -614,4 +614,74 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       });
     }
   });
+
+  it('기간 중 계약이 끝나면 다음 날부터 확정된다 — 그 계약의 갱신이 서명 대기면 막고, 다음 달에 시작하는 갱신은 막지 않는다(운영 정책 PAY-06 v251, api #206 리뷰)', async () => {
+    const { periodEndDate, status } = await prisma.payslip.findUniqueOrThrow({
+      where: { payslipId },
+    });
+    // 9/26 계약이 어제 끝났고(8/1 계약은 9/25 에 끝났다), 급여 기간 끝은 오늘이다
+    const last = await prisma.contract.findFirstOrThrow({
+      where: { staffMemberId, startDate: day('2026-09-26') },
+    });
+    await prisma.payslip.update({
+      where: { payslipId },
+      data: { periodEndDate: kstToday() },
+    });
+    await prisma.contract.update({
+      where: { contractId: last.contractId },
+      data: { endDate: addDays(kstToday(), -1) },
+    });
+    const confirm = async (code: number) =>
+      send('post', `/payslips/${payslipId}/confirm`, code, {
+        updatedAt: (await detail()).updatedAt,
+      });
+    const cancel = async () =>
+      send('post', `/payslips/${payslipId}/cancel-confirmation`, 200, {
+        updatedAt: (await detail()).updatedAt,
+      });
+    let renewalId: number | undefined;
+    try {
+      await confirm(200);
+      await cancel();
+
+      // 그 계약의 갱신이 오늘 시작하는데 서명 대기 — 계약이 끝나도 이어서 일하므로 막는다
+      ({ contractId: renewalId } = await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId,
+          employmentType: 'PART_TIME',
+          contractMethod: 'PAPER',
+          startDate: kstToday(),
+          isHealthPensionInsured: false,
+          isEmploymentInjuryInsured: false,
+          wageAmount: 12_000,
+          weeklyHoliday: 'SUN',
+          status: 'PENDING_SIGNATURE',
+          createdBy: bmId,
+          previousContractId: last.contractId,
+        },
+      }));
+      const blocked = await confirm(422);
+      expect((blocked.body as { code: string }).code).toBe('PERIOD_NOT_ENDED');
+
+      // 갱신이 급여 기간 뒤(내일)에 시작하면 남은 날을 메우지 않는다 — 다시 확정된다
+      await prisma.contract.update({
+        where: { contractId: renewalId },
+        data: { startDate: addDays(kstToday(), 1) },
+      });
+      await confirm(200);
+      await cancel();
+    } finally {
+      if (renewalId !== undefined)
+        await prisma.contract.delete({ where: { contractId: renewalId } });
+      await prisma.contract.update({
+        where: { contractId: last.contractId },
+        data: { endDate: null },
+      });
+      await prisma.payslip.update({
+        where: { payslipId },
+        data: { periodEndDate, status },
+      });
+    }
+  });
 });

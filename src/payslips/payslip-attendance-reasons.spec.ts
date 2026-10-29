@@ -191,6 +191,8 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
         ? [{ changedAt: new Date(closedAt) }]
         : [],
     });
+    const count = jest.fn();
+    beforeEach(() => count.mockReset().mockResolvedValue(0));
     const from = (
       contracts: object[],
       retiredDate: string | null = null,
@@ -198,7 +200,10 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
     ) =>
       confirmableFrom(
         {
-          contract: { findMany: jest.fn().mockResolvedValue(contracts) },
+          contract: {
+            findMany: jest.fn().mockResolvedValue(contracts),
+            count,
+          },
           staffMember: {
             findUniqueOrThrow: jest.fn().mockResolvedValue({
               retiredDate: retiredDate
@@ -242,6 +247,33 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
       expect(await from([contract('2026-10-20')], '2026-10-25')).toBe(
         '2026-10-21',
       );
+    });
+
+    it('그 계약의 진행 중 갱신(체결 전)이 있으면 계약 종료일은 보지 않는다 — 퇴직일은 본다(api #206 리뷰)', async () => {
+      count.mockResolvedValue(1);
+      expect(await from([contract('2026-10-15')])).toBe('2026-11-01');
+      expect(await from([contract('2026-10-15')], '2026-10-20')).toBe(
+        '2026-10-21',
+      );
+      expect(count).toHaveBeenCalledWith({
+        where: {
+          staffMemberId: 7,
+          status: {
+            in: [
+              'DRAFT',
+              'PENDING_SEND',
+              'PENDING_SIGNATURE',
+              'CORRECTION_REQUESTED',
+            ],
+          },
+          // 급여 기간 계약의 갱신만, 급여 기간 마지막 날까지 시작하는 것만 — 다음 달에 시작하는 갱신은 남은 날을 메우지 않는다
+          previousContractId: { in: [1] },
+          OR: [
+            { startDate: null },
+            { startDate: { lte: new Date('2026-10-31T00:00:00Z') } },
+          ],
+        },
+      });
     });
   });
 
