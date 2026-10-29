@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Admin auth](/api/admin-auth.md) — 회원 탈퇴 1단계용 현재 비밀번호 확인 `POST /auth/admin/me/password-verifications` 를 만들었다(재영 결정, S-JHQQNR). `{ currentPassword }` 가 맞으면 204, 틀리면 400 「현재 비밀번호가 올바르지 않습니다.」(내 비밀번호 변경 · 탈퇴 실행과 같은 비교 · 문구), 빈 값 400, 지운 계정 404. 아무것도 쓰지 않고 로그인 잠금에도 세지 않으며, 계정 축 10분 10건 한도를 건다. 로그인한 관리자 아무나 부를 수 있다. 탈퇴 실행의 비밀번호 확인은 그대로다(이중 확인). openapi 갱신.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff members](/api/staff-members.md) — api #164 후속(#186): 저장 · 전환 표 · 재발송 응답 status 설명을 계정 있는 번호(소속 추가 확인 요청 · 발송 대기)와 거부 · 만료 되살리기에 맞추고, 거절한 요청의 계약은 상세 재발송으로 되살아남을 적음. 기본 알림 템플릿 e2e 기대 목록에 소속 추가 확인 요청 알림톡 · 메일(44건).
 * **Update**: main 병합(api monferno, main #177 · #178 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
 * **Update**: main 병합(api monferno, main #182 · #184 까지): okf/log · [Employment Contract Batch](/api/employment-contract-batch.md) 충돌은 양쪽 기록을 살리고 생성 시각은 늦은 값을 썼다. 새 마이그레이션이 없어 `20261028140448_team1_excel_download_logs` 가 그대로 마지막이다.
