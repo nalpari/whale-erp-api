@@ -200,7 +200,8 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
       method: null,
     });
 
-    await files.fillMissing(now);
+    // 한 번에 50건씩 고른다 — 앞 suite 가 남긴 계약이 많으면 이 계약들 차례가 늦다. 더 만들 것이 없을 때까지 돈다
+    for (let run = 0; run < 50 && (await files.fillMissing(now)) > 0; run++);
     // 다른 테스트 행과 상관없이 이 계약들만 본다
     const [b, r, n, o, p] = await Promise.all(
       [backfill, recent, tooNew, tooOld, paper].map(docs),
