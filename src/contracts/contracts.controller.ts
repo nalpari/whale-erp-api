@@ -53,6 +53,10 @@ import {
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
 import { ContractIdPipe } from './contract-id.pipe';
 import { ContractsService, type PaperDocument } from './contracts.service';
+import {
+  BP_MISSING_DESCRIPTION,
+  BP_NOT_FOUND_DESCRIPTION,
+} from './contracts-swagger';
 
 /** 종이 계약 날인본 칸. 근로계약서는 필수(서비스가 본다), 임금계약서는 선택. 칸마다 한 개, 하나에 10MB 까지. */
 const PAPER_FIELDS = [
@@ -109,12 +113,6 @@ function paperDocuments(files: PaperFiles | undefined): PaperDocument[] {
     ...one('WAGE_CONTRACT', files?.wageContract),
   ];
 }
-
-/** 가드가 정한 대상 BP 의 404 — 플랫폼 계정이 보낸 X-Bp-Code-Id 가 쓸 수 없는 BP 다(점포 정보 관리와 같다). */
-export const BP_NOT_FOUND_DESCRIPTION =
-  '플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)';
-/** 플랫폼 계정이 BP 를 고르지 않음 — 점포 정보 관리와 같은 400 이다. */
-export const BP_MISSING_DESCRIPTION = '플랫폼 계정의 X-Bp-Code-Id 누락';
 
 const PAPER_BODY = {
   schema: {

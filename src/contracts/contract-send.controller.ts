@@ -21,7 +21,7 @@ import { ContractIdPipe } from './contract-id.pipe';
 import {
   BP_MISSING_DESCRIPTION,
   BP_NOT_FOUND_DESCRIPTION,
-} from './contracts.controller';
+} from './contracts-swagger';
 import { SendContractDto } from './dto/send-contract.dto';
 import { ContractSendService, type EndResult } from './contract-send.service';
 import { SendContractResponseDto } from './dto/send-contract.response.dto';
