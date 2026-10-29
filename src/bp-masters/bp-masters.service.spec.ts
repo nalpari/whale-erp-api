@@ -1,6 +1,6 @@
 import {
-  BadRequestException,
   ConflictException,
+  ForbiddenException,
   HttpException,
   NotFoundException,
   ServiceUnavailableException,
@@ -1120,31 +1120,23 @@ describe('BpMastersService', () => {
     });
   });
 
-  describe('excel', () => {
-    it('1만 건 이상이면 400 이고 1분 제한에 세지 않는다', async () => {
-      prisma.bpCode.count.mockResolvedValue(10_000);
-      await expect(service.excel(CALLER, {})).rejects.toBeInstanceOf(
-        BadRequestException,
+  // 1분 제한 · 1만 건 기준 · 생성 중 거절 · 이력은 공통 엑셀(ExcelExportsService)이 맡는다 — test/excel-exports.e2e-spec.ts.
+  describe('엑셀 — 건수 · 파일', () => {
+    it('건수는 목록과 같은 조건으로 센다 — 1만 건이 넘어도 그대로 돌려준다', async () => {
+      prisma.bpCode.count.mockResolvedValue(12_480);
+      await expect(service.excelCount({ statuses: ['ACTIVE'] })).resolves.toBe(
+        12_480,
       );
-      prisma.bpCode.count.mockResolvedValue(1);
-      await expect(service.excel(CALLER, {})).resolves.toEqual(
-        partial({
-          fileName: expect.stringMatching(/^BP목록_\d{8}\.xlsx$/) as string,
-        }),
+      const { where } = firstArg<{ where: Prisma.BpCodeWhereInput }>(
+        prisma.bpCode.count,
       );
+      expect(where).toEqual(partial({ accountStatusCode: { in: ['ACTIVE'] } }));
+      expect(prisma.bpCode.findMany).not.toHaveBeenCalled();
     });
 
-    it('한 사람 1분에 한 번 — 다시 받으면 429', async () => {
-      await service.excel(CALLER, {});
-      const error = await service.excel(CALLER, {}).catch((e: unknown) => e);
-      expect(error).toBeInstanceOf(HttpException);
-      expect((error as HttpException).getStatus()).toBe(429);
-      // 다른 사람은 받을 수 있다.
-      await expect(service.excel(2, {})).resolves.toBeDefined();
-    });
-
-    it('목록과 같은 조건 · 순서로 전부 담는다', async () => {
-      await service.excel(CALLER, { statuses: ['ACTIVE'] });
+    it('파일은 목록과 같은 조건 · 순서로 전부 담는다', async () => {
+      const buffer = await service.excelFile({ statuses: ['ACTIVE'] });
+      expect(buffer.subarray(0, 2).toString()).toBe('PK');
       const { where, orderBy, take } = firstArg<{
         where: Prisma.BpCodeWhereInput;
         orderBy: unknown;
@@ -1153,6 +1145,41 @@ describe('BpMastersService', () => {
       expect(where).toEqual(partial({ accountStatusCode: { in: ['ACTIVE'] } }));
       expect(orderBy).toEqual([{ createdAt: 'desc' }, { bpCodeId: 'desc' }]);
       expect(take).toBeUndefined();
+    });
+
+    // 예약 생성은 요청 뒤 배치가 만든다 — 그 사이 막힌 계정이나 플랫폼 권한을 잃은 계정에는 파일을 만들어 보내지 않는다.
+    it('파일을 만들 사람은 지금도 쓸 수 있는 플랫폼 계정이어야 한다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValueOnce({
+        roleTypeCode: 'PA',
+        bpCode: { isPlatform: true },
+      });
+      await expect(service.assertExcelCaller(7)).resolves.toBeUndefined();
+      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            adminAccountId: 7,
+            isDeleted: false,
+            accountStatusCode: 'ACTIVE',
+          },
+        }),
+      );
+    });
+
+    it('미사용 · 탈퇴 · 삭제 계정이면 403', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValueOnce(null);
+      await expect(service.assertExcelCaller(7)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it('플랫폼 권한이 아니면(고객 BP 의 계정 · BP 권한) 403', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValueOnce({
+        roleTypeCode: 'BM',
+        bpCode: { isPlatform: false },
+      });
+      await expect(service.assertExcelCaller(7)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
     });
   });
 });
