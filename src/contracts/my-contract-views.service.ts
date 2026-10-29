@@ -176,7 +176,7 @@ export class MyContractViewsService {
     // 계약 행이 점포를 외래키로 가리켜 없으면 데이터가 깨진 것이다(목록의 storeNames 와 같다)
     if (!store)
       throw new InternalServerErrorException(
-        `점포 ${c.storeId} 를 찾을 수 없습니다`,
+        `점포 ${c.storeId} 를 찾을 수 없습니다.`,
       );
 
     const item = itemOf(c, store.name, now);

@@ -47,7 +47,7 @@ export class PublicNoticesController {
     return this.posts.get(
       ['GUEST'],
       'NOTICE',
-      idOf(rawId, '게시물을 찾을 수 없습니다'),
+      idOf(rawId, '게시물을 찾을 수 없습니다.'),
     );
   }
 
@@ -62,8 +62,8 @@ export class PublicNoticesController {
     @Param('postId') rawId: string,
     @Param('postAttachmentId') rawAttachmentId: string,
   ): Promise<DownloadUrlResponseDto> {
-    const postId = idOf(rawId, '게시물을 찾을 수 없습니다');
-    const attachmentId = idOf(rawAttachmentId, '첨부파일을 찾을 수 없습니다');
+    const postId = idOf(rawId, '게시물을 찾을 수 없습니다.');
+    const attachmentId = idOf(rawAttachmentId, '첨부파일을 찾을 수 없습니다.');
     return this.posts.attachmentDownloadUrl(['GUEST'], postId, attachmentId);
   }
 }

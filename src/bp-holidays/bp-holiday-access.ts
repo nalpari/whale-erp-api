@@ -40,13 +40,13 @@ export interface HolidayActions {
   blockedReason: string | null;
 }
 
-export const ENDED_REASON = '끝난 휴일은 고칠 수 없습니다';
+export const ENDED_REASON = '끝난 휴일은 고칠 수 없습니다.';
 export const SHARED_REASON =
-  '맡지 않은 점포가 함께 묶인 휴일입니다 — 맡은 점포만 빼거나 더할 수 있습니다';
+  '맡지 않은 점포가 함께 묶인 휴일입니다 — 맡은 점포만 빼거나 더할 수 있습니다.';
 export const TODAY_START_REASON =
-  '오늘 시작한 휴일은 강제 종료할 수 없습니다 — 삭제해 주세요';
+  '오늘 시작한 휴일은 강제 종료할 수 없습니다 — 삭제해 주세요.';
 export const ALL_STORES_REASON =
-  '전체 점포 휴일은 BP 마스터 · 전체 점포 BP 관리자만 고칠 수 있습니다';
+  '전체 점포 휴일은 BP 마스터 · 전체 점포 BP 관리자만 고칠 수 있습니다.';
 
 /** 본사 역할 중 전체 점포 휴일을 다루는 것. 가맹 역할(FM · FA)은 전체 점포여도 다루지 않는다. */
 const HQ_ROLES = new Set(['BM', 'BA']);

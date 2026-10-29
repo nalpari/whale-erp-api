@@ -40,7 +40,7 @@ export interface PostUpload {
   sizeBytes: number;
 }
 
-const NOT_FOUND = '게시물을 찾을 수 없습니다';
+const NOT_FOUND = '게시물을 찾을 수 없습니다.';
 /** 공지사항 하나의 첨부 상한(운영 정책 CNT-18). DB 도 자리(sort_order) 1~5 로 막는다. */
 export const MAX_POST_ATTACHMENTS = 5;
 /** 첨부(10MB, 5개까지)를 트랜잭션 안에서 올린다 — 기본 5초로는 느린 업로드가 롤백된다(문의 첨부와 같다). */
@@ -245,7 +245,7 @@ export class PostsService {
         });
         if (count === 0)
           throw new ConflictException(
-            '그사이 다른 관리자가 고쳤거나 지웠습니다. 다시 불러온 뒤 고쳐 주세요',
+            '그사이 다른 관리자가 고쳤거나 지웠습니다. 다시 불러온 뒤 고쳐 주세요.',
           );
         await tx.postAudience.deleteMany({ where: { postId } });
         await saveAudiences(tx, postId, dto.audiences);
@@ -257,13 +257,13 @@ export class PostsService {
         });
         const liveIds = new Set(live.map((a) => a.postAttachmentId));
         if (removeIds.some((id) => !liveIds.has(id)))
-          throw new BadRequestException('없는 첨부파일입니다');
+          throw new BadRequestException('없는 첨부파일입니다.');
         const kept = live.filter(
           (a) => !removeIds.includes(a.postAttachmentId),
         );
         if (kept.length + files.length > MAX_POST_ATTACHMENTS)
           throw new BadRequestException(
-            `첨부파일은 공지사항 하나에 ${MAX_POST_ATTACHMENTS}개까지 올릴 수 있습니다`,
+            `첨부파일은 공지사항 하나에 ${MAX_POST_ATTACHMENTS}개까지 올릴 수 있습니다.`,
           );
         if (removeIds.length)
           await tx.postAttachment.updateMany({
@@ -308,7 +308,7 @@ export class PostsService {
       select: { postId: true },
     });
     if (!post) throw new NotFoundException(NOT_FOUND);
-    throw new ConflictException('이미 지운 게시물입니다');
+    throw new ConflictException('이미 지운 게시물입니다.');
   }
 
   /** 관리자의 첨부 내려받기 주소. 지운 글 · 뺀 첨부 · 다른 글의 첨부 · 경로와 다른 종류의 글이면 404. */
@@ -327,7 +327,8 @@ export class PostsService {
       },
       select: { storageKey: true, fileName: true },
     });
-    if (!attachment) throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+    if (!attachment)
+      throw new NotFoundException('첨부파일을 찾을 수 없습니다.');
     return {
       url: await storage.downloadUrl(
         attachment.storageKey,
@@ -368,7 +369,7 @@ export class PostsService {
         error.code === 'P2028'
       )
         throw new ServiceUnavailableException(
-          '저장이 늦어졌습니다. 잠시 뒤 다시 저장해 주세요',
+          '저장이 늦어졌습니다. 잠시 뒤 다시 저장해 주세요.',
         );
       throw error;
     }
@@ -405,7 +406,7 @@ export class PostsService {
         error instanceof Error ? error.stack : String(error),
       );
       throw new ServiceUnavailableException(
-        '첨부파일을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
+        '첨부파일을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     }
     await tx.postAttachment.createMany({
@@ -452,13 +453,13 @@ export class PostsService {
   ): Promise<PostData> {
     if (dto.status === 'PUBLISHED' && dto.audiences.length === 0)
       throw new BadRequestException(
-        '게시하려면 노출 대상을 하나 이상 골라 주세요',
+        '게시하려면 노출 대상을 하나 이상 골라 주세요.',
       );
     const common = { title: dto.title, body: dto.body, status: dto.status };
 
     if (contentType === 'FAQ') {
       if (!dto.faqCategoryCode)
-        throw new BadRequestException('FAQ 카테고리를 골라 주세요');
+        throw new BadRequestException('FAQ 카테고리를 골라 주세요.');
       // 카테고리는 게시로 저장할 때와 내용(제목 · 본문 · 카테고리)을 고칠 때만 본다. 사용 중지된 카테고리의
       // FAQ 도 비공개 · 임시저장으로 내리고 지울 수는 있어야 한다(2026-10-13 재영).
       const contentChanged =
@@ -484,14 +485,14 @@ export class PostsService {
     }
 
     if (!dto.noticeType)
-      throw new BadRequestException('공지사항 유형을 골라 주세요');
+      throw new BadRequestException('공지사항 유형을 골라 주세요.');
     const start = dto.publishStartDate
       ? parseDateOnly(dto.publishStartDate)
       : null;
     const end = dto.publishEndDate ? parseDateOnly(dto.publishEndDate) : null;
     if (start && end && end < start)
       throw new BadRequestException(
-        '게시 종료일이 시작일보다 앞설 수 없습니다',
+        '게시 종료일이 시작일보다 앞설 수 없습니다.',
       );
     return {
       ...common,
@@ -525,10 +526,10 @@ function assertAttachable(
 ): void {
   if (files.length === 0) return;
   if (contentType === 'FAQ')
-    throw new BadRequestException('FAQ 에는 첨부파일을 올릴 수 없습니다');
+    throw new BadRequestException('FAQ 에는 첨부파일을 올릴 수 없습니다.');
   if (files.length > MAX_POST_ATTACHMENTS)
     throw new BadRequestException(
-      `첨부파일은 공지사항 하나에 ${MAX_POST_ATTACHMENTS}개까지 올릴 수 있습니다`,
+      `첨부파일은 공지사항 하나에 ${MAX_POST_ATTACHMENTS}개까지 올릴 수 있습니다.`,
     );
 }
 

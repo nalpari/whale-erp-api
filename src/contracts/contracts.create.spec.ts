@@ -666,7 +666,7 @@ describe('ContractsService.create', () => {
     scope.canManageStaffAt.mockResolvedValue(false);
 
     await expect(service.create(dto(), 5)).rejects.toThrow(
-      '근무지 점포를 찾을 수 없습니다',
+      '근무지 점포를 찾을 수 없습니다.',
     );
     expect(scope.canManageStaffAt).toHaveBeenCalledWith(5, 11, false);
     expect(prisma.staffMember.create).not.toHaveBeenCalled();
@@ -1008,7 +1008,7 @@ describe('ContractsService.create', () => {
       await expect(
         service.create(dto({ correctSignedContracts: true }), 1),
       ).rejects.toThrow(
-        '잘못 올린 계약 바로잡기는 종이 계약을 등록할 때만 할 수 있습니다',
+        '잘못 올린 계약 바로잡기는 종이 계약을 등록할 때만 할 수 있습니다.',
       );
       await expect(
         service.create(
@@ -1017,7 +1017,7 @@ describe('ContractsService.create', () => {
           [employment],
         ),
       ).rejects.toThrow(
-        '잘못 올린 계약 바로잡기는 재계약과 함께 할 수 없습니다',
+        '잘못 올린 계약 바로잡기는 재계약과 함께 할 수 없습니다.',
       );
     });
 

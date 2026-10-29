@@ -114,9 +114,17 @@ export class StaffMemberSummaryService {
         sentAt: true,
       },
     });
-    const payrollAccount = await this.payrollAccount(staffMemberId);
-    if (!c) return { contract: null, payrollAccount };
+    // 기존 확인(check)이 먼저 — 본사 역할이 가맹 점포 직원이면 급여 계좌를 읽지도 풀지도 않는다(재영 2026-10-29)
+    const canViewPayrollAccount = await this.scope.canManageStaffAccount(
+      adminAccountId,
+      staffMemberId,
+    );
+    const payrollAccount = canViewPayrollAccount
+      ? await this.payrollAccount(staffMemberId)
+      : null;
+    if (!c) return { contract: null, canViewPayrollAccount, payrollAccount };
     return {
+      canViewPayrollAccount,
       payrollAccount,
       contract: {
         contractId: c.contractId,
@@ -150,7 +158,7 @@ export class StaffMemberSummaryService {
         `PERSONAL_DATA_ENCRYPTION_KEY 가 비어 신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId}`,
       );
       throw new ServiceUnavailableException(
-        '신고 정보를 지금 볼 수 없습니다. 잠시 뒤 다시 시도해 주세요',
+        '신고 정보를 지금 볼 수 없습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     }
     let accountNumber: string;
@@ -165,7 +173,7 @@ export class StaffMemberSummaryService {
         `신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId} 칸=payroll_account_number_encrypted: ${(err as Error).message}`,
         (err as Error).stack,
       );
-      throw new InternalServerErrorException('신고 정보를 읽을 수 없습니다', {
+      throw new InternalServerErrorException('신고 정보를 읽을 수 없습니다.', {
         cause: err,
       });
     }
@@ -199,7 +207,7 @@ export class StaffMemberSummaryService {
       weekStart === undefined ? kstToday(now) : parseDateOnly(weekStart);
     if (!day)
       throw new BadRequestException(
-        'weekStart 는 YYYY-MM-DD 형식의 있는 날짜입니다',
+        'weekStart 는 YYYY-MM-DD 형식의 있는 날짜입니다.',
       );
     // getUTCDay 는 일요일이 0 — 월요일로부터 며칠 지났는지로 바꾼다
     const monday = addDays(day, -((day.getUTCDay() + 6) % 7));
@@ -234,7 +242,7 @@ export class StaffMemberSummaryService {
       // 근무스케줄의 점포는 외래키로 묶여 있다. 못 찾으면 데이터가 깨진 것이라 빈 칸으로 내보내지 않는다(직원 목록과 같다)
       if (storeName === undefined)
         throw new InternalServerErrorException(
-          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다`,
+          `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다.`,
         );
       return {
         workScheduleId: r.workScheduleId,

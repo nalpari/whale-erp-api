@@ -9,7 +9,7 @@ import { LeadsService } from './leads.service';
 @Injectable()
 export class LeadsThrottlerGuard extends ThrottlerGuard {
   protected getErrorMessage(): Promise<string> {
-    return Promise.resolve('잠시 후 다시 시도해 주세요');
+    return Promise.resolve('잠시 후 다시 시도해 주세요.');
   }
 }
 

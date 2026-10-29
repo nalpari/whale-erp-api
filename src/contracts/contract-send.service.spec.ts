@@ -390,7 +390,7 @@ describe('ContractSendService (재발송)', () => {
       tx.$queryRaw.mockResolvedValueOnce([]);
 
       await expect(service().send(9, 7, NOW)).rejects.toThrow(
-        '폐점했거나 지운 점포의 근로계약서는 다시 보낼 수 없습니다',
+        '폐점했거나 지운 점포의 근로계약서는 다시 보낼 수 없습니다.',
       );
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });

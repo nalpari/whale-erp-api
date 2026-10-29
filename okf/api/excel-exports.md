@@ -4,12 +4,12 @@ title: Excel exports
 description: 모든 화면의 엑셀 공통 — 1만 건 미만은 바로 파일, 이상은 예약 생성(S3 24시간 · 등록한 이메일로 링크 · 요청한 본인만), 같은 사람 · 같은 화면은 생성 중이면 409 · 1분에 한 번, 모든 요청을 excel_download_logs 에 2년 남긴다. GET /excel-downloads/:id 가 예약 생성한 파일의 주소를 준다.
 tags: [admin, excel, batch, storage, mail, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: excel-exports-service
     resource: ../../src/excel-exports/excel-exports.service.ts
     title: ExcelExportsService — request · processPending · download · purgeExpired
-    last_modified: 2026-10-29T02:30:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: excel-export-policy
     resource: ../../src/excel-exports/excel-export-policy.ts
     title: 1만 건 · 1분 · 24시간 · 두 번 시도 · 2년, 판단 규칙과 메일 변수
@@ -25,7 +25,7 @@ sources:
   - id: excel-downloads-controller
     resource: ../../src/excel-exports/excel-downloads.controller.ts
     title: GET /excel-downloads/:id
-    last_modified: 2026-10-29T02:30:00Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: excel-download-logs-migration
     resource: ../../prisma/migrations/20261028140448_team1_excel_download_logs/migration.sql
     title: excel_download_logs · 메일 템플릿 2건
@@ -49,7 +49,7 @@ when its module starts. Everything else is here.[^excel-export-source]
 All per **(requester, screen)**, the screen being the menu (`menu_id`):[^excel-export-policy]
 
 - **While one is being made, a new request is 409** — 「엑셀 파일을 만드는 중입니다」, followed by
-  「다 만들어지면 등록한 이메일로 알려 드립니다」 for a 예약 생성 and 「잠시 뒤 다시 받아 주세요」 for a
+  「다 만들어지면 등록한 이메일로 알려 드립니다.」 for a 예약 생성 and 「잠시 뒤 다시 받아 주세요.」 for a
   바로 받기 (which sends no mail). Only the same screen: a 점포 export in progress does not block
   BP 목록. The partial unique index `excel_download_logs_requested_by_menu_id_key
   (requested_by, menu_id) WHERE status IN ('PENDING', 'PROCESSING')` enforces it in the database
@@ -110,7 +110,7 @@ the stuck cleanup collects that job. For each:[^excel-exports-service]
 A failure goes back to `PENDING` once (the next run, a minute later — a run never retries what
 it already handled; a job recovered as stuck at the start of a run is retried in that same run);
 the second failure is `FAILED` with **`EMAIL_EXCEL_FAILED`** (화면 · 요청 일시, 「다시 요청해
-주세요」). **A 4xx is final at once** — lost permission, a blocked account, a scope the screen
+주세요.」). **A 4xx is final at once** — lost permission, a blocked account, a scope the screen
 refuses would fail the same way again — and its reason is prefixed with the status
 (`[403] …`). A final failure is logged as an error with its stack; one that will be retried as a
 warning. Anything after the row is `SUCCEEDED` — reading the address, sending the mail — is

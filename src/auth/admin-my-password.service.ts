@@ -11,7 +11,7 @@ import {
 import { AdminMyPasswordChangeDto } from './dto/admin-my-password-change.dto';
 import { hashPassword, verifyPassword } from './password';
 
-const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
+const NOT_FOUND = '관리자 계정을 찾을 수 없습니다.';
 
 /**
  * 내 비밀번호 변경(마이페이지, 1팀 S-PTWREE). 로그인한 관리자 본인이 현재 비밀번호를 확인한 뒤 새 비밀번호로

@@ -642,7 +642,7 @@ describe('PlatformAdminsService', () => {
       await expect(
         service.create(pa.adminAccountId, { ...input, roleGroupId: 10 }),
       ).rejects.toThrow(
-        new ForbiddenException('플랫폼 마스터 계정을 등록할 권한이 없습니다'),
+        new ForbiddenException('플랫폼 마스터 계정을 등록할 권한이 없습니다.'),
       );
       expect(prisma.adminAccount.create).not.toHaveBeenCalled();
     });
@@ -672,7 +672,7 @@ describe('PlatformAdminsService', () => {
 
       await expect(service.create(pm.adminAccountId, input)).rejects.toThrow(
         new ConflictException(
-          '이미 사용 중인 아이디입니다. 삭제된 계정의 아이디도 다시 쓸 수 없습니다',
+          '이미 사용 중인 아이디입니다. 삭제된 계정의 아이디도 다시 쓸 수 없습니다.',
         ),
       );
       expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith(
@@ -687,7 +687,7 @@ describe('PlatformAdminsService', () => {
 
       await expect(service.create(pm.adminAccountId, input)).rejects.toThrow(
         new ConflictException(
-          '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다',
+          '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.',
         ),
       );
       expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith(
@@ -784,7 +784,7 @@ describe('PlatformAdminsService', () => {
 
       await expect(service.update(pm.adminAccountId, 5, input)).rejects.toThrow(
         new ConflictException(
-          '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요',
+          '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.',
         ),
       );
       expect(prisma.adminChangeHistory.createMany).not.toHaveBeenCalled();
@@ -902,7 +902,7 @@ describe('PlatformAdminsService', () => {
       await expect(
         service.update(pa.adminAccountId, 5, { ...input, roleGroupId: 10 }),
       ).rejects.toThrow(
-        new ForbiddenException('플랫폼 마스터 권한을 줄 권한이 없습니다'),
+        new ForbiddenException('플랫폼 마스터 권한을 줄 권한이 없습니다.'),
       );
     });
 
@@ -915,7 +915,7 @@ describe('PlatformAdminsService', () => {
           accountStatus: 'INACTIVE',
         }),
       ).rejects.toThrow(
-        new ForbiddenException('본인 계정의 권한 · 상태는 바꿀 수 없습니다'),
+        new ForbiddenException('본인 계정의 권한 · 상태는 바꿀 수 없습니다.'),
       );
       await expect(
         service.update(self.adminAccountId, 5, input),
@@ -933,7 +933,7 @@ describe('PlatformAdminsService', () => {
           email: 'Other@Whale.test',
         }),
       ).rejects.toThrow(
-        new ConflictException('이미 다른 관리자 계정에 등록된 이메일입니다'),
+        new ConflictException('이미 다른 관리자 계정에 등록된 이메일입니다.'),
       );
       expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1016,7 +1016,7 @@ describe('PlatformAdminsService', () => {
           }),
         ).rejects.toThrow(
           new ConflictException(
-            '사용 중인 플랫폼 마스터가 한 명은 있어야 합니다',
+            '사용 중인 플랫폼 마스터가 한 명은 있어야 합니다.',
           ),
         );
         expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
@@ -1118,7 +1118,7 @@ describe('PlatformAdminsService', () => {
 
     it('본인 계정은 스스로 지울 수 없다(403)', async () => {
       await expect(service.remove(5, 5)).rejects.toThrow(
-        new ForbiddenException('본인 계정은 스스로 삭제할 수 없습니다'),
+        new ForbiddenException('본인 계정은 스스로 삭제할 수 없습니다.'),
       );
     });
 

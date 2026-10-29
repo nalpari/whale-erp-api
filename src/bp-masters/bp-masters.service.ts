@@ -73,14 +73,14 @@ const STATUS_LABEL: Record<string, string> = {
   INACTIVE: '미사용',
   WITHDRAWN: '탈퇴',
 };
-const NOT_FOUND = 'BP를 찾을 수 없습니다';
-const WITHDRAWN_BP = '탈퇴한 BP는 바꿀 수 없습니다';
-const WITHDRAWN_BP_HISTORIES = '탈퇴한 BP는 변경 이력을 볼 수 없습니다';
+const NOT_FOUND = 'BP를 찾을 수 없습니다.';
+const WITHDRAWN_BP = '탈퇴한 BP는 바꿀 수 없습니다.';
+const WITHDRAWN_BP_HISTORIES = '탈퇴한 BP는 변경 이력을 볼 수 없습니다.';
 const CHANGED_MEANWHILE =
-  '그 사이 다른 관리자가 이 BP를 바꿨습니다. 최신 정보를 불러온 뒤 다시 해 주세요';
+  '그 사이 다른 관리자가 이 BP를 바꿨습니다. 최신 정보를 불러온 뒤 다시 해 주세요.';
 const LOGIN_ID_TAKEN =
-  '이미 사용 중인 아이디입니다. 삭제 · 탈퇴한 계정의 아이디도 다시 쓸 수 없습니다';
-const EMAIL_TAKEN = '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다';
+  '이미 사용 중인 아이디입니다. 삭제 · 탈퇴한 계정의 아이디도 다시 쓸 수 없습니다.';
+const EMAIL_TAKEN = '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.';
 // 국세청 키 · 하루 할당량은 가입 · 점포 · 마이페이지와 함께 쓴다 — 같은 한도를 관리자별로 센다(BpProfileService 와 같다).
 const NTS_CALLS_PER_HOUR = 10;
 const NTS_WINDOW_MS = 3_600_000;
@@ -406,7 +406,7 @@ export class BpMastersService {
         // 확인과 INSERT 사이에 같은 아이디 · 이메일 · 사업자등록번호가 먼저 들어갔다.
         if (isUniqueViolation(error))
           throw new ConflictException(
-            '이미 사용 중인 아이디 · 이메일 또는 사업자등록번호입니다',
+            '이미 사용 중인 아이디 · 이메일 또는 사업자등록번호입니다.',
           );
         throw error;
       });
@@ -468,7 +468,7 @@ export class BpMastersService {
           (await this.findEmailOwner(tx, input.email, adminAccountId))
         )
           throw new ConflictException(
-            '이미 다른 관리자 계정에 등록된 이메일입니다',
+            '이미 다른 관리자 계정에 등록된 이메일입니다.',
           );
         if (biz)
           await this.assertNumberFree(tx, biz.bizRegistrationNumber, bpCodeId);
@@ -530,7 +530,7 @@ export class BpMastersService {
       .catch((error: unknown) => {
         if (isUniqueViolation(error))
           throw new ConflictException(
-            '이미 사용 중인 이메일 또는 사업자등록번호입니다',
+            '이미 사용 중인 이메일 또는 사업자등록번호입니다.',
           );
         throw error;
       });
@@ -620,10 +620,10 @@ export class BpMastersService {
     const { bp, master } = await this.findBp(this.prisma, bpCodeId);
     assertNotWithdrawn(bp);
     if (!master.email)
-      throw new ConflictException('이메일이 없는 계정이라 보낼 곳이 없습니다');
+      throw new ConflictException('이메일이 없는 계정이라 보낼 곳이 없습니다.');
     if (this.sender === null)
       throw new ServiceUnavailableException(
-        '메일 설정이 없어 비밀번호를 초기화할 수 없습니다',
+        '메일 설정이 없어 비밀번호를 초기화할 수 없습니다.',
       );
 
     const by = callerId;
@@ -860,7 +860,7 @@ export class BpMastersService {
     );
     if (recent.length >= NTS_CALLS_PER_HOUR)
       throw new HttpException(
-        `사업자 인증은 한 시간에 ${NTS_CALLS_PER_HOUR}번까지 할 수 있습니다. 잠시 후 다시 시도해 주세요`,
+        `사업자 인증은 한 시간에 ${NTS_CALLS_PER_HOUR}번까지 할 수 있습니다. 잠시 후 다시 시도해 주세요.`,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     recent.push(now);

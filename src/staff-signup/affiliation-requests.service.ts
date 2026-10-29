@@ -33,7 +33,7 @@ import type {
   RejectAffiliationRequestDto,
 } from './dto/affiliation-request.dto';
 import { asksHqSharingConsentAt } from './hq-sharing-consent';
-import { sameName } from './same-name';
+import { sameName } from '../contracts/identity-match';
 
 type Db = Prisma.TransactionClient | PrismaService;
 
@@ -43,14 +43,14 @@ const REQUEST_TYPES: InvitationType[] = [
   'RETURN_CONFIRM',
 ];
 const REQUEST_ENDED =
-  '끝난 소속 추가 확인 요청입니다. 점포 관리자에게 다시 보내 달라고 요청해 주세요';
+  '끝난 소속 추가 확인 요청입니다. 점포 관리자에게 다시 보내 달라고 요청해 주세요.';
 
 const notFound = () =>
   new NotFoundException({
     statusCode: 404,
     error: 'Not Found',
     code: 'AFFILIATION_REQUEST_NOT_FOUND',
-    message: '소속 추가 확인 요청을 찾을 수 없습니다',
+    message: '소속 추가 확인 요청을 찾을 수 없습니다.',
   });
 const ended = () =>
   new NotFoundException({
@@ -64,7 +64,7 @@ const answered = () =>
     statusCode: 409,
     error: 'Conflict',
     code: 'AFFILIATION_REQUEST_ANSWERED',
-    message: '이미 답한 소속 추가 확인 요청입니다',
+    message: '이미 답한 소속 추가 확인 요청입니다.',
   });
 
 /**
@@ -193,7 +193,8 @@ export class AffiliationRequestsService {
         },
         select: { staffMemberId: true },
       });
-      if (employed) throw new ConflictException('이 점포에 이미 재직 중입니다');
+      if (employed)
+        throw new ConflictException('이 점포에 이미 재직 중입니다.');
       const accepted = await tx.invitation.updateMany({
         where: { invitationId, status: 'SENT' },
         data: { status: 'ACCEPTED', respondedAt: now },

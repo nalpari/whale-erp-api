@@ -45,7 +45,7 @@ import type {
 
 type Db = Prisma.TransactionClient;
 
-const MEMBERSHIP_NOT_FOUND = '소속을 찾을 수 없습니다';
+const MEMBERSHIP_NOT_FOUND = '소속을 찾을 수 없습니다.';
 
 const rejection = (
   status: HttpStatus,
@@ -126,7 +126,7 @@ export class MyAttendanceService {
       const store = await storeOf(tx, member.storeId);
       if (!store.isLocationApplied)
         throw new BadRequestException(
-          '위치를 보지 않는 근무지는 위치를 읽지 않습니다',
+          '위치를 보지 않는 근무지는 위치를 읽지 않습니다.',
         );
       // 좌표가 없으면 앱이 판정할 수 없어 위치를 읽지 않는다 — 출근은 막고 퇴근은 위치 없이 받는다(ATT-36)
       if (store.latitude === null || store.longitude === null)
@@ -135,7 +135,7 @@ export class MyAttendanceService {
             HttpStatus.UNPROCESSABLE_ENTITY,
             'Unprocessable Entity',
             'STORE_LOCATION_MISSING',
-            '근무지 위치가 등록되지 않아 위치를 확인할 수 없습니다. 근무지 관리자에게 문의해 주세요',
+            '근무지 위치가 등록되지 않아 위치를 확인할 수 없습니다. 근무지 관리자에게 문의해 주세요.',
           ),
         );
       await assertConsentUsable(tx, accountId);
@@ -184,7 +184,7 @@ export class MyAttendanceService {
             HttpStatus.UNPROCESSABLE_ENTITY,
             'Unprocessable Entity',
             'STORE_LOCATION_MISSING',
-            '근무지 위치가 등록되지 않아 출근할 수 없습니다. 근무지 관리자에게 문의해 주세요',
+            '근무지 위치가 등록되지 않아 출근할 수 없습니다. 근무지 관리자에게 문의해 주세요.',
           ),
         );
       const read = await this.assertLocationUsable(tx, accountId, store, dto);
@@ -196,8 +196,8 @@ export class MyAttendanceService {
             'Unprocessable Entity',
             block.reason,
             block.reason === 'CONTRACT_PENDING_SIGNATURE'
-              ? '근로계약을 체결해야 출근할 수 있습니다'
-              : '오늘은 근로계약 기간이 아니라 출근할 수 없습니다. 근무지 관리자에게 문의해 주세요',
+              ? '근로계약을 체결해야 출근할 수 있습니다.'
+              : '오늘은 근로계약 기간이 아니라 출근할 수 없습니다. 근무지 관리자에게 문의해 주세요.',
             { contractId: block.contractId },
           ),
         );
@@ -208,7 +208,7 @@ export class MyAttendanceService {
             HttpStatus.CONFLICT,
             'Conflict',
             'ALREADY_CHECKED_IN',
-            '이미 출근해 있습니다. 퇴근을 먼저 등록해 주세요',
+            '이미 출근해 있습니다. 퇴근을 먼저 등록해 주세요.',
             { openCheckIn: open },
           ),
         );
@@ -247,8 +247,8 @@ export class MyAttendanceService {
             'Conflict',
             'NO_OPEN_CHECK_IN',
             open
-              ? `${open.storeName}에 열린 출근이 있습니다. 그 근무지를 골라 퇴근해 주세요`
-              : '출근 기록이 없어 퇴근을 등록할 수 없습니다. 근무지 관리자에게 문의해 주세요',
+              ? `${open.storeName}에 열린 출근이 있습니다. 그 근무지를 골라 퇴근해 주세요.`
+              : '출근 기록이 없어 퇴근을 등록할 수 없습니다. 근무지 관리자에게 문의해 주세요.',
             { openCheckIn: open },
           ),
         );
@@ -258,7 +258,7 @@ export class MyAttendanceService {
             HttpStatus.CONFLICT,
             'Conflict',
             'CHECK_OUT_EXPIRED',
-            `${kstToday(open.recordedAt).toISOString().slice(5, 10).replace('-', '/')} 출근은 퇴근 등록 기한(출근한 다음 날)이 지났습니다. 근무지 관리자에게 퇴근 보정을 요청해 주세요`,
+            `${kstToday(open.recordedAt).toISOString().slice(5, 10).replace('-', '/')} 출근은 퇴근 등록 기한(출근한 다음 날)이 지났습니다. 근무지 관리자에게 퇴근 보정을 요청해 주세요.`,
             { openCheckIn: open },
           ),
         );
@@ -300,11 +300,11 @@ export class MyAttendanceService {
     ) {
       if (dto.reviewReason)
         throw new BadRequestException(
-          '위치를 보지 않는 근무지에는 확인 필요 사유를 보낼 수 없습니다',
+          '위치를 보지 않는 근무지에는 확인 필요 사유를 보낼 수 없습니다.',
         );
       if (dto.locationReadId !== undefined)
         throw new BadRequestException(
-          '위치를 보지 않는 근무지에는 위치 읽음을 보낼 수 없습니다',
+          '위치를 보지 않는 근무지에는 위치 읽음을 보낼 수 없습니다.',
         );
       return null;
     }
@@ -328,7 +328,7 @@ export class MyAttendanceService {
           HttpStatus.BAD_REQUEST,
           'Bad Request',
           'LOCATION_READ_REQUIRED',
-          '위치를 확인한 기록이 없습니다. 위치를 다시 확인해 주세요',
+          '위치를 확인한 기록이 없습니다. 위치를 다시 확인해 주세요.',
         ),
       );
     return read;

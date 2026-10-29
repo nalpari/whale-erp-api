@@ -545,7 +545,7 @@ describe('StoreManagementService', () => {
         prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
         await expect(call(service)).rejects.toMatchObject({
           constructor: BadRequestException,
-          message: '점포를 볼 BP 를 골라 주세요',
+          message: '점포를 볼 BP 를 골라 주세요.',
         });
         expect(prisma.store.findFirst).not.toHaveBeenCalled();
         expect(prisma.store.findMany).not.toHaveBeenCalled();
@@ -824,12 +824,12 @@ describe('StoreManagementService', () => {
 
     it('플랫폼 계정이 상단에서 고른 BP 와 다른 BP 를 보내면 400', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(platformAccount());
-      // 같은 400 인 「BP 를 골라 주세요」 · 「없는 BP 입니다」와 가르려고 문구까지 본다
+      // 같은 400 인 「BP 를 골라 주세요」 · 「없는 BP 입니다.」와 가르려고 문구까지 본다
       await expect(
         service.create(PM, PICKED_BP, { ...dto, bpCodeId: 9 }),
       ).rejects.toMatchObject({
         constructor: BadRequestException,
-        message: '다른 BP 에 점포를 등록할 수 없습니다',
+        message: '다른 BP 에 점포를 등록할 수 없습니다.',
       });
       expect(prisma.store.create).not.toHaveBeenCalled();
     });
@@ -1145,7 +1145,7 @@ describe('StoreManagementService', () => {
             longitude: null,
           }),
         ),
-      ).rejects.toThrow('운영 중인 점포의 좌표는 지울 수 없습니다');
+      ).rejects.toThrow('운영 중인 점포의 좌표는 지울 수 없습니다.');
     });
 
     // 진위확인 연동이 없어 인증을 채울 수 없다 — 이미 운영 중인 점포(공용 DB 11곳)는 그대로 고칠 수 있어야 한다.

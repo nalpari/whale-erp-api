@@ -758,7 +758,7 @@ describe('CodeGroupsService', () => {
         service.deleteItems(9, 'SERVICE', ['WHALE_ERP']),
       ).rejects.toThrow(
         new ConflictException(
-          '플랫폼고정 그룹의 상세 코드는 지울 수 없습니다 — 사용 상태로 관리해 주세요',
+          '플랫폼고정 그룹의 상세 코드는 지울 수 없습니다 — 사용 상태로 관리해 주세요.',
         ),
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -823,7 +823,7 @@ describe('CodeGroupsService', () => {
       await expect(
         service.deleteItems(9, 'EMP_TYPE', ['FULL', 'PART']),
       ).rejects.toThrow(
-        '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요',
+        '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요.',
       );
     });
   });
@@ -914,7 +914,7 @@ describe('CodeGroupsService', () => {
       prisma.bpCode.findMany.mockResolvedValue([]);
 
       await expect(service.applyToBps(9, 'EMP_TYPE')).rejects.toThrow(
-        new ConflictException('적용할 사용 중인 고객 BP 가 없습니다'),
+        new ConflictException('적용할 사용 중인 고객 BP 가 없습니다.'),
       );
       expect(prisma.codeItem.createMany).not.toHaveBeenCalled();
       expect(prisma.codeGroup.update).not.toHaveBeenCalled();
@@ -925,7 +925,7 @@ describe('CodeGroupsService', () => {
 
       await expect(service.applyToBps(9, 'EMP_TYPE')).rejects.toThrow(
         new ConflictException(
-          '상세 코드가 없는 그룹은 BP에 적용할 수 없습니다',
+          '상세 코드가 없는 그룹은 BP에 적용할 수 없습니다.',
         ),
       );
       expect(prisma.codeItem.createMany).not.toHaveBeenCalled();

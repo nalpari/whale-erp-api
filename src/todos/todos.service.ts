@@ -41,8 +41,8 @@ import {
 import { UpdateTodoDto } from './dto/update-todo.dto';
 import { ACTIVE_STAFF, compareTodos, groupStatus } from './todo-rules';
 
-const TODO_NOT_FOUND = 'TO-DO 를 찾을 수 없습니다';
-const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다';
+const TODO_NOT_FOUND = 'TO-DO 를 찾을 수 없습니다.';
+const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다.';
 
 // date 컬럼은 UTC 자정, time 컬럼은 1970-01-01 의 그 시각으로 넘긴다(contracts.service 와 같다).
 const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
@@ -201,11 +201,11 @@ export class TodosService {
       });
       if (individual && staff.length !== requested.length)
         throw new BadRequestException(
-          '그 근무지에 체결 완료 근로계약이 있고 가입을 마친 재직 직원만 배정할 수 있습니다 — 퇴직했거나 계약이 체결되지 않았거나 가입 전이거나 다른 근무지 직원이 있습니다',
+          '그 근무지에 체결 완료 근로계약이 있고 가입을 마친 재직 직원만 배정할 수 있습니다 — 퇴직했거나 계약이 체결되지 않았거나 가입 전이거나 다른 근무지 직원이 있습니다.',
         );
       if (staff.length === 0)
         throw new BadRequestException(
-          '근무지에 체결 완료 근로계약이 있고 가입을 마친 재직 직원이 없습니다',
+          '근무지에 체결 완료 근로계약이 있고 가입을 마친 재직 직원이 없습니다.',
         );
 
       // 한 명 수행은 공유 1행에 대상 전원, 그 밖은 직원마다 1행
@@ -476,7 +476,7 @@ export class TodosService {
     if (!todo) throw new NotFoundException(TODO_NOT_FOUND);
     if (dto.title === null || dto.dueDate === null || dto.isUrgent === null)
       throw new BadRequestException(
-        '제목 · 수행 예정 날짜 · 긴급은 비울 수 없습니다',
+        '제목 · 수행 예정 날짜 · 긴급은 비울 수 없습니다.',
       );
     if (dto.dueDate) checkDueDate(dto.dueDate, now);
 
@@ -561,7 +561,7 @@ export class TodosService {
       data: { isDeleted: true },
     });
     if (count === 0)
-      throw new ConflictException('대기인 TO-DO 만 지울 수 있습니다');
+      throw new ConflictException('대기인 TO-DO 만 지울 수 있습니다.');
     const remaining = todo.assignmentGroupId
       ? await this.prisma.todo.count({ where: targets })
       : 0;
@@ -747,8 +747,8 @@ export class TodosService {
         error: 'Conflict',
         code: 'TODO_ALREADY_DONE',
         message: performer?.staffMemberName
-          ? `${performer.staffMemberName} 님이 먼저 완료했습니다`
-          : '이미 완료된 TO-DO 입니다',
+          ? `${performer.staffMemberName} 님이 먼저 완료했습니다.`
+          : '이미 완료된 TO-DO 입니다.',
         performer,
       });
     }
@@ -757,7 +757,7 @@ export class TodosService {
       error: 'Conflict',
       code: 'TODO_STATUS_CONFLICT',
       message:
-        '다른 곳에서 상태가 바뀌었습니다. 화면을 새로 고쳐 지금 상태를 확인해 주세요',
+        '다른 곳에서 상태가 바뀌었습니다. 화면을 새로 고쳐 지금 상태를 확인해 주세요.',
       status: now.status,
     });
   }
@@ -868,16 +868,20 @@ function checkAssignment(dto: CreateTodoDto): TodoExecutionMode {
   if (dto.assigneeType === 'INDIVIDUAL') {
     if (!dto.staffMemberIds?.length)
       throw new BadRequestException(
-        '개인 배정은 직원을 한 명 이상 골라 주세요',
+        '개인 배정은 직원을 한 명 이상 골라 주세요.',
       );
     if (dto.executionMode === 'ANY_ONE')
-      throw new BadRequestException('한 명 수행은 근무지 전체 배정에만 씁니다');
+      throw new BadRequestException(
+        '한 명 수행은 근무지 전체 배정에만 씁니다.',
+      );
     return 'EACH';
   }
   if (dto.staffMemberIds)
-    throw new BadRequestException('근무지 전체 배정은 직원을 고르지 않습니다');
+    throw new BadRequestException('근무지 전체 배정은 직원을 고르지 않습니다.');
   if (!dto.executionMode)
-    throw new BadRequestException('근무지 전체 배정은 수행 방식을 골라 주세요');
+    throw new BadRequestException(
+      '근무지 전체 배정은 수행 방식을 골라 주세요.',
+    );
   return dto.executionMode;
 }
 
@@ -885,7 +889,7 @@ function checkAssignment(dto: CreateTodoDto): TodoExecutionMode {
 function checkDueDate(dueDate: string, now: Date): void {
   const date = parseDateOnly(dueDate);
   if (!date || date < kstToday(now))
-    throw new BadRequestException('수행 예정 날짜는 오늘 이후여야 합니다');
+    throw new BadRequestException('수행 예정 날짜는 오늘 이후여야 합니다.');
 }
 
 /** 목록 공통 조건 — 지우지 않은 것, 상태, 수행 예정 기간 */

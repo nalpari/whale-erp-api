@@ -4,7 +4,7 @@ title: BP holidays
 description: 관리자 웹 「BP 휴일 관리」(MN000015) — rule-stored holidays whose dates are computed when read, month calendar · list, detail, change history, overlap check, create, update, force termination and deletion; past dates never change, stores join from today and leave as of yesterday.
 tags: [admin, holiday, bp, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-27T07:48:02Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: bp-holidays-controller
     resource: ../../src/bp-holidays/bp-holidays.controller.ts
@@ -13,11 +13,11 @@ sources:
   - id: bp-holiday-changes
     resource: ../../src/bp-holidays/bp-holiday-changes.service.ts
     title: create · update · terminate · remove under a row lock
-    last_modified: 2026-10-26T06:06:05Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-holiday-access
     resource: ../../src/bp-holidays/bp-holiday-access.ts
     title: who manages what — manageAll, store scope, per-state actions
-    last_modified: 2026-10-26T06:06:05Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: holiday-dates
     resource: ../../src/bp-holidays/holiday-dates.ts
     title: date computation for DAY · PERIOD · REPEAT
@@ -33,11 +33,11 @@ sources:
   - id: bp-holiday-rule
     resource: ../../src/bp-holidays/bp-holiday-rule.ts
     title: input normalization, 2100 ceiling, describeRule
-    last_modified: 2026-10-26T06:06:05Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: bp-holidays-service
     resource: ../../src/bp-holidays/bp-holidays.service.ts
     title: list · detail · histories · overlaps
-    last_modified: 2026-10-27T07:37:14Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: store-periods-migration
     resource: ../../prisma/migrations/20261026135250_team1_bp_holiday_store_periods/migration.sql
     title: target · excluded stores become one row per period
@@ -64,7 +64,7 @@ which replaces the specs' "이후 모두" split editing and date-range deletion:
 The menu is found by the path (`menus.url = '/bp-holidays'`, MN000015, set by
 `20261019144438`); the target BP comes from `X-Bp-Code-Id` through `@TargetBp()`. A
 platform account (플랫폼 BP 의 PM · PA) must pick a BP — without the header every route
-is 400 「휴일을 볼 BP 를 골라 주세요」 — and then handles that BP like a BP 마스터.
+is 400 「휴일을 볼 BP 를 골라 주세요.」 — and then handles that BP like a BP 마스터.
 「오늘」 is always the Korean date (`kstToday`).
 
 # Stored as a rule, computed when read
@@ -118,13 +118,13 @@ The policy's core: **a change affects only today onward.** That shapes every wri
   「어제 이전에 시작한 휴일만 강제 종료할 수 있습니다 …」 (for DAY · PERIOD the CHECK
   `bp_holidays_end_date_after_start` would refuse it too; a REPEAT ends through
   `repeat_end_date`, which has no CHECK).
-- New holidays may not start before today (400 「시작일은 오늘 이후로 정해 주세요」), and
+- New holidays may not start before today (400 「시작일은 오늘 이후로 정해 주세요.」), and
   nothing may run past 2100-12-31 — start, end and repeat end dates, and for COUNT the
   date of the last occurrence (400 「반복 횟수가 2100-12-31 을 넘습니다 …」). Monthly · yearly
   computation and `public_holidays` stop at 2100, and the list cannot ask for a later
   year, so such a holiday would never show anywhere.
 - A holiday that started today shows `blockedReason` 「오늘 시작한 휴일은 강제 종료할 수
-  없습니다 — 삭제해 주세요」.
+  없습니다 — 삭제해 주세요.」.
 
 ## Stores are periods
 

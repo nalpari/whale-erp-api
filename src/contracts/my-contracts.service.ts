@@ -51,7 +51,7 @@ export const SIGNATURE_MAX_PX = 4096;
  */
 async function checkSignatureImage(buffer: Buffer): Promise<void> {
   const unreadable = () =>
-    new BadRequestException('서명 이미지를 읽을 수 없습니다');
+    new BadRequestException('서명 이미지를 읽을 수 없습니다.');
   const image = sharp(buffer, {
     limitInputPixels: SIGNATURE_MAX_PX * SIGNATURE_MAX_PX,
   });
@@ -65,7 +65,7 @@ async function checkSignatureImage(buffer: Buffer): Promise<void> {
     height > SIGNATURE_MAX_PX
   )
     throw new BadRequestException(
-      `서명 이미지는 가로 · 세로 ${SIGNATURE_MAX_PX}px 까지입니다`,
+      `서명 이미지는 가로 · 세로 ${SIGNATURE_MAX_PX}px 까지입니다.`,
     );
   await image.stats().catch(() => {
     throw unreadable();
@@ -148,10 +148,10 @@ export class MyContractsService {
     now?: Date,
   ): Promise<SignedMyContractResponseDto> {
     if (!signature)
-      throw new BadRequestException('서명 이미지(signature)를 보내 주세요');
+      throw new BadRequestException('서명 이미지(signature)를 보내 주세요.');
     // 형식은 DTO 가 보지만 주 표기(2026-W43)처럼 날짜로 못 바꾸는 값은 여기서 400 — 재발송(409)으로 보이지 않게
     if (Number.isNaN(Date.parse(sentAt)))
-      throw new BadRequestException('발송 일시 형식이 아닙니다');
+      throw new BadRequestException('발송 일시 형식이 아닙니다.');
     // 남의 계약 · 상태 · 기한 · 대조가 틀린 요청은 저장소를 부르기 전에 막는다. 트랜잭션으로 묶는 건 Prisma 가 나눠 보내는
     // 관계 쿼리를 한 연결에서 차례로 보내려는 것이다(잠그지 않는다). 시점이 맞는지는 잠근 뒤 다시 대조하는 쪽이 맡는다
     this.checkSignable(
@@ -176,7 +176,7 @@ export class MyContractsService {
       // 시간 초과처럼 실제로는 올라갔을 수 있다 — 아무도 가리키지 않는 서명이 남지 않게 지워 본다
       await this.discard(storage, contractId, key);
       throw new ServiceUnavailableException(
-        '서명을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
+        '서명을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     }
     let signedAt = new Date();
@@ -383,7 +383,7 @@ export class MyContractsService {
         error: 'Conflict',
         code: 'CONTRACT_RESENT',
         message:
-          '근로계약서가 다시 발송됐습니다. 새로 고쳐 바뀐 계약서를 확인해 주세요',
+          '근로계약서가 다시 발송됐습니다. 새로 고쳐 바뀐 계약서를 확인해 주세요.',
       });
     // 당사자 행이 없으면 모든 칸이 빈 계약서로 대조한다 — 빈 칸은 다른 것이다
     const mismatches = identityMismatches(
@@ -396,7 +396,7 @@ export class MyContractsService {
         error: 'Conflict',
         code: 'IDENTITY_MISMATCH',
         message:
-          '계약서의 직원 정보가 가입한 정보와 다릅니다. 수정을 요청해 주세요',
+          '계약서의 직원 정보가 가입한 정보와 다릅니다. 수정을 요청해 주세요.',
         mismatches,
       });
   }
@@ -409,6 +409,6 @@ function checkEmployed(c: MyContract, now: Date): void {
       statusCode: HttpStatus.CONFLICT,
       error: 'Conflict',
       code: 'STAFF_RETIRED',
-      message: '퇴직한 직원은 근로계약을 처리할 수 없습니다',
+      message: '퇴직한 직원은 근로계약을 처리할 수 없습니다.',
     });
 }

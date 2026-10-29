@@ -77,15 +77,16 @@ const TARGET_SELECT = {
 type Target = Prisma.PayslipGetPayload<{ select: typeof TARGET_SELECT }>;
 
 const FAILURE_MESSAGE: Record<PayslipSendFailure, string> = {
-  MAIL_NOT_CONFIGURED: '메일 설정(MAIL_*)이 없어 보낼 수 없습니다',
-  APP_URL_NOT_CONFIGURED: '직원 앱 주소(STAFF_APP_URL)가 없어 보낼 수 없습니다',
-  NO_EMAIL: '직원 앱 계정이 없어(가입 전 · 탈퇴) 보낼 곳이 없습니다',
+  MAIL_NOT_CONFIGURED: '메일 설정(MAIL_*)이 없어 보낼 수 없습니다.',
+  APP_URL_NOT_CONFIGURED:
+    '직원 앱 주소(STAFF_APP_URL)가 없어 보낼 수 없습니다.',
+  NO_EMAIL: '직원 앱 계정이 없어(가입 전 · 탈퇴) 보낼 곳이 없습니다.',
   CONFLICT:
-    '그사이 다른 관리자가 이 급여명세서를 고쳤거나 보내고 있습니다. 화면을 새로 고친 뒤 다시 해 주세요',
+    '그사이 다른 관리자가 이 급여명세서를 고쳤거나 보내고 있습니다. 화면을 새로 고친 뒤 다시 해 주세요.',
   // SMTP 시간 초과면 메일이 나갔을 수도 있어 「이력부터 확인」을 앞세운다
   MAIL_FAILED:
-    '메일을 보내지 못했습니다. 발송 이력을 확인한 뒤 다시 보내 주세요',
-  MASKED: '본사 제공 동의가 없는 직원이라 보낼 수 없습니다',
+    '메일을 보내지 못했습니다. 발송 이력을 확인한 뒤 다시 보내 주세요.',
+  MASKED: '본사 제공 동의가 없는 직원이라 보낼 수 없습니다.',
 };
 
 type Delivery = { ok: true } | { ok: false; reason: PayslipSendFailure };

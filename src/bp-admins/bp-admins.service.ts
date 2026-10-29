@@ -86,14 +86,14 @@ const STATUS_LABEL: Record<string, string> = {
   ACTIVE: '사용',
   INACTIVE: '미사용',
 };
-const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
+const NOT_FOUND = '관리자 계정을 찾을 수 없습니다.';
 const ROLE_GROUP_INVALID = '선택할 수 없는 권한입니다.';
-const LOGIN_ID_TAKEN = '사용할 수 없는 아이디라 계정을 만들지 않았습니다';
-const EMAIL_TAKEN = '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다';
-const CHANGED_MEANWHILE = '다른 사용자가 이 계정을 먼저 바꿨습니다';
-const BP_INACTIVE = 'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다';
+const LOGIN_ID_TAKEN = '사용할 수 없는 아이디라 계정을 만들지 않았습니다.';
+const EMAIL_TAKEN = '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.';
+const CHANGED_MEANWHILE = '다른 사용자가 이 계정을 먼저 바꿨습니다.';
+const BP_INACTIVE = 'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.';
 const BP_BUSY =
-  '다른 작업이 끝나기를 기다리다 시간이 지났습니다. 잠시 뒤 다시 저장해 주세요';
+  '다른 작업이 끝나기를 기다리다 시간이 지났습니다. 잠시 뒤 다시 저장해 주세요.';
 const BY_FM_DEACTIVATION = ' (가맹 마스터 미사용)';
 const BY_FM_SHRINK = ' (가맹 마스터 점포 제외)';
 
@@ -450,7 +450,7 @@ export class BpAdminsService {
       adminAccountId,
     );
     if (target.roleTypeCode !== 'FM')
-      throw new BadRequestException('가맹 마스터 계정만 확인합니다');
+      throw new BadRequestException('가맹 마스터 계정만 확인합니다.');
     if (!actionsOf(caller, target).canUpdate)
       throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     const linked = await this.linkedFranchiseAdmins(
@@ -492,7 +492,7 @@ export class BpAdminsService {
     const caller = await this.loadCaller(this.prisma, callerId, bp);
     const role = input.roleTypeCode;
     if (!creatableRoles(caller).includes(role))
-      throw new ForbiddenException('이 역할의 계정을 등록할 권한이 없습니다');
+      throw new ForbiddenException('이 역할의 계정을 등록할 권한이 없습니다.');
     const group = await this.findAssignableGroup(
       this.prisma,
       bp.bpCodeId,
@@ -584,7 +584,7 @@ export class BpAdminsService {
         // 확인과 INSERT 사이에 같은 아이디 · 이메일이 먼저 들어갔다.
         if (isUniqueViolation(error))
           throw new ConflictException(
-            '이미 사용 중인 아이디 또는 이메일입니다',
+            '이미 사용 중인 아이디 또는 이메일입니다.',
           );
         if (isTxTimeout(error)) throw this.busy('등록', bp.bpCodeId, error);
         throw error;
@@ -642,7 +642,7 @@ export class BpAdminsService {
         );
         const actions = actionsOf(caller, target);
         if (!actions.canUpdate)
-          throw new ForbiddenException('이 계정을 고칠 권한이 없습니다');
+          throw new ForbiddenException('이 계정을 고칠 권한이 없습니다.');
         const role = target.roleTypeCode;
         const isStatusChanged = input.accountStatus !== row.accountStatusCode;
         const isRoleGroupChanged = input.roleGroupId !== row.roleGroupId;
@@ -785,17 +785,17 @@ export class BpAdminsService {
     );
     const actions = actionsOf(caller, target);
     if (actions.isSelf)
-      throw new ForbiddenException('본인 비밀번호는 내 정보에서 바꿔 주세요');
+      throw new ForbiddenException('본인 비밀번호는 내 정보에서 바꿔 주세요.');
     if (!actions.canResetPassword)
       throw new ForbiddenException(
-        '이 계정의 비밀번호를 초기화할 권한이 없습니다',
+        '이 계정의 비밀번호를 초기화할 권한이 없습니다.',
       );
     if (!row.email)
-      throw new ConflictException('이메일이 없는 계정이라 보낼 곳이 없습니다');
+      throw new ConflictException('이메일이 없는 계정이라 보낼 곳이 없습니다.');
     // 초기화는 기존 비밀번호를 지운다. 새 비밀번호를 보낼 길이 없으면 계정이 잠기므로 아무것도 쓰지 않는다.
     if (this.sender === null)
       throw new ServiceUnavailableException(
-        '메일 설정이 없어 비밀번호를 초기화할 수 없습니다',
+        '메일 설정이 없어 비밀번호를 초기화할 수 없습니다.',
       );
 
     const by = caller.adminAccountId;
@@ -894,7 +894,7 @@ export class BpAdminsService {
     if (!side) throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     if (row.bpCode.isPlatform) {
       if (bp.bpCodeId === row.bpCodeId)
-        throw new BadRequestException('관리자 계정을 볼 BP 를 골라 주세요');
+        throw new BadRequestException('관리자 계정을 볼 BP 를 골라 주세요.');
     } else if (bp.bpCodeId !== row.bpCodeId)
       throw new ForbiddenException(OTHER_BP_MESSAGE);
     const isAllStores = row.bpCode.isPlatform || row.isAllStores;
@@ -1127,7 +1127,7 @@ export class BpAdminsService {
     if (taken.size) {
       const [, fm] = [...taken][0];
       throw new ConflictException(
-        `다른 가맹 마스터(${fm.loginId})가 맡은 점포가 있어 저장하지 않았습니다`,
+        `다른 가맹 마스터(${fm.loginId})가 맡은 점포가 있어 저장하지 않았습니다.`,
       );
     }
   }

@@ -53,9 +53,9 @@ export async function reopenBlockOf(
     WHERE store_id = ${c.storeId} AND is_deleted = false AND store_status_code <> 'CLOSED'
     ${lock ? Prisma.sql`FOR SHARE` : Prisma.empty}`;
   if (open.length === 0)
-    return '폐점했거나 지운 점포의 근로계약서는 다시 보낼 수 없습니다';
+    return '폐점했거나 지운 점포의 근로계약서는 다시 보낼 수 없습니다.';
   if (s.employmentStatus === 'RETIRED' || s.retiredDate !== null)
-    return '퇴직했거나 퇴직일을 정한 직원에게는 근로계약서를 다시 보낼 수 없습니다. 다시 일하면 새 근로계약서를 작성해 주세요';
+    return '퇴직했거나 퇴직일을 정한 직원에게는 근로계약서를 다시 보낼 수 없습니다. 다시 일하면 새 근로계약서를 작성해 주세요.';
   const sameStaff = {
     contractId: { not: c.contractId },
     storeId: c.storeId,
@@ -67,9 +67,9 @@ export async function reopenBlockOf(
       select: { contractId: true },
     })
   )
-    return '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 그 근로계약을 확인해 주세요';
+    return '이 점포에 같은 직원의 진행 중인 근로계약이 있습니다. 그 근로계약을 확인해 주세요.';
   if (c.endDate !== null && c.endDate < kstToday(now))
-    return '계약 기간이 끝난 근로계약서는 다시 보낼 수 없습니다. 새 근로계약서를 작성해 주세요';
+    return '계약 기간이 끝난 근로계약서는 다시 보낼 수 없습니다. 새 근로계약서를 작성해 주세요.';
   // 끝을 열어 두면 「겹침」과 「이 계약보다 늦게 시작함」을 한 번에 본다 — 늦게 시작한 계약은 이 시작일 뒤에 끝난다. 기간이 끝나
   // 배치가 닫은 계약도 본다(SIGNED_ONCE). 이 계약이 잇는 줄의 앞 계약(직전 계약과 그 앞)은 치지 않는다 — 만들 때의 겹침 검사
   // (checkSignedOverlap)와 같다. 하루 배치가 차례로 닫는다(api #158 재리뷰 참고 1 · 2)
@@ -83,7 +83,7 @@ export async function reopenBlockOf(
       SIGNED_ONCE,
     )
   )
-    return '이 점포에 같은 직원의 체결 완료된 근로계약이 있습니다. 이어 일하면 새 계약(재계약)을 보내 주세요';
+    return '이 점포에 같은 직원의 체결 완료된 근로계약이 있습니다. 이어 일하면 새 계약(재계약)을 보내 주세요.';
   if (
     c.previousContractId !== null &&
     (await db.contract.findFirst({
@@ -95,7 +95,7 @@ export async function reopenBlockOf(
       select: { contractId: true },
     }))
   )
-    return '직전 계약에 이어지는 다른 재계약이 있습니다. 그 근로계약을 확인해 주세요';
+    return '직전 계약에 이어지는 다른 재계약이 있습니다. 그 근로계약을 확인해 주세요.';
   return null;
 }
 

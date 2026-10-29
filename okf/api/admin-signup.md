@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:50:08Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: signup-controller
     resource: ../../src/admin-signup/admin-signup.controller.ts
     title: /auth/signup routes (public, throttled)
-    last_modified: 2026-10-15T06:05:33Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: signup-dto
     resource: ../../src/admin-signup/dto/signup.dto.ts
     title: SignupDto (format rules shared with the front signup screen)
@@ -62,7 +62,7 @@ its BP 마스터 together; no store is created.
 | `POST /auth/signup/business-verifications` | 사업자정보 인증. `{ bizRegistrationNumber, bizCeoName, bizOpenDate }` → 200 `{ verificationToken }`; 409 for a number in use, 422 when 국세청 says it does not match, 503 when 국세청 cannot answer |
 
 All four are `@Public()` and behind `SignupThrottlerGuard` (the auth throttler with
-도입문의's 429 wording, 「잠시 후 다시 시도해 주세요」). Signing up burns scrypt, and
+도입문의's 429 wording, 「잠시 후 다시 시도해 주세요.」). Signing up burns scrypt, and
 the availability checks tell anyone whether an id or address is registered, so all
 four need the IP and account limits. 사업자정보 인증's body has no email, 아이디 or
 phone, so its account axis falls back to the IP as well.

@@ -2,7 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import { isEmail, validate } from 'class-validator';
 import { RequestEmailChangePinDto } from './request-email-change-pin.dto';
 
-const SENDABLE_MESSAGE = '메일을 보낼 수 없는 형식의 이메일입니다';
+const SENDABLE_MESSAGE = '메일을 보낼 수 없는 형식의 이메일입니다.';
 
 const constraintsOf = async (newEmail: unknown) => {
   const errors = await validate(

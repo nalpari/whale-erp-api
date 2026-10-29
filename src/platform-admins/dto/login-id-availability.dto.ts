@@ -7,7 +7,7 @@ export class LoginIdAvailabilityQueryDto {
   /** 아이디. 영문 또는 영문 · 숫자 4~20자. @example seojun01 */
   @Transform(trimText)
   @Matches(LOGIN_ID_PATTERN, {
-    message: '아이디는 영문 또는 영문 · 숫자 조합으로 4~20자입니다',
+    message: '아이디는 영문 또는 영문 · 숫자 조합으로 4~20자입니다.',
   })
   loginId: string;
 }

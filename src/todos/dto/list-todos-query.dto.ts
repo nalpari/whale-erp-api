@@ -15,7 +15,7 @@ import { IsDateOnly } from '../../common/is-date-only';
 import { STORE_TYPES, type StoreType } from '../../stores/store-format';
 
 const MAX_ID = 2_147_483_647;
-const DATE_MESSAGE = '기간은 YYYY-MM-DD 형식의 있는 날짜입니다';
+const DATE_MESSAGE = '기간은 YYYY-MM-DD 형식의 있는 날짜입니다.';
 
 /** `a=1&a=2` 와 `a=1,2` 를 같은 배열로 받는다(점포 목록 ListStoresQueryDto 와 같다). */
 const splitComma = ({ value }: { value: unknown }): unknown =>

@@ -146,11 +146,11 @@ const WORKER_EDITABLE: readonly ContractStatus[] = [
 ];
 /** 가입한 직원의 번호는 계정의 신원 기준 — 근로자 정보 수정 · 이어 쓰기에서 바꾸지 않는다(WHALEERP-125) */
 const JOINED_PHONE_FIXED =
-  '가입한 직원의 휴대전화번호는 바꿀 수 없습니다 — 계정의 번호가 기준입니다';
+  '가입한 직원의 휴대전화번호는 바꿀 수 없습니다 — 계정의 번호가 기준입니다.';
 const WORKPLACE_FIXED =
-  '수정 요청 근로계약서는 근무지를 바꿀 수 없습니다 — 다른 근무지는 새 근로계약서로 써 주세요';
+  '수정 요청 근로계약서는 근무지를 바꿀 수 없습니다 — 다른 근무지는 새 근로계약서로 써 주세요.';
 /** 이어 쓰기 409 — 임시저장 · 수정 요청 근로계약서만 고친다 */
-const EDITABLE_ONLY = '임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다';
+const EDITABLE_ONLY = '임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다.';
 
 /**
  * 근로계약 관리 메뉴 권한을 서비스가 다시 묻는다(WHALEERP-592). 가드는 경로만 봐서, 이어 쓰기 PUT 은 「작성 또는 수정」으로
@@ -167,8 +167,8 @@ async function requireContractAction(
     throw new ForbiddenException(message);
 }
 /** 대체 403 꼬리 — 새로 쓰는 저장은 기존 임시저장을 이어 쓰면 되고, 이어 쓰기 · 근로자 정보 수정은 이미 다른 계약을 고치는 중이라 그럴 수 없다 */
-const CONTINUE_DRAFT = '기존 임시저장을 이어 써 주세요';
-const ASK_DELETER = '삭제 권한이 있는 관리자에게 맡겨 주세요';
+const CONTINUE_DRAFT = '기존 임시저장을 이어 써 주세요.';
+const ASK_DELETER = '삭제 권한이 있는 관리자에게 맡겨 주세요.';
 
 /**
  * 대체 권한 — 진행 중 계약을 닫으니 수정, 임시저장은 행째 지우니(replaceContracts) 삭제를 요구한다. 임시저장만 대체하면
@@ -193,7 +193,7 @@ async function requireReplaceActions(
       db,
       adminAccountId,
       'update',
-      `이 점포에 같은 직원의 ${what} 근로계약이 있습니다. 기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다`,
+      `이 점포에 같은 직원의 ${what} 근로계약이 있습니다. 기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다.`,
     );
   if (replaced.some((c) => c.status === 'DRAFT'))
     await requireContractAction(
@@ -245,9 +245,9 @@ async function checkSignedOverlap(
 }
 /** 이어 쓰기 403 — 동의로만 보는 관리자(점포 단위 범위 없음)가 번호를 바꾸거나, 다른 직원 레코드의 계약과 겹칠 때 */
 const PHONE_CHANGE_FORBIDDEN =
-  '휴대전화번호를 바꾸려면 점포 직원 관리 권한이 있어야 합니다. 번호를 바꾸지 않았다면 다른 요청이 먼저 고친 것이니 다시 열어 주세요';
+  '휴대전화번호를 바꾸려면 점포 직원 관리 권한이 있어야 합니다. 번호를 바꾸지 않았다면 다른 요청이 먼저 고친 것이니 다시 열어 주세요.';
 const OTHER_RECORD_FORBIDDEN =
-  '이 점포에 같은 번호로 다른 직원의 근로계약이 있습니다. 점포 직원 관리 권한이 있는 관리자가 처리해 주세요';
+  '이 점포에 같은 번호로 다른 직원의 근로계약이 있습니다. 점포 직원 관리 권한이 있는 관리자가 처리해 주세요.';
 // date 컬럼은 UTC 자정, time 컬럼은 1970-01-01 의 그 시각으로 넘긴다. 시간대가 끼면 하루 · 몇 시간씩 밀린다.
 const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const toTime = (hm: string) => new Date(`1970-01-01T${hm}:00.000Z`);
@@ -263,11 +263,11 @@ export function ageOn(birth: string, on: string): number {
 function checkWorkDay(d: ContractWorkDayDto) {
   if (d.endTime <= d.startTime)
     throw new BadRequestException(
-      `${d.weekday}: 종업은 시업보다 뒤여야 합니다`,
+      `${d.weekday}: 종업은 시업보다 뒤여야 합니다.`,
     );
   if (!d.breakStartTime !== !d.breakEndTime)
     throw new BadRequestException(
-      `${d.weekday}: 휴게는 시작과 종료를 함께 넣습니다`,
+      `${d.weekday}: 휴게는 시작과 종료를 함께 넣습니다.`,
     );
   if (
     d.breakStartTime &&
@@ -279,14 +279,14 @@ function checkWorkDay(d: ContractWorkDayDto) {
     )
   )
     throw new BadRequestException(
-      `${d.weekday}: 휴게는 근무 시간 안이어야 합니다`,
+      `${d.weekday}: 휴게는 근무 시간 안이어야 합니다.`,
     );
 }
 
 /** 저장 · 이어 쓰기가 같이 쓰는 입력 검사. 임시저장은 계약 칸을 비울 수 있어 넣은 값만 본다. */
 function checkInput(dto: CreateContractDto): void {
   if (dto.startDate && dto.endDate && dto.endDate < dto.startDate)
-    throw new BadRequestException('계약 종료일은 시작일보다 앞설 수 없습니다');
+    throw new BadRequestException('계약 종료일은 시작일보다 앞설 수 없습니다.');
   // 운영 정책 ACC-22 — 계약 시작일 기준. 초대도 나가지 않는다.
   if (
     dto.birthDate &&
@@ -294,12 +294,12 @@ function checkInput(dto: CreateContractDto): void {
     ageOn(dto.birthDate, dto.startDate) < 19
   )
     throw new BadRequestException(
-      '만 19세 미만 직원은 등록할 수 없습니다 (계약 시작일 기준)',
+      '만 19세 미만 직원은 등록할 수 없습니다 (계약 시작일 기준).',
     );
   const workDays = dto.workDays ?? [];
   const weekdays = new Set(workDays.map((d) => d.weekday));
   if (weekdays.size !== workDays.length)
-    throw new BadRequestException('같은 요일을 두 번 넣었습니다');
+    throw new BadRequestException('같은 요일을 두 번 넣었습니다.');
   workDays.forEach(checkWorkDay);
   checkWeeklyHoliday(dto);
   checkProbation(dto);
@@ -332,18 +332,18 @@ function checkWeeklyHoliday(dto: CreateContractDto): void {
   if (weeklyMinutesOf(workDays) < 15 * 60) {
     if (weeklyHoliday)
       throw new BadRequestException(
-        '주 소정근로시간이 15시간 미만이면 주휴일이 없습니다',
+        '주 소정근로시간이 15시간 미만이면 주휴일이 없습니다.',
       );
     return;
   }
   if (!weeklyHoliday) {
     if (dto.isTemporarySave) return;
     throw new BadRequestException(
-      '주 소정근로시간이 15시간 이상이면 주휴일을 골라야 합니다',
+      '주 소정근로시간이 15시간 이상이면 주휴일을 골라야 합니다.',
     );
   }
   if (workDays.some((d) => d.weekday === weeklyHoliday))
-    throw new BadRequestException('주휴일은 근무하지 않는 요일이어야 합니다');
+    throw new BadRequestException('주휴일은 근무하지 않는 요일이어야 합니다.');
 }
 
 /** start 부터 1년이 되는 날(그날 포함) — 2026-01-01 이면 2026-12-31 */
@@ -362,17 +362,17 @@ function checkProbation(dto: CreateContractDto): void {
   const months = dto.probationMonths ?? null;
   const rate = dto.probationWageReductionRate ?? null;
   if ((months === null) !== (rate === null))
-    throw new BadRequestException('수습 기간과 임금 감액률은 함께 넣습니다');
+    throw new BadRequestException('수습 기간과 임금 감액률은 함께 넣습니다.');
   if (months === null) return;
   if (dto.employmentType !== 'FULL_TIME')
-    throw new BadRequestException('수습은 정직원만 둘 수 있습니다');
+    throw new BadRequestException('수습은 정직원만 둘 수 있습니다.');
   if (
     dto.startDate &&
     dto.endDate &&
     dto.endDate < oneYearLastDay(dto.startDate)
   )
     throw new BadRequestException(
-      '수습은 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 둘 수 있습니다',
+      '수습은 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 둘 수 있습니다.',
     );
 }
 
@@ -408,26 +408,26 @@ function checkPaper(
   const registering = dto.contractMethod === 'PAPER' && !dto.isTemporarySave;
   if (!registering && documents.length)
     throw new BadRequestException(
-      '날인본 파일은 종이 계약을 등록할 때만 올릴 수 있습니다',
+      '날인본 파일은 종이 계약을 등록할 때만 올릴 수 있습니다.',
     );
   if (
     registering &&
     !documents.some((d) => d.kind === 'PAPER_EMPLOYMENT_CONTRACT')
   )
     throw new BadRequestException(
-      '종이 계약은 당사자가 모두 날인한 근로계약서 파일과 함께 등록합니다',
+      '종이 계약은 당사자가 모두 날인한 근로계약서 파일과 함께 등록합니다.',
     );
   // 잘못 올린 계약 바로잡기는 종이 계약 등록에서만, 재계약이 아닐 때만(WHALEERP-156)
   if (dto.correctSignedContracts && !registering)
     throw new BadRequestException(
-      '잘못 올린 계약 바로잡기는 종이 계약을 등록할 때만 할 수 있습니다',
+      '잘못 올린 계약 바로잡기는 종이 계약을 등록할 때만 할 수 있습니다.',
     );
   if (dto.correctSignedContracts && dto.previousContractId !== undefined)
     throw new BadRequestException(CORRECTION_NOT_RENEWAL);
 }
 
 const CORRECTION_NOT_RENEWAL =
-  '잘못 올린 계약 바로잡기는 재계약과 함께 할 수 없습니다';
+  '잘못 올린 계약 바로잡기는 재계약과 함께 할 수 없습니다.';
 
 /** 날인본을 저장소에 올리고 contract_documents 행을 만든다. 올린 키는 uploaded 에 쌓는다 — 실패하면 부른 쪽이 지운다. */
 async function saveDocuments(
@@ -452,7 +452,7 @@ async function saveDocuments(
         error instanceof Error ? error.stack : String(error),
       );
       throw new ServiceUnavailableException(
-        '날인본을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
+        '날인본을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     }
     rows.push({
@@ -588,7 +588,7 @@ export async function decideInvitation(
     select: { employmentStatus: true },
   });
   if (records.some((r) => r.employmentStatus === 'EMPLOYED'))
-    throw new ConflictException('이 점포에 이미 재직 중인 직원입니다');
+    throw new ConflictException('이 점포에 이미 재직 중인 직원입니다.');
   return {
     draftAction: records.length ? 'RETURN_CONFIRM' : 'AFFILIATION_CONFIRM',
     candidateAccountId: accountId,
@@ -755,7 +755,7 @@ async function refixClosedHiredDates(
 
 const correctedTooMany = () =>
   new ConflictException(
-    '바로잡을 재계약이 서로 다른 근로계약에 이어져 있습니다. 하나씩 바로잡아 주세요',
+    '바로잡을 재계약이 서로 다른 근로계약에 이어져 있습니다. 하나씩 바로잡아 주세요.',
   );
 
 async function renewalOf(
@@ -797,20 +797,20 @@ async function renewalOf(
   });
   if (!previous)
     throw new ConflictException(
-      '체결 완료되었거나 체결 뒤 종료된 근로계약만 재계약할 수 있습니다',
+      '체결 완료되었거나 체결 뒤 종료된 근로계약만 재계약할 수 있습니다.',
     );
   if (previous.contractsAsPrevious.length)
     throw new ConflictException(
-      '이미 재계약해 체결한 근로계약입니다. 이어지는 근로계약을 확인해 주세요',
+      '이미 재계약해 체결한 근로계약입니다. 이어지는 근로계약을 확인해 주세요.',
     );
   if (previous.storeId !== dto.storeId)
     throw new BadRequestException(
-      '재계약은 직전 계약과 같은 근무지로만 할 수 있습니다',
+      '재계약은 직전 계약과 같은 근무지로만 할 수 있습니다.',
     );
   const s = previous.staffMember;
   if (s.phone !== dto.phone)
     throw new BadRequestException(
-      '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+      '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다.',
     );
   // 직전 계약은 그 사람의 가장 최근 체결이어야 한다 — 더 늦게 시작한 체결 완료가 있는데 옛 계약에 이으면, 새 계약이 시작해도
   // 하루 배치는 옛 계약만 닫아 지금 체결 완료와 새 계약이 함께 남는다(api #157 셀프 리뷰)
@@ -828,7 +828,7 @@ async function renewalOf(
   });
   if (later)
     throw new ConflictException(
-      '이 직원에게 더 최근에 체결한 근로계약이 있습니다. 그 근로계약에서 재계약해 주세요',
+      '이 직원에게 더 최근에 체결한 근로계약이 있습니다. 그 근로계약에서 재계약해 주세요.',
     );
   // 연장(재직 중 — 퇴직 · 퇴직 예정이 아님)이면 같은 레코드, 재입사면 null(새 레코드)
   const employed = s.employmentStatus === 'EMPLOYED' && s.retiredDate === null;
@@ -898,7 +898,7 @@ async function renewalStartNotAfter(
 
 const renewalStartTooEarly = (previousStart: string) =>
   new BadRequestException(
-    `재계약 시작일은 직전 계약 시작일(${previousStart}) 다음 날부터입니다`,
+    `재계약 시작일은 직전 계약 시작일(${previousStart}) 다음 날부터입니다.`,
   );
 
 /**
@@ -925,7 +925,7 @@ async function checkNotEmployed(
   });
   if (employed)
     throw new ConflictException(
-      '이 점포에 같은 번호로 재직 중인 직원이 있습니다',
+      '이 점포에 같은 번호로 재직 중인 직원이 있습니다.',
     );
 }
 
@@ -943,7 +943,7 @@ export async function lockPeople(
     await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`contracts:${phone}`}))`;
 }
 
-const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다';
+const CONTRACT_NOT_FOUND = '근로계약을 찾을 수 없습니다.';
 /** 날인본을 올리는 쓰기 트랜잭션의 제한 시간 — 업로드가 안에서 돈다 */
 const PAPER_TRANSACTION_TIMEOUT_MS = 60_000;
 
@@ -951,10 +951,10 @@ const PAPER_TRANSACTION_TIMEOUT_MS = 60_000;
 function sameStore(storeId: number, scoped: number): void {
   if (storeId !== scoped)
     throw new ConflictException(
-      '다른 요청이 먼저 근무지를 고쳤습니다. 다시 열어 주세요',
+      '다른 요청이 먼저 근무지를 고쳤습니다. 다시 열어 주세요.',
     );
 }
-const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다';
+const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다.';
 
 /**
  * 관리자의 업무 범위(AdminScopeService)로 거른다. 관리하지 않는 점포의 계약, 그리고 본사 역할(BM · BA)에게 직영이
@@ -1032,7 +1032,7 @@ export class ContractsService {
           error.stack,
         );
         throw new ServiceUnavailableException(
-          '저장이 몰렸습니다. 잠시 뒤 다시 저장해 주세요',
+          '저장이 몰렸습니다. 잠시 뒤 다시 저장해 주세요.',
         );
       }
       throw error;
@@ -1446,7 +1446,7 @@ export class ContractsService {
         retryable: false,
         contractId: result.contractId,
         message:
-          '저장했지만 가입 초대 · 소속 추가 확인 요청이 나갔는지 확인하지 못했습니다. 상세를 다시 열어 상태를 확인해 주세요',
+          '저장했지만 가입 초대 · 소속 추가 확인 요청이 나갔는지 확인하지 못했습니다. 상세를 다시 열어 상태를 확인해 주세요.',
       });
     return {
       ...result,
@@ -1679,7 +1679,7 @@ export class ContractsService {
       // 범위를 본 뒤 다른 요청이 번호를 바꿨으면 위 번호 변경 검사가 맞지 않는다 — 다시 열게 한다.
       if (before.staffMember.phone !== scoped.phone)
         throw new ConflictException(
-          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
         );
       await lockPeople(tx, [before.staffMember.phone, dto.phone]);
       // 직원 행을 계약 행보다 먼저 잠근다 — 아래에서 직원 행(직무 · 고용 형태)을 쓴다. 퇴직 확정 · 직원 앱 날인 · 거부 ·
@@ -1722,14 +1722,14 @@ export class ContractsService {
         current.staffMember.phone !== before.staffMember.phone
       )
         throw new ConflictException(
-          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
         );
       // 임시저장과, 직원이 수정을 요청한 계약(WHALEERP-125 · 126)을 고칠 수 있다. 수정 요청은 고쳐 저장하면 곧바로 다시
       // 보낸다(2026-10-19 재영) — 임시저장으로 되돌리거나 종이 계약으로 바꿔 체결 완료로 넘기지는 않는다.
       if (current.status === 'CORRECTION_REQUESTED') {
         if (fields.status !== 'PENDING_SEND')
           throw new BadRequestException(
-            '수정 요청 근로계약서는 고쳐 저장하면 곧바로 다시 보냅니다 — 임시저장 · 종이 계약 등록은 할 수 없습니다',
+            '수정 요청 근로계약서는 고쳐 저장하면 곧바로 다시 보냅니다 — 임시저장 · 종이 계약 등록은 할 수 없습니다.',
           );
         // 이미 보낸 계약이라 근무지는 그대로다 — 옮기려면 새 계약으로 대체한다(api #58 리뷰)
         if (dto.storeId !== current.storeId)
@@ -1742,18 +1742,18 @@ export class ContractsService {
       if (current.previousContractId) {
         if (dto.storeId !== current.storeId)
           throw new BadRequestException(
-            '재계약은 직전 계약과 같은 근무지로만 할 수 있습니다',
+            '재계약은 직전 계약과 같은 근무지로만 할 수 있습니다.',
           );
         if (dto.phone !== current.staffMember.phone)
           throw new BadRequestException(
-            '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+            '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다.',
           );
         if (
           fields.status !== 'DRAFT' &&
           current.staffMember.retiredDate !== null
         )
           throw new ConflictException(
-            '퇴직일을 정한 직원에게는 재계약을 보낼 수 없습니다. 퇴직 뒤 다시 일하면 새 근로계약서를 작성해 주세요',
+            '퇴직일을 정한 직원에게는 재계약을 보낼 수 없습니다. 퇴직 뒤 다시 일하면 새 근로계약서를 작성해 주세요.',
           );
         if (dto.correctSignedContracts)
           throw new BadRequestException(CORRECTION_NOT_RENEWAL);
@@ -1844,7 +1844,7 @@ export class ContractsService {
           )
         )
           throw new ConflictException(
-            '잘못 올린 재계약은 그 직원의 근로계약으로 다시 올려 바로잡아 주세요',
+            '잘못 올린 재계약은 그 직원의 근로계약으로 다시 올려 바로잡아 주세요.',
           );
         const previousStart = await renewalStartNotAfter(
           tx,
@@ -2040,7 +2040,7 @@ export class ContractsService {
       if (!before) throw new NotFoundException(CONTRACT_NOT_FOUND);
       if (before.staffMember.phone !== scoped.phone)
         throw new ConflictException(
-          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
         );
       await lockPeople(tx, [before.staffMember.phone, dto.phone]);
       // 직원 행(write) → 계약 행. 번호를 바꾸면 새 번호의 같은 점포 계약을 대체하므로 그 직원 행도 자기 것과 함께 id 순으로
@@ -2081,7 +2081,7 @@ export class ContractsService {
       sameStore(current.storeId, scoped.storeId);
       if (current.staffMember.phone !== before.staffMember.phone)
         throw new ConflictException(
-          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요',
+          '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
         );
       if (!current.status || !WORKER_EDITABLE.includes(current.status))
         throw statusConflict(current.status ?? 'PENDING_SEND');
@@ -2105,7 +2105,7 @@ export class ContractsService {
         ageOn(input.birthDate, input.startDate) < 19
       )
         throw new BadRequestException(
-          '만 19세 미만 직원은 등록할 수 없습니다 (계약 시작일 기준)',
+          '만 19세 미만 직원은 등록할 수 없습니다 (계약 시작일 기준).',
         );
 
       const phoneChanged = dto.phone !== current.staffMember.phone;
@@ -2114,7 +2114,7 @@ export class ContractsService {
       // 재계약은 직전 계약과 같은 번호다 — 바꾸면 직전 계약 링크가 다른 사람의 계약을 가리킨 채 남는다(이어 쓰기와 같다, api #157 리뷰 참고 2)
       if (phoneChanged && current.previousContractId)
         throw new BadRequestException(
-          '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다',
+          '재계약은 직전 계약과 같은 휴대전화번호로만 할 수 있습니다.',
         );
       const joined = current.staffMember.joinStatus === 'JOINED';
       let draftAction = current.draftAction as Invitation['draftAction'];
@@ -2234,7 +2234,9 @@ export class ContractsService {
       if (!current) throw new NotFoundException(CONTRACT_NOT_FOUND);
       sameStore(current.storeId, scopedStore);
       if (current.status !== 'DRAFT')
-        throw new ConflictException('임시저장한 근로계약서만 지울 수 있습니다');
+        throw new ConflictException(
+          '임시저장한 근로계약서만 지울 수 있습니다.',
+        );
 
       await tx.contractWorkDay.deleteMany({ where: { contractId } });
       await tx.contractParty.deleteMany({ where: { contractId } });
@@ -2243,7 +2245,9 @@ export class ContractsService {
         where: { contractId, status: 'DRAFT' },
       });
       if (count === 0)
-        throw new ConflictException('임시저장한 근로계약서만 지울 수 있습니다');
+        throw new ConflictException(
+          '임시저장한 근로계약서만 지울 수 있습니다.',
+        );
 
       const others = await tx.contract.count({
         where: { staffMemberId: current.staffMemberId },
@@ -2279,7 +2283,7 @@ export class ContractsService {
       where: { contractDocumentId, contractId, kind: { not: 'SIGNATURE' } },
       select: { storageKey: true, fileName: true },
     });
-    if (!document) throw new NotFoundException('파일을 찾을 수 없습니다');
+    if (!document) throw new NotFoundException('파일을 찾을 수 없습니다.');
     const storage = requireStorage(this.storage);
     return {
       url: await storage.downloadUrl(document.storageKey, document.fileName),

@@ -4,12 +4,12 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:41:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
     title: RetirementService (preview · retire · changeDate · cancel · retireDue)
-    last_modified: 2026-10-22T06:25:33Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
@@ -21,7 +21,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: Which stores an 관리자 manages
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T07:10:00Z
   - id: kst-date
     resource: ../../src/staff-members/kst-date.ts
     title: KST "today" and date-only helpers
@@ -123,7 +123,7 @@ in the past: they still work today.
 # An open check-in blocks retirement
 
 Retire and change-date both refuse with 409 `OPEN_CHECK_IN` while that staff record has a check-in without its check-out
-(「MM/DD HH:mm 퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 먼저 보정으로 닫아 주세요」). Otherwise the retired membership would keep an
+(「MM/DD HH:mm 퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 먼저 보정으로 닫아 주세요.」). Otherwise the retired membership would keep an
 open check-in no one can close (2026-10-27 재영). Check-ins older than the 3-month correction window are ignored — they can no
 longer be corrected, so they would block forever. An open check-in made after the date is saved stays as 퇴근 미등록 for the
 admin to correct; the batch does not close it. `assertNoOpenCheckIn` in `retirement.service.ts`; unit and e2e tests.
@@ -144,7 +144,7 @@ the change route is the way to move the date.
 A record that has not joined yet is accepted once it has received a 근로계약서 — 재직 starts with
 the contract, not with 가입 (WHALEERP-125 「재직과 매장 정보」, CTR-25, 2026-10-19 재영). One with
 임시저장 contracts only is not counted as 재직 and is 409 「임시저장 근로계약만 있는 직원은 퇴직 처리
-대신 임시저장을 지워 주세요」.
+대신 임시저장을 지워 주세요.」.
 
 Other refusals: RETIRED is 409; changing to the same
 date is 409 (it would only stack log rows); a date older than 3 months (calendar

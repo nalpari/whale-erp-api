@@ -662,7 +662,7 @@ describe('직원 가입 (e2e, DB)', () => {
       '/auth/account/signup',
       body({ token: s.token }, { gender: undefined }),
     ).expect(400);
-    expect(JSON.stringify(res.body)).toContain('성별을 골라 주세요');
+    expect(JSON.stringify(res.body)).toContain('성별을 골라 주세요.');
     expect(await prisma.account.count({ where: { phone: s.phone } })).toBe(0);
     expect(
       await prisma.invitation.findUniqueOrThrow({

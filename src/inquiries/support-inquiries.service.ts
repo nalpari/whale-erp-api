@@ -43,7 +43,7 @@ export interface InquiryUpload {
   sizeBytes: number;
 }
 
-const NOT_FOUND = '문의를 찾을 수 없습니다';
+const NOT_FOUND = '문의를 찾을 수 없습니다.';
 const PLATFORM_BP_CODE = 'BP000000';
 /** 점포 단위 관리자 — 가맹 마스터 · 가맹 관리자. 공지 노출 대상 STORE 와 같은 기준이다. */
 const STORE_ROLES = new Set(['FM', 'FA']);
@@ -112,7 +112,7 @@ export class SupportInquiriesService {
           // 안내 문구는 미정(Manyfast 질문) — 정해지면 바꾼다.
           if (duplicate)
             throw new ConflictException(
-              '같은 문의가 방금 등록되었습니다. 문의 목록을 확인해 주세요',
+              '같은 문의가 방금 등록되었습니다. 문의 목록을 확인해 주세요.',
             );
           const { inquiryId: id } = await tx.inquiry.create({
             data: {
@@ -159,7 +159,7 @@ export class SupportInquiriesService {
           error.stack,
         );
         throw new ServiceUnavailableException(
-          '등록이 몰렸습니다. 잠시 뒤 다시 등록해 주세요',
+          '등록이 몰렸습니다. 잠시 뒤 다시 등록해 주세요.',
         );
       }
       throw error;
@@ -280,7 +280,8 @@ export class SupportInquiriesService {
       },
       select: { storageKey: true, fileName: true },
     });
-    if (!attachment) throw new NotFoundException('첨부파일을 찾을 수 없습니다');
+    if (!attachment)
+      throw new NotFoundException('첨부파일을 찾을 수 없습니다.');
     return {
       url: await storage.downloadUrl(
         attachment.storageKey,
@@ -300,7 +301,8 @@ export class SupportInquiriesService {
         isDeleted: false,
       },
     });
-    if (!found) throw new BadRequestException('문의 유형을 다시 선택해 주세요');
+    if (!found)
+      throw new BadRequestException('문의 유형을 다시 선택해 주세요.');
   }
 
   /**
@@ -353,7 +355,7 @@ export class SupportInquiriesService {
         outage[0] instanceof Error ? outage[0].stack : String(outage[0]),
       );
       throw new ServiceUnavailableException(
-        '첨부파일을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요',
+        '첨부파일을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     }
     // 썸네일을 만들 수 없는 이미지(깨짐 · 화소 초과)는 고쳐 올리면 되는 400 이다 — 장애로 바꾸지 않는다(점포 이미지와 같다).

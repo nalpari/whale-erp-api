@@ -11,7 +11,7 @@ import type { AdminProfileUpdateDto } from './dto/admin-profile-update.dto';
 import type { AdminProfileResponseDto } from './dto/admin-profile.response.dto';
 
 type Tx = Prisma.TransactionClient;
-const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
+const NOT_FOUND = '관리자 계정을 찾을 수 없습니다.';
 
 type History = {
   field: string;
@@ -77,7 +77,7 @@ export class AdminProfileService {
         });
         if (count === 0)
           throw new ConflictException(
-            '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요',
+            '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.',
           );
 
         if (emailChanged)

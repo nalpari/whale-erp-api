@@ -4,12 +4,12 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
 tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T08:41:55Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
@@ -21,7 +21,7 @@ sources:
   - id: controller
     resource: ../../src/work-schedules/work-schedules.controller.ts
     title: /work-schedules
-    last_modified: 2026-10-21T08:25:49Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: notice
     resource: ../../src/work-schedules/work-schedule-notice.ts
     title: 저장 알림 — 직원 알림 · 앱 푸시 발송 대기(#201)
@@ -113,7 +113,7 @@ sources:
 - 미리보기 권한이 create 인 것은 의도다 — 복사할 수 있는 사람만 미리보기를 연다(목업 STAFF-13 의 복사 버튼 안).
 - 원본 한 건마다 +7일 · 같은 시각 · 같은 휴게. 한 건 등록과 같은 판정(가입 · 계약 기간 · 퇴직일 · 겹침 · 범위 · 본사 동의)에 걸린 건만 뺀다 — 그 직원의 다른 날은 복사한다. 사유 코드는 등록과 같다(`WORK_SCHEDULE_NO_CONTRACT` · `…_AFTER_RETIREMENT` · `…_NOT_JOINED` · `…_OVERLAP`).
 - 응답(둘 다 같은 모양): 직원별 `source` · `copied` `{ days, minutes }`(휴게 뺀 분, 같은 날 쪼갠 근무는 하루) · `excluded[{ workDate, code }]`(날짜 단위 — 같은 날 쪼갠 근무가 둘 다 빠져도 한 번, 일부만 빠지면 그날은 `copied` 에도 센다) · `retiredDate`, 그리고 `newcomers`(이번 주에 받을 수 있지만 지난 주에 없던 직원 — 「지난 주 없음 · 따로 넣는다」).
-- 본사 계정(BM · BA)은 원본 주에 본사에게 가려진 직원이 있으면 미리보기 · 복사 모두 409 `WORK_SCHEDULE_COPY_HIDDEN_STAFF`(「가맹 점포 관리자가 복사해 주세요」, Q9 · PAY-13) — 그 직원만 빠진 반쪽 주를 만들지 않게. 누가 · 몇 명인지는 알리지 않고, 그래서 응답에 가린 줄이 없다(`newcomers` 에서도 가려진 직원은 뺀다).
+- 본사 계정(BM · BA)은 원본 주에 본사에게 가려진 직원이 있으면 미리보기 · 복사 모두 409 `WORK_SCHEDULE_COPY_HIDDEN_STAFF`(「가맹 점포 관리자가 복사해 주세요.」, Q9 · PAY-13) — 그 직원만 빠진 반쪽 주를 만들지 않게. 누가 · 몇 명인지는 알리지 않고, 그래서 응답에 가린 줄이 없다(`newcomers` 에서도 가려진 직원은 뺀다).
 - 복사는 트랜잭션 하나(30초)다. `pg_advisory_xact_lock(hashtext('work-schedule-week:<storeId>:<월요일>'))` 를 배타로 `$executeRaw` 로 잡고(반환이 void 라 `$queryRaw` 면 P2010) 빈 주를 다시 본 뒤, 원본 직원 행을 ID 순으로 한꺼번에 잠그고(다른 주를 동시에 복사할 때의 교착 방지) 차례로 넣는다 — 두 번 눌러도 한 번만. 일회용 PGlite e2e 는 연결이 하나라 동시성을 증명하지 못한다 — 실제 PostgreSQL 에서 본다. 넣을 때 다시 판정한다. 알림은 같은 트랜잭션에서 생긴 직원마다 한 번(시작 시각순으로 묶음).
 
 # Notice
@@ -130,7 +130,7 @@ sources:
 # Staff app month
 
 `GET /me/work-schedules?staffMemberId=&month=YYYY-MM`(#205) — 직원 앱 토큰만, 관리자 토큰은 403. 직원 근무 앱 근무 탭의 월 달력이 쓴다.[^my-controller]
-- 소속 하나(= 직원 레코드)를 받는다 — `GET /me/memberships` 의 `staffMemberId`. 기준은 내 소속 근무지 · TO-DO 와 같은 `ACTIVE_STAFF`(체결 완료 계약 · 가입 완료 · 재직). 남의 · 퇴직한 · 없는 레코드는 모두 같은 404 「소속을 찾을 수 없습니다」.
+- 소속 하나(= 직원 레코드)를 받는다 — `GET /me/memberships` 의 `staffMemberId`. 기준은 내 소속 근무지 · TO-DO 와 같은 `ACTIVE_STAFF`(체결 완료 계약 · 가입 완료 · 재직). 남의 · 퇴직한 · 없는 레코드는 모두 같은 404 「소속을 찾을 수 없습니다.」.
 - 달은 근무일 기준(`monthSpan` — 그 달 1일 한국 0시 ≤ 시작 < 다음 달 1일 한국 0시). 앞달 말일 밤에 시작해 1일로 넘어온 근무는 앞달 것이다. 지운 것은 빠지고, 본인 것이라 본사 제공 동의와 상관없다. 시작순 `{ items: WorkScheduleDto[] }`.
 - 실제 출근 · 실제 근무(목업의 채운 칠)는 출퇴근 기록이 생길 때 붙인다(2026-10-22 재영, 이번에는 예정만).
 

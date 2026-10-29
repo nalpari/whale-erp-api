@@ -47,12 +47,12 @@ describe('AdminSignupController 경로 보호', () => {
       expect(methodMeta('THROTTLER:LIMITip', method)).toBeUndefined();
   });
 
-  it('한도를 넘으면 「잠시 후 다시 시도해 주세요」로 알린다 — 도입문의와 같은 문구', async () => {
+  it('한도를 넘으면 「잠시 후 다시 시도해 주세요.」로 알린다 — 도입문의와 같은 문구', async () => {
     const guard = Object.create(
       SignupThrottlerGuard.prototype,
     ) as SignupThrottlerGuard;
     await expect(guard['getErrorMessage']()).resolves.toBe(
-      '잠시 후 다시 시도해 주세요',
+      '잠시 후 다시 시도해 주세요.',
     );
   });
 });

@@ -96,7 +96,7 @@ describe('AdminWithdrawalService.getEligibility', () => {
       isPlatform: true,
     });
     await expect(service.getEligibility(1)).rejects.toThrow(
-      new ForbiddenException('플랫폼 BP 는 탈퇴할 수 없습니다'),
+      new ForbiddenException('플랫폼 BP 는 탈퇴할 수 없습니다.'),
     );
     expect(prisma.adminAccount.count).not.toHaveBeenCalled();
   });
@@ -318,7 +318,7 @@ describe('AdminWithdrawalService.execute', () => {
       isPlatform: true,
     });
     await expect(service.execute(1, dto)).rejects.toThrow(
-      new ForbiddenException('플랫폼 BP 는 탈퇴할 수 없습니다'),
+      new ForbiddenException('플랫폼 BP 는 탈퇴할 수 없습니다.'),
     );
     expectNoMutation();
   });

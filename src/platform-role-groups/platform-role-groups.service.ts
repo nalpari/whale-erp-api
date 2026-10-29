@@ -242,7 +242,7 @@ export class PlatformRoleGroupsService {
    * 플랫폼 관리자 등록 · 수정은 붙일 그룹을 FOR SHARE 로 잠그고 읽으므로 이 잠금과 서로 기다린다. 삭제가 먼저면
    * 그쪽은 지운 그룹을 보고 400 이고, 그쪽이 먼저면 여기서 기다렸다가 붙은 관리자까지 읽는다 — 대체 권한을
    * 골랐으면 그 관리자도 옮기고, 고르지 않았으면(화면에서 연결 사용자가 0명이던 경우) 400 「연결 사용자가 있어
-   * 대체 권한을 골라야 합니다」다. 연결 관리자는 그룹을 잠근 뒤에, 그 행을 FOR NO KEY UPDATE 로 잠그며 읽는다 — 이
+   * 대체 권한을 골라야 합니다.」다. 연결 관리자는 그룹을 잠근 뒤에, 그 행을 FOR NO KEY UPDATE 로 잠그며 읽는다 — 이
    * 그룹에서 빠져나가는 수정이 커밋 전이면 기다렸다가 빼고 읽어, 고른 권한을 대체 권한으로 덮어쓰지 않는다.
    */
   async remove(
@@ -285,7 +285,7 @@ export class PlatformRoleGroupsService {
            FOR NO KEY UPDATE`;
       if (admins.length && !replacement)
         throw new BadRequestException(
-          '연결 사용자가 있어 대체 권한을 골라야 합니다',
+          '연결 사용자가 있어 대체 권한을 골라야 합니다.',
         );
 
       if (admins.length && replacement) {
@@ -328,7 +328,7 @@ export class PlatformRoleGroupsService {
   ) {
     if (replacementId === roleGroupId)
       throw new BadRequestException(
-        '지우는 권한을 대체 권한으로 고를 수 없습니다',
+        '지우는 권한을 대체 권한으로 고를 수 없습니다.',
       );
     const group = await tx.roleGroup.findFirst({
       where: {
@@ -345,10 +345,10 @@ export class PlatformRoleGroupsService {
       },
     });
     if (!group || group.roleTypeCode !== ADDITIONAL_ROLE_TYPE)
-      throw new BadRequestException('대체 권한으로 고를 수 없는 권한입니다');
+      throw new BadRequestException('대체 권한으로 고를 수 없는 권한입니다.');
     if (group.isMaster)
       throw new BadRequestException(
-        `고정 권한 ${group.roleCode} 은 대체 권한으로 고를 수 없습니다`,
+        `고정 권한 ${group.roleCode} 은 대체 권한으로 고를 수 없습니다.`,
       );
     return group;
   }
@@ -360,7 +360,7 @@ export class PlatformRoleGroupsService {
     });
     if (!bp)
       throw new InternalServerErrorException(
-        '플랫폼 BP(is_platform) 행이 없습니다 — 1팀 초기 데이터 마이그레이션을 확인해 주세요',
+        '플랫폼 BP(is_platform) 행이 없습니다 — 1팀 초기 데이터 마이그레이션을 확인해 주세요.',
       );
     return bp.bpCodeId;
   }
@@ -427,9 +427,11 @@ function isDeletableType(group: DeletableCheck): boolean {
 /** 지울 수 있는 것은 플랫폼 관리자(PA) 추가 권한뿐 — 고정 권한도, 잘못 들어간 다른 유형의 비고정 행도 409. */
 function assertDeletable(target: DeletableCheck) {
   if (target.isMaster)
-    throw new ConflictException('고정 권한은 삭제할 수 없습니다');
+    throw new ConflictException('고정 권한은 삭제할 수 없습니다.');
   if (target.roleTypeCode !== ADDITIONAL_ROLE_TYPE)
-    throw new ConflictException('플랫폼 관리자 추가 권한만 삭제할 수 있습니다');
+    throw new ConflictException(
+      '플랫폼 관리자 추가 권한만 삭제할 수 있습니다.',
+    );
 }
 
 function candidateWhere(roleGroupId: number): Prisma.RoleGroupWhereInput {

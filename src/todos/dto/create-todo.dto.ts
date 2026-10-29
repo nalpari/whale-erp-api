@@ -21,17 +21,17 @@ import { NO_NUL } from '../../common/no-nul';
 
 const MAX_ID = 2_147_483_647;
 export const TIME_PATTERN = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
-export const TIME_MESSAGE = '수행 시간은 HH:mm 입니다';
+export const TIME_MESSAGE = '수행 시간은 HH:mm 입니다.';
 export const DATE_MESSAGE =
-  '수행 예정 날짜는 YYYY-MM-DD 형식의 있는 날짜입니다';
+  '수행 예정 날짜는 YYYY-MM-DD 형식의 있는 날짜입니다.';
 
 /** 제목 · 내용 · 수행 예정 일시 · 긴급 — 등록과 수정이 같은 규칙을 쓴다 */
 export class TodoFieldsDto {
   /** 제목. 100자까지 */
   @IsString()
   @MaxLength(100)
-  @Matches(/\S/, { message: '제목을 입력해 주세요' })
-  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다' })
+  @Matches(/\S/, { message: '제목을 입력해 주세요.' })
+  @Matches(NO_NUL, { message: '제목에 쓸 수 없는 문자가 있습니다.' })
   title: string;
 
   /** 내용. 2,000자까지. 앞뒤 공백을 지우고, 비면(공백만이면) null */
@@ -41,7 +41,7 @@ export class TodoFieldsDto {
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  @Matches(NO_NUL, { message: '내용에 쓸 수 없는 문자가 있습니다' })
+  @Matches(NO_NUL, { message: '내용에 쓸 수 없는 문자가 있습니다.' })
   body?: string | null;
 
   /** 수행 예정 날짜 YYYY-MM-DD. 한국 날짜로 오늘 이후 */

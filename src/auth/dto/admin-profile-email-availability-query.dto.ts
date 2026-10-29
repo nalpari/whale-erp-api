@@ -10,7 +10,7 @@ import { lowerEmail } from '../../platform-admins/platform-admin-format';
  */
 export class AdminProfileEmailAvailabilityQueryDto {
   @Transform(lowerEmail)
-  @IsEmail({}, { message: '이메일 형식이 아닙니다' })
+  @IsEmail({}, { message: '이메일 형식이 아닙니다.' })
   @MaxLength(100)
   email: string;
 }

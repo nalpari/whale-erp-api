@@ -43,11 +43,11 @@ export const ROLE_GROUP_LOCK_REASONS = Object.keys(
   ROLE_GROUP_LOCK_REASON_LABELS,
 ) as readonly RoleGroupLockReason[];
 
-export const NOT_FOUND = '권한을 찾을 수 없습니다';
-export const NAME_TAKEN = '같은 이름의 권한이 있습니다';
-export const SELF_LINKED = '본인이 연결된 권한이라 고칠 수 없습니다';
+export const NOT_FOUND = '권한을 찾을 수 없습니다.';
+export const NAME_TAKEN = '같은 이름의 권한이 있습니다.';
+export const SELF_LINKED = '본인이 연결된 권한이라 고칠 수 없습니다.';
 export const CHANGED_MEANWHILE =
-  '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요';
+  '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.';
 
 /**
  * 다음 권한 코드 — 유형 + 6자리 순번. 지운 그룹까지 포함한 마지막 코드의 다음이라 지운 번호를 다시 쓰지
@@ -56,7 +56,7 @@ export const CHANGED_MEANWHILE =
 export function nextRoleCode(roleType: string, last: string | null): string {
   const next = (last ? Number(last.slice(2)) : 0) + 1;
   if (next > 999_999)
-    throw new ConflictException('권한 코드를 더 만들 수 없습니다');
+    throw new ConflictException('권한 코드를 더 만들 수 없습니다.');
   return `${roleType}${String(next).padStart(6, '0')}`;
 }
 

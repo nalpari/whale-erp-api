@@ -151,7 +151,7 @@ describe('transition', () => {
       code: 'CONTRACT_STATUS_CONFLICT',
       status: 'SIGNED',
       message:
-        '이미 체결 완료된 근로계약입니다. 화면을 새로 고쳐 지금 상태를 확인해 주세요',
+        '이미 체결 완료된 근로계약입니다. 화면을 새로 고쳐 지금 상태를 확인해 주세요.',
     });
     expect(d.contract.updateMany).not.toHaveBeenCalled();
     expect(d.contractStatusHistory.create).not.toHaveBeenCalled();

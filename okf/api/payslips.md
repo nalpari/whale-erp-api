@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:54:57Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -25,15 +25,15 @@ sources:
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-29T05:17:36Z
   - id: pdf
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
@@ -167,23 +167,23 @@ sources:
   `DRAFT`(→ 작성 중, 「초안 생성」, 처리 관리자)를 남긴다.
 * **검토 대기 분류**(WHALEERP-229, `payslip-attendance-reasons.ts`) — 사유를 붙여도 초안은 만든다. 순서는 출퇴근 누락 · 기간 중
   계약 변경 · 계약 만료 후 기록 · 확인 필요 기록 포함.
-  * **출퇴근 누락**(`MISSING_ATTENDANCE`): 급여 기간(한국 시간)에 기록이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다」. 있으면
+  * **출퇴근 누락**(`MISSING_ATTENDANCE`): 급여 기간(한국 시간)에 기록이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다.」. 있으면
     빠진 날 — 그날을 덮는 근로계약의 근무 요일인데 출근이 없는 날(출근·퇴근 모두 없음)과 출근만 있고 퇴근이 없는 날(퇴근 미등록) —
-    을 「출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음」(데모, 날짜 내림차순, 10일 넘으면 「외 N일」)
+    을 「출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음.」(데모, 날짜 내림차순, 10일 넘으면 「외 N일」)
     으로 적는다. 오늘은 끝나지 않아 어제까지만 보고, 퇴직일 뒤 · 계약 기간 밖은 빼며, 근무스케줄은 보지 않는다(STAFF-40).
     달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날)도 퇴근 미등록만 맨 뒤에 붙인다 — 그 날의 실근무는 이 달 계산에 늘
     들어가 0분이면 이 달 금액이 줄어든다(이 달이 주를 맡으면 주휴 금액, 앞 달이 맡으면 주 40시간 연장 — `weeksOf`, PR #193 리뷰). 같은
     날이 앞 달 명세서에도 실린다. 출근 · 퇴근 모두 없는 앞 달 날은 넣지 않는다(그 주 개근이 깨진다). 기록 없음 판정 · 계약 만료 후
     기록은 급여 기간 안의 날만 본다.
   * **계약 만료 후 기록**(`AFTER_CONTRACT_END`): 급여 기간에 걸친 계약 가운데 가장 늦은 종료일 뒤에 출근한 날(무기한 계약이 있으면
-    없음) — 「근로계약 만료일(2026-09-25) 뒤 출퇴근 기록이 2일 있습니다 — 09-28, 09-30」.
+    없음) — 「근로계약 만료일(2026-09-25) 뒤 출퇴근 기록이 2일 있습니다 — 09-28, 09-30.」.
   * 기간 중 계약 변경은 아래 「유효한 계약」, 공제 미입력은 확정이 422 로 막는다(230 — 사유 줄은 만들지 않고 상세는 빨간 띠로 알린다.
     목록의 검토 대기는 공제 칸으로 판정한다 — 위 「검토 대기」).
   * 「출퇴근으로 다시 계산」은 누를 때마다 검토 사유를 지금 데이터로 모두 새로 판정한다(출퇴근 셋 · 기간 중 계약 변경, 초안과 같은
     `reviewReasonsOf`) — 앞서 「확인」한 표시도 지운다(2026-10-26 재영). 처리 이력에 「출퇴근 누락 해소」 · 「계약 만료 후 기록 추가」
     모양으로 남긴다. 보정한 뒤 다시 계산하면 경고가 풀린다. 공제 미입력은 저장하지 않는 사유라 그대로 확정이 막는다.
 * **확인 필요 기록 포함**은 급여 기간(한국 시간)에 확인 필요 사유가 남은(관리자가 아직 검토하지 않은) 그 직원 출퇴근 기록이 있을 때다 —
-  검토 사유 `ATTENDANCE_NEEDS_REVIEW`(상세 「급여 기간에 확인 필요 출퇴근 기록이 N건 있습니다」, ATT-11 · 2026-10-20 재영). 확인 필요
+  검토 사유 `ATTENDANCE_NEEDS_REVIEW`(상세 「급여 기간에 확인 필요 출퇴근 기록이 N건 있습니다.」, ATT-11 · 2026-10-20 재영). 확인 필요
   기록도 급여 계산에는 넣는다. 세는 기준은 급여 계산과 같다 — 짝 퇴근은 출근한 날(자정을 넘긴 퇴근도), 출근 없는 퇴근은 자기 시각. 퇴근
   시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지 않는 다음 달에 붙었다(PR #159 리뷰).
 * **항목**은 사용 중인 급여 항목의 지급(11) · 기본 공제(6), 파트타이머면 원천징수(2)까지 `sort_order` 순으로 만든다. 기본급 ·
@@ -222,7 +222,7 @@ sources:
   가산 적용을 바꾸면 연장수당 계산값만 새로 두고, 관리자가 고친 연장수당(`adjusted_amount`)은 지킨다 — 칸을 그대로 돌려보내도 덮지 않는다(새 계산값이 null 인 고용형태 혼합 명세서에서 넣은 값이 미입력으로 돌아가던 문제, PR #159 리뷰).
   **고용형태가 다른 계약이 섞이면**(정직원 ↔ 파트타이머) 두 식을 날마다 나눠 쓰는 규칙이 정해지지 않아 기본급 · 주휴수당 · 연장수당을
   계산하지 않는다(null — 관리자가 넣는다, `PayInput.isEmploymentMixed`). 「기간 중 계약 변경」 상세도 「…고용형태가 다른 근로계약이 걸쳐
-  있어 … 계산하지 않았습니다. 직접 입력해 주세요」로 가른다 — 한 고용형태 식으로 기간 전체를 그럴듯하게 틀리게 셈하던 것을 막는다(PR #159 리뷰).
+  있어 … 계산하지 않았습니다. 직접 입력해 주세요.」로 가른다 — 한 고용형태 식으로 기간 전체를 그럴듯하게 틀리게 셈하던 것을 막는다(PR #159 리뷰).
 * **달을 걸친 주(PAY-04, 2026-10-26 재영)** — 앞 달 몫의 날만으로 주휴 조건(그 날들의 소정근로시간 15시간 이상 · 그 날들의 계약
   요일 개근 · 계약 기간 안)을 채우면 앞 달 명세서가 맡고, 못 채우면 다음 달 명세서가 주 전체로 센다 — 앞 달 명세서는 다음 달 기록
   없이 정해진다. 주휴 금액도 그 명세서가 판정에 쓴 날로 센다 — 앞 달이 맡으면 앞 달 날의 실근무만 넣고 다음 달이 보충하지 않는다

@@ -32,16 +32,16 @@ const CEO_PHONE_PATTERN = /^[0-9]{9,11}$/;
 class BpMasterProfileDto {
   /** BP 마스터 이름. 한글 · 영문 2~20자. @example 김하늘 */
   @Transform(trimText)
-  @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다' })
+  @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다.' })
   name: string;
 
   /** BP 마스터 연락처. 하이픈 없이 숫자 10~11자리. @example 01012345678 */
-  @Matches(PHONE_PATTERN, { message: '연락처는 숫자 10~11자리입니다' })
+  @Matches(PHONE_PATTERN, { message: '연락처는 숫자 10~11자리입니다.' })
   phone: string;
 
   /** BP 마스터 이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 관리자 계정끼리 겹칠 수 없다. @example ceo@hangang.co.kr */
   @Transform(lowerEmail)
-  @IsEmail({}, { message: '이메일 형식이 아닙니다' })
+  @IsEmail({}, { message: '이메일 형식이 아닙니다.' })
   @MaxLength(100)
   email: string;
 
@@ -55,7 +55,7 @@ class BpMasterProfileDto {
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
   @Matches(CEO_PHONE_PATTERN, {
-    message: '대표자 연락처는 숫자 9~11자리입니다',
+    message: '대표자 연락처는 숫자 9~11자리입니다.',
   })
   bizCeoPhone?: string | null;
 
@@ -63,7 +63,7 @@ class BpMasterProfileDto {
   @IsOptional()
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
-  @IsEmail({}, { message: '대표자 이메일 형식이 아닙니다' })
+  @IsEmail({}, { message: '대표자 이메일 형식이 아닙니다.' })
   @MaxLength(100)
   bizCeoEmail?: string | null;
 
@@ -123,7 +123,7 @@ export class CreateBpMasterDto extends BpMasterProfileDto {
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
   @Matches(LOGIN_ID_PATTERN, {
-    message: '아이디는 영문 또는 영문 · 숫자 조합으로 4~20자입니다',
+    message: '아이디는 영문 또는 영문 · 숫자 조합으로 4~20자입니다.',
   })
   loginId: string;
 }

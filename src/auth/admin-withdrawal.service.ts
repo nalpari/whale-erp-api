@@ -22,9 +22,9 @@ import type { WithdrawEligibilityResponseDto } from './dto/admin-withdrawal-elig
 import type { CreateWithdrawalDto } from './dto/admin-withdrawal.dto';
 import { verifyPassword } from './password';
 
-const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
-const NOT_BP_MASTER = 'BP 마스터만 탈퇴할 수 있습니다';
-const PLATFORM_BP = '플랫폼 BP 는 탈퇴할 수 없습니다';
+const NOT_FOUND = '관리자 계정을 찾을 수 없습니다.';
+const NOT_BP_MASTER = 'BP 마스터만 탈퇴할 수 있습니다.';
+const PLATFORM_BP = '플랫폼 BP 는 탈퇴할 수 없습니다.';
 const REASON_DETAIL_REQUIRED = '탈퇴 사유 상세를 입력해 주세요.';
 const IN_PROGRESS_CONTRACT =
   '진행 중인 근로계약이 있어 탈퇴할 수 없습니다. 근로계약을 모두 종료한 뒤 다시 시도해 주세요.';

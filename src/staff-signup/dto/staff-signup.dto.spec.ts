@@ -85,7 +85,7 @@ describe('직원 가입 DTO', () => {
       plainToInstance(StaffSignupDto, signup({ gender: undefined })),
     );
     expect(Object.values(error.constraints ?? {})).toEqual([
-      '성별을 골라 주세요',
+      '성별을 골라 주세요.',
     ]);
   });
 

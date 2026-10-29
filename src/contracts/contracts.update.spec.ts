@@ -465,7 +465,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       });
       scope.canManageStaffAt.mockResolvedValue(false);
       await expect(service.findOne(9, 7)).rejects.toThrow(
-        '근로계약을 찾을 수 없습니다',
+        '근로계약을 찾을 수 없습니다.',
       );
       expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, false);
       expect(prisma.store.findUnique).not.toHaveBeenCalled();
@@ -814,7 +814,9 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         });
         await expect(
           service.update(9, 7, dto({ isTemporarySave: false })),
-        ).rejects.toThrow('임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다');
+        ).rejects.toThrow(
+          '임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다.',
+        );
       },
     );
 
@@ -969,7 +971,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     it('업무 범위 밖 계약은 없는 것과 같게 404 — 아무것도 쓰지 않는다', async () => {
       scope.canManageStaffAt.mockResolvedValue(false);
       await expect(service.update(9, 7, dto())).rejects.toThrow(
-        '근로계약을 찾을 수 없습니다',
+        '근로계약을 찾을 수 없습니다.',
       );
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
@@ -1029,7 +1031,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       });
       prisma.store.findFirst.mockResolvedValue(null);
       await expect(service.update(9, 7, dto())).rejects.toThrow(
-        '근무지 점포를 찾을 수 없습니다',
+        '근무지 점포를 찾을 수 없습니다.',
       );
       expect(prisma.store.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1164,7 +1166,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         Promise.resolve(storeId === 11),
       );
       await expect(service.update(9, 7, dto({ storeId: 12 }))).rejects.toThrow(
-        '근무지 점포를 찾을 수 없습니다',
+        '근무지 점포를 찾을 수 없습니다.',
       );
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });

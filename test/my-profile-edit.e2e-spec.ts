@@ -252,14 +252,14 @@ describe('내 정보 편집 (e2e, DB)', () => {
         newPassword: 'NewPass456!',
       }).expect(400);
       expect((wrong.body as { message: string }).message).toBe(
-        '지금 비밀번호가 맞지 않습니다',
+        '지금 비밀번호가 맞지 않습니다.',
       );
       const weak = await send('post', '/me/profile/password-change', token, {
         currentPassword: PASSWORD,
         newPassword: 'abcdefgh',
       }).expect(400);
       expect((weak.body as { message: string }).message).toBe(
-        '영문 대문자·소문자·숫자·특수문자 중 2가지 이상을 섞어야 합니다',
+        '영문 대문자·소문자·숫자·특수문자 중 2가지 이상을 섞어야 합니다.',
       );
       const row = await prisma.account.findUniqueOrThrow({
         where: { accountId: id },

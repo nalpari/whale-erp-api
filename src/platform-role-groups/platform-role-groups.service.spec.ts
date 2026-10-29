@@ -357,7 +357,7 @@ describe('PlatformRoleGroupsService', () => {
       prisma.roleGroup.findFirst.mockResolvedValue({ roleGroupId: 3 });
       await expect(
         service.create(PM.adminAccountId, { name: 'BP 마스터' }),
-      ).rejects.toThrow(new ConflictException('같은 이름의 권한이 있습니다'));
+      ).rejects.toThrow(new ConflictException('같은 이름의 권한이 있습니다.'));
       expect(prisma.roleGroup.findFirst.mock.calls[0][0].where).toEqual({
         bpCodeId: PLATFORM_BP_ID,
         managerAdminAccountId: null,
@@ -374,7 +374,7 @@ describe('PlatformRoleGroupsService', () => {
       tx.roleGroup.create.mockRejectedValue(uniqueViolation());
       await expect(
         service.create(PM.adminAccountId, { name: 'a' }),
-      ).rejects.toThrow(new ConflictException('같은 이름의 권한이 있습니다'));
+      ).rejects.toThrow(new ConflictException('같은 이름의 권한이 있습니다.'));
     });
 
     it('이름이 아닌 고유 위반(권한 코드 등)은 409 로 바꾸지 않고 그대로 던진다', async () => {
@@ -442,7 +442,7 @@ describe('PlatformRoleGroupsService', () => {
 
     it('본인이 연결된 권한은 403', async () => {
       await expect(service.update(PA.adminAccountId, 2, body)).rejects.toThrow(
-        new ForbiddenException('본인이 연결된 권한이라 고칠 수 없습니다'),
+        new ForbiddenException('본인이 연결된 권한이라 고칠 수 없습니다.'),
       );
       expect(tx.roleGroup.updateMany).not.toHaveBeenCalled();
     });
@@ -472,7 +472,7 @@ describe('PlatformRoleGroupsService', () => {
     it('다른 권한과 같은 이름이면 409 — 자기 자신은 빼고 본다', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue({ roleGroupId: 3 });
       await expect(service.update(PM.adminAccountId, 5, body)).rejects.toThrow(
-        new ConflictException('같은 이름의 권한이 있습니다'),
+        new ConflictException('같은 이름의 권한이 있습니다.'),
       );
       expect(prisma.roleGroup.findFirst.mock.calls[0][0].where).toMatchObject({
         roleGroupId: { not: 5 },
@@ -652,7 +652,7 @@ describe('PlatformRoleGroupsService', () => {
       await expect(
         service.remove(PM.adminAccountId, 5, { updatedAt: UPDATED_AT }),
       ).rejects.toThrow(
-        new ConflictException('고정 권한은 삭제할 수 없습니다'),
+        new ConflictException('고정 권한은 삭제할 수 없습니다.'),
       );
     });
 
@@ -697,7 +697,7 @@ describe('PlatformRoleGroupsService', () => {
         }),
       ).rejects.toThrow(
         new BadRequestException(
-          '고정 권한 PA900000 은 대체 권한으로 고를 수 없습니다',
+          '고정 권한 PA900000 은 대체 권한으로 고를 수 없습니다.',
         ),
       );
     });

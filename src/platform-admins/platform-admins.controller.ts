@@ -192,6 +192,6 @@ export class PlatformAdminsController {
 function idOf(raw: string): number {
   const id = /^[0-9]{1,10}$/.test(raw) ? Number(raw) : 0;
   if (id < 1 || id > INT4_MAX)
-    throw new NotFoundException('플랫폼 관리자 계정을 찾을 수 없습니다');
+    throw new NotFoundException('플랫폼 관리자 계정을 찾을 수 없습니다.');
   return id;
 }

@@ -264,7 +264,7 @@ describe('PlatformMenusService', () => {
       prisma.codeItem.findFirst.mockResolvedValue(null);
       await expect(service.detail(12)).rejects.toThrow(
         new InternalServerErrorException(
-          '메뉴의 서비스(PLATFORM)가 공통코드 SERVICE 에 없습니다',
+          '메뉴의 서비스(PLATFORM)가 공통코드 SERVICE 에 없습니다.',
         ),
       );
     });
@@ -366,16 +366,16 @@ describe('PlatformMenusService', () => {
     });
 
     it.each([
-      ['없는 서비스', { serviceCode: 'NOPE' }, '서비스를 찾을 수 없습니다'],
+      ['없는 서비스', { serviceCode: 'NOPE' }, '서비스를 찾을 수 없습니다.'],
       [
         '없는 상위',
         { parentMenuId: 999 },
-        '상위 메뉴로 고를 수 없는 메뉴입니다',
+        '상위 메뉴로 고를 수 없는 메뉴입니다.',
       ],
       [
         '다른 서비스의 상위',
         { serviceCode: 'WHALE_ERP' },
-        '같은 서비스의 메뉴만 상위로 고를 수 있습니다',
+        '같은 서비스의 메뉴만 상위로 고를 수 있습니다.',
       ],
     ])('%s 는 400', async (_, patch, message) => {
       await expect(service.create(PM, { ...body, ...patch })).rejects.toThrow(
@@ -404,7 +404,7 @@ describe('PlatformMenusService', () => {
       await expect(
         service.create(PM, { ...body, parentMenuId: 20 }),
       ).rejects.toThrow(
-        new BadRequestException('메뉴는 최대 3단계까지만 둘 수 있습니다'),
+        new BadRequestException('메뉴는 최대 3단계까지만 둘 수 있습니다.'),
       );
     });
 
@@ -413,7 +413,7 @@ describe('PlatformMenusService', () => {
         service.create(PM, { ...body, url: '/m11' }),
       ).rejects.toThrow(
         new ConflictException(
-          '같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(MN000011)',
+          '같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(MN000011).',
         ),
       );
       const query = tx.menu.findMany.mock.calls[0][0];
@@ -540,7 +540,7 @@ describe('PlatformMenusService', () => {
         service.update(PM, 11, { ...body, url: '/m12', status: 'ACTIVE' }),
       ).rejects.toThrow(
         new ConflictException(
-          '같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(MN000012)',
+          '같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(MN000012).',
         ),
       );
       expect(tx.menu.updateMany).not.toHaveBeenCalled();
@@ -616,7 +616,7 @@ describe('PlatformMenusService', () => {
       tx.menu.updateMany.mockResolvedValue({ count: 0 });
       await expect(service.update(PM, 11, body)).rejects.toThrow(
         new ConflictException(
-          '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요',
+          '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.',
         ),
       );
       tx.menu.findFirst
@@ -661,7 +661,7 @@ describe('PlatformMenusService', () => {
       await expect(
         service.move(11, { parentMenuId: 20, index: 0 }),
       ).rejects.toThrow(
-        new BadRequestException('같은 서비스 안에서만 옮길 수 있습니다'),
+        new BadRequestException('같은 서비스 안에서만 옮길 수 있습니다.'),
       );
       expect(tx.menu.update).not.toHaveBeenCalled();
     });

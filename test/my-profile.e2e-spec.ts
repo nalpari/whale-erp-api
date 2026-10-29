@@ -678,7 +678,7 @@ describe('내 정보 (e2e, DB)', () => {
         statusCode: 400,
         error: 'Bad Request',
         code: 'CURRENT_PASSWORD_MISMATCH',
-        message: '지금 비밀번호가 맞지 않습니다',
+        message: '지금 비밀번호가 맞지 않습니다.',
       });
       expect(res.text).not.toContain('wrong-pass');
     }

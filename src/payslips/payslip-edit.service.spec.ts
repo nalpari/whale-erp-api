@@ -671,7 +671,7 @@ describe('PayslipEditService', () => {
         {
           reviewReason: 'CONTRACT_CHANGED',
           detail:
-            '급여 기간에 근로계약이 2건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다',
+            '급여 기간에 근로계약이 2건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다.',
           payslipId: 40,
         },
       ]);

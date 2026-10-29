@@ -454,7 +454,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
       const tooSoon = await resend();
       expect(tooSoon.status).toBe(409);
       expect((tooSoon.body as { message: string }).message).toBe(
-        '방금 답변 메일을 보냈습니다. 1분 뒤 다시 보내 주세요',
+        '방금 답변 메일을 보냈습니다. 1분 뒤 다시 보내 주세요.',
       );
 
       // 결과도 비워 둔다 — 다시 보내기가 결과를 쓰지 않으면 아래에서 NULL 로 드러난다.
