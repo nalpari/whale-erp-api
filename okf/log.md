@@ -1,11 +1,19 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: main 병합(api bulbasaur, main #193 · #200 까지): okf/api/payslips.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api bulbasaur, main #198 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Bulk exports](/api/bulk-exports.md) — api #197 리뷰 블로커 3건: 저장소가 4xx 로 거절한 계약서 파일은 건너뛰고 `누락_파일.csv` 에 적는다. 메모리 상한을 200MB 로 낮추고 받은 파일을 복사하지 않으며 zip 올리기는 10분 기한이다. 올리기 전에 키를 행에 적어 실패 · 멈춘 작업 정리 때 지운다.
 * **Update**: main 병합(api bulbasaur, origin/main 최신): okf/api/payslips.md · okf/domain/team3-physical-schema.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다. 마이그레이션 폴더를 main 의 마지막 마이그레이션 뒤 시각(20261029134408)으로 옮겼다.
 * **Update**: [Bulk exports](/api/bulk-exports.md) — 리뷰 「With fixes」 반영(WHALEERP-336). 부분 고유 인덱스를 `(bp_code_id, md5(scope_key))` 로 바꿨다. 전체 점포 범위 키가 btree 한 행 한도를 넘을 수 있어서다. 메모리 한도 500MB를 넘으면 413 으로 바로 실패하고, 화면 실패 사유는 우리가 낸 문구만 보인다. 요청자를 다시 볼 때 난 DB 오류는 다시 시도한다. 점만 있는 이름은 `_` 로 바꾸고(zip-slip), 만료 정리는 기한이 오래된 순으로 한다. 목록 항목에 `storeIds` 를 더했다. e2e 에는 긴 범위 키 · 동시 요청 · 실패 사유 · 멈춘 작업 되살리기를 더했다. [Team 3 physical schema](/domain/team3-physical-schema.md)도 맞췄다.
 * **Add**: [Bulk exports](/api/bulk-exports.md) — 직원 자료 일괄 저장 API(WHALEERP-336). 마이그레이션 `20261029134408_team3_bulk_exports`(`bulk_exports` · `bulk_export_download_logs`, enum `bulk_export_status`)를 더했고, 물리 생성기 밖에서 손으로 썼다([Team 3 physical schema](/domain/team3-physical-schema.md)). [Attachment storage](/api/storage.md)에 `get` · `ZIP` 을 더했고, [Payslips](/api/payslips.md)의 `DETAIL_SELECT` · `toSummary` 를 내보냈다. 배치 이름 둘([Employment Contract Batch](/api/employment-contract-batch.md))과 AppModule 등록 순서([whale-erp-api](/api/whale-erp-api.md))도 바뀌었다. `fflate` 는 직접 의존성으로 넣었다.
+* **Update**: main 병합(api farfetchd, main #198 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: main 병합(api farfetchd, main #194 까지 — 마이그레이션 20261029114945 포함): okf/log · [Payslips](/api/payslips.md) 충돌은 양쪽 기록을 살리고 시각은 늦은 값을 남겼다.
+* **Update**: [Payslips](/api/payslips.md) — PR #193 적대적 리뷰 블로커 반영: 달을 걸친 첫 주의 앞 달 날은 실근무가 이 달 계산에 늘 들어가는데(이 달이 주를 맡으면 주휴 금액, 앞 달이 맡으면 주 40시간 연장), 출퇴근 누락은 급여 기간 안의 날만 봐서 앞 달 날의 퇴근 미등록(0분)이 사유 없이 이 달 금액을 줄였다. `attendanceReviewReasons` 가 그 주 월요일부터 기간 전날까지의 퇴근 미등록도 출퇴근 누락에 넣는다(출근 · 퇴근 모두 없는 날은 넣지 않는다). 기록 없음 · 계약 만료 후 기록은 기간 안 날만 본다. 단위 테스트 · e2e(8/31 퇴근 미등록 — 고치기 전 실패 확인).
+* **Update**: main 병합(api farfetchd, main #189 까지 — PR #193 충돌 풀기): okf/log 충돌은 양쪽 기록을 살렸다. 이 브랜치는 새 마이그레이션 없음.
+* **Update**: main 병합(api farfetchd, main #186 까지 — #185 머지 포함): okf/log 충돌은 양쪽 기록을 살렸다. 이 브랜치는 새 마이그레이션 없음.
+* **Update**: main 병합(api farfetchd, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션 없음.
+* **Update**: [Payslips](/api/payslips.md) — 재영 답(2026-10-28 PAY-05 v234 · 2026-10-29 PAY-04 v237, WHALEERP-243 노무사 답 · WHALEERP-630) 반영: 파트타이머 주휴수당을 계약 소정시간이 아니라 그 주 실근무에서 연장을 뺀 시간 ÷ 5 × 시급(40시간 상한)으로. 대상 판정(계약 소정 15시간 · 개근)과 달을 걸친 주(앞 달이 맡으면 앞 달 날만, 보충 없음)는 그대로. 정직원 결근은 자동 공제하지 않는다(관리자가 고침 — 코드 변경 없음). 단위 테스트.
 * **Update**: [Staff signup (직원 앱 가입)](/api/staff-signup.md) — 소속 추가 확인 · 복귀 확인 요청에도 이름 대조(WHALEERP-140, 2026-10-29 김민식): 직원 레코드 이름이 계정 실명과 다르면(`sameName`, 근무지 더하기와 같은 본인 대조 기준) 그 계정 목록에 없고 수락 · 거절은 404 `AFFILIATION_REQUEST_NOT_FOUND` 다 — 번호 재활용 때 옛 계정이 새 주인 앞 요청을 받아 수락하던 것을 막는다. `sameName` 을 `src/staff-signup/same-name.ts` 로 꺼냈다. 140 점검: 관리자에게 후보 계정 정보가 보이지 않고 응답에도 실리지 않음(충족). 근로계약 쪽에 남은 것: 발송 전 이름 불일치 경고, 소속 추가 확인 메일이 이름 대조 없이 후보 계정 이메일로 감(번호 재활용 때 옛 주인이 채용 정보를 받음), 판별이 옛 계정을 잡아 새 주인에게 가입 초대가 안 감. 마이그레이션 없음.
 * **Update**: [Staff signup](/api/staff-signup.md) — 받은 초대 수락(`POST /me/invitations/:invitationId/accept`) 응답에 `storeId` 를 더했다. 직원앱이 수락 뒤 그 근무지 근로계약서만(`/contracts?store=`) 연다(staff #40 후속 리뷰, Plane WHALEERP-604).
 * **Update**: main 병합(api omastar, main #187 까지): okf/log 충돌은 양쪽 기록을 살렸다.

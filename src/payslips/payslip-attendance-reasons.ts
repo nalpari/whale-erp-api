@@ -1,6 +1,6 @@
 import { EmploymentType, Prisma, PrismaClient, Weekday } from '@prisma/client';
 import { addDays, kstDayStart, kstToday } from '../staff-members/kst-date';
-import { addDay } from './pay-calculation';
+import { addDay, mondayOf } from './pay-calculation';
 
 // 급여명세서 검토 대기 분류 가운데 출퇴근에서 나오는 셋(WHALEERP-229) — 출퇴근 누락(빠진 날 · 일수), 계약 만료 후 기록,
 // 확인 필요 기록 포함(ATT-11). 기간 중 계약 변경은 계약 수로 붙이고(`reviewReasonsOf`), 공제 미입력은 저장하지 않고 확정이
@@ -54,7 +54,8 @@ export interface MissingDay {
 /**
  * 출퇴근 기록이 빠진 날 — 그날을 덮는 근로계약의 근무 요일인데 출근이 없는 날(출근 · 퇴근 모두 없음)과 출근만 있고 퇴근이 없는 날
  * (퇴근 미등록). 근무스케줄은 보지 않는다(STAFF-40 — 급여는 근로계약과 출퇴근 기록으로만). 급여 기간 안, 마지막 날(`until`)까지,
- * 퇴직일 이후는 빼고 날짜 내림차순.
+ * 퇴직일 이후는 빼고 날짜 내림차순. 기간 앞 날(`leadDays`)은 퇴근 미등록만 맨 뒤에 붙인다 — 0분으로 세어 이 달 금액이 줄지만
+ * 출근 · 퇴근 모두 없는 날은 넣지 않는다 — 그 주 개근이 깨져 금액이 조용히 줄지 않고, 앞 달 명세서가 그 날을 알린다.
  */
 export function missingDays(input: {
   periodStart: string;
@@ -63,6 +64,8 @@ export function missingDays(input: {
   retiredDate: string | null;
   /** 출근한 날 → 그날 모든 출근에 퇴근 짝이 있는가 */
   checkedIn: ReadonlyMap<string, boolean>;
+  /** 기간 앞 날 — 퇴근 미등록만 본다 */
+  leadDays?: readonly string[];
 }): MissingDay[] {
   const out: MissingDay[] = [];
   for (let day = input.until; day >= input.periodStart; day = addDay(day, -1)) {
@@ -81,6 +84,9 @@ export function missingDays(input: {
     );
     if (scheduled) out.push({ date: day, kind: 'NONE' });
   }
+  for (const day of [...(input.leadDays ?? [])].sort().reverse())
+    if (input.checkedIn.get(day) === false)
+      out.push({ date: day, kind: 'NO_CHECK_OUT' });
   return out;
 }
 
@@ -117,10 +123,13 @@ export const afterEndDetail = (r: { end: string; days: string[] }) =>
 
 /**
  * 명세서 하나의 출퇴근 검토 대기 사유. 급여 기간(한국)의 그 직원 레코드 출퇴근 기록과 급여 기간에 걸친 근로계약(`contractIds`)을 본다.
- * - 출퇴근 누락: 기록이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다」, 있으면 빠진 날과 일수(오늘은 아직 끝나지 않아 어제까지).
+ * - 출퇴근 누락: 급여 기간 안 출근이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다」, 있으면 빠진 날과 일수(오늘은 아직 끝나지 않아 어제까지).
  * - 계약 만료 후 기록: 가장 늦은 계약 종료일 뒤에 출근한 날.
  * - 확인 필요 기록 포함: 확인 필요 사유가 남은(검토 전) 기록 건수(ATT-11) — 짝 퇴근은 출근한 날로 센다(급여 계산과 같다). 확인 필요
  *   기록도 급여 계산에는 넣는다.
+ * - 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날)은 퇴근 미등록도 출퇴근 누락에 넣는다. 그 날의 실근무는 이 달 계산에
+ *   늘 들어간다 — 이 달이 주를 맡으면 주휴 금액에, 앞 달이 맡으면 주 40시간 연장에(`weeksOf`, PR #193 리뷰). 같은 날이 앞 달
+ *   명세서에도 실린다. 기록 없음 · 계약 만료 후 기록은 급여 기간 안의 날만 본다.
  */
 export async function attendanceReviewReasons(
   db: Db,
@@ -132,7 +141,14 @@ export async function attendanceReviewReasons(
   },
   now: Date = new Date(),
 ): Promise<Prisma.PayslipReviewReasonCreateManyPayslipInput[]> {
+  const periodStart = ymd(basis.periodStartDate);
+  const leadDays: string[] = [];
+  for (let d = mondayOf(periodStart); d < periodStart; d = addDay(d, 1))
+    leadDays.push(d);
   const from = kstDayStart(basis.periodStartDate);
+  const checkInFrom = kstDayStart(
+    new Date(`${mondayOf(periodStart)}T00:00:00Z`),
+  );
   const to = kstDayStart(addDays(basis.periodEndDate, 1));
   const [contracts, staff, checkIns, flagged] = await Promise.all([
     db.contract.findMany({
@@ -151,7 +167,7 @@ export async function attendanceReviewReasons(
       where: {
         staffMemberId: basis.staffMemberId,
         kind: 'CHECK_IN',
-        recordedAt: { gte: from, lt: to },
+        recordedAt: { gte: checkInFrom, lt: to },
       },
       select: {
         recordedAt: true,
@@ -194,7 +210,8 @@ export async function attendanceReviewReasons(
   }));
   const reasons: Prisma.PayslipReviewReasonCreateManyPayslipInput[] = [];
 
-  if (checkIns.length === 0)
+  const periodDays = [...checkedIn.keys()].filter((d) => d >= periodStart);
+  if (periodDays.length === 0)
     reasons.push({
       reviewReason: 'MISSING_ATTENDANCE',
       detail: NO_ATTENDANCE_DETAIL,
@@ -203,11 +220,12 @@ export async function attendanceReviewReasons(
     const yesterday = ymd(addDays(kstToday(now), -1));
     const periodEnd = ymd(basis.periodEndDate);
     const missing = missingDays({
-      periodStart: ymd(basis.periodStartDate),
+      periodStart,
       until: periodEnd < yesterday ? periodEnd : yesterday,
       contracts: spans,
       retiredDate: staff.retiredDate ? ymd(staff.retiredDate) : null,
       checkedIn,
+      leadDays,
     });
     if (missing.length)
       reasons.push({
@@ -215,7 +233,7 @@ export async function attendanceReviewReasons(
         detail: missingDetail(missing),
       });
   }
-  const afterEnd = afterContractEndDays(spans, checkedIn.keys());
+  const afterEnd = afterContractEndDays(spans, periodDays);
   if (afterEnd)
     reasons.push({
       reviewReason: 'AFTER_CONTRACT_END',
