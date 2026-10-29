@@ -13,6 +13,17 @@ import { INT4_MAX, trimText } from '../platform-admin-format';
 export const ADMIN_STATUSES = ['ACTIVE', 'INACTIVE'] as const;
 export type AdminStatus = (typeof ADMIN_STATUSES)[number];
 
+export const ROLE_GROUP_PURPOSES = ['filter'] as const;
+export type RoleGroupPurpose = (typeof ROLE_GROUP_PURPOSES)[number];
+
+/** GET /platform-admins/role-groups 의 쿼리. */
+export class PlatformRoleGroupsQueryDto {
+  /** `filter` 면 목록 필터용 — 호출자와 상관없이 플랫폼 권한(PM · PA) 그룹을 다 준다. 없으면 등록 · 수정 선택지. */
+  @IsOptional()
+  @IsIn(ROLE_GROUP_PURPOSES)
+  purpose?: RoleGroupPurpose;
+}
+
 /** 한 쪽 이동. 목록 응답 규칙의 page(1부터) · pageSize(기본 20, 최대 200). */
 export class PageDto {
   /** 쪽 번호. 1부터, 최대 10,000,000 — 건너뛸 행 수가 integer 범위를 넘지 않게. */

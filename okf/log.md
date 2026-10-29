@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Platform admins](/api/platform-admins.md) — `GET /platform-admins/email-availability?email=`(등록 권한, 등록 409 와 같은 판정)와 `GET /platform-admins/role-groups?purpose=filter`(목록 필터용, 호출자와 상관없이 PM · PA 그룹 전부)를 더했다(재영 2026-10-29, front 요청). 기본 `role-groups` 는 그대로 PA 에게 PM 그룹을 빼고 준다. 마이그레이션 없음.
 * **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인 잠김 429 문구를 「로그인이 잠겼습니다. 5분 뒤에 다시 시도해 주세요.」로 띄웠다(사용자 지정 2026-10-29 — 「…해주세요」는 「…해 주세요」). api 화면 문구에서 붙여 쓴 곳은 이 하나였다. 단위 테스트 기대값도 맞췄다.
 * **Update**: 응답 문구 마침표(api slowbro) review-pr 반영: 근로계약 발송 실패 502 문구가 임시저장 꼬리가 없을 때 마침표 없이 끝나던 것을 문장 끝으로 옮겼고, 급여 검토 사유 「출퇴근 기록이 N일 누락되었습니다 — …」 · 「근로계약 만료일(…) 뒤 출퇴근 기록이 N일 있습니다 — …」 끝에도 마침표를 붙였다. 줄바꿈으로 나뉜 okf 인용 약 35곳과 [Mail](/api/mail.md) 인용, 문구를 인용한 주석 · 테스트 제목 · Swagger 설명을 맞췄다. [Admin auth](/api/admin-auth.md) 시각은 main 의 늦은 값으로 되돌렸다.
 * **Update**: main 병합(api slowbro, main #197 · #199 까지): okf/log 충돌은 양쪽 기록을 살렸고, concept 시각 충돌(auth · payslips · staff-signup · whale-erp-api)은 늦은 값을 쓰고 마침표 인용을 다시 맞췄다. 병합으로 들어온 새 문구는 이미 마침표로 끝나 더 고칠 것이 없었다.

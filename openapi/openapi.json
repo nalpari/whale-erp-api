@@ -2944,6 +2944,18 @@
         "operationId": "PlatformAdminsController_roleGroups",
         "parameters": [
           {
+            "name": "purpose",
+            "required": false,
+            "in": "query",
+            "description": "`filter` 면 목록 필터용 — 호출자와 상관없이 플랫폼 권한(PM · PA) 그룹을 다 준다. 없으면 등록 · 수정 선택지.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "filter"
+              ]
+            }
+          },
+          {
             "name": "X-Bp-Code-Id",
             "in": "header",
             "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
@@ -2964,6 +2976,9 @@
               }
             }
           },
+          "400": {
+            "description": "purpose 값"
+          },
           "403": {
             "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
           }
@@ -2973,7 +2988,7 @@
             "bearer": []
           }
         ],
-        "summary": "사용자 권한 선택지. 플랫폼 관리자에게는 플랫폼 마스터 권한을 빼고 준다.",
+        "summary": "사용자 권한 선택지. 플랫폼 관리자에게는 플랫폼 마스터 권한을 빼고 준다.\n`purpose=filter` 는 목록 필터 「권한명」용 — 호출자와 상관없이 PM · PA 그룹을 다 준다.",
         "tags": [
           "PlatformAdmins"
         ]
@@ -3027,6 +3042,59 @@
           }
         ],
         "summary": "아이디 중복 확인. 등록 화면이 칸을 벗어나거나 Enter 를 칠 때 묻는다. 등록 권한이 필요하다.\n`:id` 보다 먼저 둔다 — 뒤에 두면 이 경로가 상세(:id)로 잡힌다.",
+        "tags": [
+          "PlatformAdmins"
+        ]
+      }
+    },
+    "/platform-admins/email-availability": {
+      "get": {
+        "operationId": "PlatformAdminsController_emailAvailability",
+        "parameters": [
+          {
+            "name": "email",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "maxLength": 100,
+              "format": "email",
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProfileEmailAvailabilityResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "이메일 형식"
+          },
+          "403": {
+            "description": "메뉴 권한 없음 · 플랫폼 계정이 아님 · 마스터 보호 · 본인 보호"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "이메일 중복 확인. 아이디 확인과 같은 등록 권한이고, 판정은 등록의 409 와 같다. `:id` 보다 먼저 둔다.",
         "tags": [
           "PlatformAdmins"
         ]
