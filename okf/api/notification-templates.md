@@ -4,7 +4,7 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-23T04:11:11Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-28T10:30:00Z }
 sources:
   - id: payslip-resent-same-wording
     resource: ../../prisma/migrations/20261021100935_team3_payslip_resent_same_wording/migration.sql
@@ -18,10 +18,14 @@ sources:
     resource: ../../prisma/migrations/20261015140832_team3_lead_reply_mail_template/migration.sql
     title: 41번째 기본 템플릿 EMAIL_LEAD_REPLY — default_* 를 같은 INSERT 에서 채움
     last_modified: 2026-10-15T06:30:00Z
+  - id: excel-mail-templates
+    resource: ../../prisma/migrations/20261028140448_team1_excel_download_logs/migration.sql
+    title: 공통 엑셀 완료 · 실패 메일 기본 템플릿 2건
+    last_modified: 2026-10-28T10:30:00Z
   - id: service
     resource: ../../src/notification-templates/notification-templates.service.ts
     title: 목록 · 상세 · 등록 · 수정 · 되돌리기 · 사용 여부
-    last_modified: 2026-10-23T04:20:03Z
+    last_modified: 2026-10-28T10:30:00Z
   - id: validate
     resource: ../../src/notification-templates/validate-template.ts
     title: 저장 검사(validateTemplate)
@@ -53,7 +57,7 @@ sources:
 
 - **고칠 때마다 바뀌기 전 행 전체를 `notification_template_histories` 에 남긴다** — 수정 · 되돌리기 · 사용 여부 모두. 한
   트랜잭션에서 이력을 쓰고, 고치기가 0건(그사이 누가 고침)이면 함께 되돌린다.
-- **기본 문구**는 기본 템플릿 42건(처음 넣은 40건과 뒤에 더한 `EMAIL_LEAD_REPLY` · `NTF_SIGNUP_UNDER_AGE`)의 `default_title` · `default_body` · `default_variables` 다(NOTIFY-17). 목록 · 상세의
+- **기본 문구**는 기본 템플릿 46건(처음 넣은 40건과 뒤에 더한 `EMAIL_LEAD_REPLY` · `NTF_SIGNUP_UNDER_AGE` · `TALK_STAFF_AFFILIATION_REQUEST` · `EMAIL_STAFF_AFFILIATION_REQUEST` · `EMAIL_EXCEL_READY` · `EMAIL_EXCEL_FAILED`)의 `default_title` · `default_body` · `default_variables` 다(NOTIFY-17). 목록 · 상세의
   `hasDefault` 가 되돌리기 단추를 보일지 정한다. 채널이 바뀌어 기본 문구가 지금 채널 규칙에 맞지 않으면 400 으로 되돌리지
   않는다(NOTIFY-18).
 - **급여명세서를 다시 보내도 처음 발송과 같은 문구다**(쟁점 NOTI-6, 2026-10-20 재영 · 운영 정책 NTF-20).

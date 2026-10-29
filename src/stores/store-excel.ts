@@ -1,13 +1,9 @@
 import type { StoreBusinessProfile } from '@prisma/client';
 import ExcelJS from 'exceljs';
+import { kstDateTime } from '../common/kst-date-time';
 import { statusLabel, storeTypeLabel } from './store-format';
 
-/** 바로 내려받는 엑셀의 상한. 이 이상은 예약 생성(이메일 링크) 대상이다. */
-export const STORE_EXCEL_MAX_ROWS = 10_000;
-/** 한 관리자가 엑셀을 다시 받기까지 기다리는 시간. */
-export const STORE_EXCEL_INTERVAL_MS = 60_000;
-export const XLSX_CONTENT_TYPE =
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+// 1만 건 기준 · 1분 제한 · xlsx 형식은 공통 엑셀(excel-exports/excel-export-policy · excel-response)에 있다.
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -179,12 +175,4 @@ export function addressText(
     .filter(Boolean)
     .join(' ');
   return text || null;
-}
-
-/** 한국 시각 `YYYY-MM-DD HH:mm` */
-export function kstDateTime(date: Date): string {
-  return new Date(date.getTime() + KST_OFFSET_MS)
-    .toISOString()
-    .slice(0, 16)
-    .replace('T', ' ');
 }

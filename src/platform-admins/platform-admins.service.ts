@@ -9,6 +9,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { CLEARED_ATTEMPT_STATE } from '../auth/attempt-lock';
 import { hashPassword } from '../auth/password';
 import {
   type MenuCaller,
@@ -538,7 +539,7 @@ export class PlatformAdminsService {
 
   /**
    * 비밀번호 초기화. 기존 비밀번호와 앞서 낸 초기 비밀번호를 바로 막고, 새 1시간짜리 초기
-   * 비밀번호를 그 계정 이메일로만 보낸다 — 초기화한 사람도 값을 볼 수 없다. 계정 상태는 그대로다.
+   * 비밀번호를 그 계정 이메일로만 보낸다 — 초기화한 사람도 값을 볼 수 없다. 로그인 잠금도 풀고, 계정 상태는 그대로다.
    * 강제 변경 표시(isPasswordChangeRequired)가 켜지므로 대상의 모든 세션은 다음 요청부터 가드가 403
    * (비밀번호 변경 안내)을 내고, 다음 갱신(refresh)에서 아주 종료된다(401). 그 전에 새 초기 비밀번호로
    * 다른 곳에서 로그인했다면 갱신은 되지만 변경 전까지 403 은 그대로다. 세션 행을 여기서 끊지는 않는다. 초기화 · 감사 이력 · 「미발송」 표시를 한 트랜잭션으로 쓰고, 메일이
@@ -574,6 +575,8 @@ export class PlatformAdminsService {
           passwordHash: LOCKED_PASSWORD,
           isPasswordChangeRequired: true,
           isInitialPasswordUnsent: true,
+          failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
+          lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
           updatedBy: by,
         },
       });

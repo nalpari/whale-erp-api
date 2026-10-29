@@ -64,6 +64,11 @@ describe('SignupDto', () => {
     expect(check({ [property]: value }).failed).toEqual([property]),
   );
 
+  // 문구 「영문 또는 영문·숫자 조합」이 기대는 동작 — 숫자를 꼭 섞지 않아도 된다.
+  it.each(['abcd', 'hangang', '1abc'])('아이디 %p 는 받는다', (loginId) =>
+    expect(check({ loginId }).failed).toEqual([]),
+  );
+
   it.each(['021234567', '050720331334'])(
     '연락처 %p 는 받는다 — 9~12자리',
     (phone) => expect(check({ phone }).failed).toEqual([]),
