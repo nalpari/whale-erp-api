@@ -565,7 +565,10 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
 
   it('급여 기간 마지막 날(한국)이 지나기 전에는 확정이 422 PERIOD_NOT_ENDED 다(운영 정책 v247 PAY-06)', async () => {
     // 기간 끝을 오늘로 잠시 옮긴다 — 오늘은 아직 끝나지 않았다
-    const { periodEndDate } = await prisma.payslip.findUniqueOrThrow({
+    const confirms = () =>
+      prisma.payslipLog.count({ where: { payslipId, logType: 'CONFIRM' } });
+    const before = await confirms();
+    const { periodEndDate, status } = await prisma.payslip.findUniqueOrThrow({
       where: { payslipId },
     });
     await prisma.payslip.update({
@@ -582,7 +585,8 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
         },
       );
       expect((blocked.body as { code: string }).code).toBe('PERIOD_NOT_ENDED');
-      expect((await detail()).status).not.toBe('CONFIRMED');
+      expect((await detail()).status).toBe(status);
+      expect(await confirms()).toBe(before);
     } finally {
       await prisma.payslip.update({
         where: { payslipId },
