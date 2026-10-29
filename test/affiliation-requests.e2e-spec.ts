@@ -280,6 +280,31 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
     expect(await requests.list(r.accountId)).toEqual([]);
   });
 
+  it('근로계약서 이름이 계정 이름과 다르면(번호를 넘겨받은 다른 사람일 수 있음) 그 계정에 요청이 보이지 않고 답하지 못한다 — 이름을 바로잡으면 보인다(WHALEERP-140)', async () => {
+    const r = await requested();
+    await prisma.staffMember.update({
+      where: { staffMemberId: r.staffMemberId },
+      data: { name: '김철수' },
+    });
+    expect(await requests.list(r.accountId)).toEqual([]);
+    for (const answer of [
+      () => requests.accept(r.accountId, r.invitationId, {}),
+      () => requests.reject(r.accountId, r.invitationId, {}),
+    ])
+      expect(codeOf(await answer().catch((e: unknown) => e))).toBe(
+        'AFFILIATION_REQUEST_NOT_FOUND',
+      );
+    expect((await contractOf(r.contractId)).status).toBe('PENDING_SEND');
+    // 공백만 다른 같은 이름이면 그 계정 요청이다(날인 본인 대조와 같은 기준)
+    await prisma.staffMember.update({
+      where: { staffMemberId: r.staffMemberId },
+      data: { name: '남 도현' },
+    });
+    expect(
+      (await requests.list(r.accountId)).map((i) => i.invitationId),
+    ).toEqual([r.invitationId]);
+  });
+
   it('거절하면 요청 · 함께 온 계약을 거절 · 거부로 닫고 같은 사유를 남긴다 — 레코드는 두고 초안을 쓴 관리자에게 알린다', async () => {
     const r = await requested();
     await requests.reject(r.accountId, r.invitationId, {

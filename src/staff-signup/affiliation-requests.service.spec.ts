@@ -81,6 +81,8 @@ describe('AffiliationRequestsService', () => {
       account: {
         findUnique: jest.fn().mockResolvedValue({
           phone: PHONE,
+          // 근로계약서 이름(남도현)과 공백만 다르게 둬 같은 이름으로 보는지도 함께 본다(sameName)
+          realName: '남 도현',
           status: 'JOINED',
           isHqSharingConsented: false,
         }),
@@ -188,6 +190,7 @@ describe('AffiliationRequestsService', () => {
       await service().accept(5, 41, { hqSharingConsented: false }, NOW);
       tx.account.findUnique.mockResolvedValue({
         phone: PHONE,
+        realName: '남도현',
         status: 'JOINED',
         isHqSharingConsented: true,
         hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
@@ -204,6 +207,7 @@ describe('AffiliationRequestsService', () => {
       });
       tx.account.findUnique.mockResolvedValue({
         phone: PHONE,
+        realName: '남도현',
         status: 'JOINED',
         isHqSharingConsented: true,
         hqSharingConsentVersion: 'v0.9',
@@ -297,9 +301,27 @@ describe('AffiliationRequestsService', () => {
       );
     });
 
+    it('근로계약서 이름이 계정 이름과 다르면 남의 요청과 같은 404 — 상태를 먼저 드러내지 않는다(WHALEERP-140)', async () => {
+      request({}, { name: '김철수' });
+      expect((await codeOf(service().accept(5, 41, {}, NOW))).code).toBe(
+        'AFFILIATION_REQUEST_NOT_FOUND',
+      );
+      request({ status: 'REJECTED' }, { name: '김철수' });
+      expect((await codeOf(service().accept(5, 41, {}, NOW))).code).toBe(
+        'AFFILIATION_REQUEST_NOT_FOUND',
+      );
+      request({}, { name: '김철수' });
+      expect((await codeOf(service().reject(5, 41, {}, NOW))).code).toBe(
+        'AFFILIATION_REQUEST_NOT_FOUND',
+      );
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
+    });
+
     it('탈퇴 계정이면 401', async () => {
       tx.account.findUnique.mockResolvedValue({
         phone: PHONE,
+        realName: '남도현',
         status: 'WITHDRAWN',
         isHqSharingConsented: false,
       });
@@ -389,6 +411,40 @@ describe('AffiliationRequestsService', () => {
   });
 
   describe('list', () => {
+    it('근로계약서 이름이 계정 이름과 다른 요청은 목록에 없다 — 번호를 넘겨받은 다른 사람 앞일 수 있다(WHALEERP-140)', async () => {
+      const row = (invitationId: number, name: string) => ({
+        invitationId,
+        invitationType: 'AFFILIATION_CONFIRM',
+        sentAt: NOW,
+        expiresAt: LATER,
+        staffMember: {
+          storeId: 4,
+          name,
+          employmentType: 'PART_TIME',
+          jobTitle: '바리스타',
+          contracts: [],
+        },
+      });
+      const findStores = jest.fn().mockResolvedValue([
+        {
+          storeId: 4,
+          name: '모리커피 합정점',
+          storeTypeCode: 'DIRECT',
+          bpCode: { tradeName: '모리커피' },
+        },
+      ]);
+      Object.assign(prisma, {
+        invitation: {
+          findMany: jest
+            .fn()
+            .mockResolvedValue([row(41, '김철수'), row(42, '남도현')]),
+        },
+        store: { findMany: findStores },
+      });
+      const items = await service().list(5, NOW);
+      expect(items.map((i) => i.invitationId)).toEqual([42]);
+    });
+
     it('내 살아 있는 요청만 — 후보 계정 · 아직 잇지 않은 레코드 · 계정 번호, 가맹이고 동의 전이면 동의를 묻는다', async () => {
       Object.assign(prisma, {
         invitation: {
@@ -400,6 +456,7 @@ describe('AffiliationRequestsService', () => {
               expiresAt: LATER,
               staffMember: {
                 storeId: 4,
+                name: '남도현',
                 employmentType: 'PART_TIME',
                 jobTitle: '바리스타',
                 // 복귀 확인 — 레코드는 퇴직 전 조건이고, 알리는 것은 함께 온 계약의 조건이다
@@ -416,6 +473,7 @@ describe('AffiliationRequestsService', () => {
               // 계약 조건이 비었으면 레코드 값
               staffMember: {
                 storeId: 4,
+                name: '남도현',
                 employmentType: 'PART_TIME',
                 jobTitle: '바리스타',
                 contracts: [{ employmentType: null, jobTitle: null }],
