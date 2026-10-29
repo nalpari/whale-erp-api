@@ -4,12 +4,12 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T01:42:58Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excelCount · excelFile · assertExcelCaller)
-    last_modified: 2026-10-29T01:30:00Z
+    last_modified: 2026-10-29T01:42:58Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
@@ -126,7 +126,9 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   changed between the read and the write, so a password never goes to an old address.
   Sessions are not revoked (user decision, 2026-10-27, like 플랫폼 관리자 · BP 관리자
   초기화): the forced-change flag already makes every open session 403 on everything but
-  the password change.
+  the password change. The login lock is cleared with it (`failed_login_count = 0`,
+  `lock_expires_at = NULL`, 2026-10-28 재영), as 플랫폼 관리자 · BP 관리자 초기화 do, so a
+  locked master can sign in with the mailed password at once.
 - **Delete is for an unused 오등록 only.** 사용 or 미사용, the master never logged in, no
   undeleted BA · FM · FA, no undeleted store. The detail returns
   `deletion: { isDeletable, reasons }` with the tooltip sentences; `DELETE` re-checks them
