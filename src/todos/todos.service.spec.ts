@@ -419,6 +419,21 @@ describe('TodosService', () => {
       });
     });
 
+    it('본사 역할이 폐점한 가맹 점포를 보면 동의한 직원도 없다(ATT-30 v227)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 4, storeTypeCode: 'FRANCHISE', storeStatusCode: 'CLOSED' },
+        ],
+      });
+      await service.assignableStaff(ADMIN, 4);
+      expect(firstArg(db.staffMember.findMany).where).toEqual({
+        storeId: 4,
+        ...ACTIVE_STAFF,
+        account: { is: { accountId: { in: [] } } },
+      });
+    });
+
     it('가맹 관리자(FM)는 자기 가맹 점포 직원을 동의와 상관없이 본다', async () => {
       scope.getManageableStores.mockResolvedValue({
         roleTypeCode: 'FM',

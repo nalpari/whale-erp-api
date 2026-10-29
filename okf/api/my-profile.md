@@ -325,7 +325,9 @@ api #78). The old four columns on `staff_members` were dropped by 민식
 field is always present; the app shows it only when a membership's
 `store.storeTypeCode` is `FRANCHISE`. Ending a 가맹 relationship does not end the
 account's consent (ATT-30 v149), so whatever later writes this consent must not
-end it per store record.
+end it per store record. That record just stops using it: 본사 역할 sees a closed
+가맹 store's staff as not consented (ATT-30 v227, 2026-10-28 재영 — 폐점 and BP 회원
+탈퇴 included, no withdrawal is written; [Staff members](/api/staff-members.md)).
 
 **Wording versions** (ATT-30, 2026-10-15 재영 · WHALEERP-137): `HQ_SHARING_VALID_VERSIONS`
 in `src/admin-scope/hq-sharing.ts` lists the versions still accepted. A wording-only
