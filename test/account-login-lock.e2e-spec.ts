@@ -6,6 +6,8 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { ATTEMPT_LOCK_MS, MAX_FAILED_ATTEMPTS } from '../src/auth/attempt-lock';
+import { AuthSessionService } from '../src/auth-session/auth-session.service';
+import { applyNewPassword } from '../src/auth/apply-new-password';
 import { hashPassword } from '../src/auth/password';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -38,6 +40,7 @@ describe('로그인 실패 잠금 (e2e, DB)', () => {
     const byAccount = { accountId: { in: createdAccountIds } };
     await prisma.authSession.deleteMany({ where: byAccount });
     await prisma.loginHistory.deleteMany({ where: byAccount });
+    await prisma.accountChangeHistory.deleteMany({ where: byAccount });
     await prisma.account.deleteMany({ where: byAccount });
     await app.close();
   });
@@ -217,6 +220,49 @@ describe('로그인 실패 잠금 (e2e, DB)', () => {
 
     expect(res.status).toBe(200);
     expect((await stored(account.accountId)).failedLoginCount).toBe(0);
+  });
+
+  it('틀린 시도 · 잠금 · 성공 뒤 초기화는 계정 수정이 아니다 — 수정 일시가 마이크로초까지 그대로다(WHALEERP-624)', async () => {
+    const account = await createAccount();
+    // Prisma 밖에서 들어온 값처럼 마이크로초까지 둔다 — 읽은 값을 되돌려 쓰면 JS Date 가 버리는 자리다
+    const before = '2026-10-01 00:00:00.123456+00';
+    await prisma.$executeRaw`
+      UPDATE accounts SET updated_at = ${before}::timestamptz WHERE account_id = ${account.accountId}`;
+    const updatedAt = async () =>
+      (
+        await prisma.$queryRaw<{ at: string }[]>`
+          SELECT to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.US') AS at
+          FROM accounts WHERE account_id = ${account.accountId}`
+      )[0].at;
+    const pinned = '2026-10-01 00:00:00.123456';
+    expect(await updatedAt()).toBe(pinned);
+
+    expect(await failTimes(account.email, 5)).toEqual([
+      401, 401, 401, 401, 429,
+    ]);
+    expect((await stored(account.accountId)).failedLoginCount).toBe(5);
+    expect(await updatedAt()).toBe(pinned);
+
+    // 잠금이 풀린 뒤 맞는 비밀번호 — 횟수 · 잠금을 지워도 수정 일시는 그대로다
+    await prisma.$executeRaw`
+      UPDATE accounts SET lock_expires_at = now() - interval '1 second' WHERE account_id = ${account.accountId}`;
+    expect((await login(account.email, PASSWORD)).status).toBe(200);
+    expect(await stored(account.accountId)).toEqual({
+      failedLoginCount: 0,
+      lockExpiresAt: null,
+    });
+    expect(await updatedAt()).toBe(pinned);
+
+    // 실제 계정 수정(비밀번호 변경)은 지금처럼 수정 일시를 올린다
+    await prisma.$transaction((tx) =>
+      applyNewPassword(tx, app.get(AuthSessionService), {
+        accountId: account.accountId,
+        passwordHash,
+        now: new Date(),
+        channel: 'SELF',
+      }),
+    );
+    expect(await updatedAt()).not.toBe(pinned);
   });
 
   // 목으로는 증명할 수 없는 것. 행을 잠그지 않고 읽으면 동시에 들어온 틀린 시도가

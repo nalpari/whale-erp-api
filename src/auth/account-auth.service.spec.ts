@@ -25,7 +25,26 @@ describe('AccountAuthService', () => {
   // 일어난다.
   let tx: {
     $queryRaw: jest.Mock;
-    account: { findUniqueOrThrow: jest.Mock; update: jest.Mock };
+    $executeRaw: jest.Mock;
+    account: { findUniqueOrThrow: jest.Mock };
+  };
+  /**
+   * 실패 횟수 · 잠금을 쓴 UPDATE 들 — 수정 일시를 건드리지 않게 두 칸만 바꾸는 raw UPDATE 다(WHALEERP-624). 값은
+   * (실패 횟수, 해제 시각, 계정 id) 순이다
+   */
+  const attemptWrites = () =>
+    (tx.$executeRaw.mock.calls as [TemplateStringsArray, ...unknown[]][])
+      .filter(([sql]) => sql.join('?').includes('UPDATE accounts'))
+      .map(([, failedLoginCount, lockExpiresAt, accountId]) => ({
+        accountId,
+        failedLoginCount,
+        lockExpiresAt,
+      }));
+  const writeOrder = () => {
+    const i = (tx.$executeRaw.mock.calls as [TemplateStringsArray][]).findIndex(
+      ([sql]) => sql.join('?').includes('UPDATE accounts'),
+    );
+    return tx.$executeRaw.mock.invocationCallOrder[i];
   };
   let sessions: {
     issue: jest.Mock;
@@ -53,6 +72,7 @@ describe('AccountAuthService', () => {
     jest.useFakeTimers().setSystemTime(now);
     tx = {
       $queryRaw: jest.fn().mockResolvedValue([]),
+      $executeRaw: jest.fn().mockResolvedValue(1),
       account: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({
           failedLoginCount: 0,
@@ -60,7 +80,6 @@ describe('AccountAuthService', () => {
           passwordHash: 'scrypt$stored-hash',
           status: 'JOINED',
         }),
-        update: jest.fn().mockResolvedValue({}),
       },
     };
     prisma = {
@@ -393,9 +412,10 @@ describe('AccountAuthService', () => {
       it('실패를 한 번 세어 저장하고 401 로 답한다', async () => {
         await expect(login()).rejects.toBeInstanceOf(UnauthorizedException);
 
-        expect(tx.account.update).toHaveBeenCalledWith({
-          where: { accountId: 7 },
-          data: { failedLoginCount: 1, lockExpiresAt: null },
+        expect(attemptWrites()).toContainEqual({
+          accountId: 7,
+          failedLoginCount: 1,
+          lockExpiresAt: null,
         });
       });
 
@@ -411,7 +431,7 @@ describe('AccountAuthService', () => {
         const error: unknown = await login().catch((e: unknown) => e);
 
         expect(error).toBeInstanceOf(UnauthorizedException);
-        expect(tx.account.update).not.toHaveBeenCalled();
+        expect(attemptWrites()).toEqual([]);
         expect(sessions.recordLoginAttempt).toHaveBeenCalledWith({
           email: 'staff@example.com',
           isSucceeded: false,
@@ -430,7 +450,7 @@ describe('AccountAuthService', () => {
         );
         expect(
           tx.account.findUniqueOrThrow.mock.invocationCallOrder[0],
-        ).toBeLessThan(tx.account.update.mock.invocationCallOrder[0]);
+        ).toBeLessThan(writeOrder());
       });
 
       it('4번째 실패까지는 잠그지 않고 401 이다', async () => {
@@ -438,9 +458,10 @@ describe('AccountAuthService', () => {
 
         await expect(login()).rejects.toBeInstanceOf(UnauthorizedException);
 
-        expect(tx.account.update).toHaveBeenCalledWith({
-          where: { accountId: 7 },
-          data: { failedLoginCount: 4, lockExpiresAt: null },
+        expect(attemptWrites()).toContainEqual({
+          accountId: 7,
+          failedLoginCount: 4,
+          lockExpiresAt: null,
         });
       });
 
@@ -450,9 +471,10 @@ describe('AccountAuthService', () => {
         const error: unknown = await login().catch((e: unknown) => e);
 
         expect(error).toMatchObject({ status: 429 });
-        expect(tx.account.update).toHaveBeenCalledWith({
-          where: { accountId: 7 },
-          data: { failedLoginCount: 5, lockExpiresAt: at(FIVE_MINUTES) },
+        expect(attemptWrites()).toContainEqual({
+          accountId: 7,
+          failedLoginCount: 5,
+          lockExpiresAt: at(FIVE_MINUTES),
         });
         expect((error as HttpException).getResponse()).toMatchObject({
           lockExpiresAt: at(FIVE_MINUTES),
@@ -486,9 +508,10 @@ describe('AccountAuthService', () => {
 
         await login().catch(() => undefined);
 
-        expect(tx.account.update).toHaveBeenCalledWith({
-          where: { accountId: 7 },
-          data: { failedLoginCount: 1, lockExpiresAt: null },
+        expect(attemptWrites()).toContainEqual({
+          accountId: 7,
+          failedLoginCount: 1,
+          lockExpiresAt: null,
         });
       });
 
@@ -498,9 +521,10 @@ describe('AccountAuthService', () => {
 
         await expect(login()).rejects.toBeInstanceOf(UnauthorizedException);
 
-        expect(tx.account.update).toHaveBeenCalledWith({
-          where: { accountId: 7 },
-          data: { failedLoginCount: 1, lockExpiresAt: null },
+        expect(attemptWrites()).toContainEqual({
+          accountId: 7,
+          failedLoginCount: 1,
+          lockExpiresAt: null,
         });
       });
 
@@ -511,7 +535,7 @@ describe('AccountAuthService', () => {
         const error: unknown = await login().catch((e: unknown) => e);
 
         expect(error).toMatchObject({ status: 429 });
-        expect(tx.account.update).not.toHaveBeenCalled();
+        expect(attemptWrites()).toEqual([]);
         // 먼저 잠근 요청이 정한 해제 시각이다.
         expect((error as HttpException).getResponse()).toMatchObject({
           lockExpiresAt: at(60_000),
@@ -538,14 +562,28 @@ describe('AccountAuthService', () => {
           ...overrides,
         });
 
+      it('실패 초기화는 계정 수정이 아니다 — 두 칸만 바꾸고 수정 일시(updated_at)는 건드리지 않는다(WHALEERP-624)', async () => {
+        storedRow({ failedLoginCount: 3 });
+
+        await login();
+
+        const [sql] = tx.$executeRaw.mock.calls.find(([q]) =>
+          (q as TemplateStringsArray).join('?').includes('UPDATE accounts'),
+        ) as [TemplateStringsArray];
+        expect(sql.join('?')).toContain('failed_login_count');
+        expect(sql.join('?')).toContain('lock_expires_at');
+        expect(sql.join('?')).not.toContain('updated_at');
+      });
+
       it('쌓인 실패 횟수를 0 으로 되돌린다', async () => {
         storedRow({ failedLoginCount: 3 });
 
         await login();
 
-        expect(tx.account.update).toHaveBeenCalledWith({
-          where: { accountId: 7 },
-          data: { failedLoginCount: 0, lockExpiresAt: null },
+        expect(attemptWrites()).toContainEqual({
+          accountId: 7,
+          failedLoginCount: 0,
+          lockExpiresAt: null,
         });
       });
 
@@ -555,16 +593,17 @@ describe('AccountAuthService', () => {
 
         await login();
 
-        expect(tx.account.update).toHaveBeenCalledWith({
-          where: { accountId: 7 },
-          data: { failedLoginCount: 0, lockExpiresAt: null },
+        expect(attemptWrites()).toContainEqual({
+          accountId: 7,
+          failedLoginCount: 0,
+          lockExpiresAt: null,
         });
       });
 
       it('지울 것이 없으면 쓰지 않는다', async () => {
         await login();
 
-        expect(tx.account.update).not.toHaveBeenCalled();
+        expect(attemptWrites()).toEqual([]);
         expect(prisma.account.update).not.toHaveBeenCalled();
       });
 
@@ -577,11 +616,11 @@ describe('AccountAuthService', () => {
         const [strings] = tx.$queryRaw.mock.calls[0] as [string[]];
         expect(strings.join('?')).toContain('FOR UPDATE');
         const order = [
-          tx.$queryRaw,
-          tx.account.findUniqueOrThrow,
-          tx.account.update,
-          sessions.issue,
-        ].map((m) => m.mock.invocationCallOrder[0]);
+          tx.$queryRaw.mock.invocationCallOrder[0],
+          tx.account.findUniqueOrThrow.mock.invocationCallOrder[0],
+          writeOrder(),
+          sessions.issue.mock.invocationCallOrder[0],
+        ];
         expect(order).toEqual([...order].sort((a, b) => a - b));
         expect((sessions.issue.mock.calls[0] as unknown[])[1]).toBe(tx);
         expect(
@@ -599,7 +638,7 @@ describe('AccountAuthService', () => {
           lockExpiresAt: at(60_000),
         });
         expect(sessions.issue).not.toHaveBeenCalled();
-        expect(tx.account.update).not.toHaveBeenCalled();
+        expect(attemptWrites()).toEqual([]);
         expect(sessions.recordLoginAttempt).toHaveBeenCalledWith({
           accountId: 7,
           email: 'staff@example.com',
@@ -614,7 +653,7 @@ describe('AccountAuthService', () => {
         await expect(login()).rejects.toBeInstanceOf(UnauthorizedException);
         expect(sessions.issue).not.toHaveBeenCalled();
         expect(jwt.signAsync).not.toHaveBeenCalled();
-        expect(tx.account.update).not.toHaveBeenCalled();
+        expect(attemptWrites()).toEqual([]);
       });
 
       it('검증하는 사이 탈퇴했으면 401 이고 접속 상태를 만들지 않는다', async () => {
