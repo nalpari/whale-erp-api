@@ -569,19 +569,20 @@ table document:
   keeps every earlier session at 30 days. The `expires_at` and `last_used_at`
   comments still say 30 days; correcting them takes a `COMMENT ON COLUMN` in a
   migration (and the `_model.ADD` remark for `last_used_at`), left as is for now.
-- **직원 자료 일괄 저장 tables were written by hand, outside the generator** (WHALEERP-336,
+- **직원 자료 일괄 저장 tables came in by hand, then joined the generator** (WHALEERP-336,
   2026-10-29). `bulk_exports` (one row per request: BP, requester, role type `BM`/`FM` by CHECK,
   sorted non-empty `store_ids int[]`, `scope_key`, packed `staff_member_ids int[]`, enum `bulk_export_status`, file key/name/size,
   attempts, timestamps) and `bulk_export_download_logs` (`bulk_export_id`, `downloaded_by`,
-  `downloaded_at`) are in `20261029134408_team3_bulk_exports` and in `schema.prisma` at the end of
-  the 3팀 section only.[^bulk-exports] They are not in the front logical catalog, `_model.py`,
-  `schema.sql` or the table document. The precedent above (a copy of the catalog plus the
-  generators) could not run: `_build_physical.py` stops on main because two `_model.RENAME`
-  entries hold remarks instead of column names (`accounts.birth_date`,
-  `account_change_histories.field`, from d4f86c34). Until the catalog gains the tables and the
-  generator runs again, regenerating `schema.prisma` drops these three blocks. Re-add them by
-  hand rather than editing generated output. SQL-only: five CHECKs, three 1팀 FKs, and the
-  partial unique `(bp_code_id, md5(scope_key)) WHERE status IN ('PENDING','PROCESSING')`. The md5 is there because an all-stores scope key can pass btree's row size limit (about 2.7KB).
+  `downloaded_at`) were first written straight into `20261029134408_team3_bulk_exports` and the end of the
+  3팀 section of `schema.prisma`.[^bulk-exports] The same day they went into the front logical catalog (new
+  chapter 「직원 자료 일괄 저장」, slug `export`) and `_model.py` (ENUMS · PHYS `integer[]` · REQUIRED · FK_TARGET
+  `bulk_export_id` · `downloaded_by` · CHECKS 5 · UNIQUES · INDEXES 3). The generated `schema.sql` matches the
+  migration statement for statement (41 statements, comments included). The partial unique index needs an
+  expression, `(bp_code_id, md5(scope_key)) WHERE status IN ('PENDING','PROCESSING')`, so `_model.KEY_EXPR` maps a
+  unique-index column to an expression; an all-stores scope key can pass btree's row size limit (about 2.7KB).
+  `_build_prisma.py` now maps `integer[]` to `Int[]` and the `'{}'` default to `@default([])`. `schema.prisma` itself
+  was not regenerated: on main it already drifts from the generator (model and enum order, a few remarks), so the
+  hand-written blocks stay until someone regenerates the whole 3팀 section on purpose.
 - **The e-mail change pin is its own table, ahead of the logical ERD**
   (WHALEERP-191, 2026-10-20 노영주). `email_change_pins` keeps the same rules as
   the reset pin (hash only, five misses close it, 1-minute interval, 10 a day)
