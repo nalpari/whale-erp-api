@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Staff members](/api/staff-members.md) — 직원 상세 요약 근로계약(`GET /staff-members/:id/summary/contracts`)에 `payrollAccount`(신고 정보의 은행 이름 · 계좌번호 전체, 하이픈 없음 · 가리지 않음, 없으면 null) 추가(WHALEERP-183, 노영주 결정). 계약이 없어도 · 지급 방식과 상관없이 온다. 마이그레이션 없음. 2차 리뷰: `bankName` 은 공통코드에 없으면 은행 코드 그대로(DTO 주석), 은행 이름 조회는 `bpCode` 오름차순으로 플랫폼 원본(BP000000)을 먼저 잡는다는 가정을 주석 · 테스트로 밝혔다.
 * **Update**: main 병합(api bulbasaur, main #199 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api bulbasaur, main #193 · #200 까지): okf/api/payslips.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api bulbasaur, main #198 까지): okf/log 충돌은 양쪽 기록을 살렸다.
