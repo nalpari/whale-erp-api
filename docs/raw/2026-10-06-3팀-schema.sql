@@ -434,6 +434,13 @@ CREATE TABLE "contract_parties" (
     "address" TEXT,
     "address_detail" TEXT,
     "filled_at" TIMESTAMPTZ(6),
+    "employer_name" TEXT,
+    "employer_ceo_name" TEXT,
+    "employer_registration_number" TEXT,
+    "employer_address" TEXT,
+    "employer_address_detail" TEXT,
+    "employer_phone" TEXT,
+    "employer_fixed_at" TIMESTAMPTZ(6),
 
     CONSTRAINT "contract_parties_pkey" PRIMARY KEY ("contract_id")
 );
@@ -446,6 +453,7 @@ CREATE TABLE "contract_documents" (
     "storage_key" TEXT NOT NULL,
     "file_name" TEXT NOT NULL,
     "checksum" TEXT NOT NULL,
+    "sent_at" TIMESTAMPTZ(6),
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "contract_documents_pkey" PRIMARY KEY ("contract_document_id")
@@ -992,6 +1000,7 @@ ALTER TABLE "contracts" ADD CONSTRAINT "contracts_pay_day_range" CHECK ("pay_day
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_probation_months_range" CHECK ("probation_months" BETWEEN 1 AND 3);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_probation_wage_reduction_rate_range" CHECK ("probation_wage_reduction_rate" BETWEEN 0 AND 10);
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_probation_pair" CHECK (("probation_months" IS NULL) = ("probation_wage_reduction_rate" IS NULL));
+ALTER TABLE "contract_documents" ADD CONSTRAINT "contract_documents_sent_at_for_generated" CHECK ("kind" NOT IN ('SENT_ORIGINAL', 'SIGNED_COPY') OR "sent_at" IS NOT NULL);
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_end_after_start" CHECK ("end_time" > "start_time");
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_break_pair" CHECK (("break_start_time" IS NULL) = ("break_end_time" IS NULL));
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_break_within_work" CHECK ("break_start_time" IS NULL OR ("break_start_time" >= "start_time" AND "break_end_time" > "break_start_time" AND "break_end_time" <= "end_time"));
@@ -1045,6 +1054,7 @@ CREATE UNIQUE INDEX "password_reset_links_token_hash_key" ON "password_reset_lin
 CREATE UNIQUE INDEX "post_attachments_post_id_sort_order_key" ON "post_attachments" ("post_id", "sort_order") WHERE "is_deleted" = false;  -- 공지 하나에 지우지 않은 첨부의 자리 하나 — 자리 1~5 CHECK 와 함께 공지당 5개를 DB 가 막는다 (WHALEERP-272)
 CREATE UNIQUE INDEX "inquiry_attachments_inquiry_id_sort_order_key" ON "inquiry_attachments" ("inquiry_id", "sort_order");  -- 문의 하나에 순서 하나 — 순서 1~5 CHECK 와 함께 문의당 5개를 DB 가 막는다 (운영 정책 CNT-18)
 CREATE UNIQUE INDEX "payslip_review_reasons_payslip_id_review_reason_key" ON "payslip_review_reasons" ("payslip_id", "review_reason");  -- 명세서 한 장에 같은 사유 한 건
+CREATE UNIQUE INDEX "contract_documents_contract_id_kind_sent_at_key" ON "contract_documents" ("contract_id", "kind", "sent_at") WHERE "kind" IN ('SENT_ORIGINAL', 'SIGNED_COPY');  -- 발송마다 보낸 원본 한 장, 계약마다 처리 완료본 한 장 — 함께 만들어도 하나만 남는다 (WHALEERP-131, 2026-10-29 김민식)
 CREATE UNIQUE INDEX "bulk_exports_bp_code_id_scope_key_key" ON "bulk_exports" ("bp_code_id", md5("scope_key")) WHERE "status" IN ('PENDING', 'PROCESSING');  -- 같은 BP · 같은 범위는 만드는 중인 요청이 하나뿐 — scope_key 는 md5 로 묶는다(KEY_EXPR)
 CREATE UNIQUE INDEX "notifications_dedupe_key_key" ON "notifications" ("dedupe_key") WHERE "dedupe_key" IS NOT NULL;  -- 같은 사건·수신자 1회
 CREATE UNIQUE INDEX "notification_templates_template_code_key" ON "notification_templates" ("template_code");  -- 화면·로그·문의 대응에서 템플릿 하나를 가리키는 코드 (2026-10-07 재영)
@@ -1424,6 +1434,13 @@ COMMENT ON COLUMN "contract_parties"."zip_code" IS '우편번호 — 직원 입�
 COMMENT ON COLUMN "contract_parties"."address" IS '기본주소 — 직원 입력, 검색 API 값 (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."address_detail" IS '상세주소 — 직원 입력 (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."filled_at" IS '반영 일시 — 가입 완료 시 채움';
+COMMENT ON COLUMN "contract_parties"."employer_name" IS '사용자 상호 — 날인 때 점포 상호(없으면 점포명)를 고정 — 처리 완료본 사용자 칸 (WHALEERP-131, 2026-10-29 김민식) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."employer_ceo_name" IS '사용자 대표자 — 날인 때 고정 — 처리 완료본 사용자 칸 (WHALEERP-131) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."employer_registration_number" IS '사용자 사업자등록번호 — 날인 때 고정 — 처리 완료본 사용자 칸 (WHALEERP-131) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."employer_address" IS '사용자 소재지 기본주소 — 날인 때 점포 사업자 주소를 고정 — 처리 완료본 사용자 칸 (WHALEERP-131) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."employer_address_detail" IS '사용자 소재지 상세주소 — 날인 때 고정 — 처리 완료본 사용자 칸 (WHALEERP-131) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."employer_phone" IS '사용자 전화번호 — 날인 때 점포 연락처를 고정 — 처리 완료본 사용자 칸 (WHALEERP-131) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."employer_fixed_at" IS '사용자 고정 일시 — 날인 때 사용자 칸을 고정한 시각. NULL 이면 고정 전에 체결된 계약 — 처리 완료본은 만드는 시점의 점포 정보로 만든다 (WHALEERP-131, 2026-10-29 김민식) (물리에서 추가)';
 COMMENT ON TABLE "contract_documents" IS '계약서 파일';
 COMMENT ON COLUMN "contract_documents"."contract_document_id" IS '파일 ID';
 COMMENT ON COLUMN "contract_documents"."contract_id" IS '근로계약';
@@ -1431,6 +1448,7 @@ COMMENT ON COLUMN "contract_documents"."kind" IS '파일 구분 — 발송 원�
 COMMENT ON COLUMN "contract_documents"."storage_key" IS '저장 위치';
 COMMENT ON COLUMN "contract_documents"."file_name" IS '원래 파일 이름 — 올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15) (물리에서 추가)';
 COMMENT ON COLUMN "contract_documents"."checksum" IS '파일 해시';
+COMMENT ON COLUMN "contract_documents"."sent_at" IS '발송 일시 — 보낸 원본 · 처리 완료본이 담은 계약의 발송 일시(contracts.sent_at). 다른 파일은 NULL (WHALEERP-131, 2026-10-29 김민식) (물리에서 추가)';
 COMMENT ON COLUMN "contract_documents"."created_at" IS '생성 일시';
 COMMENT ON TABLE "contract_status_histories" IS '계약 상태 이력';
 COMMENT ON COLUMN "contract_status_histories"."contract_status_history_id" IS '상태 이력 ID (논리 history_id)';
