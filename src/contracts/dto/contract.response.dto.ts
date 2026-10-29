@@ -217,6 +217,40 @@ export class ContractDocumentDto {
   fileName: string;
 }
 
+/**
+ * 근로계약 상세의 신고 정보 상태(WHALEERP-155) — OK: 보임, NONE: 직원이 입력하지 않음, HIDDEN: 본사 역할이 가맹 점포 직원을 봄
+ * (읽지 않음), UNAVAILABLE: 키가 없거나 풀 수 없음. 화면은 NONE · HIDDEN 을 같은 「-」로 보인다
+ */
+export const CONTRACT_TAX_PROFILE_STATES = [
+  'OK',
+  'NONE',
+  'HIDDEN',
+  'UNAVAILABLE',
+] as const;
+export type ContractTaxProfileState =
+  (typeof CONTRACT_TAX_PROFILE_STATES)[number];
+
+/**
+ * 근로계약 상세의 신고 정보(WHALEERP-155) — 계약이 아니라 직원 레코드에 하나라 옛 계약에서도 그 직원의 지금 값이다. 값 칸은
+ * status 가 OK 일 때만 있고 그 밖은 모두 null
+ */
+export class ContractTaxProfileDto {
+  @ApiProperty({
+    enum: CONTRACT_TAX_PROFILE_STATES,
+    enumName: 'ContractTaxProfileState',
+  })
+  status: ContractTaxProfileState;
+  /** 가린 주민등록번호 — 앞 6자리 + 뒷자리 첫 자(예 900101-1******). 원문은 API 밖으로 나가지 않는다 */
+  @ApiProperty({ nullable: true, type: String })
+  rrnMasked: string | null;
+  /** 은행 이름(BANK 공통코드 이름, 예 KB국민은행). 공통코드에 없으면 은행 코드 그대로 */
+  @ApiProperty({ nullable: true, type: String })
+  bankName: string | null;
+  /** 계좌번호 전체 — 하이픈 없음, 가리지 않음(직원 상세 급여 계좌와 같다) */
+  @ApiProperty({ nullable: true, type: String })
+  accountNumber: string | null;
+}
+
 /** 근로계약서 작성 화면을 다시 채울 값 (GET /contracts/:contractId). 칸 이름은 저장 본문과 같다 */
 export class ContractDetailDto extends ContractTermsDto {
   contractId: number;
@@ -314,4 +348,6 @@ export class ContractDetailDto extends ContractTermsDto {
   renewedBy: number | null;
   /** 직원이 가입을 마쳤는가 — 거부 · 만료 재발송이 앱(서명 대기)으로 가는지 가입 초대(발송 대기)로 가는지 확인창 문구를 가른다 */
   staffJoined: boolean;
+  /** 직원의 신고 정보(주민등록번호 · 급여 계좌) — 읽기만. 풀 수 없어도 상세는 열리고 이 칸만 UNAVAILABLE 이다 */
+  taxProfile: ContractTaxProfileDto;
 }

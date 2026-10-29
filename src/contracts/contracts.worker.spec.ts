@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractFilesService } from './contract-files.service';
 import { ContractsService } from './contracts.service';
@@ -156,6 +157,7 @@ describe('ContractsService.updateWorker', () => {
         { provide: STORAGE, useValue: null },
         { provide: ContractDeliveryService, useValue: delivery },
         { provide: ContractFilesService, useValue: files },
+        { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);

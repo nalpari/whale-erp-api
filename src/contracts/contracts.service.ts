@@ -25,7 +25,14 @@ import {
   hqSharingConsentedOf,
   type HqSharingSource,
 } from '../admin-scope/hq-sharing';
+import { bankNameOf } from '../common/bank-name';
 import { dateOnly } from '../common/date-only';
+import {
+  decryptPersonalData,
+  staffTaxProfileAad,
+} from '../common/personal-data-cipher';
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
+import { maskRrn } from '../common/personal-data-mask';
 import { PrismaService } from '../prisma/prisma.service';
 import { joinStateOf } from '../staff-members/join-state';
 import { linkedRecords } from '../staff-members/previous-records';
@@ -79,6 +86,7 @@ import { CONTRACTS_MENU } from './contracts-menu';
 import {
   ContractDetailDto,
   ContractListResponseDto,
+  ContractTaxProfileDto,
 } from './dto/contract.response.dto';
 import {
   ContractWorkDayDto,
@@ -973,6 +981,7 @@ export class ContractsService {
     @Inject(STORAGE) private readonly storage: OptionalStorage,
     private readonly delivery: ContractDeliveryService,
     private readonly files: ContractFilesService,
+    @Inject(PERSONAL_DATA_KEY) private readonly key: Buffer | null,
   ) {}
 
   /**
@@ -1627,6 +1636,71 @@ export class ContractsService {
       registeredAt: iso(registered),
       registeredBy: registrar ? (registrar.name ?? registrar.loginId) : null,
       canResend,
+      taxProfile: await this.taxProfileOf(adminAccountId, c.staffMemberId),
+    };
+  }
+
+  /**
+   * 근로계약 상세의 신고 정보(WHALEERP-155) — 주민등록번호는 가려서, 급여 계좌는 전체를. 기준은 직원 상세 급여 계좌와 같다
+   * (canManageStaffAccount, 재영 2026-10-29) — 본사 역할이 가맹 점포 직원을 보면 읽지도 풀지도 않고 HIDDEN. 직원 상세와 달리
+   * 키가 없거나 풀 수 없어도 던지지 않고 UNAVAILABLE 이다 — 계약 상세는 그대로 열려야 한다. 원문은 응답 · 로그 · 오류 어디에도
+   * 싣지 않는다 — 로그에는 어느 레코드의 어느 칸인지만 남긴다(가림 함수의 오류도 입력을 싣지 않는다).
+   */
+  private async taxProfileOf(
+    adminAccountId: number,
+    staffMemberId: number,
+  ): Promise<ContractTaxProfileDto> {
+    const empty = { rrnMasked: null, bankName: null, accountNumber: null };
+    if (
+      !(await this.scope.canManageStaffAccount(adminAccountId, staffMemberId))
+    )
+      return { status: 'HIDDEN', ...empty };
+    const profile = await this.prisma.staffTaxProfile.findUnique({
+      where: { staffMemberId },
+      select: {
+        rrnEncrypted: true,
+        bankCode: true,
+        payrollAccountNumberEncrypted: true,
+      },
+    });
+    if (!profile) return { status: 'NONE', ...empty };
+    const key = this.key;
+    if (!key) {
+      this.logger.error(
+        `PERSONAL_DATA_ENCRYPTION_KEY 가 비어 신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId}`,
+      );
+      return { status: 'UNAVAILABLE', ...empty };
+    }
+    let column: 'rrn_encrypted' | 'payroll_account_number_encrypted' =
+      'rrn_encrypted';
+    let rrnMasked: string;
+    let accountNumber: string;
+    try {
+      rrnMasked = maskRrn(
+        decryptPersonalData(
+          key,
+          profile.rrnEncrypted,
+          staffTaxProfileAad(column, staffMemberId),
+        ),
+      );
+      column = 'payroll_account_number_encrypted';
+      accountNumber = decryptPersonalData(
+        key,
+        profile.payrollAccountNumberEncrypted,
+        staffTaxProfileAad(column, staffMemberId),
+      );
+    } catch (err) {
+      this.logger.error(
+        `신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId} 칸=${column}: ${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      return { status: 'UNAVAILABLE', ...empty };
+    }
+    return {
+      status: 'OK',
+      rrnMasked,
+      bankName: await bankNameOf(this.prisma, profile.bankCode),
+      accountNumber,
     };
   }
 

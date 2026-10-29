@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractFilesService } from './contract-files.service';
 import { ContractsService, type PaperDocument } from './contracts.service';
@@ -164,6 +165,7 @@ describe('ContractsService.create', () => {
         { provide: STORAGE, useValue: storage },
         { provide: ContractDeliveryService, useValue: delivery },
         { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
+        { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -869,6 +871,7 @@ describe('ContractsService.create', () => {
           { provide: STORAGE, useValue: null },
           { provide: ContractDeliveryService, useValue: delivery },
           { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
+          { provide: PERSONAL_DATA_KEY, useValue: null },
         ],
       }).compile();
       await expect(
@@ -1086,6 +1089,7 @@ describe('ContractsService.create', () => {
           { provide: STORAGE, useValue: null },
           { provide: ContractDeliveryService, useValue: delivery },
           { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
+          { provide: PERSONAL_DATA_KEY, useValue: null },
         ],
       }).compile();
       prisma.contract.findUnique.mockResolvedValueOnce({
