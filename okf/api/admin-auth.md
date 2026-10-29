@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:24:11Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T09:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -73,11 +73,11 @@ sources:
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 선택과 진입
-    last_modified: 2026-10-21T09:00:00Z
+    last_modified: 2026-10-29T09:00:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService — 직원 · 점포 판정의 탭 BP 인자(scopeAdmin)
-    last_modified: 2026-10-26T07:41:19Z
+    last_modified: 2026-10-29T09:00:00Z
 ---
 
 # Routes
@@ -101,7 +101,7 @@ sources:
 | `PATCH /auth/admin/me/bp` | admin, BP 마스터만 | 상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목 저장. `updatedAt` 필수(동시 수정 409) |
 | `POST /auth/admin/me/bp/business-verification` | admin, BP 마스터만 | 사업자등록번호 · 대표자명 · 개업일자 재인증 — 성공하면 세 값과 인증일시를 바로 반영 |
 | `GET /public-code-items?groups=A,B` | yes | the platform BP's 공통코드 — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
-| `GET /bp-codes?keyword=&page=&pageSize=` | PM · PA only | customer BPs to pick from, `{ items: [{ bpCodeId, bpCode, tradeName, accountStatusCode }], total }` (below) |
+| `GET /bp-codes?keyword=&withMaster=&page=&pageSize=` | PM · PA only | customer BPs to pick from, `{ items: [{ bpCodeId, bpCode, tradeName, accountStatusCode }], total }` (below) |
 | `GET /bp-codes/{bpCodeId}/stores` | any signed-in user, by BP | every undeleted store of a customer BP, `{ items, total }`. PM · PA see any customer BP; everyone else only their own (below) |
 | `GET /bp-codes/{bpCodeId}/code-items?groups=A,B` | any signed-in user, by BP | the same `codes` for a BP the caller may see — PM · PA any undeleted BP (the platform BP included); BP · 가맹 관리자 their own; 직원 앱 a BP with a joined, employed staff record; else 404 (below) |
 
@@ -722,7 +722,11 @@ BP 선택 팝업). Only an active PM or PA of the platform BP may call it
 없습니다…」, an account not in use 403 「사용할 수 없는 계정입니다…」, and a 직원 앱
 token 403. It lists undeleted customer BPs — **사용 · 미사용 · 탈퇴 alike**, since
 a withdrawn BP's records stay viewable and the stores · 공통코드 routes above answer
-for it (200, proven by e2e) — in `bp_code` order then `bp_code_id`, paged by the list rule. `keyword`
+for it (200, proven by e2e) — newest first (`created_at` desc, then `bp_code_id` desc, the same order as
+the BP 마스터 계정 list — 2026-10-29, was `bp_code` order), paged by the list rule. `withMaster=true`
+keeps only BPs with an undeleted BM account (the BP 마스터 계정 list scope, so the popup count matches it);
+absent or `false` filters nothing, because the front also calls this route to find the tab BP and the
+current BP status, which must still open a BP without a master account. Any other value is 400. `keyword`
 (trimmed, at most 50) matches 상호 or BP코드 as a case-insensitive substring,
 with `%` and `_` taken literally (`containsText`).
 `accountStatusCode` is the raw `ACCOUNT_STATUS` value; the screen labels it from

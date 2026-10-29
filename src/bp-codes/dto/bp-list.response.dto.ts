@@ -9,7 +9,7 @@ export class BpListItemResponseDto {
 }
 
 export class BpListResponseDto {
-  /** BP코드순. 미삭제 고객 BP 를 상태와 상관없이. */
+  /** 최신 등록순. 미삭제 고객 BP 를 상태와 상관없이(withMaster 면 BP 마스터 계정이 있는 BP 만). */
   items: BpListItemResponseDto[];
   total: number;
 }

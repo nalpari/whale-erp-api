@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: main 병합(api primeape, main #190 까지): okf/api/admin-auth.md 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin auth](/api/admin-auth.md) — api primeape(#192): `GET /bp-codes` 를 최신 등록순(`created_at` desc, `bp_code_id` desc)으로, 선택 쿼리 `withMaster=true` 면 BP 마스터 계정(BM, 미삭제)이 있는 BP 만 — BP 선택 팝업이 BP 마스터 계정 목록과 같은 건수를 보인다. 없거나 false 면 거르지 않는다(front 의 탭 BP 찾기 · 상태 확인).
 * **Update**: main 병합(api shinx, origin/main 최신): okf/api/admin-auth.md 시각 충돌은 늦은 값을, okf/log 는 양쪽 기록을 살렸다.
 * **Update**: [Admin auth](/api/admin-auth.md) — api #190 review-pr 반영: 현재 비밀번호 확인 문단을 비밀번호 변경 목록 뒤로 옮겼고(목록 마지막 항목이 확인 API 설명처럼 읽혔다), 강제 변경 대상 403 을 적었다. 「현재 비밀번호가 올바르지 않습니다.」가 이 화면 전용이라던 문장을 MY PAGE 세 경로(변경 · 확인 · 탈퇴)가 같이 쓴다로 고쳤다. 확인 경로의 계정 축 한도(10분 10건 · signedInUserTracker)를 컨트롤러 spec 이 고정한다.
 * **Update**: [Admin auth](/api/admin-auth.md) — 회원 탈퇴 1단계용 현재 비밀번호 확인 `POST /auth/admin/me/password-verifications` 를 만들었다(재영 결정, S-JHQQNR). `{ currentPassword }` 가 맞으면 204, 틀리면 400 「현재 비밀번호가 올바르지 않습니다.」(내 비밀번호 변경 · 탈퇴 실행과 같은 비교 · 문구), 빈 값 400, 지운 계정 404. 아무것도 쓰지 않고 로그인 잠금에도 세지 않으며, 계정 축 10분 10건 한도를 건다. 로그인한 관리자 아무나 부를 수 있다. 탈퇴 실행의 비밀번호 확인은 그대로다(이중 확인). openapi 갱신.
