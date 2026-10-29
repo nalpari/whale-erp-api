@@ -134,19 +134,32 @@ export const flaggedDetail = (
 };
 
 /**
- * 확인 필요 사유가 남은 기록 — 급여 계산과 같은 기준이다. 짝은 출근한 날의 것이라(자정을 넘긴 퇴근도) 짝 퇴근은 그 출근이 범위
- * 안일 때, 출근 없는 퇴근은 자기 시각으로. 퇴근 시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지
- * 않는 다음 달에 붙고, 지급하는 달 명세서는 검토 없이 확정된다(PR #159 리뷰)
+ * 확인 필요 사유가 남은 기록. 출근 · 짝 퇴근은 급여 계산과 같은 기준이다 — 짝은 출근한 날의 것이라(자정을 넘긴 퇴근도) 짝
+ * 퇴근은 그 출근이 범위 안일 때. 퇴근 시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지 않는 다음
+ * 달에 붙고, 지급하는 달 명세서는 검토 없이 확정된다(PR #159 리뷰). 출근 없는 퇴근은 급여 계산에 들어가지 않는 출근 누락의
+ * 신호라 자기 시각으로, 급여 기간 안의 것만 센다(`orphanFrom`) — 앞 달 날의 것은 앞 달 명세서가 알린다(api #206 리뷰).
  */
 const flaggedWhere = (
   staffMemberId: number,
   recordedAt: { gte: Date; lt: Date },
+  orphanFrom: Date,
 ): Prisma.AttendanceRecordWhereInput => ({
   staffMemberId,
   reviewReason: { not: null },
   OR: [
     { kind: 'CHECK_IN', recordedAt },
-    { kind: 'CHECK_OUT', checkInAttendanceRecordId: null, recordedAt },
+    ...(orphanFrom < recordedAt.lt
+      ? [
+          {
+            kind: 'CHECK_OUT' as const,
+            checkInAttendanceRecordId: null,
+            recordedAt: {
+              gte: orphanFrom > recordedAt.gte ? orphanFrom : recordedAt.gte,
+              lt: recordedAt.lt,
+            },
+          },
+        ]
+      : []),
     { kind: 'CHECK_OUT', checkInAttendanceRecord: { recordedAt } },
   ],
 });
@@ -208,15 +221,20 @@ export async function attendanceReviewReasons(
       },
     }),
     db.attendanceRecord.count({
-      where: flaggedWhere(basis.staffMemberId, { gte: checkInFrom, lt: to }),
+      where: flaggedWhere(
+        basis.staffMemberId,
+        { gte: checkInFrom, lt: to },
+        from,
+      ),
     }),
     // 그중 앞 달 날 것 — 문구에 그 날짜를 밝힐지 정한다
     leadDays.length
       ? db.attendanceRecord.count({
-          where: flaggedWhere(basis.staffMemberId, {
-            gte: checkInFrom,
-            lt: from,
-          }),
+          where: flaggedWhere(
+            basis.staffMemberId,
+            { gte: checkInFrom, lt: from },
+            from,
+          ),
         })
       : 0,
   ]);
@@ -353,6 +371,38 @@ export function effectiveEnd(
   if (c.status !== 'ENDED' || !closedAt) return end;
   const closed = kstDate(closedAt);
   return end && end < closed ? end : closed;
+}
+
+/**
+ * 명세서를 확정할 수 있는 첫날(한국 날짜) — 퇴직일 · 마지막 계약 종료일 · 급여 기간 마지막 날 가운데 가장 빠른 날의 다음 날
+ * (운영 정책 PAY-06 v251, 2026-10-29 재영). 기간 중 퇴직 · 계약 종료한 직원도 퇴직 후 14일 청산 기한(근로기준법 제36조) 안에
+ * 확정 · 발송할 수 있게. 계약 종료일은 급여 기간 계약(`contractIds`)의 효력 끝(`effectiveEnd`) 중 가장 늦은 날이고, 무기한
+ * 계약이 하나라도 있거나 계약이 없으면 보지 않는다.
+ */
+export async function confirmableFrom(
+  db: Db,
+  basis: {
+    staffMemberId: number;
+    contractIds: readonly number[];
+    periodEndDate: Date;
+  },
+): Promise<string> {
+  const [contracts, staff] = await Promise.all([
+    db.contract.findMany({
+      where: { contractId: { in: [...basis.contractIds] } },
+      select: CONTRACT_END_SELECT,
+    }),
+    db.staffMember.findUniqueOrThrow({
+      where: { staffMemberId: basis.staffMemberId },
+      select: { retiredDate: true },
+    }),
+  ]);
+  const ends = contracts.map(effectiveEnd);
+  const candidates = [ymd(basis.periodEndDate)];
+  if (staff.retiredDate) candidates.push(ymd(staff.retiredDate));
+  if (ends.length && !ends.includes(null))
+    candidates.push((ends as string[]).sort().at(-1)!);
+  return addDay(candidates.sort()[0], 1);
 }
 
 /** 급여 기간에 효력이 있던 근로계약(`validContractWhere`) — 늦게 시작한 것부터 */

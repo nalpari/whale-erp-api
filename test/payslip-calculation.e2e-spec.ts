@@ -7,7 +7,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { kstDayStart, kstToday } from '../src/staff-members/kst-date';
+import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 
 // 급여명세서 지급 항목 계산을 실제 DB 로 확인한다(WHALEERP-227) — 초안의 기본급 · 주휴수당 · 연장수당이 근로계약 · 출퇴근
 // 기록으로 채워지고, 가산 적용을 끄면 다시 계산되고, 「출퇴근으로 다시 계산」이 고친 값을 버리고 검토 사유를 모두 새로 판정하는 것.
@@ -563,13 +563,16 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     ).toMatch(/08-31 퇴근 미등록$/);
   });
 
-  it('급여 기간 마지막 날(한국)이 지나기 전에는 확정이 422 PERIOD_NOT_ENDED 다(운영 정책 v247 PAY-06)', async () => {
+  it('급여 기간 마지막 날(한국)이 지나기 전에는 확정이 422 PERIOD_NOT_ENDED 다 — 그 전에 퇴직했으면 퇴직일 다음 날부터 된다(운영 정책 PAY-06 v247 · v251)', async () => {
     // 기간 끝을 오늘로 잠시 옮긴다 — 오늘은 아직 끝나지 않았다
     const confirms = () =>
       prisma.payslipLog.count({ where: { payslipId, logType: 'CONFIRM' } });
     const before = await confirms();
     const { periodEndDate, status } = await prisma.payslip.findUniqueOrThrow({
       where: { payslipId },
+    });
+    const { retiredDate } = await prisma.staffMember.findUniqueOrThrow({
+      where: { staffMemberId },
     });
     await prisma.payslip.update({
       where: { payslipId },
@@ -587,10 +590,27 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       expect((blocked.body as { code: string }).code).toBe('PERIOD_NOT_ENDED');
       expect((await detail()).status).toBe(status);
       expect(await confirms()).toBe(before);
+
+      // 어제 퇴직했으면 기간 중이어도 확정된다 — 퇴직일 다음 날부터(운영 정책 PAY-06 v251)
+      await prisma.staffMember.update({
+        where: { staffMemberId },
+        data: { retiredDate: addDays(kstToday(), -1) },
+      });
+      await send('post', `/payslips/${payslipId}/confirm`, 200, {
+        updatedAt: (await detail()).updatedAt,
+      });
+      await send('post', `/payslips/${payslipId}/cancel-confirmation`, 200, {
+        updatedAt: (await detail()).updatedAt,
+      });
     } finally {
+      await prisma.staffMember.update({
+        where: { staffMemberId },
+        data: { retiredDate },
+      });
+      // 확정 · 확정 취소가 검토 중으로 돌려놓으므로 상태도 되돌린다
       await prisma.payslip.update({
         where: { payslipId },
-        data: { periodEndDate },
+        data: { periodEndDate, status },
       });
     }
   });

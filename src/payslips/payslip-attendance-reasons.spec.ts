@@ -6,6 +6,7 @@ import {
   afterContractEndDays,
   afterEndDetail,
   ContractSpan,
+  confirmableFrom,
   missingDays,
   flaggedDetail,
   missingDetail,
@@ -97,35 +98,36 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
       },
       new Date('2026-11-05T00:00:00Z'),
     );
-    const where = (range: { gte: Date; lt: Date }) => ({
+    // 출근 없는 퇴근은 급여 기간 안의 것만(`orphan`) — 그 달 출근 누락의 신호라 앞 달 날의 것은 앞 달 명세서가 알린다(api #206 리뷰)
+    const where = (
+      range: { gte: Date; lt: Date },
+      orphan: { gte: Date; lt: Date } | null,
+    ) => ({
       where: {
         staffMemberId: 7,
         reviewReason: { not: null },
         OR: [
           { kind: 'CHECK_IN', recordedAt: range },
-          {
-            kind: 'CHECK_OUT',
-            checkInAttendanceRecordId: null,
-            recordedAt: range,
-          },
+          ...(orphan
+            ? [
+                {
+                  kind: 'CHECK_OUT',
+                  checkInAttendanceRecordId: null,
+                  recordedAt: orphan,
+                },
+              ]
+            : []),
           { kind: 'CHECK_OUT', checkInAttendanceRecord: { recordedAt: range } },
         ],
       },
     });
     // 10/1 은 목요일 — 그 주 월요일 9/28 부터 세고, 그중 앞 달 날(9/28 ~ 30) 것을 따로 센다
+    const oct1 = new Date('2026-09-30T15:00:00Z');
+    const nov1 = new Date('2026-10-31T15:00:00Z');
+    const sep28 = new Date('2026-09-27T15:00:00Z');
     expect(count.mock.calls).toEqual([
-      [
-        where({
-          gte: new Date('2026-09-27T15:00:00Z'),
-          lt: new Date('2026-10-31T15:00:00Z'),
-        }),
-      ],
-      [
-        where({
-          gte: new Date('2026-09-27T15:00:00Z'),
-          lt: new Date('2026-09-30T15:00:00Z'),
-        }),
-      ],
+      [where({ gte: sep28, lt: nov1 }, { gte: oct1, lt: nov1 })],
+      [where({ gte: sep28, lt: oct1 }, null)],
     ]);
     const october = (now = new Date('2026-11-05T00:00:00Z')) =>
       attendanceReviewReasons(
@@ -174,14 +176,73 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
       },
       new Date('2026-11-05T00:00:00Z'),
     );
-    expect(count.mock.calls).toEqual([
-      [
-        where({
-          gte: new Date('2026-05-31T15:00:00Z'),
-          lt: new Date('2026-06-30T15:00:00Z'),
-        }),
-      ],
-    ]);
+    const june = {
+      gte: new Date('2026-05-31T15:00:00Z'),
+      lt: new Date('2026-06-30T15:00:00Z'),
+    };
+    expect(count.mock.calls).toEqual([[where(june, june)]]);
+  });
+
+  describe('confirmableFrom (확정할 수 있는 첫날, 운영 정책 PAY-06 v251)', () => {
+    const contract = (endDate: string | null, closedAt?: string) => ({
+      status: closedAt ? 'ENDED' : 'SIGNED',
+      endDate: endDate ? new Date(`${endDate}T00:00:00Z`) : null,
+      contractStatusHistories: closedAt
+        ? [{ changedAt: new Date(closedAt) }]
+        : [],
+    });
+    const from = (
+      contracts: object[],
+      retiredDate: string | null = null,
+      contractIds = [1],
+    ) =>
+      confirmableFrom(
+        {
+          contract: { findMany: jest.fn().mockResolvedValue(contracts) },
+          staffMember: {
+            findUniqueOrThrow: jest.fn().mockResolvedValue({
+              retiredDate: retiredDate
+                ? new Date(`${retiredDate}T00:00:00Z`)
+                : null,
+            }),
+          },
+        } as never,
+        {
+          staffMemberId: 7,
+          contractIds,
+          periodEndDate: new Date('2026-10-31T00:00:00Z'),
+        },
+      );
+
+    it('퇴직 · 계약 종료가 없으면 급여 기간 마지막 날 다음 날', async () => {
+      expect(await from([contract(null)])).toBe('2026-11-01');
+      expect(await from([contract('2026-12-31')])).toBe('2026-11-01');
+      expect(await from([], null, [])).toBe('2026-11-01');
+    });
+
+    it('기간 중 퇴직하면 퇴직일 다음 날 — 14일 청산 기한(근로기준법 제36조) 안에 확정할 수 있게', async () => {
+      expect(await from([contract(null)], '2026-10-15')).toBe('2026-10-16');
+      // 기간 전에 퇴직했으면 곧바로, 기간 뒤 퇴직(예정)이면 급여 기간 마지막 날 다음 날
+      expect(await from([contract(null)], '2026-09-20')).toBe('2026-09-21');
+      expect(await from([contract(null)], '2026-11-10')).toBe('2026-11-01');
+    });
+
+    it('기간 중 계약이 끝나면 가장 늦은 계약 종료일 다음 날 — 종료 처리한 날이 이르면 그날, 무기한 계약이 있으면 보지 않는다', async () => {
+      expect(await from([contract('2026-10-10'), contract('2026-10-20')])).toBe(
+        '2026-10-21',
+      );
+      // 종료일 12/31 계약을 10/18(한국) 에 종료 처리했다
+      expect(await from([contract('2026-12-31', '2026-10-18T03:00:00Z')])).toBe(
+        '2026-10-19',
+      );
+      expect(await from([contract('2026-10-10'), contract(null)])).toBe(
+        '2026-11-01',
+      );
+      // 퇴직일과 계약 종료일 가운데 이른 쪽
+      expect(await from([contract('2026-10-20')], '2026-10-25')).toBe(
+        '2026-10-21',
+      );
+    });
   });
 
   it('확인 필요 문구 — 앞 달 날이 하루면 그 날 하나만, 앞 달 날 것이 없으면 「급여 기간에」', () => {
