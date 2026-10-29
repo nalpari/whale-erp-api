@@ -64,7 +64,7 @@ const kstDateText = (now: Date): string =>
 type Db = PrismaService | Prisma.TransactionClient;
 
 /**
- * 회원 탈퇴(MY PAGE S-JHQQNR). BP 마스터 본인만 받는다 — 탈퇴하면 같은 BP 의 하위 관리자(BP 관리자 ·
+ * 회원 탈퇴(마이페이지 S-JHQQNR). BP 마스터 본인만 받는다 — 탈퇴하면 같은 BP 의 하위 관리자(BP 관리자 ·
  * 가맹마스터 · 가맹관리자)도 함께 탈퇴하고 점포는 모두 강제 폐점된다(1팀 규칙, admin_accounts.statusChangedAt
  * 주석 참고). getEligibility 는 그 전에 보여줄 영향 범위만 세고, execute 가 실제로 탈퇴한다.
  *
@@ -190,7 +190,7 @@ export class AdminWithdrawalService {
           where: { adminAccountId: { in: subAdminIds } },
           data: withdrawnPersonal,
         });
-      // 남은 접근 토큰으로 MY PAGE 에서 지운 개인정보를 다시 적지 못하게 본인 · 하위 관리자의 접속을 모두 끝낸다.
+      // 남은 접근 토큰으로 마이페이지에서 지운 개인정보를 다시 적지 못하게 본인 · 하위 관리자의 접속을 모두 끝낸다.
       await tx.adminSession.updateMany({
         where: {
           adminAccountId: { in: [adminAccountId, ...subAdminIds] },

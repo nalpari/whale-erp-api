@@ -600,25 +600,25 @@ export class HomeService {
     const manageable = await this.scope.getManageableStores(adminAccountId);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const picked = storeIds ? new Set(storeIds) : null;
-    const typeOf = new Map(
+    const storeOf = new Map(
       manageable.stores
         .filter((s) => !picked || picked.has(s.storeId))
-        .map((s) => [s.storeId, s.storeTypeCode]),
+        .map((s) => [s.storeId, s]),
     );
     const stores = await this.prisma.store.findMany({
       where: {
-        storeId: { in: [...typeOf.keys()] },
+        storeId: { in: [...storeOf.keys()] },
         storeStatusCode: { not: 'CLOSED' },
       },
       select: { storeId: true, name: true, storeTypeCode: true },
     });
     const ids = stores.map((s) => s.storeId);
-    const shown = hqVisibleWhere(manageable.roleTypeCode, ids, typeOf);
+    const shown = hqVisibleWhere(manageable.roleTypeCode, ids, storeOf);
     /** 이 직원의 개인 단위 자료를 가리는가 — shown 과 같은 판정을 읽은 행에 한다 */
     const hides = (storeId: number, staff: HqSharingSource) =>
       hidesPersonalData(
         manageable.roleTypeCode,
-        typeOf.get(storeId),
+        storeOf.get(storeId),
         hqSharingConsentedOf(staff),
       );
     const readable = new Set<Area>();

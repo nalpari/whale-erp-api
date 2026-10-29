@@ -14,7 +14,7 @@ import { hashPassword, verifyPassword } from './password';
 const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
 
 /**
- * 내 비밀번호 변경(MY PAGE, 1팀 S-PTWREE). 로그인한 관리자 본인이 현재 비밀번호를 확인한 뒤 새 비밀번호로
+ * 내 비밀번호 변경(마이페이지, 1팀 S-PTWREE). 로그인한 관리자 본인이 현재 비밀번호를 확인한 뒤 새 비밀번호로
  * 바꾼다. 강제 비밀번호 변경(admin-password-change.service.ts AdminPasswordChangeService)과 달리 초기
  * 비밀번호 · isPasswordChangeRequired · 약관 동의는 다루지 않는다 — 다만 살아있는 찾기용 임시 비밀번호를
  * 모두 끝내는 것은 강제 경로와 같다(아래).
@@ -26,6 +26,21 @@ const NOT_FOUND = '관리자 계정을 찾을 수 없습니다';
 @Injectable()
 export class AdminMyPasswordService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * 현재 비밀번호 확인(회원 탈퇴 1단계, S-JHQQNR). 맞으면 아무것도 쓰지 않는다. 비교 · 문구는 change · 탈퇴
+   * 실행(admin-withdrawal.service.ts)과 같다. 로그인 실패 횟수 · 잠금에는 넣지 않는다 — 시도는 경로의 계정 축
+   * 한도가 막는다.
+   */
+  async verify(adminAccountId: number, currentPassword: string): Promise<void> {
+    const account = await this.prisma.adminAccount.findFirst({
+      where: { adminAccountId, isDeleted: false },
+      select: { passwordHash: true },
+    });
+    if (!account) throw new NotFoundException(NOT_FOUND);
+    if (!(await verifyPassword(currentPassword, account.passwordHash)))
+      throw new BadRequestException(ADMIN_PASSWORD_MESSAGES.currentMismatch);
+  }
 
   async change(
     adminAccountId: number,

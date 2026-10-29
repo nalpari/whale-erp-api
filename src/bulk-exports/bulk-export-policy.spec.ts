@@ -1,3 +1,4 @@
+import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
 import {
   bulkExportFileName,
   isVisibleTo,
@@ -29,7 +30,7 @@ const closedDirect = {
 };
 // 2026-10-29 10:00 한국 = 01:00 UTC
 const NOW = new Date('2026-10-29T01:00:00.000Z');
-const CONSENTED = { account: { is: { isHqSharingConsented: true } } };
+const CONSENTED = HQ_SHARING_CONSENTED;
 
 describe('targetStaffWhere — 담을 직원', () => {
   const tail = [

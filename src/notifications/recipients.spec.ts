@@ -4,6 +4,7 @@ import {
   storeManagers,
   type RecipientsPrisma,
 } from './recipients';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 describe('운영 알림 수신자 판정', () => {
   let prisma: {
@@ -65,12 +66,17 @@ describe('운영 알림 수신자 판정', () => {
         where: { staffMemberId: 30 },
         select: {
           storeId: true,
-          account: { select: { isHqSharingConsented: true } },
+          account: {
+            select: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: true,
+            },
+          },
         },
       });
       expect(prisma.store.findFirst).toHaveBeenCalledWith({
         where: { storeId: 5, isDeleted: false },
-        select: { bpCodeId: true, storeTypeCode: true },
+        select: { bpCodeId: true, storeTypeCode: true, storeStatusCode: true },
       });
       expect(prisma.adminAccount.findMany).toHaveBeenCalledWith({
         where: {
@@ -100,7 +106,10 @@ describe('운영 알림 수신자 판정', () => {
     it('가맹 점포 직원이 본사 제공에 동의했으면 BP 마스터·BP 관리자도 받는다 (NOTIFY-13)', async () => {
       prisma.staffMember.findUnique.mockResolvedValue({
         storeId: 5,
-        account: { isHqSharingConsented: true },
+        account: {
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        },
       });
       prisma.store.findFirst.mockResolvedValue({
         bpCodeId: 7,

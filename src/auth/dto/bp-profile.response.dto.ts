@@ -1,4 +1,4 @@
-/** 내 정보(MY PAGE) 사업자정보 조회 응답 — manyfast F-AMTDCK > S-UOJVUR. BP 마스터만 받는다. */
+/** 내 정보(마이페이지) 사업자정보 조회 응답 — manyfast F-AMTDCK > S-UOJVUR. BP 마스터만 받는다. */
 export class BpProfileResponseDto {
   /** 상호명. */
   tradeName: string;

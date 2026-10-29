@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import {
   AdminScopeService,
+  consentOpensStore,
   hidesPersonalData,
 } from '../admin-scope/admin-scope.service';
 import {
@@ -279,18 +280,16 @@ export class PayslipListService {
     const name: Prisma.PayslipWhereInput | null = query.staffName
       ? { staffMember: { name: containsText(query.staffName) } }
       : null;
-    const masking = stores.filter((s) =>
-      hidesPersonalData(roleTypeCode, s.storeTypeCode, false),
+    const open = stores.filter(
+      (s) => !hidesPersonalData(roleTypeCode, s, false),
     );
+    // 동의한 직원만 보이는 점포 — 폐점한 가맹 점포는 동의해도 가려 어느 갈래에도 들지 않는다
+    const masking = stores.filter((s) => consentOpensStore(roleTypeCode, s));
     const consentedOnly: Prisma.PayslipWhereInput =
-      masking.length > 0
+      open.length < stores.length
         ? {
             OR: [
-              {
-                storeId: {
-                  in: ids(stores.filter((s) => !masking.includes(s))),
-                },
-              },
+              { storeId: { in: ids(open) } },
               {
                 storeId: { in: ids(masking) },
                 staffMember: HQ_SHARING_CONSENTED,
@@ -360,7 +359,7 @@ export class PayslipListService {
       this.prisma,
       rows.map((r) => r.storeId),
     );
-    const typeById = new Map(stores.map((s) => [s.storeId, s.storeTypeCode]));
+    const storeById = new Map(stores.map((s) => [s.storeId, s]));
     const items = rows.map((r): PayslipListItemDto => {
       const shown = {
         storeId: r.storeId,
@@ -371,7 +370,7 @@ export class PayslipListService {
       if (
         hidesPersonalData(
           roleTypeCode,
-          typeById.get(r.storeId),
+          storeById.get(r.storeId),
           hqSharingConsentedOf(r.staffMember),
         )
       )
@@ -411,7 +410,8 @@ export class PayslipListService {
   /**
    * 점포 하나 · 급여 월 하나의 요약 — 고용형태별 건수 · 지급 합계(WHALEERP-621). 네 상태를 모두 센다. 관리 범위 밖 점포는
    * 목록처럼 0건이다. 본사 역할에게 가려지는 점포면 본사 제공 동의를 한 직원 명세서만 센다 — 목록의 상태 건수와 달리
-   * 금액이 붙어, 가린 직원의 급여가 합계로 드러나지 않게(2026-10-27 재영). 관리자 계정이 없거나 사용 중이 아니면 null.
+   * 금액이 붙어, 가린 직원의 급여가 합계로 드러나지 않게(2026-10-27 재영). 폐점한 가맹 점포는 동의한 직원도 가리므로
+   * 0건이다(ATT-30 v227). 관리자 계정이 없거나 사용 중이 아니면 null.
    */
   async summary(
     adminAccountId: number,
@@ -426,18 +426,18 @@ export class PayslipListService {
       fullTime: { count: 0, grossPayAmount: 0 },
       partTime: { count: 0, grossPayAmount: 0 },
     };
-    if (!store) return result;
+    // 동의해도 가려지는 점포(폐점한 가맹 점포, ATT-30 v227)면 본사 역할에게는 셀 명세서가 없다
+    if (!store || hidesPersonalData(manageable.roleTypeCode, store, true))
+      return result;
 
     const grouped = await this.prisma.payslip.groupBy({
       by: ['employmentType'],
       where: {
         storeId: store.storeId,
         periodStartDate: monthRange(query.month),
-        ...(hidesPersonalData(
-          manageable.roleTypeCode,
-          store.storeTypeCode,
-          false,
-        ) && { staffMember: HQ_SHARING_CONSENTED }),
+        ...(consentOpensStore(manageable.roleTypeCode, store) && {
+          staffMember: HQ_SHARING_CONSENTED,
+        }),
       },
       _count: { _all: true },
       _sum: { grossPayAmount: true },
@@ -479,8 +479,7 @@ export class PayslipListService {
       !found ||
       hidesPersonalData(
         manageable.roleTypeCode,
-        manageable.stores.find((s) => s.storeId === found.storeId)
-          ?.storeTypeCode,
+        manageable.stores.find((s) => s.storeId === found.storeId),
         hqSharingConsentedOf(found.staffMember),
       )
     )

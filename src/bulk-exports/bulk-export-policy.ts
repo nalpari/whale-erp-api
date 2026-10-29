@@ -64,18 +64,11 @@ export function visibleStaffWhere(
   roleTypeCode: string,
   stores: readonly ScopeStore[],
 ): Prisma.StaffMemberWhereInput {
-  const kept = stores.filter(
-    (s) =>
-      !(
-        roleTypeCode === 'BM' &&
-        s.storeTypeCode !== 'DIRECT' &&
-        s.storeStatusCode === 'CLOSED'
-      ),
-  );
+  // 폐점한 가맹 점포는 hqVisibleWhere 가 동의해도 가린다(WHALEERP-137)
   return hqVisibleWhere(
     roleTypeCode,
-    kept.map((s) => s.storeId),
-    new Map(kept.map((s) => [s.storeId, s.storeTypeCode])),
+    stores.map((s) => s.storeId),
+    new Map(stores.map((s) => [s.storeId, s])),
   ).staff;
 }
 

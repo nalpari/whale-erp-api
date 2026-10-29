@@ -9,7 +9,7 @@ sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
     title: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
-    last_modified: 2026-10-20T05:37:25Z
+    last_modified: 2026-10-28T04:52:10Z
   - id: my-address-service
     resource: ../../src/my-profile/my-address.service.ts
     title: MyAddressService — 주소 수정과 이력(WHALEERP-189)
@@ -263,11 +263,13 @@ is active and in force (an operator switched or deleted them all), 동의 is 500
 「지금은 위치정보 동의를 받을 수 없습니다. 관리자에게 문의해 주세요」 with an `error`
 log naming the account. 본사 제공: 동의
 sets the four account columns with `HQ_SHARING_CONSENT_VERSION` (`v1.0`, an api
-constant — the wording is in the app, and both change together, 2026-10-20
-노영주), overwriting an earlier withdrawal (A안); 철회 sets only the flag and
+constant in `src/admin-scope/hq-sharing.ts` — the wording is in the app, and both change together, 2026-10-20
+노영주), overwriting an earlier withdrawal (A안) or a consent to a version no longer
+accepted; 철회 sets only the flag and
 `hq_sharing_withdrawn_at`, keeping version and 동의 시각 as the CHECKs require.
 The api does not check that the person has a 가맹 소속; the screen shows the row
-only then. 409 carries no code — the app refetches.
+only then. 409 (already consented to an accepted version) carries no code — the
+app refetches.
 
 # Memberships are the 재직 직원 rule, not every record
 
@@ -323,7 +325,31 @@ api #78). The old four columns on `staff_members` were dropped by 민식
 field is always present; the app shows it only when a membership's
 `store.storeTypeCode` is `FRANCHISE`. Ending a 가맹 relationship does not end the
 account's consent (ATT-30 v149), so whatever later writes this consent must not
-end it per store record.
+end it per store record. That record just stops using it: 본사 역할 sees a closed
+가맹 store's staff as not consented (ATT-30 v227, 2026-10-28 재영 — 폐점 and BP 회원
+탈퇴 included, no withdrawal is written; [Staff members](/api/staff-members.md)).
+
+**Wording versions** (ATT-30, 2026-10-15 재영 · WHALEERP-137): `HQ_SHARING_VALID_VERSIONS`
+in `src/admin-scope/hq-sharing.ts` lists the versions still accepted. A wording-only
+fix keeps the old version in the list; widening the items or purposes leaves only
+the new one. A consent to a version not in the list counts as **not consented**
+everywhere the masking reads it (`hqSharingConsentedOf` · `HQ_SHARING_CONSENTED`), and
+`hqSharingConsent.needsReconsent` is true — the app asks again on entry and posts
+`POST /me/hq-sharing-consent`, which then overwrites it with `HQ_SHARING_CONSENT_VERSION`.
+`isConsented` stays the stored flag, like the location consent's `state` beside its
+`needsReconsent`; 미동의 · 철회 are never `needsReconsent` (they are asked anyway).
+`needsReconsent` does not look at memberships — like the consent row, the app asks
+only when a membership's store is `FRANCHISE`, and shows the row as needing consent
+again rather than 동의 while it is true.
+
+Bumping the version: change `HQ_SHARING_CONSENT_VERSION` (and the app's wording)
+and `HQ_SHARING_VALID_VERSIONS` in the same PR — the list starts with the current
+version, so it cannot be left out — and say in the PR body whether the new wording
+only rewords (add the old version after it) or widens the items or purposes (leave
+the current one alone — every earlier consent is masked until given again). Ship a
+widening only after the 직원 앱 reads `needsReconsent`; an app that reads only
+`isConsented` would show 동의 while 본사 sees the person masked. Specs and e2e take the
+version and the masking shape from these constants, so bumping changes no test.
 
 # 위치정보 동의 state is derived
 

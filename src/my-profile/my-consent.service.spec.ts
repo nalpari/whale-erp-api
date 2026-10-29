@@ -6,10 +6,8 @@ import {
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
-import {
-  HQ_SHARING_CONSENT_VERSION,
-  MyConsentService,
-} from './my-consent.service';
+import { MyConsentService } from './my-consent.service';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 const AGREED_AT = new Date('2026-10-01T00:00:00Z');
 
@@ -307,11 +305,28 @@ describe('MyConsentService', () => {
     });
 
     it('이미 동의 중이면 다시 동의는 409', async () => {
-      const service = await build({ isHqSharingConsented: true });
+      const service = await build({
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+      });
       await expect(service.agreeHqSharing(12)).rejects.toBeInstanceOf(
         ConflictException,
       );
       expect(tx.account.update).not.toHaveBeenCalled();
+    });
+
+    it('더는 받아 주지 않는 문구 버전에 동의했으면 지금 버전으로 다시 동의한다 — 항목 · 목적이 넓어진 뒤(ATT-30)', async () => {
+      const service = await build({
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: 'v0.9',
+      });
+      await service.agreeHqSharing(12);
+      expect(tx.account.update).toHaveBeenCalledWith({
+        where: { accountId: 12 },
+        data: expect.objectContaining({
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        }) as unknown,
+      });
     });
 
     it('철회는 false 와 철회 시각만 — 동의한 버전과 시각은 남긴다(CHECK 가 요구한다)', async () => {

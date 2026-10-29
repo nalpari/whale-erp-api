@@ -53,7 +53,7 @@ sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
     title: 본사 제공 동의를 직원 레코드의 계정에서 읽는 조각
-    last_modified: 2026-10-20T03:47:38Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: post-attachments-file-type
     resource: ../../prisma/migrations/20261019171114_team3_post_attachments_file_type/migration.sql
     title: 공지 첨부 file_type · 자리 1~5 CHECK · 지우지 않은 첨부의 자리 부분 고유 (#272)
@@ -105,7 +105,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: hidesPersonalData — 본사 제공 동의를 읽는 곳
-    last_modified: 2026-10-26T07:41:19Z
+    last_modified: 2026-10-28T08:41:55Z
   - id: inquiry-lead-processing-start-migration
     resource: ../../prisma/migrations/20261013151714_team3_inquiry_lead_processing_start/migration.sql
     title: 문의사항 · 도입문의 처리 시작 관리자 · 일시를 더하는 마이그레이션

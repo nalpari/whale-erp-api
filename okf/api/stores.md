@@ -4,12 +4,12 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:50:08Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile · excelScopeKey)
-    last_modified: 2026-10-29T02:30:00Z
+    last_modified: 2026-10-29T02:50:08Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
@@ -312,7 +312,7 @@ through the shared [attachment storage](/api/storage.md), not the store form.[^s
 Unique **among undeleted 미운영 · 운영 stores**, across all BPs; a 폐점 or deleted
 store's number is free again. It also may not be the number of **another customer BP**
 (사용 · 미사용, not the platform BP, not 탈퇴 · 삭제) — the store's own BP's number is
-allowed (PL-OCJOFP, 2026-10-22). The BP condition is the same as signup · MY PAGE
+allowed (PL-OCJOFP, 2026-10-22). The BP condition is the same as signup · 마이페이지
 (`BusinessVerificationService.isBizRegistrationNumberTaken`). The owner BP is the
 store's BP on edit and the target BP otherwise (`targetBpCodeId` — the tab BP for the
 platform, the caller's own BP for BP-side callers). The save always re-checks duplicates

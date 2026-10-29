@@ -11,6 +11,7 @@ import { STORAGE } from '../storage/storage.module';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
+import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 // 보내기(ContractDeliveryService)는 따로 시험한다 — 여기서는 무엇을 넘기는지만 본다. 기본은 앱으로 받음(보낼 것 없음)
 const delivery = {
@@ -440,7 +441,10 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
         staffMember: {
-          account: { isHqSharingConsented: true },
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          },
           phone: '01090145563',
         },
       });
@@ -971,7 +975,10 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
         staffMember: {
-          account: { isHqSharingConsented: true },
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          },
           phone: '01090145563',
         },
       });
@@ -992,7 +999,10 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
         staffMember: {
-          account: { isHqSharingConsented: true },
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          },
           phone: '01090145563',
         },
       });
@@ -1007,7 +1017,10 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       prisma.contract.findUnique.mockResolvedValue({
         storeId: 11,
         staffMember: {
-          account: { isHqSharingConsented: true },
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          },
           phone: '01090145563',
         },
       });
@@ -1043,7 +1056,10 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         prisma.contract.findUnique.mockResolvedValue({
           storeId: 11,
           staffMember: {
-            account: { isHqSharingConsented: true },
+            account: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+            },
             phone: '01090145563',
           },
         }),
@@ -1092,7 +1108,10 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         prisma.contract.findUnique.mockResolvedValue({
           storeId: 11,
           staffMember: {
-            account: { isHqSharingConsented: true },
+            account: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+            },
             phone: '01090145563',
           },
         }),

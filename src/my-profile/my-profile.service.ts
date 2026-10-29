@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { needsHqSharingReconsent } from '../admin-scope/hq-sharing';
 import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { dateOnly } from '../common/date-only';
@@ -73,6 +74,7 @@ export class MyProfileService {
         consentVersion: account.hqSharingConsentVersion,
         agreedAt: account.hqSharingAgreedAt,
         withdrawnAt: account.hqSharingWithdrawnAt,
+        needsReconsent: needsHqSharingReconsent(account),
       },
       locationConsent: {
         ...locationConsent,

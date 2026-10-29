@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { SchedulerRegistry } from '@nestjs/schedule';
@@ -156,7 +157,7 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
           status: 'JOINED',
           ...(consented && {
             isHqSharingConsented: true,
-            hqSharingConsentVersion: 'v1',
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
             hqSharingAgreedAt: new Date(),
           }),
         },
@@ -508,7 +509,7 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
           data: isHqSharingConsented
             ? {
                 isHqSharingConsented,
-                hqSharingConsentVersion: 'v1',
+                hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
                 hqSharingAgreedAt: new Date(),
               }
             : {

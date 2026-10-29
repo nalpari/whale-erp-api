@@ -1,6 +1,12 @@
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
-import { AdminScopeService, hidesPersonalData } from './admin-scope.service';
+import {
+  AdminScopeService,
+  consentOpensStore,
+  hiddenStoreStaffWhere,
+  hidesPersonalData,
+} from './admin-scope.service';
+import { HQ_SHARING_CONSENT_VERSION, HQ_SHARING_CONSENTED } from './hq-sharing';
 
 describe('AdminScopeService', () => {
   let scope: AdminScopeService;
@@ -76,7 +82,12 @@ describe('AdminScopeService', () => {
       prisma.staffMember.findFirst.mockResolvedValue({
         storeId: 5,
         account:
-          isHqSharingConsented === null ? null : { isHqSharingConsented },
+          isHqSharingConsented === null
+            ? null
+            : {
+                isHqSharingConsented,
+                hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+              },
       });
 
     // 직원을 먼저 찾고 그 점포를 관리하는지 보면, 다른 BP 직원 ID 는 없는 ID 보다 쿼리가 더 돌아 같은 404 라도
@@ -88,7 +99,12 @@ describe('AdminScopeService', () => {
         where: { staffMemberId: 30, storeId: { in: [5] } },
         select: {
           storeId: true,
-          account: { select: { isHqSharingConsented: true } },
+          account: {
+            select: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: true,
+            },
+          },
         },
       });
       expect(prisma.staffMember.findUnique).not.toHaveBeenCalled();
@@ -230,7 +246,12 @@ describe('AdminScopeService', () => {
         where: { staffMemberId: 30, storeId: { in: [5] } },
         select: {
           storeId: true,
-          account: { select: { isHqSharingConsented: true } },
+          account: {
+            select: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: true,
+            },
+          },
         },
       });
       expect(prisma.staffMember.findUnique).not.toHaveBeenCalled();
@@ -279,9 +300,57 @@ describe('AdminScopeService', () => {
     ] as const)(
       '%s · %s · 동의 %s → %s',
       (role, storeType, consented, hidden) => {
-        expect(hidesPersonalData(role, storeType, consented)).toBe(hidden);
+        const store = storeType && {
+          storeTypeCode: storeType,
+          storeStatusCode: 'OPERATING',
+        };
+        expect(hidesPersonalData(role, store, consented)).toBe(hidden);
       },
     );
+
+    it.each([
+      ['BM', 'FRANCHISE', true, true],
+      ['BA', 'FRANCHISE', true, true],
+      ['BM', 'DIRECT', false, false],
+      ['FA', 'FRANCHISE', false, false],
+    ] as const)(
+      '폐점 점포 — %s · %s · 동의 %s → %s (가맹 관계가 끝난 레코드에는 동의를 적용하지 않는다, ATT-30 v227)',
+      (role, storeTypeCode, consented, hidden) => {
+        const closed = { storeTypeCode, storeStatusCode: 'CLOSED' };
+        expect(hidesPersonalData(role, closed, consented)).toBe(hidden);
+      },
+    );
+
+    it('consentOpensStore — 동의한 직원은 보이는 점포는 운영 중인 가맹 점포뿐', () => {
+      const store = (storeTypeCode: string, storeStatusCode: string) => ({
+        storeTypeCode,
+        storeStatusCode,
+      });
+      expect(consentOpensStore('BM', store('FRANCHISE', 'OPERATING'))).toBe(
+        true,
+      );
+      expect(consentOpensStore('BM', store('FRANCHISE', 'CLOSED'))).toBe(false);
+      expect(consentOpensStore('BM', store('DIRECT', 'OPERATING'))).toBe(false);
+      expect(consentOpensStore('FA', store('FRANCHISE', 'OPERATING'))).toBe(
+        false,
+      );
+      expect(consentOpensStore('BM', undefined)).toBe(false);
+    });
+
+    it('hiddenStoreStaffWhere — 운영 중인 가맹 점포는 동의한 직원, 폐점이면 아무도 걸리지 않는다', () => {
+      expect(
+        hiddenStoreStaffWhere('BM', {
+          storeTypeCode: 'FRANCHISE',
+          storeStatusCode: 'OPERATING',
+        }),
+      ).toBe(HQ_SHARING_CONSENTED);
+      expect(
+        hiddenStoreStaffWhere('BM', {
+          storeTypeCode: 'FRANCHISE',
+          storeStatusCode: 'CLOSED',
+        }),
+      ).toEqual({ account: { is: { accountId: { in: [] } } } });
+    });
   });
 
   describe('getManageableStores', () => {
@@ -304,7 +373,7 @@ describe('AdminScopeService', () => {
           isDeleted: false,
           adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
         },
-        select: { storeId: true, storeTypeCode: true },
+        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -319,7 +388,7 @@ describe('AdminScopeService', () => {
       await get();
       expect(prisma.store.findMany).toHaveBeenCalledWith({
         where: { bpCodeId: 2, isDeleted: false },
-        select: { storeId: true, storeTypeCode: true },
+        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -359,7 +428,7 @@ describe('AdminScopeService', () => {
       });
       expect(prisma.store.findMany).toHaveBeenCalledWith({
         where: { bpCodeId: 7, isDeleted: false },
-        select: { storeId: true, storeTypeCode: true },
+        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -374,14 +443,14 @@ describe('AdminScopeService', () => {
           isDeleted: false,
           adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
         },
-        select: { storeId: true, storeTypeCode: true },
+        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
         orderBy: { storeId: 'asc' },
       });
 
       await scope.canManageStore(9, 5, otherBp);
       expect(prisma.store.findFirst).toHaveBeenCalledWith({
         where: { storeId: 5, bpCodeId: 2, isDeleted: false },
-        select: { storeTypeCode: true },
+        select: { storeTypeCode: true, storeStatusCode: true },
       });
       expect(prisma.adminStoreMapping.count).toHaveBeenCalled();
     });
@@ -457,7 +526,7 @@ describe('AdminScopeService', () => {
           isDeleted: false,
           adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
         },
-        select: { storeId: true, storeTypeCode: true },
+        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -479,7 +548,7 @@ describe('AdminScopeService', () => {
       await expect(scope.canManageStore(9, 5, platformBp)).resolves.toBe(true);
       expect(prisma.store.findFirst).toHaveBeenCalledWith({
         where: { storeId: 5, bpCodeId: 7, isDeleted: false },
-        select: { storeTypeCode: true },
+        select: { storeTypeCode: true, storeStatusCode: true },
       });
       expect(prisma.adminStoreMapping.count).not.toHaveBeenCalled();
     });
@@ -668,12 +737,18 @@ describe('AdminScopeService', () => {
       prisma.bpCode.count.mockResolvedValue(31);
     });
 
-    it('미삭제 고객 BP 를 상태와 상관없이 BP코드순으로 나눠 준다', async () => {
-      await expect(scope.listBps({ page: 3, pageSize: 10 })).resolves.toEqual({
+    it('withMaster 면 BP 마스터 계정이 있는 미삭제 고객 BP 를 상태와 상관없이 최신 등록 순으로 나눠 준다', async () => {
+      await expect(
+        scope.listBps({ withMaster: true, page: 3, pageSize: 10 }),
+      ).resolves.toEqual({
         items: [{ bpCodeId: 7 }],
         total: 31,
       });
-      const where = { isDeleted: false, isPlatform: false };
+      const where = {
+        isDeleted: false,
+        isPlatform: false,
+        adminAccounts: { some: { roleTypeCode: 'BM', isDeleted: false } },
+      };
       expect(prisma.bpCode.findMany).toHaveBeenCalledWith({
         where,
         select: {
@@ -682,14 +757,14 @@ describe('AdminScopeService', () => {
           tradeName: true,
           accountStatusCode: true,
         },
-        orderBy: [{ bpCode: 'asc' }, { bpCodeId: 'asc' }],
+        orderBy: [{ createdAt: 'desc' }, { bpCodeId: 'desc' }],
         skip: 20,
         take: 10,
       });
       expect(prisma.bpCode.count).toHaveBeenCalledWith({ where });
     });
 
-    it('keyword 는 상호 · BP코드 부분 일치(대소문자 무시)를 목록과 total 에 같이 건다', async () => {
+    it('keyword 는 상호 · BP코드 부분 일치(대소문자 무시)를 목록과 total 에 같이 건다 — withMaster 가 없으면 BP 마스터 계정으로 거르지 않는다', async () => {
       await scope.listBps({ keyword: 'bp0001', page: 1, pageSize: 20 });
       const where = {
         isDeleted: false,

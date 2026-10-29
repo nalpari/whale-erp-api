@@ -20,7 +20,7 @@ type History = {
 };
 
 /**
- * 내 정보(MY PAGE) 조회 · 수정 (manyfast F-AMTDCK > S-JXKHCM). 로그인한 관리자 본인의
+ * 내 정보(마이페이지) 조회 · 수정 (manyfast F-AMTDCK > S-JXKHCM). 로그인한 관리자 본인의
  * admin_accounts 행만 다룬다 — 다른 관리자 계정은 platform-admins(플랫폼 관리자만) 가 다룬다.
  * 플랫폼 마스터 · 플랫폼 관리자뿐 아니라 BP 마스터 · BP 관리자 · 가맹 마스터 · 가맹 관리자도 쓴다
  * (컨트롤러 가드는 UserTypes('admin') 전체를 통과시킨다).
