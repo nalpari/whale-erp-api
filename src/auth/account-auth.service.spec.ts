@@ -390,6 +390,30 @@ describe('AccountAuthService', () => {
     describe('비밀번호가 틀렸을 때', () => {
       beforeEach(() => verifyPasswordMock.mockResolvedValue(false));
 
+      it('실패 횟수 · 잠금은 계정 수정이 아니다 — 잠금 아래 읽은 수정 일시를 그대로 쓴다(WHALEERP-624)', async () => {
+        const updatedAt = new Date('2026-10-01T00:00:00.000Z');
+        tx.account.findUniqueOrThrow.mockResolvedValue({
+          failedLoginCount: 0,
+          lockExpiresAt: null,
+          status: 'JOINED',
+          updatedAt,
+        });
+
+        await expect(login()).rejects.toBeInstanceOf(UnauthorizedException);
+
+        expect(
+          (
+            tx.account.findUniqueOrThrow.mock.calls[0] as [
+              { select: Record<string, boolean> },
+            ]
+          )[0].select,
+        ).toMatchObject({ updatedAt: true });
+        expect(tx.account.update).toHaveBeenCalledWith({
+          where: { accountId: 7 },
+          data: { failedLoginCount: 1, lockExpiresAt: null, updatedAt },
+        });
+      });
+
       it('실패를 한 번 세어 저장하고 401 로 답한다', async () => {
         await expect(login()).rejects.toBeInstanceOf(UnauthorizedException);
 
@@ -537,6 +561,25 @@ describe('AccountAuthService', () => {
           status: 'JOINED',
           ...overrides,
         });
+
+      it('실패 초기화는 계정 수정이 아니다 — 잠금 아래 읽은 수정 일시를 그대로 쓴다(WHALEERP-624)', async () => {
+        const updatedAt = new Date('2026-10-01T00:00:00.000Z');
+        storedRow({ failedLoginCount: 3, updatedAt });
+
+        await login();
+
+        expect(
+          (
+            tx.account.findUniqueOrThrow.mock.calls[0] as [
+              { select: Record<string, boolean> },
+            ]
+          )[0].select,
+        ).toMatchObject({ updatedAt: true });
+        expect(tx.account.update).toHaveBeenCalledWith({
+          where: { accountId: 7 },
+          data: { failedLoginCount: 0, lockExpiresAt: null, updatedAt },
+        });
+      });
 
       it('쌓인 실패 횟수를 0 으로 되돌린다', async () => {
         storedRow({ failedLoginCount: 3 });

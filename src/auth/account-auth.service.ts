@@ -270,6 +270,7 @@ export class AccountAuthService {
           lockExpiresAt: true,
           passwordHash: true,
           status: true,
+          updatedAt: true,
         },
       });
       if (current.status === 'WITHDRAWN') return { kind: 'withdrawn' };
@@ -287,6 +288,9 @@ export class AccountAuthService {
           data: {
             failedLoginCount: CLEARED_ATTEMPT_STATE.failedCount,
             lockExpiresAt: CLEARED_ATTEMPT_STATE.lockExpiresAt,
+            // 로그인은 계정 수정이 아니다. 넘기지 않으면 @updatedAt 이 수정 일시를 로그인 시각으로 바꾼다(관리자 로그인과 같다,
+            // WHALEERP-624)
+            updatedAt: current.updatedAt,
           },
         });
 
@@ -319,7 +323,12 @@ export class AccountAuthService {
       const now = new Date();
       const stored = await tx.account.findUniqueOrThrow({
         where: { accountId },
-        select: { failedLoginCount: true, lockExpiresAt: true, status: true },
+        select: {
+          failedLoginCount: true,
+          lockExpiresAt: true,
+          status: true,
+          updatedAt: true,
+        },
       });
       if (stored.status === 'WITHDRAWN') return null;
       const current = this.stateOf(stored);
@@ -331,6 +340,7 @@ export class AccountAuthService {
           data: {
             failedLoginCount: next.failedCount,
             lockExpiresAt: next.lockExpiresAt,
+            updatedAt: stored.updatedAt, // 실패 횟수는 계정 수정이 아니다(WHALEERP-624)
           },
         });
       return next;

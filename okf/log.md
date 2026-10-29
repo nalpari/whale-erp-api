@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Auth](/api/auth.md) — 직원 앱 로그인이 `accounts` 수정 일시를 바꾸지 않는다(WHALEERP-624): 실패 횟수 · 잠금과 성공 때 초기화가 잠금 아래 읽은 `updated_at` 을 그대로 다시 쓴다(관리자 로그인 api #167 과 같은 방식). 실제 계정 수정(비밀번호 · 이메일 · 주소)은 그대로 수정 일시를 올린다. 단위 · e2e. 마이그레이션 없음.
 * **Update**: [Staff signup](/api/staff-signup.md) — 받은 초대 수락(`POST /me/invitations/:invitationId/accept`) 응답에 `storeId` 를 더했다. 직원앱이 수락 뒤 그 근무지 근로계약서만(`/contracts?store=`) 연다(staff #40 후속 리뷰, Plane WHALEERP-604).
 * **Update**: main 병합(api omastar, main #187 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #186 재리뷰 참고: 상태 전환 표를 `TRANSITIONS` 에 맞춤(임시저장 → 발송 대기에 소속 추가 확인 요청, 발송 대기 → 거부(요청 거절), 서명 대기 → 발송 대기에 옛 소속 확인 계약 재발송). #186 줄의 템플릿 건수(44 → 46건) 서술을 바로잡음.

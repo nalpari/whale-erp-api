@@ -219,6 +219,40 @@ describe('로그인 실패 잠금 (e2e, DB)', () => {
     expect((await stored(account.accountId)).failedLoginCount).toBe(0);
   });
 
+  it('틀린 시도 · 잠금 · 성공 뒤 초기화는 계정 수정이 아니다 — 수정 일시가 그대로다(WHALEERP-624)', async () => {
+    const account = await createAccount();
+    const before = new Date('2026-10-01T00:00:00.000Z');
+    await prisma.account.update({
+      where: { accountId: account.accountId },
+      data: { updatedAt: before },
+    });
+    const updatedAt = async () =>
+      (
+        await prisma.account.findUniqueOrThrow({
+          where: { accountId: account.accountId },
+          select: { updatedAt: true },
+        })
+      ).updatedAt;
+
+    expect(await failTimes(account.email, 5)).toEqual([
+      401, 401, 401, 401, 429,
+    ]);
+    expect((await stored(account.accountId)).failedLoginCount).toBe(5);
+    expect(await updatedAt()).toEqual(before);
+
+    // 잠금이 풀린 뒤 맞는 비밀번호 — 횟수 · 잠금을 지워도 수정 일시는 그대로다
+    await prisma.account.update({
+      where: { accountId: account.accountId },
+      data: { lockExpiresAt: new Date(Date.now() - 1000), updatedAt: before },
+    });
+    expect((await login(account.email, PASSWORD)).status).toBe(200);
+    expect(await stored(account.accountId)).toEqual({
+      failedLoginCount: 0,
+      lockExpiresAt: null,
+    });
+    expect(await updatedAt()).toEqual(before);
+  });
+
   // 목으로는 증명할 수 없는 것. 행을 잠그지 않고 읽으면 동시에 들어온 틀린 시도가
   // 모두 같은 횟수를 읽고 같은 값을 써서 횟수가 덜 쌓이고, 병렬로 보내기만 해도
   // 5회 제한을 넘는다.
