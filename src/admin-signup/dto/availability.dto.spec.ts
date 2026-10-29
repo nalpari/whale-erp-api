@@ -29,6 +29,21 @@ describe('LoginIdAvailabilityDto', () => {
       value: 'hangang01',
       failed: false,
     }));
+
+  // 영문만도 받으므로 「영문·숫자 조합」만 적으면 숫자를 꼭 섞어야 하는 것처럼 읽힌다.
+  it('형식이 틀리면 가입과 같은 문구로 알린다', () => {
+    const constraintsOf = (dto: object) =>
+      validateSync(dto).find((e) => e.property === 'loginId')?.constraints;
+    const expected = {
+      matches: '영문 또는 영문·숫자 조합으로 4~20자로 입력해 주세요.',
+    };
+    expect(
+      constraintsOf(plainToInstance(LoginIdAvailabilityDto, { loginId: 'ab' })),
+    ).toEqual(expected);
+    expect(
+      constraintsOf(plainToInstance(SignupDto, { loginId: 'ab' })),
+    ).toEqual(expected);
+  });
 });
 
 describe('EmailAvailabilityDto', () => {

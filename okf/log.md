@@ -1,6 +1,11 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Admin signup](/api/admin-signup.md) — api #189 review-pr 반영: 영문만인 아이디(`abcd` 등)를 받는 단위 테스트를 더했다. 아이디 형식 문구 「영문 또는 영문·숫자 조합」이 기대는 동작이라, 정규식이 숫자를 요구하게 바뀌면 실패한다. 동작 변화 없음.
+* **Update**: main 병합(api grovyle, main #179 · #186 까지): okf/log · [Admin auth](/api/admin-auth.md) 충돌은 양쪽 기록을 살리고 시각은 늦은 값을 남겼다. #179 가 관리자 로그인 문구에 마침표를 붙여, 아래 「로그인 화면 오류 문구는 모두 마침표」가 코드와 맞는다.
+* **Update**: main 병합(api grovyle, origin/main 최신): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Admin signup](/api/admin-signup.md) — 회원가입 · 아이디 중복 확인의 아이디 형식 400 문구를 「영문 또는 영문·숫자 조합으로 4~20자로 입력해 주세요.」로 바꿨다(재영 결정). 영문만으로 된 아이디도 되는데 「영문·숫자 조합」이라 숫자를 꼭 섞어야 하는 것처럼 읽혔다. 두 DTO 가 같은 문구인지 단위 테스트가 고정한다.
+* **Update**: [Admin auth](/api/admin-auth.md) — 임시 비밀번호 발급 1시간 5회 초과 429 문구 끝에 마침표를 붙였다(「임시 비밀번호는 1시간에 5번까지 받을 수 있습니다.」, 재영 결정 — 찾기 · 로그인 화면 오류 문구는 모두 마침표로 끝낸다). 단위 테스트 기대값도 맞췄다.
 * **Update**: main 병합(api treecko, main #186 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션 없음.
 * **Update**: main 병합(api treecko, main #185 · #188 까지 — 마이그레이션 20261028140448 · 20261028160701): okf/log · [BP masters](/api/bp-masters.md) 충돌은 양쪽 기록을 살렸다(BP masters 출처 제목은 main 의 엑셀 메서드, 시각은 늦은 값).
 * **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — api #179 리뷰 참고: 세 초기화의 잠금 해제 값을 `CLEARED_ATTEMPT_STATE` 로 쓴다(다른 잠금 해제와 같은 출처). e2e `admin-password-reset-unlock` — 잠긴 플랫폼 관리자 · BP 마스터를 초기화하면 메일로 받은 비밀번호로 바로 로그인된다(잠금 해제를 빼면 429 로 실패하는 것을 확인). 동작 변화 없음.

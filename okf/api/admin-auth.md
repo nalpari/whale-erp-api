@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-28T09:05:49Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T00:19:02Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -57,7 +57,7 @@ sources:
   - id: admin-temporary-password-service
     resource: ../../src/auth/admin-temporary-password.service.ts
     title: POST /auth/admin/temporary-passwords — 비밀번호 찾기 임시 비밀번호
-    last_modified: 2026-10-27T05:11:09Z
+    last_modified: 2026-10-29T00:19:02Z
   - id: admin-password-change-service
     resource: ../../src/auth/admin-password-change.service.ts
     title: POST /auth/admin/password-change — 강제 비밀번호 변경 + 약관 동의
