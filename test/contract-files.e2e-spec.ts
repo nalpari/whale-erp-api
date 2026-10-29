@@ -180,6 +180,7 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
       orderBy: { contractDocumentId: 'asc' },
     });
 
+  // 배치는 DB 전체를 본다 — 앞 suite 가 남긴 체결 계약의 완료본도 만들어 PDF 몇십 장이 걸릴 수 있다
   it('채우기 배치 — 완료본이 없는 체결 계약(백필)과 발송 뒤 하루 안의 보낸 원본을 만든다. 다시 돌면 더 만들지 않는다', async () => {
     const now = new Date();
     const minutesAgo = (m: number) => new Date(now.getTime() - m * 60_000);
@@ -234,7 +235,7 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
     await files.fillMissing(now);
     expect(await docs(backfill)).toHaveLength(1);
     expect(await docs(recent)).toHaveLength(1);
-  });
+  }, 120_000);
 
   it('함께 만들어도 한 장만 남고, 진 쪽은 올린 파일을 지운다(고유 인덱스)', async () => {
     const contractId = await contract({ sentAt: new Date(), signed: true });
