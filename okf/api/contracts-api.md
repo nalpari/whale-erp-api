@@ -1035,7 +1035,10 @@ apply to reading.
   보낸 원본 · 처리 완료본 PDFs use: `{ title, blocks }`, a block being `TEXT` (`text`), `TABLE` (제3조 요일 표:
   `header`, `tableRows[{ cells, off }]`) or `VALUES` (`values[{ label, value }]`, empty values left out). The first
   `TEXT` follows the title on the same line. The wording is the 직원 앱's 원안 moved here as is (휴일 · 연차 · 가산
-  조항 wait for the 노무사 review, PAY-5); a change re-renders signed contracts in the app but not their PDFs.
+  조항 wait for the 노무사 review, PAY-5); a change re-renders signed contracts in the app but not their PDFs. One
+  addition: an old contract with no 주휴일 but 주 15시간 이상 says 「주휴일이 정해지지 않았다.」 instead of the 15시간 미만
+  sentence, which would contradict its own 제3조. 제3조's hours use `weeklyMinutesOf` / `dayMinutesOf`
+  (`contract-terms.ts`), the same calculation as the save check.
 - Reads run in one transaction only so Prisma sends the relation queries one after another (PGlite e2e).
 - **`GET /me/contracts/:contractId/documents/:contractDocumentId/download-url`** (WHALEERP-146 종이 계약
   날인본 · 임금계약서, 149 처리 완료본 내보내기; `MyContractDocumentsController`, its own controller so the 날인
@@ -1069,7 +1072,8 @@ only — a 종이 계약 has no body.
 - **보낸 원본 (`SENT_ORIGINAL`)** — one per 발송: `contract_documents.sent_at` = the contract's `sent_at`. Made after
   a send that went out (or that the 직원 answered first) — `ContractsService.settledResult` (저장 · 고쳐 보냄 · 근로자
   정보 수정) and `ContractSendService.send` (재발송) call `afterSent` without waiting. 사용자 칸 = the store now;
-  근로자 주소 is usually empty (fixed at 날인); the 서명 칸 is empty and a note says it is the pre-signature copy.
+  근로자 주소 is always empty (it is fixed at 날인, so it was not on the contract when sent — even when the batch
+  makes the file after the 직원 signed); the 서명 칸 is empty and a note says it is the pre-signature copy.
   A re-send makes a new one; earlier ones stay. File `근로계약서-보낸원본-{id}-{KST yyyymmddHHMM}.pdf`.
 - **처리 완료본 (`SIGNED_COPY`)** — one per contract, needs the `SIGNATURE` row; the PNG is read back from storage
   and drawn in the 서명 칸. 사용자 칸 = the values on the party row (`employer_*`, fixed at 날인). A contract signed
