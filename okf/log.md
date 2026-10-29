@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-28
+* **Update**: [Contracts API](/api/contracts-api.md) — api #182 code-review 반영: 이력이 아예 없는 옛 종료 계약은 체결된 것으로 본다(관리자 상세와 같은 기준), 처리 완료본 409 문구를 내려받기에 맞춤(code · status 는 같음), Swagger 409 설명, 상태가 빈 행은 404.
+* **Update**: [Contracts API](/api/contracts-api.md) — 직원 계약 파일 내려받기 PR 전 리뷰 반영: 처리 완료본은 체결 완료이거나 체결 완료에서 닫힌 종료(SIGNED → ENDED 이력)만 — 날인 전 종료는 409. e2e 에 임시저장 404 · 날인 전 종료 409 를 더했다.
+* **Update**: [Contracts API](/api/contracts-api.md) · [Employment Contract Batch](/api/employment-contract-batch.md) — 직원 앱 근로계약 파일 내려받기 `GET /me/contracts/:contractId/documents/:contractDocumentId/download-url`(WHALEERP-146 · 149). 직원 토큰만(관리자 403), 상세와 같은 「내 계약」(아니면 같은 404 본문), 그 계약의 상세 `documents` 파일만(필기 서명 · 다른 계약 파일 404), 관리자와 같은 300초 주소 `{ url }`. 처리 완료본(`SIGNED_COPY`)은 체결 완료 · 종료에서만 — 그 밖은 409 `CONTRACT_STATUS_CONFLICT`(지금 상태). 저장소 없음 503. 새 컨트롤러 · 서비스 파일로 두고 `ContractsModule` 에 등록만 했다. 마이그레이션 없음. openapi 갱신.
 * **Update**: [Staff signup](/api/staff-signup.md) — main 병합(api #164 머지 뒤): 받은 초대 목록의 고용 형태 · 직무를 #164 의 `pendingTermsOf`(시작 전 계약 값, 없으면 레코드)로 읽고 `jobTitle` 을 nullable 로. 소속 추가 확인 요청 절은 main 그대로 살렸다.
 * **Update**: [Staff signup](/api/staff-signup.md) — 받은 초대 목록 · 수락에 이름 대조를 더했다(2026-10-28 김민식): 번호와 함께 근로계약서 이름이 계정 이름과 같아야 보이고 받는다(본인 대조와 같은 규칙, 다르면 남의 초대와 같은 404). 번호 재활용 때 옛 계정이 새 주인의 초대를 받던 위험을 막는다.
 * **Update**: [My profile](/api/my-profile.md) · [Staff signup](/api/staff-signup.md) — api #180 code-review 반영: 퇴직 포함 목록에서 지운 점포의 소속을 뺀다, 퇴직 포함 조건은 재직 조건을 빼는 것으로(두 값을 다 거르던 IN 대신), 로그인한 직원의 근무지 더하기 409 문구에서 「로그인해 주세요」를 뺐다(code 는 같음).
