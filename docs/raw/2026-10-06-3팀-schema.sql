@@ -63,8 +63,8 @@ CREATE TYPE "work_schedule_change_type" AS ENUM ('CREATED', 'UPDATED', 'DELETED'
 COMMENT ON TYPE "work_schedule_change_type" IS '등록 · 수정 · 삭제';
 CREATE TYPE "attendance_kind" AS ENUM ('CHECK_IN', 'CHECK_OUT');  -- 출근 · 퇴근
 COMMENT ON TYPE "attendance_kind" IS '출근 · 퇴근';
-CREATE TYPE "attendance_review_reason" AS ENUM ('ACCURACY_EXCEEDED', 'OUT_OF_RADIUS_CHECKIN', 'OUT_OF_RADIUS_CHECKOUT', 'MOCK_LOCATION');  -- 위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지
-COMMENT ON TYPE "attendance_review_reason" IS '위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지';
+CREATE TYPE "attendance_review_reason" AS ENUM ('ACCURACY_EXCEEDED', 'OUT_OF_RADIUS_CHECKIN', 'OUT_OF_RADIUS_CHECKOUT', 'MOCK_LOCATION', 'LONG_SHIFT');  -- 위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지 · 근무 12시간 초과
+COMMENT ON TYPE "attendance_review_reason" IS '위치 오차 초과 · 반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지 · 근무 12시간 초과';
 CREATE TYPE "attendance_entry_method" AS ENUM ('SELF', 'PROXY');  -- 직원 등록 · 대신 등록
 COMMENT ON TYPE "attendance_entry_method" IS '직원 등록 · 대신 등록';
 CREATE TYPE "todo_assignee_type" AS ENUM ('INDIVIDUAL', 'ALL');  -- 개인 · 근무지 전체
