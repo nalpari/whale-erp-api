@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:54:57Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T06:40:00Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -185,7 +185,9 @@ sources:
 * **확인 필요 기록 포함**은 급여 기간(한국 시간)에 확인 필요 사유가 남은(관리자가 아직 검토하지 않은) 그 직원 출퇴근 기록이 있을 때다 —
   검토 사유 `ATTENDANCE_NEEDS_REVIEW`(상세 「급여 기간에 확인 필요 출퇴근 기록이 N건 있습니다」, ATT-11 · 2026-10-20 재영). 확인 필요
   기록도 급여 계산에는 넣는다. 세는 기준은 급여 계산과 같다 — 짝 퇴근은 출근한 날(자정을 넘긴 퇴근도), 출근 없는 퇴근은 자기 시각. 퇴근
-  시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지 않는 다음 달에 붙었다(PR #159 리뷰).
+  시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지 않는 다음 달에 붙었다(PR #159 리뷰). 달을 걸친
+  첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날)의 기록도 센다 — 그 날의 실근무가 이 달 주휴나 연장에 들어가서다(운영 정책 v247
+  PAY-06, 2026-10-29 재영, WHALEERP-634). 같은 기록이 앞 달 명세서에도 세어진다.
 * **항목**은 사용 중인 급여 항목의 지급(11) · 기본 공제(6), 파트타이머면 원천징수(2)까지 `sort_order` 순으로 만든다. 기본급 ·
   주휴수당 · 연장수당은 아래 「지급 항목 계산」의 값을 `calculatedAmount` 에 넣고 넣은 것(`isEntered` true)으로 본다 — 계산할 수
   없으면(null) 미입력이다. 나머지 줄은 금액 없이(`calculatedAmount` · `adjustedAmount` null, `isEntered` false) 선다. 추가 공제는
@@ -257,7 +259,10 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
   * 3.3% 는 파트타이머 명세서만(정직원이 true 면 400). 같은 항목 두 번 · 한 줄 1억 초과 · 합계가 integer 를 넘으면 400.
   * 합계를 다시 셈한다 — 보이는 줄만(3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수), 미입력은 0. 실지급액 CHECK(지급 − 공제)를 지킨다.
   * 바꾼 것이 있으면 처리 이력 `EDIT` 한 줄(「가산 적용 해제 · 상여 미입력 → 128,000원 · 항목 추가 연말(중도)정산」 모양). 없으면 남기지 않는다.
-* `POST /payslips/:id/confirm { updatedAt }` → 200 상세 — 작성 중 · 검토 중에서 확정. 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를
+* `POST /payslips/:id/confirm { updatedAt }` → 200 상세 — 작성 중 · 검토 중에서 확정. 급여 기간 마지막 날(한국)이 지나기 전이면 422
+  `PERIOD_NOT_ENDED`(「급여 기간이 끝나지 않아 확정할 수 없습니다. YYYY-MM-DD 부터 확정할 수 있습니다」) — 남은 날의 근무가 빠진
+  명세서가 발송되지 않게 막는다. 초안 작성 · 임시저장 · 다시 계산은 그 전에도 된다(미리 보기, 운영 정책 v247 PAY-06, 2026-10-29 재영,
+  WHALEERP-634). 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를
   켜면 소득세 · 지방소득세 대신 원천징수)가 하나라도 미입력이면 422 `DEDUCTION_MISSING`(본문 `items: [{ payslipItemId, itemName }]`).
   검토 사유가 있어도 확정하는 것이 「확인」이다 — 확인하지 않은 사유의 `acknowledged_at` 에 확정 시각을 남긴다. `confirmed_at` ·
   `confirmed_by`, 처리 이력 `CONFIRM`(「확정 · 검토 사유 N건 확인」).

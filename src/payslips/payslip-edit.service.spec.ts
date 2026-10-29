@@ -683,6 +683,26 @@ describe('PayslipEditService', () => {
 
   describe('confirm (확정, WHALEERP-230)', () => {
     const confirm = () => service.confirm(9, 40, { updatedAt: UPDATED });
+    // 급여 기간(10월)이 끝난 뒤
+    beforeEach(() =>
+      jest.useFakeTimers({
+        now: new Date('2026-10-31T15:00:00Z'),
+        doNotFake: ['nextTick', 'setImmediate'],
+      }),
+    );
+    afterEach(() => jest.useRealTimers());
+
+    it('급여 기간 마지막 날(한국)이 지나기 전이면 422 PERIOD_NOT_ENDED — 상태를 바꾸지 않는다(운영 정책 v247 PAY-06)', async () => {
+      jest.setSystemTime(new Date('2026-10-31T14:59:59Z')); // 한국 10/31 23:59:59
+      await expect(confirm()).rejects.toMatchObject({
+        response: {
+          code: 'PERIOD_NOT_ENDED',
+          message:
+            '급여 기간이 끝나지 않아 확정할 수 없습니다. 2026-11-01 부터 확정할 수 있습니다',
+        },
+      });
+      expect(prisma.payslip.updateMany).not.toHaveBeenCalled();
+    });
 
     it('보이는 공제(기본 · 붙인 추가, 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수)가 비어 있으면 422 와 그 항목', async () => {
       const error = await confirm().catch((e: unknown) => e);

@@ -77,7 +77,7 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
     );
   });
 
-  it('확인 필요 기록은 급여 계산과 같이 짝 퇴근을 출근한 날로 센다 — 월말 밤샘 퇴근의 사유가 다음 달로 넘어가지 않게', async () => {
+  it('확인 필요 기록은 급여 계산과 같이 짝 퇴근을 출근한 날로 센다 — 월말 밤샘 퇴근의 사유가 다음 달로 넘어가지 않게 · 달을 걸친 첫 주의 앞 달 날(9/28 ~ 30)도 센다(운영 정책 v247 PAY-06)', async () => {
     const count = jest.fn().mockResolvedValue(0);
     const db = {
       contract: { findMany: jest.fn().mockResolvedValue([]) },
@@ -96,11 +96,7 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
       },
       new Date('2026-11-05T00:00:00Z'),
     );
-    const range = {
-      gte: new Date('2026-09-30T15:00:00Z'),
-      lt: new Date('2026-10-31T15:00:00Z'),
-    };
-    expect(count).toHaveBeenCalledWith({
+    const where = (range: { gte: Date; lt: Date }) => ({
       where: {
         staffMemberId: 7,
         reviewReason: { not: null },
@@ -115,6 +111,30 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
         ],
       },
     });
+    // 10/1 은 목요일 — 그 주 월요일 9/28 부터
+    expect(count).toHaveBeenLastCalledWith(
+      where({
+        gte: new Date('2026-09-27T15:00:00Z'),
+        lt: new Date('2026-10-31T15:00:00Z'),
+      }),
+    );
+    // 6/1 은 월요일 — 앞 달 날이 없어 급여 기간만
+    await attendanceReviewReasons(
+      db as never,
+      {
+        staffMemberId: 7,
+        contractIds: [],
+        periodStartDate: new Date('2026-06-01T00:00:00Z'),
+        periodEndDate: new Date('2026-06-30T00:00:00Z'),
+      },
+      new Date('2026-11-05T00:00:00Z'),
+    );
+    expect(count).toHaveBeenLastCalledWith(
+      where({
+        gte: new Date('2026-05-31T15:00:00Z'),
+        lt: new Date('2026-06-30T15:00:00Z'),
+      }),
+    );
   });
 
   it('달을 걸친 첫 주의 앞 달 날(9/28 ~ 30)은 퇴근 미등록만 출퇴근 누락에 넣는다 — 기록 없음은 기간 안 날만 본다', async () => {

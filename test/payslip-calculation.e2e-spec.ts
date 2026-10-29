@@ -7,7 +7,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { kstDayStart } from '../src/staff-members/kst-date';
+import { kstDayStart, kstToday } from '../src/staff-members/kst-date';
 
 // 급여명세서 지급 항목 계산을 실제 DB 로 확인한다(WHALEERP-227) — 초안의 기본급 · 주휴수당 · 연장수당이 근로계약 · 출퇴근
 // 기록으로 채워지고, 가산 적용을 끄면 다시 계산되고, 「출퇴근으로 다시 계산」이 고친 값을 버리고 검토 사유를 모두 새로 판정하는 것.
@@ -561,5 +561,33 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       d.reviewReasons.find((r) => r.reviewReason === 'MISSING_ATTENDANCE')
         ?.detail,
     ).toMatch(/08-31 퇴근 미등록$/);
+  });
+
+  it('급여 기간 마지막 날(한국)이 지나기 전에는 확정이 422 PERIOD_NOT_ENDED 다(운영 정책 v247 PAY-06)', async () => {
+    // 기간 끝을 오늘로 잠시 옮긴다 — 오늘은 아직 끝나지 않았다
+    const { periodEndDate } = await prisma.payslip.findUniqueOrThrow({
+      where: { payslipId },
+    });
+    await prisma.payslip.update({
+      where: { payslipId },
+      data: { periodEndDate: kstToday() },
+    });
+    try {
+      const blocked = await send(
+        'post',
+        `/payslips/${payslipId}/confirm`,
+        422,
+        {
+          updatedAt: (await detail()).updatedAt,
+        },
+      );
+      expect((blocked.body as { code: string }).code).toBe('PERIOD_NOT_ENDED');
+      expect((await detail()).status).not.toBe('CONFIRMED');
+    } finally {
+      await prisma.payslip.update({
+        where: { payslipId },
+        data: { periodEndDate },
+      });
+    }
   });
 });

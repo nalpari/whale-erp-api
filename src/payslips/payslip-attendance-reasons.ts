@@ -127,9 +127,9 @@ export const afterEndDetail = (r: { end: string; days: string[] }) =>
  * - 계약 만료 후 기록: 가장 늦은 계약 종료일 뒤에 출근한 날.
  * - 확인 필요 기록 포함: 확인 필요 사유가 남은(검토 전) 기록 건수(ATT-11) — 짝 퇴근은 출근한 날로 센다(급여 계산과 같다). 확인 필요
  *   기록도 급여 계산에는 넣는다.
- * - 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날)은 퇴근 미등록도 출퇴근 누락에 넣는다. 그 날의 실근무는 이 달 계산에
- *   늘 들어간다 — 이 달이 주를 맡으면 주휴 금액에, 앞 달이 맡으면 주 40시간 연장에(`weeksOf`, PR #193 리뷰). 같은 날이 앞 달
- *   명세서에도 실린다. 기록 없음 · 계약 만료 후 기록은 급여 기간 안의 날만 본다.
+ * - 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날)은 퇴근 미등록도 출퇴근 누락에, 확인 필요 기록도 건수에 넣는다. 그
+ *   날의 실근무는 이 달 계산에 늘 들어간다 — 이 달이 주를 맡으면 주휴 금액에, 앞 달이 맡으면 주 40시간 연장에(`weeksOf`, PR #193
+ *   리뷰 · 운영 정책 v247 PAY-06). 같은 날이 앞 달 명세서에도 실린다. 기록 없음 · 계약 만료 후 기록은 급여 기간 안의 날만 본다.
  */
 export async function attendanceReviewReasons(
   db: Db,
@@ -145,7 +145,6 @@ export async function attendanceReviewReasons(
   const leadDays: string[] = [];
   for (let d = mondayOf(periodStart); d < periodStart; d = addDay(d, 1))
     leadDays.push(d);
-  const from = kstDayStart(basis.periodStartDate);
   const checkInFrom = kstDayStart(
     new Date(`${mondayOf(periodStart)}T00:00:00Z`),
   );
@@ -182,15 +181,17 @@ export async function attendanceReviewReasons(
         staffMemberId: basis.staffMemberId,
         reviewReason: { not: null },
         OR: [
-          { kind: 'CHECK_IN', recordedAt: { gte: from, lt: to } },
+          { kind: 'CHECK_IN', recordedAt: { gte: checkInFrom, lt: to } },
           {
             kind: 'CHECK_OUT',
             checkInAttendanceRecordId: null,
-            recordedAt: { gte: from, lt: to },
+            recordedAt: { gte: checkInFrom, lt: to },
           },
           {
             kind: 'CHECK_OUT',
-            checkInAttendanceRecord: { recordedAt: { gte: from, lt: to } },
+            checkInAttendanceRecord: {
+              recordedAt: { gte: checkInFrom, lt: to },
+            },
           },
         ],
       },

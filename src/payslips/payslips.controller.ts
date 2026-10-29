@@ -257,7 +257,7 @@ export class PayslipsController {
     return found(await this.edits.recalculate(user.id, routeId(rawId), dto));
   }
 
-  /** 확정 — 보이는 공제가 모두 있어야 한다. 검토 사유는 확인한 것으로 남는다. */
+  /** 확정 — 급여 기간이 끝났고 보이는 공제가 모두 있어야 한다. 검토 사유는 확인한 것으로 남는다. */
   @Post(':id/confirm')
   @HttpCode(HttpStatus.OK)
   @MenuPermission('update')
@@ -267,7 +267,8 @@ export class PayslipsController {
       'PAYSLIP_STATUS_CONFLICT — 작성 중 · 검토 중이 아님 · PAYSLIP_STALE — 그사이 누가 고침',
   })
   @ApiUnprocessableEntityResponse({
-    description: 'DEDUCTION_MISSING — 비어 있는 공제(본문 items)',
+    description:
+      'PERIOD_NOT_ENDED — 급여 기간 마지막 날이 지나지 않음 · DEDUCTION_MISSING — 비어 있는 공제(본문 items)',
   })
   async confirm(
     @CurrentUser() user: AuthUser,
