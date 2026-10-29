@@ -196,7 +196,7 @@ describe('AdminTemporaryPasswordService', () => {
     expect(err).toBeInstanceOf(HttpException);
     expect((err as HttpException).getStatus()).toBe(429);
     expect((err as HttpException).message).toBe(
-      '임시 비밀번호는 1시간에 5번까지 받을 수 있습니다',
+      '임시 비밀번호는 1시간에 5번까지 받을 수 있습니다.',
     );
     expect(mail.send).not.toHaveBeenCalled();
   });
