@@ -45,6 +45,12 @@ export const DB_ENUMS: EnumSource = {
     ['MOCK_LOCATION', '위치 조작 감지'],
     ['LONG_SHIFT', '근무 12시간 초과'],
   ],
+  BulkExportStatus: [
+    ['PENDING', '대기'],
+    ['PROCESSING', '만드는 중'],
+    ['SUCCEEDED', '완료'],
+    ['FAILED', '실패'],
+  ],
   ContractDocumentKind: [
     ['SENT_ORIGINAL', '발송 원본'],
     ['SIGNED_COPY', '날인 완료본'],

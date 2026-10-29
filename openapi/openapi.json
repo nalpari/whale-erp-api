@@ -5845,6 +5845,244 @@
         ]
       }
     },
+    "/staff-members/bulk-exports/preview": {
+      "get": {
+        "operationId": "BulkExportsController_preview",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "storeIds",
+            "required": false,
+            "in": "query",
+            "description": "업무 범위 점포(범위 선택기). 반복(`storeIds=1&storeIds=2`)과 쉼표(`storeIds=1,2`)를 모두 받는다. 주지 않으면 관리하는\n점포 전부. 관리하지 않는 점포가 섞이면 400",
+            "schema": {
+              "maxItems": 1000,
+              "example": [
+                3,
+                5
+              ],
+              "type": "array",
+              "items": {
+                "type": "number",
+                "maximum": 2147483647,
+                "minimum": 1
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkExportPreviewResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "관리하지 않는 점포가 섞임 · 형식 오류"
+          },
+          "403": {
+            "description": "직원 정보 관리 조회 권한 없음 · BP 마스터 · 가맹마스터가 아님 · 직원 앱 토큰 · 쓸 수 없는 계정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "담을 직원 수(재직 · 퇴직)와 범위 점포 수. 0 이면 화면이 요청 버튼을 끈다",
+        "tags": [
+          "BulkExports"
+        ]
+      }
+    },
+    "/staff-members/bulk-exports": {
+      "post": {
+        "operationId": "BulkExportsController_create",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBulkExportDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkExportItemDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "관리하지 않는 점포가 섞임 · 담을 직원이 없음 · 형식 오류"
+          },
+          "403": {
+            "description": "직원 정보 관리 조회 권한 없음 · BP 마스터 · 가맹마스터가 아님 · 직원 앱 토큰 · 쓸 수 없는 계정"
+          },
+          "409": {
+            "description": "같은 범위의 파일을 만드는 중"
+          },
+          "503": {
+            "description": "저장소(AWS_S3_*) 설정 없음"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "요청. 1분 배치가 만든다",
+        "tags": [
+          "BulkExports"
+        ]
+      },
+      "get": {
+        "operationId": "BulkExportsController_list",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "페이지, 1부터",
+            "schema": {
+              "minimum": 1,
+              "maximum": 1000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": false,
+            "in": "query",
+            "description": "페이지당 건수, 기본 20 · 최대 100",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkExportListResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 정보 관리 조회 권한 없음 · BP 마스터 · 가맹마스터가 아님 · 직원 앱 토큰 · 쓸 수 없는 계정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "볼 수 있는 요청 — 같은 BP · 같은 권한 유형이고 요청의 점포를 모두 관리하는 마스터. 최근 순",
+        "tags": [
+          "BulkExports"
+        ]
+      }
+    },
+    "/staff-members/bulk-exports/{id}/download": {
+      "post": {
+        "operationId": "BulkExportsController_download",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkExportDownloadResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "직원 정보 관리 조회 권한 없음 · BP 마스터 · 가맹마스터가 아님 · 직원 앱 토큰 · 쓸 수 없는 계정"
+          },
+          "404": {
+            "description": "없음 · 볼 수 없는 요청 · ID 형식 오류"
+          },
+          "409": {
+            "description": "아직 만드는 중 · 만들지 못함 · BP 마스터 파일에 담긴 직원의 본사 제공 동의나 가맹 점포 상태가 바뀜"
+          },
+          "410": {
+            "description": "받을 수 있는 기한(7일)이 지남"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "5분짜리 내려받기 주소. 내려받기 이력을 남긴다",
+        "tags": [
+          "BulkExports"
+        ]
+      }
+    },
     "/staff-members": {
       "get": {
         "operationId": "StaffMembersController_findAll",
@@ -22122,6 +22360,170 @@
           "version",
           "effectiveDate",
           "content"
+        ]
+      },
+      "BulkExportPreviewResponseDto": {
+        "type": "object",
+        "properties": {
+          "storeCount": {
+            "type": "number",
+            "description": "범위 점포 수"
+          },
+          "staffCount": {
+            "type": "number",
+            "description": "담을 직원 수(재직 + 퇴직). 0 이면 요청 버튼을 끈다"
+          },
+          "employedCount": {
+            "type": "number",
+            "description": "재직"
+          },
+          "retiredCount": {
+            "type": "number",
+            "description": "퇴직(퇴직일 다음 날부터 3년 안)"
+          },
+          "inProgress": {
+            "type": "boolean",
+            "description": "같은 범위의 파일을 만드는 중인가"
+          }
+        },
+        "required": [
+          "storeCount",
+          "staffCount",
+          "employedCount",
+          "retiredCount",
+          "inProgress"
+        ]
+      },
+      "CreateBulkExportDto": {
+        "type": "object",
+        "properties": {
+          "storeIds": {
+            "description": "업무 범위 점포. 비거나 없으면 관리하는 점포 전부. 관리하지 않는 점포가 섞이면 400",
+            "maxItems": 1000,
+            "example": [
+              3,
+              5
+            ],
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 2147483647,
+              "minimum": 1
+            }
+          }
+        }
+      },
+      "BulkExportStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "PROCESSING",
+          "SUCCEEDED",
+          "FAILED"
+        ]
+      },
+      "BulkExportItemDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/BulkExportStatus"
+              }
+            ]
+          },
+          "bulkExportId": {
+            "type": "number"
+          },
+          "storeIds": {
+            "description": "요청의 업무 범위 점포(오름차순) — 「다시 요청」이 같은 범위로 보낸다",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "requestedAt": {
+            "type": "string",
+            "description": "요청 일시(ISO)"
+          },
+          "requesterName": {
+            "type": "string",
+            "description": "요청한 관리자 이름(없으면 로그인 아이디)"
+          },
+          "staffCount": {
+            "type": "number",
+            "description": "담은 직원 수"
+          },
+          "completedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "완료 일시(ISO)"
+          },
+          "expiresAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "받을 수 있는 기한(ISO) — 완료 + 7일"
+          },
+          "isExpired": {
+            "type": "boolean",
+            "description": "기한이 지났는가"
+          },
+          "failureReason": {
+            "type": "string",
+            "nullable": true,
+            "description": "실패 사유"
+          }
+        },
+        "required": [
+          "status",
+          "bulkExportId",
+          "storeIds",
+          "requestedAt",
+          "requesterName",
+          "staffCount",
+          "completedAt",
+          "expiresAt",
+          "isExpired",
+          "failureReason"
+        ]
+      },
+      "BulkExportListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkExportItemDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
+      "BulkExportDownloadResponseDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "5분짜리 내려받기 주소"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "파일을 받을 수 있는 기한(ISO)"
+          }
+        },
+        "required": [
+          "url",
+          "fileName",
+          "expiresAt"
         ]
       },
       "EmploymentStatus": {

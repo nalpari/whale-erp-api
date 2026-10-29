@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Bulk exports](/api/bulk-exports.md) — 리뷰 「With fixes」 반영(WHALEERP-336). 부분 고유 인덱스를 `(bp_code_id, md5(scope_key))` 로 바꿨다. 전체 점포 범위 키가 btree 한 행 한도를 넘을 수 있어서다. 메모리 한도 500MB를 넘으면 413 으로 바로 실패하고, 화면 실패 사유는 우리가 낸 문구만 보인다. 요청자를 다시 볼 때 난 DB 오류는 다시 시도한다. 점만 있는 이름은 `_` 로 바꾸고(zip-slip), 만료 정리는 기한이 오래된 순으로 한다. 목록 항목에 `storeIds` 를 더했다. e2e 에는 긴 범위 키 · 동시 요청 · 실패 사유 · 멈춘 작업 되살리기를 더했다. [Team 3 physical schema](/domain/team3-physical-schema.md)도 맞췄다.
+* **Add**: [Bulk exports](/api/bulk-exports.md) — 직원 자료 일괄 저장 API(WHALEERP-336). 마이그레이션 `20261029134408_team3_bulk_exports`(`bulk_exports` · `bulk_export_download_logs`, enum `bulk_export_status`)를 더했고, 물리 생성기 밖에서 손으로 썼다([Team 3 physical schema](/domain/team3-physical-schema.md)). [Attachment storage](/api/storage.md)에 `get` · `ZIP` 을 더했고, [Payslips](/api/payslips.md)의 `DETAIL_SELECT` · `toSummary` 를 내보냈다. 배치 이름 둘([Employment Contract Batch](/api/employment-contract-batch.md))과 AppModule 등록 순서([whale-erp-api](/api/whale-erp-api.md))도 바뀌었다. `fflate` 는 직접 의존성으로 넣었다.
 * **Update**: main 병합(api treecko, main #186 까지): okf/log 충돌은 양쪽 기록을 살렸다. 새 마이그레이션 없음.
 * **Update**: main 병합(api treecko, main #185 · #188 까지 — 마이그레이션 20261028140448 · 20261028160701): okf/log · [BP masters](/api/bp-masters.md) 충돌은 양쪽 기록을 살렸다(BP masters 출처 제목은 main 의 엑셀 메서드, 시각은 늦은 값).
 * **Update**: [Platform admins](/api/platform-admins.md) · [BP masters](/api/bp-masters.md) · [BP admins](/api/bp-admins.md) — api #179 리뷰 참고: 세 초기화의 잠금 해제 값을 `CLEARED_ATTEMPT_STATE` 로 쓴다(다른 잠금 해제와 같은 출처). e2e `admin-password-reset-unlock` — 잠긴 플랫폼 관리자 · BP 마스터를 초기화하면 메일로 받은 비밀번호로 바로 로그인된다(잠금 해제를 빼면 429 로 실패하는 것을 확인). 동작 변화 없음.
