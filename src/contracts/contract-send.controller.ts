@@ -1,6 +1,7 @@
 import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
 import {
   ApiBadGatewayResponse,
+  ApiBadRequestResponse,
   ApiBody,
   ApiBearerAuth,
   ApiConflictResponse,
@@ -11,19 +12,29 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 import type { AuthUser } from '../auth/auth.types';
-import { MenuPermission } from '../auth/menu-permission.guard';
+import {
+  MenuPermission,
+  TargetBp,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
 import { ContractIdPipe } from './contract-id.pipe';
+import {
+  BP_MISSING_DESCRIPTION,
+  BP_NOT_FOUND_DESCRIPTION,
+} from './contracts.controller';
 import { SendContractDto } from './dto/send-contract.dto';
 import { ContractSendService, type EndResult } from './contract-send.service';
 import { SendContractResponseDto } from './dto/send-contract.response.dto';
 
 // 근로계약 재발송(WHALEERP-136). 보내기는 저장할 때 곧바로 한다(2026-10-19 재영) — 따로 부르는 것은 재발송뿐이다.
 // 근로계약 관리(ContractsController)와 같은 경로 · 권한이다 — 재발송은 기존 계약을 바꾸므로 수정 권한(WHALEERP-592).
+// 대상 BP 도 같다(`@TargetBp()`, WHALEERP-618).
 @ApiBearerAuth()
 @ApiForbiddenResponse({
   description:
-    '근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+    '근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더',
 })
+@ApiBadRequestResponse({ description: BP_MISSING_DESCRIPTION })
 @UserTypes('admin')
 @Controller('contracts')
 export class ContractSendController {
@@ -47,7 +58,9 @@ export class ContractSendController {
     description:
       'status — 가입 초대는 그대로 PENDING_SEND · PENDING_SIGNATURE, 가입한 직원은 PENDING_SIGNATURE, 소속 추가 확인 요청은 PENDING_SEND(signDeadlineAt null — 수락부터 30일). 거부 · 만료(WHALEERP-153)는 가입한 직원이면 PENDING_SIGNATURE, 그 밖에는 PENDING_SEND 로 되살린다. 가입한 직원은 알림함 알림(앱 푸시는 #261 전까지 나가지 않음) — 알림 템플릿을 쓸 수 없거나 탈퇴 계정이면 알림 없이 기한만 새로',
   })
-  @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
+  @ApiNotFoundResponse({
+    description: `없는 계약 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   @ApiConflictResponse({
     description:
       'CONTRACT_STATUS_CONFLICT(발송 대기 · 서명 대기 · 거부 · 만료가 아님, 또는 본문 expectedStatus · expectedSentAt 이 지금 계약과 다름 — 그사이 거부 · 만료되었거나 다른 탭에서 먼저 보냄) · REOPEN_BLOCKED(거부 · 만료를 되살릴 수 없음 — 퇴직 · 퇴직일 있음, 폐점 · 삭제 점포, 같은 점포 · 번호의 다른 진행 중 계약, 계약 기간이 끝남, 기간이 겹치거나 더 늦게 시작한 다른 체결 완료, 같은 직전 계약의 다른 재계약. message 에 까닭) · WORK_TIME_OVERLAP(거부 · 만료를 되살리면 다른 점포 근무 시간과 겹침) · SEND_PHONE_NOT_MOBILE(휴대폰 번호가 아님) · 코드 없음 「이 점포에 이미 재직 중인 직원입니다.」(가입 전 레코드인데 그 번호의 계정이 이 점포에 재직 중) · 다른 요청이 먼저 고침',
@@ -64,11 +77,15 @@ export class ContractSendController {
     @Param('contractId', ContractIdPipe) contractId: number,
     @Body() dto: SendContractDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<SendContractResponseDto> {
-    return this.sender.send(user.id, contractId, new Date(), {
-      status: dto.expectedStatus,
-      sentAt: dto.expectedSentAt,
-    });
+    return this.sender.send(
+      user.id,
+      contractId,
+      new Date(),
+      { status: dto.expectedStatus, sentAt: dto.expectedSentAt },
+      bp,
+    );
   }
 
   /**
@@ -79,7 +96,9 @@ export class ContractSendController {
   @MenuPermission('update')
   @HttpCode(200)
   @ApiOkResponse({ description: '{ contractId, status: ENDED }' })
-  @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
+  @ApiNotFoundResponse({
+    description: `없는 계약 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   @ApiConflictResponse({
     description:
       'CONTRACT_STATUS_CONFLICT(발송 대기가 아님 — 지금 상태를 싣는다) · 다른 요청이 먼저 고침',
@@ -87,7 +106,8 @@ export class ContractSendController {
   end(
     @Param('contractId', ContractIdPipe) contractId: number,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<EndResult> {
-    return this.sender.end(user.id, contractId);
+    return this.sender.end(user.id, contractId, bp);
   }
 }

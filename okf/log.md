@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Contracts API](/api/contracts-api.md) — 관리자 웹 근로계약 경로(목록 · 상세 · 작성 · 종이 계약 · 이어 쓰기 · 당사자 정보 · 날인본 · 삭제 · 재발송 · 종료)가 `@TargetBp()` 로 대상 BP 를 받아 `AdminScopeService` 에 넘긴다(WHALEERP-618). 플랫폼 계정은 고른 고객 BP 의 점포 전부를 다루고, 헤더(X-Bp-Code-Id) 없이 부르면 범위를 보기 전에 400 「근로계약을 볼 BP 를 골라 주세요.」(`checkTargetBp`). BP · 가맹 계정은 그대로다. 근무지 선택지(`GET /stores/options`)는 아직 헤더를 보지 않는다.
 * **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인 잠김 429 문구를 「로그인이 잠겼습니다. 5분 뒤에 다시 시도해 주세요.」로 띄웠다(사용자 지정 2026-10-29 — 「…해주세요」는 「…해 주세요」). api 화면 문구에서 붙여 쓴 곳은 이 하나였다. 단위 테스트 기대값도 맞췄다.
 * **Update**: 응답 문구 마침표(api slowbro) review-pr 반영: 근로계약 발송 실패 502 문구가 임시저장 꼬리가 없을 때 마침표 없이 끝나던 것을 문장 끝으로 옮겼고, 급여 검토 사유 「출퇴근 기록이 N일 누락되었습니다 — …」 · 「근로계약 만료일(…) 뒤 출퇴근 기록이 N일 있습니다 — …」 끝에도 마침표를 붙였다. 줄바꿈으로 나뉜 okf 인용 약 35곳과 [Mail](/api/mail.md) 인용, 문구를 인용한 주석 · 테스트 제목 · Swagger 설명을 맞췄다. [Admin auth](/api/admin-auth.md) 시각은 main 의 늦은 값으로 되돌렸다.
 * **Update**: main 병합(api slowbro, main #197 · #199 까지): okf/log 충돌은 양쪽 기록을 살렸고, concept 시각 충돌(auth · payslips · staff-signup · whale-erp-api)은 늦은 값을 쓰고 마침표 인용을 다시 맞췄다. 병합으로 들어온 새 문구는 이미 마침표로 끝나 더 고칠 것이 없었다.

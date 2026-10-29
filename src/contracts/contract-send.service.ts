@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ContractStatus } from '@prisma/client';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import type { SendContractResponseDto } from './dto/send-contract.response.dto';
 import {
@@ -67,10 +68,13 @@ export class ContractSendService {
     contractId: number,
     now = new Date(),
     expected: { status?: ContractStatus; sentAt?: string } = {},
+    bp?: TargetBpContext,
   ): Promise<SendResult> {
+    await this.contracts.checkTargetBp(bp);
     const scoped = await this.contracts.scopedContractOf(
       adminAccountId,
       contractId,
+      bp,
     );
     const { pending, status, joined, sent } = await this.prisma.$transaction(
       async (tx) => {
@@ -227,10 +231,16 @@ export class ContractSendService {
    * 종료로 바꾸고 이력(관리자)을 남기며, 그 직원 레코드에 나간 초대(코드 · 링크)를 무효로 한다. 행은 지우지 않는다. 남은 가입 전
    * 직원 레코드는 퇴직 처리로 정리한다(CTR-25). 발송 대기가 아니면 409(지금 상태를 싣는다). 잠금 순서는 재발송과 같다.
    */
-  async end(adminAccountId: number, contractId: number): Promise<EndResult> {
+  async end(
+    adminAccountId: number,
+    contractId: number,
+    bp?: TargetBpContext,
+  ): Promise<EndResult> {
+    await this.contracts.checkTargetBp(bp);
     const scoped = await this.contracts.scopedContractOf(
       adminAccountId,
       contractId,
+      bp,
     );
     await this.prisma.$transaction(async (tx) => {
       await lockPeople(tx, [scoped.phone]);

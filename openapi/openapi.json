@@ -8175,8 +8175,14 @@
               }
             }
           },
+          "400": {
+            "description": "검색 조건 형식 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -8223,13 +8229,13 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 만 19세 미만 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기"
+            "description": "입력 오류 · 만 19세 미만 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
             "description": "근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
           },
           "404": {
-            "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖"
+            "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(같은 점포 진행 중 계약 — contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(다른 점포 근무 시간 겹침, 초안 저장만) · 대체할 계약을 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님)"
@@ -8308,13 +8314,13 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄"
+            "description": "입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
             "description": "근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
           },
           "404": {
-            "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖"
+            "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 대체할 계약을 다른 요청이 먼저 고침 · SIGNED_CONTRACT_OVERLAP(종이 계약 — 기간이 겹치는 체결 완료 계약, contracts 목록. 잘못 올린 계약이면 correctSignedContracts 와 그 id 를 모두 replaceContractIds 로) · RENEWAL_SIGNED_OVERLAP(종이 재계약이 직전 계약이 아닌 체결 완료와 겹침 — 바로잡기 없이 막음)"
@@ -8367,11 +8373,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 계약 · 업무 범위 밖"
+            "description": "없는 계약 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -8427,13 +8436,13 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 만 19세 미만 · 수정 요청인데 임시저장 · 근무지 변경 · 가입한 직원의 번호 변경 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기"
+            "description": "입력 오류 · 만 19세 미만 · 수정 요청인데 임시저장 · 근무지 변경 · 가입한 직원의 번호 변경 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
             "description": "근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성, 수정 요청은 수정) · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)"
           },
           "404": {
-            "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖"
+            "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "임시저장 · 수정 요청이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님)"
@@ -8480,11 +8489,14 @@
           "204": {
             "description": "지웠다"
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 계약 · 업무 범위 밖"
+            "description": "없는 계약 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "임시저장이 아님"
@@ -8545,13 +8557,13 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 만 19세 미만 · 가입한 직원의 번호 변경"
+            "description": "입력 오류 · 만 19세 미만 · 가입한 직원의 번호 변경 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
             "description": "근로계약 관리 수정 권한 없음 · 새 번호의 같은 점포 임시저장을 대체하는데 삭제 권한 없음(409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)"
           },
           "404": {
-            "description": "없는 계약 · 업무 범위 밖"
+            "description": "없는 계약 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "CONTRACT_STATUS_CONFLICT(발송 대기 · 서명 대기 · 수정 요청이 아님) · 새 번호로 이 점포에 재직 중 · CONTRACT_IN_PROGRESS(새 번호의 같은 점포 진행 중 계약 — replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님)"
@@ -8638,13 +8650,13 @@
             }
           },
           "400": {
-            "description": "입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄"
+            "description": "입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
             "description": "근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성 — 수정 요청은 종이 계약으로 바꿀 수 없어 400) · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)"
           },
           "404": {
-            "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖"
+            "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "임시저장이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SIGNED_CONTRACT_OVERLAP(종이 계약 — 기간이 겹치는 체결 완료 계약, contracts 목록. 잘못 올린 계약이면 correctSignedContracts 와 그 id 를 모두 replaceContractIds 로) · RENEWAL_SIGNED_OVERLAP(종이 재계약이 직전 계약이 아닌 체결 완료와 겹침 — 바로잡기 없이 막음)"
@@ -8705,11 +8717,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 계약 · 파일 · 업무 범위 밖"
+            "description": "없는 계약 · 파일 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "503": {
             "description": "첨부파일 저장소가 설정되지 않음"
@@ -8769,11 +8784,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 계약 · 업무 범위 밖"
+            "description": "없는 계약 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "CONTRACT_STATUS_CONFLICT(발송 대기 · 서명 대기 · 거부 · 만료가 아님, 또는 본문 expectedStatus · expectedSentAt 이 지금 계약과 다름 — 그사이 거부 · 만료되었거나 다른 탭에서 먼저 보냄) · REOPEN_BLOCKED(거부 · 만료를 되살릴 수 없음 — 퇴직 · 퇴직일 있음, 폐점 · 삭제 점포, 같은 점포 · 번호의 다른 진행 중 계약, 계약 기간이 끝남, 기간이 겹치거나 더 늦게 시작한 다른 체결 완료, 같은 직전 계약의 다른 재계약. message 에 까닭) · WORK_TIME_OVERLAP(거부 · 만료를 되살리면 다른 점포 근무 시간과 겹침) · SEND_PHONE_NOT_MOBILE(휴대폰 번호가 아님) · 코드 없음 「이 점포에 이미 재직 중인 직원입니다.」(가입 전 레코드인데 그 번호의 계정이 이 점포에 재직 중) · 다른 요청이 먼저 고침"
@@ -8822,11 +8840,14 @@
           "200": {
             "description": "{ contractId, status: ENDED }"
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "근로계약 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 계약 · 업무 범위 밖"
+            "description": "없는 계약 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "CONTRACT_STATUS_CONFLICT(발송 대기가 아님 — 지금 상태를 싣는다) · 다른 요청이 먼저 고침"
