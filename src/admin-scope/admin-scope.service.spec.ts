@@ -17,8 +17,13 @@ describe('AdminScopeService', () => {
       findMany: jest.Mock;
     };
     adminAccount: { findFirst: jest.Mock };
-    store: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
-    adminStoreMapping: { count: jest.Mock };
+    store: {
+      findFirst: jest.Mock;
+      findMany: jest.Mock;
+      count: jest.Mock;
+      aggregate: jest.Mock;
+    };
+    adminStoreMapping: { count: jest.Mock; aggregate: jest.Mock };
     bpCode: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -46,8 +51,12 @@ describe('AdminScopeService', () => {
           .fn()
           .mockResolvedValue([{ storeId: 5, storeTypeCode: 'DIRECT' }]),
         count: jest.fn().mockResolvedValue(0),
+        aggregate: jest.fn().mockResolvedValue({ _max: { updatedAt: null } }),
       },
-      adminStoreMapping: { count: jest.fn().mockResolvedValue(1) },
+      adminStoreMapping: {
+        count: jest.fn().mockResolvedValue(1),
+        aggregate: jest.fn().mockResolvedValue({ _max: { updatedAt: null } }),
+      },
       bpCode: {
         findFirst: jest.fn().mockResolvedValue({ bpCodeId: 7 }),
         findMany: jest.fn(),
@@ -682,6 +691,115 @@ describe('AdminScopeService', () => {
       await expect(scope.bpStoresAccess(staff, 8)).resolves.toBe('denied');
       prisma.staffMember.findMany.mockResolvedValue([]);
       await expect(scope.bpStoresAccess(staff, 7)).resolves.toBe('denied');
+    });
+  });
+
+  // 관리자 웹이 새로고침 · 메뉴 이동 · 창 포커스 때 묻는다 — 값이 바뀌었을 때만 점포 목록을 다시 받는다.
+  describe('bpStoresVersion — BP 점포 목록 버전', () => {
+    const admin = { type: 'admin' as const, id: 9, loginId: 'a', sid: 1 };
+    const staff = {
+      type: 'account' as const,
+      id: 30,
+      email: 's@test.invalid',
+      sid: 1,
+    };
+    const T1 = new Date('2026-10-29T01:00:00.000Z');
+    const T2 = new Date('2026-10-29T02:00:00.000Z');
+    const bpAdmin = (updatedAt = T1) => ({
+      updatedAt,
+      roleTypeCode: 'BA',
+      bpCode: { isPlatform: false },
+    });
+    const platform = {
+      updatedAt: T1,
+      roleTypeCode: 'PA',
+      bpCode: { isPlatform: true },
+    };
+    const stores = (updatedAt: Date | null, live: number) => {
+      prisma.store.aggregate.mockResolvedValue({ _max: { updatedAt } });
+      prisma.store.count.mockResolvedValue(live);
+    };
+    const mappings = (updatedAt: Date | null, live: number) => {
+      prisma.adminStoreMapping.aggregate.mockResolvedValue({
+        _max: { updatedAt },
+      });
+      prisma.adminStoreMapping.count.mockResolvedValue(live);
+    };
+
+    it('점포의 최근 수정 시각은 지운 행까지 보고, 지우지 않은 점포 수를 함께 센다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platform);
+      stores(T1, 3);
+      const version = await scope.bpStoresVersion(admin, 7);
+      expect(typeof version).toBe('string');
+      // 삭제(is_deleted = true)도 updated_at 을 바꾸므로 지운 행을 빼지 않는다
+      expect(prisma.store.aggregate).toHaveBeenCalledWith({
+        where: { bpCodeId: 7 },
+        _max: { updatedAt: true },
+      });
+      expect(prisma.store.count).toHaveBeenCalledWith({
+        where: { bpCodeId: 7, isDeleted: false },
+      });
+    });
+
+    it('점포가 바뀌면(수정 시각 · 지우지 않은 수) 버전이 바뀌고, 같으면 같다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platform);
+      stores(T1, 3);
+      const before = await scope.bpStoresVersion(admin, 7);
+      await expect(scope.bpStoresVersion(admin, 7)).resolves.toBe(before);
+      stores(T2, 3);
+      await expect(scope.bpStoresVersion(admin, 7)).resolves.not.toBe(before);
+      // 같은 밀리초에 바뀌어도 수가 다르면 다르다
+      stores(T1, 2);
+      await expect(scope.bpStoresVersion(admin, 7)).resolves.not.toBe(before);
+    });
+
+    it('플랫폼 계정은 BP 전체를 보므로 점포만 담는다 — 매핑은 읽지 않는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(platform);
+      stores(T1, 3);
+      await scope.bpStoresVersion(admin, 7);
+      expect(prisma.adminStoreMapping.aggregate).not.toHaveBeenCalled();
+      expect(prisma.adminStoreMapping.count).not.toHaveBeenCalled();
+    });
+
+    it('BP · 가맹 계정은 담당 점포 매핑(지운 행 포함)과 관리 범위(계정 수정 시각)도 담는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(bpAdmin());
+      stores(T1, 3);
+      mappings(T1, 2);
+      const before = await scope.bpStoresVersion(admin, 7);
+      expect(prisma.adminStoreMapping.aggregate).toHaveBeenCalledWith({
+        where: { adminAccountId: 9 },
+        _max: { updatedAt: true },
+      });
+      expect(prisma.adminStoreMapping.count).toHaveBeenCalledWith({
+        where: { adminAccountId: 9, isDeleted: false },
+      });
+
+      mappings(T2, 2); // 매핑 추가 · 해제
+      const afterMapping = await scope.bpStoresVersion(admin, 7);
+      expect(afterMapping).not.toBe(before);
+      prisma.adminAccount.findFirst.mockResolvedValue(bpAdmin(T2)); // is_all_stores 변경
+      await expect(scope.bpStoresVersion(admin, 7)).resolves.not.toBe(
+        afterMapping,
+      );
+    });
+
+    it('직원 앱은 계정 · 매핑이 없으니 점포만 담는다', async () => {
+      stores(T1, 3);
+      await expect(scope.bpStoresVersion(staff, 7)).resolves.toEqual(
+        expect.any(String),
+      );
+      expect(prisma.adminAccount.findFirst).not.toHaveBeenCalled();
+      expect(prisma.adminStoreMapping.aggregate).not.toHaveBeenCalled();
+    });
+
+    it('없거나 지운 BP · 플랫폼 BP 면 null', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(null);
+      await expect(scope.bpStoresVersion(admin, 7)).resolves.toBeNull();
+      expect(prisma.bpCode.findFirst).toHaveBeenCalledWith({
+        where: { bpCodeId: 7, isDeleted: false, isPlatform: false },
+        select: { bpCodeId: true },
+      });
+      expect(prisma.store.aggregate).not.toHaveBeenCalled();
     });
   });
 

@@ -9,7 +9,9 @@ import { AppModule } from './../src/app.module';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { AdminLoginResponseDto } from '../src/auth/dto/admin-login.response.dto';
 import { hashPassword } from '../src/auth/password';
+import { AdminStoreListResponseDto } from '../src/auth/dto/admin-store-list.response.dto';
 import { BpStoreListResponseDto } from '../src/bp-codes/dto/bp-store-list.response.dto';
+import { BpStoresVersionResponseDto } from '../src/bp-codes/dto/bp-stores-version.response.dto';
 import { CodeItemsResponseDto } from '../src/codes/dto/code-items.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 
@@ -122,6 +124,8 @@ describe('BP 점포 목록 (e2e, DB)', () => {
 
   afterAll(async () => {
     const byAdmin = { adminAccountId: { in: adminIds } };
+    // 점포 목록 버전 테스트가 만든 담당 점포 매핑 — 계정 · 점포보다 먼저 지운다(외래키)
+    await prisma.adminStoreMapping.deleteMany({ where: byAdmin });
     await prisma.adminLoginLog.deleteMany({ where: byAdmin });
     await prisma.adminSession.deleteMany({ where: byAdmin });
     await prisma.adminAccount.deleteMany({ where: byAdmin });
@@ -236,5 +240,107 @@ describe('BP 점포 목록 (e2e, DB)', () => {
     expect((await stores(2_147_483_647, pmToken)).status).toBe(404);
     expect((await stores('99999999999', pmToken)).status).toBe(404);
     expect((await stores('abc', pmToken)).status).toBe(404);
+  });
+
+  // 관리자 웹이 새로고침 · 메뉴 이동 · 창 포커스 때 버전만 묻고, 바뀌었을 때만 점포 목록을 다시 받는다.
+  // 맨 끝에 둔다 — 점포 · 매핑 · 계정을 바꾸므로 앞 테스트의 점포 목록에 영향이 없게.
+  describe('점포 목록 버전 · 내 관리 점포', () => {
+    const versionOf = async (id: number | string, token?: string) => {
+      const req = request(app.getHttpServer()).get(
+        `/bp-codes/${id}/stores-version`,
+      );
+      const res = await (token
+        ? req.set('Authorization', `Bearer ${token}`)
+        : req);
+      return {
+        status: res.status,
+        version: (res.body as BpStoresVersionResponseDto).version,
+      };
+    };
+    const myStores = async (token: string) => {
+      const res = await request(app.getHttpServer())
+        .get('/auth/admin/me/stores')
+        .set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(200);
+      return res.body as AdminStoreListResponseDto;
+    };
+    // BM 은 beforeAll 에서 셋째로 만든 계정이다
+    const bmId = () => adminIds[2];
+
+    it('볼 수 있는 BP 와 오류는 점포 목록과 같다', async () => {
+      expect((await versionOf(bpCodeId, pmToken)).status).toBe(200);
+      expect((await versionOf(bpCodeId, bmToken)).status).toBe(200);
+      expect((await versionOf(otherBpCodeId, bmToken)).status).toBe(404);
+      expect((await versionOf(platformBpCodeId, pmToken)).status).toBe(404);
+      expect((await versionOf('99999999999', pmToken)).status).toBe(404);
+      expect((await versionOf(bpCodeId)).status).toBe(401);
+    });
+
+    it('바뀐 것이 없으면 같은 값이고, 점포 등록 · 수정 · 삭제가 있으면 바뀐다', async () => {
+      const first = (await versionOf(bpCodeId, pmToken)).version;
+      expect((await versionOf(bpCodeId, pmToken)).version).toBe(first);
+
+      const added = await prisma.store.create({
+        data: {
+          storeCode: `ST9${String(randomInt(10_000, 99_999))}`,
+          bpCodeId,
+          storeTypeCode: 'DIRECT',
+          name: '버전 점포',
+          storeStatusCode: 'NOT_OPERATING',
+        },
+      });
+      storeIds.push(added.storeId);
+      const afterAdd = (await versionOf(bpCodeId, pmToken)).version;
+      expect(afterAdd).not.toBe(first);
+
+      await prisma.store.update({
+        where: { storeId: added.storeId },
+        data: { name: '버전 점포 2' },
+      });
+      const afterEdit = (await versionOf(bpCodeId, pmToken)).version;
+      expect(afterEdit).not.toBe(afterAdd);
+
+      // 삭제는 지움 표시 — 지운 행까지 보므로 잡힌다
+      await prisma.store.update({
+        where: { storeId: added.storeId },
+        data: { isDeleted: true },
+      });
+      expect((await versionOf(bpCodeId, pmToken)).version).not.toBe(afterEdit);
+    });
+
+    it('BP · 가맹 관리자는 관리 범위 · 담당 점포 매핑이 바뀌면 바뀌고, 플랫폼 계정은 영향이 없다', async () => {
+      const pmBefore = (await versionOf(bpCodeId, pmToken)).version;
+      const allStores = (await versionOf(bpCodeId, bmToken)).version;
+      expect((await myStores(bmToken)).total).toBe(2);
+
+      await prisma.adminAccount.update({
+        where: { adminAccountId: bmId() },
+        data: { isAllStores: false },
+      });
+      const someStores = (await versionOf(bpCodeId, bmToken)).version;
+      expect(someStores).not.toBe(allStores);
+      expect(await myStores(bmToken)).toEqual({ items: [], total: 0 });
+
+      await prisma.adminStoreMapping.create({
+        data: { adminAccountId: bmId(), storeId: storeIds[1] },
+      });
+      const mapped = (await versionOf(bpCodeId, bmToken)).version;
+      expect(mapped).not.toBe(someStores);
+      expect((await myStores(bmToken)).items.map((s) => s.name)).toEqual([
+        '가 점포',
+      ]);
+
+      // 해제는 지움 표시 — 지운 행까지 보므로 잡힌다
+      await prisma.adminStoreMapping.updateMany({
+        where: { adminAccountId: bmId(), storeId: storeIds[1] },
+        data: { isDeleted: true },
+      });
+      expect((await versionOf(bpCodeId, bmToken)).version).not.toBe(mapped);
+      expect((await myStores(bmToken)).total).toBe(0);
+
+      // 플랫폼 계정은 매핑 없이 BP 전체를 본다
+      expect((await versionOf(bpCodeId, pmToken)).version).toBe(pmBefore);
+      expect(await myStores(pmToken)).toEqual({ items: [], total: 0 });
+    });
   });
 });

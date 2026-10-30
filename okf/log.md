@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-30
+* **Update**: [Admin authentication](/api/admin-auth.md) — 점포 목록 버전 `GET /bp-codes/{bpCodeId}/stores-version`(front 요청). 관리자 웹이 새로고침 · 메뉴 이동 · 창 포커스 때 버전만 묻고 바뀌었을 때만 점포 목록을 다시 받는다 — 여러 PC 의 점포 등록 · 수정 · 폐점 · 삭제와 담당 점포 매핑 · 관리 범위 변경을 잡는다. 재료는 그 BP 점포의 `max(updated_at)`(지운 행 포함) · 지우지 않은 점포 수, BP · 가맹 계정이면 자기 매핑의 `max(updated_at)`(지운 행 포함) · 살아 있는 매핑 수 · 계정 `updated_at` — 해시로 준다. 권한 · 오류는 점포 목록과 같다(`bpStoresAccess`). 선택 요청이던 `GET /auth/admin/me/stores`(login-info 의 stores 만, `{ items, total }`)도 만들었다. 리뷰 반영: 두 경로 모두 강제 비밀번호 변경 중에는 403 으로 맞췄고, 「버전을 먼저 받고 목록을 받는다」와 시각 · 개수 방식의 한계를 적었다.
+
 ## 2026-10-29
 * **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인 잠김 429 문구를 「로그인이 잠겼습니다. 5분 뒤에 다시 시도해 주세요.」로 띄웠다(사용자 지정 2026-10-29 — 「…해주세요」는 「…해 주세요」). api 화면 문구에서 붙여 쓴 곳은 이 하나였다. 단위 테스트 기대값도 맞췄다.
 * **Update**: 응답 문구 마침표(api slowbro) review-pr 반영: 근로계약 발송 실패 502 문구가 임시저장 꼬리가 없을 때 마침표 없이 끝나던 것을 문장 끝으로 옮겼고, 급여 검토 사유 「출퇴근 기록이 N일 누락되었습니다 — …」 · 「근로계약 만료일(…) 뒤 출퇴근 기록이 N일 있습니다 — …」 끝에도 마침표를 붙였다. 줄바꿈으로 나뉜 okf 인용 약 35곳과 [Mail](/api/mail.md) 인용, 문구를 인용한 주석 · 테스트 제목 · Swagger 설명을 맞췄다. [Admin auth](/api/admin-auth.md) 시각은 main 의 늦은 값으로 되돌렸다.

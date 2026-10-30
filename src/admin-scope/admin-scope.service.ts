@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
@@ -366,6 +367,72 @@ export class AdminScopeService {
   }
 
   /**
+   * 그 BP 점포 목록의 버전 — 관리자 웹이 새로고침 · 메뉴 이동 · 창 포커스 때 묻고 값이 바뀌었을 때만 목록을 다시 받는다
+   * (여러 PC 에서 같은 계정으로 쓰므로 다른 PC 의 변경을 잡는다). 형식은 정하지 않는다 — 비교만 한다. 없거나 삭제된
+   * BP · 플랫폼 BP 면 null. 누가 불러도 되는지는 부르는 쪽이 bpStoresAccess 로 정한다.
+   *
+   * 담는 것: 그 BP 점포의 최근 수정 시각(지운 행까지 — 삭제도 updated_at 을 바꾼다)과 지우지 않은 점포 수(같은
+   * 밀리초에 바뀌는 경우). BP · 가맹 관리자는 매핑으로 범위가 정해지므로 자기 매핑의 최근 수정 시각(지운 행까지) ·
+   * 살아 있는 매핑 수와 계정 수정 시각(관리 점포 범위 is_all_stores)도 담는다. 플랫폼 계정 · 직원 앱은 점포만이다.
+   * 대표 이미지는 점포 행을 바꾸지 않아 담지 않는다(선택기에 보이지 않는다). 모두 bp_code_id · 기본키 인덱스를 탄다.
+   */
+  async bpStoresVersion(
+    user: AuthUser,
+    bpCodeId: number,
+  ): Promise<string | null> {
+    const bp = await this.prisma.bpCode.findFirst({
+      where: { bpCodeId, isDeleted: false, isPlatform: false },
+      select: { bpCodeId: true },
+    });
+    if (!bp) return null;
+    const [storesAt, liveStores, admin] = await Promise.all([
+      this.prisma.store.aggregate({
+        where: { bpCodeId },
+        _max: { updatedAt: true },
+      }),
+      this.prisma.store.count({ where: { bpCodeId, isDeleted: false } }),
+      user.type === 'admin'
+        ? this.prisma.adminAccount.findFirst({
+            where: { adminAccountId: user.id },
+            select: {
+              updatedAt: true,
+              roleTypeCode: true,
+              bpCode: { select: { isPlatform: true } },
+            },
+          })
+        : null,
+    ]);
+    const parts: (string | number)[] = [
+      'stores',
+      msOf(storesAt._max.updatedAt),
+      liveStores,
+    ];
+    if (admin && !isPlatformRole(admin.roleTypeCode, admin.bpCode.isPlatform)) {
+      const [mappingsAt, liveMappings] = await Promise.all([
+        this.prisma.adminStoreMapping.aggregate({
+          where: { adminAccountId: user.id },
+          _max: { updatedAt: true },
+        }),
+        this.prisma.adminStoreMapping.count({
+          where: { adminAccountId: user.id, isDeleted: false },
+        }),
+      ]);
+      parts.push(
+        'mappings',
+        msOf(mappingsAt._max.updatedAt),
+        liveMappings,
+        'account',
+        admin.updatedAt.getTime(),
+      );
+    }
+    // 내부 값(시각 · 개수)을 그대로 내보내지 않고 짧은 지문으로 — front 는 비교만 한다.
+    return createHash('sha256')
+      .update(parts.join(':'))
+      .digest('base64url')
+      .slice(0, 22);
+  }
+
+  /**
    * 고객 BP 의 미삭제 점포 전체(운영 상태와 상관없이). 없거나 삭제된 BP · 플랫폼 BP 면 null.
    * 탈퇴한 BP 도 기록을 봐야 하므로 막지 않는다. 누가 불러도 되는지는 부르는 쪽이 정한다.
    */
@@ -456,4 +523,9 @@ export class AdminScopeService {
       return admin;
     return { ...admin, bpCodeId: bp.bpCodeId, isAllStores: true };
   }
+}
+
+/** 버전 재료의 시각 — 행이 없으면 0. */
+function msOf(at: Date | null): number {
+  return at ? at.getTime() : 0;
 }

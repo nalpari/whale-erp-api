@@ -8,13 +8,16 @@ import { BpCodesController } from './bp-codes.controller';
 
 describe('BpCodesController — 공통코드', () => {
   let controller: BpCodesController;
-  let scope: { bpStoresAccess: jest.Mock };
+  let scope: { bpStoresAccess: jest.Mock; bpStoresVersion: jest.Mock };
   let codes: { forBpId: jest.Mock };
   const admin: AuthUser = { id: 9, type: 'admin', loginId: 'bm', sid: 1 };
   const staff = { id: 3, type: 'account', email: 'a@b.c', sid: 1 } as AuthUser;
 
   beforeEach(async () => {
-    scope = { bpStoresAccess: jest.fn().mockResolvedValue('allowed') };
+    scope = {
+      bpStoresAccess: jest.fn().mockResolvedValue('allowed'),
+      bpStoresVersion: jest.fn().mockResolvedValue('v1'),
+    };
     codes = { forBpId: jest.fn().mockResolvedValue({ STORE_TYPE: [] }) };
     const module = await Test.createTestingModule({
       controllers: [BpCodesController],
@@ -57,5 +60,45 @@ describe('BpCodesController — 공통코드', () => {
       controller.findCodeItems(admin, '2147483648', {}),
     ).rejects.toThrow(NotFoundException);
     expect(scope.bpStoresAccess).not.toHaveBeenCalled();
+  });
+
+  // 관리자 웹이 새로고침 · 메뉴 이동 · 창 포커스 때 묻는다 — 볼 수 있는 BP 와 오류는 점포 목록과 같다.
+  describe('점포 목록 버전(stores-version)', () => {
+    it('볼 수 있는 BP 면 버전만 준다', async () => {
+      await expect(controller.findStoresVersion(admin, '7')).resolves.toEqual({
+        version: 'v1',
+      });
+      expect(scope.bpStoresAccess).toHaveBeenCalledWith(admin, 7);
+      expect(scope.bpStoresVersion).toHaveBeenCalledWith(admin, 7);
+    });
+
+    it('볼 수 없는 BP 는 없는 BP 처럼 404 이고 버전을 계산하지 않는다', async () => {
+      scope.bpStoresAccess.mockResolvedValue('denied');
+      await expect(controller.findStoresVersion(admin, '8')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(scope.bpStoresVersion).not.toHaveBeenCalled();
+    });
+
+    it('없거나 지운 BP · 플랫폼 BP 는 404', async () => {
+      scope.bpStoresVersion.mockResolvedValue(null);
+      await expect(controller.findStoresVersion(admin, '7')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('사용할 수 없는 관리자 계정은 403', async () => {
+      scope.bpStoresAccess.mockResolvedValue('unavailable');
+      await expect(controller.findStoresVersion(admin, '7')).rejects.toThrow(
+        new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
+      );
+    });
+
+    it('정수 범위 밖이면 묻지 않고 404', async () => {
+      await expect(
+        controller.findStoresVersion(admin, '2147483648'),
+      ).rejects.toThrow(NotFoundException);
+      expect(scope.bpStoresAccess).not.toHaveBeenCalled();
+    });
   });
 });
