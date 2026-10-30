@@ -2,7 +2,8 @@ import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { MASK } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
-import { ALIMTALK_BUTTON_NAMES, AlimtalkService } from './alimtalk.service';
+import { ALIMTALK_BUTTON_NAMES } from './alimtalk-buttons';
+import { AlimtalkService } from './alimtalk.service';
 import {
   BizppurioClient,
   BizppurioError,

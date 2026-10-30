@@ -4,12 +4,16 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:17:05Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T04:48:59Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
     last_modified: 2026-10-30T02:17:05Z
+  - id: alimtalk-buttons
+    resource: ../../src/alimtalk/alimtalk-buttons.ts
+    title: 알림톡 버튼 이름과 버튼 설정 검사(WHALEERP-636)
+    last_modified: 2026-10-30T04:48:59Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
@@ -71,11 +75,15 @@ fallback still appends the link to the text (below).
 The button **name** must match, letter for letter, the name registered with Kakao for that
 template (28 characters max; Bizppurio rejects a mismatch, and a template registered with a
 button must be sent with it). It lives in code, `ALIMTALK_BUTTON_NAMES` keyed by
-`templateCode` — not in the template's variable list, because the template admin screen keeps
-only the fields it knows and one save there would wipe it (the mail button's 「바로가기」 is
-in code too). A template with a button-link value but no entry there, or a link that is not
-http(s), or more than one button-link value (one named button is registered per template), throws
-before anything is sent; the error carries the template code, never the link.
+`templateCode` in `src/alimtalk/alimtalk-buttons.ts` — not in the template's variable list,
+because the template admin screen keeps only the fields it knows and one save there would wipe
+it (the mail button's 「바로가기」 is in code too). The same file holds the setup rule,
+`alimtalkButtonProblem`: at most one button-link variable (one named button is registered per
+template), and a template that has one needs a name there. Three places apply it so a bad setup
+never shows up only after a commit: `send` (throws before anything is sent, as it does for a link
+that is not http(s) — the error carries the template code, never the link), the 근로계약 발송
+pre-check (503 before anything is written, below) and the template save check
+([Notification templates](/api/notification-templates.md)).
 An optional link left empty sends no button. The two names (`TALK_STAFF_INVITATION` 「가입하기」,
 `TALK_STAFF_AFFILIATION_REQUEST` 「요청 확인하기」) and the same link for PC were fixed by 재영
 (2026-10-30); the templates will be registered with Kakao under them (not yet approved). The link

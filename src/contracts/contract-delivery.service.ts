@@ -28,6 +28,7 @@ import {
   type OptionalMailService,
 } from '../mail/mail.module';
 import { sameName } from './identity-match';
+import { alimtalkButtonProblem } from '../alimtalk/alimtalk-buttons';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
 import { PrismaService } from '../prisma/prisma.service';
@@ -255,12 +256,24 @@ export class ContractDeliveryService {
       });
     const template =
       kind === 'INVITE' ? INVITATION_TEMPLATE : AFFILIATION_TEMPLATE;
-    await findSendableTemplate(tx, template, 'ALIMTALK').catch((e: unknown) => {
-      this.logger.error(`${what} 템플릿을 쓸 수 없음: ${String(e)}`);
-      throw new ServiceUnavailableException(
-        `${what} 알림톡 템플릿이 없거나 꺼져 있어 보낼 수 없습니다.`,
+    const found = await findSendableTemplate(tx, template, 'ALIMTALK').catch(
+      (e: unknown) => {
+        this.logger.error(`${what} 템플릿을 쓸 수 없음: ${String(e)}`);
+        throw new ServiceUnavailableException(
+          `${what} 알림톡 템플릿이 없거나 꺼져 있어 보낼 수 없습니다.`,
+        );
+      },
+    );
+    // 버튼 설정(버튼 링크 하나 · 버튼 이름)이 맞지 않으면 커밋 뒤 발송이 늘 던진다 — 쓰기 전에 막는다(api #219 code-review)
+    const buttonProblem = alimtalkButtonProblem(template, found.variables);
+    if (buttonProblem) {
+      this.logger.error(
+        `${what} 템플릿 버튼 설정이 맞지 않음: ${buttonProblem}`,
       );
-    });
+      throw new ServiceUnavailableException(
+        `${what} 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.`,
+      );
+    }
   }
 
   /**

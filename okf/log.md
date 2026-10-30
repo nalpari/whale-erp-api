@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Notification templates](/api/notification-templates.md) · [Contracts API](/api/contracts-api.md) — api #219 code-review: 버튼 이름 · 버튼 설정 검사를 `src/alimtalk/alimtalk-buttons.ts`(`alimtalkButtonProblem`)로 모아 발송 · 근로계약 발송 전 검사(503, 쓰기 전) · 템플릿 저장 검사가 같이 쓴다 — 설정 오류가 커밋 뒤 「다시 보내 주세요」로 보이지 않게. 저장 검사는 버튼 이름이 없는 템플릿 코드의 알림톡 버튼 링크도 막는다.
 * **Update**: main 병합(api krabby, main #216 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api krabby, main #214 까지): okf 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) · [Notification templates](/api/notification-templates.md) — 알림톡에 버튼 링크를 웹링크(WL) 버튼으로 싣는다(WHALEERP-636, 노영주 요청 2026-10-30). `content.at.button` 에 `{ name, type: 'WL', url_mobile, url_pc }`, 이름은 코드 `ALIMTALK_BUTTON_NAMES`(템플릿 코드별 — 변수 목록은 관리 화면 저장 때 지워져 두지 않음). 이름이 없거나 http(s) 가 아닌 링크 · 버튼 링크가 둘 이상이면 보내기 전에 던지고, 템플릿 저장 검사도 알림톡 버튼 링크 변수를 하나까지만 받는다. 대체 문자 끝 링크는 그대로. 근로계약 가입 초대 · 소속 추가 확인 요청의 대체 문자 필수(503)는 카카오 검수 전이라 유지. 버튼 이름(「가입하기」 · 「요청 확인하기」) · PC 링크 같은 값은 재영 2026-10-30 확정, 링크는 지금처럼 STAFF_APP_URL 로 조합하고 카카오 템플릿은 하나(재영 정정 — 개발 서버 발송은 알림톡 대신 대체 문자로 갈 수 있음). 마이그레이션 없음.

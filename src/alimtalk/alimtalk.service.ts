@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { findSendableTemplate } from '../notification-templates/find-template';
+import {
+  findSendableTemplate,
+  type SendableTemplate,
+} from '../notification-templates/find-template';
 import { renderTemplate } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -10,6 +13,10 @@ import {
   type BizppurioMessage,
 } from './bizppurio.client';
 import { BIZPPURIO_CONFIG, type BizppurioConfig } from './bizppurio.config';
+import {
+  alimtalkButtonNameOf,
+  alimtalkButtonProblem,
+} from './alimtalk-buttons';
 import { failureHeadOf } from './failure-reason';
 
 export type SendAlimtalkInput = {
@@ -47,18 +54,6 @@ const LMS_SUBJECT = '[WHALE ERP]';
 const LOG_REASON_LENGTH = 1000;
 // 버튼 링크는 웹 주소만 싣는다(메일 버튼과 같다)
 const WEB_URL = /^https?:\/\//i;
-
-/**
- * 버튼 링크 변수(isButtonLink)가 있는 알림톡 템플릿의 버튼 이름(WHALEERP-636). 카카오에 등록 · 검수한 버튼 이름과 글자
- * 하나까지 같아야 한다 — 다르면 비즈뿌리오가 거절한다(28자까지). 템플릿 변수 목록이 아니라 코드에 두는 까닭: 변수 목록은
- * 템플릿 관리 화면이 저장할 때 아는 칸만 남겨, 거기에 둔 이름은 화면에서 한 번 저장하면 지워진다(메일 버튼 「바로가기」도
- * 코드에 있다). 템플릿 코드로 찾는다 — 발송 코드가 템플릿을 부르는 이름이다. 두 이름은 재영 2026-10-30 확정, 카카오에도
- * 이 이름으로 등록한다 — 바꾸면 카카오 재검수와 함께 바꾼다.
- */
-export const ALIMTALK_BUTTON_NAMES: Readonly<Record<string, string>> = {
-  TALK_STAFF_INVITATION: '가입하기',
-  TALK_STAFF_AFFILIATION_REQUEST: '요청 확인하기',
-};
 
 /**
  * 알림톡 발송의 공통 진입점. 각 도메인은 이 서비스만 주입받아 쓴다.
@@ -121,7 +116,7 @@ export class AlimtalkService {
       input.variables,
       input.maskedVariables,
     );
-    const button = buttonsOf(templateCode, links);
+    const button = buttonsOf(templateCode, template.variables, links);
 
     // CHECK notification_templates_alimtalk_fields 가 ALIMTALK 행에 값을 보장한다.
     const kakaoTemplateCode = template.kakaoTemplateCode as string;
@@ -222,34 +217,36 @@ export class AlimtalkService {
 
 /**
  * 버튼 링크 값을 웹링크(WL) 버튼 하나로. PC 카카오톡에도 보이게 모바일 · PC 링크를 같은 값으로 싣는다(직원 근무 앱은
- * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 이름이 정해지지 않은 템플릿, 웹 주소가 아닌 링크, 버튼 링크
- * 변수가 둘 이상인 템플릿(한 이름의 버튼만 등록한다)은 보내기 전에 던진다 — 오류 메시지에 링크(토큰)는 담지 않는다.
- * 링크가 없으면(선택 변수를 비움) 버튼도 없다 — 버튼을 등록한 템플릿이면 알림톡은 거절되고 대체 문자로 간다.
+ * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 버튼 설정이 맞지 않는 템플릿(alimtalkButtonProblem)과 웹 주소가
+ * 아닌 링크는 보내기 전에 던진다 — 오류 메시지에 링크(토큰)는 담지 않는다. 링크가 없으면(선택 변수를 비움) 버튼도 없다 —
+ * 버튼을 등록한 템플릿이면 알림톡은 거절되고 대체 문자로 간다.
  */
 function buttonsOf(
   templateCode: string,
+  variables: SendableTemplate['variables'],
   links: readonly string[],
 ): AlimtalkButton[] {
-  if (!links.length) return [];
-  const name = Object.hasOwn(ALIMTALK_BUTTON_NAMES, templateCode)
-    ? ALIMTALK_BUTTON_NAMES[templateCode]
-    : undefined;
-  if (!name)
-    throw new Error(`알림톡 템플릿 ${templateCode} 의 버튼 이름이 없습니다`);
-  if (links.length > 1)
+  const problem = alimtalkButtonProblem(templateCode, variables);
+  if (problem === 'MULTIPLE_LINKS')
     throw new Error(
       `알림톡 템플릿 ${templateCode} 의 버튼 링크는 하나만 쓸 수 있습니다`,
     );
-  if (!links.every((link) => WEB_URL.test(link)))
+  if (problem === 'NO_BUTTON_NAME')
+    throw new Error(`알림톡 템플릿 ${templateCode} 의 버튼 이름이 없습니다`);
+  const [link] = links;
+  if (link === undefined) return [];
+  if (!WEB_URL.test(link))
     throw new Error(
       `알림톡 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,
     );
-  return links.map((link) => ({
-    name,
-    type: 'WL',
-    url_mobile: link,
-    url_pc: link,
-  }));
+  return [
+    {
+      name: alimtalkButtonNameOf(templateCode) as string,
+      type: 'WL',
+      url_mobile: link,
+      url_pc: link,
+    },
+  ];
 }
 
 /**

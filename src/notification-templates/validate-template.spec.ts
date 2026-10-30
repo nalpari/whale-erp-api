@@ -178,7 +178,7 @@ describe('validateTemplate', () => {
     const talk = (extra: TemplateInput['variables']) =>
       mail({
         channel: 'ALIMTALK',
-        templateCode: 'TALK_X',
+        templateCode: 'TALK_STAFF_INVITATION',
         title: null,
         kakaoTemplateCode: 'KAKAO_X',
         body: '#{직원이름} 님 근무지 #{근무지}',
@@ -190,6 +190,24 @@ describe('validateTemplate', () => {
     );
     expect(
       validateTemplate(mail({ variables: [...mail().variables, second] })),
+    ).toEqual([]);
+  });
+
+  it('알림톡 버튼 링크는 버튼 이름이 정해진 템플릿 코드에만 — 버튼 링크가 없으면 상관없다(WHALEERP-636)', () => {
+    const talk = (variables: TemplateInput['variables']) =>
+      mail({
+        channel: 'ALIMTALK',
+        templateCode: 'TALK_PAYSLIP',
+        title: null,
+        kakaoTemplateCode: 'KAKAO_X',
+        body: '#{직원이름} 님 근무지 #{근무지}',
+        variables,
+      });
+    expect(validateTemplate(talk(mail().variables))).toContain(
+      '이 템플릿 코드는 알림톡 버튼 이름이 정해지지 않아 버튼 링크를 쓸 수 없습니다. 카카오에 등록한 버튼 이름을 개발팀에 알려 주세요.',
+    );
+    expect(
+      validateTemplate(talk(mail().variables.filter((v) => !v.isButtonLink))),
     ).toEqual([]);
   });
 

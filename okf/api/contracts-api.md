@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T04:48:59Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -29,7 +29,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-10-30T02:17:05Z
+    last_modified: 2026-10-30T04:48:59Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -791,6 +791,8 @@ resent — a new contract instead.
   still wait for Kakao to approve them, and a rejected 알림톡 is only seen in the result report — so
   **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until the text
   and button are approved (api #74 review; the fallback carries the body with the code and the link).
+  The same pre-check is also 503 「… 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.」 when the template's button setup
+  would make every send throw after the commit (`alimtalkButtonProblem` — two button links, or no button name; api #219).
 - Template `TALK_STAFF_INVITATION` moved to 근무지 · 초대코드 · 링크 (초대 링크),
   `invitations.invitation_code_hash` was added, and every `SENT` 가입 초대 without a code (sent
   before; the old `/invite/{token}` link) was made `EXPIRED` — the 관리자 sends again — with migration

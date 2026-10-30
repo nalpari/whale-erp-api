@@ -717,6 +717,23 @@ describe('ContractDeliveryService', () => {
         undefined,
       ],
       [
+        '가입 초대 템플릿의 버튼 설정이 맞지 않으면(버튼 링크 둘) 503 — 커밋 뒤 발송이 늘 던진다(api #219)',
+        () =>
+          tx.notificationTemplate.findUnique.mockResolvedValue({
+            isActive: true,
+            channel: 'ALIMTALK',
+            title: null,
+            body: '…',
+            variables: [
+              { name: '링크', isButtonLink: true },
+              { name: '링크2', isButtonLink: true },
+            ],
+            kakaoTemplateCode: 'WHALE_INVITE_01',
+          }),
+        ServiceUnavailableException,
+        undefined,
+      ],
+      [
         '유선번호면 409 SEND_PHONE_NOT_MOBILE',
         () => {},
         ConflictException,
