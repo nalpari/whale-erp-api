@@ -4,7 +4,7 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T01:57:17Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: platform-role-groups-service
     resource: ../../src/platform-role-groups/platform-role-groups.service.ts
     title: PlatformRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T01:57:17Z
   - id: platform-role-group-menus-service
     resource: ../../src/platform-role-groups/platform-role-group-menus.service.ts
     title: PlatformRoleGroupMenusService (tree · save · preview, revocation cascade)
@@ -33,11 +33,11 @@ sources:
   - id: platform-role-group-dto
     resource: ../../src/platform-role-groups/dto/platform-role-group.response.dto.ts
     title: Response shapes — tree cells, blocked reasons, preview counts
-    last_modified: 2026-10-15T09:38:26Z
+    last_modified: 2026-10-30T01:57:17Z
   - id: platform-role-groups-e2e
     resource: ../../test/platform-role-groups.e2e-spec.ts
     title: Real-DB proof — next-request permission change, BA cascade, concurrent save, delete move
-    last_modified: 2026-10-15T09:38:26Z
+    last_modified: 2026-10-30T01:57:17Z
 ---
 
 # What it covers
@@ -87,9 +87,11 @@ not), `createdBy` / `updatedBy` as
 
 # Status codes chosen
 
-- **본인이 연결된 권한 → 403** 「본인이 연결된 권한이라 고칠 수 없습니다.」, for name edit,
-  menu save and delete alike. It matches 플랫폼 관리자 관리's self protection, which is
-  403 too. So a PM cannot touch PM000001 at all, while a PA with MN000214 수정 may edit
+- **본인이 연결된 권한 → 403** 「본인이 연결된 권한이라 고칠 수 없습니다.」, for menu save
+  and delete — a caller cannot widen, narrow or remove its own rights. **Name and description
+  are editable** even on one's own group (재영 2026-10-30): they change no right, so the detail's
+  `editBlockedReason` never says `SELF_LINKED`; `deleteBlockedReason` and the menu cells still do.
+  It matches 플랫폼 관리자 관리's self protection, which is 403 too. So a PM cannot touch PM000001 at all, while a PA with MN000214 수정 may edit
   PM000001's name and description.
 - **Fixed role refusals → 409**: deleting any fixed role, saving PM000001's menus. The
   request is well-formed; the resource's state forbids it.

@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-30
+* **Update**: [Platform role groups](/api/platform-role-groups.md) · [BP role groups](/api/bp-role-groups.md) — 본인이 연결된 권한 그룹도 권한명 · 설명은 고친다(재영 2026-10-30, front 요청). 수정(PUT)의 본인 연결 403 과 상세 `editBlockedReason` 의 `SELF_LINKED` 를 뺐다. 메뉴 권한 저장 · 미리보기와 삭제의 본인 연결 차단은 그대로다. 마이그레이션 없음.
+
 ## 2026-10-29
 * **Update**: [Platform admins](/api/platform-admins.md) — `GET /platform-admins/email-availability?email=`(등록 권한, 등록 409 와 같은 판정)와 `GET /platform-admins/role-groups?purpose=filter`(목록 필터용, 호출자와 상관없이 PM · PA 그룹 전부)를 더했다(재영 2026-10-29, front 요청). 기본 `role-groups` 는 그대로 PA 에게 PM 그룹을 빼고 준다. 마이그레이션 없음.
 * **Update**: [Admin auth](/api/admin-auth.md) — 관리자 로그인 잠김 429 문구를 「로그인이 잠겼습니다. 5분 뒤에 다시 시도해 주세요.」로 띄웠다(사용자 지정 2026-10-29 — 「…해주세요」는 「…해 주세요」). api 화면 문구에서 붙여 쓴 곳은 이 하나였다. 단위 테스트 기대값도 맞췄다.
