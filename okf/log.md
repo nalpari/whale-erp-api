@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [Platform menus](/api/platform-menus.md) — 화면에 보이는 오류 문구의 띄어쓰기 · 마침표만 맞췄다(재영 2026-10-30, front 「로그인 정책」 요청 — 뜻은 그대로): 조사를 붙이고(「URL은」 · 「'-'로」) 끝에 마침표, API 권한 주소 409 두 문구는 「…없습니다(/x).」 꼴로. front 가 칸을 가르는 「메뉴 URL」 시작 · 「겹치는 URL」 포함은 그대로. Swagger 설명 두 곳도 맞췄다.
 * **Update**: [BP role groups](/api/bp-role-groups.md) · [Admin auth](/api/admin-auth.md) — BP 권한 그룹 컨트롤러 10개 경로의 `@MenuPermission(BP_ROLE_MENU, …)`(메뉴 코드 MN000013)를 경로 방식으로 바꾸고 `BP_ROLE_MENU` 를 지웠다(front 「로그인 정책」 요청, 재영 승인). 경로 방식 전환(10-21) 뒤에 머지돼 빠졌던 것 — `/bp-role-groups` 가 API 권한 주소에 없어 플랫폼 메뉴 관리에서 그 URL 을 바꿀 수 있었다. 컨트롤러 경로 ↔ 메뉴 URL 표에 더했다. 판정 · 403 문구 · 대상 BP 는 그대로.
 * **Update**: [BP admins](/api/bp-admins.md) — 수정 트랜잭션의 유일값 충돌(P2002)을 이메일 고유 인덱스(`admin_accounts_email_key`, 이름이 없으면 `email` 칸 — pg 어댑터의 `meta.driverAdapterError.cause.constraint`)일 때만 「사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.」로, 그 밖은 「다른 사용자가 이 계정을 먼저 바꿨습니다.」 409 로(지금 경로엔 다른 유일값 충돌이 없다 — 점포 매핑은 `skipDuplicates`, 대비용)(front PR #199 review-pr, front 요청). 문구는 바꾸지 않았다. 등록의 P2002 는 그대로. 마이그레이션 없음.
 * **Update**: [BP admins](/api/bp-admins.md) — 전화번호 표기를 「휴대전화」에서 「연락처」로(2026-10-29 사용자 결정, front 요청). 400 문구 「연락처는 숫자 9~12자리입니다.」(플랫폼 관리자와 같음) · 본인 계정 403 문구 · 변경 이력 항목명. 이미 쌓인 이력 행의 「휴대전화」는 그대로 둔다. openapi 를 다시 내보내며 main 에 늦게 반영된 발송 이력 `isResend` 설명도 함께 바뀌었다. 마이그레이션 없음.
