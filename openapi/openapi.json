@@ -1728,6 +1728,18 @@
             }
           },
           {
+            "name": "roleTypeCodes",
+            "required": false,
+            "in": "query",
+            "description": "역할 — 고른 역할의 계정만. 여러 개는 반복 또는 쉼표로. 주지 않거나 비우면 세 역할 모두\n(역할을 하나도 고르지 않은 화면은 api 를 부르지 않는다).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/components/schemas/BpAdminRole"
+              }
+            }
+          },
+          {
             "name": "accountStatus",
             "required": false,
             "in": "query",
@@ -18897,19 +18909,19 @@
           "FRANCHISE"
         ]
       },
-      "AdminAccountStatus": {
-        "type": "string",
-        "enum": [
-          "ACTIVE",
-          "INACTIVE"
-        ]
-      },
       "BpAdminRole": {
         "type": "string",
         "enum": [
           "BA",
           "FM",
           "FA"
+        ]
+      },
+      "AdminAccountStatus": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "INACTIVE"
         ]
       },
       "BpAdminRoleGroupDto": {
