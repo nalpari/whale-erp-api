@@ -312,7 +312,7 @@ describe('BpAdminsService', () => {
       );
     });
 
-    it('역할을 고르면 그 역할만 — 목록과 total 이 같은 조건', async () => {
+    it('역할을 고르면 그 역할만 — 목록 · total · 미사용 건수가 같은 조건', async () => {
       await service.list(2, bp, {
         page: 1,
         pageSize: 20,
@@ -324,6 +324,14 @@ describe('BpAdminsService', () => {
       expect(prisma.adminAccount.count).toHaveBeenCalledWith(
         partial({
           where: partial({ roleTypeCode: { in: ['FM', 'FA'] } }),
+        }),
+      );
+      expect(prisma.adminAccount.count).toHaveBeenCalledWith(
+        partial({
+          where: partial({
+            roleTypeCode: { in: ['FM', 'FA'] },
+            accountStatusCode: 'INACTIVE',
+          }),
         }),
       );
     });
