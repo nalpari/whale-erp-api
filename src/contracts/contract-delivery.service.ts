@@ -36,16 +36,21 @@ import {
   lockStaffMember,
   pendingTermsOf,
 } from './contract-status';
+import {
+  AFFILIATION_MAIL_TEMPLATE,
+  AFFILIATION_TEMPLATE,
+  CONTRACT_RELATED_TYPE,
+  INVITATION_TEMPLATE,
+  sendFailureKindOf,
+  type SendFailureKind,
+} from './contract-send-log';
 
-/** 가입 초대 알림톡 템플릿(근무지 · 초대코드 · 링크=초대 링크). 카카오 템플릿 WHALE_INVITE_01 */
-export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
-/**
- * 소속 추가 확인 요청 알림톡 · 메일(사업자 · 근무지 · 고용형태 · 링크=직원 앱 요청 화면, WHALEERP-130 · 2026-10-26 재영). 카카오
- * 템플릿 WHALE_AFFILIATION_01 은 등록 · 검수 전이라 알림톡이 거절되고 대체 문자로 간다(가입 초대와 같다). 메일은 계정의 이메일로 —
- * 알림톡과 따로 가고 실패해도 저장을 되돌리지 않는다.
- */
-export const AFFILIATION_TEMPLATE = 'TALK_STAFF_AFFILIATION_REQUEST';
-export const AFFILIATION_MAIL_TEMPLATE = 'EMAIL_STAFF_AFFILIATION_REQUEST';
+// 템플릿 이름 · 관련 업무 유형 · 실패 판정은 발송 이력과 같이 쓰는 contract-send-log.ts 에 둔다
+export {
+  AFFILIATION_MAIL_TEMPLATE,
+  AFFILIATION_TEMPLATE,
+  INVITATION_TEMPLATE,
+} from './contract-send-log';
 /** 초대 코드 · 서명 기한 — 보낸 날로부터 30일(WHALEERP-136, 물리 ERD sign_deadline_at) */
 export const SEND_VALID_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -171,11 +176,14 @@ export type PendingInvite = DeliveryInput & {
   now: Date;
 };
 
-/** 알림톡이 확실히 나가지 않은 실패인가 — 비즈뿌리오 오류가 아니면 요청 전 검사, 코드가 있으면 거절, 토큰 단계면 보내지 않음 */
-function notSent(e: unknown): boolean {
-  if (!(e instanceof BizppurioError)) return true;
-  return e.code !== undefined || e.path === '/v1/token';
-}
+/**
+ * 알림톡 실패의 갈래와 비즈뿌리오 코드(contract-send-log.ts) — 비즈뿌리오 오류가 아니면 알림톡을 부르기 전 검사(번호 · 템플릿)라 보내기 전
+ * 실패다. 발송 이력은 클라이언트를 부른 뒤의 행만 보므로 그런 예외를 접수 여부 모름으로 읽는다(sendFailureKindOfReason).
+ */
+const failureOf = (e: unknown): { kind: SendFailureKind; code?: number } =>
+  e instanceof BizppurioError
+    ? { kind: sendFailureKindOf(e), code: e.code }
+    : { kind: 'NOT_SENT' };
 
 /**
  * 근로계약 보내기(WHALEERP-136, 2026-10-19 재영 정정 — 저장하면 곧바로 보낸다). 초안 저장 · 수정 요청 계약 고침 · 날인
@@ -558,7 +566,7 @@ export class ContractDeliveryService {
           },
           // 코드 · 링크 모두 가입 열쇠라 발송 이력에서 가린다
           maskedVariables: ['초대코드', '링크'],
-          related: { type: 'contract', id: contractId },
+          related: { type: CONTRACT_RELATED_TYPE, id: contractId },
           sentBy,
         });
       else
@@ -566,11 +574,12 @@ export class ContractDeliveryService {
           templateCode: AFFILIATION_TEMPLATE,
           to: pending.phone,
           variables: this.affiliationVariables(pending),
-          related: { type: 'contract', id: contractId },
+          related: { type: CONTRACT_RELATED_TYPE, id: contractId },
           sentBy,
         });
     } catch (e) {
-      if (notSent(e)) {
+      const failure = failureOf(e);
+      if (failure.kind !== 'UNCONFIRMED') {
         if (!(e instanceof BizppurioError))
           this.logger.error(
             `알림톡을 보내기 전에 실패 contract=${contractId}`,
@@ -603,8 +612,8 @@ export class ContractDeliveryService {
           contractId,
           status,
           message: `${
-            e instanceof BizppurioError && e.code !== undefined
-              ? `${what} 알림톡을 보내지 못했습니다(비즈뿌리오 ${e.code}). 번호를 확인하고`
+            failure.kind === 'REJECTED'
+              ? `${what} 알림톡을 보내지 못했습니다(비즈뿌리오 ${failure.code}). 번호를 확인하고`
               : `${what} 알림톡을 보내지 못했습니다. 잠시 뒤`
           } 다시 보내 주세요${status === 'DRAFT' && pending.before.status !== 'DRAFT' ? ' — 근로계약서는 임시저장으로 두었습니다' : ''}.`,
         });

@@ -1,3 +1,4 @@
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
@@ -46,6 +47,8 @@ describe('근로계약 대상 BP', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
         { provide: ContractDeliveryService, useValue: {} },
+        // 상세의 신고 정보(taxProfile)가 쓴다 — 이 스펙은 범위 판정만 보므로 키는 없다
+        { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();
     contracts = module.get(ContractsService);
