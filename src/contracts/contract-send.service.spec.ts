@@ -47,7 +47,7 @@ describe('ContractSendService (재발송)', () => {
     $transaction: jest.Mock;
     contract: { findUnique: jest.Mock };
   };
-  let contracts: { scopedContractOf: jest.Mock };
+  let contracts: { checkTargetBp: jest.Mock; scopedContractOf: jest.Mock };
   let delivery: { prepare: jest.Mock; dispatch: jest.Mock };
   // 보낸 원본 만들기(WHALEERP-131) — 나간 뒤 부르는지만 본다
   let files: { afterSent: jest.Mock };
@@ -96,6 +96,7 @@ describe('ContractSendService (재발송)', () => {
       contract: { findUnique: jest.fn() },
     };
     contracts = {
+      checkTargetBp: jest.fn().mockResolvedValue(undefined),
       scopedContractOf: jest
         .fn()
         .mockResolvedValue({ storeId: 11, phone: PHONE }),

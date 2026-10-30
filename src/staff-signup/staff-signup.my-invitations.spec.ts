@@ -1,5 +1,5 @@
 import { PENDING_TERMS_SELECT } from '../contracts/contract-status';
-import { HttpException } from '@nestjs/common';
+import { HttpException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AuthSessionService } from '../auth-session/auth-session.service';
 import type { AccountAuthService } from '../auth/account-auth.service';
@@ -278,11 +278,15 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
   describe('더하기', () => {
     it('초대 id 로 찾아 수락 · 레코드를 이 계정에 잇기 · 서명 대기, 동의를 보내면 계정에 남긴다', async () => {
       await expect(
-        service().acceptForAccount(77, 41, { hqSharingConsented: true }),
+        service().acceptForAccount(77, 41, {
+          hqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        }),
       ).resolves.toEqual({
         staffMemberId: 19,
         storeId: 4,
         storeName: '모리커피 합정점',
+        hqSharingConsentRecorded: true,
       });
       expect(argOf(tx.invitation.findUnique).where).toEqual({
         invitationId: 41,
@@ -319,6 +323,7 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
         staffMemberId: 19,
         storeId: 4,
         storeName: '모리커피 합정점',
+        hqSharingConsentRecorded: null,
       });
     });
 
@@ -334,15 +339,48 @@ describe('StaffSignupService — 로그인 후 근무지 더하기', () => {
           isHqSharingConsented: consented,
           hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         });
-        await service().acceptForAccount(77, 41, { hqSharingConsented: send });
+        await expect(
+          service().acceptForAccount(77, 41, {
+            hqSharingConsented: send,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          }),
+        ).resolves.toMatchObject({ hqSharingConsentRecorded: null });
         expect(tx.account.update).not.toHaveBeenCalled();
       },
     );
 
+    it('보인 문구 버전이 지금과 다르면 근무지는 더하고 동의만 남기지 않는다 — 응답 false · 경고 로그(ATT-30 v253)', async () => {
+      store('FRANCHISE');
+      account({ isHqSharingConsented: false, hqSharingConsentVersion: null });
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      await expect(
+        service().acceptForAccount(77, 41, {
+          hqSharingConsented: true,
+          hqSharingConsentVersion: 'v0.9',
+        }),
+      ).resolves.toEqual({
+        staffMemberId: 19,
+        storeId: 4,
+        storeName: '모리커피 합정점',
+        hqSharingConsentRecorded: false,
+      });
+      expect(tx.account.update).not.toHaveBeenCalled();
+      expect(tx.staffMember.updateMany).toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('shown="v0.9"'),
+      );
+      warn.mockRestore();
+    });
+
     it('옛 문구 버전에 동의한 계정이 다시 동의를 보내면 지금 버전으로 덮는다(ATT-30, WHALEERP-137)', async () => {
       store('FRANCHISE');
       account({ isHqSharingConsented: true, hqSharingConsentVersion: 'v0.9' });
-      await service().acceptForAccount(77, 41, { hqSharingConsented: true });
+      await service().acceptForAccount(77, 41, {
+        hqSharingConsented: true,
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+      });
       expect(tx.account.update).toHaveBeenCalledWith({
         where: { accountId: 77 },
         data: expect.objectContaining({

@@ -670,7 +670,12 @@ describe('ContractsService.create', () => {
     await expect(service.create(dto(), 5)).rejects.toThrow(
       '근무지 점포를 찾을 수 없습니다.',
     );
-    expect(scope.canManageStaffAt).toHaveBeenCalledWith(5, 11, false);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(
+      5,
+      11,
+      false,
+      undefined,
+    );
     expect(prisma.staffMember.create).not.toHaveBeenCalled();
   });
 
