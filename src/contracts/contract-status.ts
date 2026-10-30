@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   HttpStatus,
   NotFoundException,
@@ -106,7 +105,7 @@ export function statusConflict(now: ContractStatus): ConflictException {
  * - 계약 행을 먼저 잠그고(`FOR UPDATE`) 지금 상태를 읽는다 — 날인과 만료 배치처럼 같은 계약을 동시에 바꾸려는
  *   요청은 줄을 서고, 뒤에 온 쪽은 바뀐 상태를 읽어 409 가 된다.
  * - `from` 을 주면 그 상태들에서만 바꾼다(예: 날인은 서명 대기에서만). 주지 않으면 전환 표가 허락하는 모든 상태.
- * - `data` 는 상태와 함께 고칠 칸(거부 사유 · 발송 일시 등)이다.
+ * - `data` 는 상태와 함께 고칠 칸(수정 요청 사유 · 발송 일시 등)이다.
  * - UPDATE 도 읽은 상태를 조건으로 건다. 0건이면(잠금 밖에서 바뀐 경우) 409.
  */
 export async function transition(
@@ -241,9 +240,6 @@ export async function lockContractWithStaff(
   if (c) await lockStaffMember(db, c.staffMemberId, 'write');
   await lockContract(db, contractId);
 }
-
-/** 거부 사유 길이 상한. 직원 앱 입력칸과 맞춘다. */
-export const REJECT_REASON_MAX = 500;
 
 /**
  * 직원 날인 — 서명 대기에서만 체결 완료로 바꾼다. 이미 체결 완료면 처리하지 않고 지금 상태를 알린다(409).
@@ -522,41 +518,36 @@ export const signDeadlineConflict = () =>
   });
 
 /**
- * 직원 수정 요청 — 가입 때 넣은 값과 계약서 값이 달라 날인할 수 없을 때, 서명 대기에서만 수정 요청으로 바꾼다.
- * 따로 받는 내용은 없다(2026-10-16). 서명 기한은 멈춘다 — 만료 배치는 서명 대기만 본다. HTTP 경로와 본인 대조는
- * [API] 날인 · 거부 처리(WHALEERP-145)에서 붙인다.
+ * 직원 수정 요청 — 계약서가 틀렸을 때, 서명 대기에서만 수정 요청으로 바꾸고 직원이 쓴 사유를 같은 UPDATE 로 남긴다(WHALEERP-635).
+ * 사유는 부르는 쪽(DTO)이 다듬은 1~100자 그대로다. 다시 요청하면 덮어쓰고, 관리자가 고쳐 다시 보내도 지우지 않는다.
+ * 서명 기한은 멈춘다 — 만료 배치는 서명 대기만 본다. HTTP 경로 · 내 계약 확인은 MyContractsService 가 한다.
  */
 export async function requestCorrection(
   db: Prisma.TransactionClient,
   contractId: number,
+  reason: string,
   now = new Date(),
 ): Promise<void> {
   // 기한이 지난 서명 대기를 수정 요청으로 살려 내지 않는다(만료 배치 전이어도) — 날인과 같다(api #58 리뷰)
   await checkSignDeadline(db, contractId, now);
   await transition(db, contractId, 'CORRECTION_REQUESTED', 'STAFF', {
     from: ['PENDING_SIGNATURE'],
+    data: { correctionReason: reason },
   });
 }
 
 /**
- * 직원 거부 — 서명 대기에서만 거부로 바꾼다. 거부 사유는 선택이다(WHALEERP-145) — 앞뒤 공백을 지우고, 비면 남기지 않는다.
+ * 직원 거부 — 서명 대기에서만 거부로 바꾼다. 사유는 받지 않는다(WHALEERP-635 — 고칠 내용은 수정 요청으로 받는다).
  * 날인 · 수정 요청과 같이 날인 기한이 지났으면 받지 않는다(409 SIGN_DEADLINE_PASSED).
  */
 export async function rejectContract(
   db: Prisma.TransactionClient,
   contractId: number,
-  reason?: string | null,
   now = new Date(),
 ): Promise<void> {
-  const rejectReason = reason?.trim() || null;
-  if (rejectReason && rejectReason.length > REJECT_REASON_MAX)
-    throw new BadRequestException(
-      `거부 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요.`,
-    );
   await checkSignDeadline(db, contractId, now);
   await transition(db, contractId, 'REJECTED', 'STAFF', {
     from: ['PENDING_SIGNATURE'],
-    data: { rejectReason },
   });
 }
 

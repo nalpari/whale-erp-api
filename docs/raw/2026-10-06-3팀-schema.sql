@@ -306,7 +306,6 @@ CREATE TABLE "invitations" (
     "expires_at" TIMESTAMPTZ(6) NOT NULL,
     "status" "invitation_status" NOT NULL,
     "responded_at" TIMESTAMPTZ(6),
-    "reject_reason" TEXT,
 
     CONSTRAINT "invitations_pkey" PRIMARY KEY ("invitation_id")
 );
@@ -399,7 +398,7 @@ CREATE TABLE "contracts" (
     "sign_deadline_at" TIMESTAMPTZ(6),
     "resend_count" INTEGER DEFAULT 0,
     "renewal_notified_at" TIMESTAMPTZ(6),
-    "reject_reason" TEXT,
+    "correction_reason" TEXT,
     "created_by" INTEGER NOT NULL,
     "created_at" TIMESTAMPTZ(6) DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) DEFAULT CURRENT_TIMESTAMP,
@@ -1343,7 +1342,6 @@ COMMENT ON COLUMN "invitations"."sent_at" IS '발송 일시';
 COMMENT ON COLUMN "invitations"."expires_at" IS '만료 일시 — 30일';
 COMMENT ON COLUMN "invitations"."status" IS '상태 — 발송·수락·만료·거절';
 COMMENT ON COLUMN "invitations"."responded_at" IS '응답 일시';
-COMMENT ON COLUMN "invitations"."reject_reason" IS '거절 사유 — 소속 확인 거절';
 COMMENT ON TABLE "link_holds" IS '가입 연결 보류';
 COMMENT ON COLUMN "link_holds"."link_hold_id" IS '보류 ID (논리 hold_id)';
 COMMENT ON COLUMN "link_holds"."invitation_id" IS '초대';
@@ -1411,7 +1409,7 @@ COMMENT ON COLUMN "contracts"."sent_at" IS '발송 일시';
 COMMENT ON COLUMN "contracts"."sign_deadline_at" IS '날인 기한 — 발송일부터 30일';
 COMMENT ON COLUMN "contracts"."resend_count" IS '재발송 횟수';
 COMMENT ON COLUMN "contracts"."renewal_notified_at" IS '갱신 예정 알림 일시 — 갱신 예정 알림 · 메일을 보낸 때 — 계약마다 한 번 (WHALEERP-152, 2026-10-26 김민식) (물리에서 추가)';
-COMMENT ON COLUMN "contracts"."reject_reason" IS '거부 사유';
+COMMENT ON COLUMN "contracts"."correction_reason" IS '수정 요청 사유 — 직원이 쓴 글, 100자';
 COMMENT ON COLUMN "contracts"."created_by" IS '작성 관리자';
 COMMENT ON COLUMN "contracts"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."updated_at" IS '최근 수정 일시 (물리에서 추가)';

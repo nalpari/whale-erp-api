@@ -30,7 +30,6 @@ import {
   AcceptAffiliationRequestDto,
   AcceptAffiliationResponseDto,
   AffiliationRequestDto,
-  RejectAffiliationRequestDto,
 } from './dto/affiliation-request.dto';
 
 const ID = new ParseIntPipe({ errorHttpStatusCode: HttpStatus.NOT_FOUND });
@@ -97,7 +96,7 @@ export class MyAffiliationRequestsController {
   @ApiTooManyRequestsResponse({ description: '계정마다 10분에 10번' })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
-  @ApiBadRequestResponse({ description: '형식 오류 · 사유 500자 넘음' })
+  @ApiBadRequestResponse({ description: '형식 오류(요청 ID)' })
   @ApiNotFoundResponse({
     description:
       'AFFILIATION_REQUEST_NOT_FOUND · AFFILIATION_REQUEST_ENDED — 수락과 같다',
@@ -108,9 +107,8 @@ export class MyAffiliationRequestsController {
   reject(
     @CurrentUser() user: AuthUser,
     @Param('invitationId', ID) invitationId: number,
-    @Body() dto: RejectAffiliationRequestDto,
   ): Promise<void> {
     if (user.type !== 'account') throw new UnauthorizedException();
-    return this.requests.reject(user.id, invitationId, dto);
+    return this.requests.reject(user.id, invitationId);
   }
 }

@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:17:05Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -587,7 +587,11 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
 - `firstSentAt` — the first history row into 발송 대기 or 서명 대기 (its DB time, so a few ms off the request time);
   `lastSentAt` — `contracts.sent_at`, rewritten on every send; `signDeadlineAt`; `lastProcessedAt` — the newest
   history row.
-- `rejectReason` — only when the contract is 거부 (the column is kept on other statuses but not shown).
+- `correctionReason` — the 수정 요청 사유 the 직원 wrote (1–100 chars, WHALEERP-635, 2026-10-30), only while the contract is
+  수정 요청 (null otherwise, and for a request made before reasons were taken). The column outlives a 관리자 fix-and-resend
+  and a second request overwrites it, but the detail hides it on other statuses so an old reason is not read as current
+  (as `rejectReason` used to be gated on 거부). There is no 거부 사유 any more (`contracts.reject_reason`
+  dropped in `20261030120000_team3_contract_correction_reason`, old values not moved).
 - `resendCount` — `contracts.resend_count`, counted in `ContractDeliveryService.prepare` when a contract that had
   been sent is sent again (재발송, 수정 요청 고침, 근로자 정보 수정) and taken back by `undo` when the 알림톡 did not go
   out. A resend that only set a new deadline with no notice (joined 직원 with a switched-off template or a withdrawn
@@ -681,8 +685,7 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
 **거부 · 만료 재발송** (WHALEERP-153, 운영 정책 CTR-10 · 2026-10-26 재영): `POST …/send` also takes a 거부 or 만료
 contract and sends **the same terms** again — no interval limit. It goes back to the status a send gives (앱 직원 →
 서명 대기, 가입 초대 · 소속 추가 확인 요청 → 발송 대기 — a number with an account gets a new 소속 추가 확인 요청,
-WHALEERP-130) with a history row from 거부 · 만료, a new 30-day deadline and `resend_count + 1`; the
-거부 사유 stays on the row. Before reopening it is refused (409) when the store is closed or deleted (a store whose
+WHALEERP-130) with a history row from 거부 · 만료, a new 30-day deadline and `resend_count + 1`. Before reopening it is refused (409) when the store is closed or deleted (a store whose
 only contracts are 거부 · 만료 can be closed), when the 직원 is 퇴직 or has any 퇴직일 set — past or future, the same
 rule as sending a 재계약 임시저장 (CTR-25 — write a new contract when they come back; api #158 review), when another contract is in progress at the same store and phone (two
 would come alive), when its 계약 기간 has already ended (it would end the day it is signed — write a new contract; api #158 code-review),
@@ -821,10 +824,13 @@ mail only (`optionalMailServiceProvider`, like 문의 답변).
   even if that one also ends inside the 30 days (`needsRenewal`, api #150 review),
   stamps it in the same transaction, and notifies after the commit, keyed by the contract ID — once per contract,
   even if sending then fails (mail logs have no contract column to dedupe on).
-- The 거부 운영 알림 template has no 근무지; passing a variable the template lacks throws in the renderer, so the
-  service builds each template's variables separately. An empty 거부 사유 is sent as 「없음」 (the renderer would leave
-  「사유 · 」 blank). Nothing here throws — failures are
-  logged.
+- 날인 · 거부 · 만료 all pass 직원이름 · 근무지 to both templates. The 거부 templates lost 거부사유 in
+  `20261030120100_team3_reject_notices_without_reason` (WHALEERP-635), on top of the same day's wording pass
+  `20261030093710`: the 운영 알림's 「- 거부 사유: #{거부사유}」 line became 「- 근무지: #{근무지}」 like 날인 · 만료 (김민식)
+  and the 메일 lost that line. The same migration drops 「- 거절 사유: #{거절사유}」 from the two 소속 추가 거절
+  templates (the code never passed it). Operator edits were overwritten (none on the dev DB, 2026-10-30). Passing a
+  variable the template lacks throws in the renderer, so that migration and this code ship together. Nothing here
+  throws — failures are logged.
 
 # Fixing the 근로자 before 날인: PATCH /contracts/:contractId/worker
 
@@ -895,7 +901,7 @@ a change means a new contract that replaces it.
   outside `from` — with **409 `CONTRACT_STATUS_CONFLICT`** carrying the
   current `status` and 「…입니다. 화면을 새로 고쳐 지금 상태를 확인해 주세요.」.
   Nothing is written, so the previous status stays. `data` is written with
-  the status (거부 사유 · 발송 일시 …).
+  the status (수정 요청 사유 · 발송 일시 …).
 - `transitionMany(tx, where, from, to, actor)` is the batch form
   (`updateManyAndReturn` + one history row each); the 서명 기한 만료 batch
   uses it.
@@ -903,12 +909,12 @@ a change means a new contract that replaces it.
   contract is not touched and answers 409 with `status: SIGNED`. Past
   `sign_deadline_at` it answers **409 `SIGN_DEADLINE_PASSED`** even before the
   만료 batch runs; turning it into 만료 stays the batch's job.
-- `requestCorrection` — 서명 대기 → 수정 요청 (`STAFF`), nothing else carried (2026-10-16).
+- `requestCorrection` — 서명 대기 → 수정 요청 (`STAFF`), writing `correction_reason` in the same UPDATE (WHALEERP-635 —
+  the DTO's trimmed 1–100 chars). A later request overwrites it; a 관리자 fix-and-resend never clears it.
   Past `sign_deadline_at` it is **409 `SIGN_DEADLINE_PASSED`**, like 날인 — an expired
   invitation is not revived by a 수정 요청 before the batch runs (api #58 review).
-- `rejectContract` — 서명 대기 → 거부 (`STAFF`). `reject_reason` is optional (WHALEERP-145, 2026-10-21):
-  trimmed, empty is NULL, over 500 chars 400. Past `sign_deadline_at` it is 409 `SIGN_DEADLINE_PASSED`
-  like the other two.
+- `rejectContract` — 서명 대기 → 거부 (`STAFF`), nothing else carried — no reason since WHALEERP-635 (2026-10-30;
+  it was optional, WHALEERP-145). Past `sign_deadline_at` it is 409 `SIGN_DEADLINE_PASSED` like the other two.
 - The 직원 앱 routes are [Staff app: 날인 · 거부 · 수정 요청](#staff-app-날인--거부--수정-요청) below.
 - Moved onto it: `PUT` 임시저장 → 발송 대기 · 서명 대기, 대체 (발송 대기 · 서명 대기 →
   종료), the 만료 batch. 퇴직 처리 (`staff-members/retirement.service.ts`)
@@ -1003,9 +1009,13 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   `{ contractId, status: SIGNED, signedAt }` — `signedAt` is the history row's `changed_at` (DB clock).
 - The `SIGNATURE` document is **not shown to the 관리자**: `GET /contracts/:id` leaves it out of
   `documents` and its download URL is 404 — it is the material the 처리 완료본 (131) merges.
-- **`POST …/reject`** — JSON `{ reason? }` (≤ 500 after trimming, `null` is 400). 200 `{ contractId, status: REJECTED }`.
-- **`POST …/correction-request`** — no body. Taken whatever the 대조 says (a wrong wage is a reason too —
-  WHALEERP-125 「계약서가 틀렸으면」). 200 `{ contractId, status: CORRECTION_REQUESTED }`.
+- **`POST …/reject`** — no body read (no `@Body`, WHALEERP-635), so an old 직원 앱 still sending `{ reason }` is not a
+  `forbidNonWhitelisted` 400 — that check only runs on a `@Body` DTO. 200 `{ contractId, status: REJECTED }`.
+- **`POST …/correction-request`** — JSON `{ reason }`, required (`RequestMyContractCorrectionDto`, WHALEERP-635):
+  NFC, trimmed, then 1–100 chars (`CORRECTION_REASON_MAX`). One check, so a 400 carries exactly one message —
+  「수정 요청 사유를 입력해 주세요.」 (missing · not a string · empty) or 「수정 요청 사유는 100자 이하로 입력해 주세요.」
+  (the 직원 앱 joins array messages). Taken whatever the 대조 says (a wrong wage is a reason too — WHALEERP-125
+  「계약서가 틀렸으면」). 200 `{ contractId, status: CORRECTION_REQUESTED }`.
 - After the commit the 처리 완료본 (`SIGNED_COPY`, below) is made without waiting (`ContractFilesService.afterSigned`);
   날인 · 거부 알림 is WHALEERP-154. The 처리 시각 and actor are the history row (`STAFF`); the 직원 is the account linked to
   the record (1:1), so no extra column.

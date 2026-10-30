@@ -1,14 +1,6 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { EmploymentType } from '@prisma/client';
-import { Transform } from 'class-transformer';
-import {
-  IsBoolean,
-  IsOptional,
-  IsString,
-  MaxLength,
-  ValidateIf,
-} from 'class-validator';
-import { REJECT_REASON_MAX } from '../../contracts/contract-status';
+import { IsBoolean, IsOptional } from 'class-validator';
 import { IsHqSharingConsentVersion } from '../hq-sharing-consent';
 
 /**
@@ -91,20 +83,4 @@ export class AcceptAffiliationResponseDto {
    */
   @ApiProperty({ nullable: true, type: Boolean })
   hqSharingConsentRecorded: boolean | null;
-}
-
-/** 거절 — 사유(선택, JOIN-5). 근로계약서 거부(RejectMyContractDto)와 같은 규칙 — 앞뒤 공백을 지운 뒤 500자까지, 비면 남기지 않는다 */
-export class RejectAffiliationRequestDto {
-  /** 거절 사유 — 함께 온 계약의 거부 사유로도 남는다 */
-  @ApiPropertyOptional({ maxLength: REJECT_REASON_MAX })
-  // 보내지 않았을 때만 건너뛴다 — null 은 400
-  @ValidateIf((_: object, value: unknown) => value !== undefined)
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.normalize('NFC').trim() : value,
-  )
-  @IsString()
-  @MaxLength(REJECT_REASON_MAX, {
-    message: `거절 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요.`,
-  })
-  reason?: string;
 }
