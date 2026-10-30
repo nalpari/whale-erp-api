@@ -19,7 +19,7 @@ sources:
     title: 최저임금 공통코드 · 수습 중 시급 검사
     last_modified: 2026-10-30T05:50:00Z
   - id: minimum-wage-migration
-    resource: ../../prisma/migrations/20261030140000_team3_minimum_wage_code/migration.sql
+    resource: ../../prisma/migrations/20261030145813_team3_minimum_wage_code/migration.sql
     title: 최저임금 공통코드 데이터 마이그레이션
     last_modified: 2026-10-30T05:50:00Z
   - id: contract-duplicates
@@ -430,7 +430,7 @@ force on `startDate`: the 공통코드 `MINIMUM_WAGE` row (플랫폼고정, BP00
 시행일 8자리 (`D20260101`), 코드명 시급 in 원, digits only (`10320`); malformed or 사용중지 rows are
 skipped (malformed with a warning log). No row in force on `startDate` (before the first 시행일)
 → not checked — earlier years are not seeded, and old 종이 계약 must still register. Migration
-`20261030140000_team3_minimum_wage_code` seeds 2026 = 10,320원 only; a new year is one more 상세
+`20261030145813_team3_minimum_wage_code` seeds 2026 = 10,320원 only; a new year is one more 상세
 in 공통코드 관리 — register it after the 고시 (August) and before 1 January, or contracts starting
 that year are checked against the previous year's lower value. Only the 상세's 사용 상태 counts:
 turning the group off does not turn the check off (법정 하한), and a 코드명 like `10,320` drops that

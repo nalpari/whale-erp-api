@@ -1,6 +1,7 @@
 import { BadRequestException, type Logger } from '@nestjs/common';
 import { INT4_MAX, PLATFORM_BP_CODE } from '../code-groups/code-format';
 import type { PrismaService } from '../prisma/prisma.service';
+import { parseDateOnly } from '../staff-members/kst-date';
 
 /**
  * 최저임금(시급)은 공통코드 `MINIMUM_WAGE` 로 관리한다(WHALEERP-595, 2026-10-30 김민식 — 별도 테이블을 두지 않음).
@@ -26,12 +27,7 @@ export function parseMinimumWage(
   const m = ITEM_CODE.exec(itemCode);
   if (!m || !/^\d+$/.test(label)) return null;
   const effectiveDate = `${m[1]}-${m[2]}-${m[3]}`;
-  const d = new Date(`${effectiveDate}T00:00:00Z`);
-  if (
-    Number.isNaN(d.getTime()) ||
-    d.toISOString().slice(0, 10) !== effectiveDate
-  )
-    return null;
+  if (!parseDateOnly(effectiveDate)) return null;
   const hourlyWage = Number(label);
   if (hourlyWage < 1 || hourlyWage > INT4_MAX) return null;
   return { effectiveDate, hourlyWage };
