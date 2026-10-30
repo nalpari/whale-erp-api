@@ -56,7 +56,12 @@ describe('근로계약 목록 (e2e)', () => {
       findMany: jest.fn(),
       findFirst: jest.fn(),
     },
-    store: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn() },
+    store: {
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      count: jest.fn(),
+    },
     invitation: {
       findMany: jest.fn(),
       count: jest.fn(),
@@ -399,6 +404,7 @@ describe('근로계약 목록 (e2e)', () => {
 
     it.each<[string, string]>([
       ['get', '/contracts'],
+      ['get', '/contracts/store-options'],
       ['get', '/contracts/7'],
       ['delete', '/contracts/7'],
       ['get', '/contracts/7/documents/3/download-url'],
@@ -436,6 +442,29 @@ describe('근로계약 목록 (e2e)', () => {
         .set('X-Bp-Code-Id', String(CUSTOMER_BP))
         .expect(404);
       expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, false, bp);
+    });
+
+    // 작성 화면의 근무지 선택지도 고른 BP 의 점포다 — `:contractId` 로 잡히지 않는다(WHALEERP-638)
+    it('근무지 선택지는 고른 BP 의 관리 점포로 거른다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'PM',
+        stores: [{ storeId: 12, storeTypeCode: 'FRANCHISE' }],
+      });
+      prisma.store.findMany.mockResolvedValueOnce([
+        { storeId: 12, name: '서초점' },
+      ]);
+      prisma.store.count.mockResolvedValueOnce(1);
+      const res = await get('/contracts/store-options?pageSize=200', 'admin')
+        .set('X-Bp-Code-Id', String(CUSTOMER_BP))
+        .expect(200);
+      expect(res.body).toEqual({
+        items: [{ storeId: 12, name: '서초점' }],
+        total: 1,
+      });
+      expect(scope.getManageableStores).toHaveBeenCalledWith(1, {
+        bpCodeId: CUSTOMER_BP,
+        isPlatformCaller: true,
+      });
     });
   });
 

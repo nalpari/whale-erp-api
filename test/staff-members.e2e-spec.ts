@@ -1021,7 +1021,7 @@ describe('직원 목록 (e2e, DB)', () => {
         isTemporarySave: true,
       });
       expect(res.status).toBe(404);
-      const stores = await call('get', '/stores/options?pageSize=200');
+      const stores = await call('get', '/contracts/store-options?pageSize=200');
       const storeIds = (
         stores.body as { items: { storeId: number }[] }
       ).items.map((i) => i.storeId);

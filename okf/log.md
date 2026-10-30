@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [Contracts API](/api/contracts-api.md) · [Store management](/api/stores.md) — 근로계약 근무지 선택지를 `GET /stores/options` 에서 `GET /contracts/store-options`(작성 또는 수정 권한, `@TargetBp()`)로 옮겼다(WHALEERP-638). 메뉴 권한 없는 경로라 가드가 탭 BP 를 정하지 않아 플랫폼 계정은 근무지가 없어 근로계약을 쓸 수 없었다. 플랫폼 계정이 헤더 없이 부르면 다른 근로계약 경로와 같은 400. 비밀번호 e2e 의 「메뉴 권한 없는 업무 API」 확인은 `GET /notifications` 로 바꿨다. api 를 먼저 배포한다.
 * **Update**: [BP admins](/api/bp-admins.md) — 수정 트랜잭션의 유일값 충돌(P2002)을 이메일 고유 인덱스(`admin_accounts_email_key`, 이름이 없으면 `email` 칸 — pg 어댑터의 `meta.driverAdapterError.cause.constraint`)일 때만 「사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.」로, 그 밖은 「다른 사용자가 이 계정을 먼저 바꿨습니다.」 409 로(지금 경로엔 다른 유일값 충돌이 없다 — 점포 매핑은 `skipDuplicates`, 대비용)(front PR #199 review-pr, front 요청). 문구는 바꾸지 않았다. 등록의 P2002 는 그대로. 마이그레이션 없음.
 * **Update**: [BP admins](/api/bp-admins.md) — 전화번호 표기를 「휴대전화」에서 「연락처」로(2026-10-29 사용자 결정, front 요청). 400 문구 「연락처는 숫자 9~12자리입니다.」(플랫폼 관리자와 같음) · 본인 계정 403 문구 · 변경 이력 항목명. 이미 쌓인 이력 행의 「휴대전화」는 그대로 둔다. openapi 를 다시 내보내며 main 에 늦게 반영된 발송 이력 `isResend` 설명도 함께 바뀌었다. 마이그레이션 없음.
 * **Update**: main 병합(api chansey, main #217 까지): okf/log 충돌은 양쪽 기록을 살렸다.

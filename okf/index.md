@@ -15,7 +15,7 @@ responses is the [staff member list](/api/staff-members.md).
 
 * [Whale ERP API](/api/whale-erp-api.md) - NestJS 11 HTTP service backed by PostgreSQL through Prisma.
 * [Items API](/api/items-api.md) - (deprecated) The removed template sample.
-* [Contracts API](/api/contracts-api.md) - `GET` · `POST /contracts` (list, 근로계약서 초안 저장), 임시저장 이어 쓰기 · 삭제, and `GET /stores/options`; admin tokens only, filtered by the admin scope. The worked example for new modules.
+* [Contracts API](/api/contracts-api.md) - `GET` · `POST /contracts` (list, 근로계약서 초안 저장), 임시저장 이어 쓰기 · 삭제, and `GET /contracts/store-options`; admin tokens only, filtered by the admin scope. The worked example for new modules.
 * [Authentication](/api/auth.md) - 직원 근무 앱 login (login · refresh · logout, per-device sessions, 5-wrong-attempts lock), PIN password reset, and the deny-by-default guard that checks the session on every request.
 * [BP signup (관리자 웹 회원가입)](/api/admin-signup.md) - POST /auth/signup creates a BP and its BP 마스터 in one transaction, records the two 약관 agreements, mails after commit, and returns a 10-minute signup token; 사업자 인증 and the session exchange come later.
 * [Public 약관 API](/api/terms-versions.md) - GET /public-terms-versions (list) and /{termsTypeCode} (with Markdown body) without login; tabs follow 공통코드 TERMS_TYPE and the version shown is the one signup records.
