@@ -490,7 +490,7 @@ table document:
   pause `location_consents.paused_at`, the 사용자 칸 fixed at 날인 `contract_parties.employer_*` ·
   `employer_fixed_at` and the 발송 a generated file belongs to `contract_documents.sent_at` (partial unique
   `(contract_id, kind, sent_at)` for 보낸 원본 · 처리 완료본 — WHALEERP-131, 2026-10-29, migration
-  `20261029171511_team3_contract_files`), and `auth_sessions.refresh_token_hash` /
+  `20261030095715_team3_contract_files`), and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
   (재영, 2026-10-07). The 42 default rows are inserted by migration (40 at first, `EMAIL_LEAD_REPLY` and `NTF_SIGNUP_UNDER_AGE` later), the same way
