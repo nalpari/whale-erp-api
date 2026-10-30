@@ -382,7 +382,7 @@ export class PayslipEditService {
           },
         });
     });
-    return this.detail.findOne(adminAccountId, payslipId);
+    return this.detail.findOne(adminAccountId, payslipId, bp);
   }
 
   /**
@@ -462,7 +462,7 @@ export class PayslipEditService {
         },
       });
     });
-    return this.detail.findOne(adminAccountId, payslipId);
+    return this.detail.findOne(adminAccountId, payslipId, bp);
   }
 
   /**
@@ -532,7 +532,7 @@ export class PayslipEditService {
         },
       });
     });
-    return this.detail.findOne(adminAccountId, payslipId);
+    return this.detail.findOne(adminAccountId, payslipId, bp);
   }
 
   /**
@@ -574,7 +574,7 @@ export class PayslipEditService {
         },
       });
     });
-    return this.detail.findOne(adminAccountId, payslipId);
+    return this.detail.findOne(adminAccountId, payslipId, bp);
   }
 
   /** 급여 기간에 걸친 체결 완료 근로계약 — 계산은 날마다 그날 계약으로 한다(2026-10-26) */

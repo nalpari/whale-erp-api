@@ -326,7 +326,7 @@ export class PayslipSendService {
           });
       }
     }
-    return this.detail.findOne(adminAccountId, payslipId);
+    return this.detail.findOne(adminAccountId, payslipId, bp);
   }
 
   /** 한 장 보내기. 설정 · 받는 곳이 없으면 쓰지 않고 실패. 그 밖은 클래스 주석의 순서. */

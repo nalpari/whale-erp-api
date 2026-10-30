@@ -433,6 +433,12 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
     const history = `/attendance-records/${attendanceRecordId}/history`;
     await asPm(history, 200, bpCodeId);
     await asPm(history, 404, otherBpCodeId);
+    // 고치는 경로도 다른 BP 를 고르면 없는 것과 같다(바꾸지 않는다)
+    await request(app.getHttpServer())
+      .post(`/attendance-records/${attendanceRecordId}/review`)
+      .set('Authorization', `Bearer ${await adminToken(pmId)}`)
+      .set('X-Bp-Code-Id', String(otherBpCodeId))
+      .expect(404);
     for (const path of [
       daily,
       `/attendance-records?from=${ymd(yesterday)}&to=${ymd(today)}`,

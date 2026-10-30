@@ -521,6 +521,25 @@ describe('급여명세서 권한 (e2e, DB)', () => {
         '급여명세서를 볼 BP 를 골라 주세요.',
       );
     }
+    // 고친 뒤 상세도 고른 BP 로 다시 읽는다 — 소속(플랫폼) BP 로 읽으면 바뀐 뒤 404 다(②리뷰)
+    const { updatedAt } = (
+      await call(
+        'pm',
+        'get',
+        `/payslips/${slips.direct.payslipId}`,
+        200,
+        bpCodeId,
+      )
+    ).body as { updatedAt: string };
+    const recalculated = await request(app.getHttpServer())
+      .post(`/payslips/${slips.direct.payslipId}/recalculate`)
+      .set('Authorization', `Bearer ${await adminToken(admins.pm)}`)
+      .set('X-Bp-Code-Id', String(bpCodeId))
+      .send({ updatedAt })
+      .expect(200);
+    expect((recalculated.body as { payslipId: number }).payslipId).toBe(
+      slips.direct.payslipId,
+    );
     // BP 계정은 헤더가 없어도 소속 BP 이고, 남의 BP 를 실으면 가드가 403
     await call('bm', 'get', `/payslips/${slips.direct.payslipId}`, 200);
     await call(

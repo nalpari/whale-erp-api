@@ -441,9 +441,22 @@ describe('PayslipEditService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('저장한 뒤 상세를 돌려준다', async () => {
+    it('저장한 뒤 상세를 돌려준다 — 받은 대상 BP 로 다시 읽는다(WHALEERP-637)', async () => {
       await expect(save()).resolves.toEqual({ payslipId: 40 });
-      expect(detail.findOne).toHaveBeenCalledWith(9, 40);
+      expect(detail.findOne).toHaveBeenCalledWith(9, 40, undefined);
+      const bp = { bpCodeId: 8, isPlatformCaller: false };
+      await service.save(
+        9,
+        40,
+        {
+          updatedAt: UPDATED,
+          isPremiumApplied: true,
+          isWithholdingApplied: true,
+          items: [],
+        },
+        bp,
+      );
+      expect(detail.findOne).toHaveBeenLastCalledWith(9, 40, bp);
     });
 
     it('가산 적용을 그대로 두면 다시 계산하지 않는다', async () => {
