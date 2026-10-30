@@ -59,13 +59,13 @@ export class CodeGroupsController {
     return this.codes.listGroups(query);
   }
 
-  /** 그룹 등록. 새 그룹 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다. 표시 순서는 api 가 전체의 최대 + 1 부터 매긴다. */
+  /** 그룹 등록. 새 그룹 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다. 표시 순서는 api 가 지우지 않은 플랫폼고정 · 플랫폼제공 그룹 전체의 최대 + 1 부터 요청 순서대로 매긴다. */
   @Post()
   @MenuPermission('create', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiConflictResponse({
     description:
-      '이미 있는(지운 것 포함) 그룹 코드 · 요청 안에서 겹친 그룹 코드',
+      '이미 있는(지운 것 포함) 그룹 코드 · 요청 안에서 겹친 그룹 코드 · 매길 표시 순서가 integer 최댓값을 넘음',
   })
   async createGroups(
     @CurrentUser() user: AuthUser,

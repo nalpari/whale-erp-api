@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 28 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:19:13Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:56:44Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -49,7 +49,7 @@ sources:
   - id: holiday-api-names-migration
     resource: ../../prisma/migrations/20261030153929_team1_public_holiday_api_names/migration.sql
     title: 규칙 계산 공식 휴일 이름을 공공 API 표기로(2000~2100 전체)
-    last_modified: 2026-10-30T06:43:18Z
+    last_modified: 2026-10-30T07:56:44Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -300,7 +300,7 @@ changing wording means stacking a new version and lowering the old one's
 the bodies sit in migrations rather than somewhere a re-run could overwrite them.
 The screens read them through [the public 약관 API](/api/terms-versions.md).
 
-# 공식 휴일 stops at 2050, and that is the data's limit
+# Lunar 공식 휴일 stop at 2050; the table runs to 2100
 
 The 1346 rows follow 관공서의 공휴일에 관한 규정: ten solar holidays with their
 start and end years, 설날·부처님오신날·추석 from the lunar calendar, and the
@@ -318,8 +318,10 @@ their solar days. The synchronization stays the only source for
 `20261030153929_team1_public_holiday_api_names` renamed every rule row (2000–2100) to the 공공 API's spelling so a year reads the same whether
 the synchronization has covered it or not: 신정 → 1월1일, 성탄절 → 기독탄신일, 설 · 추석 앞뒤 날 → 설날 ·
 추석, and a substitute is named 「대체공휴일(본 휴일)」 with 비고 NULL instead of keeping the base name and
-「대체공휴일 — …」 in 비고. Its `DO` block refuses to finish if a rule row with 비고 or an old name is left,
-or if 2100-12-25 is missing.[^holiday-api-names-migration]
+「대체공휴일 — …」 in 비고. Its `DO` block refuses to finish if a rule row with 비고 or an old name is left, if
+any row that had 비고 before is not named 「대체공휴일(…)」 now, or if a sample is missing — 2024-02-12
+대체공휴일(설날), 2024-09-17 추석, 2025-12-25 기독탄신일, 2100-12-25 기독탄신일. The rule header of
+`20261006000200` still uses the old names; a rebuilt calculation must follow these, not that header.[^holiday-api-names-migration]
 
 `public_holidays` has a unique index on `holiday_date`, so two holidays on one day
 are one row with both names joined (`어린이날 · 부처님오신날`, 2025-05-05). The

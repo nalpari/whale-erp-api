@@ -4,7 +4,7 @@ title: BP code groups
 description: 관리자 웹 「BP 공통코드 관리」(MN000014) — groups are read-only and only in-use 플랫폼제공 groups are visible (플랫폼고정 is hidden, 404); every such group (applied or not) shows the BP's own rows, where the BP edits name · status · order, adds BP전용 codes and deletes its rows; platform users read a picked BP only.
 tags: [admin, codes, bp]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T06:27:06Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:56:44Z }
 sources:
   - id: bp-code-groups-controller
     resource: ../../src/bp-code-groups/bp-code-groups.controller.ts
@@ -13,11 +13,11 @@ sources:
   - id: bp-code-groups-service
     resource: ../../src/bp-code-groups/bp-code-groups.service.ts
     title: Which groups and rows a BP sees, BP전용 creation, edits and deletion
-    last_modified: 2026-10-30T06:27:06Z
+    last_modified: 2026-10-30T07:56:44Z
   - id: bp-code-groups-e2e
     resource: ../../test/bp-code-groups.e2e-spec.ts
     title: Real-DB proof — visibility (플랫폼고정 hidden), other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore
-    last_modified: 2026-10-30T06:27:06Z
+    last_modified: 2026-10-30T07:56:44Z
 ---
 
 # What it covers
@@ -125,7 +125,7 @@ copied 플랫폼제공 row is registered again and comes back as BP전용 (below
   to set: a code whose platform original is stopped can be switched on (2026-10-22 결정 — the
   earlier 409 「플랫폼이 사용 중지한 코드는 다시 사용으로 바꿀 수 없습니다」 is gone). Each row carries
   the `updatedAt` the list gave it (2026-10-30, `UpdateCodeItemDto`, shared with the platform screen):
-  a row another admin of the BP changed since is 409 「다른 관리자가 먼저 수정했습니다. 최신 정보를
+  a row another admin changed since (a platform admin who picked the BP included) is 409 「다른 관리자가 먼저 수정했습니다. 최신 정보를
   불러온 뒤 다시 저장해 주세요.」 and nothing is written. Each row's write is itself conditioned on the
   row still being undeleted and on that millisecond, so an edit racing another admin's delete is 409
   「다른 관리자가 먼저 지운 상세 코드가 있습니다(CODE). 다시 불러온 뒤 저장해 주세요.」 rather than a 204

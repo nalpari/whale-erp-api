@@ -4,7 +4,7 @@ title: Platform holidays
 description: 관리자 웹 「플랫폼 휴일 관리」(MN000217) — GET /public-holidays reads the 공식 휴일 of a year (목록) or a month (캘린더) with the synchronization status; read-only, no route changes a holiday. A monthly batch (public-holiday-sync) aligns 올해 · 다음 해 with the 공휴일 API.
 tags: [admin, holiday, platform, team1, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:19:13Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:56:44Z }
 sources:
   - id: public-holidays-controller
     resource: ../../src/public-holidays/public-holidays.controller.ts
@@ -131,7 +131,8 @@ years.[^holiday-api-module]
   substitute → 「대체공휴일(본 휴일)」 with 비고 NULL — checked against the 2026 rows the API wrote. 대체공휴일
   of 설날 · 추석 · 기독탄신일 did not occur in 2026, so their spelling follows the same pattern by inference.
   Rows joined with 「 · 」 keep their order. A later synchronization of such a year therefore changes only
-  `source` · `source_ref` · `synchronized_at`, not the name.
+  `source` · `source_ref` · `synchronized_at`, not the name — unless one of the inferred 대체공휴일 spellings turns
+  out different, in which case the synchronization corrects it.
 - When the API returns the year cleanly, **every row of that year it did not return is
   deleted, whatever its source** — a rule row the API disagrees with, and a cancelled
   임시공휴일 that came from an earlier sync. The table has no `is_deleted`, so this is a real
@@ -169,8 +170,8 @@ year then shows in `failedYears` although the table is current, until the next r
 (노동절, 전국동시지방선거, 제헌절) and updated 19, 2027 created 4 and updated 20, nothing
 deleted. On the shared database 2026 created 4 and updated 18 — 2026-03-02 had been deleted
 by hand just before, so it came back as a new `PUBLIC_API` row. `test/public-holiday-sync.e2e-spec.ts`
-runs the rules on 2050, the last year with its lunar holidays: it replaces that year with eight solar `RULE` rows at
-the start, uses a fake client, and restores the year afterwards.
+replaces 2050 (a year no business data uses) with eight solar `RULE` rows, runs the synchronization with a fake
+client, and restores the year afterwards.
 
 What it does not do: no manual-run route, no lunar back-fill of 2051–2100 (the API answers only years it has
 published), and no reconciliation report of API against rule.

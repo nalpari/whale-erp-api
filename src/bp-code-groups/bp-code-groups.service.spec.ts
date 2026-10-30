@@ -646,6 +646,16 @@ describe('BpCodeGroupsService', () => {
           '다른 관리자가 먼저 지운 상세 코드가 있습니다(FULL). 다시 불러온 뒤 저장해 주세요.',
         ),
       );
+      // 다시 읽기는 이 BP 의 지우지 않은 행으로 — bpCode 가 빠지면 다른 BP 의 같은 코드를 보고 「수정함」이 된다.
+      expect(prisma.codeItem.findFirst).toHaveBeenCalledWith({
+        where: {
+          groupCode: 'EMP_TYPE',
+          itemCode: 'FULL',
+          bpCode: 'BP000017',
+          isDeleted: false,
+        },
+        select: { itemCode: true },
+      });
     });
 
     // 최대 500행을 한 행씩 고쳐 원격 DB 에서는 Prisma 기본 5초를 넘길 수 있다 — 넘기면 원인 없는 500 이다.

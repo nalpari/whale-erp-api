@@ -198,6 +198,36 @@ describe('CodeGroupsService', () => {
         expect(prisma.codeGroup.updateMany).not.toHaveBeenCalled();
       });
 
+      // 잠금을 기다리는 시간도 트랜잭션 시간에 든다 — 기본 5초를 넘기면 원인 없는 500 이다.
+      it('트랜잭션 시간 제한을 늘려 둔다', async () => {
+        prisma.codeGroup.createManyAndReturn.mockResolvedValue([
+          { groupCode: 'BANK' },
+        ]);
+
+        await service.createGroups(9, [create]);
+
+        expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+          timeout: 30_000,
+          maxWait: 5_000,
+        });
+      });
+
+      // 수정이 표시 순서를 integer 최댓값까지 받으므로, 최대 + 1 이 넘치면 DB 가 거부해 500 이 된다 — 그 전에 409.
+      it('매길 표시 순서가 integer 범위를 넘으면 409 이고 아무것도 만들지 않는다', async () => {
+        prisma.codeGroup.aggregate.mockResolvedValue({
+          _max: { sortOrder: 2_147_483_646 },
+        });
+
+        await expect(
+          service.createGroups(9, [create, { ...create, groupCode: 'CARD' }]),
+        ).rejects.toThrow(
+          new ConflictException(
+            '표시 순서가 최댓값에 닿아 더 등록할 수 없습니다. 기존 그룹의 표시 순서를 줄인 뒤 다시 등록해 주세요.',
+          ),
+        );
+        expect(prisma.codeGroup.createManyAndReturn).not.toHaveBeenCalled();
+      });
+
       // 화면이 보이는 목록(검색 · 쪽)으로 매기면 검색 중 추가한 그룹이 기존 순서와 겹친다 — api 가 전체로 매긴다.
       it('표시 순서는 지우지 않은 플랫폼 그룹 전체의 최대 + 1 부터 요청 순서대로 — 잠근 뒤 읽는다', async () => {
         prisma.codeGroup.aggregate.mockResolvedValue({
@@ -763,6 +793,17 @@ describe('CodeGroupsService', () => {
             '다른 관리자가 먼저 지운 상세 코드가 있습니다(PART). 다시 불러온 뒤 저장해 주세요.',
           ),
         );
+        // 다시 읽기는 고칠 수 있는 행의 조건 그대로(같은 ms 조건만 뺌) — 하나라도 빠지면 「지움」 · 「수정함」이 뒤바뀐다.
+        expect(prisma.codeItem.findFirst).toHaveBeenCalledWith({
+          where: {
+            groupCode: 'EMP_TYPE',
+            bpCode: 'BP000000',
+            isDeleted: false,
+            manageOwnerCode: { not: 'BP_ONLY' },
+            itemCode: 'PART',
+          },
+          select: { itemCode: true },
+        });
       });
 
       it('읽은 뒤 다른 관리자가 고친 코드가 있으면 409 이고 아무것도 고치지 않는다', async () => {

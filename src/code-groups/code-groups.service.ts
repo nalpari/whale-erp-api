@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   BP_ONLY_OWNER_CODE,
   BULK_UPDATE_TX,
+  INT4_MAX,
   PLATFORM_BP_CODE,
   PLATFORM_FIXED_OWNER_CODE,
   PLATFORM_OWNER_CODES,
@@ -100,7 +101,7 @@ export class CodeGroupsService {
   /**
    * 그룹 등록. 지운 그룹의 코드도 다시 쓰지 않는다. 확인과 INSERT 가 한 트랜잭션이다 — 한 행이라도 막히면
    * 아무것도 생기지 않는다. 표시 순서는 이 화면의 그룹 전체의 최대 + 1 부터 요청 순서대로 매긴다(2026-10-30) — 동시
-   * 등록이 같은 최대를 읽지 않게 트랜잭션 잠금 뒤에 읽는다.
+   * 등록이 같은 최대를 읽지 않게 트랜잭션 잠금 뒤에 읽고, integer 를 넘치게 매길 것이면 409 다.
    */
   async createGroups(
     callerId: number,
@@ -128,6 +129,9 @@ export class CodeGroupsService {
         _max: { sortOrder: true },
       });
       const lastOrder = _max.sortOrder ?? 0;
+      // 수정은 표시 순서를 integer 최댓값까지 받는다 — 넘치게 매기면 DB 가 거부해 500 이 되므로 먼저 막는다.
+      if (lastOrder + items.length > INT4_MAX)
+        throw new ConflictException(SORT_ORDER_EXHAUSTED);
 
       // 위 확인과 INSERT 사이에 다른 관리자가 같은 코드를 넣으면 키가 겹친다. 건너뛰고 409 로 되돌린다 —
       // 그대로 두면 키 위반이 500 으로 나간다. 이번 INSERT 가 만든 행을 돌려받아 만들지 못한 코드(먼저
@@ -152,7 +156,7 @@ export class CodeGroupsService {
       );
       if (lost.length)
         throw new ConflictException(withCodes(GROUP_CODE_TAKEN, lost));
-    });
+    }, BULK_UPDATE_TX);
   }
 
   /**
@@ -202,7 +206,7 @@ export class CodeGroupsService {
         sortOrder,
         updatedAt,
       } of items) {
-        // 확인과 쓰기 사이에 고친 행도 막는다 — 같은 ms 인 행에만 쓴다(그룹은 지우지 않으므로 0건이면 고친 것이다).
+        // 확인과 쓰기 사이에 고친 행도 막는다 — 같은 ms 인 행에만 쓴다(그룹을 지우는 API 가 없으므로 0건이면 고친 것이다).
         const { count } = await tx.codeGroup.updateMany({
           where: {
             groupCode,
@@ -491,7 +495,10 @@ function isPlatformOwner(code: string): boolean {
 const FIXED_NOT_DELETABLE =
   '플랫폼고정 그룹의 상세 코드는 지울 수 없습니다 — 사용 상태로 관리해 주세요.';
 
-/** 상세 코드 등록이 같은 그룹의 살아 있는 행과 겹칠 때(지운 행은 겹침이 아니라 되살린다). */
+/**
+ * 상세 코드 등록이 같은 그룹의 살아 있는 플랫폼 원본 또는 BP전용 행과 겹칠 때(BP 의 플랫폼제공 복사본 · 지운 행은 겹침이
+ * 아니다). 되살리기 · INSERT 경합의 409 에도 쓴다.
+ */
 export const SAME_AS_LIVE_ITEM = '이 그룹에 이미 있는 상세 코드입니다';
 
 /**
@@ -536,6 +543,9 @@ export function takenInOrder(
 
 /** 그룹 등록이 이미 있는(지운 것 포함) 그룹 코드와 겹칠 때. front 화면 문구와 같은 말이다. */
 const GROUP_CODE_TAKEN = '이미 사용 중인 그룹 코드입니다';
+
+const SORT_ORDER_EXHAUSTED =
+  '표시 순서가 최댓값에 닿아 더 등록할 수 없습니다. 기존 그룹의 표시 순서를 줄인 뒤 다시 등록해 주세요.';
 
 /**
  * 문구 끝에 코드 목록을 괄호로 — `이 그룹에 이미 있는 상세 코드입니다(A, B).`(2026-10-30, 메뉴 관리와 같은 꼴). front 는

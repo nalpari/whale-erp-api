@@ -13,6 +13,10 @@
 -- 부처님오신날 · 추석) 없이 양력만 있다. 그 행은 남기고 화면 · 조회도 막지 않는다(재영) — 그 양력분도 같은 표기로
 -- 맞춰 해를 넘겨 이름이 바뀌지 않게 한다.
 
+-- 바꾸기 전 대체공휴일(비고가 있는 RULE 행)을 적어 두고, 바꾼 뒤 그 행이 모두 「대체공휴일(…)」인지 센다.
+CREATE TEMP TABLE "rule_substitutes" AS
+  SELECT "public_holiday_id" FROM "public_holidays" WHERE "source" = 'RULE' AND "note" IS NOT NULL;
+
 UPDATE "public_holidays"
 SET
   "name" = CASE
@@ -45,14 +49,24 @@ BEGIN
    WHERE "source" = 'RULE' AND ("name" LIKE '%신정%' OR "name" LIKE '%성탄절%' OR "name" LIKE '%연휴%' OR "name" LIKE '%—%');
   IF n <> 0 THEN RAISE EXCEPTION '옛 이름이 남은 규칙 계산 행이 %행이다', n; END IF;
 
-  -- 실제 달력과 대조한 표본(RULE 로 남아 있을 때만 — 동기화가 덮은 해는 API 값이다)
-  IF EXISTS (SELECT 1 FROM "public_holidays"
-              WHERE "holiday_date" = DATE '2024-02-12' AND "source" = 'RULE' AND "name" <> '대체공휴일(설날)')
-    THEN RAISE EXCEPTION '2024-02-12 이 대체공휴일(설날)이 아니다'; END IF;
-  IF EXISTS (SELECT 1 FROM "public_holidays"
-              WHERE "holiday_date" = DATE '2025-12-25' AND "source" = 'RULE' AND "name" <> '기독탄신일')
-    THEN RAISE EXCEPTION '2025-12-25 가 기독탄신일이 아니다'; END IF;
-  -- 2051~2100 양력분은 남는다
+  -- 적어 둔 대체공휴일이 하나도 빠지지 않고 「대체공휴일(…)」이 됐다(공용 DB 는 동기화한 해만큼 189 보다 적다)
+  SELECT count(*) INTO n FROM "rule_substitutes";
+  IF n = 0 THEN RAISE EXCEPTION '바꿀 대체공휴일 행이 없다 — 공식 휴일 데이터가 비었다'; END IF;
+  SELECT count(*) INTO n FROM "rule_substitutes" s
+    JOIN "public_holidays" h USING ("public_holiday_id")
+   WHERE h."name" NOT LIKE '대체공휴일(%)';
+  IF n <> 0 THEN RAISE EXCEPTION '「대체공휴일(…)」로 바뀌지 않은 대체공휴일이 %행이다', n; END IF;
+
+  -- 실제 달력과 대조한 표본 — 그 행이 그 이름으로 있어야 한다(2024 · 2025 · 2100 은 동기화 대상이 아니라 RULE 그대로다)
+  IF NOT EXISTS (SELECT 1 FROM "public_holidays" WHERE "holiday_date" = DATE '2024-02-12' AND "name" = '대체공휴일(설날)')
+    THEN RAISE EXCEPTION '2024-02-12 대체공휴일(설날)이 없다'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM "public_holidays" WHERE "holiday_date" = DATE '2024-09-17' AND "name" = '추석')
+    THEN RAISE EXCEPTION '2024-09-17 추석이 없다'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM "public_holidays" WHERE "holiday_date" = DATE '2025-12-25' AND "name" = '기독탄신일')
+    THEN RAISE EXCEPTION '2025-12-25 기독탄신일이 없다'; END IF;
+  -- 2051~2100 양력분도 같은 표기로 남는다
   IF NOT EXISTS (SELECT 1 FROM "public_holidays" WHERE "holiday_date" = DATE '2100-12-25' AND "name" = '기독탄신일')
     THEN RAISE EXCEPTION '2100-12-25 기독탄신일이 없다'; END IF;
 END $$;
+
+DROP TABLE "rule_substitutes";

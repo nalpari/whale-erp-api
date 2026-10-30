@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:56:44Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -21,11 +21,11 @@ sources:
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update · DELETE items
-    last_modified: 2026-10-30T06:27:06Z
+    last_modified: 2026-10-30T07:56:44Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
-    last_modified: 2026-10-30T06:27:06Z
+    last_modified: 2026-10-30T07:56:44Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
@@ -111,14 +111,16 @@ non-platform account `ACCESS_DENIED_MESSAGE`.[^code-groups-controller]
 
 **Creating and updating are separate routes** (2026-10-20, 1팀 결정). Each takes `{ items }` — one or more rows,
 at most 200 groups or 500 items (`MAX_GROUP_ROWS` · `MAX_ITEM_ROWS` in `code-format.ts`); an empty array is 400 —
-and answers 204 with no body, since there is no generated id to return. A group row is `CodeGroupInputDto` (code,
+and answers 204 with no body, since there is no generated id to return. A group row's common fields are `CodeGroupInputDto` (code,
 name, status); creating uses `CreateCodeGroupDto`, which adds `manageOwnerCode`, and updating uses
 `UpdateCodeGroupDto`, which adds the order and `updatedAt`, so 관리 주체 cannot be sent on update. **Creating takes
 no order** (2026-10-30): the api numbers new groups from the highest order among undeleted 플랫폼고정 · 플랫폼제공
 groups plus one, in request order, reading that maximum under a transaction advisory lock so two concurrent
 creates do not take the same numbers. The screen used to send the visible list's count or maximum plus one, which
 collided with existing orders while a search was narrowing the list; a body that still sends `sortOrder` is 400
-(unknown property). An item row is `CodeItemInputDto` on create and `UpdateCodeItemDto` (adds `updatedAt`) on
+(unknown property). If the next numbers would pass the integer maximum (the update screen accepts up to it), the create is
+409 「표시 순서가 최댓값에 닿아 더 등록할 수 없습니다. …」 instead of a database 500, and the create transaction gets
+`BULK_UPDATE_TX` (30 seconds) since waiting on the lock counts toward it. An item row is `CodeItemInputDto` on create and `UpdateCodeItemDto` (adds `updatedAt`) on
 update. Earlier a single
 panel save (`PUT` with `{ updates, creates }`) did both in one transaction, and the handler added a create check
 when `creates` was non-empty because the guard cannot see the body; splitting the routes put the whole decision in
