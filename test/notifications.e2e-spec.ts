@@ -326,10 +326,10 @@ describe('운영 알림 (e2e, DB)', () => {
         relatedType: 'CONTRACT',
         relatedId: 41,
         link: '/contracts/41',
-        title: '문태경 님이 근로계약서에 날인했습니다',
-        body: '알림 테스트 직영점',
+        title: '근로계약 체결 완료',
         dedupeKey: `NTF_CONTRACT_SIGNED:e2e-${n}-first`,
       });
+      expect(stored.body).toContain('- 근무지: 알림 테스트 직영점');
     });
 
     it('같은 사건으로 다시 부르면 만들지 않는다 (부분 유일 인덱스)', async () => {
@@ -360,13 +360,15 @@ describe('운영 알림 (e2e, DB)', () => {
       expect(body.items[0]).toMatchObject({
         templateCode: 'NTF_CONTRACT_SIGNED',
         kind: '근로계약 날인',
-        title: '문태경 님이 근로계약서에 날인했습니다',
-        body: '알림 테스트 직영점',
+        title: '근로계약 체결 완료',
         relatedType: 'CONTRACT',
         relatedId: 41,
         link: '/contracts/41',
         isRead: false,
       });
+      expect(String(body.items[0].body)).toContain(
+        '- 근무지: 알림 테스트 직영점',
+      );
     });
 
     it('다른 사람의 알림은 보이지 않는다', async () => {
