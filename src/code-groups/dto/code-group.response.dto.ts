@@ -17,6 +17,8 @@ export class CodeGroupResponseDto {
   status: UseStatus;
   /** 표시 순서. */
   sortOrder: number;
+  /** 최종 수정 시각. 수정(PUT) 때 그 행의 updatedAt 으로 그대로 보낸다. */
+  updatedAt: Date;
 }
 
 export class CodeGroupListResponseDto {
@@ -35,6 +37,8 @@ export class CodeItemResponseDto {
   status: UseStatus;
   /** 표시 순서. */
   sortOrder: number;
+  /** 최종 수정 시각. 수정(PUT) 때 그 행의 updatedAt 으로 그대로 보낸다. */
+  updatedAt: Date;
 }
 
 export class CodeItemListResponseDto {

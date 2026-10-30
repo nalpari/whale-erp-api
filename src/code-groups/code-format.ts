@@ -4,6 +4,10 @@
  */
 export const CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,19}$/;
 
+/** CODE_PATTERN 이 틀렸을 때 — 그룹 코드 · 상세 코드 모두, front 화면 문구와 같은 말이다(2026-10-30). */
+export const CODE_FORMAT_MESSAGE =
+  '영문 대문자로 시작해 영문·숫자·_로 입력해 주세요(최대 20자).';
+
 /** 플랫폼 원본 행이 쓰는 BP — 플랫폼 BP 는 BP000000 하나다. */
 export const PLATFORM_BP_CODE = 'BP000000';
 

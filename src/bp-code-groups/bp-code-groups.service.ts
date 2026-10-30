@@ -13,16 +13,21 @@ import {
   PLATFORM_PROVIDED_OWNER_CODE,
 } from '../code-groups/code-format';
 import {
+  assertItemsUnchanged,
   assertNoRepeat,
-  DELETED_BEFORE_SAVE,
   DELETED_MEANWHILE,
+  itemNotFound,
   notCreated,
   restoreDeletedItems,
   SAME_AS_LIVE_ITEM,
   takenInOrder,
+  throwUnsaved,
+  withCodes,
 } from '../code-groups/code-groups.service';
 import type { CodeItemInputDto } from '../code-groups/dto/code-item-input.dto';
+import type { UpdateCodeItemDto } from '../code-groups/dto/update-code-items.dto';
 import { containsText } from '../common/contains-text';
+import { sameMillisecond } from '../common/updated-at';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   BpCodeGroupListResponseDto,
@@ -51,6 +56,7 @@ const itemSelect = {
   status: true,
   sortOrder: true,
   manageOwnerCode: true,
+  updatedAt: true,
 } as const;
 
 /** 플랫폼 원본 상세 코드(BP000000 의 플랫폼제공 행) — 사용중지 안내(isPlatformInactive)에 쓴다. */
@@ -196,16 +202,14 @@ export class BpCodeGroupsService {
       );
       if (livePlatform.length)
         throw new ConflictException(
-          `플랫폼이 등록한 상세 코드와 겹칩니다: ${livePlatform.join(', ')}`,
+          withCodes('플랫폼이 등록한 상세 코드와 겹칩니다', livePlatform),
         );
       const liveOwn = takenInOrder(
         requested,
         [...ownRow.values()].filter((t) => !t.isDeleted),
       );
       if (liveOwn.length)
-        throw new ConflictException(
-          `${SAME_AS_LIVE_ITEM}: ${liveOwn.join(', ')}`,
-        );
+        throw new ConflictException(withCodes(SAME_AS_LIVE_ITEM, liveOwn));
 
       await restoreDeletedItems(
         tx,
@@ -241,20 +245,21 @@ export class BpCodeGroupsService {
         created.map((c) => c.itemCode),
       );
       if (lost.length)
-        throw new ConflictException(`${SAME_AS_LIVE_ITEM}: ${lost.join(', ')}`);
+        throw new ConflictException(withCodes(SAME_AS_LIVE_ITEM, lost));
     }, BULK_UPDATE_TX);
   }
 
   /**
    * 상세 코드 수정 — 그 BP 의 지우지 않은 행(복사된 플랫폼제공 행 · BP전용)만, 코드명 · 사용 상태 · 표시 순서만 고친다.
    * 사용 상태는 BP 가 자유롭게 바꾼다 — 플랫폼 원본이 사용중지여도 켤 수 있다(2026-10-22 결정). 한 행이라도 없으면
-   * 아무것도 고치지 않는다. 쓰기도 지우지 않은 행에만 걸어, 확인 뒤 다른 관리자가 지운 행은 고치지 않고 409.
+   * 아무것도 고치지 않는다. 행마다 받은 updatedAt 과 같은 ms 일 때만 쓴다 — 읽은 뒤 같은 BP 의 다른 관리자가 고친 행이
+   * 있으면 409(CHANGED_MEANWHILE), 지운 행이면 409 로 모두 되돌린다(2026-10-30, 플랫폼 공통코드 관리와 같다).
    */
   async updateItems(
     callerId: number,
     bp: TargetBpContext,
     groupCode: string,
-    items: CodeItemInputDto[],
+    items: UpdateCodeItemDto[],
   ): Promise<void> {
     const bpCode = await this.writableBpCodeOf(bp);
     await this.findVisibleGroup(groupCode);
@@ -270,22 +275,28 @@ export class BpCodeGroupsService {
           isDeleted: false,
           itemCode: { in: items.map((u) => u.itemCode) },
         },
-        select: { itemCode: true },
+        select: { itemCode: true, updatedAt: true },
       });
-      const found = new Set(rows.map((r) => r.itemCode));
-      const missing = items.find((u) => !found.has(u.itemCode));
-      if (missing)
-        throw new NotFoundException(
-          `상세 코드를 찾을 수 없습니다: ${missing.itemCode}`,
-        );
+      assertItemsUnchanged(rows, items);
 
-      for (const { itemCode, label, status, sortOrder } of items) {
+      for (const { itemCode, label, status, sortOrder, updatedAt } of items) {
         const { count } = await tx.codeItem.updateMany({
-          where: { groupCode, itemCode, bpCode, isDeleted: false },
+          where: {
+            groupCode,
+            itemCode,
+            bpCode,
+            isDeleted: false,
+            updatedAt: sameMillisecond(updatedAt),
+          },
           data: { label, status, sortOrder, updatedBy: callerId },
         });
         if (count === 0)
-          throw new ConflictException(`${DELETED_BEFORE_SAVE}: ${itemCode}`);
+          await throwUnsaved(tx, {
+            groupCode,
+            itemCode,
+            bpCode,
+            isDeleted: false,
+          });
       }
     }, BULK_UPDATE_TX);
   }
@@ -317,8 +328,7 @@ export class BpCodeGroupsService {
       });
       const found = new Set(rows.map((r) => r.itemCode));
       const missing = itemCodes.find((code) => !found.has(code));
-      if (missing)
-        throw new NotFoundException(`상세 코드를 찾을 수 없습니다: ${missing}`);
+      if (missing) throw new NotFoundException(itemNotFound(missing));
 
       const { count } = await tx.codeItem.updateMany({
         where: {

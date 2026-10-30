@@ -253,7 +253,6 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       groupName: '테스트 그룹',
       manageOwnerCode: 'PLATFORM_PROVIDED',
       status: 'ACTIVE',
-      sortOrder: 1,
     };
   };
   const item = (itemCode: string, sortOrder = 1) => ({
@@ -323,6 +322,26 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
     call('post', '/code-groups', { items: groups }, sub);
   const updateGroups = (groups: object[], sub?: number) =>
     call('put', '/code-groups', { items: groups }, sub);
+  /** 목록에서 읽은 것처럼 그 그룹 · 상세 코드(플랫폼 원본)의 지금 updatedAt. 없으면 아무 시각(404 경로용). */
+  const groupAt = async (groupCode: string) =>
+    (
+      (await prisma.codeGroup.findUnique({ where: { groupCode } }))
+        ?.updatedAt ?? new Date(0)
+    ).toISOString();
+  const itemAt = async (groupCode: string, itemCode: string) =>
+    (
+      (
+        await prisma.codeItem.findUnique({
+          where: {
+            groupCode_itemCode_bpCode: {
+              groupCode,
+              itemCode,
+              bpCode: 'BP000000',
+            },
+          },
+        })
+      )?.updatedAt ?? new Date(0)
+    ).toISOString();
   const itemsPathOf = (groupCode: string) => `/code-groups/${groupCode}/items`;
 
   describe('그룹 목록 검색', () => {
@@ -394,7 +413,13 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       await createGroups([newGroup(groupCode)]);
 
       const res = await updateGroups([
-        { groupCode, groupName: '고친 이름', status: 'INACTIVE', sortOrder: 7 },
+        {
+          groupCode,
+          groupName: '고친 이름',
+          status: 'INACTIVE',
+          sortOrder: 7,
+          updatedAt: await groupAt(groupCode),
+        },
       ]);
 
       expect(res.status).toBe(204);
@@ -413,12 +438,19 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       await createGroups([newGroup(groupCode)]);
 
       const res = await updateGroups([
-        { groupCode, groupName: '고친 이름', status: 'ACTIVE', sortOrder: 1 },
+        {
+          groupCode,
+          groupName: '고친 이름',
+          status: 'ACTIVE',
+          sortOrder: 1,
+          updatedAt: await groupAt(groupCode),
+        },
         {
           groupCode: code('NONE'),
           groupName: '없는 그룹',
           status: 'ACTIVE',
           sortOrder: 2,
+          updatedAt: await groupAt(code('NONE')),
         },
       ]);
 
@@ -438,6 +470,7 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
           groupName: '이름',
           status: 'ACTIVE',
           sortOrder: 1,
+          updatedAt: await groupAt(groupCode),
           manageOwnerCode: 'PLATFORM_FIXED',
         },
       ]);
@@ -448,9 +481,22 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       const groupCode = code('TWICE');
       await createGroups([newGroup(groupCode)]);
 
+      const updatedAt = await groupAt(groupCode);
       const res = await updateGroups([
-        { groupCode, groupName: '첫째', status: 'INACTIVE', sortOrder: 5 },
-        { groupCode, groupName: '둘째', status: 'INACTIVE', sortOrder: 6 },
+        {
+          groupCode,
+          groupName: '첫째',
+          status: 'INACTIVE',
+          sortOrder: 5,
+          updatedAt,
+        },
+        {
+          groupCode,
+          groupName: '둘째',
+          status: 'INACTIVE',
+          sortOrder: 6,
+          updatedAt,
+        },
       ]);
 
       expect(res.status).toBe(409);
@@ -459,8 +505,75 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       ).resolves.toMatchObject({
         groupName: '테스트 그룹',
         status: 'ACTIVE',
-        sortOrder: 1,
       });
+    });
+
+    // 목록을 읽은 뒤 다른 관리자가 먼저 고쳤으면 덮어쓰지 않는다(2026-10-30).
+    it('읽은 updatedAt 이 지금 값과 다르면 409 이고 아무것도 고치지 않는다', async () => {
+      const groupCode = code('STALE');
+      await createGroups([newGroup(groupCode)]);
+      const readAt = await groupAt(groupCode);
+      const first = await updateGroups([
+        {
+          groupCode,
+          groupName: '먼저 고친 이름',
+          status: 'ACTIVE',
+          sortOrder: 1,
+          updatedAt: readAt,
+        },
+      ]);
+      expect(first.status).toBe(204);
+
+      const late = await updateGroups([
+        {
+          groupCode,
+          groupName: '늦게 고친 이름',
+          status: 'ACTIVE',
+          sortOrder: 1,
+          updatedAt: readAt,
+        },
+      ]);
+      expect(late.status).toBe(409);
+      expect((late.body as { message: string }).message).toBe(
+        '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.',
+      );
+      await expect(
+        prisma.codeGroup.findUnique({ where: { groupCode } }),
+      ).resolves.toMatchObject({ groupName: '먼저 고친 이름' });
+    });
+
+    // 화면의 검색 · 쪽 결과로 매기면 기존 순서와 겹친다 — api 가 지우지 않은 플랫폼 그룹 전체로 매긴다.
+    it('새 그룹의 표시 순서는 전체의 최대 + 1 부터 요청 순서대로', async () => {
+      const first = code('ORD1');
+      const second = code('ORD2');
+      const { _max } = await prisma.codeGroup.aggregate({
+        where: {
+          isDeleted: false,
+          manageOwnerCode: { in: ['PLATFORM_FIXED', 'PLATFORM_PROVIDED'] },
+        },
+        _max: { sortOrder: true },
+      });
+
+      expect(
+        (await createGroups([newGroup(first), newGroup(second)])).status,
+      ).toBe(204);
+      const rows = await prisma.codeGroup.findMany({
+        where: { groupCode: { in: [first, second] } },
+        select: { groupCode: true, sortOrder: true },
+        orderBy: { sortOrder: 'asc' },
+      });
+      const last = _max.sortOrder ?? 0;
+      expect(rows).toEqual([
+        { groupCode: first, sortOrder: last + 1 },
+        { groupCode: second, sortOrder: last + 2 },
+      ]);
+    });
+
+    it('등록에 표시 순서를 보내면 400 — api 가 매긴다', async () => {
+      const res = await createGroups([
+        { ...newGroup(code('ORDSENT')), sortOrder: 6 },
+      ]);
+      expect(res.status).toBe(400);
     });
 
     it('이미 있는 그룹 코드를 등록하면 409', async () => {
@@ -480,8 +593,16 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
     );
 
     it('표시 순서가 integer 범위를 넘으면 500 이 아니라 400', async () => {
-      const res = await createGroups([
-        { ...newGroup(code('BIG')), sortOrder: 2_147_483_648 },
+      const groupCode = code('BIG');
+      await createGroups([newGroup(groupCode)]);
+      const res = await updateGroups([
+        {
+          groupCode,
+          groupName: '테스트 그룹',
+          status: 'ACTIVE',
+          sortOrder: 2_147_483_648,
+          updatedAt: await groupAt(groupCode),
+        },
       ]);
       expect(res.status).toBe(400);
     });
@@ -500,11 +621,12 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
 
   // 등록(POST)은 MN000216 create, 수정(PUT)은 update 를 가드가 경로마다 본다.
   describe('등록 · 수정 권한', () => {
-    const updateOf = (groupCode: string) => ({
+    const updateOf = async (groupCode: string) => ({
       groupCode,
       groupName: '수정만 있는 관리자가 고친 이름',
       status: 'ACTIVE',
       sortOrder: 2,
+      updatedAt: await groupAt(groupCode),
     });
 
     it('수정 권한만 있는 플랫폼 관리자가 그룹을 등록하면 403 이고 그 그룹은 생기지 않는다', async () => {
@@ -525,7 +647,10 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       const existing = code('UPD');
       await createGroups([newGroup(existing)]);
 
-      const res = await updateGroups([updateOf(existing)], updateOnlyAdminId);
+      const res = await updateGroups(
+        [await updateOf(existing)],
+        updateOnlyAdminId,
+      );
 
       expect(res.status).toBe(204);
       await expect(
@@ -565,7 +690,15 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       const allowed = await call(
         'put',
         itemsPath,
-        { items: [{ ...item('KEEP'), label: '수정만으로 고친 코드' }] },
+        {
+          items: [
+            {
+              ...item('KEEP'),
+              label: '수정만으로 고친 코드',
+              updatedAt: await itemAt(groupCode, 'KEEP'),
+            },
+          ],
+        },
         updateOnlyAdminId,
       );
       expect(allowed.status).toBe(204);
@@ -604,7 +737,7 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       expect(created.status).toBe(204);
 
       const denied = await updateGroups(
-        [updateOf(groupCode)],
+        [await updateOf(groupCode)],
         createOnlyAdminId,
       );
       expect(denied.status).toBe(403);
@@ -615,7 +748,6 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
         prisma.codeGroup.findUnique({ where: { groupCode } }),
       ).resolves.toMatchObject({
         groupName: '테스트 그룹',
-        sortOrder: 1,
         createdBy: createOnlyAdminId,
         updatedBy: createOnlyAdminId,
       });
@@ -657,7 +789,14 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       await call('post', itemsPath(), { items: [item('FULL')] });
 
       const res = await call('put', itemsPath(), {
-        items: [{ ...item('FULL'), label: '고친 이름' }, item('NONE', 2)],
+        items: [
+          {
+            ...item('FULL'),
+            label: '고친 이름',
+            updatedAt: await itemAt(groupCode, 'FULL'),
+          },
+          { ...item('NONE', 2), updatedAt: await itemAt(groupCode, 'NONE') },
+        ],
       });
 
       expect(res.status).toBe(404);
@@ -712,7 +851,7 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
           { bpCode, isDeleted: false },
         ]),
       );
-      // 화면 목록에서 빠지고, 다시 지우면 404. BP 에 살아 있는 복사본이 있어 같은 코드로 다시 만들면 409.
+      // 화면 목록에서 빠지고, 다시 지우면 404. BP 에 플랫폼제공 복사본이 살아 있어도 같은 코드로 다시 만들면 되살린다.
       const list = await call('get', itemsPath());
       expect(
         (list.body as { items: { itemCode: string }[] }).items.map(
@@ -722,12 +861,26 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       expect(
         (await call('delete', itemsPath(), { itemCodes: ['FULL'] })).status,
       ).toBe(404);
-      // FULL 은 원본을 지웠어도 BP 에 살아 있는 행이 있어 「이미 있는」 문구다.
+      // 2026-10-30 — 복사본이 막으면 [BP에 적용] 뒤 지운 코드를 영영 다시 못 만든다. 복사본은 그대로 둔다.
       const again = await call('post', itemsPath(), { items: [item('FULL')] });
-      expect(again.status).toBe(409);
-      expect((again.body as { message: string }).message).toBe(
-        '이 그룹에 이미 있는 상세 코드입니다: FULL',
+      expect(again.status).toBe(204);
+      await expect(
+        prisma.codeItem.findMany({
+          where: {
+            groupCode,
+            itemCode: 'FULL',
+            bpCode: { in: ['BP000000', bpCode] },
+          },
+          select: { bpCode: true, isDeleted: true },
+        }),
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          { bpCode: 'BP000000', isDeleted: false },
+          { bpCode, isDeleted: false },
+        ]),
       );
+      // 다시 적용해도 이미 있는 복사본은 건너뛴다 — 겹치지 않는다.
+      expect((await call('post', applyPath())).status).toBe(200);
     });
 
     it('지운 원본과 같은 코드로 등록하면 그 원본을 요청 값으로 되살린다', async () => {
