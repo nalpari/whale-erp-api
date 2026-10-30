@@ -66,6 +66,8 @@ describe('근로계약 목록 (e2e)', () => {
       delete: jest.fn(),
     },
     notificationTemplate: { findUnique: jest.fn() },
+    // 최저임금 공통코드(WHALEERP-595)
+    codeItem: { findMany: jest.fn() },
     invitationCodeAttempt: {
       create: jest.fn().mockResolvedValue({ invitationCodeAttemptId: 1 }),
       findFirst: jest.fn(),
@@ -173,6 +175,9 @@ describe('근로계약 목록 (e2e)', () => {
     prisma.contract.groupBy.mockReset().mockResolvedValue([]);
     prisma.store.findMany.mockReset().mockResolvedValue([]);
     prisma.store.findFirst.mockReset().mockResolvedValue({ storeId: 11 });
+    prisma.codeItem.findMany
+      .mockReset()
+      .mockResolvedValue([{ itemCode: 'D20260101', label: '10320' }]);
     prisma.staffMember.findFirst.mockReset().mockResolvedValue(null);
     prisma.account.findMany.mockReset().mockResolvedValue([]);
     prisma.staffMember.findMany.mockReset().mockResolvedValue([]);
@@ -506,6 +511,27 @@ describe('근로계약 목록 (e2e)', () => {
     },
   );
 
+  // 작성 화면의 시급 도움말 · 수습 확인 값(WHALEERP-595) — `:contractId` 경로에 걸리지 않는다
+  it('GET /contracts/minimum-wages — 공통코드 최저임금을 시행일 오름차순으로 준다', async () => {
+    prisma.codeItem.findMany.mockResolvedValue([
+      { itemCode: 'D20270101', label: '11000' },
+      { itemCode: 'D20260101', label: '10320' },
+    ]);
+    const res = await get('/contracts/minimum-wages', 'admin').expect(200);
+    expect(res.body).toEqual({
+      items: [
+        { effectiveDate: '2026-01-01', hourlyWage: 10320 },
+        { effectiveDate: '2027-01-01', hourlyWage: 11000 },
+      ],
+    });
+  });
+
+  it('GET /contracts/minimum-wages — 작성 · 수정 권한이 없으면 403', async () => {
+    prisma.roleGroupMenu.count.mockResolvedValue(0);
+    await get('/contracts/minimum-wages', 'admin').expect(403);
+    expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['pageSize 가 200 을 넘으면', '/contracts?pageSize=201'],
     ['page 가 0 이면', '/contracts?page=0'],
@@ -729,6 +755,34 @@ describe('근로계약 목록 (e2e)', () => {
         weekday,
       }),
     );
+
+    // 수습 중 시급은 계약 시작일 최저임금(공통코드 MINIMUM_WAGE)의 90% 이상 — 2026년 10,320원 → 9,288원(WHALEERP-595)
+    describe('수습 중 시급 · 최저임금 90%', () => {
+      const probation = {
+        ...body,
+        workDays: fullWeek,
+        weeklyHoliday: 'SAT',
+        probationMonths: 3,
+        probationWageReductionRate: 10,
+      };
+
+      it('딱 90%(시급 10,320원)면 저장한다', async () => {
+        await post({ ...probation, wageAmount: 10320 }).expect(201);
+      });
+
+      it('1원 모자라면(시급 10,319원 → 9,287원) 400 과 하한 금액을 준다', async () => {
+        const res = await post({ ...probation, wageAmount: 10319 }).expect(400);
+        expect((res.body as { message: string }).message).toBe(
+          '수습 중 시급은 최저임금의 90%(9,288원) 이상이어야 합니다.',
+        );
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      });
+
+      it('수습이 없으면 시급이 낮아도 보지 않는다', async () => {
+        await post({ ...body, wageAmount: 5000 }).expect(201);
+        expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
+      });
+    });
 
     it('주 15시간 이상이면 고른 주휴일 · 급여 지급 방식 · 수습을 저장한다', async () => {
       await post({

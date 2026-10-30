@@ -1,7 +1,7 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wages (최저임금 공통코드), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
@@ -411,9 +411,20 @@ left for it.
 `probationWageReductionRate` (%, 0–10) go together or not at all (the DB CHECK
 `contracts_probation_pair` too). 수습 is only for 정직원 whose contract runs a
 year or more (end ≥ start + 1 year − 1 day) or has no end date (노무사 확인
-2026-10-14, 질문 19). The 90%-of-minimum-wage floor is checked by the 화면 only,
-until the minimum wage is managed in the system like a 공통코드 (2026-10-15).
-`GET` returns all three.
+2026-10-14, 질문 19). `GET` returns all three.
+
+**최저임금 90%** (WHALEERP-595, 2026-10-30 김민식 — 최저임금은 공통코드로, 별도 테이블 없음).
+With 수습, `POST` · `PUT` (임시저장 too, when 시급 and 시작일 are filled) check that 수습 중 시급
+— `round(wageAmount × (100 − rate) / 100)` — is at least 90% (원 미만 올림) of the minimum wage in
+force on `startDate`: the 공통코드 `MINIMUM_WAGE` row (플랫폼고정, BP000000 원본) with the latest
+시행일 on or before it. Below it → 400 「수습 중 시급은 최저임금의 90%(9,288원) 이상이어야
+합니다.」 (the 원 amount is that floor). Row format (`src/contracts/minimum-wage.ts`): 상세코드 `D` +
+시행일 8자리 (`D20260101`), 코드명 시급 in 원, digits only (`10320`); malformed or 사용중지 rows are
+skipped (malformed with a warning log). No row in force on `startDate` (before the first 시행일)
+→ not checked — earlier years are not seeded, and old 종이 계약 must still register. Migration
+`20261030140000_team3_minimum_wage_code` seeds 2026 = 10,320원 only; a new year is one more 상세
+in 공통코드 관리. `GET /contracts/minimum-wages` (작성 or 수정 권한) returns `{ items:
+[{ effectiveDate, hourlyWage }] }` ascending, for the 작성 화면's 시급 help and 수습 check.
 
 **초대 유형 is decided, not sent.** On 초안 저장 (a new `POST`, or a `PUT` that
 leaves 임시저장) the newest account with that phone decides it: none → 가입 초대

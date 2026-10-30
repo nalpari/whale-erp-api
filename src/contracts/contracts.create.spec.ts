@@ -61,6 +61,7 @@ describe('ContractsService.create', () => {
       create: jest.Mock;
     };
     contractDocument: { createMany: jest.Mock; findFirst: jest.Mock };
+    codeItem: { findMany: jest.Mock };
   };
   let storage: {
     put: jest.Mock<Promise<void>, [string, Buffer, string]>;
@@ -149,6 +150,12 @@ describe('ContractsService.create', () => {
       contractDocument: {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findFirst: jest.fn(),
+      },
+      // 최저임금 공통코드(WHALEERP-595) — 기본은 2026년 10,320원 하나
+      codeItem: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ itemCode: 'D20260101', label: '10320' }]),
       },
     };
     storage = {
@@ -564,6 +571,77 @@ describe('ContractsService.create', () => {
       await service.create(dto(), 1);
       expect(created().contracts).toMatchObject({
         create: { probationMonths: null, probationWageReductionRate: null },
+      });
+    });
+
+    // 수습 중 시급 = 시급 × (1 − 감액률)이 계약 시작일 최저임금의 90% 이상(WHALEERP-595). 2026년 10,320원 → 9,288원
+    describe('최저임금 90%', () => {
+      it('딱 90%(10,320원 × 90% = 9,288원)면 저장한다', async () => {
+        await service.create(dto({ ...probation, wageAmount: 10320 }), 1);
+        expect(created().contracts).toMatchObject({ create: probation });
+        expect(prisma.codeItem.findMany).toHaveBeenCalledWith({
+          where: {
+            groupCode: 'MINIMUM_WAGE',
+            bpCode: 'BP000000',
+            status: 'ACTIVE',
+            isDeleted: false,
+          },
+          select: { itemCode: true, label: true },
+        });
+      });
+
+      it('1원 모자라면(10,319원 × 90% = 9,287원) 400 이고 저장하지 않는다', async () => {
+        await expect(
+          service.create(dto({ ...probation, wageAmount: 10319 }), 1),
+        ).rejects.toThrow(
+          '수습 중 시급은 최저임금의 90%(9,288원) 이상이어야 합니다.',
+        );
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      });
+
+      // 시행일 경계 — 시작일에 적용되는 값은 시행일이 그날 이전(그날 포함)인 것 중 가장 늦은 것
+      describe('시행일 경계(2027-01-01부터 11,000원 → 9,900원이라 하면)', () => {
+        beforeEach(() =>
+          prisma.codeItem.findMany.mockResolvedValue([
+            { itemCode: 'D20270101', label: '11000' },
+            { itemCode: 'D20260101', label: '10320' },
+          ]),
+        );
+        const wage = { ...probation, wageAmount: 10320 }; // 수습 중 9,288원
+
+        it('시행일 전날 시작이면 앞 값(9,288원)으로 본다 — 저장', async () => {
+          await service.create(dto({ ...wage, startDate: '2026-12-31' }), 1);
+          expect(prisma.staffMember.create).toHaveBeenCalled();
+        });
+
+        it('시행일 당일 시작이면 새 값(9,900원)으로 본다 — 400', async () => {
+          await expect(
+            service.create(dto({ ...wage, startDate: '2027-01-01' }), 1),
+          ).rejects.toThrow('최저임금의 90%(9,900원)');
+        });
+      });
+
+      it('시작일에 적용되는 값이 없으면(첫 시행일 전) 보지 않는다', async () => {
+        await service.create(
+          dto({ ...probation, wageAmount: 5000, startDate: '2025-12-31' }),
+          1,
+        );
+        expect(prisma.staffMember.create).toHaveBeenCalled();
+      });
+
+      it('수습이 없으면 시급이 낮아도 보지 않고 공통코드도 읽지 않는다', async () => {
+        await service.create(dto({ wageAmount: 5000 }), 1);
+        expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
+        expect(prisma.staffMember.create).toHaveBeenCalled();
+      });
+
+      it('임시저장도 넣은 값이면 본다', async () => {
+        await expect(
+          service.create(
+            dto({ ...probation, wageAmount: 9000, isTemporarySave: true }),
+            1,
+          ),
+        ).rejects.toThrow('최저임금의 90%');
       });
     });
   });

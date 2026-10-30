@@ -84,6 +84,11 @@ import {
 } from './contract-status';
 import { CONTRACTS_MENU } from './contracts-menu';
 import {
+  checkProbationWage,
+  type MinimumWage,
+  readMinimumWages,
+} from './minimum-wage';
+import {
   ContractDetailDto,
   ContractListResponseDto,
   ContractTaxProfileDto,
@@ -356,7 +361,8 @@ function oneYearLastDay(start: string): string {
 
 /**
  * 수습(노무사 확인 2026-10-14, 질문 19) — 정직원이고 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 둔다.
- * 기간(1~3개월) · 감액률(0~10%)은 함께 넣는다. 최저임금 90% 확인은 최저임금을 시스템이 관리하기 전까지 화면이 한다.
+ * 기간(1~3개월) · 감액률(0~10%)은 함께 넣는다. 최저임금 90% 확인은 공통코드를 읽어야 해 따로 본다(checkProbationWage,
+ * WHALEERP-595).
  */
 function checkProbation(dto: CreateContractDto): void {
   const months = dto.probationMonths ?? null;
@@ -978,6 +984,17 @@ export class ContractsService {
     @Inject(PERSONAL_DATA_KEY) private readonly key: Buffer | null,
   ) {}
 
+  /** 작성 화면이 시급 칸 도움말 · 수습 중 시급 확인에 쓰는 최저임금 — 시행일 오름차순(WHALEERP-595) */
+  minimumWages(): Promise<MinimumWage[]> {
+    return readMinimumWages(this.prisma, this.logger);
+  }
+
+  /** 수습 중 시급이 최저임금의 90% 이상인지 — 수습이 있을 때만 공통코드를 읽는다 */
+  private async checkProbationWage(dto: CreateContractDto): Promise<void> {
+    if (dto.probationMonths == null) return;
+    checkProbationWage(dto, await this.minimumWages());
+  }
+
   /**
    * 쓰기 트랜잭션을 돌리고, 실패하면 그 안에서 올린 날인본을 저장소에서 지운다(첨부 저장소 규칙 — put 뒤 DB 저장이
    * 실패하면 delete). 날인본이 없으면 저장소를 부르지 않는다(설정이 없는 환경에서도 전자계약은 저장된다).
@@ -1146,6 +1163,7 @@ export class ContractsService {
     await this.checkTargetBp(bp);
     checkInput(dto);
     checkPaper(dto, documents);
+    await this.checkProbationWage(dto);
     await this.checkStore(adminAccountId, dto.storeId, bp);
     // 재계약이면 직전 계약도 이 관리자의 범위 안이어야 한다(없거나 범위 밖이면 404 · 403)
     if (dto.previousContractId !== undefined)
@@ -1746,6 +1764,7 @@ export class ContractsService {
     await this.checkTargetBp(bp);
     checkInput(dto);
     checkPaper(dto, documents);
+    await this.checkProbationWage(dto);
     const fields = contractFields(dto);
     // 지금 근무지도, 옮겨 갈 근무지도 업무 범위 안이어야 한다. 지금 근무지는 계약 직원의 동의로 봤으니, 같은
     // 근무지면 점포 단위로 다시 묻지 않는다 — 동의한 가맹 점포 직원의 임시저장을 본사 역할이 이어 쓸 수 있게.

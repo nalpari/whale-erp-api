@@ -22,6 +22,7 @@ describe('근로계약 api 메뉴 권한', () => {
     ['list', 'read'],
     ['create', 'create'],
     ['createPaper', 'create'],
+    ['minimumWages', ['create', 'update']],
     ['findOne', 'read'],
     ['update', ['create', 'update']],
     ['updateWorker', 'update'],

@@ -91,7 +91,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
     store: { findFirst: jest.Mock; findUnique: jest.Mock };
     adminAccount: { findUnique: jest.Mock };
     staffTaxProfile: { findUnique: jest.Mock };
-    codeItem: { findFirst: jest.Mock };
+    codeItem: { findFirst: jest.Mock; findMany: jest.Mock };
   };
 
   const dto = (over: Partial<CreateContractDto> = {}): CreateContractDto => ({
@@ -200,7 +200,13 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       },
       // 신고 정보(WHALEERP-155) — 기본은 직원이 입력하지 않았다
       staffTaxProfile: { findUnique: jest.fn().mockResolvedValue(null) },
-      codeItem: { findFirst: jest.fn().mockResolvedValue(null) },
+      codeItem: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        // 최저임금 공통코드(WHALEERP-595) — 2026년 10,320원 하나
+        findMany: jest
+          .fn()
+          .mockResolvedValue([{ itemCode: 'D20260101', label: '10320' }]),
+      },
     };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -748,6 +754,26 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
   });
 
   describe('update', () => {
+    // 이어 쓰기도 수습 중 시급을 최저임금의 90%(2026년 9,288원)와 견준다(WHALEERP-595) — 고치기 전에 막는다
+    it('수습 중 시급이 최저임금의 90% 아래면 400 이고 고치지 않는다', async () => {
+      await expect(
+        service.update(
+          9,
+          7,
+          dto({
+            employmentType: 'FULL_TIME',
+            startDate: '2026-11-01',
+            wageAmount: 10000,
+            probationMonths: 3,
+            probationWageReductionRate: 10,
+          }),
+        ),
+      ).rejects.toThrow(
+        '수습 중 시급은 최저임금의 90%(9,288원) 이상이어야 합니다.',
+      );
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
     it('임시저장을 그대로 고친다 — 직원 레코드 · 계약 · 당사자 · 근무 요일을 바꾸고 상태 이력은 남기지 않는다', async () => {
       await expect(
         service.update(
