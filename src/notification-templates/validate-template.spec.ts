@@ -186,8 +186,24 @@ describe('validateTemplate', () => {
       });
     expect(validateTemplate(talk([]))).toEqual([]);
     expect(validateTemplate(talk([second]))).toContain(
-      '알림톡은 버튼 링크 변수를 하나만 둘 수 있습니다.',
+      '이 알림톡의 버튼 링크는 #{링크} 변수 하나에만 표시합니다.',
     );
+    // 표시를 다른 변수로 옮김 · 뺌도 같은 오류(api #219 리뷰)
+    const moved = mail().variables.map((v) =>
+      v.name === '링크'
+        ? { ...v, isButtonLink: false }
+        : v.name === '근무지'
+          ? { ...v, isButtonLink: true }
+          : v,
+    );
+    const removed = mail().variables.map((v) => ({
+      ...v,
+      isButtonLink: false,
+    }));
+    for (const variables of [moved, removed])
+      expect(validateTemplate({ ...talk([]), variables })).toContain(
+        '이 알림톡의 버튼 링크는 #{링크} 변수 하나에만 표시합니다.',
+      );
     expect(
       validateTemplate(mail({ variables: [...mail().variables, second] })),
     ).toEqual([]);

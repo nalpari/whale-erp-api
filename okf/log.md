@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Notification templates](/api/notification-templates.md) · [Contracts API](/api/contracts-api.md) — api #219 리뷰(노영주) 참고 1 · 2: 버튼을 다는 템플릿마다 링크 변수 이름까지 둔다(`ALIMTALK_BUTTONS` — 이름 · `링크`). 버튼 링크 표시가 그 변수 하나가 아니면(없음 · 초대코드 · 근무지로 옮김 · 둘) 저장 · 근로계약 발송 전 검사 · 발송이 모두 막는다(`LINK_MISMATCH`). 링크 origin 비교는 링크가 늘 `STAFF_APP_URL` 에서 나와 두지 않았다.
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Notification templates](/api/notification-templates.md) · [Contracts API](/api/contracts-api.md) — api #219 code-review: 버튼 이름 · 버튼 설정 검사를 `src/alimtalk/alimtalk-buttons.ts`(`alimtalkButtonProblem`)로 모아 발송 · 근로계약 발송 전 검사(503, 쓰기 전) · 템플릿 저장 검사가 같이 쓴다 — 설정 오류가 커밋 뒤 「다시 보내 주세요」로 보이지 않게. 저장 검사는 버튼 이름이 없는 템플릿 코드의 알림톡 버튼 링크도 막는다.
 * **Update**: main 병합(api krabby, main #218 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api krabby, main #216 까지): okf/log 충돌은 양쪽 기록을 살렸다.

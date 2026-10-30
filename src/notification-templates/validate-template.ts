@@ -2,7 +2,10 @@ import type {
   NotificationTemplateChannel,
   PreferenceCategory,
 } from '@prisma/client';
-import { alimtalkButtonProblem } from '../alimtalk/alimtalk-buttons';
+import {
+  alimtalkButtonOf,
+  alimtalkButtonProblem,
+} from '../alimtalk/alimtalk-buttons';
 import { NO_NUL } from '../common/no-nul';
 
 export type TemplateVariableInput = {
@@ -99,15 +102,17 @@ export function validateTemplate(t: TemplateInput): string[] {
     if (v.isButtonLink && !BUTTON_LINK_CHANNELS.includes(t.channel))
       add(`${at} 버튼 링크는 메일 · 알림톡 변수에만 씁니다.`);
   });
-  // 알림톡은 카카오에 등록한 버튼 하나만, 그 템플릿 코드의 버튼 이름으로 싣는다 — 맞지 않으면 발송이 보내기 전에 던진다
-  // (WHALEERP-636, alimtalk-buttons.ts)
+  // 알림톡은 카카오에 등록한 버튼 하나만, 그 템플릿 코드에 정해진 이름과 링크 변수로 싣는다 — 맞지 않으면 발송이 보내기 전에
+  // 던진다(WHALEERP-636, alimtalk-buttons.ts)
   // 템플릿 코드 형식이 틀렸으면 그 오류만 — 「개발팀에 알려 주세요」로 잘못 보내지 않게
   const buttonProblem =
     alimtalk && CODE.test(t.templateCode)
       ? alimtalkButtonProblem(t.templateCode, t.variables)
       : null;
-  if (buttonProblem === 'MULTIPLE_LINKS')
-    add('알림톡은 버튼 링크 변수를 하나만 둘 수 있습니다.');
+  if (buttonProblem === 'LINK_MISMATCH')
+    add(
+      `이 알림톡의 버튼 링크는 #{${alimtalkButtonOf(t.templateCode)?.link}} 변수 하나에만 표시합니다.`,
+    );
   if (buttonProblem === 'NO_BUTTON_NAME')
     add(
       '이 템플릿 코드는 알림톡 버튼 이름이 정해지지 않아 버튼 링크를 쓸 수 없습니다. 카카오에 등록한 버튼 이름을 개발팀에 알려 주세요.',

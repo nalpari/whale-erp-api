@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
-import { ALIMTALK_BUTTON_NAMES } from '../alimtalk/alimtalk-buttons';
+import { ALIMTALK_BUTTONS } from '../alimtalk/alimtalk-buttons';
 import { AlimtalkService } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
 import { noticeStaff } from '../notifications/staff-notice';
@@ -142,7 +142,8 @@ describe('ContractDeliveryService', () => {
           channel: 'ALIMTALK',
           title: null,
           body: '…',
-          variables: [],
+          // 가입 초대 · 소속 추가 확인 요청은 링크 변수에 버튼 링크 표시가 있어야 보낸다(WHALEERP-636)
+          variables: [{ name: '링크', isButtonLink: true }],
           kakaoTemplateCode: 'WHALE_INVITE_01',
         }),
       },
@@ -695,7 +696,10 @@ describe('ContractDeliveryService', () => {
     });
 
     it('버튼 링크가 있는데 그 템플릿 코드의 버튼 이름이 없으면 쓰기 전에 503(api #219)', async () => {
-      const names = ALIMTALK_BUTTON_NAMES as Record<string, string>;
+      const names = ALIMTALK_BUTTONS as Record<
+        string,
+        { name: string; link: string }
+      >;
       const saved = names.TALK_STAFF_INVITATION;
       delete names.TALK_STAFF_INVITATION;
       try {
@@ -741,7 +745,7 @@ describe('ContractDeliveryService', () => {
         undefined,
       ],
       [
-        '가입 초대 템플릿의 버튼 설정이 맞지 않으면(버튼 링크 둘) 503 — 커밋 뒤 발송이 늘 던진다(api #219)',
+        '가입 초대 템플릿의 버튼 링크 표시가 정해진 변수 하나가 아니면(둘) 503 — 커밋 뒤 발송이 늘 던진다(api #219)',
         () =>
           tx.notificationTemplate.findUnique.mockResolvedValue({
             isActive: true,

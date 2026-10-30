@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { MASK } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
-import { ALIMTALK_BUTTON_NAMES } from './alimtalk-buttons';
+import { ALIMTALK_BUTTONS } from './alimtalk-buttons';
 import { AlimtalkService } from './alimtalk.service';
 import {
   BizppurioClient,
@@ -307,13 +307,13 @@ describe('AlimtalkService', () => {
       body: '#{name}님, 아래 링크로 가입해 주세요.',
       variables: [
         { name: 'name', isRequired: true },
-        { name: 'link', isRequired: true, isButtonLink: true },
+        { name: '링크', isRequired: true, isButtonLink: true },
       ],
     });
 
     await service.send({
       ...invite,
-      variables: { name: '홍길동', link: 'https://erp.whale.test/i/abc' },
+      variables: { name: '홍길동', 링크: 'https://erp.whale.test/i/abc' },
     });
 
     expect(sent().content.at.message).toBe(
@@ -333,7 +333,7 @@ describe('AlimtalkService', () => {
       body: '#{name}님, 아래 링크로 가입해 주세요.',
       variables: [
         { name: 'name', isRequired: true },
-        { name: 'link', ...link, isButtonLink: true },
+        { name: '링크', ...link, isButtonLink: true },
       ],
     });
 
@@ -342,7 +342,10 @@ describe('AlimtalkService', () => {
       const link = `https://erp.whale.test/i/${'a'.repeat(35)}`;
       findUnique.mockResolvedValue(linked({ isRequired: true }));
 
-      await service.send({ ...invite, variables: { name: '홍길동', link } });
+      await service.send({
+        ...invite,
+        variables: { name: '홍길동', 링크: link },
+      });
 
       expect(sent().resend).toEqual({ first: 'lms' });
       expect(sent().recontent?.lms?.message).toBe(
@@ -352,7 +355,7 @@ describe('AlimtalkService', () => {
 
     it.each([
       ['넘기지 않은 선택 링크', {}],
-      ['빈 문자열 선택 링크', { link: '' }],
+      ['빈 문자열 선택 링크', { 링크: '' }],
     ])('%s 는 붙이지 않는다', async (_, extra) => {
       findUnique.mockResolvedValue(linked({ isRequired: false }));
 
@@ -372,8 +375,8 @@ describe('AlimtalkService', () => {
 
       await service.send({
         ...invite,
-        variables: { name: '홍길동', link },
-        maskedVariables: ['link'],
+        variables: { name: '홍길동', 링크: link },
+        maskedVariables: ['링크'],
       });
 
       expect(sent().recontent?.sms?.message).toContain(link);
@@ -386,10 +389,13 @@ describe('AlimtalkService', () => {
       const link = 'https://erp.whale.test/i/secret-token';
       findUnique.mockResolvedValue({
         ...linked({ isRequired: true }),
-        body: '#{name}님, #{link}',
+        body: '#{name}님, #{링크}',
       });
 
-      await service.send({ ...invite, variables: { name: '홍길동', link } });
+      await service.send({
+        ...invite,
+        variables: { name: '홍길동', 링크: link },
+      });
 
       expect(sent().content.at.message).toContain(link);
       expect(logged().body).toBe(`홍길동님, ${MASK}`);
@@ -403,7 +409,7 @@ describe('AlimtalkService', () => {
       body: '#{name}님, 아래 버튼을 눌러 가입해 주세요.',
       variables: [
         { name: 'name', isRequired: true },
-        { name: 'link', isRequired, isButtonLink: true },
+        { name: '링크', isRequired, isButtonLink: true },
       ],
     });
     const link = 'https://staff.whale.test/invite#token=secret-token';
@@ -411,7 +417,10 @@ describe('AlimtalkService', () => {
     it('버튼 링크 값을 등록한 이름의 웹링크 버튼으로 싣는다 — 모바일 · PC 같은 링크', async () => {
       findUnique.mockResolvedValue(withLink());
 
-      await service.send({ ...invite, variables: { name: '홍길동', link } });
+      await service.send({
+        ...invite,
+        variables: { name: '홍길동', 링크: link },
+      });
 
       expect(sent().content.at.button).toEqual([
         { name: '가입하기', type: 'WL', url_mobile: link, url_pc: link },
@@ -436,13 +445,13 @@ ${link}`,
         templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
         variables: {
           name: '홍길동',
-          link: 'https://staff.whale.test/affiliations',
+          링크: 'https://staff.whale.test/affiliations',
         },
       });
 
       expect(sent().content.at.button).toEqual([
         {
-          name: ALIMTALK_BUTTON_NAMES.TALK_STAFF_AFFILIATION_REQUEST,
+          name: ALIMTALK_BUTTONS.TALK_STAFF_AFFILIATION_REQUEST.name,
           type: 'WL',
           url_mobile: 'https://staff.whale.test/affiliations',
           url_pc: 'https://staff.whale.test/affiliations',
@@ -467,7 +476,7 @@ ${link}`,
       });
 
       const error = await service
-        .send({ ...input, variables: { name: '홍길동', link } })
+        .send({ ...input, variables: { name: '홍길동', 링크: link } })
         .catch((e: Error) => e);
 
       expect(error).toBeInstanceOf(Error);
@@ -496,7 +505,7 @@ ${link}`,
       const error = await service
         .send({
           ...invite,
-          variables: { name: '홍길동', link: 'javascript:secret-token' },
+          variables: { name: '홍길동', 링크: 'javascript:secret-token' },
         })
         .catch((e: Error) => e);
 
@@ -505,28 +514,62 @@ ${link}`,
       expect(client.sendMessage).not.toHaveBeenCalled();
     });
 
-    it('버튼 링크 변수가 둘이면 보내지 않고 던진다 — 한 이름의 버튼만 등록한다', async () => {
+    it('버튼 링크 표시가 정해진 변수 하나가 아니면(둘) 보내지 않고 던진다 — 한 이름의 버튼만 등록한다', async () => {
       findUnique.mockResolvedValue({
         ...withLink(),
         variables: [
           ...withLink().variables,
-          { name: 'link2', isRequired: true, isButtonLink: true },
+          { name: '링크2', isRequired: true, isButtonLink: true },
         ],
       });
 
       await expect(
         service.send({
           ...invite,
-          variables: { name: '홍길동', link, link2: link },
+          variables: { name: '홍길동', 링크: link, 링크2: link },
         }),
-      ).rejects.toThrow('버튼 링크는 하나만 쓸 수 있습니다');
+      ).rejects.toThrow(
+        '알림톡 템플릿 TALK_STAFF_INVITATION 의 버튼 링크 변수는 링크 하나여야 합니다',
+      );
+      expect(client.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('버튼 링크 표시를 다른 변수로 옮겼거나 뺐으면 보내지 않고 던진다(api #219 리뷰)', async () => {
+      for (const variables of [
+        // 표시를 초대코드로 옮김 — 그 값이 버튼 주소가 되거나 모든 발송이 실패한다
+        [
+          { name: 'name', isRequired: true },
+          { name: '링크', isRequired: true },
+          { name: '초대코드', isRequired: true, isButtonLink: true },
+        ],
+        // 표시를 뺌 — 알림톡은 거절되고 대체 문자에도 링크가 없다
+        [
+          { name: 'name', isRequired: true },
+          { name: '링크', isRequired: true },
+        ],
+      ]) {
+        findUnique.mockResolvedValue({ ...withLink(), variables });
+        await expect(
+          service.send({
+            ...invite,
+            variables: {
+              name: '홍길동',
+              링크: link,
+              ...(variables.length === 3 ? { 초대코드: 'ABC123' } : {}),
+            },
+          }),
+        ).rejects.toThrow('버튼 링크 변수는 링크 하나여야 합니다');
+      }
       expect(client.sendMessage).not.toHaveBeenCalled();
     });
 
     it('버튼 링크(토큰)는 이력 · 로그에 남지 않는다', async () => {
       findUnique.mockResolvedValue(withLink());
 
-      await service.send({ ...invite, variables: { name: '홍길동', link } });
+      await service.send({
+        ...invite,
+        variables: { name: '홍길동', 링크: link },
+      });
 
       expect(JSON.stringify(logged())).not.toContain('secret-token');
       for (const [line] of logLog.mock.calls as [string][])

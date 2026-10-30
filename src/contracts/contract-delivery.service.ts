@@ -264,7 +264,7 @@ export class ContractDeliveryService {
         );
       },
     );
-    // 버튼 설정(버튼 링크 하나 · 버튼 이름)이 맞지 않으면 커밋 뒤 발송이 늘 던진다 — 쓰기 전에 막는다(api #219 code-review)
+    // 버튼 설정(정해진 링크 변수 하나 · 버튼 이름)이 맞지 않으면 커밋 뒤 발송이 늘 던진다 — 쓰기 전에 막는다(api #219)
     const buttonProblem = alimtalkButtonProblem(template, found.variables);
     if (buttonProblem) {
       this.logger.error(

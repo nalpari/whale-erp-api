@@ -13,10 +13,7 @@ import {
   type BizppurioMessage,
 } from './bizppurio.client';
 import { BIZPPURIO_CONFIG, type BizppurioConfig } from './bizppurio.config';
-import {
-  alimtalkButtonNameOf,
-  alimtalkButtonProblem,
-} from './alimtalk-buttons';
+import { alimtalkButtonOf, alimtalkButtonProblem } from './alimtalk-buttons';
 import { failureHeadOf } from './failure-reason';
 
 export type SendAlimtalkInput = {
@@ -227,22 +224,22 @@ function buttonsOf(
   links: readonly string[],
 ): AlimtalkButton[] {
   const problem = alimtalkButtonProblem(templateCode, variables);
-  if (problem === 'MULTIPLE_LINKS')
-    throw new Error(
-      `알림톡 템플릿 ${templateCode} 의 버튼 링크는 하나만 쓸 수 있습니다`,
-    );
-  const name = alimtalkButtonNameOf(templateCode);
-  if (problem === 'NO_BUTTON_NAME' || (links.length && !name))
+  const button = alimtalkButtonOf(templateCode);
+  if (problem === 'NO_BUTTON_NAME' || (links.length && !button))
     throw new Error(`알림톡 템플릿 ${templateCode} 의 버튼 이름이 없습니다`);
+  if (problem === 'LINK_MISMATCH')
+    throw new Error(
+      `알림톡 템플릿 ${templateCode} 의 버튼 링크 변수는 ${button?.link} 하나여야 합니다`,
+    );
   const [link] = links;
-  if (link === undefined || !name) return [];
+  if (link === undefined || !button) return [];
   if (!WEB_URL.test(link))
     throw new Error(
       `알림톡 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,
     );
   return [
     {
-      name,
+      name: button.name,
       type: 'WL',
       url_mobile: link,
       url_pc: link,
