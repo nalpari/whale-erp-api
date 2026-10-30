@@ -204,6 +204,27 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     ).toEqual([...DEFAULT_TEMPLATE_CODES].sort());
   });
 
+  // 카카오(비즈뿌리오)에 등록한 본문과 글자 · 줄바꿈까지 같아야 알림톡이 나간다(WHALEERP-636, 2026-10-30 등록)
+  it('가입 초대 알림톡의 문구 · 카카오 템플릿 코드가 카카오 등록본과 같다', async () => {
+    const registered = [
+      '#{근무지}에서 근로계약서를 보내려고 합니다.',
+      '아래 링크를 누르면 WHALE ERP 직원 근무 앱에서 바로 가입할 수 있습니다.',
+      '앱에서 직접 가입할 때는 휴대전화번호와 초대 코드를 입력해 주세요.',
+      '초대 코드: #{초대코드}',
+      '초대 코드와 링크는 30일 동안 쓸 수 있습니다.',
+    ].join('\n');
+    await expect(
+      prisma.notificationTemplate.findUnique({
+        where: { templateCode: 'TALK_STAFF_INVITATION' },
+        select: { body: true, defaultBody: true, kakaoTemplateCode: true },
+      }),
+    ).resolves.toEqual({
+      body: registered,
+      defaultBody: registered,
+      kakaoTemplateCode: 'TALK_STAFF_INVITATION',
+    });
+  });
+
   it('채널 하나의 목록을 주고, 플랫폼 관리자가 아니면 403', async () => {
     const { status, body } = await call(
       'get',

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [Notification templates](/api/notification-templates.md) — 가입 초대 알림톡(`TALK_STAFF_INVITATION`)이 카카오에 등록돼(WHALEERP-636) 본문 · 되돌리기 원본을 등록본과 같게, 카카오 템플릿 코드를 `WHALE_INVITE_01` → `TALK_STAFF_INVITATION` 으로 바꾼다(`20261030174743`, 운영자가 고친 문구도 덮음). 버튼 링크 형식(`https://` 포함 여부)은 비즈뿌리오 확인 뒤.
 * **Update**: main 병합(api teddiursa, main #225 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Platform holidays](/api/public-holidays.md) — api #224 재리뷰: 응답 DTO 의 예시를 새 표기에 맞췄다 — 휴일명 예시 「대체공휴일(삼일절)」, 비고는 「지금은 모두 null」(대체공휴일도 이름에 담는다). openapi 설명 · 예시만 바뀜.
 * **Update**: main 병합(api teddiursa, main #222 까지): okf/log 충돌은 양쪽 기록을 살렸다.

@@ -2,7 +2,7 @@
 // 가벼운 모듈로 둔다 — enum 라벨(api-enums)까지 이 파일을 거쳐 오므로 발송 서비스 · 알림톡 모듈을 끌어오지 않게(failure-reason 은 import 없는 파일).
 import { TOKEN_PATH } from '../alimtalk/failure-reason';
 
-/** 가입 초대 알림톡 템플릿(근무지 · 초대코드 · 링크=초대 링크). 카카오 템플릿 WHALE_INVITE_01 */
+/** 가입 초대 알림톡 템플릿(근무지 · 초대코드 · 링크=초대 링크). 카카오 템플릿 TALK_STAFF_INVITATION(2026-10-30 등록) */
 export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
 /**
  * 소속 추가 확인 요청 알림톡 · 메일(사업자 · 근무지 · 고용형태 · 링크=직원 앱 요청 화면, WHALEERP-130 · 2026-10-26 재영). 카카오
