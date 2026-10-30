@@ -17,6 +17,7 @@ describe('PlatformAdminsController', () => {
     | 'detail'
     | 'histories'
     | 'isLoginIdAvailable'
+    | 'isEmailAvailable'
     | 'create'
     | 'update'
     | 'remove'
@@ -47,6 +48,7 @@ describe('PlatformAdminsController', () => {
       detail: jest.fn().mockResolvedValue({}),
       histories: jest.fn().mockResolvedValue({ items: [], total: 0 }),
       isLoginIdAvailable: jest.fn().mockResolvedValue(true),
+      isEmailAvailable: jest.fn().mockResolvedValue(true),
       create: jest
         .fn()
         .mockResolvedValue({ adminAccountId: 5, isMailSent: true }),
@@ -72,6 +74,7 @@ describe('PlatformAdminsController', () => {
     ['detail', 'read'],
     ['histories', 'read'],
     ['loginIdAvailability', 'create'],
+    ['emailAvailability', 'create'],
     ['create', 'create'],
     ['update', 'update'],
     ['remove', 'delete'],
@@ -96,20 +99,26 @@ describe('PlatformAdminsController', () => {
 
   it('호출자는 id 만 넘기고, 경로의 id 는 숫자로 바꿔 넘긴다', async () => {
     await controller.list(page);
-    await controller.roleGroups(user);
+    await controller.roleGroups(user, {});
+    await controller.roleGroups(user, { purpose: 'filter' });
     await controller.detail('5');
     await controller.histories('5', page);
     await controller.loginIdAvailability({ loginId: 'seojun01' });
+    await expect(
+      controller.emailAvailability({ email: 'a@whale.test' }),
+    ).resolves.toEqual({ available: true });
     await controller.create(user, createBody);
     await controller.update(user, '5', updateBody);
     await controller.remove(user, '5');
     await controller.resetPassword(user, '5');
 
     expect(admins.list).toHaveBeenCalledWith(page);
-    expect(admins.roleGroups).toHaveBeenCalledWith(9);
+    expect(admins.roleGroups).toHaveBeenCalledWith(9, undefined);
+    expect(admins.roleGroups).toHaveBeenCalledWith(9, 'filter');
     expect(admins.detail).toHaveBeenCalledWith(5);
     expect(admins.histories).toHaveBeenCalledWith(5, page);
     expect(admins.isLoginIdAvailable).toHaveBeenCalledWith('seojun01');
+    expect(admins.isEmailAvailable).toHaveBeenCalledWith('a@whale.test');
     expect(admins.create).toHaveBeenCalledWith(9, createBody);
     expect(admins.update).toHaveBeenCalledWith(9, 5, updateBody);
     expect(admins.remove).toHaveBeenCalledWith(9, 5);
@@ -127,6 +136,18 @@ describe('PlatformAdminsController', () => {
       );
       expect(admins.detail).not.toHaveBeenCalled();
       expect(admins.remove).not.toHaveBeenCalled();
+    },
+  );
+
+  // Nest 는 선언 순서대로 경로를 잡는다. 뒤로 가면 GET /platform-admins/email-availability 가 상세(:id)로 잡혀 404.
+  it.each(['roleGroups', 'loginIdAvailability', 'emailAvailability'])(
+    '%s 는 :id 경로보다 먼저 선언한다',
+    (method) => {
+      const order = Object.getOwnPropertyNames(
+        PlatformAdminsController.prototype,
+      );
+      expect(order.indexOf(method)).toBeGreaterThan(-1);
+      expect(order.indexOf(method)).toBeLessThan(order.indexOf('detail'));
     },
   );
 

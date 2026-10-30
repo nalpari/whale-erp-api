@@ -264,11 +264,11 @@ describe('PlatformRoleGroupsService', () => {
       });
     });
 
-    it('본인이 연결된 권한은 수정 · 삭제 모두 SELF_LINKED', async () => {
+    it('본인이 연결된 권한은 권한명 · 설명은 고치고, 삭제만 SELF_LINKED', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(group({ roleGroupId: 2 }));
       expect(await service.detail(PA.adminAccountId, 2)).toMatchObject({
-        isEditable: false,
-        editBlockedReason: 'SELF_LINKED',
+        isEditable: true,
+        editBlockedReason: null,
         isDeletable: false,
         deleteBlockedReason: 'SELF_LINKED',
       });
@@ -440,11 +440,15 @@ describe('PlatformRoleGroupsService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('본인이 연결된 권한은 403', async () => {
-      await expect(service.update(PA.adminAccountId, 2, body)).rejects.toThrow(
-        new ForbiddenException('본인이 연결된 권한이라 고칠 수 없습니다.'),
+    it('본인이 연결된 권한도 권한명 · 설명은 고친다(재영 2026-10-30)', async () => {
+      tx.roleGroup.findFirst.mockResolvedValue(group({ roleGroupId: 2 }));
+      prisma.roleGroup.findFirst.mockResolvedValue(null);
+      await service.update(PA.adminAccountId, 2, body);
+      expect(tx.roleGroup.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ roleGroupId: 2 }),
+        }),
       );
-      expect(tx.roleGroup.updateMany).not.toHaveBeenCalled();
     });
 
     it('PA 는 PM000001 의 권한명 · 설명을 고칠 수 있다', async () => {

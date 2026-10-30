@@ -61,7 +61,7 @@ const NOT_FOUND_DESCRIPTION =
 @ApiBearerAuth()
 @ApiForbiddenResponse({
   description:
-    '메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구) · 본인이 연결된 권한',
+    '메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구) · 본인이 연결된 권한(메뉴 권한 저장 · 삭제)',
 })
 @UserTypes('admin')
 @Controller(PLATFORM_ROLE_GROUPS_PATH)

@@ -366,6 +366,38 @@ describe('PlatformAdminsService', () => {
         }),
       );
     });
+
+    it('목록 필터용(purpose=filter)은 PA 에게도 PM · PA 그룹을 다 준다', async () => {
+      await service.roleGroups(pa.adminAccountId, 'filter');
+
+      expect(prisma.roleGroup.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: partial({ roleTypeCode: { in: ['PM', 'PA'] } }),
+        }),
+      );
+    });
+  });
+
+  describe('isEmailAvailable', () => {
+    it('지우지 않은 사용 · 미사용 계정과 겹치지 않을 때만 쓸 수 있다 — 등록 409 와 같은 판정', async () => {
+      await expect(service.isEmailAvailable('a@whale.test')).resolves.toBe(
+        true,
+      );
+      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            email: 'a@whale.test',
+            isDeleted: false,
+            accountStatusCode: { not: 'WITHDRAWN' },
+          },
+        }),
+      );
+
+      prisma.adminAccount.findFirst.mockResolvedValue({ adminAccountId: 3 });
+      await expect(service.isEmailAvailable('a@whale.test')).resolves.toBe(
+        false,
+      );
+    });
   });
 
   describe('isLoginIdAvailable', () => {

@@ -23,7 +23,13 @@ import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { MenuPermission } from '../auth/menu-permission.guard';
-import { ListPlatformAdminsDto, PageDto } from './dto/list-platform-admins.dto';
+import { AdminProfileEmailAvailabilityQueryDto } from '../auth/dto/admin-profile-email-availability-query.dto';
+import { AdminProfileEmailAvailabilityResponseDto } from '../auth/dto/admin-profile-email-availability.response.dto';
+import {
+  ListPlatformAdminsDto,
+  PageDto,
+  PlatformRoleGroupsQueryDto,
+} from './dto/list-platform-admins.dto';
 import {
   LoginIdAvailabilityQueryDto,
   LoginIdAvailabilityResponseDto,
@@ -67,13 +73,18 @@ export class PlatformAdminsController {
     return this.admins.list(query);
   }
 
-  /** 사용자 권한 선택지. 플랫폼 관리자에게는 플랫폼 마스터 권한을 빼고 준다. */
+  /**
+   * 사용자 권한 선택지. 플랫폼 관리자에게는 플랫폼 마스터 권한을 빼고 준다.
+   * `purpose=filter` 는 목록 필터 「권한명」용 — 호출자와 상관없이 PM · PA 그룹을 다 준다.
+   */
   @Get('role-groups')
   @MenuPermission('read', { platformOnly: true })
+  @ApiBadRequestResponse({ description: 'purpose 값' })
   roleGroups(
     @CurrentUser() user: AuthUser,
+    @Query() query: PlatformRoleGroupsQueryDto,
   ): Promise<PlatformRoleGroupListResponseDto> {
-    return this.admins.roleGroups(user.id);
+    return this.admins.roleGroups(user.id, query.purpose);
   }
 
   /**
@@ -89,6 +100,18 @@ export class PlatformAdminsController {
     return {
       available: await this.admins.isLoginIdAvailable(query.loginId),
     };
+  }
+
+  /**
+   * 이메일 중복 확인. 아이디 확인과 같은 등록 권한이고, 판정은 등록의 409 와 같다. `:id` 보다 먼저 둔다.
+   */
+  @Get('email-availability')
+  @MenuPermission('create', { platformOnly: true })
+  @ApiBadRequestResponse({ description: '이메일 형식' })
+  async emailAvailability(
+    @Query() query: AdminProfileEmailAvailabilityQueryDto,
+  ): Promise<AdminProfileEmailAvailabilityResponseDto> {
+    return { available: await this.admins.isEmailAvailable(query.email) };
   }
 
   /** 상세. 지운 · 탈퇴한 계정과 BP 쪽 계정은 404. */
