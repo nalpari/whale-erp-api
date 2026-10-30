@@ -41,6 +41,9 @@ import {
 } from './payslip-calculation';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 import { amountOf, dateOnly, isShown, ITEM_ORDER } from './payslip-shared';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
+import { targetStores } from '../admin-scope/target-stores';
+import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
 
 type Tx = Prisma.TransactionClient;
 
@@ -177,8 +180,9 @@ export class PayslipEditService {
   async previousValues(
     adminAccountId: number,
     payslipId: number,
+    bp?: TargetBpContext,
   ): Promise<PayslipPreviousResponseDto> {
-    const current = await this.locate(adminAccountId, payslipId);
+    const current = await this.locate(adminAccountId, payslipId, bp);
     const previous = await this.prisma.payslip.findFirst({
       where: {
         staffMemberId: current.staffMemberId,
@@ -232,8 +236,9 @@ export class PayslipEditService {
     adminAccountId: number,
     payslipId: number,
     dto: SavePayslipDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    const current = await this.locate(adminAccountId, payslipId);
+    const current = await this.locate(adminAccountId, payslipId, bp);
     if (!EDITABLE.includes(current.status))
       throw statusConflict(current.status);
     if (dto.isWithholdingApplied && current.employmentType !== 'PART_TIME')
@@ -392,8 +397,9 @@ export class PayslipEditService {
     adminAccountId: number,
     payslipId: number,
     dto: PayslipStatusChangeDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    const current = await this.locate(adminAccountId, payslipId);
+    const current = await this.locate(adminAccountId, payslipId, bp);
     if (!EDITABLE.includes(current.status))
       throw statusConflict(current.status);
     await this.prisma.$transaction(async (tx) => {
@@ -470,8 +476,9 @@ export class PayslipEditService {
     adminAccountId: number,
     payslipId: number,
     dto: PayslipStatusChangeDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    const current = await this.locate(adminAccountId, payslipId);
+    const current = await this.locate(adminAccountId, payslipId, bp);
     if (!EDITABLE.includes(current.status))
       throw statusConflict(current.status);
     const now = new Date();
@@ -536,8 +543,9 @@ export class PayslipEditService {
     adminAccountId: number,
     payslipId: number,
     dto: PayslipStatusChangeDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    const current = await this.locate(adminAccountId, payslipId);
+    const current = await this.locate(adminAccountId, payslipId, bp);
     if (!CONFIRMED.includes(current.status))
       throw statusConflict(current.status);
     await this.prisma.$transaction(async (tx) => {
@@ -638,8 +646,18 @@ export class PayslipEditService {
    * 관리 범위 안에서 찾고, 가려지는 명세서(본사 역할 · 동의 없는 가맹 점포 직원)는 없는 것과 같은 404 — 상세와 같은 판정.
    * 사용 중인 관리자가 아니어도 404 다(상세와 같다).
    */
-  private async locate(adminAccountId: number, payslipId: number) {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+  private async locate(
+    adminAccountId: number,
+    payslipId: number,
+    bp?: TargetBpContext,
+  ) {
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      PAYSLIP_BP_NOT_CHOSEN,
+    );
     const found =
       manageable &&
       (await this.prisma.payslip.findFirst({

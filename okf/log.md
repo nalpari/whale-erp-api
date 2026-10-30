@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [Payslips](/api/payslips.md) · [Attendance](/api/attendance.md) — 급여명세서 · 출퇴근 기록 관리자 경로가 탭 BP 를 받는다(WHALEERP-637, Whale ERP 채널 2026-10-22 「탭 BP 경로 방식」). 컨트롤러가 `@TargetBp()` 로 대상 BP 를 받아 `targetStores`(새 `src/admin-scope/target-stores.ts` — 플랫폼 계정이 헤더 없이 부르면 400, 아니면 `getManageableStores(id, bp)`)로 관리 점포를 정한다. 플랫폼 계정은 고른 고객 BP 의 점포 전부, BP · 가맹 계정은 그대로다. Swagger 400 · 403 · 404 설명에 BP 판정을 더했다(openapi.json 다시 생성). 단위(target-stores · 컨트롤러) · e2e(payslip-permissions · attendance-records 에 플랫폼 계정 — 고른 BP 만, 다른 BP 는 404, 헤더 없으면 400, BP 계정이 남의 BP 를 실으면 403). 마이그레이션 없음.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #211 재리뷰 블로커: 직원 앱 상세 `documents` · 내려받기에서 보낸 원본을 아예 뺀다(`myDocumentWhere`). 「지금 발송분만」으로는 재발송 실패 되돌림(undo)이 `sent_at` 을 앞 발송으로 돌려 옛 근로자 정보 원본이 다시 걸렸다. 직원 앱은 처리 완료본 · 종이 계약 파일만 쓴다. 관리자 상세는 그대로 모두 보인다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 제2조 근무 장소 · 직무도 날인 시점 값(2026-10-30 김민식, api #211 리뷰 정책 확인): 날인 때 `contract_parties.fixed_work_location`(비었으면 점포명) · `fixed_job_title`(비었으면 직원 직무)을 고정하고, 체결된 계약의 직원 앱 본문 · `worker.jobTitle` · 처리 완료본이 그 값을 쓴다. 백필도 만든 때 값을 적는다. 같은 PR 의 아직 적용되지 않은 마이그레이션 `20261030095715_team3_contract_files` 에 두 칸을 더했다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #211 리뷰 블로커: 직원 앱 상세 `documents` · 내려받기가 보낸 원본을 지금 발송분(`sent_at` = 계약 `sent_at`)만 준다(`myDocumentWhere`, `my-contract-scope.ts`). 근로자 정보를 고쳐 다시 보내기 전 원본에 다른 사람의 이름 · 생년월일 · 번호가 남아 새 직원이 받을 수 있었다. 관리자 상세는 그대로 모두 보인다.

@@ -37,6 +37,9 @@ import {
   REPLACED_BY_WITHHOLDING,
   storeNames,
 } from './payslip-shared';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
+import { targetStores } from '../admin-scope/target-stores';
+import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
 
 const STATUSES = Object.values(PayslipStatus);
 
@@ -248,8 +251,15 @@ export class PayslipListService {
   async list(
     adminAccountId: number,
     query: PayslipListQueryDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipListResponseDto | null> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      PAYSLIP_BP_NOT_CHOSEN,
+    );
     if (!manageable) return null;
     const { roleTypeCode } = manageable;
     // 점포 · 점포 유형을 고르면 관리 범위 안에서 좁힌다. 범위 밖 ID 는 조용히 빠진다(직원 목록과 같다).
@@ -416,8 +426,15 @@ export class PayslipListService {
   async summary(
     adminAccountId: number,
     query: PayslipSummaryQueryDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipSummaryResponseDto | null> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      PAYSLIP_BP_NOT_CHOSEN,
+    );
     if (!manageable) return null;
     const store = manageable.stores.find((s) => s.storeId === query.storeId);
     const result: PayslipSummaryResponseDto = {
@@ -462,8 +479,15 @@ export class PayslipListService {
   async findOne(
     adminAccountId: number,
     payslipId: number,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      PAYSLIP_BP_NOT_CHOSEN,
+    );
     if (!manageable) return null;
     const found = await this.prisma.payslip.findFirst({
       where: {
