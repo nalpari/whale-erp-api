@@ -1320,6 +1320,9 @@ describe('근무스케줄 (e2e, DB)', () => {
       });
       expect(res.status).toBe(201);
       expect((res.body as { failed: unknown[] }).failed).toEqual([]);
+      // 일괄 등록은 메일을 기다리지 않고 응답한다 — 두 통이 나갈 때까지 기다린다
+      for (let i = 0; i < 50 && sendMail.mock.calls.length < 2; i += 1)
+        await new Promise((r) => setTimeout(r, 20));
       expect(sendMail).toHaveBeenCalledTimes(2);
       const byTo = new Map(
         sendMail.mock.calls.map(([m]) => {

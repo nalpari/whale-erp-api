@@ -1188,6 +1188,8 @@ describe('WorkSchedulesService', () => {
           breakMinutes: 0,
         })),
       });
+      // 일괄 등록은 메일을 기다리지 않고 응답한다
+      await new Promise((r) => setImmediate(r));
       expect(noticeSpy).toHaveBeenCalledTimes(2);
       expect(mail!.send).toHaveBeenCalledTimes(2);
     });

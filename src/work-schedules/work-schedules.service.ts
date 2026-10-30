@@ -313,7 +313,7 @@ export class WorkSchedulesService {
 
   /** 커밋 뒤 근무스케줄 변경 메일(WHALEERP-639) — 던지지 않는다. 직원마다 한 통씩 차례로 */
   private async mailAfterCommit(mails: (ScheduleMail | null)[]): Promise<void> {
-    // ponytail: 차례로 보낸다 — 한 통에 SMTP 왕복(멈추면 최대 30초씩). 지난 주 복사는 기다리지 않고 응답한다. 더 늘면 발송 대기열로
+    // ponytail: 차례로 보낸다 — 한 통에 SMTP 왕복(멈추면 최대 30초씩). 일괄 등록 · 지난 주 복사는 기다리지 않고 응답한다. 더 늘면 발송 대기열로
     for (const mail of mails)
       await sendScheduleMail(
         {
@@ -708,6 +708,8 @@ export class WorkSchedulesService {
         ...(byStaff.get(row.staffMemberId) ?? []),
         row,
       ]);
+    // 커밋 뒤에 보낼 메일 — 직원마다 한 통
+    const mails: (ScheduleMail | null)[] = [];
     for (const [staffMemberId, rows] of byStaff) {
       try {
         const mail = await this.prisma.$transaction((tx) =>
@@ -717,13 +719,16 @@ export class WorkSchedulesService {
             changes: rows.map((after) => ({ kind: 'CREATED', after })),
           }),
         );
-        await this.mailAfterCommit([mail]);
+        mails.push(mail);
       } catch (error) {
         this.logger.error(
           `work schedule notice FAILED staffMember ${staffMemberId} after bulk save: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
+    // 최대 100줄 · 직원 수십 명이면 SMTP 를 차례로 기다리는 동안 화면이 시간 초과로 실패를 보인다(다시 보내면 겹침 409) —
+    // 지난 주 복사와 같이 기다리지 않는다(던지지 않는다)
+    void this.mailAfterCommit(mails);
     return { created: created.map(toDto), failed };
   }
 
