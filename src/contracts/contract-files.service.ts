@@ -85,6 +85,49 @@ export const employerOf = (store: EmployerStore) => ({
   phone: store.phone,
 });
 
+/** 날인 때(또는 백필이) 당사자 행에 적은 값이 있는가 — 둘은 사용자 칸 · 제2조를 함께 적고 상호(없으면 점포명)는 늘 채운다 */
+export const snapshotOf = <
+  P extends {
+    employerName: string | null;
+    fixedWorkLocation: string | null;
+    fixedJobTitle: string | null;
+  },
+>(
+  party: P | null | undefined,
+): (P & { employerName: string }) | null =>
+  party && typeof party.employerName === 'string'
+    ? { ...party, employerName: party.employerName }
+    : null;
+
+/**
+ * 제2조(근무장소와 업무)의 근무 장소 · 직무. 적은 값이 있으면 그대로 쓴다 — 비어(null) 있어도 지금 값으로 넘어가지 않는다(날인 때
+ * 직무가 없던 계약이 나중에 직원 직무가 생겨도 문장이 바뀌지 않게). 없으면 근무 장소는 계약 칸(비면 점포명), 직무는 계약 칸(비면
+ * 직원 직무). 날인 · 백필이 적는 값과 처리 완료본 · 직원 앱 본문이 읽는 값이 모두 이 함수다(2026-10-30 김민식).
+ */
+export function article2Of(
+  c: {
+    workLocation: string | null;
+    jobTitle: string | null;
+    staffMember: { jobTitle: string | null };
+  },
+  storeName: string,
+  snapshot: {
+    fixedWorkLocation: string | null;
+    fixedJobTitle: string | null;
+  } | null,
+): { workLocation: string | null; jobTitle: string | null } {
+  if (snapshot)
+    return {
+      workLocation: snapshot.fixedWorkLocation,
+      jobTitle: snapshot.fixedJobTitle,
+    };
+  return {
+    // 점포명을 적어 두어야 점포 이름이 바뀌어도 고정된다(템플릿의 점포명 대체와 같은 규칙)
+    workLocation: c.workLocation ?? storeName,
+    jobTitle: c.jobTitle ?? c.staffMember.jobTitle,
+  };
+}
+
 export type ContractFileSource = {
   contract: Prisma.ContractGetPayload<{ select: typeof SOURCE_SELECT }> & {
     contractId: number;
@@ -104,19 +147,12 @@ export function pdfInputOf(
 ): ContractPdfInput & {
   employerFixed: boolean;
   /** 제2조에 쓴 근무 장소 · 직무 — 백필이 당사자 행에 적는다 */
-  article2: { workLocation: string; jobTitle: string | null };
+  article2: { workLocation: string | null; jobTitle: string | null };
 } {
   const party = c.contractParty;
-  // 적힌 사용자 칸이 있는가 — 고정 · 백필은 상호(없으면 점포명)를 늘 적는다
-  const snapshot =
-    kind === 'SIGNED_COPY' && party && party.employerName !== null
-      ? { ...party, employerName: party.employerName }
-      : null;
-  // 제2조도 날인 때 고정한 근무 장소 · 직무(2026-10-30 김민식). 없으면 계약 칸, 그것도 비면 지금 점포명 · 직원 직무
-  const article2 = {
-    workLocation: snapshot?.fixedWorkLocation ?? c.workLocation ?? store.name,
-    jobTitle: snapshot?.fixedJobTitle ?? c.jobTitle ?? c.staffMember.jobTitle,
-  };
+  // 처리 완료본만 적힌 값을 쓴다 — 보낸 원본은 보낼 때 값
+  const snapshot = kind === 'SIGNED_COPY' ? snapshotOf(party) : null;
+  const article2 = article2Of(c, store.name, snapshot);
   return {
     kind,
     contractId: c.contractId,

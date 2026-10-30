@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { dateOnly } from '../common/date-only';
 import { PrismaService } from '../prisma/prisma.service';
 import { storeNames } from '../payslips/payslip-shared';
+import { article2Of, snapshotOf } from './contract-files.service';
 import { contractArticles } from './contract-template';
 import { CONTRACT_TERMS_SELECT, contractTermsOf } from './contract-terms';
 import { employedOn, signDeadlinePassed } from './contract-status';
@@ -194,13 +195,12 @@ export class MyContractViewsService {
     );
     const biz = store.businessProfile;
     const terms = contractTermsOf(c);
-    // 체결된 계약은 날인 때 고정한 근무 장소 · 직무로(2026-10-30 김민식) — 처리 완료본 제2조와 같다
-    const jobTitle =
-      party?.fixedJobTitle ?? c.jobTitle ?? c.staffMember.jobTitle;
-    // 처리 완료본에 쓴 사용자 칸이 당사자 행에 있으면(날인 때 고정 · 백필) 그 값으로 — 완료본과 같게(WHALEERP-131). 점포명 ·
-    // 점포 주소 · 사업장 우편번호(고정하지 않는다 — 직원 앱이 보이지 않는다)는 지금 값이다
-    const fixed =
-      party && typeof party.employerName === 'string' ? party : null;
+    // 당사자 행에 적힌 값(날인 때 고정 · 백필)이 있으면 사용자 칸 · 제2조를 그 값으로 — 처리 완료본과 같은 함수 · 같은 조건
+    // (WHALEERP-131). 점포명 · 점포 주소 · 사업장 우편번호(고정하지 않는다 — 직원 앱이 보이지 않는다)는 지금 값이다
+    const fixed = snapshotOf(party);
+    const article2 = article2Of(c, store.name, fixed);
+    // 직원 레코드 직무는 NOT NULL 이라 날인 · 백필이 적은 직무도 늘 있다 — 칸 타입(string)을 맞추려고만 잇는다
+    const jobTitle = article2.jobTitle ?? c.staffMember.jobTitle;
     return {
       ...item,
       ...terms,
@@ -209,8 +209,7 @@ export class MyContractViewsService {
         ...terms,
         employmentType: c.employmentType,
         storeName: store.name,
-        workLocation: party?.fixedWorkLocation ?? c.workLocation,
-        jobTitle,
+        ...article2,
       }),
       signable: item.awaitingSignature && mismatches.length === 0,
       mismatches,

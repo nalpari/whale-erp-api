@@ -1,5 +1,9 @@
 import { Prisma } from '@prisma/client';
-import { ContractFilesService, pdfInputOf } from './contract-files.service';
+import {
+  ContractFilesService,
+  article2Of,
+  pdfInputOf,
+} from './contract-files.service';
 import { renderContractPdf } from './contract-pdf';
 
 jest.mock('./contract-pdf', () => ({
@@ -125,6 +129,35 @@ function setup(
   const service = new ContractFilesService(prisma as never, storage as never);
   return { service, prisma, storage, create, tx };
 }
+
+describe('article2Of (제2조 근무 장소 · 직무, 2026-10-30 김민식)', () => {
+  const c = {
+    workLocation: null,
+    jobTitle: null,
+    staffMember: { jobTitle: '매장' },
+  };
+  it('적은 값이 있으면 그대로 — 비어 있어도 지금 값으로 넘어가지 않는다', () => {
+    expect(
+      article2Of(c, '강남점', {
+        fixedWorkLocation: '옛 점포',
+        fixedJobTitle: null,
+      }),
+    ).toEqual({ workLocation: '옛 점포', jobTitle: null });
+  });
+  it('적은 값이 없으면 계약 칸, 비면 점포명 · 직원 직무', () => {
+    expect(article2Of(c, '강남점', null)).toEqual({
+      workLocation: '강남점',
+      jobTitle: '매장',
+    });
+    expect(
+      article2Of(
+        { ...c, workLocation: '2층 주방', jobTitle: '조리' },
+        '강남점',
+        null,
+      ),
+    ).toEqual({ workLocation: '2층 주방', jobTitle: '조리' });
+  });
+});
 
 describe('pdfInputOf', () => {
   const source = (p: Partial<typeof party>) => ({

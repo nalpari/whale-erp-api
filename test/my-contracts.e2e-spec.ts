@@ -940,18 +940,22 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
         where: { storeId },
         data: { name: '바뀐 점포명' },
       });
-      const again = await request(app.getHttpServer())
-        .get(`/me/contracts/${contractId}`)
-        .set('Authorization', `Bearer ${auth}`)
-        .expect(200);
-      expect(
-        (again.body as { articles: { blocks: { text?: string }[] }[] })
-          .articles[1].blocks[0].text,
-      ).toBe('날인 테스트 직영점에서 매장 업무를 한다.');
-      await prisma.store.update({
-        where: { storeId },
-        data: { name: '날인 테스트 직영점' },
-      });
+      try {
+        const again = await request(app.getHttpServer())
+          .get(`/me/contracts/${contractId}`)
+          .set('Authorization', `Bearer ${auth}`)
+          .expect(200);
+        expect(
+          (again.body as { articles: { blocks: { text?: string }[] }[] })
+            .articles[1].blocks[0].text,
+        ).toBe('날인 테스트 직영점에서 매장 업무를 한다.');
+      } finally {
+        // 단언이 실패해도 뒤 테스트가 점포명을 그대로 보게 되돌린다
+        await prisma.store.update({
+          where: { storeId },
+          data: { name: '날인 테스트 직영점' },
+        });
+      }
       expect(body.articles).toHaveLength(10);
       expect(body.documents).toEqual([
         expect.objectContaining({

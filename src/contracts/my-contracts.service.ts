@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   ContractFilesService,
   EMPLOYER_STORE_SELECT,
+  article2Of,
   employerOf,
 } from './contract-files.service';
 import { ContractNoticeService } from './contract-notice.service';
@@ -73,6 +74,12 @@ async function checkSignatureImage(buffer: Buffer): Promise<void> {
 }
 
 /** 날인에 쓰는 내 계약 — 상태 · 기한 · 발송 일시와 대조할 계약서 값 · 계정 값, 재직 여부 */
+/** 제2조 값 → 당사자 행 칸 */
+const fixedArticle2 = (a: ReturnType<typeof article2Of>) => ({
+  fixedWorkLocation: a.workLocation,
+  fixedJobTitle: a.jobTitle,
+});
+
 const MINE_SELECT = {
   status: true,
   storeId: true,
@@ -233,8 +240,7 @@ export class MyContractsService {
             // 체결 이력의 처리 시각(DB 시계) — 응답 · 처리 완료본의 체결일과 같은 시각
             employerFixedAt: signedAt,
             // 제2조도 날인 시점 값 — 근무 장소가 비면 그때 점포명, 직무 칸이 빈 옛 계약은 그때 직원 직무(2026-10-30 김민식)
-            fixedWorkLocation: c.workLocation ?? store.name,
-            fixedJobTitle: c.jobTitle ?? c.staffMember.jobTitle,
+            ...fixedArticle2(article2Of(c, store.name, null)),
           },
         });
       });
