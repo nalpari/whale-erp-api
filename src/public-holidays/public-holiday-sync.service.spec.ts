@@ -283,6 +283,17 @@ describe('PublicHolidaySyncService', () => {
     );
   });
 
+  // 공식 휴일은 2050년까지다(2026-10-30) — CHECK 가 막는 해를 받아 실패 이력만 쌓지 않게 건너뛴다.
+  it('syncAll 은 2050년을 넘는 해를 건너뛴다', async () => {
+    const deps = setup();
+    deps.client.fetchYear.mockResolvedValue([]);
+    const service = await serviceOf(deps);
+
+    await service.syncAll(new Date('2050-03-01T00:00:00.000Z'));
+
+    expect(deps.client.fetchYear.mock.calls).toEqual([[2050]]);
+  });
+
   it('실패 이력조차 쓰지 못해도(DB 다운) 다음 해는 시도한다', async () => {
     const deps = setup();
     deps.client.fetchYear

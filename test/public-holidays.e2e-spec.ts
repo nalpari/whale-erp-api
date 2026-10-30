@@ -174,9 +174,10 @@ describe('플랫폼 휴일 관리 (e2e, DB)', () => {
       month: 9,
       total: 3,
       items: [
-        { holidayDate: '2026-09-24', name: '추석 연휴', note: null },
+        // 규칙 계산 행도 공공 API 표기다 — 사흘 모두 「추석」(2026-10-30)
+        { holidayDate: '2026-09-24', name: '추석', note: null },
         { holidayDate: '2026-09-25', name: '추석', note: null },
-        { holidayDate: '2026-09-26', name: '추석 연휴', note: null },
+        { holidayDate: '2026-09-26', name: '추석', note: null },
       ],
     });
   });
@@ -214,11 +215,8 @@ describe('플랫폼 휴일 관리 (e2e, DB)', () => {
       total: 2,
       items: [
         { holidayDate: '2026-03-01', name: '삼일절', note: null },
-        {
-          holidayDate: '2026-03-02',
-          name: '삼일절',
-          note: '대체공휴일 — 삼일절',
-        },
+        // 대체공휴일은 이름에 담고 비고는 비운다 — 공공 API 표기(2026-10-30)
+        { holidayDate: '2026-03-02', name: '대체공휴일(삼일절)', note: null },
       ],
     });
   });
@@ -256,7 +254,7 @@ describe('플랫폼 휴일 관리 (e2e, DB)', () => {
   it.each([
     ['연도 없음', '/public-holidays'],
     ['연도 1999', '/public-holidays?year=1999'],
-    ['연도 2101', '/public-holidays?year=2101'],
+    ['연도 2051', '/public-holidays?year=2051'],
     ['월 0', '/public-holidays?year=2026&month=0'],
     ['월 13', '/public-holidays?year=2026&month=13'],
   ])('%s 는 400', async (_, path) => {

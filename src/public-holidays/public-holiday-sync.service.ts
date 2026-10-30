@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import { HolidayApiClient, type ApiHoliday } from './holiday-api.client';
 import { planPublicHolidaySync } from './public-holiday-sync-plan';
+import { syncYearsOf } from './public-holiday-years';
 
 // 오류 칸은 TEXT 지만 화면 · 로그가 읽을 만한 길이로 자른다.
 const ERROR_MAX = 2_000;
@@ -29,12 +30,12 @@ export class PublicHolidaySyncService {
   ) {}
 
   /**
-   * 한국 날짜의 올해와 다음 해를 차례로. 한 해가 실패해도 다른 해는 돈다 — 실패는 이력에 남고, 그 이력조차 쓰지
+   * 한국 날짜의 올해와 다음 해를 차례로(2050년을 넘는 해는 건너뛴다 — 테이블 범위 밖). 한 해가 실패해도 다른 해는 돈다 — 실패는 이력에 남고, 그 이력조차 쓰지
    * 못하면(DB 다운) 로그로만 남긴다.
    */
   async syncAll(now: Date = new Date()): Promise<void> {
     const thisYear = kstToday(now).getUTCFullYear();
-    for (const year of [thisYear, thisYear + 1]) {
+    for (const year of syncYearsOf(thisYear)) {
       try {
         await this.syncYear(year, now);
       } catch (e) {

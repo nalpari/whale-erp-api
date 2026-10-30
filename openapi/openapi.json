@@ -4806,10 +4806,10 @@
             "name": "year",
             "required": true,
             "in": "query",
-            "description": "연도. 2000~2100(공식 휴일 테이블의 범위).",
+            "description": "연도. 2000~2050(공식 휴일 테이블의 범위).",
             "schema": {
               "minimum": 2000,
-              "maximum": 2100,
+              "maximum": 2050,
               "example": 2026,
               "type": "number"
             }
@@ -4848,7 +4848,7 @@
             }
           },
           "400": {
-            "description": "연도 2000~2100 · 월 1~12 밖"
+            "description": "연도 2000~2050 · 월 1~12 밖"
           },
           "403": {
             "description": "메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구)"
