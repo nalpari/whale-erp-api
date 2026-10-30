@@ -912,6 +912,46 @@ describe('BpAdminsService', () => {
       ]);
     });
 
+    describe('저장 중 유일값 충돌(P2002)', () => {
+      // pg 어댑터는 충돌한 제약을 meta.driverAdapterError.cause.constraint 에 담는다.
+      const dup = (constraint: object) =>
+        new Prisma.PrismaClientKnownRequestError('dup', {
+          code: 'P2002',
+          clientVersion: 'x',
+          meta: {
+            driverAdapterError: {
+              cause: { kind: 'UniqueConstraintViolation', constraint },
+            },
+          },
+        });
+
+      it.each([
+        [{ index: 'admin_accounts_email_key' }],
+        [{ fields: ['email'] }],
+      ])('이메일 고유 인덱스(%j)면 409 이메일 중복', async (constraint) => {
+        prisma.adminAccount.updateMany.mockRejectedValueOnce(dup(constraint));
+        await expect(
+          service.update(1, bp, 2, input(2, { email: 'new@test.invalid' })),
+        ).rejects.toThrow(
+          '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.',
+        );
+      });
+
+      it('이메일이 아닌 제약의 충돌은 이메일 중복이 아니라 「먼저 바꿨다」 409', async () => {
+        prisma.adminAccount.updateMany.mockRejectedValueOnce(
+          dup({ index: 'admin_store_mappings_pkey' }),
+        );
+        await expect(
+          service.update(1, bp, 2, input(2, { name: '새이름' })),
+        ).rejects.toThrow('다른 사용자가 이 계정을 먼저 바꿨습니다.');
+      });
+    });
+
+    it('전화번호 변경은 「연락처」로 남긴다 — 다른 관리자 계정 화면과 같은 이름', async () => {
+      await service.update(1, bp, 2, input(2, { phone: '0212345678' }));
+      expect(historyRows()).toEqual([partial({ field: '연락처' })]);
+    });
+
     it('범위 밖 매핑은 남긴다 — 일부 점포 담당이 범위 안 점포만 바꾼다', async () => {
       // 2(점포 1 · 2 담당)가 40(1 · 5)을 고쳐 1 을 빼고 2 를 더한다
       await service.update(2, bp, 40, input(40, { storeIds: [2] }));

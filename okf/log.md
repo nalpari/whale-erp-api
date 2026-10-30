@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [BP admins](/api/bp-admins.md) — 수정 트랜잭션의 유일값 충돌(P2002)을 이메일 고유 인덱스(`admin_accounts_email_key`, 이름이 없으면 `email` 칸 — pg 어댑터의 `meta.driverAdapterError.cause.constraint`)일 때만 「사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.」로, 그 밖은 「다른 사용자가 이 계정을 먼저 바꿨습니다.」 409 로(지금 경로엔 다른 유일값 충돌이 없다 — 점포 매핑은 `skipDuplicates`, 대비용)(front PR #199 review-pr, front 요청). 문구는 바꾸지 않았다. 등록의 P2002 는 그대로. 마이그레이션 없음.
+* **Update**: [BP admins](/api/bp-admins.md) — 전화번호 표기를 「휴대전화」에서 「연락처」로(2026-10-29 사용자 결정, front 요청). 400 문구 「연락처는 숫자 9~12자리입니다.」(플랫폼 관리자와 같음) · 본인 계정 403 문구 · 변경 이력 항목명. 이미 쌓인 이력 행의 「휴대전화」는 그대로 둔다. openapi 를 다시 내보내며 main 에 늦게 반영된 발송 이력 `isResend` 설명도 함께 바뀌었다. 마이그레이션 없음.
 * **Update**: main 병합(api chansey, main #217 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api chansey, main #211 · #214 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Platform role groups](/api/platform-role-groups.md) · [BP role groups](/api/bp-role-groups.md) · [Platform admins](/api/platform-admins.md) — api #215 review-pr 반영: PM000001 에 연결된 PM 도 권한명 · 설명은 고친다는 문장으로 고쳤고, 두 컨트롤러의 403 설명을 「본인이 연결된 권한(메뉴 권한 저장 · 삭제)」로 좁혔다. 이메일 중복 확인 400 사유(없음 · 형식 · 100자)를 적고, 쿼리 DTO 주석에 플랫폼 관리자 경로를 더했다. `purpose` 검증과 경로 선언 순서(`:id` 앞) 단위 테스트를 더했다.

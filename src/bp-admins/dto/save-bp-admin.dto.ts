@@ -35,10 +35,10 @@ class BpAdminProfileDto {
   name: string;
 
   /**
-   * 휴대전화. 하이픈 없이 숫자 9~12자리 — 화면 이름은 휴대전화지만 1팀 연락처 범위(02 지역번호 9자리 · 050X
-   * 평생번호 12자리)를 그대로 받는다. 중복 검사는 하지 않는다. @example 01012345678
+   * 연락처. 하이픈 없이 숫자 9~12자리 — 1팀 연락처 범위(02 지역번호 9자리 · 050X 평생번호 12자리)를
+   * 그대로 받는다. 중복 검사는 하지 않는다. @example 01012345678
    */
-  @Matches(PHONE_PATTERN, { message: '휴대전화는 숫자 9~12자리입니다.' })
+  @Matches(PHONE_PATTERN, { message: '연락처는 숫자 9~12자리입니다.' })
   phone: string;
 
   /** 이메일. 소문자로 저장한다. 지우지 않은 사용 · 미사용 관리자 계정끼리 겹칠 수 없다. @example jisu@whale.test */
@@ -82,7 +82,7 @@ export class CreateBpAdminDto extends BpAdminProfileDto {
   roleTypeCode: BpAdminRole;
 }
 
-/** BP 관리자 수정. 아이디 · 역할 · 연결 가맹 마스터는 바꾸지 않는다. 본인 계정은 이름 · 휴대전화 · 이메일만. */
+/** BP 관리자 수정. 아이디 · 역할 · 연결 가맹 마스터는 바꾸지 않는다. 본인 계정은 이름 · 연락처 · 이메일만. */
 export class UpdateBpAdminDto extends BpAdminProfileDto {
   /** 계정 상태. 가맹 마스터를 미사용으로 바꾸면 연결된 사용 중 가맹 관리자도 미사용이 된다. */
   @ApiProperty({ enum: ADMIN_STATUSES, enumName: 'AdminAccountStatus' })
