@@ -354,7 +354,7 @@ version and the masking shape from these constants, so bumping changes no test.
 **The app sends the version it showed** (ATT-30 v252, 2026-10-29 재영) — `consentVersion` here and
 `hqSharingConsentVersion` at signup · 근무지 더하기 · 소속 추가 수락 ([Staff signup](/api/staff-signup.md)). A
 tab or PWA left open across a bump otherwise records the new version for the old wording. Here a mismatch is
-409 and nothing is written; at signup and the two accepts it is not an error (본사 제공 동의 is optional, v253):
+409 (`code: HQ_SHARING_TERMS_CHANGED`, checked before the account lock — a constant compare) and nothing is written; at signup and the two accepts it is not an error (본사 제공 동의 is optional, v253):
 the account is linked, the consent is not written, and the response says `hqSharingConsentRecorded: false`.
 Before a bump ships, the 직원 앱 must already send these fields. An app that sends none gets 400 here (내 정보
 동의 only — joining is not blocked); at signup and the accepts a missing version is treated like a mismatch

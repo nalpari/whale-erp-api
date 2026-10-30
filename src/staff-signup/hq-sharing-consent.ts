@@ -7,6 +7,9 @@ import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 export const asksHqSharingConsentAt = (storeTypeCode: string | undefined) =>
   storeTypeCode !== 'DIRECT';
 
+/** 동의 문구 버전 칸의 길이 상한 — 버전 칸은 길이 제한이 없다. 「v1.0」 꼴보다 넉넉히, 위치정보 동의와 같다 */
+export const CONSENT_VERSION_MAX = 64;
+
 const VERSION_INVALID =
   '동의 문구 버전(hqSharingConsentVersion)은 비지 않은 문자열이어야 합니다.';
 
@@ -19,18 +22,18 @@ const VERSION_INVALID =
 export function IsHqSharingConsentVersion(): PropertyDecorator {
   return applyDecorators(
     // Swagger 플러그인은 소스의 검증 데코레이터만 읽어 여기 감춘 것은 못 본다 — 길이는 직접 적는다(IsUpdatedAt 과 같다)
-    ApiPropertyOptional({ minLength: 1, maxLength: 64 }),
+    ApiPropertyOptional({ minLength: 1, maxLength: CONSENT_VERSION_MAX }),
     ValidateIf(
       (o: {
         hqSharingConsented?: unknown;
         hqSharingConsentVersion?: unknown;
       }) =>
-        o.hqSharingConsented === true &&
-        o.hqSharingConsentVersion !== undefined,
+        // null 도 빠진 것과 같다 — 버전을 null 로 싣는 앱도 가입 · 수락이 막히지 않게(v253)
+        o.hqSharingConsented === true && o.hqSharingConsentVersion != null,
     ),
     IsString({ message: VERSION_INVALID }),
     IsNotEmpty({ message: VERSION_INVALID }),
-    MaxLength(64, {
+    MaxLength(CONSENT_VERSION_MAX, {
       message: '동의 문구 버전(hqSharingConsentVersion)은 64자 이하입니다.',
     }),
   );
@@ -46,7 +49,10 @@ export function IsHqSharingConsentVersion(): PropertyDecorator {
  */
 export function hqSharingConsentRecordOf(
   asked: boolean,
-  dto: { hqSharingConsented?: boolean; hqSharingConsentVersion?: string },
+  dto: {
+    hqSharingConsented?: boolean;
+    hqSharingConsentVersion?: string | null;
+  },
 ): boolean | null {
   if (!asked || dto.hqSharingConsented !== true) return null;
   return dto.hqSharingConsentVersion === HQ_SHARING_CONSENT_VERSION;
@@ -60,9 +66,12 @@ export function warnStaleHqSharingVersion(
   logger: Logger,
   flow: string,
   accountId: number,
-  dto: { hqSharingConsentVersion?: string },
+  dto: { hqSharingConsentVersion?: string | null },
+  recorded: boolean | null,
 ): void {
+  // 남기지 않았을 때(false)만 — 흐름마다 같은 조건을 되풀이하지 않게 여기서 본다
+  if (recorded !== false) return;
   logger.warn(
-    `${flow}: 화면이 보인 본사 제공 동의 문구 버전이 지금과 달라 동의를 남기지 않았다 accountId=${accountId} shown=${JSON.stringify(dto.hqSharingConsentVersion) ?? 'none'} current=${HQ_SHARING_CONSENT_VERSION}`,
+    `${flow}: 화면이 보인 본사 제공 동의 문구 버전이 지금과 달라 동의를 남기지 않았다 accountId=${accountId} shown=${dto.hqSharingConsentVersion == null ? 'none' : JSON.stringify(dto.hqSharingConsentVersion)} current=${HQ_SHARING_CONSENT_VERSION}`,
   );
 }

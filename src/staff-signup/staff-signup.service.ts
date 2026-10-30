@@ -340,8 +340,13 @@ export class StaffSignupService {
       });
     }
 
-    if (outcome.hqSharingConsentRecorded === false)
-      warnStaleHqSharingVersion(this.logger, '가입', outcome.accountId, dto);
+    warnStaleHqSharingVersion(
+      this.logger,
+      '가입',
+      outcome.accountId,
+      dto,
+      outcome.hqSharingConsentRecorded,
+    );
     // 가입이 커밋된 뒤 접속 상태를 연다 — 여기서 실패해도 가입은 끝났고, 직원은 로그인 화면에서 들어온다
     const session = await this.sessions.issue({
       accountId: outcome.accountId,
@@ -507,8 +512,13 @@ export class StaffSignupService {
         hqSharingConsentRecorded,
       };
     });
-    if (result.hqSharingConsentRecorded === false)
-      warnStaleHqSharingVersion(this.logger, '근무지 더하기', accountId, dto);
+    warnStaleHqSharingVersion(
+      this.logger,
+      '근무지 더하기',
+      accountId,
+      dto,
+      result.hqSharingConsentRecorded,
+    );
     return result;
   }
 

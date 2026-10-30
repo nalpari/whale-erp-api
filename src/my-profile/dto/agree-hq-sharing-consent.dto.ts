@@ -1,4 +1,6 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { CONSENT_VERSION_MAX } from '../../staff-signup/hq-sharing-consent';
 
 /**
  * 본사 제공 동의 본문 (ATT-30). 화면이 보여 준 동의 문구의 버전을 반드시 싣는다 — 위치정보 동의(termsVersion)와 같이, 그사이
@@ -8,14 +10,16 @@ import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
  */
 export class AgreeHqSharingConsentDto {
   /** 화면이 보여 준 본사 제공 동의 문구 버전 — 예: v1.0 */
+  // Swagger 플러그인은 IsNotEmpty 를 minLength 로 옮기지 않는다 — 가입 · 수락의 버전 칸과 같게 직접 적는다
+  @ApiProperty({ minLength: 1, maxLength: CONSENT_VERSION_MAX })
   @IsString({
     message: '화면에 보인 동의 문구 버전(consentVersion)을 보내 주세요.',
   })
   @IsNotEmpty({
     message: '화면에 보인 동의 문구 버전(consentVersion)을 보내 주세요.',
   })
-  @MaxLength(64, {
+  @MaxLength(CONSENT_VERSION_MAX, {
     message: '동의 문구 버전(consentVersion)은 64자 이하입니다.',
-  }) // 버전 칸은 길이 제한이 없다 — 「v1.0」 꼴보다 넉넉히, 위치정보 동의와 같은 상한
+  })
   consentVersion: string;
 }

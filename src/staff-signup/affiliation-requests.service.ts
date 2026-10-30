@@ -263,8 +263,13 @@ export class AffiliationRequestsService {
         hqSharingConsentRecorded,
       };
     });
-    if (result.hqSharingConsentRecorded === false)
-      warnStaleHqSharingVersion(this.logger, '소속 추가 수락', accountId, dto);
+    warnStaleHqSharingVersion(
+      this.logger,
+      '소속 추가 수락',
+      accountId,
+      dto,
+      result.hqSharingConsentRecorded,
+    );
     return result;
   }
 

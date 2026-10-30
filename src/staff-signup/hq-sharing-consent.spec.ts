@@ -31,6 +31,12 @@ describe('hqSharingConsentRecordOf — 가입 · 수락에서 본사 제공 동�
     ],
     // 버전을 싣지 않는 예전 앱 — 400 이 아니라 가입 · 수락은 마치고 동의만 남기지 않는다(앱이 다시 동의를 안내하게 false)
     ['버전 없이 동의', true, { hqSharingConsented: true }, false],
+    [
+      '버전을 null 로 동의',
+      true,
+      { hqSharingConsented: true, hqSharingConsentVersion: null },
+      false,
+    ],
   ] as const)('%s → %s', (_, asked, dto, expected) => {
     expect(hqSharingConsentRecordOf(asked, dto)).toBe(expected);
   });
