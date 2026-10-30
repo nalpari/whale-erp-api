@@ -240,8 +240,9 @@ export class ContractDeliveryService {
       throw new ServiceUnavailableException(
         `직원 앱 주소(STAFF_APP_URL)가 없어 ${what} 링크를 보낼 수 없습니다.`,
       );
-    // 링크는 알림톡 버튼 변수다. 버튼은 싣지만(WHALEERP-636) 바뀐 본문 · 버튼은 카카오 재검수 전이라 알림톡이 거절될 수 있다 —
-    // 대체 문자가 없으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다(api #59 · #74 리뷰). 검수가 끝나면 다시 본다.
+    // 링크는 알림톡 버튼 변수다. 가입 초대는 카카오에 등록됐지만(WHALEERP-636) 버튼 링크 형식은 확인 중이고 소속 추가 확인 요청은
+    // 등록 전이며, 등록 링크와 STAFF_APP_URL 이 다른 서버(개발)도 알림톡이 거절된다 — 대체 문자가 없으면 직원에게 닿을 길이 없는데
+    // 화면은 보낸 상태가 된다(api #59 · #74 리뷰). 둘 다 등록 · 확인되면 다시 본다.
     if (!this.alimtalk.hasSmsFallback())
       throw new ServiceUnavailableException(
         `대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없어 ${what}를 보낼 수 없습니다.`,

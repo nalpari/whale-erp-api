@@ -213,16 +213,16 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       '초대 코드: #{초대코드}',
       '초대 코드와 링크는 30일 동안 쓸 수 있습니다.',
     ].join('\n');
-    await expect(
-      prisma.notificationTemplate.findUnique({
-        where: { templateCode: 'TALK_STAFF_INVITATION' },
-        select: { body: true, defaultBody: true, kakaoTemplateCode: true },
-      }),
-    ).resolves.toEqual({
+    const row = await prisma.notificationTemplate.findUniqueOrThrow({
+      where: { templateCode: 'TALK_STAFF_INVITATION' },
+    });
+    expect(row).toMatchObject({
       body: registered,
       defaultBody: registered,
       kakaoTemplateCode: 'TALK_STAFF_INVITATION',
     });
+    // 발송 코드가 넘기는 변수(근무지 · 초대코드 · 링크=버튼 링크)와 맞는 기본 변수 목록
+    expect(row.variables).toEqual(row.defaultVariables);
   });
 
   it('채널 하나의 목록을 주고, 플랫폼 관리자가 아니면 403', async () => {
