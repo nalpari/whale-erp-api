@@ -18,7 +18,7 @@ export const personalDataKeyProvider: Provider = {
     if (!key) {
       const logger = new Logger('PersonalDataKey');
       const message =
-        'PERSONAL_DATA_ENCRYPTION_KEY 가 비어 있습니다 — 있는 신고 정보를 읽으면 503 입니다';
+        'PERSONAL_DATA_ENCRYPTION_KEY 가 비어 있습니다 — 있는 신고 정보를 풀 수 없습니다(직원 앱 · 직원 상세는 503, 근로계약 상세는 신고 정보 칸만 실패)';
       if (isProduction()) logger.error(message);
       else logger.warn(message);
     }

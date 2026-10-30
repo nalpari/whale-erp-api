@@ -1,4 +1,5 @@
 import type { BizppurioConfig } from './bizppurio.config';
+import { MESSAGE_PATH, TOKEN_PATH } from './failure-reason';
 
 /**
  * 비즈뿌리오 호출 실패. `code` 는 비즈뿌리오 응답 코드(1000 성공, 2000 메시지
@@ -101,7 +102,7 @@ export class BizppurioClient {
     token: string,
   ): Promise<BizppurioSendResponse> {
     const response = await this.request<BizppurioSendResponse>(
-      '/v3/message',
+      MESSAGE_PATH,
       `Bearer ${token}`,
       message,
     );
@@ -110,7 +111,7 @@ export class BizppurioClient {
         `sendMessage failed: code=${response.code} description=${response.description}`,
         response.code,
         200,
-        { path: '/v3/message' },
+        { path: MESSAGE_PATH },
       );
     return response;
   }
@@ -132,7 +133,7 @@ export class BizppurioClient {
       `${this.config.account}:${this.config.password}`,
     ).toString('base64');
     const issued = await this.request<IssuedToken & { code?: number }>(
-      '/v1/token',
+      TOKEN_PATH,
       `Basic ${basic}`,
     );
     // 200 에 오류 코드만 실려 오면 토큰 없이 캐시돼 `Bearer undefined` 로 나간다.
@@ -142,7 +143,7 @@ export class BizppurioClient {
         issued.code,
         200,
         {
-          path: '/v1/token',
+          path: TOKEN_PATH,
         },
       );
     this.token = {
@@ -197,7 +198,9 @@ export class BizppurioClient {
         response.status,
         { path },
       );
-    if (payload === undefined)
+    // JSON 이 아니거나 객체가 아니면(null 포함) 본문이 없는 것과 같다 — 그대로 넘기면 호출부가 null.code 를 읽다 비즈뿌리오
+    // 오류가 아닌 예외로 터져 단계(path)를 잃는다
+    if (typeof payload !== 'object' || payload === null)
       throw new BizppurioError(`${path} returned no body`, undefined, 200, {
         path,
       });

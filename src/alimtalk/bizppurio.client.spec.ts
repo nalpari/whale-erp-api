@@ -152,6 +152,18 @@ describe('BizppurioClient', () => {
     expect((error as Error).message).toContain('bad');
   });
 
+  it('메시지 응답 본문이 null 이면 단계(path)를 담은 본문 없음으로 던진다 — 비즈뿌리오 오류가 아닌 예외로 터지지 않게', async () => {
+    fetchFn
+      .mockResolvedValueOnce(token('t1'))
+      .mockResolvedValueOnce(json(200, null));
+
+    const error = await client.sendMessage(message).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(BizppurioError);
+    expect(error).toMatchObject({ code: undefined, path: '/v3/message' });
+    expect((error as Error).message).toContain('no body');
+  });
+
   it('메시지 단계의 네트워크 오류·타임아웃은 다시 보내지 않는다', async () => {
     // 이미 접수됐을 수 있어, 다시 보내면 같은 알림톡이 두 번 간다.
     fetchFn

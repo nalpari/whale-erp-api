@@ -597,7 +597,7 @@ describe('근무스케줄 (e2e, DB)', () => {
       });
       // 직영하나 2줄 → 알림 하나에 묶음, 직영둘 → 하나
       expect(notices).toHaveLength(2);
-      expect(notices[0].body).toMatch(/09:00~13:00 추가, .*17:00~21:00 추가$/);
+      expect(notices[0].body).toMatch(/09:00~13:00 추가, .*17:00~21:00 추가\n/);
     });
 
     it('줄 형식이 틀리면 요청 전체가 400 이고 아무 줄도 저장하지 않는다', async () => {
@@ -762,7 +762,7 @@ describe('근무스케줄 (e2e, DB)', () => {
       });
       expect(notices).toHaveLength(1);
       expect(notices[0].body).toMatch(
-        /09:00~13:00 추가, .*17:00~21:00 추가, .*09:00~18:00 추가$/,
+        /09:00~13:00 추가, .*17:00~21:00 추가, .*09:00~18:00 추가\n/,
       );
 
       const again = await asAdmin('post', '/work-schedules/copy-last-week', {
@@ -1128,13 +1128,11 @@ describe('근무스케줄 (e2e, DB)', () => {
       const notices = await noticesOf(id);
       expect(notices).toHaveLength(3);
       expect(notices.map((n) => n.body)).toEqual([
-        expect.stringMatching(/ 09:00~13:00 추가$/),
-        expect.stringMatching(/ 09:00~13:00 → 10:00~14:00$/),
-        expect.stringMatching(/ 10:00~14:00 삭제$/),
+        expect.stringMatching(/ 09:00~13:00 추가\n/),
+        expect.stringMatching(/ 09:00~13:00 → 10:00~14:00\n/),
+        expect.stringMatching(/ 10:00~14:00 삭제\n/),
       ]);
-      expect(notices[0].title).toBe(
-        '근무스케줄 DIRECT 근무스케줄이 바뀌었습니다',
-      );
+      expect(notices[0].title).toBe('근무스케줄 변경');
       for (const n of notices) {
         expect(n.notificationTarget).toBe('STAFF');
         expect(n.notificationRecipients).toHaveLength(1);

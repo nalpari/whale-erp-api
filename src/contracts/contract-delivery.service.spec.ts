@@ -938,9 +938,19 @@ describe('ContractDeliveryService', () => {
           path: '/v1/token',
         }),
       ],
+      [
+        '토큰 단계 계정 오류(코드 있음)',
+        new BizppurioError('/v1/token failed: http=401 code=3001', 3001, 401, {
+          path: '/v1/token',
+        }),
+      ],
     ])('%s 는 나가지 않았다 — 되돌리고 502 SEND_FAILED', async (_, failure) => {
       const body = await failWith(failure);
       expect(body).toMatchObject({ code: 'SEND_FAILED', retryable: true });
+      // 토큰 단계는 코드가 있어도 번호 탓이 아니다 — 발송 이력(sendFailureOf)과 같은 문구
+      expect((body as { message: string }).message).not.toContain(
+        '번호를 확인',
+      );
       expect(tx.invitation.delete).toHaveBeenCalled();
     });
 

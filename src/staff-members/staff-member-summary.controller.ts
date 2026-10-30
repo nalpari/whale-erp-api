@@ -20,6 +20,7 @@ import { parseRouteId } from '../common/route-id';
 import {
   StaffMemberContractSummaryResponseDto,
   StaffMemberPayslipSummaryResponseDto,
+  StaffMemberSendLogResponseDto,
   StaffMemberTodoSummaryResponseDto,
   StaffMemberWeekScheduleResponseDto,
 } from './dto/staff-member-summary.response.dto';
@@ -81,6 +82,18 @@ export class StaffMemberSummaryController {
     @Param('id') rawId: string,
   ): Promise<StaffMemberPayslipSummaryResponseDto> {
     return this.summary.payslips(user.id, idOf(rawId));
+  }
+
+  /**
+   * 발송 이력 영역 — 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청(재발송 포함)의 결과 · 실패 사유 · 재시도 가능 여부, 최근 순
+   * (WHALEERP-136). 근로계약 관리 조회 권한
+   */
+  @Get(':id/summary/send-logs')
+  async sendLogs(
+    @CurrentUser() user: AuthUser,
+    @Param('id') rawId: string,
+  ): Promise<StaffMemberSendLogResponseDto> {
+    return this.summary.sendLogs(user.id, idOf(rawId));
   }
 
   /** TO-DO 영역 — 전체 · 완료 · 미완료 건수와 최근 처리 이력. TO-DO 관리 조회 권한 */

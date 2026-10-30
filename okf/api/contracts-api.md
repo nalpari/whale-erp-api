@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:44:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T08:30:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-29T08:20:16Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -33,7 +33,7 @@ sources:
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
-    last_modified: 2026-10-23T09:40:00Z
+    last_modified: 2026-10-29T08:20:16Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -169,9 +169,25 @@ a 직원 not yet joined has no account, so counts as not consented)
   not 폐점 is checked either way — a draft whose store closed after it was saved
   is 404 「근무지 점포를 찾을 수 없습니다.」 even when kept at the same store, so
   it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403
-  on the list (`getManageableStores` is null). 플랫폼 관리자 (PM · PA) manage no
-  customer store until this module passes the tab BP (`@TargetBp()`, WHALEERP-618), so
-  they see an empty list.[^admin-scope]
+  on the list (`getManageableStores` is null).[^admin-scope]
+- **The BP is the tab's, not the account's** (WHALEERP-618, 2026-10-29). Every
+  관리자 웹 route here (`ContractsController` and `ContractSendController`'s
+  send · end) takes `@TargetBp()` — the guard reads `X-Bp-Code-Id`, which front
+  puts on from `/bp/{bpCodeId}/contracts…` — and passes it to every
+  `AdminScopeService` call (`getManageableStores` · `canManageStaffAt`). A BP or
+  가맹 account gets its own BP (another BP in the header is the guard's 403), so
+  nothing changes for it. A platform account (PM · PA) works on every store of the
+  chosen customer BP. A platform account **without** the header lands on its own
+  platform BP, which has no stores — `ContractsService.checkTargetBp` answers 400
+  「근로계약을 볼 BP 를 골라 주세요.」 before any scope check (one `bp_codes` read,
+  platform callers only; a platform BP in the header is already the guard's 404, so
+  a platform target means the header was missing). It runs first on each route, so a
+  body that would fail the service's own checks still gets the 400; DTO validation
+  comes before it. The service methods take `bp` as an optional last argument
+  (absent = the account's own BP, the pre-618 behaviour), so callers and unit specs
+  kept their shape. `GET /stores/options` (the 근무지 dropdown) does **not** read
+  the header yet — a platform account sees no 근무지 there and cannot write a
+  contract until that route moves too.
 - **Store names cost a second query.** `stores` is 1팀's table and has no
   Prisma relation to `contracts`, so `include` cannot reach it. A `storeName`
   filter first looks up matching `store_id`s (no match → `storeId: { in: [] }`,
@@ -586,6 +602,24 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   app notice).
   Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503) or the account being 재직 at this
   store already (409) still fail when sent.
+- `taxProfile` — the 직원's 신고 정보, read-only (WHALEERP-155, 2026-10-29 김민식): `{ status, rrnMasked, bankName,
+  accountNumber }`. It hangs on the 직원 record (`StaffTaxProfile` is 1:1 by `staffMemberId`), not the contract, so an
+  old contract shows the 직원's **current** values. The visibility check (`canManageStaffAccount`) uses the same target
+  BP as the detail (`@TargetBp()`, WHALEERP-618) — without it a platform account viewing a customer BP always got `HIDDEN`. `status`:
+  - `OK` — `rrnMasked` is 앞 6자리 + 뒷자리 첫 자 (`900101-1******`, `maskRrn` — masked **here**, the raw number never
+    leaves the API), `bankName` the BANK 공통코드 label (`bankNameOf`, `src/common/bank-name.ts`, shared with the 직원
+    상세 급여 계좌; the code itself when missing), `accountNumber` the full number (no hyphen, not masked — same as
+    WHALEERP-183).
+  - `NONE` — the 직원 has not entered it, whatever the contract's status or method.
+  - `HIDDEN` — 본사 역할(BM · BA) looking at a 가맹 점포 직원's contract (they can open it with 본사 제공 동의). Judged
+    by `AdminScopeService.canManageStaffAccount`, the same rule as the 직원 상세 급여 계좌 (재영 2026-10-29, TAX-07 ·
+    TAX-08); the row is neither read nor decrypted. It is judged on the 직원 record's store, not the contract's — the 신고
+    정보 belongs to the record (the two can differ when a 가입한 직원's 임시저장 moves to another 근무지).
+  - `UNAVAILABLE` — no `PERSONAL_DATA_ENCRYPTION_KEY`, or a column will not decrypt / the decrypted 주민번호 is malformed.
+    Unlike the 직원 상세 요약 (503/500 for the whole area), **the detail still returns 200** — only this field fails.
+    The log names the record and column, never the value.
+
+  Every value field is null unless `status` is `OK`. The 관리자웹 shows `NONE` and `HIDDEN` alike as 「-」.
 
 # 소속 추가 확인 요청 (WHALEERP-130 · 144, 2026-10-26 재영)
 
