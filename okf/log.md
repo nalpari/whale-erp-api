@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: main 병합(electrode, WHALEERP-637): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Payslips](/api/payslips.md) · [Attendance](/api/attendance.md) — 급여명세서 · 출퇴근 기록 관리자 경로가 탭 BP 를 받는다(WHALEERP-637, Whale ERP 채널 2026-10-22 「탭 BP 경로 방식」). 컨트롤러가 `@TargetBp()` 로 대상 BP 를 받아 `targetStores`(새 `src/admin-scope/target-stores.ts` — 플랫폼 계정이 헤더 없이 부르면 400, 아니면 `getManageableStores(id, bp)`)로 관리 점포를 정한다. 플랫폼 계정은 고른 고객 BP 의 점포 전부, BP · 가맹 계정은 그대로다. Swagger 400 · 403 · 404 설명에 BP 판정을 더했다(openapi.json 다시 생성). 단위(target-stores · 컨트롤러) · e2e(payslip-permissions · attendance-records 에 플랫폼 계정 — 고른 BP 만, 다른 BP 는 404, 헤더 없으면 400, BP 계정이 남의 BP 를 실으면 403). 마이그레이션 없음.
 * **Update**: [BP admins](/api/bp-admins.md) — 수정 트랜잭션의 유일값 충돌(P2002)을 이메일 고유 인덱스(`admin_accounts_email_key`, 이름이 없으면 `email` 칸 — pg 어댑터의 `meta.driverAdapterError.cause.constraint`)일 때만 「사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.」로, 그 밖은 「다른 사용자가 이 계정을 먼저 바꿨습니다.」 409 로(지금 경로엔 다른 유일값 충돌이 없다 — 점포 매핑은 `skipDuplicates`, 대비용)(front PR #199 review-pr, front 요청). 문구는 바꾸지 않았다. 등록의 P2002 는 그대로. 마이그레이션 없음.
 * **Update**: [BP admins](/api/bp-admins.md) — 전화번호 표기를 「휴대전화」에서 「연락처」로(2026-10-29 사용자 결정, front 요청). 400 문구 「연락처는 숫자 9~12자리입니다.」(플랫폼 관리자와 같음) · 본인 계정 403 문구 · 변경 이력 항목명. 이미 쌓인 이력 행의 「휴대전화」는 그대로 둔다. openapi 를 다시 내보내며 main 에 늦게 반영된 발송 이력 `isResend` 설명도 함께 바뀌었다. 마이그레이션 없음.
 * **Update**: main 병합(api chansey, main #217 까지): okf/log 충돌은 양쪽 기록을 살렸다.

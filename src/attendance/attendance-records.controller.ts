@@ -21,7 +21,16 @@ import {
 import { CurrentUser } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
-import { MenuPermission } from '../auth/menu-permission.guard';
+import {
+  MenuPermission,
+  TargetBp,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
+import {
+  BP_FORBIDDEN_DESCRIPTION,
+  BP_MISSING_DESCRIPTION,
+  BP_NOT_FOUND_DESCRIPTION,
+} from '../contracts/contracts-swagger';
 import { AttendanceEditService } from './attendance-edit.service';
 import { AttendanceRecordsService } from './attendance-records.service';
 import {
@@ -41,13 +50,16 @@ import {
 
 /**
  * 관리자 웹 「출·퇴근 현황 조회」(WHALEERP-217 · 219). 메뉴는 `/attendance-records`(MN000025). 업무 범위(관리하는 점포) 밖은
- * 없는 것과 같다(404). 권한은 가드가 먼저 보고(403), 범위는 그 뒤 서비스가 본다(404).
+ * 없는 것과 같다(404). 권한은 가드가 먼저 보고(403), 범위는 그 뒤 서비스가 본다(404). 다루는 기록의 BP 는 가드가 X-Bp-Code-Id 로
+ * 정한다(`@TargetBp()`, WHALEERP-637) — BP · 가맹 계정은 소속 BP, 플랫폼 계정은 헤더로 고른 고객 BP 의 점포 전부다(헤더가 없으면
+ * 서비스가 400, 근로계약과 같다). 자기 400 · 404 를 적은 경로는 BP 설명을 함께 다시 적는다 — 메서드의 설명이 클래스의 것을 덮는다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
-  description:
-    '출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  description: `출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
 })
+@ApiBadRequestResponse({ description: BP_MISSING_DESCRIPTION })
+@ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
 @Controller('attendance-records')
 export class AttendanceRecordsController {
   constructor(
@@ -62,12 +74,15 @@ export class AttendanceRecordsController {
   @Get('daily')
   @MenuPermission('read')
   @ApiOkResponse({ type: DailyAttendanceResponseDto })
-  @ApiBadRequestResponse({ description: '쿼리 형식 오류' })
+  @ApiBadRequestResponse({
+    description: `쿼리 형식 오류 · ${BP_MISSING_DESCRIPTION}`,
+  })
   daily(
     @Query() query: DailyAttendanceQueryDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<DailyAttendanceResponseDto> {
-    return this.records.daily(user.id, query, query.date);
+    return this.records.daily(user.id, query, query.date, bp);
   }
 
   /**
@@ -78,14 +93,15 @@ export class AttendanceRecordsController {
   @MenuPermission('read')
   @ApiOkResponse({ type: PeriodAttendanceResponseDto })
   @ApiBadRequestResponse({
-    description: '쿼리 형식 오류 · 기간이 92일 넘음 · 끝이 시작보다 앞',
+    description: `쿼리 형식 오류 · 기간이 92일 넘음 · 끝이 시작보다 앞 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
-    description: '직원이 점포 조건 안의 직원이 아니거나 본사에게 가려진 직원',
+    description: `직원이 점포 조건 안의 직원이 아니거나 본사에게 가려진 직원 · ${BP_NOT_FOUND_DESCRIPTION}`,
   })
   period(
     @Query() query: PeriodAttendanceQueryDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<PeriodAttendanceResponseDto> {
     return this.records.period(
       user.id,
@@ -93,6 +109,7 @@ export class AttendanceRecordsController {
       query.from,
       query.to,
       query.staffMemberId ?? null,
+      bp,
     );
   }
 
@@ -100,12 +117,15 @@ export class AttendanceRecordsController {
   @Get('proxy-staff')
   @MenuPermission('create')
   @ApiOkResponse({ type: ProxyStaffResponseDto })
-  @ApiBadRequestResponse({ description: '쿼리 형식 오류' })
+  @ApiBadRequestResponse({
+    description: `쿼리 형식 오류 · ${BP_MISSING_DESCRIPTION}`,
+  })
   proxyStaff(
     @Query() query: ProxyStaffQueryDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<ProxyStaffResponseDto> {
-    return this.edit.proxyStaff(user.id, query, query.date);
+    return this.edit.proxyStaff(user.id, query, query.date, bp);
   }
 
   /** 출퇴근 대신 등록(ATT-20 · 26). 최근 3개월 · 오늘까지, 사유 필수 */
@@ -114,8 +134,7 @@ export class AttendanceRecordsController {
   @ApiOkResponse({ type: AttendanceEditResultDto })
   @HttpCode(HttpStatus.OK)
   @ApiBadRequestResponse({
-    description:
-      '본문 형식 오류 · 3개월이 지났거나 오늘 이후 · 아직 오지 않은 시각',
+    description: `본문 형식 오류 · 3개월이 지났거나 오늘 이후 · 아직 오지 않은 시각 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiConflictResponse({
     description:
@@ -128,8 +147,9 @@ export class AttendanceRecordsController {
   proxy(
     @Body() dto: ProxyAttendanceDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<AttendanceEditResultDto> {
-    return this.edit.proxy(user.id, dto);
+    return this.edit.proxy(user.id, dto, bp);
   }
 
   /** 기록 보정 — 짝의 출근 · 퇴근 시각, 비었던 쪽은 새로. 보정 이력을 남기고 확인 필요 사유를 지운다(218 · ATT-19) */
@@ -138,11 +158,10 @@ export class AttendanceRecordsController {
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: AttendanceEditResultDto })
   @ApiBadRequestResponse({
-    description:
-      '본문 형식 오류 · 3개월이 지남 · 있던 쪽 시각을 비움 · 바뀐 값 없음 · 아직 오지 않은 시각',
+    description: `본문 형식 오류 · 3개월이 지남 · 있던 쪽 시각을 비움 · 바뀐 값 없음 · 아직 오지 않은 시각 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
-    description: '없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원',
+    description: `없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원 · ${BP_NOT_FOUND_DESCRIPTION}`,
   })
   @ApiConflictResponse({
     description: 'ATTENDANCE_CHANGED — 그사이 다른 관리자가 고침',
@@ -151,8 +170,9 @@ export class AttendanceRecordsController {
     @Param('recordId', ParseIntPipe) recordId: number,
     @Body() dto: CorrectAttendanceDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<AttendanceEditResultDto> {
-    return this.edit.correct(user.id, recordId, dto);
+    return this.edit.correct(user.id, recordId, dto, bp);
   }
 
   /** 「이상 없음」 — 값은 그대로 두고 짝의 확인 필요 사유만 지운다(ATT-19) */
@@ -161,7 +181,7 @@ export class AttendanceRecordsController {
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: AttendanceEditResultDto })
   @ApiNotFoundResponse({
-    description: '없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원',
+    description: `없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원 · ${BP_NOT_FOUND_DESCRIPTION}`,
   })
   @ApiConflictResponse({
     description: 'ATTENDANCE_CHANGED — 확인 필요 사유가 없음(이미 검토됨)',
@@ -169,8 +189,9 @@ export class AttendanceRecordsController {
   review(
     @Param('recordId', ParseIntPipe) recordId: number,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<AttendanceEditResultDto> {
-    return this.edit.review(user.id, recordId);
+    return this.edit.review(user.id, recordId, bp);
   }
 
   /** 이력 — 짝의 보정 이력과 대신 등록, 새것부터 */
@@ -178,12 +199,13 @@ export class AttendanceRecordsController {
   @MenuPermission('read')
   @ApiOkResponse({ type: AttendanceHistoryResponseDto })
   @ApiNotFoundResponse({
-    description: '없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원',
+    description: `없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원 · ${BP_NOT_FOUND_DESCRIPTION}`,
   })
   history(
     @Param('recordId', ParseIntPipe) recordId: number,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<AttendanceHistoryResponseDto> {
-    return this.edit.history(user.id, recordId);
+    return this.edit.history(user.id, recordId, bp);
   }
 }
