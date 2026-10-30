@@ -4,7 +4,7 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T08:38:01Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:27:29Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
@@ -65,7 +65,7 @@ status.[^platform-admins-service]
 | `GET /platform-admins/role-groups` | 조회 — the 사용자 권한 choices of 등록 · 수정 (a `PA` gets no `PM` group). `?purpose=filter` is the 목록 필터 「권한명」 list: every platform `PM` · `PA` group whoever calls, so a `PA` can filter the master accounts the list already shows (재영 2026-10-29). Any other `purpose` is 400 |
 | `GET /platform-admins/:id`, `GET /platform-admins/:id/histories` | 조회 |
 | `GET /platform-admins/login-id-availability?loginId=` | 등록 — `{ available }`. 등록 화면이 아이디 칸을 벗어나거나 Enter 를 칠 때 묻는다. 삭제한 계정의 아이디도 쓸 수 없다고 답한다. `:id` 보다 앞에 둔다 |
-| `GET /platform-admins/email-availability?email=` | 등록 — `{ available }`, 이메일 칸을 벗어날 때 묻는다(BP 마스터 · BP 관리자와 같은 모양, 재영 2026-10-29). 소문자로 맞춰, 등록 409 와 같은 판정 — 지우지 않은 사용 · 미사용 관리자 계정(BP 쪽 포함)과 겹치면 false. 400 은 이메일 형식. `:id` 보다 앞에 둔다 |
+| `GET /platform-admins/email-availability?email=` | 등록 — `{ available }`, 이메일 칸을 벗어날 때 묻는다(BP 마스터 · BP 관리자와 같은 모양, 재영 2026-10-29). 소문자로 맞춰, 등록 409 와 같은 판정 — 지우지 않은 사용 · 미사용 관리자 계정(BP 쪽 포함)과 겹치면 false. 400 은 email 없음 · 이메일 형식 · 100자 초과. `:id` 보다 앞에 둔다 |
 | `POST /platform-admins` | 등록 |
 | `PUT /platform-admins/:id` | 수정 |
 | `POST /platform-admins/:id/password-reset` | 수정 — `{ isMailSent, updatedAt }`. The reset moves `updatedAt`, so the detail screen saves its next edit with this value. It is always present |

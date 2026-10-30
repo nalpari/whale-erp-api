@@ -1,8 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [Platform role groups](/api/platform-role-groups.md) · [BP role groups](/api/bp-role-groups.md) · [Platform admins](/api/platform-admins.md) — api #215 review-pr 반영: PM000001 에 연결된 PM 도 권한명 · 설명은 고친다는 문장으로 고쳤고, 두 컨트롤러의 403 설명을 「본인이 연결된 권한(메뉴 권한 저장 · 삭제)」로 좁혔다. 이메일 중복 확인 400 사유(없음 · 형식 · 100자)를 적고, 쿼리 DTO 주석에 플랫폼 관리자 경로를 더했다. `purpose` 검증과 경로 선언 순서(`:id` 앞) 단위 테스트를 더했다.
 * **Update**: main 병합(api chansey, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
-* **Update**: [Platform role groups](/api/platform-role-groups.md) · [BP role groups](/api/bp-role-groups.md) — 본인이 연결된 권한 그룹도 권한명 · 설명은 고친다(재영 2026-10-30, front 요청). 수정(PUT)의 본인 연결 403 과 상세 `editBlockedReason` 의 `SELF_LINKED` 를 뺐다. 메뉴 권한 저장 · 미리보기와 삭제의 본인 연결 차단은 그대로다. 마이그레이션 없음.
+* **Update**: [Platform role groups](/api/platform-role-groups.md) · [BP role groups](/api/bp-role-groups.md) — 본인이 연결된 권한 그룹도 권한명 · 설명은 고친다(재영 2026-10-30, front 요청). 수정(PUT)의 본인 연결 403 과 상세 `editBlockedReason` 의 `SELF_LINKED` 를 뺐다. 메뉴 권한 저장과 삭제의 본인 연결 차단은 그대로다(미리보기는 원래 본인 연결을 보지 않는다). 마이그레이션 없음.
 * **Update**: main 병합(api electabuzz, main #210 · #212 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Payslips](/api/payslips.md) — api #206 재리뷰(재영 2026-10-30): 확정 가능일의 계약 종료일을 끄는 갱신에서 임시저장을 뺐다(`SENT_RENEWAL` — 발송 대기 · 서명 대기 · 수정 요청). 보내지 않은 임시저장 갱신 하나로 일찍 확정하지 못하던 것 — 「가장 최근 계약」(`NOT_IDLE_RENEWAL`)도 임시저장 재계약을 뺀다. 422 · Swagger 설명도 맞췄다. 단위 · e2e(임시저장 갱신이면 200).
 * **Update**: [Notification templates](/api/notification-templates.md) · [To-dos](/api/todos.md) — 알림 템플릿 기본 문구 42건을 「알림톡_템플릿_20261029.xlsx」 새 문구로 바꾸는 데이터 마이그레이션 `20261030093710_team3_notification_template_wording`(api petra). 급여명세서 재발송 2건은 엑셀 대신 처음 발송 새 문구를 따른다(NTF-20 유지). `default_*` 는 42건 모두, 지금 문구는 제목 · 본문 · 변수가 셋 다 옛 기본값일 때만. 변수 목록은 `NTF_AFFILIATION_REJECTED` · `EMAIL_AFFILIATION_REJECTED` 에 선택 변수 `거절사유` 만 더했다(발송은 아직 넘기지 않아 빈칸). 엑셀에 없는 기본 템플릿 4건과 `TALK_STAFF_INVITATION` 의 null 제목은 그대로. todos e2e 의 `PUSH_TODO_DUE_SOON` 제목 기대값을 새 문구로. work-schedule-notice.ts 주석만 새 제목에 맞췄다([Work schedules](/api/work-schedules.md)). 스키마 변경 없음.

@@ -66,7 +66,7 @@ const NOT_FOUND_DESCRIPTION =
 @ApiBearerAuth()
 @ApiForbiddenResponse({
   description:
-    '메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 역할로 쓸 수 없음 · 연결 가맹 마스터 없는 가맹 관리자(공용 문구) · 본인이 연결된 권한',
+    '메뉴 권한 없음 · BP · 가맹 사용자의 다른 BP 헤더 · 역할로 쓸 수 없음 · 연결 가맹 마스터 없는 가맹 관리자(공용 문구) · 본인이 연결된 권한(메뉴 권한 저장 · 삭제)',
 })
 @ApiBadRequestResponse({
   description: '플랫폼 사용자의 X-Bp-Code-Id 누락',

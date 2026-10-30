@@ -139,6 +139,18 @@ describe('PlatformAdminsController', () => {
     },
   );
 
+  // Nest 는 선언 순서대로 경로를 잡는다. 뒤로 가면 GET /platform-admins/email-availability 가 상세(:id)로 잡혀 404.
+  it.each(['roleGroups', 'loginIdAvailability', 'emailAvailability'])(
+    '%s 는 :id 경로보다 먼저 선언한다',
+    (method) => {
+      const order = Object.getOwnPropertyNames(
+        PlatformAdminsController.prototype,
+      );
+      expect(order.indexOf(method)).toBeGreaterThan(-1);
+      expect(order.indexOf(method)).toBeLessThan(order.indexOf('detail'));
+    },
+  );
+
   // 경로마다 가드가 같은 표시를 붙이지만, 가드를 빠뜨린 경로가 더해져도 직원 앱 토큰에 열리지 않게 클래스에도 둔다.
   it('관리자 토큰만 받는다', () => {
     expect(Reflect.getMetadata(USER_TYPES, PlatformAdminsController)).toEqual([
