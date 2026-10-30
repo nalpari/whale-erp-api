@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-30
+* **Update**: [Notification templates](/api/notification-templates.md) · [To-dos](/api/todos.md) — 알림 템플릿 기본 문구 42건을 「알림톡_템플릿_20261029.xlsx」 새 문구로 바꾸는 데이터 마이그레이션 `20261030093710_team3_notification_template_wording`(api petra). 급여명세서 재발송 2건은 엑셀 대신 처음 발송 새 문구를 따른다(NTF-20 유지). `default_*` 는 42건 모두, 지금 문구는 제목 · 본문 · 변수가 셋 다 옛 기본값일 때만. 변수 목록은 `NTF_AFFILIATION_REJECTED` · `EMAIL_AFFILIATION_REJECTED` 에 선택 변수 `거절사유` 만 더했다(발송은 아직 넘기지 않아 빈칸). 엑셀에 없는 기본 템플릿 4건과 `TALK_STAFF_INVITATION` 의 null 제목은 그대로. todos e2e 의 `PUSH_TODO_DUE_SOON` 제목 기대값을 새 문구로. work-schedule-notice.ts 주석만 새 제목에 맞췄다([Work schedules](/api/work-schedules.md)). 스키마 변경 없음.
+
 ## 2026-10-29
 * **Update**: main 병합(api doduo, main #209 까지): okf 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api doduo, main #202 까지): okf/log 충돌은 양쪽 기록을 살렸다.

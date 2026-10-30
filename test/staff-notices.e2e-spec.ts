@@ -224,15 +224,15 @@ describe('직원 알림 — 근로계약서 · 급여명세서 발송 (e2e, DB)'
         r.notificationDeliveries,
       ]),
     ).toEqual([
-      ['PUSH_CONTRACT_SENT', '근로계약서가 도착했습니다', []],
+      ['PUSH_CONTRACT_SENT', '근로계약서 서명 요청', []],
       [
         'PUSH_PAYSLIP_SENT',
-        '9월 급여명세서가 도착했습니다',
+        '9월 급여명세서 안내',
         [{ channel: 'PUSH', result: null }],
       ],
       [
         'PUSH_PAYSLIP_RESENT',
-        '9월 급여명세서가 도착했습니다',
+        '9월 급여명세서 안내',
         [{ channel: 'PUSH', result: null }],
       ],
     ]);

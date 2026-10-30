@@ -4,8 +4,12 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-10-30T00:40:00Z }
 sources:
+  - id: wording-cleanup
+    resource: ../../prisma/migrations/20261030093710_team3_notification_template_wording/migration.sql
+    title: 기본 문구 42건을 「알림톡_템플릿_20261029.xlsx」 새 문구로 (운영자가 고친 문구는 그대로)
+    last_modified: 2026-10-30T00:40:00Z
   - id: payslip-resent-same-wording
     resource: ../../prisma/migrations/20261021100935_team3_payslip_resent_same_wording/migration.sql
     title: 급여명세서 다시 발송 두 템플릿을 처음 발송 문구와 같게 (NOTI-6)
@@ -65,6 +69,15 @@ sources:
   `PUSH_PAYSLIP_SENT` · `EMAIL_PAYSLIP_SENT` 의 기본 문구로 바꾸고(앱 푸시 변수에 `#{근무지}` 가 더해진다), 지금 문구는
   제목 · 본문 · 변수 목록이 셋 다 옛 기본값일 때만 같이 바꾼다 — 운영자가 고친 문구는 그대로 둔다. 코드 · 이름 · 채널 ·
   수신 설정 묶음 · 사용 여부는 그대로다.
+- **기본 문구 정리**(2026-10-29 노영주, 「알림톡_템플릿_20261029.xlsx」 — 카카오 심사 전 문구 다듬기 포함).
+  `20261030093710_team3_notification_template_wording` 이 기본 템플릿 46건 중 42건의 `default_title` · `default_body` 를 새 문구로
+  바꾸고, 엑셀에 없는 4건(`EMAIL_EXCEL_READY` · `EMAIL_EXCEL_FAILED` · `TALK_STAFF_AFFILIATION_REQUEST` · `EMAIL_STAFF_AFFILIATION_REQUEST`)은
+  건드리지 않는다. `default_variables` 는 `NTF_AFFILIATION_REJECTED` · `EMAIL_AFFILIATION_REJECTED` 두 건만 바뀐다 — 선택 변수
+  `#{거절사유}`(`isRequired: false`)가 더해진다. 소속 추가 거절 발송은 아직 `거절사유` 를 넘기지 않아 빈칸으로 렌더된다.
+  `TALK_STAFF_INVITATION` 의 제목은 null 그대로다. 지금 문구(`title` · `body` · `variables`)는 셋 다 옛 기본값 그대로일 때만 같이
+  바꾸고(운영자가 고친 문구는 그대로), 되돌리기 원본은 늘 바꾼다. 코드 · 이름 · 채널 · 수신 설정 묶음 · 사용 여부 · 카카오 템플릿
+  코드는 그대로이고 변경 이력은 남기지 않는다.
+  예외로 `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_RESENT` 는 엑셀의 재발송 문구 대신 `PUSH_PAYSLIP_SENT` · `EMAIL_PAYSLIP_SENT` 의 새 문구를 따른다 — 다시 보내도 처음 발송과 같은 문구(NTF-20 유지, 2026-10-29 노영주).
 - **템플릿 코드**는 고칠 수 있다. 형식(`^[A-Z][A-Z0-9_]*$`)과 고유만 보고 겹치면 409. 채널을 바꿔도 코드가 저절로 바뀌지
   않는다. 발송 코드가 이 값으로 부르므로 화면이 「발송 코드도 함께 바꿔야 합니다」 확인을 받는다.
 
