@@ -37,6 +37,16 @@ const splitNumbers = ({ value }: { value: unknown }): unknown => {
     : parts;
 };
 
+/** `a=x&a=y` · `a=x,y` · 둘을 섞은 것을 같은 글자 배열로 받는다. 빈 조각은 버린다. */
+const splitTexts = ({ value }: { value: unknown }): unknown => {
+  const parts = typeof value === 'string' ? [value] : value;
+  return Array.isArray(parts)
+    ? parts
+        .flatMap((p: unknown) => (typeof p === 'string' ? p.split(',') : [p]))
+        .filter((p: unknown) => p !== '')
+    : parts;
+};
+
 /** BP 관리자 목록 검색. 조건은 모두 AND. BP 는 쿼리가 아니라 X-Bp-Code-Id 헤더로 받는다(가드가 정한다). */
 export class ListBpAdminsDto extends PageDto {
   /** 아이디 · 이름 중 하나에 들어 있으면 나온다. @example 지수 */
@@ -68,6 +78,22 @@ export class ListBpAdminsDto extends PageDto {
   @Min(1)
   @Max(INT4_MAX)
   roleGroupId?: number;
+
+  /**
+   * 역할 — 고른 역할의 계정만. 여러 개는 반복 또는 쉼표로. 주지 않거나 비우면 세 역할 모두
+   * (역할을 하나도 고르지 않은 화면은 api 를 부르지 않는다). @example FM,FA
+   */
+  @IsOptional()
+  @Transform(splitTexts)
+  @ApiProperty({
+    enum: BP_ADMIN_ROLES,
+    enumName: 'BpAdminRole',
+    isArray: true,
+    required: false,
+  })
+  @ArrayMaxSize(BP_ADMIN_ROLES.length)
+  @IsIn(BP_ADMIN_ROLES, { each: true })
+  roleTypeCodes?: BpAdminRole[];
 
   /** 계정 상태. 주지 않으면 사용 · 미사용 둘 다. */
   @IsOptional()
