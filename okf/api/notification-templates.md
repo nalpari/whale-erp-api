@@ -4,8 +4,12 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-30T00:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
 sources:
+  - id: reject-notices-without-reason
+    resource: ../../prisma/migrations/20261030120100_team3_reject_notices_without_reason/migration.sql
+    title: 근로계약 거부 · 소속 추가 거절 알림 4건에서 사유 줄 · 변수를 뺌 (WHALEERP-635)
+    last_modified: 2026-10-30T10:00:00Z
   - id: wording-cleanup
     resource: ../../prisma/migrations/20261030093710_team3_notification_template_wording/migration.sql
     title: 기본 문구 42건을 「알림톡_템플릿_20261029.xlsx」 새 문구로 (운영자가 고친 문구는 그대로)
@@ -73,7 +77,10 @@ sources:
   `20261030093710_team3_notification_template_wording` 이 기본 템플릿 46건 중 42건의 `default_title` · `default_body` 를 새 문구로
   바꾸고, 엑셀에 없는 4건(`EMAIL_EXCEL_READY` · `EMAIL_EXCEL_FAILED` · `TALK_STAFF_AFFILIATION_REQUEST` · `EMAIL_STAFF_AFFILIATION_REQUEST`)은
   건드리지 않는다. `default_variables` 는 `NTF_AFFILIATION_REJECTED` · `EMAIL_AFFILIATION_REJECTED` 두 건만 바뀐다 — 선택 변수
-  `#{거절사유}`(`isRequired: false`)가 더해진다. 소속 추가 거절 발송은 아직 `거절사유` 를 넘기지 않아 빈칸으로 렌더된다.
+  `#{거절사유}`(`isRequired: false`)가 더해진다. 소속 추가 거절 발송은 `거절사유` 를 넘기지 않아 빈칸으로 렌더됐고, 곧이은
+  `20261030120100_team3_reject_notices_without_reason`(WHALEERP-635 — 두 거절 모두 사유를 받지 않는다)이 이 두 건의 「- 거절 사유」 줄과
+  변수를 다시 뺀다. 같은 마이그레이션이 근로계약 거부 두 건의 「- 거부 사유」 줄도 걷는다 — 운영 알림은 그 자리를 「- 근무지: #{근무지}」로
+  바꾸고 변수도 근무지(필수)로 바뀐다. 이 네 건은 운영자가 고친 문구도 덮어쓴다([근로계약 API](/api/contracts-api.md)).
   `TALK_STAFF_INVITATION` 의 제목은 null 그대로다. 지금 문구(`title` · `body` · `variables`)는 셋 다 옛 기본값 그대로일 때만 같이
   바꾸고(운영자가 고친 문구는 그대로), 되돌리기 원본은 늘 바꾼다. 코드 · 이름 · 채널 · 수신 설정 묶음 · 사용 여부 · 카카오 템플릿
   코드는 그대로이고 변경 이력은 남기지 않는다.

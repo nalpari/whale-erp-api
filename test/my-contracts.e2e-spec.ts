@@ -616,23 +616,25 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     const d = await post(
       `/me/contracts/${othersContract}/correction-request`,
       auth,
+      { reason: '사유' },
     ).expect(404);
     // 후보 계정으로만 이어진 계약에 수정 요청해도 같은 404
     const e = await post(
       `/me/contracts/${candidateOnly}/correction-request`,
       auth,
+      { reason: '사유' },
     ).expect(404);
     expect(c.body).toEqual(a.body);
     expect(d.body).toEqual(a.body);
     expect(e.body).toEqual(a.body);
-    // 두 계약 모두 상태 · 거부 사유 · 상태 이력이 그대로다
+    // 두 계약 모두 상태 · 수정 요청 사유 · 상태 이력이 그대로다
     for (const contractId of [othersContract, candidateOnly]) {
       expect(
         await prisma.contract.findUniqueOrThrow({
           where: { contractId },
-          select: { status: true, rejectReason: true },
+          select: { status: true, correctionReason: true },
         }),
-      ).toEqual({ status: 'PENDING_SIGNATURE', rejectReason: null });
+      ).toEqual({ status: 'PENDING_SIGNATURE', correctionReason: null });
       expect(
         await prisma.contractStatusHistory.count({
           where: {
@@ -644,43 +646,76 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     }
   });
 
-  it('거부 사유는 선택이다 — 비우면 남기지 않는다', async () => {
-    const a = await account();
-    const { contractId } = await pending(a);
-    await post(`/me/contracts/${contractId}/reject`, await token(a.accountId))
-      .expect(200)
-      .expect((r) =>
-        expect(r.body).toEqual({ contractId, status: 'REJECTED' }),
-      );
-    expect(
-      await prisma.contract.findUniqueOrThrow({ where: { contractId } }),
-    ).toMatchObject({ status: 'REJECTED', rejectReason: null });
+  it('거부는 본문 없이 받는다 — 빈 본문 · 사유를 싣던 옛 직원 앱 모두 200(forbidNonWhitelisted 400 이 아님, WHALEERP-635)', async () => {
+    for (const body of [undefined, { reason: '가'.repeat(501) }]) {
+      const a = await account();
+      const { contractId } = await pending(a);
+      const req = request(app.getHttpServer())
+        .post(`/me/contracts/${contractId}/reject`)
+        .set('Authorization', `Bearer ${await token(a.accountId)}`);
+      await (body ? req.send(body) : req)
+        .expect(200)
+        .expect((r) =>
+          expect(r.body).toEqual({ contractId, status: 'REJECTED' }),
+        );
+      expect(
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId },
+          select: { status: true, correctionReason: true },
+        }),
+      ).toEqual({ status: 'REJECTED', correctionReason: null });
+    }
   });
 
-  it('거부 사유 길이는 앞뒤 공백을 지운 뒤로 센다', async () => {
-    const a = await account();
-    const { contractId } = await pending(a);
-    const reason = '가'.repeat(500);
-    await post(`/me/contracts/${contractId}/reject`, await token(a.accountId), {
-      reason: ` ${reason}
-`,
-    }).expect(200);
-    expect(
-      await prisma.contract.findUniqueOrThrow({ where: { contractId } }),
-    ).toMatchObject({ status: 'REJECTED', rejectReason: reason });
-  });
+  it.each([
+    ['사유 없음', {}, '수정 요청 사유를 입력해 주세요.'],
+    ['빈칸', { reason: '' }, '수정 요청 사유를 입력해 주세요.'],
+    ['공백만', { reason: ' \n ' }, '수정 요청 사유를 입력해 주세요.'],
+    ['null', { reason: null }, '수정 요청 사유를 입력해 주세요.'],
+    [
+      '101자',
+      { reason: '가'.repeat(101) },
+      '수정 요청 사유는 100자 이하로 입력해 주세요.',
+    ],
+  ])(
+    '수정 요청 — %s 이면 400 과 문구 하나, 상태 · 사유는 그대로',
+    async (_, body, message) => {
+      const a = await account();
+      const { contractId } = await pending(a);
+      const res = await post(
+        `/me/contracts/${contractId}/correction-request`,
+        await token(a.accountId),
+        body,
+      ).expect(400);
+      expect((res.body as { message: unknown }).message).toEqual([message]);
+      expect(
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId },
+          select: { status: true, correctionReason: true },
+        }),
+      ).toEqual({ status: 'PENDING_SIGNATURE', correctionReason: null });
+    },
+  );
 
-  it('수정 요청 — 서명 대기면 받는다', async () => {
+  it('수정 요청 — 서명 대기면 받고 앞뒤 공백을 지운 사유(100자까지)를 남긴다', async () => {
     const a = await account();
     const { contractId } = await pending(a);
+    const reason = '가'.repeat(100);
     await post(
       `/me/contracts/${contractId}/correction-request`,
       await token(a.accountId),
-    ).expect(200);
+      { reason: ` ${reason}\n` },
+    )
+      .expect(200)
+      .expect((r) =>
+        expect(r.body).toEqual({ contractId, status: 'CORRECTION_REQUESTED' }),
+      );
     expect(
-      (await prisma.contract.findUniqueOrThrow({ where: { contractId } }))
-        .status,
-    ).toBe('CORRECTION_REQUESTED');
+      await prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { status: true, correctionReason: true },
+      }),
+    ).toEqual({ status: 'CORRECTION_REQUESTED', correctionReason: reason });
   });
 
   it('서명이 없으면 400, 관리자 토큰은 403', async () => {

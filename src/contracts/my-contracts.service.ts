@@ -308,18 +308,17 @@ export class MyContractsService {
       );
   }
 
-  /** 거부 — 사유는 선택이다. 서명 대기 · 기한 안 · 재직 중에서만(기한 · 퇴직일은 잠근 시각으로) */
+  /** 거부 — 사유는 받지 않는다(WHALEERP-635). 서명 대기 · 기한 안 · 재직 중에서만(기한 · 퇴직일은 잠근 시각으로) */
   async reject(
     accountId: number,
     contractId: number,
-    reason?: string,
     now?: Date,
   ): Promise<MyContractActionResponseDto> {
     const historyId = await this.prisma.$transaction(async (tx) => {
       const c = await this.lockMine(tx, accountId, contractId);
       const lockedAt = now ?? new Date();
       checkEmployed(c, lockedAt);
-      await rejectContract(tx, contractId, reason, lockedAt);
+      await rejectContract(tx, contractId, lockedAt);
       // 거부 알림의 사건 키 — 방금 남긴 거부 이력
       const history = await tx.contractStatusHistory.findFirstOrThrow({
         where: { contractId, toStatus: 'REJECTED' },
@@ -332,17 +331,21 @@ export class MyContractsService {
     return { contractId, status: 'REJECTED' };
   }
 
-  /** 수정 요청 — 대조 결과와 상관없이 서명 대기 · 기한 안이면 받는다(2026-10-21 김민식). 따로 받는 내용은 없다 */
+  /**
+   * 수정 요청 — 대조 결과와 상관없이 서명 대기 · 기한 안이면 받는다(2026-10-21 김민식). 사유(DTO 가 다듬은 1~100자)를 상태와 함께
+   * 남긴다(WHALEERP-635)
+   */
   async requestCorrection(
     accountId: number,
     contractId: number,
+    reason: string,
     now?: Date,
   ): Promise<MyContractActionResponseDto> {
     await this.prisma.$transaction(async (tx) => {
       const c = await this.lockMine(tx, accountId, contractId);
       const lockedAt = now ?? new Date();
       checkEmployed(c, lockedAt);
-      await requestCorrection(tx, contractId, lockedAt);
+      await requestCorrection(tx, contractId, reason, lockedAt);
     });
     return { contractId, status: 'CORRECTION_REQUESTED' };
   }
