@@ -1,10 +1,10 @@
 ---
 type: API
 title: Admin authentication
-description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
+description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, and the store list version (`stores-version`, `me/stores`) the header store picker refreshes by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T09:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -24,8 +24,8 @@ sources:
     last_modified: 2026-10-22T04:31:00Z
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
-    title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts · me/password-change · me/password-verifications, GET /auth/admin/login-info · me · me/bp · me/email-availability, PATCH /auth/admin/me · me/bp, POST /auth/admin/me/bp/business-verification
-    last_modified: 2026-10-29T02:50:08Z
+    title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts · me/password-change · me/password-verifications, GET /auth/admin/login-info · me · me/bp · me/email-availability · me/stores, PATCH /auth/admin/me · me/bp, POST /auth/admin/me/bp/business-verification
+    last_modified: 2026-10-30T05:00:00Z
   - id: admin-profile-service
     resource: ../../src/auth/admin-profile.service.ts
     title: 마이페이지 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
@@ -45,7 +45,7 @@ sources:
   - id: admin-login-info-service
     resource: ../../src/auth/admin-login-info.service.ts
     title: Login info — account, menu tree with CRUD, managed stores, codes
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T05:00:00Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check, target BP (X-Bp-Code-Id → @TargetBp())'
@@ -72,12 +72,12 @@ sources:
     last_modified: 2026-10-29T05:17:36Z
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
-    title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · code-items — 플랫폼 사용자의 BP 선택과 진입
-    last_modified: 2026-10-29T09:00:00Z
+    title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · stores-version · code-items — 플랫폼 사용자의 BP 선택과 진입
+    last_modified: 2026-10-30T07:00:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService — 직원 · 점포 판정의 탭 BP 인자(scopeAdmin)
-    last_modified: 2026-10-29T09:00:00Z
+    last_modified: 2026-10-30T07:00:00Z
 ---
 
 # Routes
@@ -92,6 +92,7 @@ sources:
 | `POST /auth/admin/login-id-find-attempts` | yes | `{ name, email }` → `{ maskedLoginId }` for an active match, else the same 404 |
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
 | `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
+| `GET /auth/admin/me/stores` | admin | only login-info's `stores`, as `{ items, total }` — same rule (platform `[]`, deleted account 401; an unused or withdrawn one gets `[]`, as login-info does, while the version route answers it 403), 403 during a forced password change like the version route (only the popup is open then), not throttled. 관리자 웹 calls it when the stores version below changes, instead of re-reading menus and codes |
 | `GET /auth/admin/me` | admin | 마이페이지(S-JXKHCM) — `{ loginId, name, phone, email, roleTypeCode, createdAt, lastLoginAt }` for the signed-in admin's own account only (`CurrentUser().id`, never a BP/customer context) |
 | `PATCH /auth/admin/me` | admin | `{ name, phone, email, updatedAt }` → 204. Changing `email` does **not** check the current password (S-JXKHCM, user decision 2026-10-22 · confirmed 2026-10-23). The check added by the 2026-10-21 adversarial review was removed knowingly — a stolen access token alone can again change the login email and intercept a mailed temp-password via `POST /auth/admin/temporary-passwords`; the user was told and accepted it. With the check gone, a token-only caller can also learn whether an email is taken from the 409 (the same is already possible through `GET /auth/admin/me/email-availability`). `currentPassword` was kept for a while as an ignored optional field so the old front build didn't hit `forbidNonWhitelisted` 400; front #125 stopped sending it and the field is now gone (2026-10-26) — sending it now gets 400. my-profile(직원 앱)'s email-change keeps its own current-password check. `updatedAt` is the optimistic-lock token from `GET /me` — `updateMany` with `sameMillisecond(updatedAt)`, 409 if another admin (e.g. via platform-admins) saved first (same review round — the original diff had no concurrency check and silently overwrote concurrent edits). Re-checks email uniqueness (excluding `WITHDRAWN`) inside the same transaction, 409 on conflict; if email changed, invalidates every live `temporary_passwords` row for the account (used ones too) (an account-takeover path via the mailed temp-password flow otherwise survives an email change) and re-arms `isInitialPasswordUnsent` if any were invalidated and the account has no usable password (`'!'`) — the shared `voidTempPasswordsForEmailChange`, so a signed-in admin (who has one) never gets it; logs changed fields to `admin_change_histories` with `updatedBy` set to the signed-in admin. Account axis throttled on the signed-in user, not the request's own `email` field (the default account tracker keys on `body.email`, which this route's caller controls) |
 | `GET /auth/admin/me/email-availability?email=` | admin | `{ available }` for 마이페이지's blur/Enter check — DTO-validated (400 on missing/malformed `email`, fixed from a prior 500). No `@SkipThrottle` (아이디 · 이메일 중복 확인은 기본 한도를 둔다는 결정, api #37 과 같다) |
@@ -103,6 +104,7 @@ sources:
 | `GET /public-code-items?groups=A,B` | yes | the platform BP's 공통코드 — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
 | `GET /bp-codes?keyword=&withMaster=&page=&pageSize=` | PM · PA only | customer BPs to pick from, `{ items: [{ bpCodeId, bpCode, tradeName, accountStatusCode }], total }` (below) |
 | `GET /bp-codes/{bpCodeId}/stores` | any signed-in user, by BP | every undeleted store of a customer BP, `{ items, total }`. PM · PA see any customer BP; everyone else only their own (below) |
+| `GET /bp-codes/{bpCodeId}/stores-version` | any signed-in user, by BP | `{ version }` — compare only. Same access and errors as the stores above (below) |
 | `GET /bp-codes/{bpCodeId}/code-items?groups=A,B` | any signed-in user, by BP | the same `codes` for a BP the caller may see — PM · PA any undeleted BP (the platform BP included); BP · 가맹 관리자 their own; 직원 앱 a BP with a joined, employed staff record; else 404 (below) |
 
 Access tokens last 1 hour and carry `type: 'admin'`, `loginId` and `sid`; the
@@ -595,6 +597,47 @@ What `login-info` contains:
 - **account** — includes `isPasswordChangeRequired`,
   `temporaryPasswordExpiresAt`, and `isTermsAgreementRequired` (플랫폼등록 and
   no agreement yet) for the forced-change popup.
+
+# Store list version
+
+The same account is used on several PCs, so a store registered, edited, closed or deleted on one — or a
+manager's store mappings or 관리 점포 범위 changed — has to reach the others' header store picker and list
+filters. 관리자 웹 asks `GET /bp-codes/{bpCodeId}/stores-version` on refresh, menu change and window focus,
+and re-reads the stores (`GET /auth/admin/me/stores` for its own BP, `GET /bp-codes/{id}/stores` for a picked
+one) only when the value changed (front 요청, 2026-10-29). Access and errors are the stores route's
+(`bpStoresAccess`): PM · PA any customer BP, BP · 가맹 관리자 their own, 직원 앱 a BP holding a store of
+their joined, employed staff record; another BP or the platform BP 404, an unusable account 403 — also when
+it became unusable between that check and the version being built (the version reads the account again,
+`ACTIVE` and undeleted, and answers 403 rather than a version without the mapping part).
+
+`AdminScopeService.bpStoresVersion` hashes (SHA-256, base64url, 22 chars — ids and times are not exposed,
+and the format may change):
+
+- **every** `stores` row of the BP, **deleted rows included** — deletion is a flag, so it moves
+  `updated_at` — as `(store_id, updated_at, is_deleted)` in `store_id` order;
+- for a BP · 가맹 account only (their scope is mappings): every `admin_store_mappings` row of theirs, the
+  same way (unassigning sets the flag), and their `admin_accounts.updated_at` — that catches 관리 점포 범위
+  (`is_all_stores`) and status changes. Any other edit of the account moves it too, which only costs one
+  extra re-read. PM · PA and 직원 앱 see the whole BP, so stores only.
+
+**Why every row, not `max(updated_at)` and a count** (first version, changed after review on 2026-10-30):
+`@updatedAt` is stamped when Prisma builds the query, not at commit, and the store transactions lock rows
+and write history before committing. A 폐점 stamped t1 that commits after an edit stamped t2 > t1 leaves the
+maximum at t2 and the count unchanged, so the version would never move and the other PCs would keep showing
+the store as open until some later change. An edit in the same millisecond as the latest one, and a mapping
+swapped for another (same count), were missed the same way. Per-row material moves whenever any row's
+values do, whatever the commit order. Unit spec and e2e both cover the late-commit case.
+
+The 대표 이미지 is not in it — the picker does not show it, and it does not touch the store row. Login does
+not change it either: a login does not move `admin_accounts.updated_at` (admin-auth e2e). The reads are
+`bp_codes` by primary key, the BP's stores on `stores_bp_code_id_idx` (one row per store, deleted ones
+included, so the cost grows with the BP's store count), and for an admin the account by primary key; a
+BP · 가맹 account adds its mappings on the mapping primary key's leading `admin_account_id`. With
+`bpStoresAccess` that is four to six reads per call besides the session check.
+
+**Ask the version before the list, never after.** Read the list first and a change landing in between is
+inside the stored version but not in the list, so the picker keeps the old list until something else changes;
+read the version first and the worst case is one extra re-read next time.
 
 # Which BP's 공통코드 rows
 

@@ -50,7 +50,6 @@ import {
   XLSX_CONTENT_TYPE,
 } from '../excel-exports/excel-response';
 import { AttachmentsInterceptor } from '../storage/upload-check';
-import { ListStoreOptionsQueryDto } from './dto/list-store-options-query.dto';
 import {
   ListStoresQueryDto,
   StoreExcelQueryDto,
@@ -61,7 +60,6 @@ import {
   UpdateStoreDto,
   VerifyStoreBusinessDto,
 } from './dto/save-store.dto';
-import { StoreOptionListResponseDto } from './dto/store-option.response.dto';
 import {
   CreateStoreResponseDto,
   StoreBusinessVerificationResponseDto,
@@ -77,7 +75,6 @@ import {
   StoreManagementService,
   type StoreImageUpload,
 } from './store-management.service';
-import { StoresService } from './stores.service';
 
 /** 가드가 정한 대상 BP 의 404 — 플랫폼 계정이 보낸 X-Bp-Code-Id 가 쓸 수 없는 BP 다. */
 const BP_NOT_FOUND_DESCRIPTION =
@@ -91,7 +88,6 @@ const BP_MISSING_DESCRIPTION = '플랫폼 계정의 X-Bp-Code-Id 누락';
  * (@MenuPermission)가 판정하고, 업무 규칙(범위 · 상태 · BP 사용 여부 · 가맹 역할 등록 금지)은 StoreManagementService 가 본다.
  * 다루는 점포의 BP 는 가드가 X-Bp-Code-Id 로 정한다(`@TargetBp()`) — BP · 가맹 계정은 소속 BP, 플랫폼 계정은 헤더로
  * 고객 BP 를 보내야 한다(없으면 서비스가 400, BP 권한 그룹과 같다).
- * 근로계약서 근무지 선택지(`/stores/options`)는 메뉴 권한 없이 업무 범위로만 거른다 — 근로계약 화면이 쓴다. 헤더도 보지 않는다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
@@ -104,26 +100,10 @@ const BP_MISSING_DESCRIPTION = '플랫폼 계정의 X-Bp-Code-Id 누락';
 @Controller('stores')
 export class StoresController {
   constructor(
-    private readonly stores: StoresService,
     private readonly management: StoreManagementService,
     private readonly excelExports: ExcelExportsService,
     private readonly excelSource: StoreExcelSource,
   ) {}
-
-  /** 근무지 선택지. 업무 범위 안에서 지우지 않았고 폐점이 아닌 점포, 이름순. `:id` 보다 먼저 둔다. */
-  @Get('options')
-  @ApiOkResponse({ type: StoreOptionListResponseDto })
-  // 메뉴 권한을 보지 않는 경로라 클래스의 403 설명(메뉴 권한 · 가맹 등록)을 덮어쓴다.
-  @ApiForbiddenResponse({
-    description: '직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
-  })
-  @ApiBadRequestResponse({ description: '검색 조건 형식' })
-  options(
-    @Query() query: ListStoreOptionsQueryDto,
-    @CurrentUser() user: AuthUser,
-  ): Promise<StoreOptionListResponseDto> {
-    return this.stores.options(user.id, query);
-  }
 
   /** 점포 정보 관리 목록. 등록일 최신순, 기본은 미운영 · 운영. */
   @Get()

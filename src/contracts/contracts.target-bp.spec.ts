@@ -18,6 +18,8 @@ describe('근로계약 대상 BP', () => {
   let prisma: {
     bpCode: { findFirst: jest.Mock };
     contract: { findUnique: jest.Mock };
+    $transaction: jest.Mock;
+    store: { findMany: jest.Mock; count: jest.Mock };
   };
   let scope: { getManageableStores: jest.Mock; canManageStaffAt: jest.Mock };
   let contracts: ContractsService;
@@ -31,6 +33,14 @@ describe('근로계약 대상 BP', () => {
           storeId: 11,
           staffMember: { account: null, phone: '01090145563' },
         }),
+      },
+      // 근무지 선택지(storeOptions)의 점포 조회
+      $transaction: jest.fn((queries: Promise<unknown>[]) =>
+        Promise.all(queries),
+      ),
+      store: {
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
       },
     };
     scope = {
@@ -60,6 +70,10 @@ describe('근로계약 대상 BP', () => {
   // 경로마다 서비스 진입점 — 본문은 BP 확인 뒤에 보므로 비워 둔다
   const routes: [string, (bp: TargetBpContext) => Promise<unknown>][] = [
     ['목록', (bp) => contracts.list(5, { page: 1, pageSize: 20 }, bp)],
+    [
+      '근무지 선택지',
+      (bp) => contracts.storeOptions(5, { page: 1, pageSize: 20 }, bp),
+    ],
     ['상세', (bp) => contracts.findOne(5, 7, bp)],
     ['작성', (bp) => contracts.create({} as never, 5, [], bp)],
     [
@@ -107,11 +121,30 @@ describe('근로계약 대상 BP', () => {
       expect(scope.getManageableStores).toHaveBeenCalledWith(5, bp);
     });
 
+    // 작성 화면이 먼저 부르는 선택지라 이것이 탭 BP 를 보지 않으면 플랫폼 계정은 근로계약을 쓸 수 없다(WHALEERP-638)
+    it('근무지 선택지는 그 BP 로 관리 점포를 구한다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'PM',
+        stores: [{ storeId: 11, storeTypeCode: 'FRANCHISE' }],
+      });
+      await contracts.storeOptions(5, { page: 1, pageSize: 20 }, bp);
+      expect(scope.getManageableStores).toHaveBeenCalledWith(5, bp);
+      expect(prisma.store.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({ storeId: { in: [11] } }) as unknown,
+      });
+    });
+
     it.each(
       routes.filter(
         ([name]) =>
           // 작성 · 이어 쓰기는 본문 검사(400)가 범위보다 먼저라 빼고, 목록은 따로 본다
-          !['목록', '작성', '종이 계약 등록', '이어 쓰기'].includes(name),
+          ![
+            '목록',
+            '근무지 선택지',
+            '작성',
+            '종이 계약 등록',
+            '이어 쓰기',
+          ].includes(name),
       ),
     )('%s — 계약 범위를 그 BP 로 본다(범위 밖이면 404)', async (_, call) => {
       await expect(call(bp)).rejects.toBeInstanceOf(NotFoundException);

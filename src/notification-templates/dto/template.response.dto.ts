@@ -25,7 +25,7 @@ export class TemplateListItemDto {
   bodySummary: string;
   kakaoTemplateCode: string | null;
   isActive: boolean;
-  /** 기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 46건) — 되돌리기를 보일지 */
+  /** 기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 47건) — 되돌리기를 보일지 */
   hasDefault: boolean;
   /** 마지막으로 고친 관리자 이름. 아무도 고치지 않았으면 null — 화면은 「기본 문구」 */
   updatedByName: string | null;
