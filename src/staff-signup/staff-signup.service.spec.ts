@@ -560,7 +560,9 @@ describe('StaffSignupService', () => {
       );
       expect(tx.staffMember.updateMany).toHaveBeenCalled();
       expect(sessions.issue).toHaveBeenCalled();
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('shown=v0.9'));
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('shown="v0.9"'),
+      );
       warn.mockRestore();
     });
 

@@ -115,20 +115,18 @@ describe('직원 가입 DTO', () => {
     ['근무지 더하기', AcceptMyInvitationDto, asIs],
     ['소속 추가 수락', AcceptAffiliationRequestDto, asIs],
   ])('%s — 본사 제공 동의 문구 버전(ATT-30 v252)', (_label, cls, body) => {
-    it('동의하면 버전이 있어야 한다 — 없거나 비었거나 문자열이 아니거나 64자를 넘으면 400', () => {
-      for (const hqSharingConsentVersion of [
-        undefined,
-        null,
-        '',
-        1,
-        'v'.repeat(65),
-      ])
+    it('동의하면서 버전을 실으면 비지 않은 64자 이하 문자열이어야 한다 — 아니면 400', () => {
+      for (const hqSharingConsentVersion of [null, '', 1, 'v'.repeat(65)])
         expect(
           errorsOf(
             cls,
             body({ hqSharingConsented: true, hqSharingConsentVersion }),
           ),
         ).toEqual(['hqSharingConsentVersion']);
+    });
+
+    it('동의하면서 버전을 싣지 않아도 400 이 아니다 — 예전 앱의 동의는 남기지 않고 가입 · 수락은 마친다(ATT-30 v253)', () => {
+      expect(errorsOf(cls, body({ hqSharingConsented: true }))).toEqual([]);
     });
 
     it('동의하지 않으면 버전은 보지 않는다', () => {

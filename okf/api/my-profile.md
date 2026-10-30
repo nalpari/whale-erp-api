@@ -356,8 +356,9 @@ version and the masking shape from these constants, so bumping changes no test.
 tab or PWA left open across a bump otherwise records the new version for the old wording. Here a mismatch is
 409 and nothing is written; at signup and the two accepts it is not an error (본사 제공 동의 is optional, v253):
 the account is linked, the consent is not written, and the response says `hqSharingConsentRecorded: false`.
-Before a bump ships, the 직원 앱 must already send these fields — an app that sends none gets 400 here and, when
-consenting, at signup and accept.
+Before a bump ships, the 직원 앱 must already send these fields. An app that sends none gets 400 here (내 정보
+동의 only — joining is not blocked); at signup and the accepts a missing version is treated like a mismatch
+(`hqSharingConsentRecorded: false`), so deploying the api before the app never blocks a signup or accept.
 
 # 위치정보 동의 state is derived
 

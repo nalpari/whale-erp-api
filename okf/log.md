@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-29
+* **Update**: [Staff signup](/api/staff-signup.md) · [My profile](/api/my-profile.md) — 137 후속 리뷰: 가입 · 수락에서 동의 문구 버전이 빠져도 400 이 아니라 「버전이 다르다」와 같게(가입 · 수락은 마치고 동의만 남기지 않음, `false`) — 배포 순서와 상관없이 가입이 끊기지 않게. 경고 로그의 보낸 값은 JSON 으로 감싼다.
 * **Update**: [My profile](/api/my-profile.md) · [Staff signup (직원 앱 가입)](/api/staff-signup.md) — 사업자(본사) 제공 동의 문구 버전 대조(WHALEERP-137 후속, 운영 정책 ATT-30 v252 · v253, 2026-10-29 재영). `POST /me/hq-sharing-consent` 는 본문 `{ consentVersion }`(필수)을 받아 지금 버전과 다르면 409 「사업자 제공 동의 내용이 바뀌었습니다. 화면을 새로 고쳐 …」(빼면 400). 가입 · 근무지 더하기 · 소속 추가 수락은 동의할 때 `hqSharingConsentVersion` 이 필수(없으면 400)이고, 다르면 가입 · 수락은 마치고 동의만 남기지 않는다 — 응답에 `hqSharingConsentRecorded`(true · false · null, 가입은 `StaffSignupResponseDto`)와 경고 로그. 트랜잭션 · 잠금 순서는 그대로. 마이그레이션 없음.
 * **Update**: main 병합(api doduo, main #209 까지): okf 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api doduo, main #202 까지): okf/log 충돌은 양쪽 기록을 살렸다.

@@ -212,7 +212,9 @@ describe('AffiliationRequestsService', () => {
       });
       expect(tx.account.update).not.toHaveBeenCalled();
       expect(tx.staffMember.updateMany).toHaveBeenCalled();
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining('shown=v0.9'));
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('shown="v0.9"'),
+      );
       warn.mockRestore();
     });
 

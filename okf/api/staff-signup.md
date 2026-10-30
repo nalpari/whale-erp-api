@@ -133,8 +133,10 @@ part like `"a"@example.com` is a 400, since password-reset mail could never reac
 (YYYY-MM-DD) · `gender` (required, 남 · 여 — 2026-10-21 재영: 본인 대조가 늘 다섯 가지를 보도록
 성별이 빈 계정을 만들지 않는다, ACC-23 · JOI-10) · `isForeigner` (optional) · `zipCode` (5 digits) ·
 `address` · `addressDetail` (optional) · `hqSharingConsented` (optional) · `hqSharingConsentVersion`
-(the wording version the screen showed — required when `hqSharingConsented` is true, else not read;
-400 if missing, ATT-30 v252) · `deviceIdentifier`
+(the wording version the screen showed — read only when `hqSharingConsented` is true; if sent it must be a
+non-empty string ≤ 64 chars (400), and **missing is not an error**: an app that predates this field (deploy
+skew) has its consent treated like a version mismatch — joining completes, the consent is not written,
+ATT-30 v252 · v253) · `deviceIdentifier`
 (optional, as in login). **There is no phone field**: the account takes the invitation's
 (근로계약서) phone — if a 직원 could type it, they could sign up on someone else's number and block
 that person's next invitation (JOIN-7). 약관 동의 waits for 1팀's common 약관 registration
@@ -166,9 +168,10 @@ In one transaction:
    in `accounts` → **409 `ACCOUNT_EMAIL_TAKEN`**. At a non-`DIRECT` store with
    `hqSharingConsented: true` the **account** gets `is_hq_sharing_consented` ·
    `hq_sharing_consent_version` (`HQ_SHARING_CONSENT_VERSION`, the one constant in `src/admin-scope/hq-sharing.ts`, shared with 내 정보 동의 #85) · `hq_sharing_agreed_at` — one answer per
-   person since api #78. **Only if `hqSharingConsentVersion` equals that constant**: otherwise the signup
+   person since api #78. **Only if `hqSharingConsentVersion` equals that constant**: otherwise (different or missing) the signup
    still completes without the consent (ATT-30 v253 — the consent is optional, so a changed wording must
-   not block joining) and a warn log names the account and both versions.
+   not block joining) and a warn log names the account and both versions (the sent value JSON-quoted, since it
+   comes from a public route).
 5. Link the record (`account_id`, `join_status = JOINED`, conditioned on no account yet).
 6. The record's 발송 대기 contracts → 서명 대기, history actor `STAFF`. The deadline from the send stays.
 

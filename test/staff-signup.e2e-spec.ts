@@ -518,18 +518,16 @@ describe('직원 가입 (e2e, DB)', () => {
     });
   });
 
-  it('보인 동의 문구 버전이 지금과 다르면 가입 · 근무지 더하기는 마치고 동의만 남기지 않는다, 버전 없이 동의하면 400(ATT-30 v252 · v253)', async () => {
-    const s = await invited(franchiseStoreId);
-    // 동의했는데 버전이 없으면 400 — 계정을 만들지 않고 초대도 그대로다
-    await post(
+  it('보인 동의 문구 버전이 지금과 다르거나 빠지면 가입 · 근무지 더하기는 마치고 동의만 남기지 않는다(ATT-30 v252 · v253)', async () => {
+    // 버전을 싣지 않는 예전 앱의 동의 — 400 이 아니라 가입은 마치고 동의만 남기지 않는다(배포 어긋남에도 가입이 끊기지 않게)
+    const old = await invited(franchiseStoreId);
+    const oldApp = await post(
       '/auth/account/signup',
-      body({ token: s.token }, { hqSharingConsented: true }),
-    ).expect(400);
-    expect(
-      await prisma.invitation.findUniqueOrThrow({
-        where: { invitationId: s.invitationId },
-      }),
-    ).toMatchObject({ status: 'SENT' });
+      body({ token: old.token }, { hqSharingConsented: true }),
+    ).expect(201);
+    expect(oldApp.body).toMatchObject({ hqSharingConsentRecorded: false });
+
+    const s = await invited(franchiseStoreId);
 
     const payload = body(
       { token: s.token },

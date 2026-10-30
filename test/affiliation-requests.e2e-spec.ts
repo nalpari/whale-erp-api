@@ -582,10 +582,11 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       });
     });
 
-    it('가맹점 요청 — 동의에 버전이 없으면 400, 보인 문구 버전이 지금과 다르면 수락은 마치고 동의만 남기지 않는다(ATT-30 v252 · v253)', async () => {
+    it('가맹점 요청 — 보인 문구 버전이 지금과 다르거나 빠지면 수락은 마치고 동의만 남기지 않는다(ATT-30 v252 · v253)', async () => {
       // 이 파일의 점포는 직영이다 — 요청을 만든 뒤(관리자 범위는 직영 기준으로 맞춰 두었다) 본사 제공 동의를 묻게 잠시 가맹으로 바꾼다
       const stale = await requested();
       const fresh = await requested();
+      const noVersion = await requested();
       await prisma.store.update({
         where: { storeId },
         data: { storeTypeCode: 'FRANCHISE' },
@@ -608,11 +609,20 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
             },
           });
 
-        const answerStale = await accept(stale.accountId, stale.invitationId);
-        await answerStale({ hqSharingConsented: true }).expect(400);
-        expect((await contractOf(stale.contractId)).status).toBe(
-          'PENDING_SEND',
+        // 버전을 싣지 않는 예전 앱의 동의 — 400 이 아니라 수락은 마치고 동의만 남기지 않는다
+        const answerNoVersion = await accept(
+          noVersion.accountId,
+          noVersion.invitationId,
         );
+        const oldApp = await answerNoVersion({
+          hqSharingConsented: true,
+        }).expect(200);
+        expect(oldApp.body).toMatchObject({ hqSharingConsentRecorded: false });
+        expect(await consentOf(noVersion.accountId)).toMatchObject({
+          isHqSharingConsented: false,
+        });
+
+        const answerStale = await accept(stale.accountId, stale.invitationId);
         const res = await answerStale({
           hqSharingConsented: true,
           hqSharingConsentVersion: 'v0.9',
