@@ -8,6 +8,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { StorageService } from '../storage/storage.service';
 import { MyContractDocumentsService } from './my-contract-documents.service';
 
+const SENT_AT = new Date('2026-10-20T01:00:00.000Z');
+
 /** 직원 앱 근로계약 파일 내려받기 주소(WHALEERP-146 · 149) */
 describe('MyContractDocumentsService', () => {
   let prisma: {
@@ -30,7 +32,9 @@ describe('MyContractDocumentsService', () => {
   beforeEach(() => {
     prisma = {
       contract: {
-        findFirst: jest.fn().mockResolvedValue({ status: 'SIGNED' }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ status: 'SIGNED', sentAt: SENT_AT }),
       },
       contractDocument: {
         findFirst: jest
@@ -96,6 +100,7 @@ describe('MyContractDocumentsService', () => {
       contractDocumentId: 5,
       contractId: 41,
       kind: { not: 'SIGNATURE' },
+      OR: [{ kind: { not: 'SENT_ORIGINAL' } }, { sentAt: SENT_AT }],
     });
   });
 
@@ -177,5 +182,22 @@ describe('MyContractDocumentsService', () => {
   it('주소 만들기가 실패하면 그 오류를 그대로 올린다', async () => {
     storage.downloadUrl.mockRejectedValue(new Error('s3 down'));
     await expect(service().downloadUrl(77, 41, 5)).rejects.toThrow('s3 down');
+  });
+
+  it('보낸 원본은 지금 발송분만 — 근로자 정보를 고쳐 다시 보내기 전 원본은 404(다른 사람 정보가 들어 있을 수 있다, api #211 리뷰)', async () => {
+    await service().downloadUrl(77, 41, 5);
+    const [args] = prisma.contractDocument.findFirst.mock.calls[0] as [
+      Prisma.ContractDocumentFindFirstArgs,
+    ];
+    expect(args.where).toEqual({
+      contractDocumentId: 5,
+      contractId: 41,
+      kind: { not: 'SIGNATURE' },
+      OR: [{ kind: { not: 'SENT_ORIGINAL' } }, { sentAt: SENT_AT }],
+    });
+    prisma.contractDocument.findFirst.mockResolvedValue(null);
+    await expect(service().downloadUrl(77, 41, 5)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });

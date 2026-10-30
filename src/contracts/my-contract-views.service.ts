@@ -16,7 +16,11 @@ import type {
   MyContractListResponseDto,
 } from './dto/my-contract-view.dto';
 import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
-import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
+import {
+  MY_CONTRACT_NOT_FOUND,
+  myContractWhere,
+  myDocumentWhere,
+} from './my-contract-scope';
 
 /** 목록 · 상세가 같이 읽는 칸 */
 const ITEM_SELECT = {
@@ -162,9 +166,9 @@ export class MyContractViewsService {
           },
         },
       });
-      // 직원 필기 서명(SIGNATURE)은 처리 완료본(WHALEERP-131)의 재료라 싣지 않는다 — 관리자 상세와 같다
+      // 직원 필기 서명은 싣지 않고 보낸 원본은 지금 발송분만(myDocumentWhere)
       const documents = await tx.contractDocument.findMany({
-        where: { contractId, kind: { not: 'SIGNATURE' } },
+        where: myDocumentWhere(contractId, c.sentAt),
         select: { contractDocumentId: true, kind: true, fileName: true },
         orderBy: { contractDocumentId: 'asc' },
       });

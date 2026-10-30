@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-30
+* **Update**: [Contracts API](/api/contracts-api.md) — api #211 리뷰 블로커: 직원 앱 상세 `documents` · 내려받기가 보낸 원본을 지금 발송분(`sent_at` = 계약 `sent_at`)만 준다(`myDocumentWhere`, `my-contract-scope.ts`). 근로자 정보를 고쳐 다시 보내기 전 원본에 다른 사람의 이름 · 생년월일 · 번호가 남아 새 직원이 받을 수 있었다. 관리자 상세는 그대로 모두 보인다.
+
 ## 2026-10-29
 * **Update**: [Contracts API](/api/contracts-api.md) — 근로계약서 템플릿과 보낸 원본 · 처리 완료본(WHALEERP-131, 2026-10-29 김민식 결정). 조항 템플릿 `contract-template.ts`(직원 앱 원안 문구 그대로, 노무사 검토 전)를 직원 앱 상세 `articles` 와 PDF(`contract-pdf.ts`)가 같이 쓴다. 날인이 사용자 칸(상호 · 대표자 · 사업자등록번호 · 소재지 · 전화번호)을 그 시점 점포 정보로 `contract_parties.employer_*` 에 고정하고, 커밋 뒤 서명을 합성한 처리 완료본을 만든다. 발송 · 재발송이 나가면 그 발송의 보낸 원본을 만든다. 10분 채우기 배치 `contract-files` 가 완료본 없는 체결 계약(백필 — 고정 전 계약은 지금 점포 정보, `employer_fixed_at` NULL 이 그 기록)과 하루 안의 빠진 보낸 원본을 채운다. 상세 사용자 칸은 날인 뒤 고정 값. 마이그레이션 `20261029171511_team3_contract_files`(칸 8 · CHECK 1 · 부분 고유 인덱스 1) — 물리 생성기 · [Team 3 physical schema](/domain/team3-physical-schema.md) · [Employment Contract Batch](/api/employment-contract-batch.md) 도 맞췄다. schema.prisma 머리말의 SQL 전용 건수는 생성기 값으로 바로잡았다(앞선 PR 들이 손으로 더해 어긋나 있었다).
 * **Update**: main 병합(api doduo, main #209 까지): okf 충돌은 양쪽 기록을 살렸다.

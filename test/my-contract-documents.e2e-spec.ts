@@ -168,6 +168,7 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
     contractId: number,
     kind: ContractDocumentKind,
     fileName = '근로계약서 (최종).pdf',
+    sentAt: Date = new Date(),
   ) {
     const storageKey = `contracts/${contractId}/${randomUUID()}.pdf`;
     const { contractDocumentId } = await prisma.contractDocument.create({
@@ -179,9 +180,7 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
         checksum: 'e2e',
         // 보낸 원본 · 처리 완료본은 어느 발송의 것인지 있어야 한다(CHECK, WHALEERP-131)
         sentAt:
-          kind === 'SENT_ORIGINAL' || kind === 'SIGNED_COPY'
-            ? new Date()
-            : null,
+          kind === 'SENT_ORIGINAL' || kind === 'SIGNED_COPY' ? sentAt : null,
       },
     });
     return { contractDocumentId, storageKey, fileName };
@@ -345,6 +344,44 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
     const original = await document(waiting, 'SENT_ORIGINAL');
     await download(waiting, original.contractDocumentId, auth).expect(200);
     expect(storage.downloadUrl).toHaveBeenCalledTimes(3);
+  });
+
+  it('보낸 원본은 지금 발송분만 보이고 받는다 — 근로자 정보를 고쳐 다시 보내기 전 원본은 상세에 없고 404(api #211 리뷰)', async () => {
+    const me = await account();
+    const auth = await token(me);
+    const contractId = await contract(me, 'PENDING_SIGNATURE');
+    const before = new Date('2026-10-01T00:00:00.000Z');
+    const now = new Date('2026-10-20T01:00:00.000Z');
+    await prisma.contract.update({
+      where: { contractId },
+      data: { contractMethod: 'ELECTRONIC', sentAt: now },
+    });
+    // 앞 발송분 — 고치기 전 다른 사람(A)의 정보로 만든 원본
+    const old = await document(contractId, 'SENT_ORIGINAL', 'a.pdf', before);
+    const current = await document(contractId, 'SENT_ORIGINAL', 'b.pdf', now);
+
+    const detail = await request(app.getHttpServer())
+      .get(`/me/contracts/${contractId}`)
+      .set('Authorization', `Bearer ${auth}`)
+      .expect(200);
+    expect(
+      (
+        detail.body as { documents: { contractDocumentId: number }[] }
+      ).documents.map((d) => d.contractDocumentId),
+    ).toEqual([current.contractDocumentId]);
+    await download(contractId, current.contractDocumentId, auth).expect(200);
+    await download(contractId, old.contractDocumentId, auth).expect(404);
+
+    // 관리자는 기록이라 둘 다 본다
+    const adminDetail = await request(app.getHttpServer())
+      .get(`/contracts/${contractId}`)
+      .set('Authorization', `Bearer ${await admin()}`)
+      .expect(200);
+    expect(
+      (
+        adminDetail.body as { documents: { contractDocumentId: number }[] }
+      ).documents.map((d) => d.contractDocumentId),
+    ).toEqual([old.contractDocumentId, current.contractDocumentId]);
   });
 
   it('관리자 토큰 403 · 토큰 없음 401', async () => {
