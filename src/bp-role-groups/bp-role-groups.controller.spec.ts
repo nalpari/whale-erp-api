@@ -108,17 +108,20 @@ describe('BpRoleGroupsController', () => {
     ],
   ] as const;
 
-  it.each(calls)('%s 는 가드로 MN000013 %s 권한을 본다', (method, action) => {
-    expect(
-      Reflect.getMetadata(
-        MENU_PERMISSION,
-        Object.getOwnPropertyDescriptor(
-          BpRoleGroupsController.prototype,
-          method,
-        )!.value as object,
-      ),
-    ).toEqual({ menuCode: 'MN000013', action });
-  });
+  it.each(calls)(
+    '%s 는 가드로 경로 메뉴(/bp-role-groups) %s 권한을 본다',
+    (method, action) => {
+      expect(
+        Reflect.getMetadata(
+          MENU_PERMISSION,
+          Object.getOwnPropertyDescriptor(
+            BpRoleGroupsController.prototype,
+            method,
+          )!.value as object,
+        ),
+      ).toEqual({ action });
+    },
+  );
 
   it.each(calls)(
     '%s 는 호출자 id 와 가드가 정한 대상 BP 로 범위를 정한다',

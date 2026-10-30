@@ -20,10 +20,22 @@ describe('UpdateCodeItemsDto — 상세 코드 수정 본문', () => {
     label: '정규직',
     status: 'ACTIVE',
     sortOrder: 1,
+    updatedAt: '2026-10-30T01:02:03.456Z',
   };
 
   it('한 행이면 받는다', async () => {
     expect(await constraintsOf({ items: [row] })).toEqual([]);
+  });
+
+  // 목록에서 읽은 값 그대로 — 그 뒤 다른 관리자가 고쳤으면 409 다.
+  it('행마다 updatedAt(시간대 포함)이 있어야 한다', async () => {
+    for (const item of [
+      { ...row, updatedAt: undefined },
+      { ...row, updatedAt: '2026-10-30T01:02:03.456' },
+    ]) {
+      const errors = await errorsOf({ items: [item] });
+      expect(errors[0].children?.[0].children?.[0].property).toBe('updatedAt');
+    }
   });
 
   it('빈 items · items 없음은 400', async () => {

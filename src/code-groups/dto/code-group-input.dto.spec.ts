@@ -15,7 +15,6 @@ describe('CodeGroupInputDto — 그룹 한 행', () => {
     groupCode: 'BANK',
     groupName: '은행',
     status: 'ACTIVE',
-    sortOrder: 1,
   };
 
   it('그룹 코드는 대문자로 바꿔 받고, 형식이 틀리면 거른다', async () => {
@@ -26,13 +25,17 @@ describe('CodeGroupInputDto — 그룹 한 행', () => {
     expect(errors.map((e) => e.property)).toEqual(['groupCode']);
   });
 
-  // integer 칸을 넘는 값은 DB 가 거부해 500 이 된다. 검증에서 400 으로 끝낸다.
-  it('표시 순서는 integer 범위 안이어야 한다', async () => {
-    expect(
-      (await check({ ...group, sortOrder: 2_147_483_647 })).errors,
-    ).toHaveLength(0);
-    const { errors } = await check({ ...group, sortOrder: 2_147_483_648 });
-    expect(errors.map((e) => e.property)).toEqual(['sortOrder']);
+  // 화면 문구와 같은 말이다(front 와 맞춤, 2026-10-30).
+  it('형식 · 길이 문구', async () => {
+    const [code] = (await check({ ...group, groupCode: '1BANK' })).errors;
+    expect(Object.values(code.constraints ?? {})).toEqual([
+      '영문 대문자로 시작해 영문·숫자·_로 입력해 주세요(최대 20자).',
+    ]);
+    const [name] = (await check({ ...group, groupName: '가'.repeat(51) }))
+      .errors;
+    expect(Object.values(name.constraints ?? {})).toEqual([
+      '그룹명은 50자까지입니다.',
+    ]);
   });
 
   // DB 에 공백 금지 CHECK 가 없어 그대로 저장된다. 검증에서 거른다.

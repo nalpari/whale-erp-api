@@ -28,6 +28,7 @@ describe('BpCodeGroupsController', () => {
     label: '수습',
     status: 'ACTIVE' as const,
     sortOrder: 5,
+    updatedAt: '2026-10-30T01:02:03.456Z',
   };
 
   beforeEach(async () => {

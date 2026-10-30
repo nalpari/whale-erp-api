@@ -34,7 +34,9 @@ describe('ListPublicHolidaysQueryDto', () => {
     [{ year: '2026.5' }],
     [{ year: 'abc' }],
   ])('연도 %j 는 거부한다', (query) => {
-    expect(errorsOf(query)).toContain('연도는 2000~2100 사이로 보내 주세요.');
+    expect(errorsOf(query)).toContain(
+      '연도는 2000년부터 2100년까지 조회할 수 있습니다.',
+    );
   });
 
   // 빈 값(`month=`)은 생략이 아니라 0 으로 바뀌어 거부된다 — 목록(그 해 전체)은 month 를 빼고 보낸다.

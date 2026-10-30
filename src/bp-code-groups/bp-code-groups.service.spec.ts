@@ -18,6 +18,7 @@ describe('BpCodeGroupsService', () => {
     codeGroup: { findMany: jest.Mock; findFirst: jest.Mock; count: jest.Mock };
     codeItem: {
       findMany: jest.Mock;
+      findFirst: jest.Mock;
       update: jest.Mock;
       updateMany: jest.Mock;
       createManyAndReturn: jest.Mock;
@@ -73,6 +74,7 @@ describe('BpCodeGroupsService', () => {
       },
       codeItem: {
         findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
         update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         createManyAndReturn: jest.fn().mockResolvedValue([]),
@@ -334,7 +336,7 @@ describe('BpCodeGroupsService', () => {
     it('한 요청에 같은 코드가 두 번이면 상세 코드 행을 읽기 전에 409 — 이미 있는 코드와 다른 문구로', async () => {
       await expect(
         service.createItems(1, bpUser, 'EMP_TYPE', [input(), input()]),
-      ).rejects.toThrow('한 요청에 같은 상세 코드가 두 번 있습니다: INTERN');
+      ).rejects.toThrow('한 요청에 같은 상세 코드가 두 번 있습니다(INTERN).');
       expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
     });
 
@@ -347,7 +349,7 @@ describe('BpCodeGroupsService', () => {
         service.createItems(1, bpUser, 'EMP_TYPE', [
           input({ itemCode: 'PART' }),
         ]),
-      ).rejects.toThrow('플랫폼이 등록한 상세 코드와 겹칩니다: PART');
+      ).rejects.toThrow('플랫폼이 등록한 상세 코드와 겹칩니다(PART).');
       expect(prisma.codeItem.findMany).toHaveBeenCalledWith({
         where: {
           groupCode: 'EMP_TYPE',
@@ -366,7 +368,7 @@ describe('BpCodeGroupsService', () => {
 
       await expect(
         service.createItems(1, bpUser, 'EMP_TYPE', [input()]),
-      ).rejects.toThrow('이 그룹에 이미 있는 상세 코드입니다: INTERN');
+      ).rejects.toThrow('이 그룹에 이미 있는 상세 코드입니다(INTERN).');
     });
 
     // 지운 행은 겹침이 아니다 — 그 BP 의 지운 행은 되살리고, 지운 플랫폼 원본은 보지 않는다.
@@ -451,7 +453,7 @@ describe('BpCodeGroupsService', () => {
           input({ itemCode: 'TEMP' }),
           input(),
         ]),
-      ).rejects.toThrow('이 그룹에 이미 있는 상세 코드입니다: INTERN');
+      ).rejects.toThrow('이 그룹에 이미 있는 상세 코드입니다(INTERN).');
 
       prisma.codeItem.findMany.mockResolvedValueOnce([
         { itemCode: 'INTERN', bpCode: 'BP000017', isDeleted: false },
@@ -462,7 +464,7 @@ describe('BpCodeGroupsService', () => {
           input(),
           input({ itemCode: 'PART' }),
         ]),
-      ).rejects.toThrow('플랫폼이 등록한 상세 코드와 겹칩니다: PART');
+      ).rejects.toThrow('플랫폼이 등록한 상세 코드와 겹칩니다(PART).');
       expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
     });
 
@@ -474,7 +476,7 @@ describe('BpCodeGroupsService', () => {
 
       await expect(
         service.createItems(1, bpUser, 'EMP_TYPE', [input()]),
-      ).rejects.toThrow('이 그룹에 이미 있는 상세 코드입니다: INTERN');
+      ).rejects.toThrow('이 그룹에 이미 있는 상세 코드입니다(INTERN).');
     });
 
     it('그 BP 의 BP전용 행으로 만든다', async () => {
@@ -513,20 +515,28 @@ describe('BpCodeGroupsService', () => {
           input(),
           input({ itemCode: 'TEMP' }),
         ]),
-      ).rejects.toThrow('이 그룹에 이미 있는 상세 코드입니다: TEMP');
+      ).rejects.toThrow('이 그룹에 이미 있는 상세 코드입니다(TEMP).');
     });
   });
 
   describe('updateItems', () => {
+    const READ_AT = '2026-10-30T01:02:03.456Z';
+    const CHANGED_MEANWHILE =
+      '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.';
     const bpRow = (overrides: Record<string, unknown> = {}) => ({
       itemCode: 'FULL',
       status: 'ACTIVE',
+      updatedAt: new Date(READ_AT),
       ...overrides,
+    });
+    const edit = (overrides: Record<string, unknown> = {}) => ({
+      updatedAt: READ_AT,
+      ...input(overrides),
     });
 
     it('플랫폼 사용자는 403', async () => {
       await expect(
-        service.updateItems(1, platformUser, 'EMP_TYPE', [input()]),
+        service.updateItems(1, platformUser, 'EMP_TYPE', [edit()]),
       ).rejects.toBeInstanceOf(ForbiddenException);
     });
 
@@ -535,18 +545,18 @@ describe('BpCodeGroupsService', () => {
         groupLookup(fixedGroup),
       );
       await expect(
-        service.updateItems(1, bpUser, 'ROLE_TYPE', [input()]),
+        service.updateItems(1, bpUser, 'ROLE_TYPE', [edit()]),
       ).rejects.toBeInstanceOf(NotFoundException);
 
       prisma.codeGroup.findFirst.mockResolvedValueOnce(null);
       await expect(
-        service.updateItems(1, bpUser, 'EMP_TYPE', [input()]),
+        service.updateItems(1, bpUser, 'EMP_TYPE', [edit()]),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('한 요청에 같은 코드가 두 번이면 409', async () => {
       await expect(
-        service.updateItems(1, bpUser, 'EMP_TYPE', [input(), input()]),
+        service.updateItems(1, bpUser, 'EMP_TYPE', [edit(), edit()]),
       ).rejects.toBeInstanceOf(ConflictException);
     });
 
@@ -555,10 +565,10 @@ describe('BpCodeGroupsService', () => {
 
       await expect(
         service.updateItems(1, bpUser, 'EMP_TYPE', [
-          input({ itemCode: 'FULL' }),
-          input({ itemCode: 'GHOST' }),
+          edit({ itemCode: 'FULL' }),
+          edit({ itemCode: 'GHOST' }),
         ]),
-      ).rejects.toThrow('상세 코드를 찾을 수 없습니다: GHOST');
+      ).rejects.toThrow('상세 코드를 찾을 수 없습니다(GHOST).');
       expect(prisma.codeItem.findMany).toHaveBeenCalledWith({
         where: {
           groupCode: 'EMP_TYPE',
@@ -566,7 +576,7 @@ describe('BpCodeGroupsService', () => {
           isDeleted: false,
           itemCode: { in: ['FULL', 'GHOST'] },
         },
-        select: { itemCode: true },
+        select: { itemCode: true, updatedAt: true },
       });
       expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
     });
@@ -578,7 +588,7 @@ describe('BpCodeGroupsService', () => {
       ]);
 
       await service.updateItems(7, bpUser, 'EMP_TYPE', [
-        input({ itemCode: 'CONTRACT', status: 'ACTIVE' }),
+        edit({ itemCode: 'CONTRACT', status: 'ACTIVE' }),
       ]);
 
       expect(prisma.codeItem.findMany).toHaveBeenCalledTimes(1);
@@ -588,9 +598,38 @@ describe('BpCodeGroupsService', () => {
           itemCode: 'CONTRACT',
           bpCode: 'BP000017',
           isDeleted: false,
+          updatedAt: {
+            gte: new Date(READ_AT),
+            lt: new Date(new Date(READ_AT).getTime() + 1),
+          },
         },
         data: { label: '수습', status: 'ACTIVE', sortOrder: 5, updatedBy: 7 },
       });
+    });
+
+    it('읽은 뒤 다른 관리자가 고친 코드가 있으면 409 이고 아무것도 고치지 않는다', async () => {
+      prisma.codeItem.findMany.mockResolvedValueOnce([
+        bpRow({ updatedAt: new Date('2026-10-30T01:02:04.000Z') }),
+      ]);
+
+      await expect(
+        service.updateItems(1, bpUser, 'EMP_TYPE', [
+          edit({ itemCode: 'FULL' }),
+        ]),
+      ).rejects.toThrow(new ConflictException(CHANGED_MEANWHILE));
+      expect(prisma.codeItem.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('확인 뒤 쓰기 전에 다른 관리자가 고쳤으면(고친 행 0건, 행은 살아 있음) 409 — 수정 문구', async () => {
+      prisma.codeItem.findMany.mockResolvedValueOnce([bpRow()]);
+      prisma.codeItem.updateMany.mockResolvedValueOnce({ count: 0 });
+      prisma.codeItem.findFirst.mockResolvedValueOnce({ itemCode: 'FULL' });
+
+      await expect(
+        service.updateItems(1, bpUser, 'EMP_TYPE', [
+          edit({ itemCode: 'FULL' }),
+        ]),
+      ).rejects.toThrow(new ConflictException(CHANGED_MEANWHILE));
     });
 
     // 확인 뒤 같은 BP 의 다른 관리자가 지운 행에는 쓰지 않는다 — 0건이면 트랜잭션째 409.
@@ -600,13 +639,23 @@ describe('BpCodeGroupsService', () => {
 
       await expect(
         service.updateItems(1, bpUser, 'EMP_TYPE', [
-          input({ itemCode: 'FULL' }),
+          edit({ itemCode: 'FULL' }),
         ]),
       ).rejects.toThrow(
         new ConflictException(
-          '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 저장해 주세요: FULL',
+          '다른 관리자가 먼저 지운 상세 코드가 있습니다(FULL). 다시 불러온 뒤 저장해 주세요.',
         ),
       );
+      // 다시 읽기는 이 BP 의 지우지 않은 행으로 — bpCode 가 빠지면 다른 BP 의 같은 코드를 보고 「수정함」이 된다.
+      expect(prisma.codeItem.findFirst).toHaveBeenCalledWith({
+        where: {
+          groupCode: 'EMP_TYPE',
+          itemCode: 'FULL',
+          bpCode: 'BP000017',
+          isDeleted: false,
+        },
+        select: { itemCode: true },
+      });
     });
 
     // 최대 500행을 한 행씩 고쳐 원격 DB 에서는 Prisma 기본 5초를 넘길 수 있다 — 넘기면 원인 없는 500 이다.
@@ -614,7 +663,7 @@ describe('BpCodeGroupsService', () => {
       prisma.codeItem.findMany.mockResolvedValueOnce([bpRow()]);
 
       await service.updateItems(1, bpUser, 'EMP_TYPE', [
-        input({ itemCode: 'FULL' }),
+        edit({ itemCode: 'FULL' }),
       ]);
 
       expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
@@ -629,7 +678,7 @@ describe('BpCodeGroupsService', () => {
       ]);
 
       await service.updateItems(7, bpUser, 'EMP_TYPE', [
-        input({ itemCode: 'FULL', label: '정규직', sortOrder: 2 }),
+        edit({ itemCode: 'FULL', label: '정규직', sortOrder: 2 }),
       ]);
 
       expect(prisma.codeItem.updateMany).toHaveBeenCalledWith({
@@ -638,6 +687,10 @@ describe('BpCodeGroupsService', () => {
           itemCode: 'FULL',
           bpCode: 'BP000017',
           isDeleted: false,
+          updatedAt: {
+            gte: new Date(READ_AT),
+            lt: new Date(new Date(READ_AT).getTime() + 1),
+          },
         },
         data: { label: '정규직', status: 'ACTIVE', sortOrder: 2, updatedBy: 7 },
       });
@@ -669,7 +722,7 @@ describe('BpCodeGroupsService', () => {
     it('한 요청에 같은 코드가 두 번이면 409', async () => {
       await expect(
         service.deleteItems(1, bpUser, 'EMP_TYPE', ['INTERN', 'INTERN']),
-      ).rejects.toThrow('한 요청에 같은 상세 코드가 두 번 있습니다: INTERN');
+      ).rejects.toThrow('한 요청에 같은 상세 코드가 두 번 있습니다(INTERN).');
       expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
     });
 
@@ -678,7 +731,7 @@ describe('BpCodeGroupsService', () => {
 
       await expect(
         service.deleteItems(1, bpUser, 'EMP_TYPE', ['INTERN', 'GHOST']),
-      ).rejects.toThrow('상세 코드를 찾을 수 없습니다: GHOST');
+      ).rejects.toThrow('상세 코드를 찾을 수 없습니다(GHOST).');
       expect(prisma.codeItem.findMany).toHaveBeenCalledWith({
         where: {
           groupCode: 'EMP_TYPE',
@@ -722,7 +775,7 @@ describe('BpCodeGroupsService', () => {
       await expect(
         service.deleteItems(1, bpUser, 'EMP_TYPE', ['INTERN', 'TEMP']),
       ).rejects.toThrow(
-        '다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요.',
+        '다른 관리자가 먼저 지운 상세 코드가 있습니다. 다시 불러온 뒤 삭제해 주세요.',
       );
     });
   });

@@ -45,10 +45,10 @@ class PlatformMenuFieldsDto {
   @Transform(emptyToNull)
   @ValidateIf((_, v) => v !== null)
   @IsString()
-  @MaxLength(MENU_URL_MAX, { message: '메뉴 URL 은 200자까지입니다.' })
+  @MaxLength(MENU_URL_MAX, { message: '메뉴 URL은 200자까지입니다.' })
   @Matches(MENU_URL_PATTERN, {
     message:
-      "메뉴 URL 은 '/' 로 시작하는 소문자 · 숫자 · '-' 경로여야 합니다(예: /staff-content)",
+      "메뉴 URL은 '/'로 시작하는 소문자 · 숫자 · '-' 경로여야 합니다(예: /staff-content).",
   })
   url?: string | null;
 }

@@ -13,7 +13,10 @@ import {
 } from '../code-format';
 import { CodeGroupInputDto } from './code-group-input.dto';
 
-/** 새 그룹. BP 적용 여부는 받지 않는다 — 늘 미적용으로 만든다. */
+/**
+ * 새 그룹. BP 적용 여부는 받지 않는다 — 늘 미적용으로 만든다. 표시 순서도 받지 않는다 — api 가 지우지 않은 플랫폼
+ * 그룹 전체의 최대 + 1 부터 요청 순서대로 매긴다(화면의 검색 · 쪽 결과로 매기면 기존 순서와 겹친다, 2026-10-30).
+ */
 export class CreateCodeGroupDto extends CodeGroupInputDto {
   /** 관리 주체. 플랫폼고정 · 플랫폼제공만. 등록 뒤 바꾸지 않는다. */
   @IsIn(PLATFORM_OWNER_CODES)

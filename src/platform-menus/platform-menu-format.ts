@@ -13,7 +13,7 @@ export const MENU_URL_PATTERN = /^(\/[a-z0-9-]+)+$/;
  */
 export const MENU_URL_ONE_SEGMENT = /^\/[a-z0-9-]+$/;
 export const MENU_URL_ONE_SEGMENT_MESSAGE =
-  "메뉴 URL 은 '/' 하나로 시작하는 1뎁스 경로만 됩니다 — 소문자 · 숫자 · '-' 로, 구간은 '-' 로 잇습니다(예: /staff-content)";
+  "메뉴 URL은 '/' 하나로 시작하는 1뎁스 경로만 됩니다 — 소문자 · 숫자 · '-'로, 구간은 '-'로 잇습니다(예: /staff-content).";
 export const MENU_URL_MAX = 200;
 
 export const NOT_FOUND = '메뉴를 찾을 수 없습니다.';

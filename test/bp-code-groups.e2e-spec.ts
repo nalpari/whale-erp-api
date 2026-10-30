@@ -248,8 +248,31 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
   });
   const create = (groupCode: string, items: object[], sub = bmAId) =>
     call('post', itemsPathOf(groupCode), { sub, body: { items } });
-  const update = (groupCode: string, items: object[], sub = bmAId) =>
-    call('put', itemsPathOf(groupCode), { sub, body: { items } });
+  /** 목록에서 읽은 것처럼 행마다 지금 updatedAt 을 싣는다(bpA 의 행, 없으면 아무 시각 — 404 경로용). */
+  const update = async (
+    groupCode: string,
+    items: { itemCode: string }[],
+    sub = bmAId,
+  ) => {
+    const rows = await prisma.codeItem.findMany({
+      where: {
+        groupCode,
+        bpCode: bpA.bpCode,
+        itemCode: { in: items.map((i) => i.itemCode) },
+      },
+      select: { itemCode: true, updatedAt: true },
+    });
+    const at = new Map(rows.map((r) => [r.itemCode, r.updatedAt]));
+    return call('put', itemsPathOf(groupCode), {
+      sub,
+      body: {
+        items: items.map((i) => ({
+          updatedAt: (at.get(i.itemCode) ?? new Date(0)).toISOString(),
+          ...i,
+        })),
+      },
+    });
+  };
   type ListBody = {
     items: Record<string, unknown>[];
     total: number;
@@ -404,7 +427,7 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
       const res = await create(applied, [item('LATE')]);
       expect(res.status).toBe(409);
       expect(bodyOf(res).message).toBe(
-        '플랫폼이 등록한 상세 코드와 겹칩니다: LATE',
+        '플랫폼이 등록한 상세 코드와 겹칩니다(LATE).',
       );
     });
 
@@ -475,6 +498,31 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
         select: { status: true },
       });
       expect(row.status).toBe('ACTIVE');
+    });
+
+    // 목록을 읽은 뒤 같은 BP 의 다른 관리자가 먼저 고쳤으면 덮어쓰지 않는다(2026-10-30).
+    it('읽은 updatedAt 이 지금 값과 다르면 409 이고 아무것도 고치지 않는다', async () => {
+      const res = await update(applied, [
+        item('FULL', {
+          label: '늦게 고친 이름',
+          updatedAt: '2000-01-01T00:00:00.000Z',
+        }),
+      ]);
+      expect(res.status).toBe(409);
+      expect(bodyOf(res).message).toBe(
+        '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.',
+      );
+      const row = await prisma.codeItem.findUniqueOrThrow({
+        where: {
+          groupCode_itemCode_bpCode: {
+            groupCode: applied,
+            itemCode: 'FULL',
+            bpCode: bpA.bpCode,
+          },
+        },
+        select: { label: true },
+      });
+      expect(row.label).not.toBe('늦게 고친 이름');
     });
 
     it('그 BP 에 없는 코드(플랫폼 원본에만 있는 것 포함)는 404', async () => {

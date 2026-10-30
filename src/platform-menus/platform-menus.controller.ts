@@ -92,7 +92,7 @@ export class PlatformMenusController {
   })
   @ApiConflictResponse({
     description:
-      '같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · API 권한 주소(경로 방식 @MenuPermission 컨트롤러의 경로)인 URL · 메뉴 코드를 더 만들 수 없음',
+      '같거나 겹치는 URL을 쓰는 사용 중 메뉴 · API 권한 주소(경로 방식 @MenuPermission 컨트롤러의 경로)인 URL · 메뉴 코드를 더 만들 수 없음',
   })
   @ApiServiceUnavailableResponse({ description: WRITE_BUSY })
   async create(
@@ -113,7 +113,7 @@ export class PlatformMenusController {
   @ApiNotFoundResponse({ description: NOT_FOUND })
   @ApiConflictResponse({
     description:
-      '같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · API 권한 주소인 URL 을 바꾸거나 다른 메뉴가 가져가려 함 · 동시 수정',
+      '같거나 겹치는 URL을 쓰는 사용 중 메뉴 · API 권한 주소인 URL을 바꾸거나 다른 메뉴가 가져가려 함 · 동시 수정',
   })
   @ApiServiceUnavailableResponse({ description: WRITE_BUSY })
   async update(

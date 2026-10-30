@@ -4,20 +4,20 @@ title: BP code groups
 description: 관리자 웹 「BP 공통코드 관리」(MN000014) — groups are read-only and only in-use 플랫폼제공 groups are visible (플랫폼고정 is hidden, 404); every such group (applied or not) shows the BP's own rows, where the BP edits name · status · order, adds BP전용 codes and deletes its rows; platform users read a picked BP only.
 tags: [admin, codes, bp]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:56:44Z }
 sources:
   - id: bp-code-groups-controller
     resource: ../../src/bp-code-groups/bp-code-groups.controller.ts
     title: /bp-code-groups routes — menu by the path (MN000014), target BP from X-Bp-Code-Id, POST create · PUT update · DELETE
-    last_modified: 2026-10-27T02:13:42Z
+    last_modified: 2026-10-30T06:27:06Z
   - id: bp-code-groups-service
     resource: ../../src/bp-code-groups/bp-code-groups.service.ts
     title: Which groups and rows a BP sees, BP전용 creation, edits and deletion
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T07:56:44Z
   - id: bp-code-groups-e2e
     resource: ../../test/bp-code-groups.e2e-spec.ts
     title: Real-DB proof — visibility (플랫폼고정 hidden), other-BP 403, platform read-only, overlap 409, concurrent create · delete · restore
-    last_modified: 2026-10-27T05:08:14Z
+    last_modified: 2026-10-30T07:56:44Z
 ---
 
 # What it covers
@@ -108,9 +108,9 @@ copied 플랫폼제공 row is registered again and comes back as BP전용 (below
   skips the key, so it stays BP전용) — and a deleted platform original is simply ignored. This
   applies to any deleted row of the BP, BP전용 included, so a restore can leave a BP전용 row next
   to a live platform original with the same code (see Known edges). The 409 message says which live row, checked
-  in this order, each listing every such code in request order (`: A, B` — the screen reads the
-  codes after the colon): a live platform original 「플랫폼이 등록한 상세 코드와 겹칩니다」, a live row
-  of this BP 「이 그룹에 이미 있는 상세 코드입니다」. Nothing is restored when any code is refused.
+  in this order, each listing every such code in request order in the last parentheses (`(A, B).` — the
+  screen reads the codes there; until 2026-10-30 they followed a colon): a live platform original
+  「플랫폼이 등록한 상세 코드와 겹칩니다(A).」, a live row of this BP 「이 그룹에 이미 있는 상세 코드입니다(A).」. Nothing is restored when any code is refused.
   A restore is conditioned on the row still being deleted, so two admins bringing back the same
   code at once give one 204 and one 409 「이미 있는」. A live original
   blocks even when the BP never received that code: otherwise a re-application would skip it for
@@ -123,10 +123,14 @@ copied 플랫폼제공 row is registered again and comes back as BP전용 (below
 - **Update** touches only the BP's undeleted rows of the group (anything else 404 — including a
   platform code the BP never received) and only name, status and order. The status is the BP's
   to set: a code whose platform original is stopped can be switched on (2026-10-22 결정 — the
-  earlier 409 「플랫폼이 사용 중지한 코드는 다시 사용으로 바꿀 수 없습니다」 is gone). Each row's
-  write is itself conditioned on the row still being undeleted, so an edit racing another
-  admin's delete is 409 「다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 저장해 주세요:
-  CODE」 rather than a 204 that wrote to a deleted row (unit-tested with mocks).
+  earlier 409 「플랫폼이 사용 중지한 코드는 다시 사용으로 바꿀 수 없습니다」 is gone). Each row carries
+  the `updatedAt` the list gave it (2026-10-30, `UpdateCodeItemDto`, shared with the platform screen):
+  a row another admin changed since (a platform admin who picked the BP included) is 409 「다른 관리자가 먼저 수정했습니다. 최신 정보를
+  불러온 뒤 다시 저장해 주세요.」 and nothing is written. Each row's write is itself conditioned on the
+  row still being undeleted and on that millisecond, so an edit racing another admin's delete is 409
+  「다른 관리자가 먼저 지운 상세 코드가 있습니다(CODE). 다시 불러온 뒤 저장해 주세요.」 rather than a 204
+  that wrote to a deleted row, and one racing an edit gets the 수정 문구 (unit-tested with mocks; the
+  stale-`updatedAt` case is in the e2e).
 - A code repeated within one body is 409 「한 요청에 같은 상세 코드가 두 번 있습니다」, on create,
   update and delete alike — after the BP and group checks but before any item row is read, and with a
   different message from a code that already exists, so the screen can tell its own duplicate
@@ -140,7 +144,7 @@ copied 플랫폼제공 row is registered again and comes back as BP전용 (below
   same code again does (above). The
   update is conditioned on the rows still being undeleted; if another admin deleted one in between,
   fewer rows change and the whole request is
-  409 「다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시 불러온 뒤 삭제해 주세요.」 instead of a
+  409 「다른 관리자가 먼저 지운 상세 코드가 있습니다. 다시 불러온 뒤 삭제해 주세요.」 instead of a
   partial delete. Two admins deleting the same code at once give one 204 and a 404 or 409 (e2e).
 
 All three are all-or-nothing in one transaction. Update and create write row by row — up to 500

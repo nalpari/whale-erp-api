@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:56:44Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -21,11 +21,11 @@ sources:
   - id: code-groups-controller
     resource: ../../src/code-groups/code-groups.controller.ts
     title: 플랫폼 공통코드 관리 routes (/code-groups) — menu guard by the path (`/code-groups`, MN000216 today) + platformOnly, POST create · PUT update · DELETE items
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T07:56:44Z
   - id: code-groups-service
     resource: ../../src/code-groups/code-groups.service.ts
     title: 플랫폼 공통코드 관리 rules (create, update, BP application)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T07:56:44Z
   - id: leads-service
     resource: ../../src/leads/leads.service.ts
     title: 도입문의 접수 · 파기 (POST /leads, lead-purge)
@@ -50,18 +50,41 @@ copies a 플랫폼제공 group to every active customer BP (`POST /code-groups/{
 `is_deleted` on the 플랫폼제공 group's undeleted platform originals only, whether or not BPs use the code:
 rows already copied to a BP are that BP's and stay, and the deleted code drops out of later [BP에 적용] and
 signup copies. Creating
-checks only **live** rows (2026-10-22 결정): a live row anywhere in the group (original, a BP's copy or
-BP전용) is 409 「이 그룹에 이미 있는 상세 코드입니다: …」, every such code listed in request order; a code
+checks only **live** rows (2026-10-22 결정), and of those only the live original and any BP's live
+**BP전용** row (2026-10-30 결정): either is 409 「이 그룹에 이미 있는 상세 코드입니다(A, B).」, every such code
+listed in request order. A BP전용 row blocks because [BP에 적용] would skip that BP's key and the
+platform's meaning would never reach it. A BP's live **플랫폼제공 copy** does not block: until 2026-10-30
+it did, which meant a 플랫폼제공 original deleted after [BP에 적용] could never be registered again. A code
 matching a deleted original brings that original back with the request's name · status · order
 (`restoreDeletedItems`, shared with BP 공통코드 관리 — conditioned on it still being deleted, so a
-concurrent restore is 409); deleted BP rows do not block. Put together, a deleted 플랫폼제공 original
-whose copy is still live in some BP (it was applied) cannot be registered again — that copy is a live
-row, so the answer is 409, not a restore. Delete is all-or-nothing: an unknown or already
-deleted code is 404, a repeated one 409, and if another admin deleted one between the check and the
-write the short `updateMany` count makes the whole request 409 「다른 관리자가 먼저 지운 상세 코드가
-있습니다 — 다시 불러온 뒤 삭제해 주세요.」. Item updates are conditioned on the row still being
-undeleted too, so an edit racing a delete is 409 「다른 관리자가 먼저 지운 상세 코드가 있습니다 — 다시
-불러온 뒤 저장해 주세요: CODE」 instead of a 204 that wrote to a deleted row. Create and update both run
+concurrent restore is 409); the copies stay as they are, and re-applying skips them because the key is
+taken. Deleted BP rows do not block. If only copies exist and no original row at all (not producible
+except by hand-written SQL — copies are made from originals, which are never removed), a new original is
+inserted; the key includes the BP, so it cannot collide with a copy. Delete is all-or-nothing: an unknown
+or already deleted code is 404, a repeated one 409, and if another admin deleted one between the check
+and the write the short `updateMany` count makes the whole request 409 「다른 관리자가 먼저 지운 상세
+코드가 있습니다. 다시 불러온 뒤 삭제해 주세요.」.
+
+**Updates check each row's `updatedAt`** (2026-10-30). The group and item lists carry `updatedAt`, and
+every `PUT` row sends it back (`UpdateCodeGroupDto` · `UpdateCodeItemDto`, `IsUpdatedAt` — an offset is
+required). Before writing, a row whose stored value is not in the same millisecond is 409 「다른 관리자가
+먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.」 (플랫폼 메뉴 관리's `CHANGED_MEANWHILE`) and
+nothing in the request is written; each write is also conditioned on that millisecond (`sameMillisecond`),
+so a change between check and write rolls the whole request back the same way. When that conditioned
+write finds no row, the item is read again: deleted means 409 「다른 관리자가 먼저 지운 상세 코드가
+있습니다(CODE). 다시 불러온 뒤 저장해 주세요.」, still there means the 수정 문구. Before this, a later save
+silently overwrote the earlier one. Any write bumps `updatedAt` — [BP에 적용] flips the group's flag, so a
+group list read before an application is stale after it. BP 공통코드 관리's item update shares
+`assertItemsUnchanged` · `throwUnsaved` and behaves the same.
+
+**Messages put the codes in parentheses at the end** (2026-10-30, as 플랫폼 메뉴 관리 did the same day):
+「…입니다(A, B).」 instead of 「…입니다: A, B」 — `withCodes` in `code-groups.service.ts`, also used by
+`assertNoRepeat`. The screen splits by the message's beginning (「이 그룹에 이미 있는 상세 코드입니다」,
+「플랫폼이 등록한 상세 코드와 겹칩니다」) and reads the codes from the last parentheses, so those beginnings
+must not change. A taken group code is 「이미 사용 중인 그룹 코드입니다(CODE).」, the screen's own wording.
+Code format errors read 「영문 대문자로 시작해 영문·숫자·_로 입력해 주세요(최대 20자).」
+(`CODE_FORMAT_MESSAGE`, group and item codes alike), and names 「그룹명은 50자까지입니다.」 ·
+「코드명은 50자까지입니다.」. Create and update both run
 under `BULK_UPDATE_TX` (30 seconds), since a restore also writes row by row.
 The group list (`GET /code-groups`) also takes `groupCode` and `groupName`, matched by case-insensitive
 containment with LIKE wildcards taken literally (`containsText`) — the same `ListCodeGroupsDto` that
@@ -88,9 +111,17 @@ non-platform account `ACCESS_DENIED_MESSAGE`.[^code-groups-controller]
 
 **Creating and updating are separate routes** (2026-10-20, 1팀 결정). Each takes `{ items }` — one or more rows,
 at most 200 groups or 500 items (`MAX_GROUP_ROWS` · `MAX_ITEM_ROWS` in `code-format.ts`); an empty array is 400 —
-and answers 204 with no body, since there is no generated id to return. A group row is `CodeGroupInputDto` (code,
-name, status, order); creating uses `CreateCodeGroupDto`, which extends it with `manageOwnerCode`, and updating
-uses it as is, so 관리 주체 cannot be sent on update. An item row is `CodeItemInputDto` for both. Earlier a single
+and answers 204 with no body, since there is no generated id to return. A group row's common fields are `CodeGroupInputDto` (code,
+name, status); creating uses `CreateCodeGroupDto`, which adds `manageOwnerCode`, and updating uses
+`UpdateCodeGroupDto`, which adds the order and `updatedAt`, so 관리 주체 cannot be sent on update. **Creating takes
+no order** (2026-10-30): the api numbers new groups from the highest order among undeleted 플랫폼고정 · 플랫폼제공
+groups plus one, in request order, reading that maximum under a transaction advisory lock so two concurrent
+creates do not take the same numbers. The screen used to send the visible list's count or maximum plus one, which
+collided with existing orders while a search was narrowing the list; a body that still sends `sortOrder` is 400
+(unknown property). If the next numbers would pass the integer maximum (the update screen accepts up to it), the create is
+409 「표시 순서가 최댓값에 닿아 더 등록할 수 없습니다. …」 instead of a database 500, and the create transaction gets
+`BULK_UPDATE_TX` (30 seconds) since waiting on the lock counts toward it. An item row is `CodeItemInputDto` on create and `UpdateCodeItemDto` (adds `updatedAt`) on
+update. Earlier a single
 panel save (`PUT` with `{ updates, creates }`) did both in one transaction, and the handler added a create check
 when `creates` was non-empty because the guard cannot see the body; splitting the routes put the whole decision in
 the guard, so the handler check went away together with the controller's `MenuPermissionsService` injection and

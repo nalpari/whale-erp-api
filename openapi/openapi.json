@@ -1410,7 +1410,7 @@
             "description": "쓸 수 없는 계정 · 메뉴 권한 없음 · 플랫폼 관리자가 아님"
           },
           "409": {
-            "description": "이미 있는(지운 것 포함) 그룹 코드 · 요청 안에서 겹친 그룹 코드"
+            "description": "이미 있는(지운 것 포함) 그룹 코드 · 요청 안에서 겹친 그룹 코드 · 매길 표시 순서가 integer 최댓값을 넘음"
           }
         },
         "security": [
@@ -1418,7 +1418,7 @@
             "bearer": []
           }
         ],
-        "summary": "그룹 등록. 새 그룹 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다.",
+        "summary": "그룹 등록. 새 그룹 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다. 표시 순서는 api 가 지우지 않은 플랫폼고정 · 플랫폼제공 그룹 전체의 최대 + 1 부터 요청 순서대로 매긴다.",
         "tags": [
           "CodeGroups"
         ]
@@ -1457,7 +1457,7 @@
             "description": "고칠 그룹이 없음"
           },
           "409": {
-            "description": "한 요청에 같은 그룹 코드가 두 번"
+            "description": "한 요청에 같은 그룹 코드가 두 번 · 목록에서 읽은 뒤 다른 관리자가 먼저 수정(updatedAt 이 다름)"
           }
         },
         "security": [
@@ -1465,7 +1465,7 @@
             "bearer": []
           }
         ],
-        "summary": "그룹 수정. 기존 그룹 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다.",
+        "summary": "그룹 수정. 기존 그룹 여러 개를 한 번에 — 하나라도 없거나 그 사이 고쳐졌으면(행마다 updatedAt) 아무것도 고치지 않는다.",
         "tags": [
           "CodeGroups"
         ]
@@ -1563,7 +1563,7 @@
             "description": "없는 그룹"
           },
           "409": {
-            "description": "이 그룹의 살아 있는 행(플랫폼 원본 · BP별 · BP전용)과 겹친 상세 코드 · 요청 안에서 겹친 상세 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록 · 되살림 — 지운 원본과 같은 코드는 되살린다"
+            "description": "이 그룹의 살아 있는 플랫폼 원본 · BP전용 행과 겹친 상세 코드 · 요청 안에서 겹친 상세 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록 · 되살림 — 지운 원본과 같은 코드는 BP 에 플랫폼제공 복사본이 살아 있어도 되살린다"
           }
         },
         "security": [
@@ -1618,7 +1618,7 @@
             "description": "없는 그룹 · 고칠 상세 코드가 없음"
           },
           "409": {
-            "description": "한 요청에 같은 상세 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드"
+            "description": "한 요청에 같은 상세 코드가 두 번 · 목록에서 읽은 뒤 다른 관리자가 먼저 수정(updatedAt 이 다름) · 먼저 지운 코드"
           }
         },
         "security": [
@@ -1626,7 +1626,7 @@
             "bearer": []
           }
         ],
-        "summary": "상세 코드 수정. 기존 코드 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다.",
+        "summary": "상세 코드 수정. 기존 코드 여러 개를 한 번에 — 하나라도 없거나 그 사이 고쳐졌으면(행마다 updatedAt) 아무것도 고치지 않는다.",
         "tags": [
           "CodeGroups"
         ]
@@ -1681,7 +1681,7 @@
             "bearer": []
           }
         ],
-        "summary": "상세 코드 삭제(논리) — 플랫폼제공 그룹만, 여러 개를 한 번에, 하나라도 막히면 아무것도 지우지 않는다. 플랫폼 원본만\n지우고 BP 에 복사된 행은 건드리지 않는다. 플랫폼고정 그룹은 시스템이 값을 참조해 409(사용 상태로 관리). 같은 코드로 다시 등록하면 되살아난다 — 단 어느 BP 에 복사본이 살아 있으면 등록이 409 다.",
+        "summary": "상세 코드 삭제(논리) — 플랫폼제공 그룹만, 여러 개를 한 번에, 하나라도 막히면 아무것도 지우지 않는다. 플랫폼 원본만\n지우고 BP 에 복사된 행은 건드리지 않는다. 플랫폼고정 그룹은 시스템이 값을 참조해 409(사용 상태로 관리). 같은 코드로 다시 등록하면 되살아난다 — BP 에 플랫폼제공 복사본이 살아 있어도 되살린다.",
         "tags": [
           "CodeGroups"
         ]
@@ -2750,7 +2750,7 @@
             "description": "대상 BP(가드) · 그룹(없음 · 지움 · 사용중지 · 플랫폼고정) 404, 그리고 이 BP 에 없는 상세 코드(플랫폼 원본에만 있는 코드 포함)"
           },
           "409": {
-            "description": "한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드(「다른 관리자가 먼저 지운…저장해 주세요」)"
+            "description": "한 요청에 같은 코드가 두 번 · 목록에서 읽은 뒤 다른 관리자가 먼저 수정(「다른 관리자가 먼저 수정했습니다…」) · 먼저 지운 코드(「다른 관리자가 먼저 지운…저장해 주세요.」)"
           }
         },
         "security": [
@@ -2758,7 +2758,7 @@
             "bearer": []
           }
         ],
-        "summary": "상세 코드 수정 — 이 BP 의 행 여러 개를 한 번에. 하나라도 막히면 아무것도 고치지 않는다.",
+        "summary": "상세 코드 수정 — 이 BP 의 행 여러 개를 한 번에. 하나라도 막히거나 그 사이 고쳐졌으면(행마다 updatedAt) 아무것도 고치지 않는다.",
         "tags": [
           "BpCodeGroups"
         ]
@@ -4636,7 +4636,7 @@
             "description": "메뉴 권한 없음 · 플랫폼 계정이 아님(공용 문구)"
           },
           "409": {
-            "description": "같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · API 권한 주소(경로 방식 @MenuPermission 컨트롤러의 경로)인 URL · 메뉴 코드를 더 만들 수 없음"
+            "description": "같거나 겹치는 URL을 쓰는 사용 중 메뉴 · API 권한 주소(경로 방식 @MenuPermission 컨트롤러의 경로)인 URL · 메뉴 코드를 더 만들 수 없음"
           },
           "503": {
             "description": "쓰기가 몰려 트랜잭션 시간을 넘김 — 잠시 뒤 다시 시도"
@@ -4748,7 +4748,7 @@
             "description": "메뉴를 찾을 수 없습니다."
           },
           "409": {
-            "description": "같거나 겹치는 URL 을 쓰는 사용 중 메뉴 · API 권한 주소인 URL 을 바꾸거나 다른 메뉴가 가져가려 함 · 동시 수정"
+            "description": "같거나 겹치는 URL을 쓰는 사용 중 메뉴 · API 권한 주소인 URL을 바꾸거나 다른 메뉴가 가져가려 함 · 동시 수정"
           },
           "503": {
             "description": "쓰기가 몰려 트랜잭션 시간을 넘김 — 잠시 뒤 다시 시도"
@@ -4833,7 +4833,7 @@
             "name": "year",
             "required": true,
             "in": "query",
-            "description": "연도. 2000~2100(공식 휴일 테이블의 범위).",
+            "description": "연도. 2000~2100(공식 휴일 테이블의 범위 — 2051년부터는 양력 휴일만 있다).",
             "schema": {
               "minimum": 2000,
               "maximum": 2100,
@@ -18808,6 +18808,11 @@
           "sortOrder": {
             "type": "number",
             "description": "표시 순서."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최종 수정 시각. 수정(PUT) 때 그 행의 updatedAt 으로 그대로 보낸다."
           }
         },
         "required": [
@@ -18816,7 +18821,8 @@
           "groupCode",
           "groupName",
           "isBpApplied",
-          "sortOrder"
+          "sortOrder",
+          "updatedAt"
         ]
       },
       "CodeGroupListResponseDto": {
@@ -18867,20 +18873,13 @@
               "ACTIVE",
               "INACTIVE"
             ]
-          },
-          "sortOrder": {
-            "type": "number",
-            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
-            "minimum": 1,
-            "maximum": 2147483647
           }
         },
         "required": [
           "manageOwnerCode",
           "groupCode",
           "groupName",
-          "status",
-          "sortOrder"
+          "status"
         ]
       },
       "CreateCodeGroupsDto": {
@@ -18899,9 +18898,20 @@
           "items"
         ]
       },
-      "CodeGroupInputDto": {
+      "UpdateCodeGroupDto": {
         "type": "object",
         "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "목록에서 받은 그 행의 updatedAt 그대로. 그 사이 다른 관리자가 고쳤으면 요청 전체를 저장하지 않고 409.",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
+            "minimum": 1,
+            "maximum": 2147483647
+          },
           "groupCode": {
             "type": "string",
             "description": "그룹 코드. 등록 뒤 바뀌지 않는다 — 수정 본문에서는 대상을 가리킬 뿐이다.",
@@ -18920,19 +18930,14 @@
               "ACTIVE",
               "INACTIVE"
             ]
-          },
-          "sortOrder": {
-            "type": "number",
-            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
-            "minimum": 1,
-            "maximum": 2147483647
           }
         },
         "required": [
+          "updatedAt",
+          "sortOrder",
           "groupCode",
           "groupName",
-          "status",
-          "sortOrder"
+          "status"
         ]
       },
       "UpdateCodeGroupsDto": {
@@ -18943,7 +18948,7 @@
             "minItems": 1,
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/CodeGroupInputDto"
+              "$ref": "#/components/schemas/UpdateCodeGroupDto"
             }
           }
         },
@@ -18975,13 +18980,19 @@
           "sortOrder": {
             "type": "number",
             "description": "표시 순서."
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최종 수정 시각. 수정(PUT) 때 그 행의 updatedAt 으로 그대로 보낸다."
           }
         },
         "required": [
           "status",
           "itemCode",
           "label",
-          "sortOrder"
+          "sortOrder",
+          "updatedAt"
         ]
       },
       "CodeItemListResponseDto": {
@@ -19056,6 +19067,49 @@
           "items"
         ]
       },
+      "UpdateCodeItemDto": {
+        "type": "object",
+        "properties": {
+          "updatedAt": {
+            "type": "string",
+            "description": "목록에서 받은 그 행의 updatedAt 그대로. 그 사이 다른 관리자가 고쳤으면 요청 전체를 저장하지 않고 409.",
+            "pattern": "T.*(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "itemCode": {
+            "type": "string",
+            "description": "상세 코드. 등록 뒤 바뀌지 않는다 — 수정 본문에서는 대상을 가리킬 뿐이다. SERVICE 그룹이면 서비스 코드다.",
+            "example": "FULL"
+          },
+          "label": {
+            "type": "string",
+            "description": "코드명. 앞뒤 공백을 지우고 1~50자. SERVICE 그룹이면 서비스명이다.",
+            "example": "정규직",
+            "minLength": 1,
+            "maxLength": 50
+          },
+          "status": {
+            "description": "사용 상태.",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "type": "string"
+          },
+          "sortOrder": {
+            "type": "number",
+            "description": "표시 순서. 화면이 끌어 옮긴 뒤 1부터 다시 매긴 값.",
+            "minimum": 1,
+            "maximum": 2147483647
+          }
+        },
+        "required": [
+          "updatedAt",
+          "itemCode",
+          "label",
+          "status",
+          "sortOrder"
+        ]
+      },
       "UpdateCodeItemsDto": {
         "type": "object",
         "properties": {
@@ -19064,7 +19118,7 @@
             "minItems": 1,
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/CodeItemInputDto"
+              "$ref": "#/components/schemas/UpdateCodeItemDto"
             }
           }
         },
@@ -19866,6 +19920,11 @@
             "type": "number",
             "description": "표시 순서."
           },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "최종 수정 시각. 수정(PUT) 때 그 행의 updatedAt 으로 그대로 보낸다."
+          },
           "isPlatformInactive": {
             "type": "boolean",
             "description": "플랫폼 원본이 사용중지인가(안내용). BP전용은 늘 거짓. 플랫폼제공 그룹에서 BP 는 이 값과 관계없이 사용 상태를\n자유롭게 바꾼다(2026-10-22 결정)."
@@ -19877,6 +19936,7 @@
           "itemCode",
           "label",
           "sortOrder",
+          "updatedAt",
           "isPlatformInactive"
         ]
       },
@@ -21816,14 +21876,13 @@
           },
           "name": {
             "type": "string",
-            "description": "휴일명.",
-            "example": "삼일절"
+            "description": "휴일명. 공공 API 표기 — 대체공휴일도 이름에 담는다.",
+            "example": "대체공휴일(삼일절)"
           },
           "note": {
             "type": "string",
             "nullable": true,
-            "description": "비고. 없으면 null(대체공휴일이면 그 사유).",
-            "example": "대체공휴일 — 삼일절"
+            "description": "비고. 지금은 모두 null 이다 — 동기화도 규칙 계산 행도 대체공휴일을 이름에 담는다(2026-10-30)."
           }
         },
         "required": [

@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 28 tables (auth · BP · stores · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T03:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:56:44Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 28개)
-    last_modified: 2026-10-27T04:12:31Z
+    last_modified: 2026-10-30T06:43:18Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -46,6 +46,10 @@ sources:
     resource: ../../prisma/migrations/20261028140448_team1_excel_download_logs/migration.sql
     title: 엑셀 다운로드 이력(부분 고유 · CHECK 4 · 외래키 3)
     last_modified: 2026-10-29T03:30:00Z
+  - id: holiday-api-names-migration
+    resource: ../../prisma/migrations/20261030153929_team1_public_holiday_api_names/migration.sql
+    title: 규칙 계산 공식 휴일 이름을 공공 API 표기로(2000~2100 전체)
+    last_modified: 2026-10-30T07:56:44Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -242,9 +246,10 @@ anything. A change means a new migration, because an applied one is never edited
 That matches where this table went — since 2026-10-28 the monthly 공공 API 동기화
 (`public-holiday-sync`, [platform holidays](/api/public-holidays.md)) rewrites 올해 · 다음 해
 from the API, deleting rule rows the API does not return. It was built **without** the
-calculation: the API only answers years it has published, so filling 2051–2100's lunar
-holidays early, or reporting where the API and the rule disagree, still needs the rule
-(and a lunar conversion dependency) back — nothing calls for that yet.
+calculation: the API only answers years it has published, so 2051–2100's lunar holidays are not
+filled that way for decades — those years stay solar-only (below). Filling them early, or
+reporting where the API and the rule disagree, would still need the rule (and a lunar conversion
+dependency) back — nothing calls for that yet.
 
 ## The platform master has no password
 
@@ -295,7 +300,7 @@ changing wording means stacking a new version and lowering the old one's
 the bodies sit in migrations rather than somewhere a re-run could overwrite them.
 The screens read them through [the public 약관 API](/api/terms-versions.md).
 
-# 공식 휴일 stops at 2050, and that is the data's limit
+# Lunar 공식 휴일 stop at 2050; the table runs to 2100
 
 The 1346 rows follow 관공서의 공휴일에 관한 규정: ten solar holidays with their
 start and end years, 설날·부처님오신날·추석 from the lunar calendar, and the
@@ -303,9 +308,20 @@ start and end years, 설날·부처님오신날·추석 from the lunar calendar,
 substitutes. The full rule set is in the migration's header comment.[^holiday-migration]
 
 Lunar conversion followed 한국천문연구원, whose 음양력 변환 table ends at **2050**.
-So 2051–2100 hold solar holidays only (487 of the rows). The missing years come
-from the 공공 API 동기화 path, which is also the only source for 임시공휴일 and
-선거일 — neither is derivable from a rule, so the migration never invents them.
+So 2051–2100 hold solar holidays only (487 of the rows). The expectation was that the 공공 API 동기화
+would fill the rest, but it only fetches 올해 · 다음 해, so those years stay without 설날 · 부처님오신날 · 추석
+for decades. They are kept and shown on purpose (2026-10-30, 재영 — a deletion and then a 2050 cap on the
+query were tried and dropped the same day): the CHECK stays 2000~2100, the query API and BP 휴일 달력 show
+their solar days. The synchronization stays the only source for
+임시공휴일 and 선거일 — neither is derivable from a rule, so the migrations never invent them.
+
+`20261030153929_team1_public_holiday_api_names` renamed every rule row (2000–2100) to the 공공 API's spelling so a year reads the same whether
+the synchronization has covered it or not: 신정 → 1월1일, 성탄절 → 기독탄신일, 설 · 추석 앞뒤 날 → 설날 ·
+추석, and a substitute is named 「대체공휴일(본 휴일)」 with 비고 NULL instead of keeping the base name and
+「대체공휴일 — …」 in 비고. Its `DO` block refuses to finish if a rule row with 비고 or an old name is left, if
+any row that had 비고 before is not named 「대체공휴일(…)」 now, or if a sample is missing — 2024-02-12
+대체공휴일(설날), 2024-09-17 추석, 2025-12-25 기독탄신일, 2100-12-25 기독탄신일. The rule header of
+`20261006000200` still uses the old names; a rebuilt calculation must follow these, not that header.[^holiday-api-names-migration]
 
 `public_holidays` has a unique index on `holiday_date`, so two holidays on one day
 are one row with both names joined (`어린이날 · 부처님오신날`, 2025-05-05). The
@@ -321,6 +337,7 @@ must be absent, and no lunar holiday may appear after 2050.
 [^team1-data-migration]: 1팀 초기 기준 데이터 245행 (마이그레이션 INSERT)
 [^prisma-schema]: Prisma 스키마 (3팀 48개 + 1팀 28개)
 [^holiday-migration]: 공식 휴일 1346행 (규칙 명세는 머리말에)
+[^holiday-api-names-migration]: 규칙 계산 공식 휴일 이름을 공공 API 표기로(2000~2100 전체)
 [^menus-url-unique-migration]: 사용 중 메뉴 url 부분 유니크 인덱스(menus_url_active_key)
 [^terms-demo-migration]: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
 [^stores-phone-migration]: 점포 연락처 CHECK 9~12자리(050X 평생번호)
