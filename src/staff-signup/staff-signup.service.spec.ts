@@ -1,4 +1,4 @@
-import { HttpException } from '@nestjs/common';
+import { HttpException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import type { AuthSessionService } from '../auth-session/auth-session.service';
@@ -421,6 +421,7 @@ describe('StaffSignupService', () => {
     it('계정(번호는 초대의 번호) · 레코드 연결 · 초대 수락 · 서명 대기(직원) · 접속 상태', async () => {
       await expect(service().signup(input({ phone: PHONE }))).resolves.toEqual({
         accessToken: 'access',
+        hqSharingConsentRecorded: null,
       });
       expect(tx.invitation.updateMany).toHaveBeenCalledWith({
         where: { invitationId: 31, status: 'SENT' },
@@ -526,12 +527,43 @@ describe('StaffSignupService', () => {
 
     it('가맹 점포에서 본사 제공 동의하면 계정에 버전 · 시각과 함께 남긴다(api #78)', async () => {
       store('FRANCHISE');
-      await service().signup(input({ hqSharingConsented: true }));
+      await expect(
+        service().signup(
+          input({
+            hqSharingConsented: true,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          }),
+        ),
+      ).resolves.toMatchObject({ hqSharingConsentRecorded: true });
       expect(argOf(tx.account.create).data).toMatchObject({
         isHqSharingConsented: true,
         hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
         hqSharingAgreedAt: NOW,
       });
+    });
+
+    it('보인 문구 버전이 지금과 다르면 가입은 마치고 동의만 남기지 않는다 — 응답 false · 경고 로그(ATT-30 v253)', async () => {
+      store('FRANCHISE');
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      await expect(
+        service().signup(
+          input({ hqSharingConsented: true, hqSharingConsentVersion: 'v0.9' }),
+        ),
+      ).resolves.toEqual({
+        accessToken: 'access',
+        hqSharingConsentRecorded: false,
+      });
+      expect(argOf(tx.account.create).data).not.toHaveProperty(
+        'isHqSharingConsented',
+      );
+      expect(tx.staffMember.updateMany).toHaveBeenCalled();
+      expect(sessions.issue).toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('shown="v0.9"'),
+      );
+      warn.mockRestore();
     });
 
     it.each([
@@ -580,7 +612,10 @@ describe('StaffSignupService', () => {
     it('생일 당일에 만 19세가 되면 가입한다', async () => {
       await expect(
         service().signup(input({ birthDate: '2007-10-20' })),
-      ).resolves.toEqual({ accessToken: 'access' });
+      ).resolves.toEqual({
+        accessToken: 'access',
+        hqSharingConsentRecorded: null,
+      });
     });
 
     it.each([

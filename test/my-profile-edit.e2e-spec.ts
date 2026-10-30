@@ -451,19 +451,44 @@ describe('내 정보 편집 (e2e, DB)', () => {
   });
 
   describe('본사 제공 동의 (ATT-30)', () => {
+    // 화면이 보인 동의 문구 버전(ATT-30 v252) — 직원 앱은 문구와 같이 묶인 버전을 싣는다
+    const SHOWN = { consentVersion: HQ_SHARING_CONSENT_VERSION };
+
+    it('보인 문구 버전이 지금 것과 다르면 409 와 새로 고치라는 사유, 없거나 형식이 틀리면 400 — 동의를 남기지 않는다(ATT-30 v252)', async () => {
+      const id = await account('문구', 'JOINED', await hashPassword(PASSWORD));
+      const { token } = await login(id);
+      const res = await send('post', '/me/hq-sharing-consent', token, {
+        consentVersion: 'v0.9',
+      }).expect(409);
+      expect((res.body as { message: string }).message).toBe(
+        '사업자 제공 동의 내용이 바뀌었습니다. 화면을 새로 고쳐 바뀐 내용을 확인한 뒤 다시 동의해 주세요.',
+      );
+      for (const body of [
+        undefined,
+        {},
+        { consentVersion: null },
+        { consentVersion: '' },
+        { consentVersion: 7 },
+        { consentVersion: 'v'.repeat(65) },
+        { ...SHOWN, version: 'x' }, // 모르는 칸(forbidNonWhitelisted)
+      ])
+        await send('post', '/me/hq-sharing-consent', token, body).expect(400);
+      expect((await profile(token)).hqSharingConsent.isConsented).toBe(false);
+    });
+
     it('동의 → 철회 → 다시 동의, DB CHECK 를 지킨다. 상태가 맞지 않으면 409', async () => {
       const id = await account('본사', 'JOINED', await hashPassword(PASSWORD));
       const { token } = await login(id);
       const hq = async () => (await profile(token)).hqSharingConsent;
 
       await send('post', '/me/hq-sharing-consent/withdraw', token).expect(409);
-      await send('post', '/me/hq-sharing-consent', token).expect(204);
+      await send('post', '/me/hq-sharing-consent', token, SHOWN).expect(204);
       expect(await hq()).toMatchObject({
         isConsented: true,
         consentVersion: HQ_SHARING_CONSENT_VERSION,
         withdrawnAt: null,
       });
-      await send('post', '/me/hq-sharing-consent', token).expect(409);
+      await send('post', '/me/hq-sharing-consent', token, SHOWN).expect(409);
 
       await send('post', '/me/hq-sharing-consent/withdraw', token).expect(204);
       const withdrawn = await hq();
@@ -471,7 +496,7 @@ describe('내 정보 편집 (e2e, DB)', () => {
       expect(withdrawn.consentVersion).toBe(HQ_SHARING_CONSENT_VERSION);
       expect(withdrawn.withdrawnAt).not.toBeNull();
 
-      await send('post', '/me/hq-sharing-consent', token).expect(204);
+      await send('post', '/me/hq-sharing-consent', token, SHOWN).expect(204);
       expect(await hq()).toMatchObject({
         isConsented: true,
         withdrawnAt: null,
@@ -500,13 +525,13 @@ describe('내 정보 편집 (e2e, DB)', () => {
         consentVersion: 'v0.9',
         needsReconsent: true,
       });
-      await send('post', '/me/hq-sharing-consent', token).expect(204);
+      await send('post', '/me/hq-sharing-consent', token, SHOWN).expect(204);
       expect(await hq()).toMatchObject({
         isConsented: true,
         consentVersion: HQ_SHARING_CONSENT_VERSION,
         needsReconsent: false,
       });
-      await send('post', '/me/hq-sharing-consent', token).expect(409);
+      await send('post', '/me/hq-sharing-consent', token, SHOWN).expect(409);
     });
   });
 });
