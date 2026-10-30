@@ -28,6 +28,7 @@ import {
   type OptionalMailService,
 } from '../mail/mail.module';
 import { sameName } from './identity-match';
+import { alimtalkButtonProblem } from '../alimtalk/alimtalk-buttons';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
 import { PrismaService } from '../prisma/prisma.service';
@@ -195,9 +196,9 @@ const failureOf = (e: unknown): { kind: SendFailureKind; code?: number } =>
  * - `dispatch` 는 커밋 뒤에 가입 초대 알림톡을 보낸다 — 알림톡은 롤백이 없어서다(공통 모듈 규칙). 확실히 나가지
  *   않았으면 보내기 직전으로 되돌려 502 SEND_FAILED, 메시지 요청 뒤 응답이 끊겼으면 되돌리지 않고 502 SEND_UNCONFIRMED.
  *
- * 초대 코드는 알림톡 본문에 싣는다. 초대 링크(STAFF_APP_URL 의 `/invite#token=…`)는 버튼 변수인데 공통 모듈이 아직 버튼을
- * 보내지 않아 대체 문자로만 간다. 바뀐 본문은 카카오 재검수 전이라 알림톡이 거절될 수도 있다 — 카카오 재검수와 버튼 발송이
- * 들어오기 전까지는 대체 문자 발신번호가 없으면 쓰기 전에 막는다(api #74 리뷰).
+ * 초대 코드는 알림톡 본문에 싣는다. 초대 링크(STAFF_APP_URL 의 `/invite#token=…`)는 버튼 변수라 알림톡 버튼과 대체 문자
+ * 끝에 함께 실린다(WHALEERP-636). 바뀐 본문 · 버튼은 카카오 재검수 전이라 알림톡이 거절될 수 있어, 검수가 끝나기 전까지는
+ * 대체 문자 발신번호가 없으면 쓰기 전에 막는다(api #74 리뷰) — 그러지 않으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다.
  */
 @Injectable()
 export class ContractDeliveryService {
@@ -239,8 +240,8 @@ export class ContractDeliveryService {
       throw new ServiceUnavailableException(
         `직원 앱 주소(STAFF_APP_URL)가 없어 ${what} 링크를 보낼 수 없습니다.`,
       );
-    // 링크는 알림톡 버튼 변수에만 있는데 버튼을 아직 보내지 않고, 바뀐 본문은 카카오 재검수 전이다 — 대체 문자가 없으면
-    // 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다(api #59 · #74 리뷰).
+    // 링크는 알림톡 버튼 변수다. 버튼은 싣지만(WHALEERP-636) 바뀐 본문 · 버튼은 카카오 재검수 전이라 알림톡이 거절될 수 있다 —
+    // 대체 문자가 없으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다(api #59 · #74 리뷰). 검수가 끝나면 다시 본다.
     if (!this.alimtalk.hasSmsFallback())
       throw new ServiceUnavailableException(
         `대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없어 ${what}를 보낼 수 없습니다.`,
@@ -255,12 +256,24 @@ export class ContractDeliveryService {
       });
     const template =
       kind === 'INVITE' ? INVITATION_TEMPLATE : AFFILIATION_TEMPLATE;
-    await findSendableTemplate(tx, template, 'ALIMTALK').catch((e: unknown) => {
-      this.logger.error(`${what} 템플릿을 쓸 수 없음: ${String(e)}`);
-      throw new ServiceUnavailableException(
-        `${what} 알림톡 템플릿이 없거나 꺼져 있어 보낼 수 없습니다.`,
+    const found = await findSendableTemplate(tx, template, 'ALIMTALK').catch(
+      (e: unknown) => {
+        this.logger.error(`${what} 템플릿을 쓸 수 없음: ${String(e)}`);
+        throw new ServiceUnavailableException(
+          `${what} 알림톡 템플릿이 없거나 꺼져 있어 보낼 수 없습니다.`,
+        );
+      },
+    );
+    // 버튼 설정(정해진 링크 변수 하나 · 버튼 이름)이 맞지 않으면 커밋 뒤 발송이 늘 던진다 — 쓰기 전에 막는다(api #219)
+    const buttonProblem = alimtalkButtonProblem(template, found.variables);
+    if (buttonProblem) {
+      this.logger.error(
+        `${what} 템플릿 버튼 설정이 맞지 않음: ${buttonProblem}`,
       );
-    });
+      throw new ServiceUnavailableException(
+        `${what} 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.`,
+      );
+    }
   }
 
   /**

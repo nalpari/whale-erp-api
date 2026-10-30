@@ -167,6 +167,72 @@ describe('validateTemplate', () => {
     );
   });
 
+  it('알림톡은 버튼 링크 변수를 하나만 둔다 — 메일은 여럿이어도 된다(WHALEERP-636)', () => {
+    const second = {
+      name: '링크2',
+      label: '두 번째 링크',
+      isRequired: false,
+      sampleValue: 'https://y',
+      isButtonLink: true,
+    };
+    const talk = (extra: TemplateInput['variables']) =>
+      mail({
+        channel: 'ALIMTALK',
+        templateCode: 'TALK_STAFF_INVITATION',
+        title: null,
+        kakaoTemplateCode: 'KAKAO_X',
+        body: '#{직원이름} 님 근무지 #{근무지}',
+        variables: [...mail().variables, ...extra],
+      });
+    expect(validateTemplate(talk([]))).toEqual([]);
+    expect(validateTemplate(talk([second]))).toContain(
+      '이 알림톡의 버튼 링크는 #{링크} 변수 하나에만 표시합니다.',
+    );
+    // 표시를 다른 변수로 옮김 · 뺌도 같은 오류(api #219 리뷰)
+    const moved = mail().variables.map((v) =>
+      v.name === '링크'
+        ? { ...v, isButtonLink: false }
+        : v.name === '근무지'
+          ? { ...v, isButtonLink: true }
+          : v,
+    );
+    const removed = mail().variables.map((v) => ({
+      ...v,
+      isButtonLink: false,
+    }));
+    for (const variables of [moved, removed])
+      expect(validateTemplate({ ...talk([]), variables })).toContain(
+        '이 알림톡의 버튼 링크는 #{링크} 변수 하나에만 표시합니다.',
+      );
+    expect(
+      validateTemplate(mail({ variables: [...mail().variables, second] })),
+    ).toEqual([]);
+  });
+
+  it('알림톡 버튼 링크는 버튼 이름이 정해진 템플릿 코드에만 — 버튼 링크가 없으면 상관없다(WHALEERP-636)', () => {
+    const talk = (variables: TemplateInput['variables']) =>
+      mail({
+        channel: 'ALIMTALK',
+        templateCode: 'TALK_PAYSLIP',
+        title: null,
+        kakaoTemplateCode: 'KAKAO_X',
+        body: '#{직원이름} 님 근무지 #{근무지}',
+        variables,
+      });
+    expect(validateTemplate(talk(mail().variables))).toContain(
+      '이 템플릿 코드는 알림톡 버튼 이름이 정해지지 않아 버튼 링크를 쓸 수 없습니다. 카카오에 등록한 버튼 이름을 개발팀에 알려 주세요.',
+    );
+    expect(
+      validateTemplate(talk(mail().variables.filter((v) => !v.isButtonLink))),
+    ).toEqual([]);
+    // 코드 형식이 틀리면 코드 오류만 — 버튼 이름 안내는 내지 않는다
+    expect(
+      validateTemplate({ ...talk(mail().variables), templateCode: 'talk_x' }),
+    ).not.toContain(
+      '이 템플릿 코드는 알림톡 버튼 이름이 정해지지 않아 버튼 링크를 쓸 수 없습니다. 카카오에 등록한 버튼 이름을 개발팀에 알려 주세요.',
+    );
+  });
+
   it('NUL 이 든 값은 받지 않는다', () => {
     expect(validateTemplate(mail({ body: '근무지\u0000' }))).toContain(
       '제어 문자(NUL)는 쓸 수 없습니다.',

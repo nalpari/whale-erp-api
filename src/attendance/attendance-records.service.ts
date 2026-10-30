@@ -41,6 +41,9 @@ import type {
   MyAttendanceRecordsResponseDto,
   PeriodAttendanceResponseDto,
 } from './dto/attendance-records.dto';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
+import { targetStores } from '../admin-scope/target-stores';
+import { ATTENDANCE_BP_NOT_CHOSEN } from './attendance-target-bp';
 
 const STAFF_NOT_FOUND = '직원을 찾을 수 없습니다.';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -89,9 +92,10 @@ export class AttendanceRecordsService {
     adminAccountId: number,
     stores: AttendanceStoresQueryDto,
     dateYmd: string,
+    bp?: TargetBpContext,
     now: Date = new Date(),
   ): Promise<DailyAttendanceResponseDto> {
-    const scope = await this.scopeOf(adminAccountId, stores);
+    const scope = await this.scopeOf(adminAccountId, stores, bp);
     const date = toDate(dateYmd);
     const roster = scope.storeIds.length
       ? await this.prisma.staffMember.findMany({
@@ -121,6 +125,7 @@ export class AttendanceRecordsService {
     fromYmd: string,
     toYmd: string,
     staffMemberId: number | null,
+    bp?: TargetBpContext,
     now: Date = new Date(),
   ): Promise<PeriodAttendanceResponseDto> {
     const from = toDate(fromYmd);
@@ -130,7 +135,7 @@ export class AttendanceRecordsService {
       throw new BadRequestException(
         `기간은 시작일부터 ${MAX_PERIOD_DAYS}일 이하입니다.`,
       );
-    const scope = await this.scopeOf(adminAccountId, stores);
+    const scope = await this.scopeOf(adminAccountId, stores, bp);
     if (staffMemberId !== null) {
       const staff = await this.prisma.staffMember.findFirst({
         where: { staffMemberId, storeId: { in: scope.storeIds } },
@@ -335,8 +340,15 @@ export class AttendanceRecordsService {
   private async scopeOf(
     adminAccountId: number,
     query: AttendanceStoresQueryDto,
+    bp?: TargetBpContext,
   ): Promise<Scope> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      ATTENDANCE_BP_NOT_CHOSEN,
+    );
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
     const picked = [...storeOf.keys()].filter(

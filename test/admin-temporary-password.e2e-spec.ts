@@ -160,10 +160,10 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
       .set('Authorization', `Bearer ${accessToken}`)
       .expect(200);
     // 업무 API 도 강제 변경 때문에 막히지 않는다(범위 때문에 403 일 수는 있다).
-    const stores = await request(app.getHttpServer())
-      .get('/stores/options')
+    const notifications = await request(app.getHttpServer())
+      .get('/notifications')
       .set('Authorization', `Bearer ${accessToken}`);
-    expect((stores.body as { message?: string }).message).not.toBe(
+    expect((notifications.body as { message?: string }).message).not.toBe(
       PASSWORD_CHANGE_REQUIRED_MESSAGE,
     );
   });

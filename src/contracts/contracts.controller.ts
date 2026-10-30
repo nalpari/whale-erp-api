@@ -51,6 +51,8 @@ import {
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
+import { ListStoreOptionsQueryDto } from './dto/list-store-options-query.dto';
+import { StoreOptionListResponseDto } from './dto/store-option.response.dto';
 import { ContractIdPipe } from './contract-id.pipe';
 import { ContractsService, type PaperDocument } from './contracts.service';
 import {
@@ -168,6 +170,24 @@ export class ContractsController {
     @TargetBp() bp: TargetBpContext,
   ): Promise<ContractListResponseDto> {
     return this.contracts.list(user.id, query, bp);
+  }
+
+  /** 작성 · 이어 쓰기의 근무지 선택지. 업무 범위(플랫폼 계정은 탭 BP) 안에서 지우지 않았고 폐점이 아닌 점포, 이름순. 작성 또는 수정 권한. */
+  // 가드가 대상 BP 를 정하는 근로계약 경로라 여기 둔다 — 메뉴 권한 없는 /stores/options 는 탭 BP 를 못 받았다(WHALEERP-638).
+  // `:contractId` 보다 먼저 둔다.
+  @Get('store-options')
+  @MenuPermission(['create', 'update'])
+  @ApiOkResponse({ type: StoreOptionListResponseDto })
+  @ApiBadRequestResponse({
+    description: `검색 조건 형식 · ${BP_MISSING_DESCRIPTION}`,
+  })
+  @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
+  storeOptions(
+    @Query() query: ListStoreOptionsQueryDto,
+    @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
+  ): Promise<StoreOptionListResponseDto> {
+    return this.contracts.storeOptions(user.id, query, bp);
   }
 
   /**

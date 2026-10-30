@@ -33,6 +33,9 @@ import {
   validContractWhere,
 } from './payslip-attendance-reasons';
 import { dateOnly, monthRange, storeNames } from './payslip-shared';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
+import { targetStores } from '../admin-scope/target-stores';
+import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
 
 /** 급여 기간 — 그 달 1일 ~ 말일. 근로계약의 임금지급 월 · 일은 언제 주는지일 뿐 셈하는 기간을 바꾸지 않는다. */
 function payPeriod(month: string) {
@@ -95,8 +98,15 @@ export class PayslipDraftService {
   async candidates(
     adminAccountId: number,
     month: string,
+    bp?: TargetBpContext,
   ): Promise<PayslipCandidatesResponseDto | null> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      PAYSLIP_BP_NOT_CHOSEN,
+    );
     if (!manageable) return null;
     const period = payPeriod(month);
     const list = await this.loadCandidates(manageable, month);
@@ -128,8 +138,15 @@ export class PayslipDraftService {
     adminAccountId: number,
     staffMemberId: number,
     month: string,
+    bp?: TargetBpContext,
   ): Promise<PayslipCreatedDto | null> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      PAYSLIP_BP_NOT_CHOSEN,
+    );
     if (!manageable) return null;
     const [candidate] = await this.loadCandidates(
       manageable,
@@ -167,8 +184,15 @@ export class PayslipDraftService {
   async bulkCreate(
     adminAccountId: number,
     month: string,
+    bp?: TargetBpContext,
   ): Promise<PayslipBulkCreateResponseDto | null> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      PAYSLIP_BP_NOT_CHOSEN,
+    );
     if (!manageable) return null;
     const list = await this.loadCandidates(manageable, month);
     const result: PayslipBulkCreateResponseDto = { created: [], skipped: [] };
