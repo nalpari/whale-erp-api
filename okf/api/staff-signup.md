@@ -4,12 +4,12 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:44:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-29T09:00:43Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
     title: StaffSignupService (lookup, check, signup transaction, under-age notice, logged-in list · accept)
-    last_modified: 2026-10-29T04:33:07Z
+    last_modified: 2026-10-29T09:00:43Z
   - id: identity-match
     resource: ../../src/contracts/identity-match.ts
     title: sameName · nameKey — 근무지 더하기 · 소속 추가 확인 요청 · 메일의 이름 대조(본인 대조 규칙)
@@ -17,7 +17,7 @@ sources:
   - id: affiliation-requests-service
     resource: ../../src/staff-signup/affiliation-requests.service.ts
     title: AffiliationRequestsService — 소속 추가 확인 · 복귀 확인 요청 목록 · 수락 · 거절
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-29T09:00:43Z
   - id: my-invitations-controller
     resource: ../../src/staff-signup/my-invitations.controller.ts
     title: GET /me/invitations · POST /me/invitations/:invitationId/accept (account token)
@@ -25,19 +25,19 @@ sources:
   - id: my-invitation-dto
     resource: ../../src/staff-signup/dto/my-invitation.dto.ts
     title: MyInvitationDto · MyInvitationListResponseDto · AcceptMyInvitationDto · AcceptMyInvitationResponseDto
-    last_modified: 2026-10-29T01:31:11Z
+    last_modified: 2026-10-29T09:00:43Z
   - id: staff-signup-controller
     resource: ../../src/staff-signup/staff-signup.controller.ts
     title: /auth/account/invitations/check · /auth/account/signup (public, default rate limit)
-    last_modified: 2026-10-20T06:10:00Z
+    last_modified: 2026-10-29T09:00:43Z
   - id: staff-signup-dto
     resource: ../../src/staff-signup/dto/staff-signup.dto.ts
     title: StaffSignupDto (lookup + account + 인적사항; no phone of its own)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-29T09:00:43Z
   - id: hq-sharing-consent
     resource: ../../src/staff-signup/hq-sharing-consent.ts
     title: 본사 제공 동의 문구 버전 and which stores ask
-    last_modified: 2026-10-20T06:10:00Z
+    last_modified: 2026-10-29T09:00:43Z
   - id: staff-signup-migration
     resource: ../../prisma/migrations/20261021103042_team3_staff_signup/migration.sql
     title: accounts.gender · is_foreigner and NTF_SIGNUP_UNDER_AGE
@@ -45,7 +45,7 @@ sources:
   - id: staff-signup-e2e
     resource: ../../test/staff-signup.e2e-spec.ts
     title: Signup against a real DB
-    last_modified: 2026-10-28T05:30:00Z
+    last_modified: 2026-10-29T09:00:43Z
 ---
 
 # What it is
@@ -132,7 +132,11 @@ part like `"a"@example.com` is a 400, since password-reset mail could never reac
 `password` · `name` · `birthDate`
 (YYYY-MM-DD) · `gender` (required, 남 · 여 — 2026-10-21 재영: 본인 대조가 늘 다섯 가지를 보도록
 성별이 빈 계정을 만들지 않는다, ACC-23 · JOI-10) · `isForeigner` (optional) · `zipCode` (5 digits) ·
-`address` · `addressDetail` (optional) · `hqSharingConsented` (optional) · `deviceIdentifier`
+`address` · `addressDetail` (optional) · `hqSharingConsented` (optional) · `hqSharingConsentVersion`
+(the wording version the screen showed — read only when `hqSharingConsented` is true; if sent it must be a
+non-empty string ≤ 64 chars (400), and **missing is not an error**: an app that predates this field (deploy
+skew) has its consent treated like a version mismatch — joining completes, the consent is not written,
+ATT-30 v252 · v253) · `deviceIdentifier`
 (optional, as in login). **There is no phone field**: the account takes the invitation's
 (근로계약서) phone — if a 직원 could type it, they could sign up on someone else's number and block
 that person's next invitation (JOIN-7). 약관 동의 waits for 1팀's common 약관 registration
@@ -164,12 +168,18 @@ In one transaction:
    in `accounts` → **409 `ACCOUNT_EMAIL_TAKEN`**. At a non-`DIRECT` store with
    `hqSharingConsented: true` the **account** gets `is_hq_sharing_consented` ·
    `hq_sharing_consent_version` (`HQ_SHARING_CONSENT_VERSION`, the one constant in `src/admin-scope/hq-sharing.ts`, shared with 내 정보 동의 #85) · `hq_sharing_agreed_at` — one answer per
-   person since api #78.
+   person since api #78. **Only if `hqSharingConsentVersion` equals that constant**: otherwise (different or missing) the signup
+   still completes without the consent (ATT-30 v253 — the consent is optional, so a changed wording must
+   not block joining) and a warn log names the account and both versions (the sent value JSON-quoted, since it
+   comes from a public route).
 5. Link the record (`account_id`, `join_status = JOINED`, conditioned on no account yet).
 6. The record's 발송 대기 contracts → 서명 대기, history actor `STAFF`. The deadline from the send stays.
 
 After commit a session is issued (`AuthSessionService.issue`, same device rule as login) and the login
-response returned. A failure there leaves the signup done — the 직원 logs in from the login screen.
+response returned, plus `hqSharingConsentRecorded` (`StaffSignupResponseDto`): `true` written, `false`
+consented but the version differed (the app's done screen says to reload and agree in 내 정보), `null`
+nothing to write (직영 · not consented). `hqSharingConsentRecordOf` in `hq-sharing-consent.ts` decides it for
+all three flows. A failure there leaves the signup done — the 직원 logs in from the login screen.
 
 # Adding a 근무지 after login (WHALEERP-603)
 
@@ -211,8 +221,9 @@ token lookup, with the per-phone code lock counted on the account's phone) are g
   consented yet (one answer per person, api #78) — a consent to a wording version no longer accepted
   counts as not yet (`hqSharingAgreedOf`, [My profile](/api/my-profile.md)), and accept then
   overwrites it with the current version.
-- `POST /me/invitations/:invitationId/accept` with `{ hqSharingConsented? }` → 200 `{ staffMemberId,
-  storeId, storeName }` — the app goes to that 소속's waiting contract (`storeId` is the linked record's
+- `POST /me/invitations/:invitationId/accept` with `{ hqSharingConsented?, hqSharingConsentVersion? }` → 200 `{ staffMemberId,
+  storeId, storeName, hqSharingConsentRecorded }` (version rule and flag as at signup; `null` also when the
+  account already consented to an accepted version) — the app goes to that 소속's waiting contract (`storeId` is the linked record's
   store; the app filters `GET /me/contracts` items by it to open that store's contracts only, staff #40
   follow-up). The 직원 row re-read under `FOR UPDATE` also checks the store — if a contract edit moved
   the record meanwhile it is 404 `INVITATION_ENDED`, so the response never names a stale store (api #195). The id goes through `InvitationIdPipe`
@@ -274,13 +285,14 @@ someone else, its new owner cannot sign up on it — handled by the phone check 
   `jobTitle` come together from the request's in-progress contract when it carries terms, otherwise both from the
   record (the record takes them only when a contract starts — `applyStartedTerms`, WHALEERP-156); one rule,
   `pendingTermsOf` (`contract-status.ts`), also used by the 알림톡 · 메일 고용형태 and the signup invitation check.
-- `POST /me/affiliation-requests/:invitationId/accept` `{ hqSharingConsented? }` — 번호 lock → account row `FOR UPDATE`
+- `POST /me/affiliation-requests/:invitationId/accept` `{ hqSharingConsented?, hqSharingConsentVersion? }` — 번호 lock → account row `FOR UPDATE`
   (so rewriting an old-version consent cannot undo a withdrawal made meanwhile, as at 근무지 더하기, api #183) → 직원 row
   `FOR UPDATE` → re-read; the request must be this account's (`candidate_account_id` and the record's name, `sameName`), `SENT`, unexpired, and the record's phone the
   account's phone. 409 if the account is already 재직 at that store. Invitation → `ACCEPTED`, optional consent written
   exactly as at 근무지 더하기, record linked (`account_id`, `JOINED`, candidate cleared), its 발송 대기 contracts →
   서명 대기 (`STAFF`) with `sign_deadline_at = now + 30 days` (the deadline starts here, not at sending) and one
-  `PUSH_CONTRACT_SENT` notice each. Returns `{ staffMemberId, storeName, contractIds }`.
+  `PUSH_CONTRACT_SENT` notice each. Returns `{ staffMemberId, storeName, contractIds, hqSharingConsentRecorded }` — a
+  version mismatch accepts without the consent, as at signup.
 - `POST /me/affiliation-requests/:invitationId/reject` `{ reason? }` — reason optional, NFC-normalized and trimmed, then
   at most 500 chars (400 otherwise — the same DTO rules as a contract 거부, JOIN-5). Invitation → `REJECTED` with `reject_reason`; the record is kept (운영 정책 JOI-08) and so is its
   `candidate_account_id` (재발송 runs 판별 again anyway); its 발송 대기 contracts → 거부 (`PENDING_SEND → REJECTED`, `STAFF`)

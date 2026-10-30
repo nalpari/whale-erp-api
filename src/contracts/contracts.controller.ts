@@ -30,7 +30,11 @@ import {
 } from '@nestjs/swagger';
 import { AttachmentFileType } from '@prisma/client';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
-import { MenuPermission } from '../auth/menu-permission.guard';
+import {
+  MenuPermission,
+  TargetBp,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
 import type { AuthUser } from '../auth/auth.types';
 import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
 import {
@@ -49,6 +53,11 @@ import {
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
 import { ContractIdPipe } from './contract-id.pipe';
 import { ContractsService, type PaperDocument } from './contracts.service';
+import {
+  BP_FORBIDDEN_DESCRIPTION,
+  BP_MISSING_DESCRIPTION,
+  BP_NOT_FOUND_DESCRIPTION,
+} from './contracts-swagger';
 
 /** 종이 계약 날인본 칸. 근로계약서는 필수(서비스가 본다), 임금계약서는 선택. 칸마다 한 개, 하나에 10MB 까지. */
 const PAPER_FIELDS = [
@@ -133,11 +142,14 @@ const PAPER_BODY = {
 // 관리자 웹의 근로계약 관리. 관리자의 업무 범위(BP · 점포) 밖 계약은 없는 것과 같다(404) — ContractsService.
 // 권한은 「근로계약 관리」(/contracts) 메뉴 권한을 가드가 먼저 본다(403, WHALEERP-592) — 조회 · 작성 · 수정 · 삭제.
 // 임시저장 이어 쓰기(PUT)는 작성의 연장이라 작성 또는 수정 권한이다(관리자 웹 화면과 같다).
+// 다루는 계약의 BP 는 가드가 X-Bp-Code-Id 로 정한다(`@TargetBp()`, WHALEERP-618) — BP · 가맹 계정은 소속 BP, 플랫폼 계정은
+// 헤더로 고른 고객 BP 의 점포 전부다(헤더가 없으면 서비스가 400, 점포 정보 관리와 같다).
 @ApiBearerAuth()
 @ApiForbiddenResponse({
-  description:
-    '근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  description: `근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
 })
+// 본문 · 쿼리를 받는 경로는 자기 400 과 함께 다시 적는다 — 메서드의 설명이 클래스의 것을 덮는다.
+@ApiBadRequestResponse({ description: BP_MISSING_DESCRIPTION })
 @UserTypes('admin')
 @Controller('contracts')
 export class ContractsController {
@@ -146,11 +158,16 @@ export class ContractsController {
   @Get()
   @MenuPermission('read')
   @ApiOkResponse({ type: ContractListResponseDto })
+  @ApiBadRequestResponse({
+    description: `검색 조건 형식 · ${BP_MISSING_DESCRIPTION}`,
+  })
+  @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   list(
     @Query() query: ListContractsQueryDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<ContractListResponseDto> {
-    return this.contracts.list(user.id, query);
+    return this.contracts.list(user.id, query, bp);
   }
 
   /**
@@ -162,15 +179,13 @@ export class ContractsController {
   @MenuPermission('create')
   @ApiCreatedResponse({ type: CreatedContractResponseDto })
   @ApiForbiddenResponse({
-    description:
-      '근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+    description: `근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
   })
   @ApiBadRequestResponse({
-    description:
-      '입력 오류 · 만 19세 미만 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기',
+    description: `입력 오류 · 만 19세 미만 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
-    description: '근무지 점포가 없거나 폐점이거나 업무 범위 밖',
+    description: `근무지 점포가 없거나 폐점이거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
   })
   @ApiConflictResponse({
     description:
@@ -187,8 +202,9 @@ export class ContractsController {
   create(
     @Body() body: CreateContractDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<CreatedContractResponseDto> {
-    return this.contracts.create(body, user.id);
+    return this.contracts.create(body, user.id, [], bp);
   }
 
   /**
@@ -203,15 +219,13 @@ export class ContractsController {
   @ApiBody(PAPER_BODY)
   @ApiCreatedResponse({ type: CreatedContractResponseDto })
   @ApiForbiddenResponse({
-    description:
-      '근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+    description: `근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
   })
   @ApiBadRequestResponse({
-    description:
-      '입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄',
+    description: `입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
-    description: '근무지 점포가 없거나 폐점이거나 업무 범위 밖',
+    description: `근무지 점포가 없거나 폐점이거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
   })
   @ApiConflictResponse({
     description:
@@ -225,11 +239,13 @@ export class ContractsController {
     @Body('data') data: unknown,
     @UploadedFiles() files: PaperFiles | undefined,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<CreatedContractResponseDto> {
     return this.contracts.create(
       await parseContractData(data),
       user.id,
       paperDocuments(files),
+      bp,
     );
   }
 
@@ -237,12 +253,15 @@ export class ContractsController {
   @Get(':contractId')
   @MenuPermission('read')
   @ApiOkResponse({ type: ContractDetailDto })
-  @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
+  @ApiNotFoundResponse({
+    description: `없는 계약 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   findOne(
     @Param('contractId', ContractIdPipe) contractId: number,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<ContractDetailDto> {
-    return this.contracts.findOne(user.id, contractId);
+    return this.contracts.findOne(user.id, contractId, bp);
   }
 
   /**
@@ -254,11 +273,10 @@ export class ContractsController {
   @MenuPermission(['create', 'update'])
   @ApiOkResponse({ type: CreatedContractResponseDto })
   @ApiBadRequestResponse({
-    description:
-      '입력 오류 · 만 19세 미만 · 수정 요청인데 임시저장 · 근무지 변경 · 가입한 직원의 번호 변경 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기',
+    description: `입력 오류 · 만 19세 미만 · 수정 요청인데 임시저장 · 근무지 변경 · 가입한 직원의 번호 변경 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
-    description: '없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖',
+    description: `없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
   })
   @ApiConflictResponse({
     description:
@@ -273,15 +291,15 @@ export class ContractsController {
       '저장했지만 가입 초대 알림톡이 실패(본문 contractId): SEND_FAILED(나가지 않아 보내기 직전으로 되돌림 — status, 새 계약 · 임시저장에서 넘긴 것은 임시저장) · SEND_UNCONFIRMED(접수 여부 모름 — 상세를 다시 읽을 것)',
   })
   @ApiForbiddenResponse({
-    description:
-      '근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성, 수정 요청은 수정) · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+    description: `근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성, 수정 요청은 수정) · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원) · ${BP_FORBIDDEN_DESCRIPTION}`,
   })
   update(
     @Param('contractId', ContractIdPipe) contractId: number,
     @Body() body: CreateContractDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<CreatedContractResponseDto> {
-    return this.contracts.update(user.id, contractId, body);
+    return this.contracts.update(user.id, contractId, body, [], bp);
   }
 
   /**
@@ -293,16 +311,17 @@ export class ContractsController {
   @MenuPermission('update')
   @ApiOkResponse({ type: CreatedContractResponseDto })
   @ApiBadRequestResponse({
-    description: '입력 오류 · 만 19세 미만 · 가입한 직원의 번호 변경',
+    description: `입력 오류 · 만 19세 미만 · 가입한 직원의 번호 변경 · ${BP_MISSING_DESCRIPTION}`,
   })
-  @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
+  @ApiNotFoundResponse({
+    description: `없는 계약 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   @ApiConflictResponse({
     description:
       'CONTRACT_STATUS_CONFLICT(발송 대기 · 서명 대기 · 수정 요청이 아님) · 새 번호로 이 점포에 재직 중 · CONTRACT_IN_PROGRESS(새 번호의 같은 점포 진행 중 계약 — replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님)',
   })
   @ApiForbiddenResponse({
-    description:
-      '근로계약 관리 수정 권한 없음 · 새 번호의 같은 점포 임시저장을 대체하는데 삭제 권한 없음(409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+    description: `근로계약 관리 수정 권한 없음 · 새 번호의 같은 점포 임시저장을 대체하는데 삭제 권한 없음(409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원) · ${BP_FORBIDDEN_DESCRIPTION}`,
   })
   @ApiServiceUnavailableResponse({
     description:
@@ -316,8 +335,9 @@ export class ContractsController {
     @Param('contractId', ContractIdPipe) contractId: number,
     @Body() body: UpdateWorkerDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<CreatedContractResponseDto> {
-    return this.contracts.updateWorker(user.id, contractId, body);
+    return this.contracts.updateWorker(user.id, contractId, body, bp);
   }
 
   /** 임시저장을 이어 써서 종이 계약으로 등록한다. 받는 것 · 하는 일은 POST /contracts/paper 와 같다 */
@@ -328,11 +348,10 @@ export class ContractsController {
   @ApiBody(PAPER_BODY)
   @ApiOkResponse({ type: CreatedContractResponseDto })
   @ApiBadRequestResponse({
-    description:
-      '입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄',
+    description: `입력 오류 · 만 19세 미만 · 근로계약서 날인본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
-    description: '없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖',
+    description: `없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
   })
   @ApiConflictResponse({
     description:
@@ -343,20 +362,21 @@ export class ContractsController {
       '첨부파일 저장소가 설정되지 않음 · 저장소 오류 · 저장이 몰려 시간 초과(잠시 뒤 다시)',
   })
   @ApiForbiddenResponse({
-    description:
-      '근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성 — 수정 요청은 종이 계약으로 바꿀 수 없어 400) · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원)',
+    description: `근로계약 관리 권한 없음(임시저장 이어 쓰기는 작성 — 수정 요청은 종이 계약으로 바꿀 수 없어 400) · 대체하는데 권한 없음(진행 중 계약은 수정, 임시저장은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원) · ${BP_FORBIDDEN_DESCRIPTION}`,
   })
   async updatePaper(
     @Param('contractId', ContractIdPipe) contractId: number,
     @Body('data') data: unknown,
     @UploadedFiles() files: PaperFiles | undefined,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<CreatedContractResponseDto> {
     return this.contracts.update(
       user.id,
       contractId,
       await parseContractData(data),
       paperDocuments(files),
+      bp,
     );
   }
 
@@ -364,7 +384,9 @@ export class ContractsController {
   @Get(':contractId/documents/:contractDocumentId/download-url')
   @MenuPermission('read')
   @ApiOkResponse({ type: DownloadUrlResponseDto })
-  @ApiNotFoundResponse({ description: '없는 계약 · 파일 · 업무 범위 밖' })
+  @ApiNotFoundResponse({
+    description: `없는 계약 · 파일 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   @ApiServiceUnavailableResponse({
     description: '첨부파일 저장소가 설정되지 않음',
   })
@@ -372,11 +394,13 @@ export class ContractsController {
     @Param('contractId', ContractIdPipe) contractId: number,
     @Param('contractDocumentId', ContractIdPipe) contractDocumentId: number,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<DownloadUrlResponseDto> {
     return this.contracts.documentDownloadUrl(
       user.id,
       contractId,
       contractDocumentId,
+      bp,
     );
   }
 
@@ -385,12 +409,15 @@ export class ContractsController {
   @MenuPermission('delete')
   @HttpCode(204)
   @ApiNoContentResponse({ description: '지웠다' })
-  @ApiNotFoundResponse({ description: '없는 계약 · 업무 범위 밖' })
+  @ApiNotFoundResponse({
+    description: `없는 계약 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   @ApiConflictResponse({ description: '임시저장이 아님' })
   remove(
     @Param('contractId', ContractIdPipe) contractId: number,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<void> {
-    return this.contracts.remove(user.id, contractId);
+    return this.contracts.remove(user.id, contractId, bp);
   }
 }

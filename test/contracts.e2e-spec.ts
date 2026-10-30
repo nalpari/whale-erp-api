@@ -74,6 +74,8 @@ describe('근로계약 목록 (e2e)', () => {
     account: { findMany: jest.fn(), findUnique: jest.fn() },
     // 메뉴 권한 가드(WHALEERP-592) — 근로계약 관리 권한이 있는 BP 관리자
     adminAccount: { findFirst: jest.fn() },
+    // 플랫폼 계정의 대상 BP — 가드(헤더 BP)와 서비스(BP 를 골랐는가, WHALEERP-618)가 읽는다
+    bpCode: { findFirst: jest.fn() },
     roleGroupMenu: { count: jest.fn(), findFirst: jest.fn() },
     menu: { count: jest.fn().mockResolvedValue(1) },
     staffMember: {
@@ -105,6 +107,8 @@ describe('근로계약 목록 (e2e)', () => {
       typ: 'access',
       sid: 1,
     });
+  // 가드가 정한 대상 BP — 헤더 없이 부른 BP 계정은 소속 BP(3)다(WHALEERP-618)
+  const OWN_BP = { bpCodeId: 3, isPlatformCaller: false };
   const get = (path: string, type?: UserType) => {
     const req = request(app.getHttpServer()).get(path);
     return type ? req.set('Authorization', `Bearer ${token(type)}`) : req;
@@ -354,7 +358,7 @@ describe('근로계약 목록 (e2e)', () => {
 
   it('업무 범위 안 점포의 계약만 읽는다', async () => {
     await get('/contracts', 'admin').expect(200);
-    expect(scope.getManageableStores).toHaveBeenCalledWith(1);
+    expect(scope.getManageableStores).toHaveBeenCalledWith(1, OWN_BP);
     const [args] = prisma.contract.findMany.mock.calls[0];
     expect(args.where).toMatchObject({ storeId: { in: [11] } });
   });
@@ -366,7 +370,73 @@ describe('근로계약 목록 (e2e)', () => {
     });
     scope.canManageStaffAt.mockResolvedValue(false);
     await get('/contracts/7', 'admin').expect(404);
-    expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, false);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, false, OWN_BP);
+  });
+
+  // 플랫폼 계정은 탭 BP(X-Bp-Code-Id)의 계약만 다룬다. 헤더가 없으면 가드가 소속 플랫폼 BP 를 둬 서비스가 범위를 보기 전에 400 이다(WHALEERP-618).
+  // 본문을 받는 작성 · 이어 쓰기 · 당사자 정보 수정은 본문 검사(400)가 먼저라 contracts.target-bp.spec 이 서비스로 본다
+  describe('플랫폼 계정의 대상 BP', () => {
+    const PLATFORM_BP = 1;
+    const CUSTOMER_BP = 9;
+    beforeEach(() => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        roleGroupId: 7,
+        roleTypeCode: 'PM',
+        bpCodeId: PLATFORM_BP,
+        bpCode: { isPlatform: true },
+      });
+      // 가드는 헤더의 고객 BP 를(isPlatform: false 조건), 서비스는 대상 BP 가 플랫폼 BP 인지를 읽는다
+      prisma.bpCode.findFirst
+        .mockReset()
+        .mockImplementation(({ where }: { where: { bpCodeId: number } }) =>
+          Promise.resolve(
+            where.bpCodeId === CUSTOMER_BP
+              ? { bpCodeId: CUSTOMER_BP, isPlatform: false }
+              : { bpCodeId: PLATFORM_BP, isPlatform: true },
+          ),
+        );
+    });
+
+    it.each<[string, string]>([
+      ['get', '/contracts'],
+      ['get', '/contracts/7'],
+      ['delete', '/contracts/7'],
+      ['get', '/contracts/7/documents/3/download-url'],
+      ['post', '/contracts/7/send'],
+      ['post', '/contracts/7/end'],
+    ])(
+      '헤더 없이 %s %s — 400 「근로계약을 볼 BP 를 골라 주세요.」',
+      async (method, path) => {
+        const res = await request(app.getHttpServer())
+          [method as 'get'](path)
+          .set('Authorization', `Bearer ${token('admin')}`)
+          .send({});
+        expect(res.status).toBe(400);
+        expect((res.body as { message: string }).message).toBe(
+          '근로계약을 볼 BP 를 골라 주세요.',
+        );
+        expect(scope.getManageableStores).not.toHaveBeenCalled();
+        expect(scope.canManageStaffAt).not.toHaveBeenCalled();
+        expect(prisma.contract.findMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('고른 BP 의 점포로 목록 · 상세 범위를 본다', async () => {
+      const bp = { bpCodeId: CUSTOMER_BP, isPlatformCaller: true };
+      await get('/contracts', 'admin')
+        .set('X-Bp-Code-Id', String(CUSTOMER_BP))
+        .expect(200);
+      expect(scope.getManageableStores).toHaveBeenCalledWith(1, bp);
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 12,
+        staffMember: { account: null },
+      });
+      scope.canManageStaffAt.mockResolvedValue(false);
+      await get('/contracts/7', 'admin')
+        .set('X-Bp-Code-Id', String(CUSTOMER_BP))
+        .expect(404);
+      expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, false, bp);
+    });
   });
 
   // 상태를 바꾸는 경로도 같은 범위 검사를 거친다 — 본사 역할에게 본사 제공에 동의하지 않은 가맹 점포 직원이면 404 이고 아무것도
@@ -414,7 +484,12 @@ describe('근로계약 목록 (e2e)', () => {
       const res = await call
         .set('Authorization', `Bearer ${token('admin')}`)
         .send(body ?? {});
-      expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, consented);
+      expect(scope.canManageStaffAt).toHaveBeenCalledWith(
+        1,
+        12,
+        consented,
+        OWN_BP,
+      );
       if (consented) {
         // 범위 검사를 지나 쓰기 트랜잭션까지 간다(그다음 결과는 이 표가 보지 않는다)
         expect(res.status).not.toBe(404);

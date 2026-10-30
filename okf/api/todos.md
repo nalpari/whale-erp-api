@@ -4,7 +4,7 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-10-30T00:40:00Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
@@ -217,6 +217,9 @@ The template is the seeded `PUSH_TODO_ASSIGNED`, renamed by
 `20261019114505_team3_todo_due_soon_template` to `PUSH_TODO_DUE_SOON`
 (「TO-DO 수행 임박 알림」, title 「곧 수행할 TO-DO가 있습니다」, body unchanged
 「#{TO-DO제목} · #{수행예정일시}」, `default_title` kept in step).[^template-migration]
+`20261030093710_team3_notification_template_wording` later reworded it to title 「TO-DO 수행 예정 알림」 and a multi-line body
+(「예정된 TO-DO 시간이 다가오고 있습니다.」, TO-DO 제목, 예정 일시) — operator-edited wording is left alone, so the wording the rows
+carry is whatever the template holds now, not these quotes.
 If the template is missing (before that migration), turned off by an
 operator, or on another channel, the batch logs `todo due soon SKIPPED` (warn)
 and creates **nothing — not even the inbox row**: the inbox text comes from the

@@ -44,7 +44,6 @@ describe('MyConsentController', () => {
     ['pauseLocation', 'location-consent/pause'],
     ['resumeLocation', 'location-consent/resume'],
     ['withdrawLocation', 'location-consent/withdraw'],
-    ['agreeHqSharing', 'hq-sharing-consent'],
     ['withdrawHqSharing', 'hq-sharing-consent/withdraw'],
   ] as const)(
     '%s 는 POST /me/%s 이고 토큰의 계정으로만 부른다',
@@ -64,6 +63,24 @@ describe('MyConsentController', () => {
       expect(fn).toHaveBeenCalledWith(12);
     },
   );
+
+  it('agreeHqSharing 은 POST /me/hq-sharing-consent 이고 토큰의 계정 · 화면이 보여 준 문구 버전으로 부른다(ATT-30 v252)', async () => {
+    const fn = jest.fn().mockResolvedValue(undefined);
+    const controller = new MyConsentController({
+      agreeHqSharing: fn,
+    } as unknown as MyConsentService);
+    expect(
+      Reflect.getMetadata(
+        PATH_METADATA,
+        Object.getOwnPropertyDescriptor(
+          MyConsentController.prototype,
+          'agreeHqSharing',
+        )?.value as object,
+      ),
+    ).toBe('hq-sharing-consent');
+    await controller.agreeHqSharing(me, { consentVersion: 'v1.0' });
+    expect(fn).toHaveBeenCalledWith(12, 'v1.0');
+  });
 
   it('위치정보 동의는 시행 중인 약관이 없을 때의 500 을 문서에 적는다', () => {
     expect(

@@ -1,7 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: main 병합(api electabuzz, main #210 · #212 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Payslips](/api/payslips.md) — api #206 재리뷰(재영 2026-10-30): 확정 가능일의 계약 종료일을 끄는 갱신에서 임시저장을 뺐다(`SENT_RENEWAL` — 발송 대기 · 서명 대기 · 수정 요청). 보내지 않은 임시저장 갱신 하나로 일찍 확정하지 못하던 것 — 「가장 최근 계약」(`NOT_IDLE_RENEWAL`)도 임시저장 재계약을 뺀다. 422 · Swagger 설명도 맞췄다. 단위 · e2e(임시저장 갱신이면 200).
+* **Update**: [Notification templates](/api/notification-templates.md) · [To-dos](/api/todos.md) — 알림 템플릿 기본 문구 42건을 「알림톡_템플릿_20261029.xlsx」 새 문구로 바꾸는 데이터 마이그레이션 `20261030093710_team3_notification_template_wording`(api petra). 급여명세서 재발송 2건은 엑셀 대신 처음 발송 새 문구를 따른다(NTF-20 유지). `default_*` 는 42건 모두, 지금 문구는 제목 · 본문 · 변수가 셋 다 옛 기본값일 때만. 변수 목록은 `NTF_AFFILIATION_REJECTED` · `EMAIL_AFFILIATION_REJECTED` 에 선택 변수 `거절사유` 만 더했다(발송은 아직 넘기지 않아 빈칸). 엑셀에 없는 기본 템플릿 4건과 `TALK_STAFF_INVITATION` 의 null 제목은 그대로. todos e2e 의 `PUSH_TODO_DUE_SOON` 제목 기대값을 새 문구로. work-schedule-notice.ts 주석만 새 제목에 맞췄다([Work schedules](/api/work-schedules.md)). 스키마 변경 없음.
 
 ## 2026-10-29
 * **Update**: main 병합(api electabuzz, main #208 · #209 까지): src/payslips/payslip-attendance-reasons.ts 충돌은 이 브랜치의 확인 필요 문구(`flaggedDetail`)를 남기고 main 의 문구 끝 마침표 규칙(1a37ed4e)을 맞췄다 — 422 PERIOD_NOT_ENDED 문구에도 마침표. okf 시각 충돌은 늦은 값, okf/log 는 양쪽 기록을 살렸다.
@@ -11,6 +13,12 @@
 * **Update**: [Payslips](/api/payslips.md) · [Attendance](/api/attendance.md) — api #206 code-review 반영: 두 문서의 `generated.at` 과 payslips 의 controller · edit-service `last_modified` 를 맞췄다.
 * **Update**: main 병합(api electabuzz, main #203 이후 최신): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Payslips](/api/payslips.md) — 재영 답(2026-10-29 운영 정책 v247 PAY-06, WHALEERP-634): ① 「확인 필요 기록 포함」이 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날) 기록도 센다(앞 달 날에 그런 기록이 있으면 문구에 그 날짜를 밝힌다, [Attendance](/api/attendance.md)도 맞춤) — 그 근무가 이 달 주휴나 연장에 들어가서다(#193 의 출퇴근 누락과 같은 기준). ② 확정은 급여 기간 마지막 날(한국)이 지난 뒤에만 — 그 전이면 422 `PERIOD_NOT_ENDED`. 초안 · 임시저장 · 다시 계산은 그대로 된다(미리 보기). Swagger 설명(openapi.json 다시 생성). 단위 테스트 · e2e(PERIOD_NOT_ENDED — 고치기 전 실패 확인). 마이그레이션 없음.
+* **Update**: main 병합(api koffing, main #210 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Staff signup](/api/staff-signup.md) · [My profile](/api/my-profile.md) — api #212 code-review: 가입 · 수락에서 버전을 null 로 실어도 빠진 것과 같게(남기지 않음, false) — 가입이 막히지 않게. 내 정보 동의의 버전 409 는 잠그기 전에 보고 `code: HQ_SHARING_TERMS_CHANGED` 를 싣는다. 응답 false 설명에 「싣지 않음」을 더하고, 버전 길이 상한을 `CONSENT_VERSION_MAX` 로 모았다(openapi 에 minLength 1). 경고 로그 조건은 `warnStaleHqSharingVersion` 안으로.
+* **Update**: [Staff signup](/api/staff-signup.md) · [My profile](/api/my-profile.md) — 137 후속 리뷰: 가입 · 수락에서 동의 문구 버전이 빠져도 400 이 아니라 「버전이 다르다」와 같게(가입 · 수락은 마치고 동의만 남기지 않음, `false`) — 배포 순서와 상관없이 가입이 끊기지 않게. 경고 로그의 보낸 값은 JSON 으로 감싼다.
+* **Update**: [My profile](/api/my-profile.md) · [Staff signup (직원 앱 가입)](/api/staff-signup.md) — 사업자(본사) 제공 동의 문구 버전 대조(WHALEERP-137 후속, 운영 정책 ATT-30 v252 · v253, 2026-10-29 재영). `POST /me/hq-sharing-consent` 는 본문 `{ consentVersion }`(필수)을 받아 지금 버전과 다르면 409 「사업자 제공 동의 내용이 바뀌었습니다. 화면을 새로 고쳐 …」(빼면 400). 가입 · 근무지 더하기 · 소속 추가 수락은 동의할 때 `hqSharingConsentVersion` 이 필수(없으면 400)이고, 다르면 가입 · 수락은 마치고 동의만 남기지 않는다 — 응답에 `hqSharingConsentRecorded`(true · false · null, 가입은 `StaffSignupResponseDto`)와 경고 로그. 트랜잭션 · 잠금 순서는 그대로. 마이그레이션 없음.
+* **Update**: main 병합(api grimer, main #208 · #209 까지): okf 충돌은 양쪽 기록을 살렸다. 근로계약 상세의 신고 정보(`taxProfileOf`)도 대상 BP 를 받는다(아래).
+* **Update**: [Contracts API](/api/contracts-api.md) — 관리자 웹 근로계약 경로(목록 · 상세 · 작성 · 종이 계약 · 이어 쓰기 · 당사자 정보 · 날인본 · 삭제 · 재발송 · 종료)가 `@TargetBp()` 로 대상 BP 를 받아 `AdminScopeService` 에 넘긴다(WHALEERP-618). 플랫폼 계정은 고른 고객 BP 의 점포 전부를 다루고, 헤더(X-Bp-Code-Id) 없이 부르면 범위를 보기 전에 400 「근로계약을 볼 BP 를 골라 주세요.」(`checkTargetBp`). BP · 가맹 계정은 그대로다. 근무지 선택지(`GET /stores/options`)는 아직 헤더를 보지 않는다.
 * **Update**: main 병합(api doduo, main #209 까지): okf 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api doduo, main #202 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Staff members](/api/staff-members.md) · [Alimtalk](/api/alimtalk.md) — api #208 판정 커밋 재리뷰: 단계를 모르는 실패는 `path=unknown` 으로 남겨 발송 이력에서 접수 여부 모름으로 읽는다(`local` · 보내기 전 실패로 보던 것을 걷음). 단계 이름 `TOKEN_PATH` · `MESSAGE_PATH` 를 import 없는 `failure-reason.ts` 하나에 두고 클라이언트도 쓴다. 비즈뿌리오 200 응답 본문이 `null` 이면 `returned no body`(단계 포함)로 던진다. `path=undefined` 옛 행은 칸이 없는 것처럼 본다.
