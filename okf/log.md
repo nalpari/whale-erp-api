@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [BP admins](/api/bp-admins.md) — 수정 트랜잭션의 유일값 충돌(P2002)을 이메일 고유 인덱스(`admin_accounts_email_key`, 이름이 없으면 `email` 칸 — pg 어댑터의 `meta.driverAdapterError.cause.constraint`)일 때만 「사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.」로, 그 밖(점포 매핑 등)은 「다른 사용자가 이 계정을 먼저 바꿨습니다.」 409 로(front PR #199 review-pr, front 요청). 문구는 바꾸지 않았다. 등록의 P2002 는 그대로. 마이그레이션 없음.
 * **Update**: [BP admins](/api/bp-admins.md) — 전화번호 표기를 「휴대전화」에서 「연락처」로(2026-10-29 사용자 결정, front 요청). 400 문구 「연락처는 숫자 9~12자리입니다.」(플랫폼 관리자와 같음) · 본인 계정 403 문구 · 변경 이력 항목명. 이미 쌓인 이력 행의 「휴대전화」는 그대로 둔다. openapi 를 다시 내보내며 main 에 늦게 반영된 발송 이력 `isResend` 설명도 함께 바뀌었다. 마이그레이션 없음.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #211 재리뷰 블로커: 직원 앱 상세 `documents` · 내려받기에서 보낸 원본을 아예 뺀다(`myDocumentWhere`). 「지금 발송분만」으로는 재발송 실패 되돌림(undo)이 `sent_at` 을 앞 발송으로 돌려 옛 근로자 정보 원본이 다시 걸렸다. 직원 앱은 처리 완료본 · 종이 계약 파일만 쓴다. 관리자 상세는 그대로 모두 보인다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 제2조 근무 장소 · 직무도 날인 시점 값(2026-10-30 김민식, api #211 리뷰 정책 확인): 날인 때 `contract_parties.fixed_work_location`(비었으면 점포명) · `fixed_job_title`(비었으면 직원 직무)을 고정하고, 체결된 계약의 직원 앱 본문 · `worker.jobTitle` · 처리 완료본이 그 값을 쓴다. 백필도 만든 때 값을 적는다. 같은 PR 의 아직 적용되지 않은 마이그레이션 `20261030095715_team3_contract_files` 에 두 칸을 더했다.

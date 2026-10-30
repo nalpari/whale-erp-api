@@ -4,7 +4,7 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T00:58:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:34:58Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-30T00:58:40Z
+    last_modified: 2026-10-30T02:34:58Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
@@ -57,6 +57,15 @@ business 400 on `GET /bp-admins` or `GET /bp-admins/:id` may be a bare string.
 The phone is 「연락처」 everywhere here — the 400 message, the self-edit 403 and the
 change-history `field` — as in every other admin account API and 관리자 웹. It was
 「휴대전화」 until 2026-10-29 (사용자 결정); history rows written before keep that label.[^bp-admins-service]
+
+**An edit's unique-violation 409 says 「이메일」 only when the email index fired.** The
+pre-check catches a taken address; a P2002 that still escapes the edit transaction is the
+email only if the pg adapter names `admin_accounts_email_key` (or, with no name, the
+`email` column) in `meta.driverAdapterError.cause.constraint` — any other, such as a
+store mapping inserted by a parallel edit, is 「다른 사용자가 이 계정을 먼저 바꿨습니다.」.
+관리자 웹 turns a 409 into the email field's error only when the message has
+「관리자 계정의 이메일」, so the two wordings must stay apart (2026-10-30, front 요청).
+Register's own P2002 is still the one 「이미 사용 중인 아이디 또는 이메일입니다.」.[^bp-admins-service]
 
 # Who sees and edits whom
 

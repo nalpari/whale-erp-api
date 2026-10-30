@@ -761,7 +761,11 @@ export class BpAdminsService {
           });
       })
       .catch((error: unknown) => {
-        if (isUniqueViolation(error)) throw new ConflictException(EMAIL_TAKEN);
+        // 이메일 인덱스만 이메일 중복이다 — 점포 매핑 등 다른 충돌은 그 사이 누가 먼저 바꾼 것이다.
+        if (isUniqueViolation(error))
+          throw new ConflictException(
+            isEmailKeyViolation(error) ? EMAIL_TAKEN : CHANGED_MEANWHILE,
+          );
         if (isTxTimeout(error)) throw this.busy('수정', bp.bpCodeId, error);
         throw error;
       });
@@ -1383,10 +1387,26 @@ async function record(
   if (data.length) await db.adminChangeHistory.createMany({ data });
 }
 
-function isUniqueViolation(error: unknown): boolean {
+function isUniqueViolation(
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
     error.code === 'P2002'
+  );
+}
+
+/** pg 어댑터가 담는 충돌 제약 — 이름(`admin_accounts_email_key`)이 있으면 이름, 없으면 칸으로 본다. */
+function isEmailKeyViolation(error: Prisma.PrismaClientKnownRequestError) {
+  const cause = (
+    error.meta?.driverAdapterError as
+      | { cause?: { constraint?: { index?: string; fields?: string[] } } }
+      | undefined
+  )?.cause;
+  const constraint = cause?.constraint;
+  return (
+    constraint?.index === 'admin_accounts_email_key' ||
+    (constraint?.index === undefined && !!constraint?.fields?.includes('email'))
   );
 }
 
