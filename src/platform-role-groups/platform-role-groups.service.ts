@@ -108,11 +108,10 @@ export class PlatformRoleGroupsService {
     if (!row) throw new NotFoundException(NOT_FOUND);
     const rights = await callerRoleMenuRights(this.prisma, caller.roleGroupId);
     const isSelf = caller.roleGroupId === roleGroupId;
+    // 본인 연결이어도 권한명 · 설명은 고친다(재영 2026-10-30). 메뉴 권한 · 삭제만 막는다.
     const editBlockedReason: RoleGroupLockReason | null = !rights.update
       ? 'NO_PERMISSION'
-      : isSelf
-        ? 'SELF_LINKED'
-        : null;
+      : null;
     const deleteBlockedReason: RoleGroupLockReason | null = !isDeletableType(
       row,
     )
@@ -173,15 +172,16 @@ export class PlatformRoleGroupsService {
       .catch((error) => this.rethrowNameConflict(error, bpCodeId, dto.name));
   }
 
-  /** 권한명 · 설명 수정. 본인이 연결된 권한은 403. 상세에서 받은 updatedAt 과 같은 ms 일 때만 고친다. */
+  /**
+   * 권한명 · 설명 수정. 본인이 연결된 권한도 고친다 — 이름 · 설명은 권한 범위를 바꾸지 않는다(재영 2026-10-30).
+   * 상세에서 받은 updatedAt 과 같은 ms 일 때만 고친다.
+   */
   async update(
     callerId: number,
     roleGroupId: number,
     dto: UpdatePlatformRoleGroupDto,
   ): Promise<void> {
     const caller = await this.permissions.caller(callerId);
-    if (caller.roleGroupId === roleGroupId)
-      throw new ForbiddenException(SELF_LINKED);
     const bpCodeId = await this.platformBpId();
     await this.assertNameFree(bpCodeId, dto.name, roleGroupId);
     await this.prisma

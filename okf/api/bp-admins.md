@@ -4,16 +4,16 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:37:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T03:51:46Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
     title: sideOf · canSee · creatableRoles · actionsOf · assertSelfEdit · planStores · shrinkCascade — the role rules as pure functions
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T00:58:40Z
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-30T02:37:43Z
+    last_modified: 2026-10-30T03:51:46Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
@@ -53,6 +53,20 @@ customer BP. A platform account calling without the header targets the platform 
 which this service answers with the one string 400 「관리자 계정을 볼 BP 를 골라 주세요.」;
 관리자 웹 shows a string 400 on a read route as the target-BP refusal, so no other
 business 400 on `GET /bp-admins` or `GET /bp-admins/:id` may be a bare string.
+
+The phone is 「연락처」 everywhere here — the 400 message, the self-edit 403 and the
+change-history `field` — as in every other admin account API and 관리자 웹. It was
+「휴대전화」 until 2026-10-29 (사용자 결정); history rows written before keep that label.[^bp-admins-service]
+
+**An edit's unique-violation 409 says 「이메일」 only when the email index fired.** The
+pre-check catches a taken address; a P2002 that still escapes the edit transaction is the
+email only if the pg adapter names `admin_accounts_email_key` (or, with no name, the
+`email` column) in `meta.driverAdapterError.cause.constraint` — any other is
+「다른 사용자가 이 계정을 먼저 바꿨습니다.」. No other unique key can fire there today (store
+mappings are inserted with `skipDuplicates`), so that branch is a fallback, not a known path.
+관리자 웹 turns a 409 into the email field's error only when the message has
+「관리자 계정의 이메일」, so the two wordings must stay apart (2026-10-30, front 요청).
+Register's own P2002 is still the one 「이미 사용 중인 아이디 또는 이메일입니다.」.[^bp-admins-service]
 
 # Who sees and edits whom
 

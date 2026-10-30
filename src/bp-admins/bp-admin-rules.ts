@@ -132,7 +132,7 @@ export function assertSelfEdit(
     (change.roleGroupChanged || change.statusChanged || change.storesChanged)
   )
     throw new ForbiddenException(
-      '본인 계정은 이름 · 휴대전화 · 이메일만 고칠 수 있습니다.',
+      '본인 계정은 이름 · 연락처 · 이메일만 고칠 수 있습니다.',
     );
 }
 

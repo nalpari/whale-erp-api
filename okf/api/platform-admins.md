@@ -4,12 +4,12 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:27:29Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
     title: PlatformAdminsService (list · roleGroups · detail · histories · create · update · remove · resetPassword)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-29T08:38:01Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear — moved out of the service, shared with BP admins
@@ -21,7 +21,7 @@ sources:
   - id: platform-admins-controller
     resource: ../../src/platform-admins/platform-admins.controller.ts
     title: /platform-admins routes, the menu permission per action (`/platform-admins`, MN000213 today) and the platform-account check
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-29T08:38:01Z
   - id: platform-admins-menu-url
     resource: ../../prisma/migrations/20261019144438_team1_menu_single_level_urls/migration.sql
     title: 1팀 메뉴 10개 url 을 한 단계로 (MN000213 /platform/system/admins → /platform-admins 등)
@@ -62,9 +62,10 @@ status.[^platform-admins-service]
 | Route | Menu permission |
 |---|---|
 | `GET /platform-admins` | 조회 — `{ items, total, inactiveCount }`, newest first. `inactiveCount` ignores the status filter (keyword and role still apply), so 「미사용 N」 shows even while only 사용 is selected |
-| `GET /platform-admins/role-groups` | 조회 — the 사용자 권한 choices |
+| `GET /platform-admins/role-groups` | 조회 — the 사용자 권한 choices of 등록 · 수정 (a `PA` gets no `PM` group). `?purpose=filter` is the 목록 필터 「권한명」 list: every platform `PM` · `PA` group whoever calls, so a `PA` can filter the master accounts the list already shows (재영 2026-10-29). Any other `purpose` is 400 |
 | `GET /platform-admins/:id`, `GET /platform-admins/:id/histories` | 조회 |
 | `GET /platform-admins/login-id-availability?loginId=` | 등록 — `{ available }`. 등록 화면이 아이디 칸을 벗어나거나 Enter 를 칠 때 묻는다. 삭제한 계정의 아이디도 쓸 수 없다고 답한다. `:id` 보다 앞에 둔다 |
+| `GET /platform-admins/email-availability?email=` | 등록 — `{ available }`, 이메일 칸을 벗어날 때 묻는다(BP 마스터 · BP 관리자와 같은 모양, 재영 2026-10-29). 소문자로 맞춰, 등록 409 와 같은 판정 — 지우지 않은 사용 · 미사용 관리자 계정(BP 쪽 포함)과 겹치면 false. 400 은 email 없음 · 이메일 형식 · 100자 초과. `:id` 보다 앞에 둔다 |
 | `POST /platform-admins` | 등록 |
 | `PUT /platform-admins/:id` | 수정 |
 | `POST /platform-admins/:id/password-reset` | 수정 — `{ isMailSent, updatedAt }`. The reset moves `updatedAt`, so the detail screen saves its next edit with this value. It is always present |
@@ -113,7 +114,7 @@ after the old in-handler check as well. A caller with the right sees the same re
 
 **Then master protection.** A `PM` account is edited, deleted and reset only by
 a `PM`, and a `PA` can neither register a `PM` nor hand out a `PM` role group —
-`GET /role-groups` already leaves `PM` groups out for a `PA`, and the server
+`GET /role-groups` already leaves `PM` groups out for a `PA` (only `?purpose=filter`, which no form submits from, lists them), and the server
 refuses them anyway.
 
 **The role group being given is locked, not just read.** Registration, and an edit that

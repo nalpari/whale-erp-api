@@ -130,17 +130,19 @@ export class BpRoleGroupsService {
       select: SUMMARY_SELECT,
     });
     if (!row) throw new NotFoundException(NOT_FOUND);
-    const lock: RoleGroupLockReason | null = !canWrite(scope, row)
-      ? 'NO_PERMISSION'
-      : scope.caller.roleGroupId === roleGroupId
-        ? 'SELF_LINKED'
-        : null;
+    // 본인 연결이어도 권한명 · 설명은 고친다(재영 2026-10-30). 메뉴 권한 · 삭제만 막는다.
+    const editLock: RoleGroupLockReason | null = canWrite(scope, row)
+      ? null
+      : 'NO_PERMISSION';
+    const deleteLock: RoleGroupLockReason | null =
+      editLock ??
+      (scope.caller.roleGroupId === roleGroupId ? 'SELF_LINKED' : null);
     return {
       ...summaryOf(row, scope),
-      isEditable: lock === null,
-      editBlockedReason: lock,
-      isDeletable: lock === null,
-      deleteBlockedReason: lock,
+      isEditable: editLock === null,
+      editBlockedReason: editLock,
+      isDeletable: deleteLock === null,
+      deleteBlockedReason: deleteLock,
     };
   }
 
@@ -185,14 +187,18 @@ export class BpRoleGroupsService {
       .catch((error) => this.rethrowNameConflict(error, key));
   }
 
-  /** 권한명 · 설명 수정. 역할로 못 고치면 403, 본인 연결이면 403, 상세의 updatedAt 과 다르면 409. */
+  /**
+   * 권한명 · 설명 수정. 역할로 못 고치면 403, 상세의 updatedAt 과 다르면 409. 본인 연결이어도 고친다 — 이름 ·
+   * 설명은 권한 범위를 바꾸지 않는다(재영 2026-10-30). 메뉴 권한 · 삭제는 assertWritable 이 본인 연결을 막는다.
+   */
   async update(
     scope: BpScope,
     roleGroupId: number,
     dto: UpdatePlatformRoleGroupDto,
   ): Promise<void> {
     const target = await findBpRoleGroup(this.prisma, scope, roleGroupId);
-    assertWritable(scope, target);
+    if (!canWrite(scope, target))
+      throw new ForbiddenException(ACCESS_DENIED_MESSAGE);
     const key = {
       bpCodeId: scope.bpCodeId,
       managerId: target.managerAdminAccountId,
