@@ -16,6 +16,7 @@ import {
 } from '../common/personal-data-cipher';
 import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
@@ -208,6 +209,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
         { provide: ContractDeliveryService, useValue: delivery },
+        { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
         { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();
@@ -473,7 +475,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       });
       scope.canManageStaffAt.mockResolvedValue(false);
       await expect(service.findOne(9, 7)).rejects.toThrow(NotFoundException);
-      expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, true);
+      expect(scope.canManageStaffAt).toHaveBeenCalledWith(
+        9,
+        11,
+        true,
+        undefined,
+      );
     });
 
     it('업무 범위 밖 점포의 계약은 없는 것과 같게 404', async () => {
@@ -488,7 +495,12 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       await expect(service.findOne(9, 7)).rejects.toThrow(
         '근로계약을 찾을 수 없습니다.',
       );
-      expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, false);
+      expect(scope.canManageStaffAt).toHaveBeenCalledWith(
+        9,
+        11,
+        false,
+        undefined,
+      );
       expect(prisma.store.findUnique).not.toHaveBeenCalled();
     });
 
@@ -526,6 +538,10 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
               { provide: AdminScopeService, useValue: scope },
               { provide: STORAGE, useValue: null },
               { provide: ContractDeliveryService, useValue: delivery },
+              {
+                provide: ContractFilesService,
+                useValue: { afterSent: jest.fn() },
+              },
               { provide: PERSONAL_DATA_KEY, useValue: k },
             ],
           }).compile()
@@ -559,7 +575,11 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           accountNumber: ACCOUNT,
         });
         expect(JSON.stringify(detail)).not.toContain(RRN.slice(7));
-        expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 3);
+        expect(scope.canManageStaffAccount).toHaveBeenCalledWith(
+          9,
+          3,
+          undefined,
+        );
         expect(prisma.staffTaxProfile.findUnique).toHaveBeenCalledWith(
           expect.objectContaining({ where: { staffMemberId: 3 } }),
         );
@@ -607,6 +627,16 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         }
       });
 
+      it('신고 정보도 상세와 같은 대상 BP 로 범위를 본다 — 플랫폼 계정이 고객 BP 를 고르면 그 BP 로(WHALEERP-618)', async () => {
+        prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
+        prisma.codeItem.findFirst.mockResolvedValue({ label: 'KB국민은행' });
+        const bp = { bpCodeId: 8, isPlatformCaller: false };
+
+        await (await serviceWith(key)).findOne(9, 7, bp);
+
+        expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 3, bp);
+      });
+
       it('본사 역할이 가맹 점포 직원을 보면 HIDDEN — 신고 정보를 읽지도 풀지도 않는다', async () => {
         scope.canManageStaffAccount.mockResolvedValue(false);
         prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
@@ -619,7 +649,11 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           bankName: null,
           accountNumber: null,
         });
-        expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 3);
+        expect(scope.canManageStaffAccount).toHaveBeenCalledWith(
+          9,
+          3,
+          undefined,
+        );
         expect(prisma.staffTaxProfile.findUnique).not.toHaveBeenCalled();
         expect(prisma.codeItem.findFirst).not.toHaveBeenCalled();
       });
@@ -1077,6 +1111,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: storage },
           { provide: ContractDeliveryService, useValue: delivery },
+          { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
           { provide: PERSONAL_DATA_KEY, useValue: null },
         ],
       }).compile();

@@ -14,10 +14,9 @@ import {
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Public } from '../auth/auth.decorators';
-import { LoginResponseDto } from '../auth/dto/login.response.dto';
 import { InvitationCheckResponseDto } from './dto/invitation-check.response.dto';
 import { InvitationLookupDto } from './dto/invitation-lookup.dto';
-import { StaffSignupDto } from './dto/staff-signup.dto';
+import { StaffSignupDto, StaffSignupResponseDto } from './dto/staff-signup.dto';
 import { StaffSignupService } from './staff-signup.service';
 
 // 로그인 전 화면이라 공개다. 대입은 같은 번호 5회 · 30분 잠금(서비스, invitation_code_attempts)으로 막는다 — 초대 코드
@@ -58,6 +57,8 @@ export class StaffSignupController {
    * 직원 앱 가입(WHALEERP-601 · 142, 가이드 ③·④). 초대를 다시 확인하고 계정을 만들어 직원 레코드에 잇고(가입 완료) 초대를
    * 수락으로 둔다. 가입을 기다리던 근로계약서는 서명 대기가 된다. 계정 번호는 초대의 번호다. 마치면 로그인 응답과 같은
    * 모양으로 접속 상태를 준다. 가입하는 날 만 19세 미만이면 계정을 만들지 않고 초대를 「가입 불가」로 둔 뒤 400 이다.
+   * 본사 제공 동의에 실은 문구 버전(hqSharingConsentVersion)이 지금과 달라도 가입은 마치고 동의만 남기지 않는다 — 응답의
+   * hqSharingConsentRecorded 가 false 다(ATT-30 v253).
    */
   @Post('signup')
   @ApiBadRequestResponse({
@@ -75,7 +76,7 @@ export class StaffSignupController {
     description:
       '같은 번호로 번호 + 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 공개 경로 기본 요청 제한',
   })
-  signup(@Body() dto: StaffSignupDto): Promise<LoginResponseDto> {
+  signup(@Body() dto: StaffSignupDto): Promise<StaffSignupResponseDto> {
     return this.signups.signup(dto);
   }
 }

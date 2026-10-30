@@ -12,12 +12,13 @@ import {
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AccountUser } from '../auth/auth.types';
+import { AgreeHqSharingConsentDto } from './dto/agree-hq-sharing-consent.dto';
 import { AgreeLocationConsentDto } from './dto/agree-location-consent.dto';
 import { MyConsentService } from './my-consent.service';
 
 /**
- * 직원 앱 내 정보의 위치정보 동의 · 본사 제공 동의 (WHALEERP-193). 토큰의 계정에 쓴다 — 위치정보 동의만 보여 준 약관 버전을
- * 본문에 싣고(필수), 나머지는 본문이 없다. 지금 상태와 맞지
+ * 직원 앱 내 정보의 위치정보 동의 · 본사 제공 동의 (WHALEERP-193). 토큰의 계정에 쓴다 — 위치정보 동의 · 본사 제공 동의만 보여
+ * 준 약관 · 문구 버전을 본문에 싣고(필수), 나머지는 본문이 없다. 지금 상태와 맞지
  * 않으면(이미 철회 등) 409 이고, 화면은 `GET /me/profile` 을 다시 받는다
  */
 @ApiBearerAuth()
@@ -82,13 +83,26 @@ export class MyConsentController {
 
   /**
    * 본사 제공 동의 — 처음이든 철회 뒤든, 내 정보의 `needsReconsent` 로 다시 동의할 때든 (ATT-30). 계정에 하나라 소속 가맹
-   * 점포 모두에 같이 적용된다
+   * 점포 모두에 같이 적용된다. 본문의 `consentVersion`(화면이 보여 준 문구 버전, 필수)이 지금 버전과 다르면 409 — 화면은 새로
+   * 고쳐 새 문구를 보인다(ATT-30 v252). 빼면 400
    */
   @Post('hq-sharing-consent')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBody({ type: AgreeHqSharingConsentDto })
   @ApiNoContentResponse({ description: '동의함' })
-  agreeHqSharing(@CurrentUser() user: AccountUser): Promise<void> {
-    return this.consents.agreeHqSharing(user.id);
+  @ApiConflictResponse({
+    description:
+      '이미 지금 버전에 동의함 · 화면이 보여 준 문구 버전(consentVersion)이 지금 것과 다름 — 「사업자 제공 동의 내용이 바뀌었습니다. …」(화면은 새로 고친다)',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'consentVersion 없음 · 빈 문자열 · 문자열 아님 · 64자 초과 · 모르는 칸',
+  })
+  agreeHqSharing(
+    @CurrentUser() user: AccountUser,
+    @Body() dto: AgreeHqSharingConsentDto,
+  ): Promise<void> {
+    return this.consents.agreeHqSharing(user.id, dto.consentVersion);
   }
 
   /** 본사 제공 동의 철회 (ATT-30) */

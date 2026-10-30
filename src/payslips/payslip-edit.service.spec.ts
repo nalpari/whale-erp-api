@@ -9,6 +9,7 @@ import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   attendanceReviewReasons,
+  confirmableFrom,
   periodContractIds,
 } from './payslip-attendance-reasons';
 import { calculatePayslip } from './payslip-calculation';
@@ -24,12 +25,15 @@ const calculate = calculatePayslip as jest.Mock;
 jest.mock('./payslip-attendance-reasons', () => ({
   ...jest.requireActual<object>('./payslip-attendance-reasons'),
   attendanceReviewReasons: jest.fn(),
+  // 확정할 수 있는 날의 판정(퇴직 · 계약 종료)은 payslip-attendance-reasons.spec 이 본다
+  confirmableFrom: jest.fn(),
   // 고용형태가 섞인 경우는 payslip-attendance-reasons.spec · pay-calculation.spec 이 본다
   contractsEmploymentMixed: () => Promise.resolve(false),
   periodContractIds: jest.fn(),
 }));
 const attendanceReasons = attendanceReviewReasons as jest.Mock;
 const contractIdsOf = periodContractIds as jest.Mock;
+const confirmable = confirmableFrom as jest.Mock;
 const pay = (over: object = {}) => ({
   basePay: 1_000_000,
   weeklyHolidayPay: 0,
@@ -136,6 +140,7 @@ describe('PayslipEditService', () => {
     calculate.mockReset().mockResolvedValue(pay());
     attendanceReasons.mockReset().mockResolvedValue([]);
     contractIdsOf.mockReset().mockResolvedValue([7]);
+    confirmable.mockReset().mockResolvedValue('2026-11-01');
     scope = {
       getManageableStores: jest.fn().mockResolvedValue({
         roleTypeCode: 'BM',
@@ -683,6 +688,53 @@ describe('PayslipEditService', () => {
 
   describe('confirm (확정, WHALEERP-230)', () => {
     const confirm = () => service.confirm(9, 40, { updatedAt: UPDATED });
+    // 급여 기간(10월)이 끝난 뒤
+    beforeEach(() =>
+      jest.useFakeTimers({
+        now: new Date('2026-10-31T15:00:00Z'),
+        doNotFake: ['nextTick', 'setImmediate'],
+      }),
+    );
+    afterEach(() => jest.useRealTimers());
+
+    it('확정할 수 있는 날(한국) 전이면 422 PERIOD_NOT_ENDED — 트랜잭션 안에서 막혀 상태를 바꾸지 않는다(운영 정책 PAY-06 v247 · v251)', async () => {
+      jest.setSystemTime(new Date('2026-10-31T14:59:59Z')); // 한국 10/31 23:59:59
+      await expect(confirm()).rejects.toMatchObject({
+        response: {
+          code: 'PERIOD_NOT_ENDED',
+          message:
+            '아직 확정할 수 없습니다. 2026-11-01 부터 확정할 수 있습니다 — 급여 기간 마지막 날(그 전에 퇴직하거나 계약이 끝나면 그날. 진행 중인 갱신 계약이 있으면 급여 기간 마지막 날)이 지나야 합니다.',
+        },
+      });
+      // 트랜잭션 안에서 막혀 되돌린다 — 확정 이력 · 사유 확인을 남기지 않는다
+      expect(prisma.payslipLog.create).not.toHaveBeenCalled();
+      expect(prisma.payslipReviewReason.updateMany).not.toHaveBeenCalled();
+      expect(confirmable).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          staffMemberId: 30,
+          contractIds: [7],
+          periodEndDate: d('2026-10-31'),
+        }),
+      );
+    });
+
+    it('기간 중 퇴직 · 계약 종료로 확정할 수 있는 날이 앞당겨지면 기간 중에도 확정한다(운영 정책 PAY-06 v251)', async () => {
+      jest.setSystemTime(new Date('2026-10-15T15:00:00Z')); // 한국 10/16 00:00
+      confirmable.mockResolvedValue('2026-10-16');
+      prisma.payslipItem.findMany.mockResolvedValue(
+        lines().map((l) =>
+          l.itemCategory === 'EARNING'
+            ? l
+            : { ...l, adjustedAmount: 0, isEntered: true },
+        ),
+      );
+      await expect(confirm()).resolves.toEqual({ payslipId: 40 });
+      jest.setSystemTime(new Date('2026-10-15T14:59:59Z')); // 한국 10/15 23:59:59
+      await expect(confirm()).rejects.toMatchObject({
+        response: { code: 'PERIOD_NOT_ENDED' },
+      });
+    });
 
     it('보이는 공제(기본 · 붙인 추가, 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수)가 비어 있으면 422 와 그 항목', async () => {
       const error = await confirm().catch((e: unknown) => e);

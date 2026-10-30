@@ -68,6 +68,7 @@ import {
   type DispatchResult,
   type PendingInvite,
 } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import {
   applyStartedTerms,
   refixHiredDate,
@@ -93,7 +94,12 @@ import {
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
-import { CONTRACT_TERMS_SELECT, contractTermsOf, hhmm } from './contract-terms';
+import {
+  CONTRACT_TERMS_SELECT,
+  contractTermsOf,
+  hhmm,
+  weeklyMinutesOf,
+} from './contract-terms';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 import {
   ACCESS_DENIED_MESSAGE,
@@ -102,6 +108,7 @@ import {
 import {
   adminHasMenuAction,
   type MenuAction,
+  type TargetBpContext,
 } from '../auth/menu-permission.guard';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
@@ -312,22 +319,8 @@ function checkInput(dto: CreateContractDto): void {
   checkProbation(dto);
 }
 
-const minutesOf = (hm: string) =>
-  Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
-
-/** 주 소정근로시간(분) — 요일마다 종업 − 시업 − 휴게의 합 */
-export function weeklyMinutesOf(workDays: ContractWorkDayDto[]): number {
-  return workDays.reduce(
-    (sum, d) =>
-      sum +
-      minutesOf(d.endTime) -
-      minutesOf(d.startTime) -
-      (d.breakStartTime && d.breakEndTime
-        ? minutesOf(d.breakEndTime) - minutesOf(d.breakStartTime)
-        : 0),
-    0,
-  );
-}
+// 주 소정근로시간 계산은 계약서 조항과 같이 쓴다(contract-terms, WHALEERP-131)
+export { weeklyMinutesOf };
 
 /**
  * 주휴일(노무사 확인 2026-10-14, 질문 4) — 주 소정근로시간이 15시간 이상이면 근무하지 않는 요일 하나를 관리자가 고른다.
@@ -962,6 +955,8 @@ function sameStore(storeId: number, scoped: number): void {
     );
 }
 const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다.';
+/** 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 없음) — 점포 정보 관리와 같은 400 이다. */
+const BP_NOT_CHOSEN = '근로계약을 볼 BP 를 골라 주세요.';
 
 /**
  * 관리자의 업무 범위(AdminScopeService)로 거른다. 관리하지 않는 점포의 계약, 그리고 본사 역할(BM · BA)에게 직영이
@@ -979,6 +974,7 @@ export class ContractsService {
     private readonly scope: AdminScopeService,
     @Inject(STORAGE) private readonly storage: OptionalStorage,
     private readonly delivery: ContractDeliveryService,
+    private readonly files: ContractFilesService,
     @Inject(PERSONAL_DATA_KEY) private readonly key: Buffer | null,
   ) {}
 
@@ -1050,9 +1046,12 @@ export class ContractsService {
   private async checkStore(
     adminAccountId: number,
     storeId: number,
+    bp?: TargetBpContext,
   ): Promise<void> {
     await this.checkStoreOpen(storeId);
-    if (!(await this.scope.canManageStaffAt(adminAccountId, storeId, false)))
+    if (
+      !(await this.scope.canManageStaffAt(adminAccountId, storeId, false, bp))
+    )
       throw new NotFoundException(STORE_NOT_FOUND);
   }
 
@@ -1072,12 +1071,14 @@ export class ContractsService {
       storeId: number;
       staffMember: HqSharingSource;
     },
+    bp?: TargetBpContext,
   ): Promise<void> {
     if (
       !(await this.scope.canManageStaffAt(
         adminAccountId,
         c.storeId,
         hqSharingConsentedOf(c.staffMember),
+        bp,
       ))
     )
       throw new NotFoundException(CONTRACT_NOT_FOUND);
@@ -1091,14 +1092,17 @@ export class ContractsService {
   private async scopedStoreOf(
     adminAccountId: number,
     contractId: number,
+    bp?: TargetBpContext,
   ): Promise<number> {
-    return (await this.scopedContractOf(adminAccountId, contractId)).storeId;
+    return (await this.scopedContractOf(adminAccountId, contractId, bp))
+      .storeId;
   }
 
   /** scopedStoreOf 와 같고, 그때 읽은 직원 번호도 준다(이어 쓰기가 번호를 바꾸는지 본다). */
   async scopedContractOf(
     adminAccountId: number,
     contractId: number,
+    bp?: TargetBpContext,
   ): Promise<{ storeId: number; phone: string }> {
     const c = await this.prisma.contract.findUnique({
       where: { contractId },
@@ -1108,8 +1112,22 @@ export class ContractsService {
       },
     });
     if (!c) throw new NotFoundException(CONTRACT_NOT_FOUND);
-    await this.checkContractScope(adminAccountId, c);
+    await this.checkContractScope(adminAccountId, c, bp);
     return { storeId: c.storeId, phone: c.staffMember.phone };
+  }
+
+  /**
+   * 탭 BP 를 골랐는가. 가드는 플랫폼 계정이 헤더 없이 부르면 소속 플랫폼 BP 를 둔다 — 플랫폼 BP 에는 점포 · 계약이
+   * 없으니 고르라고 400 이다(점포 정보 관리와 같다). 헤더로 온 플랫폼 BP 는 가드가 404 로 막으므로, 플랫폼 BP 면
+   * 헤더가 없던 것이다. BP · 가맹 계정은 가드가 소속 BP 로 정해 묻지 않는다. 경로마다 범위를 보기 전에 부른다.
+   */
+  async checkTargetBp(bp?: TargetBpContext): Promise<void> {
+    if (!bp?.isPlatformCaller) return;
+    const target = await this.prisma.bpCode.findFirst({
+      where: { bpCodeId: bp.bpCodeId },
+      select: { isPlatform: true },
+    });
+    if (target?.isPlatform) throw new BadRequestException(BP_NOT_CHOSEN);
   }
 
   /**
@@ -1123,13 +1141,15 @@ export class ContractsService {
     dto: CreateContractDto,
     adminAccountId: number,
     documents: readonly PaperDocument[] = [],
+    bp?: TargetBpContext,
   ): Promise<CreatedContractResponseDto> {
+    await this.checkTargetBp(bp);
     checkInput(dto);
     checkPaper(dto, documents);
-    await this.checkStore(adminAccountId, dto.storeId);
+    await this.checkStore(adminAccountId, dto.storeId, bp);
     // 재계약이면 직전 계약도 이 관리자의 범위 안이어야 한다(없거나 범위 밖이면 404 · 403)
     if (dto.previousContractId !== undefined)
-      await this.scopedContractOf(adminAccountId, dto.previousContractId);
+      await this.scopedContractOf(adminAccountId, dto.previousContractId, bp);
     const fields = contractFields(dto);
     const now = new Date();
 
@@ -1422,11 +1442,14 @@ export class ContractsService {
    * 확인 요청에 답했으면('ANSWERED') 계약은 그 답으로 서명 대기 · 거부라 지금 상태를 싣고 처리 결과는 둔다. 보냈거나 보낼 것이 없으면
    * 그대로다(다시 읽지 않는다). 지금 상태를 읽다 실패하면 저장은 이미 끝났으니 오류로 답하지 않는다 — 500 이면 화면이 저장 실패로
    * 알고 다시 저장한다. 계산한 상태에 처리 결과 null 을 싣고 로그만 남긴다.
+   * 나갔으면(답한 것 포함) 그 발송의 보낸 원본을 만든다(WHALEERP-131) — 기다리지 않는다. 보내지 않은 저장(임시저장 · 종이 계약)은
+   * 만들 것이 없어 ContractFilesService 가 건너뛴다.
    */
   private async settledResult(
     result: CreatedContractResponseDto,
     sent: DispatchResult,
   ): Promise<CreatedContractResponseDto> {
+    if (sent !== false) this.files.afterSent(result.contractId);
     if (sent === true) return result;
     const now = await this.prisma.contract
       .findUnique({
@@ -1466,7 +1489,9 @@ export class ContractsService {
   async findOne(
     adminAccountId: number,
     contractId: number,
+    bp?: TargetBpContext,
   ): Promise<ContractDetailDto> {
+    await this.checkTargetBp(bp);
     const c = await this.prisma.contract.findUnique({
       where: { contractId },
       select: {
@@ -1529,7 +1554,7 @@ export class ContractsService {
       },
     });
     if (!c) throw new NotFoundException(CONTRACT_NOT_FOUND);
-    await this.checkContractScope(adminAccountId, c);
+    await this.checkContractScope(adminAccountId, c, bp);
     // stores 는 1팀 테이블이라 Prisma 관계가 없다. 이름만 따로 읽는다(지운 점포여도 이름은 보인다).
     const store = await this.prisma.store.findUnique({
       where: { storeId: c.storeId },
@@ -1631,7 +1656,7 @@ export class ContractsService {
       registeredAt: iso(registered),
       registeredBy: registrar ? (registrar.name ?? registrar.loginId) : null,
       canResend,
-      taxProfile: await this.taxProfileOf(adminAccountId, c.staffMemberId),
+      taxProfile: await this.taxProfileOf(adminAccountId, c.staffMemberId, bp),
     };
   }
 
@@ -1644,10 +1669,16 @@ export class ContractsService {
   private async taxProfileOf(
     adminAccountId: number,
     staffMemberId: number,
+    bp?: TargetBpContext,
   ): Promise<ContractTaxProfileDto> {
     const empty = { rrnMasked: null, bankName: null, accountNumber: null };
     if (
-      !(await this.scope.canManageStaffAccount(adminAccountId, staffMemberId))
+      // 상세와 같은 대상 BP 로 본다 — 빠지면 플랫폼 계정은 소속(플랫폼) BP 범위라 늘 HIDDEN 이다(WHALEERP-618)
+      !(await this.scope.canManageStaffAccount(
+        adminAccountId,
+        staffMemberId,
+        bp,
+      ))
     )
       return { status: 'HIDDEN', ...empty };
     const profile = await this.prisma.staffTaxProfile.findUnique({
@@ -1708,24 +1739,31 @@ export class ContractsService {
     contractId: number,
     dto: CreateContractDto,
     documents: readonly PaperDocument[] = [],
+    bp?: TargetBpContext,
   ): Promise<CreatedContractResponseDto> {
+    await this.checkTargetBp(bp);
     checkInput(dto);
     checkPaper(dto, documents);
     const fields = contractFields(dto);
     // 지금 근무지도, 옮겨 갈 근무지도 업무 범위 안이어야 한다. 지금 근무지는 계약 직원의 동의로 봤으니, 같은
     // 근무지면 점포 단위로 다시 묻지 않는다 — 동의한 가맹 점포 직원의 임시저장을 본사 역할이 이어 쓸 수 있게.
     // 점포가 남아 있는지(폐점 · 삭제)는 같은 근무지여도 늘 본다 — 임시저장 뒤 폐점한 점포로 발송 대기가 되지 않게.
-    const scoped = await this.scopedContractOf(adminAccountId, contractId);
+    const scoped = await this.scopedContractOf(adminAccountId, contractId, bp);
     const scopedStore = scoped.storeId;
     if (dto.storeId !== scopedStore)
-      await this.checkStore(adminAccountId, dto.storeId);
+      await this.checkStore(adminAccountId, dto.storeId, bp);
     else await this.checkStoreOpen(dto.storeId);
     // 점포 단위 범위가 있는가 — 없으면 이 계약 직원의 동의로만 보는 관리자(본사 역할)다. 근무지를 옮기면 위에서 이미 봤다.
     // 동의로만 보는 관리자는 번호를 바꿀 수 없고, 같은 점포 · 같은 번호의 다른 직원 레코드 계약을 대체할 수도 없다 — 그
     // 계약(동의하지 않은 직원 것)이 409 에 이름 · 기간과 함께 실리고 대체로 닫힐 수 있어서다(api #49 4차 · 5차 리뷰).
     const storeLevel =
       dto.storeId !== scopedStore ||
-      (await this.scope.canManageStaffAt(adminAccountId, dto.storeId, false));
+      (await this.scope.canManageStaffAt(
+        adminAccountId,
+        dto.storeId,
+        false,
+        bp,
+      ));
     // 연 뒤 다른 요청이 번호를 바꿨어도 여기서는 「바꿈」으로 보여 같은 403 이다 — 문구가 두 경우를 아우른다(5차 참고 3).
     if (!storeLevel && dto.phone !== scoped.phone)
       throw new ForbiddenException(PHONE_CHANGE_FORBIDDEN);
@@ -2083,12 +2121,15 @@ export class ContractsService {
     adminAccountId: number,
     contractId: number,
     dto: UpdateWorkerDto,
+    bp?: TargetBpContext,
   ): Promise<CreatedContractResponseDto> {
-    const scoped = await this.scopedContractOf(adminAccountId, contractId);
+    await this.checkTargetBp(bp);
+    const scoped = await this.scopedContractOf(adminAccountId, contractId, bp);
     const storeLevel = await this.scope.canManageStaffAt(
       adminAccountId,
       scoped.storeId,
       false,
+      bp,
     );
     if (!storeLevel && dto.phone !== scoped.phone)
       throw new ForbiddenException(PHONE_CHANGE_FORBIDDEN);
@@ -2292,8 +2333,17 @@ export class ContractsService {
    * 상태 이력 · 계약, 그리고 그 계약에만 쓰인 초안(가입 전) 직원 레코드. 임시저장이 아니면 409.
    * 계약 삭제는 상태를 조건으로 걸어, 읽은 뒤 초안 저장으로 넘어갔으면 0건 → 409 로 트랜잭션째 되돌린다.
    */
-  async remove(adminAccountId: number, contractId: number): Promise<void> {
-    const scopedStore = await this.scopedStoreOf(adminAccountId, contractId);
+  async remove(
+    adminAccountId: number,
+    contractId: number,
+    bp?: TargetBpContext,
+  ): Promise<void> {
+    await this.checkTargetBp(bp);
+    const scopedStore = await this.scopedStoreOf(
+      adminAccountId,
+      contractId,
+      bp,
+    );
     await this.prisma.$transaction(async (tx) => {
       await lockContractWithStaff(tx, contractId);
       const current = await tx.contract.findUnique({
@@ -2337,16 +2387,18 @@ export class ContractsService {
   }
 
   /**
-   * 종이 계약 날인본 내려받기 주소. 계약 상세와 같은 업무 범위를 본 뒤 300초짜리 서명 주소를 준다 — 받으면 원래
+   * 계약서 파일(종이 계약 날인본 · 임금계약서 · 보낸 원본 · 처리 완료본) 내려받기 주소. 계약 상세와 같은 업무 범위를 본 뒤 300초짜리 서명 주소를 준다 — 받으면 원래
    * 파일 이름으로 저장된다. 다른 계약의 파일 ID 로는 받지 못한다(404).
    */
   async documentDownloadUrl(
     adminAccountId: number,
     contractId: number,
     contractDocumentId: number,
+    bp?: TargetBpContext,
   ): Promise<DownloadUrlResponseDto> {
+    await this.checkTargetBp(bp);
     // 없는 계약 · 범위 밖 · 다른 계약의 파일은 저장소 설정과 상관없이 404 다 — 저장소 확인은 그 뒤에 한다.
-    await this.scopedStoreOf(adminAccountId, contractId);
+    await this.scopedStoreOf(adminAccountId, contractId, bp);
     const document = await this.prisma.contractDocument.findFirst({
       // 필기 서명은 상세 목록에 없으므로 받지도 못한다 — 없는 파일과 같은 404
       where: { contractDocumentId, contractId, kind: { not: 'SIGNATURE' } },
@@ -2359,14 +2411,16 @@ export class ContractsService {
     };
   }
 
-  /** 목록. 업무 범위 안 점포의 계약만이다. 사용 중인 관리자 계정이 아니면 403. */
+  /** 목록. 업무 범위(플랫폼 계정은 탭 BP 의 점포 전부) 안 점포의 계약만이다. 사용 중인 관리자 계정이 아니면 403. */
   async list(
     adminAccountId: number,
     query: ListContractsQueryDto,
+    bp?: TargetBpContext,
   ): Promise<ContractListResponseDto> {
     const { page, pageSize, status, storeName, staffMemberName } = query;
 
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    await this.checkTargetBp(bp);
+    const manageable = await this.scope.getManageableStores(adminAccountId, bp);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     // 고른 점포 · 점포 유형은 업무 범위 안에서만 거른다 — 범위 밖 id 는 조용히 빠진다(WHALEERP-326)
     const picked = query.storeIds?.length ? new Set(query.storeIds) : null;

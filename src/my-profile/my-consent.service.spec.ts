@@ -6,7 +6,10 @@ import {
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
-import { MyConsentService } from './my-consent.service';
+import {
+  HQ_SHARING_TERMS_CHANGED,
+  MyConsentService,
+} from './my-consent.service';
 import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
 const AGREED_AT = new Date('2026-10-01T00:00:00Z');
@@ -292,7 +295,7 @@ describe('MyConsentService', () => {
   describe('본사 제공 동의 (ATT-30, 계정에 하나)', () => {
     it('다시 동의하면 api 의 문구 버전 · 지금 시각으로 덮고 철회 시각을 지운다 (A안)', async () => {
       const service = await build();
-      await service.agreeHqSharing(12);
+      await service.agreeHqSharing(12, HQ_SHARING_CONSENT_VERSION);
       expect(tx.account.update).toHaveBeenCalledWith({
         where: { accountId: 12 },
         data: {
@@ -304,14 +307,32 @@ describe('MyConsentService', () => {
       });
     });
 
+    it('화면이 보여 준 문구 버전이 지금 것과 다르면 409 와 새로 고치라는 사유 — 동의를 남기지 않는다(ATT-30 v252)', async () => {
+      const service = await build();
+      await expect(service.agreeHqSharing(12, 'v0.9')).rejects.toThrow(
+        new ConflictException(HQ_SHARING_TERMS_CHANGED),
+      );
+      expect(tx.account.update).not.toHaveBeenCalled();
+    });
+
+    it('이미 지금 버전에 동의했어도 보인 문구 버전이 다르면 버전 409 가 먼저다 — 위치정보 동의와 같은 순서', async () => {
+      const service = await build({
+        isHqSharingConsented: true,
+        hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+      });
+      await expect(service.agreeHqSharing(12, 'v0.9')).rejects.toThrow(
+        HQ_SHARING_TERMS_CHANGED,
+      );
+    });
+
     it('이미 동의 중이면 다시 동의는 409', async () => {
       const service = await build({
         isHqSharingConsented: true,
         hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
       });
-      await expect(service.agreeHqSharing(12)).rejects.toBeInstanceOf(
-        ConflictException,
-      );
+      await expect(
+        service.agreeHqSharing(12, HQ_SHARING_CONSENT_VERSION),
+      ).rejects.toBeInstanceOf(ConflictException);
       expect(tx.account.update).not.toHaveBeenCalled();
     });
 
@@ -320,7 +341,7 @@ describe('MyConsentService', () => {
         isHqSharingConsented: true,
         hqSharingConsentVersion: 'v0.9',
       });
-      await service.agreeHqSharing(12);
+      await service.agreeHqSharing(12, HQ_SHARING_CONSENT_VERSION);
       expect(tx.account.update).toHaveBeenCalledWith({
         where: { accountId: 12 },
         data: expect.objectContaining({
@@ -358,11 +379,13 @@ describe('MyConsentService', () => {
     'withdrawHqSharing',
   ] as const)('탈퇴 계정은 %s 가 401', async (method) => {
     const service = await build({ status: 'WITHDRAWN' });
-    // agreeLocation 만 보인 약관 버전을 받는다
+    // agreeLocation · agreeHqSharing 만 보인 약관 · 문구 버전을 받는다
     const run = () =>
       method === 'agreeLocation'
         ? service.agreeLocation(12, 'v1.0')
-        : service[method](12);
+        : method === 'agreeHqSharing'
+          ? service.agreeHqSharing(12, HQ_SHARING_CONSENT_VERSION)
+          : service[method](12);
     await expect(run()).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

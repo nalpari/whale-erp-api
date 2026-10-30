@@ -123,7 +123,7 @@ export async function noticeScheduleChange(
     );
     return;
   }
-  // 점포는 1팀 표라 직원 레코드에서 관계로 닿지 않는다. 이름이 없으면 제목이 「 근무스케줄이…」로 나가니 보내지 않는다
+  // 점포는 1팀 표라 직원 레코드에서 관계로 닿지 않는다. 이름이 없으면 본문의 근무지 자리(「#{근무지} 근무스케줄이 변경되었습니다.」)가 빈칸이 되니 보내지 않는다
   const store = await tx.store.findUnique({
     where: { storeId: staff.storeId },
     select: { name: true },
