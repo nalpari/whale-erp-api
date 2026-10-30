@@ -197,4 +197,30 @@ describe('AdminLoginInfoService', () => {
     });
     await expect(service.get(7)).rejects.toThrow(UnauthorizedException);
   });
+
+  // 관리자 웹이 점포 목록 버전(GET /bp-codes/:id/stores-version)이 바뀌었을 때 부른다 — 메뉴 · 공통코드 없이 점포만.
+  describe('stores — 내 관리 점포만', () => {
+    it('로그인 정보의 stores 와 같은 목록을 준다', async () => {
+      await expect(service.stores(7)).resolves.toEqual([store]);
+      expect(scope.listStores).toHaveBeenCalledWith(7);
+    });
+
+    it('플랫폼 계정은 빈 목록 — BP 를 골라 일한다', async () => {
+      prisma.adminAccount.findUnique.mockResolvedValue(
+        account({ bpCode: { ...bp, bpCode: 'BP000000', isPlatform: true } }),
+      );
+      await expect(service.stores(7)).resolves.toEqual([]);
+      expect(scope.listStores).not.toHaveBeenCalled();
+    });
+
+    it('없거나 삭제된 계정이면 401', async () => {
+      prisma.adminAccount.findUnique.mockResolvedValue(null);
+      await expect(service.stores(7)).rejects.toThrow(UnauthorizedException);
+      prisma.adminAccount.findUnique.mockResolvedValue({
+        ...account(),
+        isDeleted: true,
+      });
+      await expect(service.stores(7)).rejects.toThrow(UnauthorizedException);
+    });
+  });
 });

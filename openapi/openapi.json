@@ -619,6 +619,33 @@
         ]
       }
     },
+    "/auth/admin/me/stores": {
+      "get": {
+        "operationId": "AdminAuthController_getMyStores",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminStoreListResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "관리 점포만 — 로그인 정보의 `stores` 와 같은 목록을 `{ items, total }` 로. 관리자 웹이 점포 목록 버전\n(`GET /bp-codes/:id/stores-version`)이 바뀌었을 때 메뉴 · 공통코드 없이 점포만 다시 받는다. 버전 경로와 같이\n강제 비밀번호 변경 중에는 403 이다 — 그동안은 팝업만 열려 점포를 다시 받을 화면이 없다. 플랫폼 계정은 빈 목록,\n없거나 삭제된 계정은 401.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
     "/auth/admin/password-change": {
       "post": {
         "operationId": "AdminAuthController_changeRequiredPassword",
@@ -4982,6 +5009,48 @@
         ]
       }
     },
+    "/bp-codes/{bpCodeId}/stores-version": {
+      "get": {
+        "operationId": "BpCodesController_findStoresVersion",
+        "parameters": [
+          {
+            "name": "bpCodeId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BpStoresVersionResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "사용할 수 없는 관리자 계정"
+          },
+          "404": {
+            "description": "없거나 삭제된 BP"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "그 BP 점포 목록의 버전 — 관리자 웹이 새로고침 · 메뉴 이동 · 창 포커스 때 버전만 묻고, 바뀌었을 때만 점포 목록\n(자기 BP 는 `GET /auth/admin/me/stores`, 연 BP 는 위 점포 목록)을 다시 받는다 — 버전을 먼저 받고 목록을 받는다.\n여러 PC 에서 같은 계정으로 쓸 때 다른 PC 의 점포 등록 · 수정 · 폐점 · 삭제와 담당 점포 매핑 · 관리 범위 변경을\n잡는다(BP · 가맹 관리자만 매핑 · 범위까지). 볼 수 있는 BP 와 오류는 점포 목록과 같다(bpStoresAccess) — 볼 수 없는\nBP · 플랫폼 BP 는 404, 사용 중인 관리자 계정이 아니면 403(판정 뒤 버전을 만드는 사이에 바뀌어도).",
+        "tags": [
+          "BpCodes"
+        ]
+      }
+    },
     "/bp-codes/{bpCodeId}/code-items": {
       "get": {
         "operationId": "BpCodesController_findCodeItems",
@@ -7206,10 +7275,13 @@
             }
           },
           "400": {
-            "description": "쿼리 형식 오류(month 누락 포함)"
+            "description": "쿼리 형식 오류(month 누락 포함) · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -7256,13 +7328,13 @@
             }
           },
           "400": {
-            "description": "본문 형식 오류"
+            "description": "본문 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 직원 · 관리 범위 밖 · 가려지는 직원(본사 제공 동의 없음)"
+            "description": "없는 직원 · 관리 범위 밖 · 가려지는 직원(본사 제공 동의 없음) · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "PAYSLIP_EXISTS — 이 직원의 이 달 명세서가 이미 있음(본문 payslipId)"
@@ -7330,10 +7402,13 @@
             }
           },
           "400": {
-            "description": "쿼리 형식 오류(month · storeId 누락 포함)"
+            "description": "쿼리 형식 오류(month · storeId 누락 포함) · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -7382,10 +7457,13 @@
             }
           },
           "400": {
-            "description": "쿼리 형식 오류(month 누락 포함)"
+            "description": "쿼리 형식 오류(month 누락 포함) · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -7435,10 +7513,13 @@
             }
           },
           "400": {
-            "description": "본문 형식 오류"
+            "description": "본문 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -7488,10 +7569,13 @@
             }
           },
           "400": {
-            "description": "본문 형식 오류"
+            "description": "본문 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -7530,8 +7614,11 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           }
         },
         "security": [
@@ -7578,11 +7665,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -7638,13 +7728,13 @@
             }
           },
           "400": {
-            "description": "본문 형식 오류 · 정직원 3.3% · 같은 항목 두 번 · 붙일 수 없는 항목 · 합계 초과"
+            "description": "본문 형식 오류 · 정직원 3.3% · 같은 항목 두 번 · 붙일 수 없는 항목 · 합계 초과 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "PAYSLIP_STATUS_CONFLICT — 작성 중 · 검토 중이 아님 · PAYSLIP_STALE — 그사이 누가 고침"
@@ -7694,11 +7784,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -7755,11 +7848,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "PAYSLIP_STATUS_CONFLICT — 작성 중 · 검토 중이 아님 · PAYSLIP_STALE — 그사이 누가 고침"
@@ -7819,11 +7915,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "PAYSLIP_STATUS_CONFLICT — 작성 중 · 검토 중이 아님 · PAYSLIP_STALE — 그사이 누가 고침"
@@ -7886,11 +7985,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "PAYSLIP_STATUS_CONFLICT — 확정 · 발송 완료가 아님 · PAYSLIP_STALE — 그사이 누가 고침"
@@ -7950,11 +8052,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "PAYSLIP_STATUS_CONFLICT — 보낼 수 있는 상태가 아님 · PAYSLIP_STALE — 그사이 누가 고쳤거나 보내는 중"
@@ -8023,11 +8128,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "급여명세서 관리의 해당 권한(조회 · 등록 · 수정) 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류"
+            "description": "없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "PAYSLIP_STATUS_CONFLICT — 보낼 수 있는 상태가 아님 · PAYSLIP_STALE — 그사이 누가 고쳤거나 보내는 중"
@@ -8384,6 +8492,75 @@
           }
         ],
         "summary": "근로계약서 초안 저장 — 직원 레코드와 계약을 만들고 곧바로 보낸다(2026-10-19 재영). 계정이 없는 번호면 가입 초대\n알림톡과 발송 대기, 계정이 있는 번호면 소속 추가 확인 요청과 발송 대기(직원이 수락하면 서명 대기, WHALEERP-130). 임시저장은\n보내지 않는다.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
+    "/contracts/store-options": {
+      "get": {
+        "operationId": "ContractsController_storeOptions",
+        "parameters": [
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "description": "쪽 번호. 1부터.",
+            "schema": {
+              "minimum": 1,
+              "maximum": 10000000,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "pageSize",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 200,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoreOptionListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "검색 조건 형식 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
+          "403": {
+            "description": "근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "작성 · 이어 쓰기의 근무지 선택지. 업무 범위(플랫폼 계정은 탭 BP) 안에서 지우지 않았고 폐점이 아닌 점포, 이름순. 작성 또는 수정 권한.",
         "tags": [
           "Contracts"
         ]
@@ -9746,63 +9923,6 @@
         "summary": "한 묶음 켜고 끄기. 그 뒤에 생기는 알림부터 든다",
         "tags": [
           "MyNotificationPreferences"
-        ]
-      }
-    },
-    "/stores/options": {
-      "get": {
-        "operationId": "StoresController_options",
-        "parameters": [
-          {
-            "name": "page",
-            "required": true,
-            "in": "query",
-            "description": "쪽 번호. 1부터.",
-            "schema": {
-              "minimum": 1,
-              "maximum": 10000000,
-              "default": 1,
-              "type": "number"
-            }
-          },
-          {
-            "name": "pageSize",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "minimum": 1,
-              "maximum": 200,
-              "default": 20,
-              "type": "number"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StoreOptionListResponseDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "검색 조건 형식"
-          },
-          "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "근무지 선택지. 업무 범위 안에서 지우지 않았고 폐점이 아닌 점포, 이름순. `:id` 보다 먼저 둔다.",
-        "tags": [
-          "Stores"
         ]
       }
     },
@@ -15180,10 +15300,13 @@
             }
           },
           "400": {
-            "description": "쿼리 형식 오류"
+            "description": "쿼리 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -15283,13 +15406,13 @@
             }
           },
           "400": {
-            "description": "쿼리 형식 오류 · 기간이 92일 넘음 · 끝이 시작보다 앞"
+            "description": "쿼리 형식 오류 · 기간이 92일 넘음 · 끝이 시작보다 앞 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "직원이 점포 조건 안의 직원이 아니거나 본사에게 가려진 직원"
+            "description": "직원이 점포 조건 안의 직원이 아니거나 본사에게 가려진 직원 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -15369,10 +15492,13 @@
             }
           },
           "400": {
-            "description": "쿼리 형식 오류"
+            "description": "쿼리 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -15422,10 +15548,13 @@
             }
           },
           "400": {
-            "description": "본문 형식 오류 · 3개월이 지났거나 오늘 이후 · 아직 오지 않은 시각"
+            "description": "본문 형식 오류 · 3개월이 지났거나 오늘 이후 · 아직 오지 않은 시각 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "ALREADY_CHECKED_IN — 퇴근 없이 출근만 넣는데 열린 출근이 있음"
@@ -15489,13 +15618,13 @@
             }
           },
           "400": {
-            "description": "본문 형식 오류 · 3개월이 지남 · 있던 쪽 시각을 비움 · 바뀐 값 없음 · 아직 오지 않은 시각"
+            "description": "본문 형식 오류 · 3개월이 지남 · 있던 쪽 시각을 비움 · 바뀐 값 없음 · 아직 오지 않은 시각 · 플랫폼 계정의 X-Bp-Code-Id 누락"
           },
           "403": {
-            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원"
+            "description": "없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "ATTENDANCE_CHANGED — 그사이 다른 관리자가 고침"
@@ -15545,11 +15674,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원"
+            "description": "없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "ATTENDANCE_CHANGED — 확인 필요 사유가 없음(이미 검토됨)"
@@ -15599,11 +15731,14 @@
               }
             }
           },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
           "403": {
-            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님"
+            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
           },
           "404": {
-            "description": "없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원"
+            "description": "없는 기록 · 업무 범위 밖 · 본사에게 가려진 직원 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -17911,6 +18046,25 @@
           "account",
           "menus",
           "stores"
+        ]
+      },
+      "AdminStoreListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "description": "관리 점포 — 로그인 정보의 `stores` 와 같은 항목 · 순서(점포 이름순). 플랫폼 계정은 빈 목록이다.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminStoreDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
         ]
       },
       "AdminPasswordChangeDto": {
@@ -21759,6 +21913,19 @@
         "required": [
           "items",
           "total"
+        ]
+      },
+      "BpStoresVersionResponseDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "점포 목록 버전 — 이전에 받은 값과 다르면 점포 목록을 다시 받는다. 형식은 정해 두지 않으니 비교에만 쓴다.",
+            "example": "q3Zr8l0b2nXyK1pV0aWmTg"
+          }
+        },
+        "required": [
+          "version"
         ]
       },
       "BpMasterSummaryResponseDto": {

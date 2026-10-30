@@ -47,6 +47,7 @@ import {
   AdminRefreshResponseDto,
 } from './dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
+import { AdminStoreListResponseDto } from './dto/admin-store-list.response.dto';
 import { AdminMyPasswordChangeDto } from './dto/admin-my-password-change.dto';
 import { AdminPasswordVerificationDto } from './dto/admin-password-verification.dto';
 import { AdminPasswordChangeDto } from './dto/admin-password-change.dto';
@@ -209,6 +210,24 @@ export class AdminAuthController {
   ): Promise<AdminLoginInfoResponseDto> {
     if (user.type !== 'admin') throw new UnauthorizedException();
     return this.loginInfo.get(user.id);
+  }
+
+  /**
+   * 관리 점포만 — 로그인 정보의 `stores` 와 같은 목록을 `{ items, total }` 로. 관리자 웹이 점포 목록 버전
+   * (`GET /bp-codes/:id/stores-version`)이 바뀌었을 때 메뉴 · 공통코드 없이 점포만 다시 받는다. 버전 경로와 같이
+   * 강제 비밀번호 변경 중에는 403 이다 — 그동안은 팝업만 열려 점포를 다시 받을 화면이 없다. 플랫폼 계정은 빈 목록,
+   * 없거나 삭제된 계정은 401.
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @SkipThrottle({ ip: true, account: true })
+  @Get('me/stores')
+  async getMyStores(
+    @CurrentUser() user: AuthUser,
+  ): Promise<AdminStoreListResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    const items = await this.loginInfo.stores(user.id);
+    return { items, total: items.length };
   }
 
   /**

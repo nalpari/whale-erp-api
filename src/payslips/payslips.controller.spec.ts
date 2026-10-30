@@ -38,6 +38,8 @@ describe('PayslipsController · MyPayslipsController', () => {
     bulkCreate: jest.Mock;
   };
   const adminUser = { type: 'admin' as const, id: 9, loginId: 'a', sid: 1 };
+  // 가드가 정한 대상 BP — 서비스에 그대로 넘긴다(WHALEERP-637)
+  const bp = { bpCodeId: 2, isPlatformCaller: false };
   const accountUser = {
     type: 'account' as const,
     id: 3,
@@ -115,27 +117,27 @@ describe('PayslipsController · MyPayslipsController', () => {
   it('관리자 계정을 쓸 수 없으면 목록 403', async () => {
     list.list.mockResolvedValue(null);
     await expect(
-      admin.findAll(adminUser, { month: '2026-09' }),
+      admin.findAll(adminUser, bp, { month: '2026-09' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('관리자 계정을 쓸 수 없으면 요약 403', async () => {
     list.summary.mockResolvedValue(null);
     await expect(
-      admin.summary(adminUser, { month: '2026-09', storeId: 5 }),
+      admin.summary(adminUser, bp, { month: '2026-09', storeId: 5 }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('관리자 상세: ID 형식 오류는 서비스를 부르지 않고 404, 없으면 404', async () => {
-    await expect(admin.findOne(adminUser, '2147483648')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      admin.findOne(adminUser, bp, '2147483648'),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(list.findOne).not.toHaveBeenCalled();
     list.findOne.mockResolvedValue(null);
-    await expect(admin.findOne(adminUser, '40')).rejects.toBeInstanceOf(
+    await expect(admin.findOne(adminUser, bp, '40')).rejects.toBeInstanceOf(
       NotFoundException,
     );
-    expect(list.findOne).toHaveBeenCalledWith(9, 40);
+    expect(list.findOne).toHaveBeenCalledWith(9, 40, bp);
   });
 
   it('직원 앱: 로그인한 계정으로 찾고, 없으면 404', async () => {
@@ -181,27 +183,27 @@ describe('PayslipsController · MyPayslipsController', () => {
     draft.create.mockResolvedValue(null);
     draft.bulkCreate.mockResolvedValue(null);
     await expect(
-      admin.candidates(adminUser, { month: '2026-10' }),
+      admin.candidates(adminUser, bp, { month: '2026-10' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
-      admin.create(adminUser, { staffMemberId: 30, month: '2026-10' }),
+      admin.create(adminUser, bp, { staffMemberId: 30, month: '2026-10' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
-      admin.bulkCreate(adminUser, { month: '2026-10' }),
+      admin.bulkCreate(adminUser, bp, { month: '2026-10' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('초안 작성 · 일괄 작성은 로그인한 관리자로 서비스를 부른다', async () => {
     draft.create.mockResolvedValue({ payslipId: 100 });
     await expect(
-      admin.create(adminUser, { staffMemberId: 30, month: '2026-10' }),
+      admin.create(adminUser, bp, { staffMemberId: 30, month: '2026-10' }),
     ).resolves.toEqual({ payslipId: 100 });
-    expect(draft.create).toHaveBeenCalledWith(9, 30, '2026-10');
+    expect(draft.create).toHaveBeenCalledWith(9, 30, '2026-10', bp);
     draft.bulkCreate.mockResolvedValue({ created: [], skipped: [] });
     await expect(
-      admin.bulkCreate(adminUser, { month: '2026-10' }),
+      admin.bulkCreate(adminUser, bp, { month: '2026-10' }),
     ).resolves.toEqual({ created: [], skipped: [] });
-    expect(draft.bulkCreate).toHaveBeenCalledWith(9, '2026-10');
+    expect(draft.bulkCreate).toHaveBeenCalledWith(9, '2026-10', bp);
   });
 
   it('임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목은 급여명세서 관리 수정(update) 권한을 본다', () => {
@@ -223,19 +225,19 @@ describe('PayslipsController · MyPayslipsController', () => {
 
   it('고치는 경로: ID 형식 오류는 서비스를 부르지 않고 404, 고친 뒤 상세가 없으면 404', async () => {
     const dto = { updatedAt: '2026-10-19T01:00:00.000Z' };
-    await expect(admin.confirm(adminUser, 'abc', dto)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      admin.confirm(adminUser, bp, 'abc', dto),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(edit.confirm).not.toHaveBeenCalled();
     edit.confirm.mockResolvedValue(null);
-    await expect(admin.confirm(adminUser, '40', dto)).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      admin.confirm(adminUser, bp, '40', dto),
+    ).rejects.toBeInstanceOf(NotFoundException);
     edit.cancelConfirmation.mockResolvedValue({ payslipId: 40 });
     await expect(
-      admin.cancelConfirmation(adminUser, '40', dto),
+      admin.cancelConfirmation(adminUser, bp, '40', dto),
     ).resolves.toEqual({ payslipId: 40 });
-    expect(edit.cancelConfirmation).toHaveBeenCalledWith(9, 40, dto);
+    expect(edit.cancelConfirmation).toHaveBeenCalledWith(9, 40, dto, bp);
     const body = {
       ...dto,
       isPremiumApplied: true,
@@ -243,12 +245,12 @@ describe('PayslipsController · MyPayslipsController', () => {
       items: [],
     };
     edit.save.mockResolvedValue({ payslipId: 40 });
-    await expect(admin.save(adminUser, '40', body)).resolves.toEqual({
+    await expect(admin.save(adminUser, bp, '40', body)).resolves.toEqual({
       payslipId: 40,
     });
-    expect(edit.save).toHaveBeenCalledWith(9, 40, body);
+    expect(edit.save).toHaveBeenCalledWith(9, 40, body, bp);
     edit.previousValues.mockResolvedValue({ previous: null });
-    await expect(admin.previousValues(adminUser, '40')).resolves.toEqual({
+    await expect(admin.previousValues(adminUser, bp, '40')).resolves.toEqual({
       previous: null,
     });
   });
@@ -264,15 +266,15 @@ describe('PayslipsController · MyPayslipsController', () => {
       ).toEqual({ action: 'update' });
     sends.sendMany.mockResolvedValue(null);
     await expect(
-      admin.sendMany(adminUser, { month: '2026-10' }),
+      admin.sendMany(adminUser, bp, { month: '2026-10' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
     const dto = { updatedAt: '2026-10-19T01:00:00.000Z' };
     sends.resend.mockResolvedValue({ payslipId: 40 });
-    await expect(admin.resend(adminUser, '40', dto)).resolves.toEqual({
+    await expect(admin.resend(adminUser, bp, '40', dto)).resolves.toEqual({
       payslipId: 40,
     });
-    expect(sends.resend).toHaveBeenCalledWith(9, 40, dto);
-    await expect(admin.send(adminUser, 'x', dto)).rejects.toBeInstanceOf(
+    expect(sends.resend).toHaveBeenCalledWith(9, 40, dto, bp);
+    await expect(admin.send(adminUser, bp, 'x', dto)).rejects.toBeInstanceOf(
       NotFoundException,
     );
     expect(sends.send).not.toHaveBeenCalled();
