@@ -50,6 +50,7 @@ import {
   CreateContractDto,
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
+import { MinimumWageResponseDto } from './dto/minimum-wage.response.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
 import { ListStoreOptionsQueryDto } from './dto/list-store-options-query.dto';
 import { StoreOptionListResponseDto } from './dto/store-option.response.dto';
@@ -267,6 +268,21 @@ export class ContractsController {
       paperDocuments(files),
       bp,
     );
+  }
+
+  /**
+   * 지금 최저임금(공통코드 MINIMUM_WAGE · HOURLY) — 작성 · 이어 쓰기 화면이 시급 칸 도움말과 수습 중 시급 확인에 쓴다
+   * (WHALEERP-595). 저장도 같은 값으로 다시 본다. 공통코드를 쓸 수 없으면 hourlyWage 는 null, problem 이 저장 400 문장이다.
+   * `:contractId` 보다 먼저 둔다.
+   */
+  @Get('minimum-wage')
+  @MenuPermission(['create', 'update'])
+  @ApiOkResponse({ type: MinimumWageResponseDto })
+  async minimumWage(): Promise<MinimumWageResponseDto> {
+    const minimum = await this.contracts.minimumWage();
+    return 'problem' in minimum
+      ? { hourlyWage: null, problem: minimum.problem }
+      : { hourlyWage: minimum.hourlyWage, problem: null };
   }
 
   /** 작성 화면을 다시 채울 값 — 임시저장 이어 쓰기 */

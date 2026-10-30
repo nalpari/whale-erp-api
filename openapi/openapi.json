@@ -8648,6 +8648,49 @@
         ]
       }
     },
+    "/contracts/minimum-wage": {
+      "get": {
+        "operationId": "ContractsController_minimumWage",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MinimumWageResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
+          "403": {
+            "description": "근로계약 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "지금 최저임금(공통코드 MINIMUM_WAGE · HOURLY) — 작성 · 이어 쓰기 화면이 시급 칸 도움말과 수습 중 시급 확인에 쓴다\n(WHALEERP-595). 저장도 같은 값으로 다시 본다. 공통코드를 쓸 수 없으면 hourlyWage 는 null, problem 이 저장 400 문장이다.\n`:contractId` 보다 먼저 둔다.",
+        "tags": [
+          "Contracts"
+        ]
+      }
+    },
     "/contracts/{contractId}": {
       "get": {
         "operationId": "ContractsController_findOne",
@@ -26053,6 +26096,27 @@
           "draftAction",
           "contractId",
           "staffMemberId"
+        ]
+      },
+      "MinimumWageResponseDto": {
+        "type": "object",
+        "properties": {
+          "hourlyWage": {
+            "type": "number",
+            "nullable": true,
+            "description": "시급(원). 공통코드를 쓸 수 없으면 null",
+            "example": 10320
+          },
+          "problem": {
+            "type": "string",
+            "nullable": true,
+            "description": "공통코드를 쓸 수 없는 까닭(없음 · 사용 중지 · 코드명이 숫자 아님) — 수습이 있는 계약을 저장하면 이 문장으로 400 이다.\n쓸 수 있으면 null",
+            "example": null
+          }
+        },
+        "required": [
+          "hourlyWage",
+          "problem"
         ]
       },
       "ContractStatusHistoryDto": {

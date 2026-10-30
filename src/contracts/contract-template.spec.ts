@@ -211,6 +211,29 @@ describe('contractArticles (근로계약서 조항 템플릿, WHALEERP-131)', ()
     });
   });
 
+  // 수습 중 시급은 저장 검사 · 관리자 웹과 같은 정수 셈(WHALEERP-595) — 부동소수 셈이면 14,650원 · 7% 가 13,624원이 된다
+  it('제5조 — 수습 중 시급은 정수 셈으로 원 미만 반올림', () => {
+    expect(
+      article(
+        {
+          ...base,
+          wageAmount: 14650,
+          weeklyHoliday: null,
+          probationMonths: 3,
+          probationWageReductionRate: 7,
+        },
+        5,
+      ).blocks[1],
+    ).toMatchObject({
+      values: expect.arrayContaining([
+        {
+          label: '수습',
+          value: '3개월 · 시급의 7% 감액(수습 중 시급 13,625원)',
+        },
+      ]) as unknown,
+    });
+  });
+
   it('제7조 — 관리자가 고친 연차 문구, 없으면 원안', () => {
     expect(article(base, 7).blocks[0]).toEqual({
       type: 'TEXT',
