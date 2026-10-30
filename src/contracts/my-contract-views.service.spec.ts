@@ -440,10 +440,18 @@ describe('MyContractViewsService', () => {
             employerAddressDetail: '3층',
             employerPhone: '0299990000',
             employerFixedAt: NOW,
+            fixedWorkLocation: '옛 근무 장소',
+            fixedJobTitle: '옛 직무',
           },
         }),
       );
       const d = await service().findOne(77, 41, NOW);
+      // 제2조 · 근로자 직무도 날인 때 고정한 값(2026-10-30 김민식)
+      expect(d.articles[1].blocks[0]).toEqual({
+        type: 'TEXT',
+        text: '옛 근무 장소에서 옛 직무 업무를 한다.',
+      });
+      expect(d.worker.jobTitle).toBe('옛 직무');
       expect(d.employer).toMatchObject({
         storeName: '웨일 카페 홍대점',
         tradeName: '옛 상호',

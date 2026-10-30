@@ -488,7 +488,7 @@ table document:
   `staff_members.previous_staff_member_id` (a self foreign key to the same person's previous 재직 record,
   WHALEERP-615 2026-10-22), location
   pause `location_consents.paused_at`, the 사용자 칸 fixed at 날인 `contract_parties.employer_*` ·
-  `employer_fixed_at` and the 발송 a generated file belongs to `contract_documents.sent_at` (partial unique
+  `employer_fixed_at` and 제2조 `fixed_work_location` · `fixed_job_title` (2026-10-30) and the 발송 a generated file belongs to `contract_documents.sent_at` (partial unique
   `(contract_id, kind, sent_at)` for 보낸 원본 · 처리 완료본 — WHALEERP-131, 2026-10-29, migration
   `20261030095715_team3_contract_files`), and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.

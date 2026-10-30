@@ -23,6 +23,8 @@ const party = {
   employerAddressDetail: null as string | null,
   employerPhone: null as string | null,
   employerFixedAt: null as Date | null,
+  fixedWorkLocation: null as string | null,
+  fixedJobTitle: null as string | null,
 };
 
 const contractRow = (over: Record<string, unknown> = {}) => ({
@@ -145,9 +147,16 @@ describe('pdfInputOf', () => {
         employerAddressDetail: null,
         employerPhone: '0299998888',
         employerFixedAt: SIGNED_AT,
+        fixedWorkLocation: '옛 점포명',
+        fixedJobTitle: '옛 직무',
       }),
     );
     expect(input.employerFixed).toBe(true);
+    // 제2조도 날인 때 고정한 근무 장소 · 직무(2026-10-30 김민식)
+    expect(input.articles[1].blocks[0]).toEqual({
+      type: 'TEXT',
+      text: '옛 점포명에서 옛 직무 업무를 한다.',
+    });
     expect(input.employer).toEqual({
       name: '옛 상호',
       ceoName: '옛 대표',
@@ -238,6 +247,9 @@ describe('ContractFilesService.make', () => {
         employerAddress: '서울 강남구',
         employerAddressDetail: '2층',
         employerPhone: '0212345678',
+        // 근무 장소를 비운 계약은 만드는 때의 점포명, 직무는 계약 칸
+        fixedWorkLocation: '강남점',
+        fixedJobTitle: '홀',
       },
     });
 

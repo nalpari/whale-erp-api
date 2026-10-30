@@ -39,6 +39,9 @@ describe('MyContractsService', () => {
   const mine = (o: Record<string, unknown> = {}) => ({
     status: 'PENDING_SIGNATURE',
     storeId: 3,
+    // 제2조 — 근무 장소를 비운 계약(날인 때 점포명으로 고정)
+    workLocation: null,
+    jobTitle: '바리스타',
     sentAt: SENT,
     signDeadlineAt: new Date('2026-11-19T01:00:00.000Z'),
     contractParty: {
@@ -51,6 +54,7 @@ describe('MyContractsService', () => {
     staffMember: {
       employmentStatus: 'EMPLOYED',
       retiredDate: null,
+      jobTitle: '매장',
       account: {
         realName: '홍길동',
         phone: '01090145563',
@@ -235,6 +239,9 @@ describe('MyContractsService', () => {
           employerPhone: '0212345678',
           // 체결 이력의 처리 시각(DB 시계) — 응답의 signedAt 과 같다
           employerFixedAt: HISTORY_AT,
+          // 제2조도 날인 시점 값 — 근무 장소가 비면 그때 점포명, 직무는 계약 칸(2026-10-30 김민식)
+          fixedWorkLocation: '강남점',
+          fixedJobTitle: '바리스타',
         },
       });
       expect(tx.store.findUniqueOrThrow).toHaveBeenCalledWith(

@@ -905,6 +905,9 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
         employerAddress: '서울 마포구 양화로 1',
         employerPhone: null,
         employerFixedAt: expect.any(Date) as unknown,
+        // 제2조도 날인 시점 값 — 근무 장소를 비운 계약은 그때 점포명, 직무는 직원 레코드(계약 칸이 빈 옛 계약)
+        fixedWorkLocation: '날인 테스트 직영점',
+        fixedJobTitle: '매장',
       });
 
       const copy = await signedCopyOf(contractId);
@@ -932,6 +935,23 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
         documents: unknown[];
       };
       expect(body.employer).toMatchObject({ tradeName: '날인 때 상호' });
+      // 점포 이름이 바뀌어도 제2조는 날인 때 점포명
+      await prisma.store.update({
+        where: { storeId },
+        data: { name: '바뀐 점포명' },
+      });
+      const again = await request(app.getHttpServer())
+        .get(`/me/contracts/${contractId}`)
+        .set('Authorization', `Bearer ${auth}`)
+        .expect(200);
+      expect(
+        (again.body as { articles: { blocks: { text?: string }[] }[] })
+          .articles[1].blocks[0].text,
+      ).toBe('날인 테스트 직영점에서 매장 업무를 한다.');
+      await prisma.store.update({
+        where: { storeId },
+        data: { name: '날인 테스트 직영점' },
+      });
       expect(body.articles).toHaveLength(10);
       expect(body.documents).toEqual([
         expect.objectContaining({

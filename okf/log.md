@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [Contracts API](/api/contracts-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 제2조 근무 장소 · 직무도 날인 시점 값(2026-10-30 김민식, api #211 리뷰 정책 확인): 날인 때 `contract_parties.fixed_work_location`(비었으면 점포명) · `fixed_job_title`(비었으면 직원 직무)을 고정하고, 체결된 계약의 직원 앱 본문 · `worker.jobTitle` · 처리 완료본이 그 값을 쓴다. 백필도 만든 때 값을 적는다. 같은 PR 의 아직 적용되지 않은 마이그레이션 `20261030095715_team3_contract_files` 에 두 칸을 더했다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #211 리뷰 블로커: 직원 앱 상세 `documents` · 내려받기가 보낸 원본을 지금 발송분(`sent_at` = 계약 `sent_at`)만 준다(`myDocumentWhere`, `my-contract-scope.ts`). 근로자 정보를 고쳐 다시 보내기 전 원본에 다른 사람의 이름 · 생년월일 · 번호가 남아 새 직원이 받을 수 있었다. 관리자 상세는 그대로 모두 보인다.
 * **Update**: [Notification templates](/api/notification-templates.md) · [To-dos](/api/todos.md) — 알림 템플릿 기본 문구 42건을 「알림톡_템플릿_20261029.xlsx」 새 문구로 바꾸는 데이터 마이그레이션 `20261030093710_team3_notification_template_wording`(api petra). 급여명세서 재발송 2건은 엑셀 대신 처음 발송 새 문구를 따른다(NTF-20 유지). `default_*` 는 42건 모두, 지금 문구는 제목 · 본문 · 변수가 셋 다 옛 기본값일 때만. 변수 목록은 `NTF_AFFILIATION_REJECTED` · `EMAIL_AFFILIATION_REJECTED` 에 선택 변수 `거절사유` 만 더했다(발송은 아직 넘기지 않아 빈칸). 엑셀에 없는 기본 템플릿 4건과 `TALK_STAFF_INVITATION` 의 null 제목은 그대로. todos e2e 의 `PUSH_TODO_DUE_SOON` 제목 기대값을 새 문구로. work-schedule-notice.ts 주석만 새 제목에 맞췄다([Work schedules](/api/work-schedules.md)). 스키마 변경 없음.
 

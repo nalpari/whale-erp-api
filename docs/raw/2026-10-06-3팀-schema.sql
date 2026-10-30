@@ -441,6 +441,8 @@ CREATE TABLE "contract_parties" (
     "employer_address_detail" TEXT,
     "employer_phone" TEXT,
     "employer_fixed_at" TIMESTAMPTZ(6),
+    "fixed_work_location" TEXT,
+    "fixed_job_title" TEXT,
 
     CONSTRAINT "contract_parties_pkey" PRIMARY KEY ("contract_id")
 );
@@ -1441,6 +1443,8 @@ COMMENT ON COLUMN "contract_parties"."employer_address" IS '사용자 소재지 
 COMMENT ON COLUMN "contract_parties"."employer_address_detail" IS '사용자 소재지 상세주소 — 날인 때 고정 — 처리 완료본 사용자 칸 (WHALEERP-131) (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."employer_phone" IS '사용자 전화번호 — 날인 때 점포 연락처를 고정 — 처리 완료본 사용자 칸 (WHALEERP-131) (물리에서 추가)';
 COMMENT ON COLUMN "contract_parties"."employer_fixed_at" IS '사용자 고정 일시 — 날인 때 사용자 칸을 고정한 시각. NULL 이면 고정 전에 체결된 계약 — 처리 완료본은 만드는 시점의 점포 정보로 만든다 (WHALEERP-131, 2026-10-29 김민식) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."fixed_work_location" IS '고정 근무 장소 — 날인 때 제2조 근무 장소(비었으면 그때 점포명)를 고정 — 체결된 계약의 본문 · 처리 완료본 (WHALEERP-131, 2026-10-30 김민식) (물리에서 추가)';
+COMMENT ON COLUMN "contract_parties"."fixed_job_title" IS '고정 직무 — 날인 때 제2조 직무(비었으면 그때 직원 직무)를 고정 — 체결된 계약의 본문 · 처리 완료본 (WHALEERP-131, 2026-10-30 김민식) (물리에서 추가)';
 COMMENT ON TABLE "contract_documents" IS '계약서 파일';
 COMMENT ON COLUMN "contract_documents"."contract_document_id" IS '파일 ID';
 COMMENT ON COLUMN "contract_documents"."contract_id" IS '근로계약';

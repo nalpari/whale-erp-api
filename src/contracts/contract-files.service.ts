@@ -49,6 +49,8 @@ const SOURCE_SELECT = {
       employerAddressDetail: true,
       employerPhone: true,
       employerFixedAt: true,
+      fixedWorkLocation: true,
+      fixedJobTitle: true,
     },
   },
 } satisfies Prisma.ContractSelect;
@@ -99,13 +101,22 @@ export type ContractFileSource = {
 export function pdfInputOf(
   kind: ContractPdfKind,
   { contract: c, store, signedAt }: ContractFileSource,
-): ContractPdfInput & { employerFixed: boolean } {
+): ContractPdfInput & {
+  employerFixed: boolean;
+  /** 제2조에 쓴 근무 장소 · 직무 — 백필이 당사자 행에 적는다 */
+  article2: { workLocation: string; jobTitle: string | null };
+} {
   const party = c.contractParty;
   // 적힌 사용자 칸이 있는가 — 고정 · 백필은 상호(없으면 점포명)를 늘 적는다
   const snapshot =
     kind === 'SIGNED_COPY' && party && party.employerName !== null
       ? { ...party, employerName: party.employerName }
       : null;
+  // 제2조도 날인 때 고정한 근무 장소 · 직무(2026-10-30 김민식). 없으면 계약 칸, 그것도 비면 지금 점포명 · 직원 직무
+  const article2 = {
+    workLocation: snapshot?.fixedWorkLocation ?? c.workLocation ?? store.name,
+    jobTitle: snapshot?.fixedJobTitle ?? c.jobTitle ?? c.staffMember.jobTitle,
+  };
   return {
     kind,
     contractId: c.contractId,
@@ -114,8 +125,7 @@ export function pdfInputOf(
       ...contractTermsOf(c),
       employmentType: c.employmentType,
       storeName: store.name,
-      workLocation: c.workLocation,
-      jobTitle: c.jobTitle ?? c.staffMember.jobTitle,
+      ...article2,
     }),
     employer: snapshot
       ? {
@@ -141,6 +151,7 @@ export function pdfInputOf(
     sentAt: c.sentAt!,
     signedAt,
     employerFixed: snapshot !== null,
+    article2,
   };
 }
 
@@ -348,6 +359,8 @@ export class ContractFilesService {
               employerAddress: input.employer.address,
               employerAddressDetail: input.employer.addressDetail,
               employerPhone: input.employer.phone,
+              fixedWorkLocation: input.article2.workLocation,
+              fixedJobTitle: input.article2.jobTitle,
             },
           });
       });

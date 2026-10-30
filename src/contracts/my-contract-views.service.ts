@@ -120,6 +120,8 @@ export class MyContractViewsService {
               employerAddressDetail: true,
               employerPhone: true,
               employerFixedAt: true,
+              fixedWorkLocation: true,
+              fixedJobTitle: true,
             },
           },
           staffMember: {
@@ -192,7 +194,9 @@ export class MyContractViewsService {
     );
     const biz = store.businessProfile;
     const terms = contractTermsOf(c);
-    const jobTitle = c.jobTitle ?? c.staffMember.jobTitle;
+    // 체결된 계약은 날인 때 고정한 근무 장소 · 직무로(2026-10-30 김민식) — 처리 완료본 제2조와 같다
+    const jobTitle =
+      party?.fixedJobTitle ?? c.jobTitle ?? c.staffMember.jobTitle;
     // 처리 완료본에 쓴 사용자 칸이 당사자 행에 있으면(날인 때 고정 · 백필) 그 값으로 — 완료본과 같게(WHALEERP-131). 점포명 ·
     // 점포 주소 · 사업장 우편번호(고정하지 않는다 — 직원 앱이 보이지 않는다)는 지금 값이다
     const fixed =
@@ -205,7 +209,7 @@ export class MyContractViewsService {
         ...terms,
         employmentType: c.employmentType,
         storeName: store.name,
-        workLocation: c.workLocation,
+        workLocation: party?.fixedWorkLocation ?? c.workLocation,
         jobTitle,
       }),
       signable: item.awaitingSignature && mismatches.length === 0,

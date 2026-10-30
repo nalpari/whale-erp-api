@@ -992,7 +992,10 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   the logical ERD's older wording). The same update **fixes the 사용자 칸 at signing time** — `employer_name`
   (상호, else 점포명) · `employer_ceo_name` · `employer_registration_number` · `employer_address` ·
   `employer_address_detail` (사업자 주소) · `employer_phone` (점포 연락처) · `employer_fixed_at` from the store and its
-  `store_business_profiles` (`employerOf` in `contract-files.service.ts`, WHALEERP-131, 2026-10-29 김민식: the 처리 완료본
+  `store_business_profiles` (`employerOf` in `contract-files.service.ts`), and **제2조 too** — `fixed_work_location`
+  (근무 장소, or the 점포명 when empty) · `fixed_job_title` (the contract's 직무, or the 직원 레코드's when an old contract
+  has none; 2026-10-30 김민식, api #211 review) — so a later store rename or 직무 change does not alter the signed text
+  (WHALEERP-131, 2026-10-29 김민식: the 처리 완료본
   uses 날인 시점 값 — the app showed the live store values when the 직원 signed, and a later edit cannot be traced
   back). On a failure the uploaded key is deleted only when no
   `contract_documents` row points at it (the commit may have gone through with only the reply lost —
@@ -1098,7 +1101,8 @@ only — a 종이 계약 has no body.
 - **처리 완료본 (`SIGNED_COPY`)** — one per contract, needs the `SIGNATURE` row; the PNG is read back from storage
   and drawn in the 서명 칸. 사용자 칸 = the values on the party row (`employer_*`, fixed at 날인). A contract signed
   before those columns existed is made with the store's current values, logged, and those values are written to
-  `employer_*` in the same transaction as the file row so the app detail shows what the PDF shows; `employer_fixed_at`
+  `employer_*` · `fixed_work_location` · `fixed_job_title` in the same transaction as the file row so the app detail
+  shows what the PDF shows; `employer_fixed_at`
   stays NULL — that NULL is the record that they are not 날인 시점 값. `employer_fixed_at` is the `→ SIGNED` history
   row's time (DB clock), the same as `signedAt`.
   계약 체결일 = the latest `→ SIGNED` history row (KST date). File `근로계약서-처리완료본-{id}.pdf`.
@@ -1115,8 +1119,9 @@ only — a 종이 계약 has no body.
   make throws is left out of the next runs for an hour (in process memory, `FILL_RETRY_AFTER_MS`) so a few contracts
   that always fail (a lost signature object, an image pdfkit cannot read) cannot hold the first 50 places forever.
   Storage not configured → nothing.
-- **Known limits**: 제2조 uses the 점포명 when 근무 장소 is empty, so renaming a store changes the app's 제2조 of a signed
-  contract (its PDF does not). Before running the migration on a database, check that no `SENT_ORIGINAL` · `SIGNED_COPY`
+- **제2조 of a signed contract** (app `articles`, `worker.jobTitle` and the 처리 완료본) uses the fixed 근무 장소 · 직무
+  when the party row has them; unsigned contracts and 보낸 원본 use the live values.
+- **Known limits**: Before running the migration on a database, check that no `SENT_ORIGINAL` · `SIGNED_COPY`
   row exists (nothing wrote them before; the new CHECK would refuse such rows without `sent_at`).
 - Admins see both kinds in `GET /contracts/:id` `documents` and download them through the existing route.
 

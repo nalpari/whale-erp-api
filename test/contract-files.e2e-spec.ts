@@ -231,6 +231,9 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
       employerCeoName: '김대표',
       employerPhone: '0212345678',
       employerFixedAt: null,
+      // 제2조도 만든 때 값 — 근무 장소가 빈 계약은 점포명, 직무는 직원 레코드
+      fixedWorkLocation: '파일 테스트 직영점',
+      fixedJobTitle: '매장',
     });
 
     await files.fillMissing(now);

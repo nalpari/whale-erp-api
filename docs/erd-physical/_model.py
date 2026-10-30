@@ -210,7 +210,10 @@ ADD = {
                          (None, "", "사용자 소재지 기본주소", "text", "employer_address", "날인 때 점포 사업자 주소를 고정 — 처리 완료본 사용자 칸 (WHALEERP-131)"),
                          (None, "", "사용자 소재지 상세주소", "text", "employer_address_detail", "날인 때 고정 — 처리 완료본 사용자 칸 (WHALEERP-131)"),
                          (None, "", "사용자 전화번호", "text", "employer_phone", "날인 때 점포 연락처를 고정 — 처리 완료본 사용자 칸 (WHALEERP-131)"),
-                         (None, "", "사용자 고정 일시", "datetime", "employer_fixed_at", "날인 때 사용자 칸을 고정한 시각. NULL 이면 고정 전에 체결된 계약 — 처리 완료본은 만드는 시점의 점포 정보로 만든다 (WHALEERP-131, 2026-10-29 김민식)")],
+                         (None, "", "사용자 고정 일시", "datetime", "employer_fixed_at", "날인 때 사용자 칸을 고정한 시각. NULL 이면 고정 전에 체결된 계약 — 처리 완료본은 만드는 시점의 점포 정보로 만든다 (WHALEERP-131, 2026-10-29 김민식)"),
+                         # 제2조 근무 장소 · 직무도 날인 시점 값 — 점포명 · 직원 직무가 바뀌어도 체결본 문장이 그대로 (WHALEERP-131, 2026-10-30 김민식)
+                         (None, "", "고정 근무 장소", "text", "fixed_work_location", "날인 때 제2조 근무 장소(비었으면 그때 점포명)를 고정 — 체결된 계약의 본문 · 처리 완료본 (WHALEERP-131, 2026-10-30 김민식)"),
+                         (None, "", "고정 직무", "text", "fixed_job_title", "날인 때 제2조 직무(비었으면 그때 직원 직무)를 고정 — 체결된 계약의 본문 · 처리 완료본 (WHALEERP-131, 2026-10-30 김민식)")],
     "work_schedules": [(None, "", "삭제 표시", "bool", "is_deleted", "변경 유형에 삭제가 있다"),
                        (None, "", "등록 일시", "datetime", "created_at", ""),
                        (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
