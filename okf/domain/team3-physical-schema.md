@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T02:54:57Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
 sources:
+  - id: contract-correction-reason
+    resource: ../../prisma/migrations/20261030120000_team3_contract_correction_reason/migration.sql
+    title: 수정 요청 사유 correction_reason 추가 · 거부 · 거절 사유 reject_reason 두 칸 삭제 (WHALEERP-635)
+    last_modified: 2026-10-30T09:00:00Z
   - id: bulk-exports
     resource: ../../prisma/migrations/20261029134408_team3_bulk_exports/migration.sql
     title: 직원 자료 일괄 저장 bulk_exports · bulk_export_download_logs (WHALEERP-336)
@@ -583,6 +587,16 @@ table document:
   `_build_prisma.py` now maps `integer[]` to `Int[]` and the `'{}'` default to `@default([])`. `schema.prisma` itself
   was not regenerated: on main it already drifts from the generator (model and enum order, a few remarks), so the
   hand-written blocks stay until someone regenerates the whole 3팀 section on purpose.
+- **수정 요청 사유 replaced the two 거부 · 거절 사유 columns** (WHALEERP-635, 2026-10-30 김민식). The 직원 앱 no longer
+  asks for a reason when rejecting a contract or an 소속 추가 확인, and asks for one (required, 1–100 chars) on a
+  수정 요청. `20261030120000_team3_contract_correction_reason` drops `contracts.reject_reason` and
+  `invitations.reject_reason` and adds `contracts.correction_reason` (text, comment 「수정 요청 사유 — 직원이 쓴 글,
+  100자」); old reasons are not moved — renaming would have shown an old 거부 사유 as a 수정 요청 사유. It went through
+  the generator the 2026-10-20 way: a copy of front's catalog was generated before and after the change (the only drift
+  was line endings), and the difference (`schema.sql` three lines, the table document) was applied here, with
+  `schema.prisma` edited by hand (two fields) and front's `docs/erd/README.md` and physical screens changed in the
+  front PR. Dropping a column breaks the old code's default `SELECT *` on `contracts`, so the API deploy should be
+  migrate-then-start with no old instance left running.
 - **The e-mail change pin is its own table, ahead of the logical ERD**
   (WHALEERP-191, 2026-10-20 노영주). `email_change_pins` keeps the same rules as
   the reset pin (hash only, five misses close it, 1-minute interval, 10 a day)

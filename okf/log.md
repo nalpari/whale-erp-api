@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-30
+* **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup](/api/staff-signup.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — WHALEERP-635: 직원 수정 요청이 사유(필수, NFC · 앞뒤 공백 뺀 1~100자, 400 문구 하나)를 받아 `contracts.correction_reason` 에 남기고(다시 요청하면 덮어씀, 고쳐 다시 보내도 남음) 관리자 상세에 `correctionReason` 으로 준다. 근로계약서 거부 · 소속 추가 거절은 사유를 받지 않고 본문을 읽지 않는다. `contracts.reject_reason` · `invitations.reject_reason` 삭제(옮기지 않음), 거부 알림 두 템플릿에서 거부사유를 뺐다(운영 알림 본문은 「#{근무지}」).
+
 ## 2026-10-29
 * **Update**: main 병합(api doduo, main #209 까지): okf 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api doduo, main #202 까지): okf/log 충돌은 양쪽 기록을 살렸다.

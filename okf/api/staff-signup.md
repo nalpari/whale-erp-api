@@ -4,7 +4,7 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:44:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
@@ -281,10 +281,11 @@ someone else, its new owner cannot sign up on it — handled by the phone check 
   exactly as at 근무지 더하기, record linked (`account_id`, `JOINED`, candidate cleared), its 발송 대기 contracts →
   서명 대기 (`STAFF`) with `sign_deadline_at = now + 30 days` (the deadline starts here, not at sending) and one
   `PUSH_CONTRACT_SENT` notice each. Returns `{ staffMemberId, storeName, contractIds }`.
-- `POST /me/affiliation-requests/:invitationId/reject` `{ reason? }` — reason optional, NFC-normalized and trimmed, then
-  at most 500 chars (400 otherwise — the same DTO rules as a contract 거부, JOIN-5). Invitation → `REJECTED` with `reject_reason`; the record is kept (운영 정책 JOI-08) and so is its
-  `candidate_account_id` (재발송 runs 판별 again anyway); its 발송 대기 contracts → 거부 (`PENDING_SEND → REJECTED`, `STAFF`)
-  with the same `reject_reason`. After commit, ops notice `NTF_AFFILIATION_REJECTED` (related `STAFF_MEMBER`, link
+- `POST /me/affiliation-requests/:invitationId/reject` — no reason and no body read (WHALEERP-635, 2026-10-30 — the
+  직원 앱 only asks for confirmation; an old app's `{ reason }` is ignored, not a 400). `invitations.reject_reason` was
+  dropped. Invitation → `REJECTED`; the record is kept (운영 정책 JOI-08) and so is its
+  `candidate_account_id` (재발송 runs 판별 again anyway); its 발송 대기 contracts → 거부 (`PENDING_SEND → REJECTED`, `STAFF`).
+  After commit, ops notice `NTF_AFFILIATION_REJECTED` (related `STAFF_MEMBER`, link
   `/staff-members/:id`, event key = invitation id) to the admins who wrote those contracts (`created_by`) — only those
   still active and managing that store (`storeManagers`, with its 가맹 masking rule) — or the store's managers if none. `EMAIL_AFFILIATION_REJECTED` stays switched off — not sent. 204.
 - Errors: 404 `AFFILIATION_REQUEST_NOT_FOUND` (no such request, not this account's — other candidate or other name —,
