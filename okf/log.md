@@ -1,6 +1,13 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: main 병합(api krabby, main #223 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Notification templates](/api/notification-templates.md) · [Contracts API](/api/contracts-api.md) — api #219 리뷰(노영주) 참고 1 · 2: 버튼을 다는 템플릿마다 링크 변수 이름까지 둔다(`ALIMTALK_BUTTONS` — 이름 · `링크`). 버튼 링크 표시가 그 변수 하나가 아니면(없음 · 초대코드 · 근무지로 옮김 · 둘) 저장 · 근로계약 발송 전 검사 · 발송이 모두 막는다(`LINK_MISMATCH`). 링크 origin 비교는 링크가 늘 `STAFF_APP_URL` 에서 나와 두지 않았다.
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Notification templates](/api/notification-templates.md) · [Contracts API](/api/contracts-api.md) — api #219 code-review: 버튼 이름 · 버튼 설정 검사를 `src/alimtalk/alimtalk-buttons.ts`(`alimtalkButtonProblem`)로 모아 발송 · 근로계약 발송 전 검사(503, 쓰기 전) · 템플릿 저장 검사가 같이 쓴다 — 설정 오류가 커밋 뒤 「다시 보내 주세요」로 보이지 않게. 저장 검사는 버튼 이름이 없는 템플릿 코드의 알림톡 버튼 링크도 막는다.
+* **Update**: main 병합(api krabby, main #218 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: main 병합(api krabby, main #216 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: main 병합(api krabby, main #214 까지): okf 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) · [Notification templates](/api/notification-templates.md) — 알림톡에 버튼 링크를 웹링크(WL) 버튼으로 싣는다(WHALEERP-636, 노영주 요청 2026-10-30). `content.at.button` 에 `{ name, type: 'WL', url_mobile, url_pc }`, 이름은 코드 `ALIMTALK_BUTTON_NAMES`(템플릿 코드별 — 변수 목록은 관리 화면 저장 때 지워져 두지 않음). 이름이 없거나 http(s) 가 아닌 링크 · 버튼 링크가 둘 이상이면 보내기 전에 던지고, 템플릿 저장 검사도 알림톡 버튼 링크 변수를 하나까지만 받는다. 대체 문자 끝 링크는 그대로. 근로계약 가입 초대 · 소속 추가 확인 요청의 대체 문자 필수(503)는 카카오 검수 전이라 유지. 버튼 이름(「가입하기」 · 「요청 확인하기」) · PC 링크 같은 값은 재영 2026-10-30 확정, 링크는 지금처럼 STAFF_APP_URL 로 조합하고 카카오 템플릿은 하나(재영 정정 — 개발 서버 발송은 알림톡 대신 대체 문자로 갈 수 있음). 마이그레이션 없음.
 * **Update**: main 병합(api tyrogue, main #220 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api tyrogue, main #221 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Work schedules](/api/work-schedules.md) · [Notification templates](/api/notification-templates.md) · [naming](/conventions/naming.md) — 근무스케줄 변경 메일(WHALEERP-639, 운영 정책 NTF-14 · NTF-18 v262). 기본 템플릿 `EMAIL_SCHEDULE_CHANGED`(마이그레이션 `20261030142820`, 기본 템플릿 47건 · 메일 29). `noticeScheduleChange` 가 앱 푸시 발송 대기를 만들 때 보낼 메일을 돌려주고, 등록 · 수정 · 삭제 · 일괄 등록 · 지난 주 복사가 커밋 뒤에 `sendScheduleMail` 로 보낸다(직원마다 한 통, 버튼은 근무 탭 `/work`). 수신 설정 묶음을 끄면 메일도 없다. 메일 실패 · `MAIL_*` · `STAFF_APP_URL` 없음은 저장을 막지 않는다. 이력은 `notification_deliveries` EMAIL 행(SUCCEEDED · FAILED). 단위(알림 · 메일 발송 · 커밋 뒤 순서 · 롤백 · 메일 null) · e2e(등록 · 수정 · 삭제 · 일괄 등록 · SMTP 실패 · 수신 설정 끔). 스키마 변경 없음(ERD 그대로).

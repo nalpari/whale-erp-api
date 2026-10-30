@@ -1,14 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { findSendableTemplate } from '../notification-templates/find-template';
+import {
+  findSendableTemplate,
+  type SendableTemplate,
+} from '../notification-templates/find-template';
 import { renderTemplate } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  type AlimtalkButton,
   BizppurioClient,
   BizppurioError,
   type BizppurioMessage,
 } from './bizppurio.client';
 import { BIZPPURIO_CONFIG, type BizppurioConfig } from './bizppurio.config';
+import { alimtalkButtonOf, alimtalkButtonProblem } from './alimtalk-buttons';
 import { failureHeadOf } from './failure-reason';
 
 export type SendAlimtalkInput = {
@@ -44,6 +49,8 @@ export const isMobilePhone = (phone: string) =>
 const SMS_MAX_BYTES = 90;
 const LMS_SUBJECT = '[WHALE ERP]';
 const LOG_REASON_LENGTH = 1000;
+// 버튼 링크는 웹 주소만 싣는다(메일 버튼과 같다)
+const WEB_URL = /^https?:\/\//i;
 
 /**
  * 알림톡 발송의 공통 진입점. 각 도메인은 이 서비스만 주입받아 쓴다.
@@ -73,8 +80,9 @@ export class AlimtalkService {
   ) {}
 
   /**
-   * 알림톡이 실패했을 때 문자로 대신 보내는가(BIZPPURIO_SMS_FROM 이 있는가). 버튼을 아직 보내지 않아 버튼 링크는
-   * 대체 문자에만 실린다 — 링크가 꼭 가야 하는 호출부는 보내기 전에 확인한다.
+   * 알림톡이 실패했을 때 문자로 대신 보내는가(BIZPPURIO_SMS_FROM 이 있는가). 버튼 링크는 알림톡 버튼과 대체 문자 끝에
+   * 함께 실린다. 카카오가 아직 검수하지 않은 템플릿(본문 · 버튼이 등록과 다름)은 알림톡이 거절되고 대체 문자로만 닿으므로,
+   * 링크가 꼭 가야 하는 호출부는 보내기 전에 확인한다.
    */
   hasSmsFallback(): boolean {
     return this.config.smsFrom !== null;
@@ -105,6 +113,7 @@ export class AlimtalkService {
       input.variables,
       input.maskedVariables,
     );
+    const button = buttonsOf(templateCode, template.variables, links);
 
     // CHECK notification_templates_alimtalk_fields 가 ALIMTALK 행에 값을 보장한다.
     const kakaoTemplateCode = template.kakaoTemplateCode as string;
@@ -123,6 +132,7 @@ export class AlimtalkService {
             senderkey: this.config.senderKey,
             templatecode: kakaoTemplateCode,
             message: body,
+            ...(button.length ? { button } : {}),
           },
         },
         // 문자에는 버튼이 없어 버튼 링크를 본문 끝에 줄을 바꿔 붙인다. 그러지 않으면
@@ -200,6 +210,41 @@ export class AlimtalkService {
       );
     }
   }
+}
+
+/**
+ * 버튼 링크 값을 웹링크(WL) 버튼 하나로. PC 카카오톡에도 보이게 모바일 · PC 링크를 같은 값으로 싣는다(직원 근무 앱은
+ * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 버튼 설정이 맞지 않는 템플릿(alimtalkButtonProblem)과 웹 주소가
+ * 아닌 링크는 보내기 전에 던진다 — 오류 메시지에 링크(토큰)는 담지 않는다. 링크가 없으면(선택 변수를 비움) 버튼도 없다 —
+ * 버튼을 등록한 템플릿이면 알림톡은 거절되고 대체 문자로 간다.
+ */
+function buttonsOf(
+  templateCode: string,
+  variables: SendableTemplate['variables'],
+  links: readonly string[],
+): AlimtalkButton[] {
+  const problem = alimtalkButtonProblem(templateCode, variables);
+  const button = alimtalkButtonOf(templateCode);
+  if (problem === 'NO_BUTTON_NAME' || (links.length && !button))
+    throw new Error(`알림톡 템플릿 ${templateCode} 의 버튼 이름이 없습니다`);
+  if (problem === 'LINK_MISMATCH')
+    throw new Error(
+      `알림톡 템플릿 ${templateCode} 의 버튼 링크 변수는 ${button?.link} 하나여야 합니다`,
+    );
+  const [link] = links;
+  if (link === undefined || !button) return [];
+  if (!WEB_URL.test(link))
+    throw new Error(
+      `알림톡 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,
+    );
+  return [
+    {
+      name: button.name,
+      type: 'WL',
+      url_mobile: link,
+      url_pc: link,
+    },
+  ];
 }
 
 /**
