@@ -4,16 +4,24 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wages (최저임금 공통코드), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T05:50:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T05:50:00Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-29T08:20:16Z
+    last_modified: 2026-10-30T05:50:00Z
+  - id: minimum-wage
+    resource: ../../src/contracts/minimum-wage.ts
+    title: 최저임금 공통코드 · 수습 중 시급 검사
+    last_modified: 2026-10-30T05:50:00Z
+  - id: minimum-wage-migration
+    resource: ../../prisma/migrations/20261030140000_team3_minimum_wage_code/migration.sql
+    title: 최저임금 공통코드 데이터 마이그레이션
+    last_modified: 2026-10-30T05:50:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -426,7 +434,8 @@ skipped (malformed with a warning log). No row in force on `startDate` (before t
 in 공통코드 관리 — register it after the 고시 (August) and before 1 January, or contracts starting
 that year are checked against the previous year's lower value. Only the 상세's 사용 상태 counts:
 turning the group off does not turn the check off (법정 하한), and a 코드명 like `10,320` drops that
-row (the check then passes for its dates — keep 코드명 digits only). `GET /contracts/minimum-wages` (작성 or 수정 권한) returns `{ items:
+row — its dates fall back to the previous 시행일's value, or go unchecked if there is none (keep
+코드명 digits only). `GET /contracts/minimum-wages` (작성 or 수정 권한) returns `{ items:
 [{ effectiveDate, hourlyWage }] }` ascending, for the 작성 화면's 시급 help and 수습 check.
 
 **초대 유형 is decided, not sent.** On 초안 저장 (a new `POST`, or a `PUT` that
