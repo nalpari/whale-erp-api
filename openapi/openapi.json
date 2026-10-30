@@ -9011,16 +9011,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RejectMyContractDto"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "",
@@ -9031,9 +9021,6 @@
                 }
               }
             }
-          },
-          "400": {
-            "description": "사유 500자 넘음 · null"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -9056,7 +9043,7 @@
             "bearer": []
           }
         ],
-        "summary": "거부 — 사유는 선택(500자)",
+        "summary": "거부 — 사유는 받지 않는다(WHALEERP-635, 본문은 읽지 않는다)",
         "tags": [
           "MyContracts"
         ]
@@ -9075,6 +9062,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestMyContractCorrectionDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "",
@@ -9085,6 +9082,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "사유 없음 · 비었음(앞뒤 공백을 지운 뒤) · 100자 넘음"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -9107,7 +9107,7 @@
             "bearer": []
           }
         ],
-        "summary": "수정 요청 — 계약서가 틀렸을 때(대조 결과와 상관없이). 따로 받는 내용은 없다",
+        "summary": "수정 요청 — 계약서가 틀렸을 때(대조 결과와 상관없이). 사유는 필수(1~100자, WHALEERP-635)",
         "tags": [
           "MyContracts"
         ]
@@ -16413,22 +16413,12 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RejectAffiliationRequestDto"
-              }
-            }
-          }
-        },
         "responses": {
           "204": {
             "description": ""
           },
           "400": {
-            "description": "형식 오류 · 사유 500자 넘음"
+            "description": "형식 오류(요청 ID)"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -26047,10 +26037,10 @@
             "nullable": true,
             "description": "최종 처리일(ISO 8601) — 가장 최근 상태 변경 일시. 이력이 없으면 null"
           },
-          "rejectReason": {
+          "correctionReason": {
             "type": "string",
             "nullable": true,
-            "description": "직원이 남긴 거부 사유 — 거부된 계약에만, 그 밖은 null"
+            "description": "직원이 남긴 수정 요청 사유(1~100자, WHALEERP-635) — 수정 요청된 계약에만, 그 밖은 null. 사유를 받기 전의 수정 요청도 null.\n고쳐 다시 보내도 행에는 남지만 다른 상태에서는 주지 않는다(지난 사유가 지금 사유처럼 읽히지 않게)"
           },
           "previousContractId": {
             "type": "number",
@@ -26152,7 +26142,7 @@
           "lastSentAt",
           "signDeadlineAt",
           "lastProcessedAt",
-          "rejectReason",
+          "correctionReason",
           "previousContractId",
           "registeredAt",
           "registeredBy",
@@ -26308,15 +26298,6 @@
           "signedAt"
         ]
       },
-      "RejectMyContractDto": {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "maxLength": 500
-          }
-        }
-      },
       "MyContractActionResponseDto": {
         "type": "object",
         "properties": {
@@ -26334,6 +26315,21 @@
         "required": [
           "contractId",
           "status"
+        ]
+      },
+      "RequestMyContractCorrectionDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "수정 요청 사유 — 앞뒤 공백을 지운 뒤 1~100자",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "시급이 안내받은 금액과 다릅니다"
+          }
+        },
+        "required": [
+          "reason"
         ]
       },
       "MyContractListItemDto": {
@@ -33452,16 +33448,6 @@
           "storeName",
           "contractIds"
         ]
-      },
-      "RejectAffiliationRequestDto": {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "description": "거절 사유 — 함께 온 계약의 거부 사유로도 남는다",
-            "maxLength": 500
-          }
-        }
       },
       "BpHolidayTargetResponseDto": {
         "type": "object",
