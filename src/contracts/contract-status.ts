@@ -520,7 +520,7 @@ export const signDeadlineConflict = () =>
 /**
  * 직원 수정 요청 — 계약서가 틀렸을 때, 서명 대기에서만 수정 요청으로 바꾸고 직원이 쓴 사유를 같은 UPDATE 로 남긴다(WHALEERP-635).
  * 사유는 부르는 쪽(DTO)이 다듬은 1~100자 그대로다. 다시 요청하면 덮어쓰고, 관리자가 고쳐 다시 보내도 지우지 않는다.
- * 서명 기한은 멈춘다 — 만료 배치는 서명 대기만 본다. HTTP 경로와 본인 대조는 [API] 날인 · 거부 처리(WHALEERP-145)에서 붙인다.
+ * 서명 기한은 멈춘다 — 만료 배치는 서명 대기만 본다. HTTP 경로 · 내 계약 확인은 MyContractsService 가 한다.
  */
 export async function requestCorrection(
   db: Prisma.TransactionClient,
