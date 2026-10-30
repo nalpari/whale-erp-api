@@ -65,7 +65,7 @@ sources:
 
 - **고칠 때마다 바뀌기 전 행 전체를 `notification_template_histories` 에 남긴다** — 수정 · 되돌리기 · 사용 여부 모두. 한
   트랜잭션에서 이력을 쓰고, 고치기가 0건(그사이 누가 고침)이면 함께 되돌린다.
-- **기본 문구**는 기본 템플릿 46건(처음 넣은 40건과 뒤에 더한 `EMAIL_LEAD_REPLY` · `NTF_SIGNUP_UNDER_AGE` · `TALK_STAFF_AFFILIATION_REQUEST` · `EMAIL_STAFF_AFFILIATION_REQUEST` · `EMAIL_EXCEL_READY` · `EMAIL_EXCEL_FAILED`)의 `default_title` · `default_body` · `default_variables` 다(NOTIFY-17). 목록 · 상세의
+- **기본 문구**는 기본 템플릿 47건(처음 넣은 40건과 뒤에 더한 `EMAIL_LEAD_REPLY` · `NTF_SIGNUP_UNDER_AGE` · `TALK_STAFF_AFFILIATION_REQUEST` · `EMAIL_STAFF_AFFILIATION_REQUEST` · `EMAIL_EXCEL_READY` · `EMAIL_EXCEL_FAILED` · `EMAIL_SCHEDULE_CHANGED`)의 `default_title` · `default_body` · `default_variables` 다(NOTIFY-17). 목록 · 상세의
   `hasDefault` 가 되돌리기 단추를 보일지 정한다. 채널이 바뀌어 기본 문구가 지금 채널 규칙에 맞지 않으면 400 으로 되돌리지
   않는다(NOTIFY-18).
 - **급여명세서를 다시 보내도 처음 발송과 같은 문구다**(쟁점 NOTI-6, 2026-10-20 재영 · 운영 정책 NTF-20).
