@@ -19,6 +19,11 @@ describe('ListBpAdminsDto roleTypeCodes', () => {
     expect(parse('FM,FA').dto.roleTypeCodes).toEqual(['FM', 'FA']);
     expect(parse(['BA', 'FA']).dto.roleTypeCodes).toEqual(['BA', 'FA']);
     expect(parse('FM,FA').errors).toEqual([]);
+    expect(parse(['FM,FA', 'BA']).dto.roleTypeCodes).toEqual([
+      'FM',
+      'FA',
+      'BA',
+    ]);
   });
 
   it('빈 값은 조건 없음 — 400 이 아니다', () => {
@@ -30,6 +35,10 @@ describe('ListBpAdminsDto roleTypeCodes', () => {
   it('BP 관리자 목록의 세 역할이 아니면 400', () => {
     expect(parse('BM').errors).not.toEqual([]);
     expect(parse('FM,XX').errors).not.toEqual([]);
+  });
+
+  it('세 개를 넘게 보내면 400', () => {
+    expect(parse('BA,FM,FA,FA').errors).not.toEqual([]);
   });
 });
 
