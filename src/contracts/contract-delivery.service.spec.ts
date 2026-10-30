@@ -702,6 +702,7 @@ describe('ContractDeliveryService', () => {
       >;
       const saved = names.TALK_STAFF_INVITATION;
       delete names.TALK_STAFF_INVITATION;
+      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
       try {
         tx.notificationTemplate.findUnique.mockResolvedValue({
           isActive: true,
@@ -716,8 +717,34 @@ describe('ContractDeliveryService', () => {
         );
         expect(tx.invitation.updateMany).not.toHaveBeenCalled();
         expect(tx.contract.update).not.toHaveBeenCalled();
+        expect(error).toHaveBeenCalledWith(
+          '가입 초대 템플릿 버튼 설정이 맞지 않음: NO_BUTTON_NAME 버튼 링크 표시=[링크]',
+        );
       } finally {
         names.TALK_STAFF_INVITATION = saved;
+        error.mockRestore();
+      }
+    });
+
+    it('버튼 링크 표시가 다른 변수로 옮겨졌으면 503 — 로그에는 표시된 변수와 기대 변수 이름만 남긴다(api #219)', async () => {
+      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      try {
+        tx.notificationTemplate.findUnique.mockResolvedValue({
+          isActive: true,
+          channel: 'ALIMTALK',
+          title: null,
+          body: '…',
+          variables: [{ name: '근무지', isButtonLink: true }],
+          kakaoTemplateCode: 'WHALE_INVITE_01',
+        });
+        await expect(service().prepare(t(), input(), NOW)).rejects.toThrow(
+          '가입 초대 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.',
+        );
+        expect(error).toHaveBeenCalledWith(
+          '가입 초대 템플릿 버튼 설정이 맞지 않음: LINK_MISMATCH 버튼 링크 표시=[근무지] 기대=링크',
+        );
+      } finally {
+        error.mockRestore();
       }
     });
 

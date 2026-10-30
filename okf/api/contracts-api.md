@@ -37,7 +37,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-10-30T06:04:46Z
+    last_modified: 2026-10-30T06:18:28Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
