@@ -4,12 +4,12 @@ title: BP role groups
 description: 관리자 웹 「BP 권한 그룹 관리」(MN000013) — BA · FA groups scoped by the caller's role, codes numbered per type, names unique per (BP, 관리계정), per-menu CRUD capped by the fixed role ∩ the caller's own rights, and deletion that moves linked admins.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:27:29Z }
 sources:
   - id: bp-role-groups-controller
     resource: ../../src/bp-role-groups/bp-role-groups.controller.ts
     title: /bp-role-groups routes and the MN000013 permission per action
-    last_modified: 2026-10-21T09:00:00Z
+    last_modified: 2026-10-30T02:27:29Z
   - id: bp-role-group-access
     resource: ../../src/bp-role-groups/bp-role-group-access.ts
     title: Caller scope, visible groups, writable type, cell block reasons, ceiling intersection
@@ -17,7 +17,7 @@ sources:
   - id: bp-role-groups-service
     resource: ../../src/bp-role-groups/bp-role-groups.service.ts
     title: BpRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T01:57:17Z
   - id: bp-role-group-menus-service
     resource: ../../src/bp-role-groups/bp-role-group-menus.service.ts
     title: BpRoleGroupMenusService (tree · save · preview · franchise-master view)
@@ -25,7 +25,7 @@ sources:
   - id: bp-role-group-dto
     resource: ../../src/bp-role-groups/dto/bp-role-group.response.dto.ts
     title: Response shapes extending the platform DTOs (roleTypeCode narrowed)
-    last_modified: 2026-10-20T08:30:00Z
+    last_modified: 2026-10-30T01:57:17Z
   - id: bp-role-groups-e2e
     resource: ../../test/bp-role-groups.e2e-spec.ts
     title: Real-DB proof — five roles' scope, FA names per 가맹 마스터, ceiling 400, delete move
@@ -71,7 +71,9 @@ for the platform BP. The `bpCodeId` query the request first had is gone. A group
 가맹 마스터's FA, a fixed role, a platform role, a deleted group — is 404, so an id does not
 reveal that it exists. The role check runs before the self-link check, so a caller who cannot
 write sees `NO_PERMISSION` even on its own group; `SELF_LINKED` only appears for a writable
-group the caller is linked to. `NO_PERMISSION` keeps the platform label 「권한 관리 메뉴 권한
+group the caller is linked to — and only for delete and menu save. Name and description of one's
+own group are editable (재영 2026-10-30, as on [platform role groups](/api/platform-role-groups.md)),
+so `editBlockedReason` is `NO_PERMISSION` or null. `NO_PERMISSION` keeps the platform label 「권한 관리 메뉴 권한
 없음」 — one enum serves both screens' popups, and on this screen it also covers a role that cannot
 write (a wider label was tried and dropped on 2026-10-21 so the platform screen stays as it was).
 

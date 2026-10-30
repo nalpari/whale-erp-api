@@ -240,7 +240,7 @@ describe('BpRoleGroupsService', () => {
       });
     });
 
-    it('본인 연결 그룹은 SELF_LINKED', async () => {
+    it('본인 연결 그룹은 권한명 · 설명은 고치고, 삭제만 SELF_LINKED', async () => {
       prisma.roleGroup.findFirst.mockResolvedValue(
         group({
           roleGroupId: 3,
@@ -249,8 +249,9 @@ describe('BpRoleGroupsService', () => {
         }),
       );
       expect(await service.detail(FM, 3)).toMatchObject({
-        isEditable: false,
-        editBlockedReason: 'SELF_LINKED',
+        isEditable: true,
+        editBlockedReason: null,
+        isDeletable: false,
         deleteBlockedReason: 'SELF_LINKED',
         isSelfLinked: true,
       });
@@ -333,7 +334,7 @@ describe('BpRoleGroupsService', () => {
   describe('update', () => {
     const dto = { updatedAt: UPDATED_AT, name: '새 이름' };
 
-    it('범위 밖 404 · 역할 403 · 본인 연결 403', async () => {
+    it('범위 밖 404 · 역할 403', async () => {
       prisma.roleGroup.findFirst.mockResolvedValueOnce(null);
       await expect(service.update(BM, 5, dto)).rejects.toThrow(
         NotFoundException,
@@ -341,11 +342,17 @@ describe('BpRoleGroupsService', () => {
       await expect(service.update(BA, 5, dto)).rejects.toThrow(
         ForbiddenException,
       );
-      prisma.roleGroup.findFirst.mockResolvedValue(group({ roleGroupId: 2 }));
-      await expect(service.update(BM, 2, dto)).rejects.toThrow(
-        ForbiddenException,
-      );
       expect(tx.roleGroup.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('본인 연결 그룹도 권한명 · 설명은 고친다(재영 2026-10-30)', async () => {
+      prisma.roleGroup.findFirst
+        .mockResolvedValueOnce(group({ roleGroupId: 2 }))
+        .mockResolvedValueOnce(null);
+      await service.update(BM, 2, dto);
+      expect(tx.roleGroup.updateMany.mock.calls[0][0]).toMatchObject({
+        where: { roleGroupId: 2 },
+      });
     });
 
     it('같은 ms 일 때만 고치고, 아니면 409', async () => {
