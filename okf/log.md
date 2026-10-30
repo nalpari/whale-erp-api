@@ -1,6 +1,9 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: main 병합(api tyrogue, main #220 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: main 병합(api tyrogue, main #221 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Work schedules](/api/work-schedules.md) · [Notification templates](/api/notification-templates.md) · [naming](/conventions/naming.md) — 근무스케줄 변경 메일(WHALEERP-639, 운영 정책 NTF-14 · NTF-18 v262). 기본 템플릿 `EMAIL_SCHEDULE_CHANGED`(마이그레이션 `20261030142820`, 기본 템플릿 47건 · 메일 29). `noticeScheduleChange` 가 앱 푸시 발송 대기를 만들 때 보낼 메일을 돌려주고, 등록 · 수정 · 삭제 · 일괄 등록 · 지난 주 복사가 커밋 뒤에 `sendScheduleMail` 로 보낸다(직원마다 한 통, 버튼은 근무 탭 `/work`). 수신 설정 묶음을 끄면 메일도 없다. 메일 실패 · `MAIL_*` · `STAFF_APP_URL` 없음은 저장을 막지 않는다. 이력은 `notification_deliveries` EMAIL 행(SUCCEEDED · FAILED). 단위(알림 · 메일 발송 · 커밋 뒤 순서 · 롤백 · 메일 null) · e2e(등록 · 수정 · 삭제 · 일괄 등록 · SMTP 실패 · 수신 설정 끔). 스키마 변경 없음(ERD 그대로).
 * **Update**: main 병합(ponyta, main #221 까지): okf 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Store management](/api/stores.md) — 근로계약 근무지 선택지를 `GET /stores/options` 에서 `GET /contracts/store-options`(작성 또는 수정 권한, `@TargetBp()`)로 옮겼다(WHALEERP-638). 메뉴 권한 없는 경로라 가드가 탭 BP 를 정하지 않아 플랫폼 계정은 근무지가 없어 근로계약을 쓸 수 없었다. 플랫폼 계정이 헤더 없이 부르면 다른 근로계약 경로와 같은 400. 비밀번호 e2e 의 「메뉴 권한 없는 업무 API」 확인은 `GET /notifications` 로 바꿨다. 옛 경로를 지워 api 와 front 를 잇달아 배포한다(api 만 나가면 옛 front 의 작성 · 이어 쓰기가 오류 화면).
 * **Update**: main 병합(api exeggcute, main #218 까지): okf/log 충돌은 양쪽 기록을 살렸다.
