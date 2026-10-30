@@ -78,9 +78,11 @@ http(s), or more than one button-link value (one named button is registered per 
 before anything is sent; the error carries the template code, never the link.
 An optional link left empty sends no button. The two names (`TALK_STAFF_INVITATION` 「가입하기」,
 `TALK_STAFF_AFFILIATION_REQUEST` 「요청 확인하기」) and the same link for PC were fixed by 재영
-(2026-10-30); the templates will be registered with Kakao under them (not yet approved). The link is registered as a fixed domain per
-environment with the path as a variable (`/invite#token=…`, `/affiliations`) — whether Kakao
-accepts a `#` in the variable part is still to be confirmed at registration.
+(2026-10-30); the templates will be registered with Kakao under them (not yet approved). The link
+is built from `STAFF_APP_URL` as before (`/invite#token=…`, `/affiliations`) and there is one Kakao
+template per message, not one per environment (재영 2026-10-30) — so a send from a server whose
+`STAFF_APP_URL` differs from the registered link (the dev server) may be rejected as an 알림톡 and
+reach the 직원 only as the SMS fallback.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`
