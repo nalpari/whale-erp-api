@@ -100,7 +100,7 @@ PostgreSQL.[^batch-design]
 hash of a job-name string — not any row in `contracts`. Postgres
 has no idea what that integer means; it only tracks who grabbed it
 first.[^batch-design] Jobs with different names (`contract-expire`, `staff-retire`,
-`lead-purge`, `todo-due-soon`, `work-schedule-purge`, `attendance-purge`, `public-holiday-sync`, `excel-export`, `excel-download-purge`, `bulk-export` and `bulk-export-file-purge` today, the designed `contract-expiry-reminder` once built) run fully
+`lead-purge`, `todo-due-soon`, `work-schedule-purge`, `attendance-purge`, `public-holiday-sync`, `excel-export`, `excel-download-purge`, `bulk-export`, `bulk-export-file-purge` and `contract-files` (10분, 근로계약서 파일 채우기 — [Contracts API](/api/contracts-api.md), no lock: the unique index keeps one copy) today, the designed `contract-expiry-reminder` once built) run fully
 independently of each other. Nothing in the database enforces that
 separation — reusing a name for an unrelated job makes it block that job too.
 `BATCH_JOB` keeps every name in one place so a collision is visible. Request

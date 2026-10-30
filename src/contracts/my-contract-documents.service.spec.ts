@@ -95,7 +95,10 @@ describe('MyContractDocumentsService', () => {
     expect(args.where).toEqual({
       contractDocumentId: 5,
       contractId: 41,
-      kind: { not: 'SIGNATURE' },
+      // 직원 앱이 쓰는 종류만 — 처리 완료본 · 종이 계약 날인본 · 임금계약서
+      kind: {
+        in: ['SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT'],
+      },
     });
   });
 
@@ -155,7 +158,7 @@ describe('MyContractDocumentsService', () => {
     },
   );
 
-  it.each(['SENT_ORIGINAL', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT'])(
+  it.each(['PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT'])(
     '처리 완료본이 아닌 파일(%s)은 서명 대기에서도 받는다',
     async (kind) => {
       prisma.contract.findFirst.mockResolvedValue({
@@ -177,5 +180,24 @@ describe('MyContractDocumentsService', () => {
   it('주소 만들기가 실패하면 그 오류를 그대로 올린다', async () => {
     storage.downloadUrl.mockRejectedValue(new Error('s3 down'));
     await expect(service().downloadUrl(77, 41, 5)).rejects.toThrow('s3 down');
+  });
+
+  it('보낸 원본은 직원 앱이 받지 않는다 — 고치기 전 · 되돌린 발송의 원본에 다른 사람 정보가 있을 수 있다(api #211 리뷰)', async () => {
+    await service().downloadUrl(77, 41, 5);
+    const [args] = prisma.contractDocument.findFirst.mock.calls[0] as [
+      Prisma.ContractDocumentFindFirstArgs,
+    ];
+    expect(args.where).toEqual({
+      contractDocumentId: 5,
+      contractId: 41,
+      // 직원 앱이 쓰는 종류만 — 처리 완료본 · 종이 계약 날인본 · 임금계약서
+      kind: {
+        in: ['SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT'],
+      },
+    });
+    prisma.contractDocument.findFirst.mockResolvedValue(null);
+    await expect(service().downloadUrl(77, 41, 5)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });

@@ -68,6 +68,7 @@ import {
   type DispatchResult,
   type PendingInvite,
 } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import {
   applyStartedTerms,
   refixHiredDate,
@@ -93,7 +94,12 @@ import {
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
-import { CONTRACT_TERMS_SELECT, contractTermsOf, hhmm } from './contract-terms';
+import {
+  CONTRACT_TERMS_SELECT,
+  contractTermsOf,
+  hhmm,
+  weeklyMinutesOf,
+} from './contract-terms';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 import {
   ACCESS_DENIED_MESSAGE,
@@ -313,22 +319,8 @@ function checkInput(dto: CreateContractDto): void {
   checkProbation(dto);
 }
 
-const minutesOf = (hm: string) =>
-  Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
-
-/** 주 소정근로시간(분) — 요일마다 종업 − 시업 − 휴게의 합 */
-export function weeklyMinutesOf(workDays: ContractWorkDayDto[]): number {
-  return workDays.reduce(
-    (sum, d) =>
-      sum +
-      minutesOf(d.endTime) -
-      minutesOf(d.startTime) -
-      (d.breakStartTime && d.breakEndTime
-        ? minutesOf(d.breakEndTime) - minutesOf(d.breakStartTime)
-        : 0),
-    0,
-  );
-}
+// 주 소정근로시간 계산은 계약서 조항과 같이 쓴다(contract-terms, WHALEERP-131)
+export { weeklyMinutesOf };
 
 /**
  * 주휴일(노무사 확인 2026-10-14, 질문 4) — 주 소정근로시간이 15시간 이상이면 근무하지 않는 요일 하나를 관리자가 고른다.
@@ -982,6 +974,7 @@ export class ContractsService {
     private readonly scope: AdminScopeService,
     @Inject(STORAGE) private readonly storage: OptionalStorage,
     private readonly delivery: ContractDeliveryService,
+    private readonly files: ContractFilesService,
     @Inject(PERSONAL_DATA_KEY) private readonly key: Buffer | null,
   ) {}
 
@@ -1449,11 +1442,14 @@ export class ContractsService {
    * 확인 요청에 답했으면('ANSWERED') 계약은 그 답으로 서명 대기 · 거부라 지금 상태를 싣고 처리 결과는 둔다. 보냈거나 보낼 것이 없으면
    * 그대로다(다시 읽지 않는다). 지금 상태를 읽다 실패하면 저장은 이미 끝났으니 오류로 답하지 않는다 — 500 이면 화면이 저장 실패로
    * 알고 다시 저장한다. 계산한 상태에 처리 결과 null 을 싣고 로그만 남긴다.
+   * 나갔으면(답한 것 포함) 그 발송의 보낸 원본을 만든다(WHALEERP-131) — 기다리지 않는다. 보내지 않은 저장(임시저장 · 종이 계약)은
+   * 만들 것이 없어 ContractFilesService 가 건너뛴다.
    */
   private async settledResult(
     result: CreatedContractResponseDto,
     sent: DispatchResult,
   ): Promise<CreatedContractResponseDto> {
+    if (sent !== false) this.files.afterSent(result.contractId);
     if (sent === true) return result;
     const now = await this.prisma.contract
       .findUnique({
@@ -1510,7 +1506,7 @@ export class ContractsService {
         draftAction: true,
         sentAt: true,
         signDeadlineAt: true,
-        rejectReason: true,
+        correctionReason: true,
         resendCount: true,
         previousContractId: true,
         // 이어지는 체결된 재계약 — 있으면 「새 계약」을 다시 띄우지 않는다(WHALEERP-156). 진행 중 재계약은 치지 않는다 — 새
@@ -1652,7 +1648,9 @@ export class ContractsService {
       lastSentAt: iso(c.sentAt),
       signDeadlineAt: iso(c.signDeadlineAt),
       lastProcessedAt: iso(c.contractStatusHistories[0]?.changedAt),
-      rejectReason: c.status === 'REJECTED' ? c.rejectReason : null,
+      // 사유는 고쳐 다시 보내도 행에 남지만, 지난 사유가 지금 사유처럼 읽히지 않게 수정 요청일 때만 준다(거부 사유와 같던 방식)
+      correctionReason:
+        c.status === 'CORRECTION_REQUESTED' ? c.correctionReason : null,
       resendCount: c.resendCount ?? 0,
       previousContractId: c.previousContractId,
       renewedBy: c.contractsAsPrevious[0]?.contractId ?? null,
@@ -2391,7 +2389,7 @@ export class ContractsService {
   }
 
   /**
-   * 종이 계약 날인본 내려받기 주소. 계약 상세와 같은 업무 범위를 본 뒤 300초짜리 서명 주소를 준다 — 받으면 원래
+   * 계약서 파일(종이 계약 날인본 · 임금계약서 · 보낸 원본 · 처리 완료본) 내려받기 주소. 계약 상세와 같은 업무 범위를 본 뒤 300초짜리 서명 주소를 준다 — 받으면 원래
    * 파일 이름으로 저장된다. 다른 계약의 파일 ID 로는 받지 못한다(404).
    */
   async documentDownloadUrl(

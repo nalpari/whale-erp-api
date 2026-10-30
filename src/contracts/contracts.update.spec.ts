@@ -16,6 +16,7 @@ import {
 } from '../common/personal-data-cipher';
 import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractsService } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
@@ -208,6 +209,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
         { provide: ContractDeliveryService, useValue: delivery },
+        { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
         { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();
@@ -245,7 +247,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       draftAction: null,
       sentAt: null,
       signDeadlineAt: null,
-      rejectReason: null,
+      correctionReason: null,
       resendCount: 0,
       previousContractId: null,
       contractsAsPrevious: [],
@@ -342,7 +344,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         lastSentAt: null,
         signDeadlineAt: null,
         lastProcessedAt: '2026-10-12T01:00:00.000Z',
-        rejectReason: null,
+        correctionReason: null,
         resendCount: 0,
         previousContractId: null,
         registeredAt: null,
@@ -536,6 +538,10 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
               { provide: AdminScopeService, useValue: scope },
               { provide: STORAGE, useValue: null },
               { provide: ContractDeliveryService, useValue: delivery },
+              {
+                provide: ContractFilesService,
+                useValue: { afterSent: jest.fn() },
+              },
               { provide: PERSONAL_DATA_KEY, useValue: k },
             ],
           }).compile()
@@ -1105,6 +1111,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: storage },
           { provide: ContractDeliveryService, useValue: delivery },
+          { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
           { provide: PERSONAL_DATA_KEY, useValue: null },
         ],
       }).compile();

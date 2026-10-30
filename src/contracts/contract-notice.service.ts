@@ -29,7 +29,6 @@ type Target = {
   staffMemberId: number;
   staffName: string;
   storeName: string;
-  rejectReason: string | null;
   endDate: Date | null;
 };
 
@@ -78,24 +77,12 @@ export class ContractNoticeService {
     });
     if (!target) return;
     const { ops, mail } = TEMPLATES[event];
-    // 거부 운영 알림에는 근무지가 없고 거부 사유는 선택이다 — 템플릿에 없는 변수를 넘기면 렌더러가 던진다
-    // 거부 사유는 선택이라 비면 「없음」 — 넘기지 않으면 렌더러가 빈 문자열로 채워 「사유 · 」만 남는다
-    const reason: Record<string, string> =
-      event === 'REJECTED' ? { 거부사유: target.rejectReason || '없음' } : {};
-    const opsVariables: Record<string, string> =
-      event === 'REJECTED'
-        ? { 직원이름: target.staffName, ...reason }
-        : { 직원이름: target.staffName, 근무지: target.storeName };
+    // 날인 · 거부 · 만료 모두 직원 이름과 근무지다 — 거부 사유는 받지 않아 넘기지 않는다(WHALEERP-635). 템플릿에 없는 변수를
+    // 넘기면 렌더러가 던진다
+    const variables = { 직원이름: target.staffName, 근무지: target.storeName };
     await this.send(target, event, String(historyId), {
-      ops: { templateCode: ops, variables: opsVariables },
-      mail: {
-        templateCode: mail,
-        variables: {
-          직원이름: target.staffName,
-          근무지: target.storeName,
-          ...reason,
-        },
-      },
+      ops: { templateCode: ops, variables },
+      mail: { templateCode: mail, variables },
     });
   }
 
@@ -129,7 +116,6 @@ export class ContractNoticeService {
         contractId: true,
         staffMemberId: true,
         storeId: true,
-        rejectReason: true,
         endDate: true,
         staffMember: { select: { name: true } },
         contractParty: { select: { enteredName: true } },
@@ -146,7 +132,6 @@ export class ContractNoticeService {
       staffMemberId: c.staffMemberId,
       staffName: c.contractParty?.enteredName ?? c.staffMember.name,
       storeName: store?.name ?? '',
-      rejectReason: c.rejectReason,
       endDate: c.endDate,
     };
   }

@@ -706,7 +706,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       expect(first.resendCount).toBe(0);
       // 계정 없는 번호의 가입 초대라 재발송할 수 있다
       expect(first.canResend).toBe(true);
-      expect(first.rejectReason).toBeNull();
+      expect(first.correctionReason).toBeNull();
       expect(first.registeredAt).toBeNull();
       expect(first.registeredBy).toBeNull();
 
@@ -758,23 +758,33 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       );
     });
 
-    it('거부 사유는 거부된 계약에만 준다', async () => {
-      const { contractId } = await contracts.create(dto(nextPhone()), adminId);
+    it('상세는 수정 요청된 계약에만 직원이 남긴 수정 요청 사유를 주고 거부 사유 칸은 없다 — 고쳐 다시 보내도 행에는 남는다(WHALEERP-635)', async () => {
+      const phone = nextPhone();
+      const { contractId } = await contracts.create(dto(phone), adminId);
       await prisma.contract.update({
         where: { contractId },
-        data: { rejectReason: '근무 시간이 맞지 않아요' },
+        data: {
+          status: 'CORRECTION_REQUESTED',
+          correctionReason: '시급이 다릅니다',
+        },
       });
-      expect(
-        (await contracts.findOne(adminId, contractId)).rejectReason,
-      ).toBeNull();
+      const requested = await contracts.findOne(adminId, contractId);
+      expect(requested.correctionReason).toBe('시급이 다릅니다');
+      expect(requested).not.toHaveProperty('rejectReason');
 
-      await prisma.contract.update({
-        where: { contractId },
-        data: { status: 'REJECTED' },
-      });
-      expect((await contracts.findOne(adminId, contractId)).rejectReason).toBe(
-        '근무 시간이 맞지 않아요',
-      );
+      // 고쳐 다시 보내면 행에는 남지만 상세는 수정 요청일 때만 준다
+      await contracts.update(adminId, contractId, dto(phone));
+      const resent = await contracts.findOne(adminId, contractId);
+      expect(resent.status).toBe('PENDING_SEND');
+      expect(resent.correctionReason).toBeNull();
+      expect(
+        (
+          await prisma.contract.findUniqueOrThrow({
+            where: { contractId },
+            select: { correctionReason: true },
+          })
+        ).correctionReason,
+      ).toBe('시급이 다릅니다');
     });
 
     it('발송 대기 계약을 종료로 닫으면 이력을 남기고 나간 초대를 무효로 한다 — 행은 남는다', async () => {

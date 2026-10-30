@@ -25,7 +25,6 @@ describe('ContractNoticeService (근로계약 날인 · 거부 · 만료 · 갱�
     contractId: 41,
     staffMemberId: 3,
     storeId: 11,
-    rejectReason: null,
     endDate: new Date('2026-11-06T00:00:00Z'),
     staffMember: { name: '레코드이름' },
     contractParty: { enteredName: '홍길동' },
@@ -94,37 +93,24 @@ describe('ContractNoticeService (근로계약 날인 · 거부 · 만료 · 갱�
     });
   });
 
-  it('거부 — 운영 알림에는 근무지가 없고(템플릿에 없는 변수는 렌더러가 던진다) 사유가 있으면 싣는다', async () => {
-    prisma.contract.findUnique.mockResolvedValue(
-      contract({ rejectReason: '근무 시간이 달라요' }),
-    );
-
+  it('거부 — 날인과 같이 직원 이름 · 근무지만 싣는다(거부 사유는 받지 않는다, WHALEERP-635)', async () => {
     await service().statusChanged('REJECTED', 41, 502);
 
     expect(ops.notify).toHaveBeenCalledWith(
       expect.objectContaining({
         templateCode: 'NTF_CONTRACT_REJECTED',
-        variables: { 직원이름: '홍길동', 거부사유: '근무 시간이 달라요' },
+        variables: { 직원이름: '홍길동', 근무지: '모리커피 연남점' },
         eventKey: '502',
       }),
     );
     expect(mail.send).toHaveBeenCalledWith(
       expect.objectContaining({
         templateCode: 'EMAIL_CONTRACT_REJECTED',
-        variables: expect.objectContaining({
+        variables: {
+          직원이름: '홍길동',
           근무지: '모리커피 연남점',
-          거부사유: '근무 시간이 달라요',
-        }) as object,
-      }),
-    );
-  });
-
-  it('거부 사유가 없으면 「없음」 — 비우면 렌더러가 「사유 · 」만 남긴다', async () => {
-    await service().statusChanged('REJECTED', 41, 502);
-
-    expect(ops.notify).toHaveBeenCalledWith(
-      expect.objectContaining({
-        variables: { 직원이름: '홍길동', 거부사유: '없음' },
+          링크: 'https://dev.whaleerp.co.kr/contracts/41',
+        },
       }),
     );
   });
