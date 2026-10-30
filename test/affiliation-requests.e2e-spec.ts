@@ -5,6 +5,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 import {
   BizppurioClient,
   BizppurioError,
@@ -253,6 +254,7 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       staffMemberId: r.staffMemberId,
       storeName: '소속 추가 점포',
       contractIds: [r.contractId],
+      hqSharingConsentRecorded: null, // 직영점이라 묻지 않았다
     });
     const c = await contractOf(r.contractId);
     expect(c.status).toBe('PENDING_SIGNATURE');
@@ -353,13 +355,16 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       },
       select: {
         title: true,
+        body: true,
         relatedType: true,
         relatedId: true,
         notificationRecipients: { select: { adminAccountId: true } },
       },
     });
+    // 거절 사유 줄은 없다(WHALEERP-635 — 20261030120100 템플릿)
     expect(notice).toEqual({
-      title: '남도현 님이 소속 추가 확인을 거절했습니다',
+      title: '소속 추가 거절',
+      body: '남도현 님이 소속 추가 요청을 거절했습니다.\n\n- 근무지: 소속 추가 점포\n\n필요하면 소속 추가를 다시 요청해 주세요.',
       relatedType: 'STAFF_MEMBER',
       relatedId: r.staffMemberId,
       notificationRecipients: [{ adminAccountId: adminId }],
@@ -559,6 +564,81 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
         .send({ reason: 'ㄱ'.repeat(501) })
         .expect(204);
       expect((await contractOf(r.contractId)).status).toBe('REJECTED');
+    });
+
+    it('가맹점 요청 — 보인 문구 버전이 지금과 다르거나 빠지면 수락은 마치고 동의만 남기지 않는다(ATT-30 v252 · v253)', async () => {
+      // 이 파일의 점포는 직영이다 — 요청을 만든 뒤(관리자 범위는 직영 기준으로 맞춰 두었다) 본사 제공 동의를 묻게 잠시 가맹으로 바꾼다
+      const stale = await requested();
+      const fresh = await requested();
+      const noVersion = await requested();
+      await prisma.store.update({
+        where: { storeId },
+        data: { storeTypeCode: 'FRANCHISE' },
+      });
+      try {
+        const accept = async (accountId: number, invitationId: number) => {
+          const auth = `Bearer ${await accountToken(accountId)}`;
+          return (payload: object) =>
+            http()
+              .post(`/me/affiliation-requests/${invitationId}/accept`)
+              .set('Authorization', auth)
+              .send(payload);
+        };
+        const consentOf = (accountId: number) =>
+          prisma.account.findUniqueOrThrow({
+            where: { accountId },
+            select: {
+              isHqSharingConsented: true,
+              hqSharingConsentVersion: true,
+            },
+          });
+
+        // 버전을 싣지 않는 예전 앱의 동의 — 400 이 아니라 수락은 마치고 동의만 남기지 않는다
+        const answerNoVersion = await accept(
+          noVersion.accountId,
+          noVersion.invitationId,
+        );
+        const oldApp = await answerNoVersion({
+          hqSharingConsented: true,
+        }).expect(200);
+        expect(oldApp.body).toMatchObject({ hqSharingConsentRecorded: false });
+        expect(await consentOf(noVersion.accountId)).toMatchObject({
+          isHqSharingConsented: false,
+        });
+
+        const answerStale = await accept(stale.accountId, stale.invitationId);
+        const res = await answerStale({
+          hqSharingConsented: true,
+          hqSharingConsentVersion: 'v0.9',
+        }).expect(200);
+        expect(res.body).toMatchObject({
+          staffMemberId: stale.staffMemberId,
+          hqSharingConsentRecorded: false,
+        });
+        expect((await contractOf(stale.contractId)).status).toBe(
+          'PENDING_SIGNATURE',
+        );
+        expect(await consentOf(stale.accountId)).toEqual({
+          isHqSharingConsented: false,
+          hqSharingConsentVersion: null,
+        });
+
+        const answerFresh = await accept(fresh.accountId, fresh.invitationId);
+        const ok = await answerFresh({
+          hqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        }).expect(200);
+        expect(ok.body).toMatchObject({ hqSharingConsentRecorded: true });
+        expect(await consentOf(fresh.accountId)).toEqual({
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        });
+      } finally {
+        await prisma.store.update({
+          where: { storeId },
+          data: { storeTypeCode: 'DIRECT' },
+        });
+      }
     });
   });
 });

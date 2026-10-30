@@ -488,7 +488,7 @@ describe('TO-DO (e2e, DB)', () => {
     expect(rows[0]).toMatchObject({
       notificationTarget: 'STAFF',
       templateCode: 'PUSH_TODO_DUE_SOON',
-      title: '곧 수행할 TO-DO가 있습니다',
+      title: 'TO-DO 수행 예정 알림',
     });
     expect(rows[0].notificationRecipients).toHaveLength(1);
     expect(rows[0].notificationRecipients[0].accountId).toBe(direct1.accountId);

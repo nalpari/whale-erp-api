@@ -520,7 +520,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         `NTF_CONTRACT_EXPIRED:${900_001 + n}`,
       );
       expect(expired).toMatchObject({
-        title: '남도현 님의 근로계약서가 날인 기한이 지나 만료되었습니다',
+        title: '근로계약서 서명 기한 만료',
         link: `/contracts/${contractId}`,
         relatedType: 'CONTRACT',
         relatedId: contractId,
@@ -532,18 +532,22 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect(
         await notificationOf(`NTF_CONTRACT_SIGNED:${900_002 + n}`),
       ).not.toBeNull();
-      // 거부 알림은 사유 없이 근무지만 보인다(WHALEERP-635 — 20261030120100 템플릿)
+      // 거부 알림은 사유 없이 근무지를 보인다(WHALEERP-635 — 20261030120100 템플릿)
       const rejected = await notificationOf(
         `NTF_CONTRACT_REJECTED:${900_003 + n}`,
       );
-      expect(rejected?.title).toBe('남도현 님이 근로계약서를 거부했습니다');
-      expect(rejected?.body).toBe(
-        (await notificationOf(`NTF_CONTRACT_SIGNED:${900_002 + n}`))?.body,
+      expect(rejected?.title).toBe('근로계약서 서명 거부');
+      expect(rejected?.body).toMatch(
+        /^남도현 님이 근로계약서 서명을 거부했습니다\.\n\n- 근무지: .+\n\n필요하면/,
       );
-      expect(rejected?.body).not.toMatch(/사유|없음/);
-      expect(
-        (await notificationOf(`NTF_CONTRACT_RENEWAL_DUE:${contractId}`))?.title,
-      ).toMatch(/^남도현 님의 근로계약이 \d+월 \d+일에 끝납니다$/);
+      expect(rejected?.body).not.toContain('사유');
+      const renewal = await notificationOf(
+        `NTF_CONTRACT_RENEWAL_DUE:${contractId}`,
+      );
+      expect(renewal?.title).toBe('근로계약 종료 예정');
+      expect(renewal?.body).toMatch(
+        /^남도현 님의 근로계약이 곧 종료됩니다\.\n\n- 근무지: .+\n- 종료일: \d+월 \d+일\n/,
+      );
 
       // 같은 사건(같은 이력 ID)은 두 번 알리지 않는다
       await notice.statusChanged('EXPIRED', contractId, 900_001 + n);
