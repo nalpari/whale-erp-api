@@ -94,3 +94,26 @@ export function contractTermsOf(
     workDays: workDaysOf(c.contractWorkDays),
   };
 }
+
+const minutesOf = (hm: string) =>
+  Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+
+/** 근무 요일 하나(시각 HH:mm) — 작성 DTO 와 응답 칸이 같은 모양이다 */
+type WorkDayTimes = {
+  startTime: string;
+  endTime: string;
+  breakStartTime?: string | null;
+  breakEndTime?: string | null;
+};
+
+/** 하루 소정근로시간(분) — 종업 − 시업 − 휴게. 종업은 시업보다 뒤다(CHECK) */
+export const dayMinutesOf = (d: WorkDayTimes) =>
+  minutesOf(d.endTime) -
+  minutesOf(d.startTime) -
+  (d.breakStartTime && d.breakEndTime
+    ? minutesOf(d.breakEndTime) - minutesOf(d.breakStartTime)
+    : 0);
+
+/** 주 소정근로시간(분) — 요일마다 종업 − 시업 − 휴게의 합. 저장 검사(주휴일 15시간)와 계약서 조항이 같이 쓴다 */
+export const weeklyMinutesOf = (workDays: readonly WorkDayTimes[]) =>
+  workDays.reduce((sum, d) => sum + dayMinutesOf(d), 0);

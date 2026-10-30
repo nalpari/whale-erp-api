@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
 import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractsService } from './contracts.service';
 import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
 
@@ -87,6 +88,7 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
         { provide: ContractDeliveryService, useValue: delivery },
+        { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
         { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();

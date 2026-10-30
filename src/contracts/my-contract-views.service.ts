@@ -7,6 +7,8 @@ import { Prisma } from '@prisma/client';
 import { dateOnly } from '../common/date-only';
 import { PrismaService } from '../prisma/prisma.service';
 import { storeNames } from '../payslips/payslip-shared';
+import { article2Of, snapshotOf } from './contract-files.service';
+import { contractArticles } from './contract-template';
 import { CONTRACT_TERMS_SELECT, contractTermsOf } from './contract-terms';
 import { employedOn, signDeadlinePassed } from './contract-status';
 import type {
@@ -15,7 +17,11 @@ import type {
   MyContractListResponseDto,
 } from './dto/my-contract-view.dto';
 import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
-import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
+import {
+  MY_CONTRACT_NOT_FOUND,
+  myContractWhere,
+  myDocumentWhere,
+} from './my-contract-scope';
 
 /** 목록 · 상세가 같이 읽는 칸 */
 const ITEM_SELECT = {
@@ -108,6 +114,15 @@ export class MyContractViewsService {
               zipCode: true,
               address: true,
               addressDetail: true,
+              employerName: true,
+              employerCeoName: true,
+              employerRegistrationNumber: true,
+              employerAddress: true,
+              employerAddressDetail: true,
+              employerPhone: true,
+              employerFixedAt: true,
+              fixedWorkLocation: true,
+              fixedJobTitle: true,
             },
           },
           staffMember: {
@@ -154,9 +169,9 @@ export class MyContractViewsService {
           },
         },
       });
-      // 직원 필기 서명(SIGNATURE)은 처리 완료본(WHALEERP-131)의 재료라 싣지 않는다 — 관리자 상세와 같다
+      // 직원 앱이 쓰는 종류만(myDocumentWhere) — 필기 서명 · 보낸 원본은 없다
       const documents = await tx.contractDocument.findMany({
-        where: { contractId, kind: { not: 'SIGNATURE' } },
+        where: myDocumentWhere(contractId),
         select: { contractDocumentId: true, kind: true, fileName: true },
         orderBy: { contractDocumentId: 'asc' },
       });
@@ -179,9 +194,23 @@ export class MyContractViewsService {
       account,
     );
     const biz = store.businessProfile;
+    const terms = contractTermsOf(c);
+    // 당사자 행에 적힌 값(날인 때 고정 · 백필)이 있으면 사용자 칸 · 제2조를 그 값으로 — 처리 완료본과 같은 함수 · 같은 조건
+    // (WHALEERP-131). 점포명 · 점포 주소 · 사업장 우편번호(고정하지 않는다 — 직원 앱이 보이지 않는다)는 지금 값이다
+    const fixed = snapshotOf(party);
+    const article2 = article2Of(c, store.name, fixed);
+    // 직원 레코드 직무는 NOT NULL 이라 날인 · 백필이 적은 직무도 늘 있다 — 칸 타입(string)을 맞추려고만 잇는다
+    const jobTitle = article2.jobTitle ?? c.staffMember.jobTitle;
     return {
       ...item,
-      ...contractTermsOf(c),
+      ...terms,
+      // 보낸 원본 · 처리 완료본 PDF 와 같은 템플릿(WHALEERP-131)
+      articles: contractArticles({
+        ...terms,
+        employmentType: c.employmentType,
+        storeName: store.name,
+        ...article2,
+      }),
       signable: item.awaitingSignature && mismatches.length === 0,
       mismatches,
       worker: {
@@ -194,23 +223,27 @@ export class MyContractViewsService {
         gender: party?.enteredGender ?? null,
         isForeigner: party?.isForeigner ?? false,
         // 그 계약서에 적은 직무(WHALEERP-156) — 칸이 빈 옛 계약만 직원 레코드 값
-        jobTitle: c.jobTitle ?? c.staffMember.jobTitle,
+        jobTitle,
         zipCode: party?.zipCode ?? null,
         address: party?.address ?? null,
         addressDetail: party?.addressDetail ?? null,
       },
       employer: {
         storeName: store.name,
-        storePhone: store.phone,
+        storePhone: fixed ? fixed.employerPhone : store.phone,
         storeZipCode: store.zipCode,
         storeAddress: store.address,
         storeAddressDetail: store.addressDetail,
-        tradeName: biz?.bizTradeName ?? null,
-        registrationNumber: biz?.bizRegistrationNumber ?? null,
-        ceoName: biz?.bizCeoName ?? null,
+        tradeName: fixed ? fixed.employerName : (biz?.bizTradeName ?? null),
+        registrationNumber: fixed
+          ? fixed.employerRegistrationNumber
+          : (biz?.bizRegistrationNumber ?? null),
+        ceoName: fixed ? fixed.employerCeoName : (biz?.bizCeoName ?? null),
         bizZipCode: biz?.bizZipCode ?? null,
-        bizAddress: biz?.bizAddress ?? null,
-        bizAddressDetail: biz?.bizAddressDetail ?? null,
+        bizAddress: fixed ? fixed.employerAddress : (biz?.bizAddress ?? null),
+        bizAddressDetail: fixed
+          ? fixed.employerAddressDetail
+          : (biz?.bizAddressDetail ?? null),
       },
       account: {
         name: account.realName,

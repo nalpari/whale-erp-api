@@ -6,6 +6,7 @@ import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
 import { ContractDeliveryService } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractSendService } from './contract-send.service';
 import { ContractsService } from './contracts.service';
 
@@ -47,6 +48,7 @@ describe('근로계약 대상 BP', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
         { provide: ContractDeliveryService, useValue: {} },
+        { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
         // 상세의 신고 정보(taxProfile)가 쓴다 — 이 스펙은 범위 판정만 보므로 키는 없다
         { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
