@@ -18,6 +18,24 @@ export class AdminLoginInfoService {
     private readonly codes: CodesService,
   ) {}
 
+  /**
+   * 관리 점포만(`GET /auth/admin/me/stores`) — 로그인 정보의 stores 와 같은 판정 · 모양이다. 관리자 웹이 점포 목록
+   * 버전(`GET /bp-codes/:id/stores-version`)이 바뀌었을 때 메뉴 · 공통코드까지 다시 받지 않으려고 부른다.
+   */
+  async stores(
+    adminAccountId: number,
+  ): Promise<AdminLoginInfoResponseDto['stores']> {
+    const account = await this.prisma.adminAccount.findUnique({
+      where: { adminAccountId },
+      select: { isDeleted: true, bpCode: { select: { isPlatform: true } } },
+    });
+    if (!account || account.isDeleted)
+      throw new UnauthorizedException('만료되었거나 종료된 접속입니다.');
+    return account.bpCode.isPlatform
+      ? []
+      : this.scope.listStores(adminAccountId);
+  }
+
   async get(adminAccountId: number): Promise<AdminLoginInfoResponseDto> {
     const account = await this.prisma.adminAccount.findUnique({
       where: { adminAccountId },

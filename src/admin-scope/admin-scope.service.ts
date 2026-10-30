@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
@@ -97,6 +98,12 @@ const STORE_SELECT = {
   storeStatusCode: true,
 } as const;
 const STORE_ORDER = [{ name: 'asc' as const }, { storeId: 'asc' as const }];
+/** 점포 목록 버전의 재료 — 점포 · 매핑 행 하나를 가리는 값(bpStoresVersion). */
+const ROW_VERSION_SELECT = {
+  storeId: true,
+  updatedAt: true,
+  isDeleted: true,
+} as const;
 
 /**
  * 플랫폼 계정인가 — 권한 유형 PM · PA 이면서 소속 BP 가 플랫폼 BP. 권한 유형만 보면 고객 BP 에 잘못 붙은 PM · PA 가
@@ -368,6 +375,65 @@ export class AdminScopeService {
   }
 
   /**
+   * 그 BP 점포 목록의 버전 — 관리자 웹이 새로고침 · 메뉴 이동 · 창 포커스 때 묻고 값이 바뀌었을 때만 목록을 다시 받는다
+   * (여러 PC 에서 같은 계정으로 쓰므로 다른 PC 의 변경을 잡는다). 형식은 정하지 않는다 — 비교만 한다. 없거나 삭제된
+   * BP · 플랫폼 BP 면 null. 누가 불러도 되는지는 부르는 쪽이 bpStoresAccess 로 정하고, 그 뒤 관리자 계정을 쓸 수
+   * 없게 됐으면 unavailable — 매핑을 빼고 다른 모양의 버전을 내지 않는다.
+   *
+   * 담는 것: 그 BP 점포 행 전부(지운 행까지 — 삭제도 updated_at 을 바꾼다)의 (id, 수정 시각, 지움). 최근 수정 시각
+   * 하나와 개수로는 늦게 커밋된 수정(@updatedAt 은 커밋이 아니라 쿼리를 만들 때 시각이다 — 이미 본 다른 행보다 이른
+   * 시각이 찍힌다)과 같은 수의 맞바꿈을 놓친다. BP · 가맹 관리자는 매핑으로 범위가 정해지므로 자기 매핑 행 전부(지운
+   * 행까지)와 계정 수정 시각도 담는다 — 관리 범위(is_all_stores) · 상태가 바뀌면 바뀐다. 다른 계정 수정도 값을 바꾸지만
+   * 목록을 한 번 더 받을 뿐이다. 플랫폼 계정 · 직원 앱은 점포만이다. 대표 이미지는 점포 행을 바꾸지 않아 담지 않는다
+   * (선택기에 보이지 않는다). 점포는 stores_bp_code_id_idx, 매핑 · 계정 · BP 는 기본키로 읽고, 점포 행 수만큼 읽는다.
+   */
+  async bpStoresVersion(
+    user: AuthUser,
+    bpCodeId: number,
+  ): Promise<{ version: string } | 'unavailable' | null> {
+    const bp = await this.prisma.bpCode.findFirst({
+      where: { bpCodeId, isDeleted: false, isPlatform: false },
+      select: { bpCodeId: true },
+    });
+    if (!bp) return null;
+    const [stores, admin] = await Promise.all([
+      this.prisma.store.findMany({
+        where: { bpCodeId },
+        select: ROW_VERSION_SELECT,
+        orderBy: { storeId: 'asc' },
+      }),
+      user.type === 'admin'
+        ? this.prisma.adminAccount.findFirst({
+            where: {
+              adminAccountId: user.id,
+              isDeleted: false,
+              accountStatusCode: 'ACTIVE',
+            },
+            select: {
+              updatedAt: true,
+              roleTypeCode: true,
+              bpCode: { select: { isPlatform: true } },
+            },
+          })
+        : null,
+    ]);
+    if (user.type === 'admin' && !admin) return 'unavailable';
+    const hash = createHash('sha256').update(`stores:${rowsKey(stores)}`);
+    if (admin && !isPlatformRole(admin.roleTypeCode, admin.bpCode.isPlatform)) {
+      const mappings = await this.prisma.adminStoreMapping.findMany({
+        where: { adminAccountId: user.id },
+        select: ROW_VERSION_SELECT,
+        orderBy: { storeId: 'asc' },
+      });
+      hash.update(
+        `|mappings:${rowsKey(mappings)}|account:${admin.updatedAt.getTime()}`,
+      );
+    }
+    // 내부 값(id · 시각)을 그대로 내보내지 않고 짧은 지문으로 — front 는 비교만 한다.
+    return { version: hash.digest('base64url').slice(0, 22) };
+  }
+
+  /**
    * 고객 BP 의 미삭제 점포 전체(운영 상태와 상관없이). 없거나 삭제된 BP · 플랫폼 BP 면 null.
    * 탈퇴한 BP 도 기록을 봐야 하므로 막지 않는다. 누가 불러도 되는지는 부르는 쪽이 정한다.
    */
@@ -458,4 +524,13 @@ export class AdminScopeService {
       return admin;
     return { ...admin, bpCodeId: bp.bpCodeId, isAllStores: true };
   }
+}
+
+/** 버전 재료 한 줄 — 점포 · 매핑 행마다 (점포 id, 수정 시각, 지움). storeId 순으로 이어 붙인다. */
+function rowsKey(
+  rows: { storeId: number; updatedAt: Date; isDeleted: boolean }[],
+): string {
+  return rows
+    .map((r) => `${r.storeId}.${r.updatedAt.getTime()}.${r.isDeleted ? 1 : 0}`)
+    .join(',');
 }
