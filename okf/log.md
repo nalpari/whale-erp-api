@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: api #225 code-review — 근로계약 발송 전 버튼 설정 검사 503 로그(종류 · 표시된 변수 · 기대 변수 이름만, 값 없음)를 단위 테스트로 묶었다.
 * **Update**: api #219 후속 — 머지 뒤에 올라 main 에 빠진 `20803b4f`(버튼 검사 결과에 기대 링크 변수 · 표시 변수 싣기)를 옮기고, `test/contracts.e2e-spec.ts` 의 템플릿 mock 에 `링크` 버튼 링크 표시를 넣어 #219 버튼 검사(503)에 맞췄다(main 에서 13건 실패).
 * **Update**: main 병합(api krabby, main #223 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Notification templates](/api/notification-templates.md) · [Contracts API](/api/contracts-api.md) — api #219 리뷰(노영주) 참고 1 · 2: 버튼을 다는 템플릿마다 링크 변수 이름까지 둔다(`ALIMTALK_BUTTONS` — 이름 · `링크`). 버튼 링크 표시가 그 변수 하나가 아니면(없음 · 초대코드 · 근무지로 옮김 · 둘) 저장 · 근로계약 발송 전 검사 · 발송이 모두 막는다(`LINK_MISMATCH`). 링크 origin 비교는 링크가 늘 `STAFF_APP_URL` 에서 나와 두지 않았다. 검사 결과는 기대 링크 변수와 표시된 변수 이름을 함께 주고, 근로계약 발송 전 검사 503 의 로그에 그 이름을 남긴다.
