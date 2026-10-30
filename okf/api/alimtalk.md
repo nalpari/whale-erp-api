@@ -76,8 +76,10 @@ only the fields it knows and one save there would wipe it (the mail button's 「
 in code too). A template with a button-link value but no entry there, or a link that is not
 http(s), throws before anything is sent; the error carries the template code, never the link.
 An optional link left empty sends no button. The two names (`TALK_STAFF_INVITATION` 「가입하기」,
-`TALK_STAFF_AFFILIATION_REQUEST` 「요청 확인하기」) are proposals until 재영 confirms the
-Kakao registration.
+`TALK_STAFF_AFFILIATION_REQUEST` 「요청 확인하기」) and the same link for PC were fixed by 재영
+(2026-10-30); Kakao is registered with them. The link is registered as a fixed domain per
+environment with the path as a variable (`/invite#token=…`, `/affiliations`) — whether Kakao
+accepts a `#` in the variable part is still to be confirmed at registration.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`
