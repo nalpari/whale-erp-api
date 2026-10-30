@@ -7,6 +7,8 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
+import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
+import { MailService } from '../src/mail/mail.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, addMonths, kstToday } from '../src/staff-members/kst-date';
 import { purgeExpiredWorkSchedules } from '../src/work-schedules/work-schedule-purge';
@@ -17,6 +19,8 @@ import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 describe('근무스케줄 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
+  /** 근무스케줄 변경 메일(WHALEERP-639) — 실제 MailService(템플릿 · 발송 이력)에 SMTP 만 바꿔 끼운다 */
+  const sendMail = jest.fn().mockResolvedValue({ messageId: 'e2e' });
 
   let bpCodeId: number;
   let directStoreId: number;
@@ -57,7 +61,14 @@ describe('근무스케줄 (e2e, DB)', () => {
       );
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(OPTIONAL_MAIL_SERVICE)
+      .useFactory({
+        inject: [PrismaService],
+        factory: (p: PrismaService) =>
+          new MailService({ sendMail }, { username: 'e2e@test.invalid' }, p),
+      })
+      .compile();
     app = moduleFixture.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);
@@ -209,6 +220,13 @@ describe('근무스케줄 (e2e, DB)', () => {
 
   afterAll(async () => {
     if (!prisma) return;
+    const emails = await prisma.account.findMany({
+      where: { accountId: { in: accountIds } },
+      select: { email: true },
+    });
+    await prisma.mailSendLog.deleteMany({
+      where: { toEmail: { in: emails.map((a) => a.email) } },
+    });
     const schedules = await prisma.workSchedule.findMany({
       where: { staffMemberId: { in: staffIds } },
       select: { workScheduleId: true },
@@ -1137,8 +1155,10 @@ describe('근무스케줄 (e2e, DB)', () => {
         expect(n.notificationTarget).toBe('STAFF');
         expect(n.notificationRecipients).toHaveLength(1);
         expect(n.notificationRecipients[0].accountId).toBe(accountId);
+        // 메일(WHALEERP-639)은 커밋 뒤라 앱 푸시 발송 대기 뒤에 남는다
         expect(n.notificationRecipients[0].notificationDeliveries).toEqual([
           expect.objectContaining({ channel: 'PUSH', sentAt: null }),
+          expect.objectContaining({ channel: 'EMAIL', result: 'SUCCEEDED' }),
         ]);
       }
     });
@@ -1197,6 +1217,163 @@ describe('근무스케줄 (e2e, DB)', () => {
           where: { relatedType: 'WORK_SCHEDULE' },
         }),
       ).toBe(before);
+    });
+  });
+
+  describe('근무스케줄 변경 메일 (WHALEERP-639)', () => {
+    /** 그 근무스케줄 알림들의 EMAIL 발송 이력 */
+    const mailDeliveriesOf = (workScheduleId: number) =>
+      prisma.notificationDelivery.findMany({
+        where: {
+          channel: 'EMAIL',
+          notificationRecipient: {
+            notification: {
+              relatedType: 'WORK_SCHEDULE',
+              relatedId: workScheduleId,
+            },
+          },
+        },
+        orderBy: { notificationDeliveryId: 'asc' },
+      });
+    const emailOf = async (staffMemberId: number) =>
+      (
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId },
+          select: { account: { select: { email: true } } },
+        })
+      ).account!.email;
+    beforeEach(() => sendMail.mockClear());
+
+    it('등록 · 수정 · 삭제마다 계정 이메일로 한 통 — 근무 탭 버튼, EMAIL 발송 이력 · 메일 발송 이력', async () => {
+      const to = await emailOf(directId);
+      // 앞 시험의 저장도 이 직원에게 메일을 보냈다 — 이 시험 것만 센다
+      const since = new Date();
+      const created = await post(directId, day(60), '09:00', '13:00');
+      const id = (created.body as { workScheduleId: number }).workScheduleId;
+      await asAdmin('patch', `/work-schedules/${id}`, {
+        workDate: day(60),
+        startTime: '10:00',
+        endTime: '14:00',
+        breakMinutes: 0,
+      });
+      await asAdmin('delete', `/work-schedules/${id}`);
+
+      expect(sendMail).toHaveBeenCalledTimes(3);
+      const sent = sendMail.mock.calls.map(
+        ([m]) => m as { to: string; subject: string; text: string },
+      );
+      for (const m of sent) {
+        expect(m.to).toBe(to);
+        expect(m.subject).toBe('[WHALE ERP] 근무스케줄 변경');
+        expect(m.text).toContain(
+          '근무스케줄 DIRECT 근무스케줄이 변경되었습니다.',
+        );
+        expect(m.text).toContain('https://staff.e2e.test/work');
+      }
+      expect(sent.map((m) => m.text)).toEqual([
+        expect.stringMatching(/- 변경 내용: .* 09:00~13:00 추가\n/),
+        expect.stringMatching(/ 09:00~13:00 → 10:00~14:00\n/),
+        expect.stringMatching(/ 10:00~14:00 삭제\n/),
+      ]);
+      const deliveries = await mailDeliveriesOf(id);
+      expect(deliveries).toHaveLength(3);
+      for (const row of deliveries) {
+        expect(row.result).toBe('SUCCEEDED');
+        expect(row.sentAt).toBeInstanceOf(Date);
+      }
+      expect(
+        await prisma.mailSendLog.count({
+          where: {
+            toEmail: to,
+            mailTypeCode: 'EMAIL_SCHEDULE_CHANGED',
+            result: 'SUCCEEDED',
+            sentAt: { gte: since },
+          },
+        }),
+      ).toBe(3);
+    });
+
+    it('일괄 등록은 직원마다 한 통 — 같은 직원의 쪼갠 근무는 한 통에 묶는다', async () => {
+      // 계약이 오늘+10 에 끝나는 직원도 받는 날(오늘+9)
+      const res = await asAdmin('post', '/work-schedules/bulk', {
+        workDate: day(9),
+        rows: [
+          {
+            staffMemberId: directId,
+            startTime: '09:00',
+            endTime: '12:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: endingId,
+            startTime: '09:00',
+            endTime: '12:00',
+            breakMinutes: 0,
+          },
+          {
+            staffMemberId: directId,
+            startTime: '17:00',
+            endTime: '20:00',
+            breakMinutes: 0,
+          },
+        ],
+      });
+      expect(res.status).toBe(201);
+      expect((res.body as { failed: unknown[] }).failed).toEqual([]);
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      const byTo = new Map(
+        sendMail.mock.calls.map(([m]) => {
+          const { to, text } = m as { to: string; text: string };
+          return [to, text];
+        }),
+      );
+      expect(byTo.get(await emailOf(directId))).toMatch(
+        / 09:00~12:00 추가, .* 17:00~20:00 추가\n/,
+      );
+      expect(byTo.has(await emailOf(endingId))).toBe(true);
+    });
+
+    it('SMTP 가 실패해도 저장은 되고, EMAIL 발송 이력은 FAILED(sent_at 없음)', async () => {
+      sendMail.mockRejectedValueOnce(
+        Object.assign(new Error('smtp down'), { code: 'ECONNECTION' }),
+      );
+      const created = await post(directId, day(62), '09:00', '13:00');
+      expect(created.status).toBe(201);
+      const id = (created.body as { workScheduleId: number }).workScheduleId;
+      expect(await mailDeliveriesOf(id)).toEqual([
+        expect.objectContaining({ result: 'FAILED', sentAt: null }),
+      ]);
+    });
+
+    it('수신 설정 묶음 근무스케줄을 끈 직원에게는 메일도 없다 — 알림함 줄은 남는다', async () => {
+      const { accountId } = await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: direct2Id },
+        select: { accountId: true },
+      });
+      await prisma.notificationPreference.upsert({
+        where: {
+          accountId_preferenceCategory: {
+            accountId: accountId!,
+            preferenceCategory: 'SCHEDULE',
+          },
+        },
+        create: {
+          accountId: accountId!,
+          preferenceCategory: 'SCHEDULE',
+          isEnabled: false,
+        },
+        update: { isEnabled: false },
+      });
+      const created = await post(direct2Id, day(44), '09:00', '13:00');
+      expect(created.status).toBe(201);
+      const id = (created.body as { workScheduleId: number }).workScheduleId;
+      expect(sendMail).not.toHaveBeenCalled();
+      expect(await mailDeliveriesOf(id)).toEqual([]);
+      expect(
+        await prisma.notification.count({
+          where: { relatedType: 'WORK_SCHEDULE', relatedId: id },
+        }),
+      ).toBe(1);
     });
   });
 

@@ -4,10 +4,12 @@ import {
   ForbiddenException,
   HttpException,
   HttpStatus,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import {
   AdminScopeService,
@@ -19,6 +21,12 @@ import {
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
+import { readStaffAppUrl } from '../auth/staff-app-url';
+import { isProduction } from '../config/profile';
+import {
+  OPTIONAL_MAIL_SERVICE,
+  type OptionalMailService,
+} from '../mail/mail.module';
 import { adminNames } from '../common/admin-names';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, kstDayStart } from '../staff-members/kst-date';
@@ -44,7 +52,11 @@ import {
   WorkScheduleRosterItemDto,
   WorkScheduleStaffResponseDto,
 } from './dto/work-schedule.dto';
-import { noticeScheduleChange } from './work-schedule-notice';
+import {
+  noticeScheduleChange,
+  type ScheduleMail,
+  sendScheduleMail,
+} from './work-schedule-notice';
 import {
   breakFits,
   coverageOf,
@@ -285,10 +297,34 @@ const isOverlapViolation = (error: unknown) =>
 export class WorkSchedulesService {
   private readonly logger = new Logger(WorkSchedulesService.name);
 
+  private readonly appUrl: string | null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly scope: AdminScopeService,
-  ) {}
+    @Inject(OPTIONAL_MAIL_SERVICE) private readonly mail: OptionalMailService,
+    config: ConfigService,
+  ) {
+    this.appUrl = readStaffAppUrl(
+      config.get<string>('STAFF_APP_URL'),
+      isProduction(),
+    );
+  }
+
+  /** 커밋 뒤 근무스케줄 변경 메일(WHALEERP-639) — 던지지 않는다. 직원마다 한 통씩 차례로 */
+  private async mailAfterCommit(mails: (ScheduleMail | null)[]): Promise<void> {
+    // ponytail: 차례로 보낸다 — 한 통에 SMTP 왕복(멈추면 최대 30초씩). 지난 주 복사는 기다리지 않고 응답한다. 더 늘면 발송 대기열로
+    for (const mail of mails)
+      await sendScheduleMail(
+        {
+          prisma: this.prisma,
+          mail: this.mail,
+          appUrl: this.appUrl,
+          logger: this.logger,
+        },
+        mail,
+      );
+  }
 
   /**
    * 주간 · 월간 보기(#343 · #202). 날마다 「받을 수 있는 직원」을 같은 판정(schedulable)으로 찾아 행을 만들고, 그 날짜의
@@ -596,20 +632,22 @@ export class WorkSchedulesService {
   ): Promise<WorkScheduleDto> {
     const { date, span } = spanOf(dto);
     const scope = await this.scopeOf(adminAccountId);
-    return this.save(async (tx) => {
+    const { dto: saved, mail } = await this.save(async (tx) => {
       const row = await this.insert(tx, scope, adminAccountId, {
         staffMemberId: dto.staffMemberId,
         date,
         span,
         breakMinutes: dto.breakMinutes,
       });
-      await noticeScheduleChange(tx, this.logger, {
+      const mail = await noticeScheduleChange(tx, this.logger, {
         staffMemberId: row.staffMemberId,
         workScheduleId: row.workScheduleId,
         changes: [{ kind: 'CREATED', after: row }],
       });
-      return toDto(row);
+      return { dto: toDto(row), mail };
     });
+    await this.mailAfterCommit([mail]);
+    return saved;
   }
 
   /**
@@ -672,13 +710,14 @@ export class WorkSchedulesService {
       ]);
     for (const [staffMemberId, rows] of byStaff) {
       try {
-        await this.prisma.$transaction((tx) =>
+        const mail = await this.prisma.$transaction((tx) =>
           noticeScheduleChange(tx, this.logger, {
             staffMemberId,
             workScheduleId: rows[0].workScheduleId,
             changes: rows.map((after) => ({ kind: 'CREATED', after })),
           }),
         );
+        await this.mailAfterCommit([mail]);
       } catch (error) {
         this.logger.error(
           `work schedule notice FAILED staffMember ${staffMemberId} after bulk save: ${error instanceof Error ? error.message : String(error)}`,
@@ -712,6 +751,8 @@ export class WorkSchedulesService {
     // 미리보기도 막는다 — 할 수 없는 복사를 보이지 않는다
     if (await isClosedStore(this.prisma, storeId)) throw storeClosed();
     const sourceMonday = addDays(monday, -7);
+    // 복사 트랜잭션이 커밋된 뒤에 보낼 메일 — 직원마다 한 통
+    const mails: (ScheduleMail | null)[] = [];
 
     const run = async (db: Tx): Promise<CopyLastWeekResponseDto> => {
       if (apply)
@@ -841,11 +882,13 @@ export class WorkSchedulesService {
       }
 
       for (const [staffMemberId, rows] of createdOf)
-        await noticeScheduleChange(db, this.logger, {
-          staffMemberId,
-          workScheduleId: rows[0].workScheduleId,
-          changes: rows.map((after) => ({ kind: 'CREATED', after })),
-        });
+        mails.push(
+          await noticeScheduleChange(db, this.logger, {
+            staffMemberId,
+            workScheduleId: rows[0].workScheduleId,
+            changes: rows.map((after) => ({ kind: 'CREATED', after })),
+          }),
+        );
 
       // 이번 주에 받을 수 있지만 지난 주에 없던 직원 — 「지난 주 없음 · 따로 넣는다」
       const fresh = new Set<number>();
@@ -883,9 +926,11 @@ export class WorkSchedulesService {
       };
     };
     // 복사는 수십 명 × 6일을 한 트랜잭션에 넣는다 — 기본 5초로는 모자랄 수 있다
-    return apply
-      ? this.save(run, { timeout: COPY_TIMEOUT_MS })
-      : run(this.prisma);
+    if (!apply) return run(this.prisma);
+    const copied = await this.save(run, { timeout: COPY_TIMEOUT_MS });
+    // 수십 명에게 보내는 동안 응답을 붙잡으면 저장은 끝났는데 화면이 시간 초과로 실패를 보일 수 있다 — 기다리지 않는다(던지지 않는다)
+    void this.mailAfterCommit(mails);
+    return copied;
   }
 
   /**
@@ -950,7 +995,7 @@ export class WorkSchedulesService {
   ): Promise<WorkScheduleDto> {
     const { date, span } = spanOf(dto);
     const scope = await this.scopeOf(adminAccountId);
-    return this.save(async (tx) => {
+    const { dto: saved, mail } = await this.save(async (tx) => {
       // 옮겨 갈 주의 공유 잠금을 먼저(insert 와 같다) — 범위 · 존재는 lockSchedule 이 본다
       const home = await tx.workSchedule.findUnique({
         where: { workScheduleId },
@@ -976,13 +1021,15 @@ export class WorkSchedulesService {
           changedBy: adminAccountId,
         },
       });
-      await noticeScheduleChange(tx, this.logger, {
+      const mail = await noticeScheduleChange(tx, this.logger, {
         staffMemberId: row.staffMemberId,
         workScheduleId,
         changes: [{ kind: 'UPDATED', before, after: row }],
       });
-      return toDto(row);
+      return { dto: toDto(row), mail };
     });
+    await this.mailAfterCommit([mail]);
+    return saved;
   }
 
   /** 삭제(is_deleted) → 변경 이력 DELETED(변경 전). 계약 · 퇴직 조건은 보지 않는다 */
@@ -991,7 +1038,7 @@ export class WorkSchedulesService {
     workScheduleId: number,
   ): Promise<WorkScheduleDeleteResponseDto> {
     const scope = await this.scopeOf(adminAccountId);
-    return this.prisma.$transaction(async (tx) => {
+    const mail = await this.prisma.$transaction(async (tx) => {
       const before = await this.lockSchedule(tx, scope, workScheduleId);
       await tx.workSchedule.update({
         where: { workScheduleId },
@@ -1006,13 +1053,14 @@ export class WorkSchedulesService {
         },
       });
       // 지운 근무스케줄도 그 직원에게는 변경이다(#201)
-      await noticeScheduleChange(tx, this.logger, {
+      return noticeScheduleChange(tx, this.logger, {
         staffMemberId: before.staffMemberId,
         workScheduleId,
         changes: [{ kind: 'DELETED', before }],
       });
-      return { workScheduleId };
     });
+    await this.mailAfterCommit([mail]);
+    return { workScheduleId };
   }
 
   /** 저장 트랜잭션. 동시 저장이 DB 겹침 금지에 걸리면 서버가 먼저 찾은 것과 같은 409 다 */

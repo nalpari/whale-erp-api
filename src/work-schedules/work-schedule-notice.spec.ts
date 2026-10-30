@@ -1,6 +1,12 @@
 import { Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { changeText, noticeScheduleChange } from './work-schedule-notice';
+import type { MailService } from '../mail/mail.service';
+import type { PrismaService } from '../prisma/prisma.service';
+import {
+  changeText,
+  noticeScheduleChange,
+  sendScheduleMail,
+} from './work-schedule-notice';
 import { toSpan } from './work-schedule-rules';
 
 const d = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
@@ -90,7 +96,7 @@ describe('noticeScheduleChange', () => {
       findUnique: jest.fn().mockResolvedValue({
         storeId: 3,
         employmentStatus: 'EMPLOYED',
-        account: { accountId: 5, status: 'JOINED' },
+        account: { accountId: 5, status: 'JOINED', email: 'staff@example.com' },
       }),
     },
     store: { findUnique: jest.fn().mockResolvedValue({ name: '연남점' }) },
@@ -123,9 +129,16 @@ describe('noticeScheduleChange', () => {
       input,
     );
 
-  it('직원 알림 · 받는 사람 · 앱 푸시 발송 대기를 하나씩 만든다', async () => {
+  it('직원 알림 · 받는 사람 · 앱 푸시 발송 대기를 하나씩 만들고, 커밋 뒤 보낼 메일을 돌려준다(WHALEERP-639)', async () => {
     const tx = mockTx();
-    await run(tx);
+    await expect(run(tx)).resolves.toEqual({
+      notificationRecipientId: 200,
+      to: 'staff@example.com',
+      variables: {
+        근무지: '연남점',
+        변경내용: '10월 21일(수) 09:00~18:00 추가',
+      },
+    });
     expect(tx.notification.create).toHaveBeenCalledWith({
       data: {
         notificationTarget: 'STAFF',
@@ -148,7 +161,8 @@ describe('noticeScheduleChange', () => {
   it('수신 설정 묶음 근무스케줄을 끄면 알림함에만 — 앱 푸시 발송 대기가 없다(NTF-14)', async () => {
     const tx = mockTx();
     tx.notificationPreference.findFirst.mockResolvedValue({ accountId: 5 });
-    await run(tx);
+    // 메일도 보내지 않는다 — 메일 템플릿에는 묶음이 없어 앱 푸시의 판정을 따른다
+    await expect(run(tx)).resolves.toBeNull();
     expect(tx.notificationRecipient.create).toHaveBeenCalled();
     expect(tx.notificationDelivery.create).not.toHaveBeenCalled();
   });
@@ -156,7 +170,7 @@ describe('noticeScheduleChange', () => {
   it('템플릿이 없거나 사용 안 함이면 알림 없이 넘어간다(저장은 막지 않는다)', async () => {
     const missing = mockTx();
     missing.notificationTemplate.findUnique.mockResolvedValue(null);
-    await expect(run(missing)).resolves.toBeUndefined();
+    await expect(run(missing)).resolves.toBeNull();
     expect(missing.notification.create).not.toHaveBeenCalled();
     const off = mockTx();
     off.notificationTemplate.findUnique.mockResolvedValue({
@@ -192,7 +206,7 @@ describe('noticeScheduleChange', () => {
     ]) {
       const tx = mockTx();
       tx.notificationTemplate.findUnique.mockResolvedValue(broken);
-      await expect(run(tx)).resolves.toBeUndefined();
+      await expect(run(tx)).resolves.toBeNull();
       expect(tx.notification.create).not.toHaveBeenCalled();
     }
   });
@@ -210,7 +224,7 @@ describe('noticeScheduleChange', () => {
       employmentStatus: 'EMPLOYED',
       account: null,
     });
-    await run(tx);
+    await expect(run(tx)).resolves.toBeNull();
     expect(tx.notificationTemplate.findUnique).not.toHaveBeenCalled();
     expect(log.warn).toHaveBeenCalledWith(
       expect.stringContaining('no account'),
@@ -224,7 +238,7 @@ describe('noticeScheduleChange', () => {
       employmentStatus: 'RETIRED',
       account: { accountId: 5, status: 'JOINED' },
     });
-    await run(tx);
+    await expect(run(tx)).resolves.toBeNull();
     expect(tx.notification.create).not.toHaveBeenCalled();
     expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('RETIRED'));
   });
@@ -236,7 +250,7 @@ describe('noticeScheduleChange', () => {
       employmentStatus: 'EMPLOYED',
       account: { accountId: 5, status: 'WITHDRAWN' },
     });
-    await run(tx);
+    await expect(run(tx)).resolves.toBeNull();
     expect(tx.notification.create).not.toHaveBeenCalled();
     expect(log.warn).toHaveBeenCalledWith(
       expect.stringContaining('withdrawn account'),
@@ -294,5 +308,80 @@ describe('noticeScheduleChange', () => {
     );
     expect(tx.staffMember.findUnique).not.toHaveBeenCalled();
     expect(tx.notification.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('sendScheduleMail (WHALEERP-639)', () => {
+  const mail = {
+    notificationRecipientId: 200,
+    to: 'staff@example.com',
+    variables: { 근무지: '연남점', 변경내용: '10월 21일(수) 09:00~18:00 추가' },
+  };
+  const setup = (patch: { mail?: null; appUrl?: null } = {}) => {
+    const prisma = { notificationDelivery: { create: jest.fn() } };
+    const mailer = { send: jest.fn().mockResolvedValue({ messageId: 'm' }) };
+    const logger = { warn: jest.fn(), error: jest.fn() };
+    const deps = {
+      prisma: prisma as unknown as PrismaService,
+      mail: 'mail' in patch ? null : (mailer as unknown as MailService),
+      appUrl: 'appUrl' in patch ? null : 'https://staff.example.com/x',
+      logger: logger as unknown as Logger,
+    };
+    return { prisma, mailer, logger, deps };
+  };
+
+  it('근무 탭 링크를 붙여 계정 이메일로 보내고, EMAIL 발송 이력을 sent_at · SUCCEEDED 로 남긴다', async () => {
+    const { prisma, mailer, deps } = setup();
+    await sendScheduleMail(deps, mail);
+    expect(mailer.send).toHaveBeenCalledWith({
+      templateCode: 'EMAIL_SCHEDULE_CHANGED',
+      to: 'staff@example.com',
+      variables: { ...mail.variables, 링크: 'https://staff.example.com/work' },
+    });
+    expect(prisma.notificationDelivery.create).toHaveBeenCalledWith({
+      data: {
+        notificationRecipientId: 200,
+        channel: 'EMAIL',
+        result: 'SUCCEEDED',
+        sentAt: expect.any(Date) as unknown,
+      },
+    });
+  });
+
+  it('보낼 메일이 없으면(null) 아무것도 하지 않는다', async () => {
+    const { prisma, mailer, deps } = setup();
+    await sendScheduleMail(deps, null);
+    expect(mailer.send).not.toHaveBeenCalled();
+    expect(prisma.notificationDelivery.create).not.toHaveBeenCalled();
+  });
+
+  it('메일 설정 · 직원 앱 주소가 없으면 보내지 않고 로그만(알림함 줄은 남아 있다)', async () => {
+    for (const patch of [{ mail: null }, { appUrl: null }] as const) {
+      const { prisma, logger, deps } = setup(patch);
+      await sendScheduleMail(deps, mail);
+      expect(prisma.notificationDelivery.create).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('work schedule mail SKIPPED'),
+      );
+    }
+  });
+
+  it('보내기 전에 막히면(템플릿 꺼짐 등) 던지지 않고 이력 없이 로그만', async () => {
+    const { prisma, mailer, logger, deps } = setup();
+    mailer.send.mockRejectedValue(new Error('template inactive'));
+    await expect(sendScheduleMail(deps, mail)).resolves.toBeUndefined();
+    expect(prisma.notificationDelivery.create).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('NOT SENT'),
+    );
+  });
+
+  it('이력 쓰기가 실패해도 던지지 않는다', async () => {
+    const { prisma, logger, deps } = setup();
+    prisma.notificationDelivery.create.mockRejectedValue(new Error('db'));
+    await expect(sendScheduleMail(deps, mail)).resolves.toBeUndefined();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('delivery row not written'),
+    );
   });
 });
