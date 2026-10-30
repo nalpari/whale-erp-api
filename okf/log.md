@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [BP holidays](/api/bp-holidays.md) — 변경 이력 항목명을 화면처럼 「대상점포」 · 「예외점포」(붙여 씀)로, 등록 요약의 점포 수 단위를 「예외 N개」로(「N개점」 아님, 2026-10-30 재영, front 요청). 막힘 사유 문구는 그대로. 옛 이력 행은 그대로 둔다 — 마이그레이션 없음.
 * **Update**: [BP role groups](/api/bp-role-groups.md) · [Platform role groups](/api/platform-role-groups.md) — 목록의 메뉴 등록 수(`menuCount`) · 등록 여부(`isMenuRegistered`)를 사용(`ACTIVE`) 메뉴의 조회 켜진 행만 센다. 사용중지 메뉴에 남긴 보존 권한까지 세어 목록 「등록 N개」와 메뉴설정 팝업의 켜진 칸 수가 달랐다(2026-10-30 재영, front 요청). 사용중지 메뉴만 켜진 그룹은 0개 · 미등록. 마이그레이션 없음.
 * **Update**: main 병합(api krabby, main #223 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Notification templates](/api/notification-templates.md) · [Contracts API](/api/contracts-api.md) — api #219 리뷰(노영주) 참고 1 · 2: 버튼을 다는 템플릿마다 링크 변수 이름까지 둔다(`ALIMTALK_BUTTONS` — 이름 · `링크`). 버튼 링크 표시가 그 변수 하나가 아니면(없음 · 초대코드 · 근무지로 옮김 · 둘) 저장 · 근로계약 발송 전 검사 · 발송이 모두 막는다(`LINK_MISMATCH`). 링크 origin 비교는 링크가 늘 `STAFF_APP_URL` 에서 나와 두지 않았다.

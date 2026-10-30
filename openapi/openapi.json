@@ -25664,6 +25664,40 @@
           "statusCounts"
         ]
       },
+      "StoreOptionDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "name": {
+            "type": "string",
+            "description": "점포명"
+          }
+        },
+        "required": [
+          "storeId",
+          "name"
+        ]
+      },
+      "StoreOptionListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StoreOptionDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "total"
+        ]
+      },
       "Gender": {
         "type": "string",
         "enum": [
@@ -27514,40 +27548,6 @@
           "isEnabled"
         ]
       },
-      "StoreOptionDto": {
-        "type": "object",
-        "properties": {
-          "storeId": {
-            "type": "number"
-          },
-          "name": {
-            "type": "string",
-            "description": "점포명"
-          }
-        },
-        "required": [
-          "storeId",
-          "name"
-        ]
-      },
-      "StoreOptionListResponseDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StoreOptionDto"
-            }
-          },
-          "total": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "items",
-          "total"
-        ]
-      },
       "StoreSummaryResponseDto": {
         "type": "object",
         "properties": {
@@ -29147,7 +29147,7 @@
           },
           "hasDefault": {
             "type": "boolean",
-            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 46건) — 되돌리기를 보일지"
+            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 47건) — 되돌리기를 보일지"
           },
           "updatedByName": {
             "type": "string",
@@ -29291,7 +29291,7 @@
           },
           "hasDefault": {
             "type": "boolean",
-            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 46건) — 되돌리기를 보일지"
+            "description": "기본 문구가 있는지(마이그레이션으로 넣은 기본 템플릿 47건) — 되돌리기를 보일지"
           },
           "updatedByName": {
             "type": "string",
@@ -33888,7 +33888,8 @@
             "example": "정기휴무"
           },
           "field": {
-            "type": "string"
+            "type": "string",
+            "example": "대상점포"
           },
           "beforeValue": {
             "type": "string",
