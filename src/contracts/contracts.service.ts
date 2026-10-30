@@ -89,7 +89,8 @@ import { CONTRACTS_MENU } from './contracts-menu';
 import {
   checkProbationWage,
   type MinimumWage,
-  readMinimumWages,
+  needsProbationWageCheck,
+  readMinimumWage,
 } from './minimum-wage';
 import {
   ContractDetailDto,
@@ -989,15 +990,15 @@ export class ContractsService {
     @Inject(PERSONAL_DATA_KEY) private readonly key: Buffer | null,
   ) {}
 
-  /** 작성 화면이 시급 칸 도움말 · 수습 중 시급 확인에 쓰는 최저임금 — 시행일 오름차순(WHALEERP-595) */
-  minimumWages(): Promise<MinimumWage[]> {
-    return readMinimumWages(this.prisma, this.logger);
+  /** 지금 최저임금 — 작성 화면이 시급 칸 도움말 · 수습 중 시급 확인에 쓴다(WHALEERP-595) */
+  minimumWage(): Promise<MinimumWage> {
+    return readMinimumWage(this.prisma);
   }
 
-  /** 수습 중 시급이 최저임금의 90% 이상인지 — 수습이 있을 때만 공통코드를 읽는다 */
+  /** 수습 중 시급이 최저임금의 90% 이상인지 — 수습과 시급이 있을 때만 공통코드를 읽는다 */
   private async checkProbationWage(dto: CreateContractDto): Promise<void> {
-    if (dto.probationMonths == null) return;
-    checkProbationWage(dto, await this.minimumWages());
+    if (!needsProbationWageCheck(dto)) return;
+    checkProbationWage(dto, await this.minimumWage());
   }
 
   /**

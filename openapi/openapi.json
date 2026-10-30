@@ -8648,9 +8648,9 @@
         ]
       }
     },
-    "/contracts/minimum-wages": {
+    "/contracts/minimum-wage": {
       "get": {
-        "operationId": "ContractsController_minimumWages",
+        "operationId": "ContractsController_minimumWage",
         "parameters": [
           {
             "name": "X-Bp-Code-Id",
@@ -8668,7 +8668,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MinimumWagesResponseDto"
+                  "$ref": "#/components/schemas/MinimumWageResponseDto"
                 }
               }
             }
@@ -8685,7 +8685,7 @@
             "bearer": []
           }
         ],
-        "summary": "최저임금(공통코드 MINIMUM_WAGE) — 작성 · 이어 쓰기 화면이 시급 칸 도움말과 수습 중 시급 확인에 쓴다(WHALEERP-595).\n저장도 같은 값으로 다시 본다. `:contractId` 보다 먼저 둔다.",
+        "summary": "지금 최저임금(공통코드 MINIMUM_WAGE · HOURLY) — 작성 · 이어 쓰기 화면이 시급 칸 도움말과 수습 중 시급 확인에 쓴다\n(WHALEERP-595). 저장도 같은 값으로 다시 본다. 공통코드를 쓸 수 없으면 hourlyWage 는 null, problem 이 저장 400 문장이다.\n`:contractId` 보다 먼저 둔다.",
         "tags": [
           "Contracts"
         ]
@@ -26038,35 +26038,25 @@
           "staffMemberId"
         ]
       },
-      "MinimumWageDto": {
+      "MinimumWageResponseDto": {
         "type": "object",
         "properties": {
-          "effectiveDate": {
-            "type": "string",
-            "description": "시행일 YYYY-MM-DD — 이날부터 적용"
-          },
           "hourlyWage": {
             "type": "number",
-            "description": "시급(원)"
+            "nullable": true,
+            "description": "시급(원). 공통코드를 쓸 수 없으면 null",
+            "example": 10320
+          },
+          "problem": {
+            "type": "string",
+            "nullable": true,
+            "description": "공통코드를 쓸 수 없는 까닭(없음 · 사용 중지 · 코드명이 숫자 아님) — 수습이 있는 계약을 저장하면 이 문장으로 400 이다.\n쓸 수 있으면 null",
+            "example": null
           }
         },
         "required": [
-          "effectiveDate",
-          "hourlyWage"
-        ]
-      },
-      "MinimumWagesResponseDto": {
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MinimumWageDto"
-            }
-          }
-        },
-        "required": [
-          "items"
+          "hourlyWage",
+          "problem"
         ]
       },
       "ContractStatusHistoryDto": {

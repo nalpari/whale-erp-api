@@ -1,92 +1,53 @@
-import { BadRequestException, type Logger } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { INT4_MAX, PLATFORM_BP_CODE } from '../code-groups/code-format';
 import type { PrismaService } from '../prisma/prisma.service';
-import { parseDateOnly } from '../staff-members/kst-date';
 
 /**
- * 최저임금(시급)은 공통코드 `MINIMUM_WAGE` 로 관리한다(WHALEERP-595, 2026-10-30 김민식 — 별도 테이블을 두지 않음).
- * 플랫폼고정 그룹이라 플랫폼 원본(BP000000) 행만 본다. 한 행이 한 시행일이다 — 상세코드는 `D` + 시행일 8자리
- * (D20260101 = 2026-01-01부터, 상세코드는 영문으로 시작해야 해서 D 를 붙인다), 코드명은 시급(원, 숫자만 — 10320).
+ * 최저임금(시급)은 공통코드 하나로 관리한다(WHALEERP-595, 2026-10-30 김민식 — 별도 테이블 없이, 시행일마다 행을 늘리지 않고
+ * 값 하나를 매년 고친다). 그룹 `MINIMUM_WAGE` 의 상세 `HOURLY`, 코드명이 시급(원, 숫자만 — 10320)이다. 플랫폼고정 그룹이라
+ * 플랫폼 원본(BP000000) 행만 본다. 검사는 계약 시작일과 상관없이 지금 등록된 값으로 한다.
  */
 export const MINIMUM_WAGE_GROUP = 'MINIMUM_WAGE';
+export const MINIMUM_WAGE_ITEM = 'HOURLY';
+
+const ASK = '플랫폼 관리자에게 문의해 주세요.';
+export const MINIMUM_WAGE_MISSING = `최저임금 공통코드(MINIMUM_WAGE · HOURLY)가 없어 수습 중 시급을 확인할 수 없습니다. ${ASK}`;
+export const MINIMUM_WAGE_INACTIVE = `최저임금 공통코드(MINIMUM_WAGE · HOURLY)가 사용 중지되어 수습 중 시급을 확인할 수 없습니다. ${ASK}`;
+export const MINIMUM_WAGE_NOT_NUMBER = `최저임금 공통코드(MINIMUM_WAGE · HOURLY)의 코드명이 숫자가 아니어서 수습 중 시급을 확인할 수 없습니다. ${ASK}`;
+
+/** 지금 최저임금 — 쓸 수 있으면 시급, 아니면 그 까닭(저장 400 문장 그대로) */
+export type MinimumWage = { hourlyWage: number } | { problem: string };
 
 /**
- * 첫 시행일 — 마이그레이션이 넣은 가장 이른 시행일(2025년 10,030원). 이날부터 시작하는 계약은 적용할 행이 꼭 있어야 한다 —
- * 행이 사용중지되거나 코드명이 숫자가 아니어서 빠져도 검사가 조용히 꺼지지 않게 코드에 둔다(2026-10-30 김민식). 그보다 앞서
- * 시작하는 계약은 값이 없어 보지 않는다. 더 이른 연도 행을 넣으면 이 값도 당긴다.
+ * 지금 등록된 최저임금. 코드가 없거나(삭제 포함) · 그룹이나 상세가 사용 중지됐거나 · 코드명이 1 이상 숫자가 아니면 그 까닭을
+ * 준다 — 검사가 조용히 꺼지지 않게 저장이 그 문장으로 400 이다(2026-10-30 김민식).
  */
-export const MINIMUM_WAGE_CHECKED_FROM = '2025-01-01';
-
-/** 첫 시행일 이후 시작인데 적용할 최저임금 행이 없을 때(공통코드 설정 문제) */
-export const MINIMUM_WAGE_MISSING =
-  '계약 시작일에 적용할 최저임금이 없습니다. 관리자에게 문의해 주세요.';
-
-export interface MinimumWage {
-  /** 시행일 YYYY-MM-DD */
-  effectiveDate: string;
-  /** 시급(원) */
-  hourlyWage: number;
-}
-
-const ITEM_CODE = /^D(\d{4})(\d{2})(\d{2})$/;
-
-/** 상세코드 · 코드명을 시행일 · 시급으로. 형식이 틀리거나(없는 날짜 포함) 시급이 0 이하 · int 범위 밖이면 null */
-export function parseMinimumWage(
-  itemCode: string,
-  label: string,
-): MinimumWage | null {
-  const m = ITEM_CODE.exec(itemCode);
-  if (!m || !/^\d+$/.test(label)) return null;
-  const effectiveDate = `${m[1]}-${m[2]}-${m[3]}`;
-  if (!parseDateOnly(effectiveDate)) return null;
-  const hourlyWage = Number(label);
-  if (hourlyWage < 1 || hourlyWage > INT4_MAX) return null;
-  return { effectiveDate, hourlyWage };
-}
-
-/**
- * 사용 중인 최저임금 전부, 시행일 오름차순. 형식이 틀린 행은 빼고 경고를 남긴다 — 공통코드 화면에서 코드명을 잘못
- * 고쳐도 저장이 500 이 되지 않게(그 행만 없는 것과 같다). 상세의 사용 상태만 보고 그룹의 사용 상태는 보지 않는다 —
- * 법정 하한이라 그룹을 사용중지해도 검사는 꺼지지 않는다(시행일 하나를 빼려면 그 상세를 사용중지한다).
- */
-export async function readMinimumWages(
+export async function readMinimumWage(
   prisma: Pick<PrismaService, 'codeItem'>,
-  logger: Pick<Logger, 'warn'>,
-): Promise<MinimumWage[]> {
-  const rows = await prisma.codeItem.findMany({
+): Promise<MinimumWage> {
+  const row = await prisma.codeItem.findUnique({
     where: {
-      groupCode: MINIMUM_WAGE_GROUP,
-      bpCode: PLATFORM_BP_CODE,
-      status: 'ACTIVE',
-      isDeleted: false,
+      groupCode_itemCode_bpCode: {
+        groupCode: MINIMUM_WAGE_GROUP,
+        itemCode: MINIMUM_WAGE_ITEM,
+        bpCode: PLATFORM_BP_CODE,
+      },
     },
-    select: { itemCode: true, label: true },
+    select: {
+      label: true,
+      status: true,
+      isDeleted: true,
+      codeGroup: { select: { status: true, isDeleted: true } },
+    },
   });
-  const out: MinimumWage[] = [];
-  for (const row of rows) {
-    const wage = parseMinimumWage(row.itemCode, row.label);
-    if (wage) out.push(wage);
-    else
-      logger.warn(
-        `최저임금 공통코드 형식이 틀려 뺍니다: ${row.itemCode} = ${row.label}`,
-      );
-  }
-  return out.sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate));
-}
-
-/** 그날 적용되는 최저임금 — 시행일이 그날 이전(그날 포함)인 것 중 가장 늦은 것. 없으면 null */
-export function minimumWageOn(
-  wages: readonly MinimumWage[],
-  date: string,
-): MinimumWage | null {
-  let found: MinimumWage | null = null;
-  for (const w of wages)
-    if (
-      w.effectiveDate <= date &&
-      (!found || w.effectiveDate > found.effectiveDate)
-    )
-      found = w;
-  return found;
+  if (!row || row.isDeleted || row.codeGroup.isDeleted)
+    return { problem: MINIMUM_WAGE_MISSING };
+  if (row.status !== 'ACTIVE' || row.codeGroup.status !== 'ACTIVE')
+    return { problem: MINIMUM_WAGE_INACTIVE };
+  const hourlyWage = Number(row.label);
+  if (!/^\d+$/.test(row.label) || hourlyWage < 1 || hourlyWage > INT4_MAX)
+    return { problem: MINIMUM_WAGE_NOT_NUMBER };
+  return { hourlyWage };
 }
 
 /** 수습 중 시급의 하한 — 최저임금의 90%, 원 미만 올림(노무사 확인 2026-10-14, 질문 19). 관리자 웹과 같다 */
@@ -98,29 +59,29 @@ export const probationWageOf = (wage: number, reductionRate: number) =>
   Math.round((wage * (100 - reductionRate)) / 100);
 
 interface ProbationWageInput {
-  startDate?: string;
   wageAmount?: number;
   probationMonths?: number | null;
   probationWageReductionRate?: number | null;
 }
 
+/** 수습을 두고 시급을 넣었는가 — 수습 중 시급 검사를 할 때. 둘 중 하나라도 없으면(임시저장) 넣은 값만 보는 다른 검사처럼 보지 않는다 */
+export const needsProbationWageCheck = (dto: ProbationWageInput) =>
+  dto.probationMonths != null &&
+  dto.probationWageReductionRate != null &&
+  !!dto.wageAmount;
+
 /**
- * 수습 중 시급이 계약 시작일의 최저임금 90% 이상인지(WHALEERP-595). 수습 · 시급 · 시작일 중 하나라도 없으면(임시저장)
- * 보지 않는다 — 넣은 값만 보는 다른 검사와 같다. 첫 시행일(MINIMUM_WAGE_CHECKED_FROM) 전에 시작하는 계약은 보지 않는다 —
- * 그 전 연도 값은 넣지 않았고, 그 무렵 종이 계약을 등록할 수 있어야 해서다. 첫 시행일 이후인데 적용할 행이 없으면 400 이다.
+ * 수습 중 시급이 지금 최저임금의 90% 이상인지(WHALEERP-595). 계약 시작일과 상관없이 지금 값으로 본다 — 지난 날짜에 시작한
+ * 계약도, 연초 값을 고치기 전에는 지난해 값으로 본다(2026-10-30 김민식). 최저임금을 쓸 수 없으면 그 까닭으로 400 이다.
  */
 export function checkProbationWage(
   dto: ProbationWageInput,
-  wages: readonly MinimumWage[],
+  minimum: MinimumWage,
 ): void {
-  const rate = dto.probationWageReductionRate ?? null;
-  if (dto.probationMonths == null || rate === null) return;
-  if (!dto.wageAmount || !dto.startDate) return;
-  if (dto.startDate < MINIMUM_WAGE_CHECKED_FROM) return;
-  const minimum = minimumWageOn(wages, dto.startDate);
-  if (!minimum) throw new BadRequestException(MINIMUM_WAGE_MISSING);
+  if (!needsProbationWageCheck(dto)) return;
+  if ('problem' in minimum) throw new BadRequestException(minimum.problem);
   const floor = probationWageFloor(minimum.hourlyWage);
-  if (probationWageOf(dto.wageAmount, rate) < floor)
+  if (probationWageOf(dto.wageAmount!, dto.probationWageReductionRate!) < floor)
     throw new BadRequestException(
       `수습 중 시급은 최저임금의 90%(${floor.toLocaleString('ko-KR')}원) 이상이어야 합니다.`,
     );

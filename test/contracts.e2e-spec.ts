@@ -72,7 +72,7 @@ describe('근로계약 목록 (e2e)', () => {
     },
     notificationTemplate: { findUnique: jest.fn() },
     // 최저임금 공통코드(WHALEERP-595)
-    codeItem: { findMany: jest.fn() },
+    codeItem: { findUnique: jest.fn() },
     invitationCodeAttempt: {
       create: jest.fn().mockResolvedValue({ invitationCodeAttemptId: 1 }),
       findFirst: jest.fn(),
@@ -180,9 +180,12 @@ describe('근로계약 목록 (e2e)', () => {
     prisma.contract.groupBy.mockReset().mockResolvedValue([]);
     prisma.store.findMany.mockReset().mockResolvedValue([]);
     prisma.store.findFirst.mockReset().mockResolvedValue({ storeId: 11 });
-    prisma.codeItem.findMany
-      .mockReset()
-      .mockResolvedValue([{ itemCode: 'D20260101', label: '10320' }]);
+    prisma.codeItem.findUnique.mockReset().mockResolvedValue({
+      label: '10320',
+      status: 'ACTIVE',
+      isDeleted: false,
+      codeGroup: { status: 'ACTIVE', isDeleted: false },
+    });
     prisma.staffMember.findFirst.mockReset().mockResolvedValue(null);
     prisma.account.findMany.mockReset().mockResolvedValue([]);
     prisma.staffMember.findMany.mockReset().mockResolvedValue([]);
@@ -567,24 +570,25 @@ describe('근로계약 목록 (e2e)', () => {
   );
 
   // 작성 화면의 시급 도움말 · 수습 확인 값(WHALEERP-595) — `:contractId` 경로에 걸리지 않는다
-  it('GET /contracts/minimum-wages — 공통코드 최저임금을 시행일 오름차순으로 준다', async () => {
-    prisma.codeItem.findMany.mockResolvedValue([
-      { itemCode: 'D20270101', label: '11000' },
-      { itemCode: 'D20260101', label: '10320' },
-    ]);
-    const res = await get('/contracts/minimum-wages', 'admin').expect(200);
+  it('GET /contracts/minimum-wage — 지금 최저임금(공통코드 MINIMUM_WAGE · HOURLY) 하나를 준다', async () => {
+    const res = await get('/contracts/minimum-wage', 'admin').expect(200);
+    expect(res.body).toEqual({ hourlyWage: 10320, problem: null });
+  });
+
+  it('GET /contracts/minimum-wage — 공통코드를 쓸 수 없으면 hourlyWage null 과 저장 400 문장', async () => {
+    prisma.codeItem.findUnique.mockResolvedValue(null);
+    const res = await get('/contracts/minimum-wage', 'admin').expect(200);
     expect(res.body).toEqual({
-      items: [
-        { effectiveDate: '2026-01-01', hourlyWage: 10320 },
-        { effectiveDate: '2027-01-01', hourlyWage: 11000 },
-      ],
+      hourlyWage: null,
+      problem:
+        '최저임금 공통코드(MINIMUM_WAGE · HOURLY)가 없어 수습 중 시급을 확인할 수 없습니다. 플랫폼 관리자에게 문의해 주세요.',
     });
   });
 
-  it('GET /contracts/minimum-wages — 작성 · 수정 권한이 없으면 403', async () => {
+  it('GET /contracts/minimum-wage — 작성 · 수정 권한이 없으면 403', async () => {
     prisma.roleGroupMenu.count.mockResolvedValue(0);
-    await get('/contracts/minimum-wages', 'admin').expect(403);
-    expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
+    await get('/contracts/minimum-wage', 'admin').expect(403);
+    expect(prisma.codeItem.findUnique).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -820,7 +824,7 @@ describe('근로계약 목록 (e2e)', () => {
       }),
     );
 
-    // 수습 중 시급은 계약 시작일 최저임금(공통코드 MINIMUM_WAGE)의 90% 이상 — 2026년 10,320원 → 9,288원(WHALEERP-595)
+    // 수습 중 시급은 지금 최저임금(공통코드 MINIMUM_WAGE · HOURLY)의 90% 이상 — 10,320원 → 9,288원(WHALEERP-595)
     describe('수습 중 시급 · 최저임금 90%', () => {
       const probation = {
         ...body,
@@ -842,24 +846,23 @@ describe('근로계약 목록 (e2e)', () => {
         expect(prisma.staffMember.create).not.toHaveBeenCalled();
       });
 
-      it('첫 시행일 이후인데 적용할 행이 없으면 400(공통코드 설정 문제)', async () => {
-        prisma.codeItem.findMany.mockResolvedValue([
-          { itemCode: 'D20260101', label: '10320' },
-        ]);
-        const res = await post({
-          ...probation,
-          startDate: '2025-06-01',
-          endDate: undefined,
-          wageAmount: 20000,
-        }).expect(400);
+      it('최저임금 코드가 사용 중지면 400 과 그 까닭', async () => {
+        prisma.codeItem.findUnique.mockResolvedValue({
+          label: '10320',
+          status: 'INACTIVE',
+          isDeleted: false,
+          codeGroup: { status: 'ACTIVE', isDeleted: false },
+        });
+        const res = await post({ ...probation, wageAmount: 20000 }).expect(400);
         expect((res.body as { message: string }).message).toBe(
-          '계약 시작일에 적용할 최저임금이 없습니다. 관리자에게 문의해 주세요.',
+          '최저임금 공통코드(MINIMUM_WAGE · HOURLY)가 사용 중지되어 수습 중 시급을 확인할 수 없습니다. 플랫폼 관리자에게 문의해 주세요.',
         );
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
       });
 
       it('수습이 없으면 시급이 낮아도 보지 않는다', async () => {
         await post({ ...body, wageAmount: 5000 }).expect(201);
-        expect(prisma.codeItem.findMany).not.toHaveBeenCalled();
+        expect(prisma.codeItem.findUnique).not.toHaveBeenCalled();
       });
     });
 
