@@ -72,14 +72,19 @@ export const needsProbationWageCheck = (dto: ProbationWageInput) =>
 
 /**
  * 수습 중 시급이 지금 최저임금의 90% 이상인지(WHALEERP-595). 계약 시작일과 상관없이 지금 값으로 본다 — 지난 날짜에 시작한
- * 계약도, 연초 값을 고치기 전에는 지난해 값으로 본다(2026-10-30 김민식). 최저임금을 쓸 수 없으면 그 까닭으로 400 이다.
+ * 계약도, 연초 값을 고치기 전에는 지난해 값으로 본다(2026-10-30 김민식). 최저임금을 쓸 수 없으면 그 까닭으로 400 이다 —
+ * 임시저장은 예외로 저장한다(입력과 상관없는 설정 문제로 작성 중인 초안을 잃지 않게, 초안 저장 때 다시 본다).
  */
 export function checkProbationWage(
   dto: ProbationWageInput,
   minimum: MinimumWage,
+  temporary = false,
 ): void {
   if (!needsProbationWageCheck(dto)) return;
-  if ('problem' in minimum) throw new BadRequestException(minimum.problem);
+  if ('problem' in minimum) {
+    if (temporary) return;
+    throw new BadRequestException(minimum.problem);
+  }
   const floor = probationWageFloor(minimum.hourlyWage);
   if (probationWageOf(dto.wageAmount!, dto.probationWageReductionRate!) < floor)
     throw new BadRequestException(

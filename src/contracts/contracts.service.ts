@@ -998,7 +998,7 @@ export class ContractsService {
   /** 수습 중 시급이 최저임금의 90% 이상인지 — 수습과 시급이 있을 때만 공통코드를 읽는다 */
   private async checkProbationWage(dto: CreateContractDto): Promise<void> {
     if (!needsProbationWageCheck(dto)) return;
-    checkProbationWage(dto, await this.minimumWage());
+    checkProbationWage(dto, await this.minimumWage(), !!dto.isTemporarySave);
   }
 
   /**
@@ -1169,11 +1169,12 @@ export class ContractsService {
     await this.checkTargetBp(bp);
     checkInput(dto);
     checkPaper(dto, documents);
-    await this.checkProbationWage(dto);
     await this.checkStore(adminAccountId, dto.storeId, bp);
     // 재계약이면 직전 계약도 이 관리자의 범위 안이어야 한다(없거나 범위 밖이면 404 · 403)
     if (dto.previousContractId !== undefined)
       await this.scopedContractOf(adminAccountId, dto.previousContractId, bp);
+    // 공통코드를 읽어야 해 범위(403 · 404) 뒤에 본다 — 범위 밖 요청이 최저임금 400 을 먼저 받지 않게
+    await this.checkProbationWage(dto);
     const fields = contractFields(dto);
     const now = new Date();
 
@@ -1770,7 +1771,6 @@ export class ContractsService {
     await this.checkTargetBp(bp);
     checkInput(dto);
     checkPaper(dto, documents);
-    await this.checkProbationWage(dto);
     const fields = contractFields(dto);
     // 지금 근무지도, 옮겨 갈 근무지도 업무 범위 안이어야 한다. 지금 근무지는 계약 직원의 동의로 봤으니, 같은
     // 근무지면 점포 단위로 다시 묻지 않는다 — 동의한 가맹 점포 직원의 임시저장을 본사 역할이 이어 쓸 수 있게.
@@ -1794,6 +1794,8 @@ export class ContractsService {
     // 연 뒤 다른 요청이 번호를 바꿨어도 여기서는 「바꿈」으로 보여 같은 403 이다 — 문구가 두 경우를 아우른다(5차 참고 3).
     if (!storeLevel && dto.phone !== scoped.phone)
       throw new ForbiddenException(PHONE_CHANGE_FORBIDDEN);
+    // 공통코드를 읽어야 해 범위(403 · 404) 뒤에 본다
+    await this.checkProbationWage(dto);
     const now = new Date();
 
     const { result, pending } = await this.withDocuments<{

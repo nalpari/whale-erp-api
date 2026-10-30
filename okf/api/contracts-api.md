@@ -427,9 +427,9 @@ not matter — a contract that started earlier (e.g. a late 종이 계약) is ch
 and until the value is updated in January the previous year's applies (accepted by 김민식). Below it →
 400 「수습 중 시급은 최저임금의 90%(9,288원) 이상이어야 합니다.」 (the 원 amount is that floor). If the
 code is missing (or deleted), 사용 중지 (상세 or 그룹), or its 코드명 is not a number ≥ 1, saving such a
-contract is 400 with that cause — 「최저임금 공통코드(MINIMUM_WAGE · HOURLY)가 없어 / 사용 중지되어 /
+contract is 400 with that cause (임시저장 is still saved — a setting problem should not lose a draft; 초안 저장 checks again) — 「최저임금 공통코드(MINIMUM_WAGE · HOURLY)가 없어 / 사용 중지되어 /
 의 코드명이 숫자가 아니어서 수습 중 시급을 확인할 수 없습니다. 플랫폼 관리자에게 문의해 주세요.」 — so the
-check never turns off silently. Without 수습 or 시급 the code is not read. Migration
+check never turns off silently. Without 수습 or 시급 the code is not read; it is read after the 범위 checks (403 · 404). The 계약서 본문 (`contract-template.ts`) prints 수습 중 시급 with the same integer formula. Migration
 `20261030145813_team3_minimum_wage_code` seeds 10,320원; update the 코드명 in 공통코드 관리 after the 고시
 (August) and before 1 January. `GET /contracts/minimum-wage` (작성 or 수정 권한) returns
 `{ hourlyWage, problem }` — the current value, or `hourlyWage: null` with the 400 sentence — for the

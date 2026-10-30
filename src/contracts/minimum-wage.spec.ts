@@ -105,6 +105,20 @@ describe('최저임금 공통코드 MINIMUM_WAGE · HOURLY(WHALEERP-595)', () =>
       ).toThrow('수습 중 시급은 최저임금의 90%(9,288원) 이상이어야 합니다.');
     });
 
+    it('임시저장은 최저임금을 쓸 수 없어도 저장한다 — 하한은 그대로 본다', () => {
+      const p = { ...probation, wageAmount: 20000 };
+      expect(() =>
+        checkProbationWage(p, { problem: MINIMUM_WAGE_INACTIVE }, true),
+      ).not.toThrow();
+      expect(() =>
+        checkProbationWage(
+          { ...probation, wageAmount: 9000 },
+          { hourlyWage: 10320 },
+          true,
+        ),
+      ).toThrow('최저임금의 90%');
+    });
+
     it('최저임금을 쓸 수 없으면 그 까닭으로 400', () => {
       expect(() =>
         checkProbationWage(

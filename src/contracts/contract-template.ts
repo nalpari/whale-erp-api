@@ -1,5 +1,6 @@
 import type { EmploymentType, Weekday } from '@prisma/client';
 import { DB_ENUMS } from '../enums/db-enums.generated';
+import { probationWageOf } from './minimum-wage';
 import {
   dayMinutesOf,
   weeklyMinutesOf,
@@ -143,7 +144,7 @@ function probationText(c: ContractTemplateInput): string | null {
   const during =
     c.wageAmount === null
       ? ''
-      : `(수습 중 시급 ${wonText(Math.round(c.wageAmount * (1 - rate / 100)))})`;
+      : `(수습 중 시급 ${wonText(probationWageOf(c.wageAmount, rate))})`;
   return `${months}개월 · 시급의 ${rate}% 감액${during}`;
 }
 
