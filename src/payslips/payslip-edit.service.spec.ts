@@ -700,7 +700,9 @@ describe('PayslipEditService', () => {
   });
 
   describe('confirm (확정, WHALEERP-230)', () => {
-    const confirm = () => service.confirm(9, 40, { updatedAt: UPDATED });
+    // 가드가 정한 대상 BP — 확정 뒤 상세도 이 BP 로 다시 읽는다(WHALEERP-637)
+    const bp = { bpCodeId: 2, isPlatformCaller: false };
+    const confirm = () => service.confirm(9, 40, { updatedAt: UPDATED }, bp);
     // 급여 기간(10월)이 끝난 뒤
     beforeEach(() =>
       jest.useFakeTimers({
@@ -743,6 +745,7 @@ describe('PayslipEditService', () => {
         ),
       );
       await expect(confirm()).resolves.toEqual({ payslipId: 40 });
+      expect(detail.findOne).toHaveBeenLastCalledWith(9, 40, bp);
       jest.setSystemTime(new Date('2026-10-15T14:59:59Z')); // 한국 10/15 23:59:59
       await expect(confirm()).rejects.toMatchObject({
         response: { code: 'PERIOD_NOT_ENDED' },
@@ -804,8 +807,9 @@ describe('PayslipEditService', () => {
   });
 
   describe('cancelConfirmation (확정 취소, WHALEERP-230)', () => {
+    const bp = { bpCodeId: 2, isPlatformCaller: false };
     const cancel = () =>
-      service.cancelConfirmation(9, 40, { updatedAt: UPDATED });
+      service.cancelConfirmation(9, 40, { updatedAt: UPDATED }, bp);
 
     it('확정 · 발송 완료에서 검토 중으로 — 확정 일시 · 관리자를 비우고 처리 이력(확정 취소)', async () => {
       for (const status of ['CONFIRMED', 'SENT']) {
@@ -813,6 +817,7 @@ describe('PayslipEditService', () => {
         prisma.payslip.updateMany.mockClear();
         prisma.payslipLog.create.mockClear();
         await expect(cancel()).resolves.toEqual({ payslipId: 40 });
+        expect(detail.findOne).toHaveBeenLastCalledWith(9, 40, bp);
         expect(call(prisma.payslip.updateMany)).toMatchObject({
           where: { payslipId: 40, status },
           data: { status: 'REVIEWING', confirmedAt: null, confirmedBy: null },

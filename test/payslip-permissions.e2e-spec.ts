@@ -511,12 +511,40 @@ describe('급여명세서 권한 (e2e, DB)', () => {
       200,
       otherBpCodeId,
     );
-    for (const [method, path] of [
+    // BP 를 받는 경로 전부 — 하나라도 bp 를 빠뜨리면 400 이 아니라 빈 200 · 404 가 되어 여기서 드러난다(③리뷰). 본문은 형식 검사(400)를
+    // 지나 범위 판정까지 가게 맞는 모양으로 싣는다
+    const id = slips.direct.payslipId;
+    const status = { updatedAt: new Date().toISOString() };
+    for (const [method, path, body] of [
       ['get', `/payslips?month=${month}`],
-      ['get', `/payslips/${slips.direct.payslipId}`],
-      ['post', `/payslips/${slips.direct.payslipId}/confirm`],
+      ['get', `/payslips/summary?month=${month}&storeId=${storeIds.direct}`],
+      ['get', `/payslips/candidates?month=${month}`],
+      ['post', '/payslips', { staffMemberId: 1, month }],
+      ['post', '/payslips/bulk', { month }],
+      ['post', '/payslips/send', { month }],
+      ['get', `/payslips/${id}`],
+      ['get', `/payslips/${id}/previous-values`],
+      [
+        'put',
+        `/payslips/${id}`,
+        {
+          ...status,
+          isPremiumApplied: true,
+          isWithholdingApplied: false,
+          items: [],
+        },
+      ],
+      ['post', `/payslips/${id}/recalculate`, status],
+      ['post', `/payslips/${id}/confirm`, status],
+      ['post', `/payslips/${id}/cancel-confirmation`, status],
+      ['post', `/payslips/${id}/send`, status],
+      ['post', `/payslips/${id}/resend`, status],
     ] as const) {
-      const res = await call('pm', method, path, 400);
+      const res = await request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${await adminToken(admins.pm)}`)
+        .send(body ?? {});
+      expect([path, res.status]).toEqual([path, 400]);
       expect((res.body as { message: string }).message).toBe(
         '급여명세서를 볼 BP 를 골라 주세요.',
       );

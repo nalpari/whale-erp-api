@@ -85,12 +85,12 @@ sources:
 
 `test/payslip-permissions.e2e-spec.ts` 가 실제 DB 로 고정한다. 관리 범위는 역할이 아니라 계정의 `is_all_stores` · 점포 매핑이 정한다
 (`AdminScopeService.getManageableStores`) — BP 마스터는 BP 전체, BP 관리자 · 가맹 마스터 · 가맹 관리자는 매핑한 점포. **BP 는 계정이 아니라
-탭의 BP 다**(WHALEERP-637): 관리자 웹 경로(`PayslipsController` 전부)가 `@TargetBp()` 로 가드가 정한 대상 BP(`X-Bp-Code-Id` — front 가
+탭의 BP 다**(WHALEERP-637): 관리자 웹 경로(`PayslipsController` 의 추가 공제 항목 `GET /payslips/additional-items` — BP 와 무관한 공통 목록 — 을 뺀 모든 경로)가 `@TargetBp()` 로 가드가 정한 대상 BP(`X-Bp-Code-Id` — front 가
 `/bp/{bpCodeId}/payslips…` 주소에서 싣는다)를 받아 서비스의 `targetStores`(`src/admin-scope/target-stores.ts`)로 넘긴다. BP · 가맹 계정은
 소속 BP 라 그대로이고(남의 BP 헤더는 가드의 403), 플랫폼 계정(PM · PA)은 고른 고객 BP 의 점포 전부를 다룬다. 플랫폼 계정이 헤더 **없이**
 부르면 대상이 자기 플랫폼 BP 라 범위를 보기 전에 400 「급여명세서를 볼 BP 를 골라 주세요.」(근로계약 `checkTargetBp` 와 같다 — 플랫폼 계정만
 `bp_codes` 한 번 읽음). 서비스 메서드는 `bp` 를 마지막 선택 인자로 받는다(없으면 계정의 소속 BP — 옮기기 전 동작). 홈 점포 하나 화면의 요약
-(`GET /payslips/summary`)도 같아서, 탭 BP 주소가 아닌 홈에서 플랫폼 계정이 부르면 400 이다(점포 카드 `GET /stores/:id` 와 같다). 범위 밖 ·
+(`GET /payslips/summary`)은 홈이 탭 BP 주소가 아니라 헤더 없이 부르지만, 플랫폼 계정은 점포 하나 화면을 열지 않아 400 을 받을 일이 없다. 범위 밖 ·
 가린 명세서는 목록에서 빠지거나 가리고, 상세 · 지난 값 · 다시 계산 · 확정 · 발송은 모두 같은 404 다. 본사 역할(BM · BA)에게 동의 없는
 가맹 점포 직원 명세서는 목록에서 근무지 · 급여 기간만 남고(검토 대기만으로 거르면 빠지고 검토 대기 건수에도 들지 않는다) 상세 · 처리는 404, 가맹 역할에게는
 동의와 상관없이 보인다(ATT-30). 직원은 자기에게 발송된 명세서만(`/me/payslips/:id`, 남의 것 · 발송 전은 404), 관리자 경로는 403.

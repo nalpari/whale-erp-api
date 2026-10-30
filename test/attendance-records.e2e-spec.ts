@@ -439,12 +439,35 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       .set('Authorization', `Bearer ${await adminToken(pmId)}`)
       .set('X-Bp-Code-Id', String(otherBpCodeId))
       .expect(404);
-    for (const path of [
-      daily,
-      `/attendance-records?from=${ymd(yesterday)}&to=${ymd(today)}`,
-      history,
-    ]) {
-      const res = await asPm(path, 400);
+    // BP 를 받는 경로 전부 — 하나라도 bp 를 빠뜨리면 400 이 아니라 빈 200 · 404 가 되어 여기서 드러난다(③리뷰)
+    const recordPath = `/attendance-records/${attendanceRecordId}`;
+    for (const [method, path, body] of [
+      ['get', daily],
+      ['get', `/attendance-records?from=${ymd(yesterday)}&to=${ymd(today)}`],
+      ['get', history],
+      ['get', `/attendance-records/proxy-staff?date=${ymd(yesterday)}`],
+      [
+        'post',
+        '/attendance-records/proxy',
+        {
+          staffMemberId: directStaffId,
+          date: ymd(yesterday),
+          checkInTime: '09:00',
+          reason: '대신 등록',
+        },
+      ],
+      [
+        'post',
+        `${recordPath}/correction`,
+        { checkInTime: '09:00', reason: '보정' },
+      ],
+      ['post', `${recordPath}/review`],
+    ] as const) {
+      const res = await request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${await adminToken(pmId)}`)
+        .send(body ?? {});
+      expect([path, res.status]).toEqual([path, 400]);
       expect((res.body as { message: string }).message).toBe(
         '출퇴근 기록을 볼 BP 를 골라 주세요.',
       );
