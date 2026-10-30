@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: [Platform holidays](/api/public-holidays.md) — api #224 재리뷰: 응답 DTO 의 예시를 새 표기에 맞췄다 — 휴일명 예시 「대체공휴일(삼일절)」, 비고는 「지금은 모두 null」(대체공휴일도 이름에 담는다). openapi 설명 · 예시만 바뀜.
 * **Update**: main 병합(api teddiursa, main #222 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Whale ERP API](/api/whale-erp-api.md) · [BP code groups](/api/bp-code-groups.md) · [Platform holidays](/api/public-holidays.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — api #224 review-pr 반영: 그룹 등록이 integer 최댓값을 넘치게 순서를 매길 것이면 500 대신 409, 등록 트랜잭션에 `BULK_UPDATE_TX`(잠금 대기도 시간에 든다). 공식 휴일 이름 마이그레이션의 검사를 「그 이름이 있어야 한다」로 바꾸고 바꾸기 전 대체공휴일이 모두 「대체공휴일(…)」이 됐는지 센다(아직 미적용이라 같은 파일을 고침). 저장 경합 때 다시 읽는 조건을 단위 테스트로 고정. 주석 · okf 문구 정리(`SAME_AS_LIVE_ITEM`, 2050 e2e 설명, 「위 줄」, `CodeGroupInputDto` 는 공통 칸).
 * **Update**: main 병합(api teddiursa, main #223 까지): okf 시각 충돌은 늦은 값을, okf/log 충돌은 양쪽 기록을 살렸다.

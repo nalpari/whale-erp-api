@@ -21876,14 +21876,13 @@
           },
           "name": {
             "type": "string",
-            "description": "휴일명.",
-            "example": "삼일절"
+            "description": "휴일명. 공공 API 표기 — 대체공휴일도 이름에 담는다.",
+            "example": "대체공휴일(삼일절)"
           },
           "note": {
             "type": "string",
             "nullable": true,
-            "description": "비고. 없으면 null(대체공휴일이면 그 사유).",
-            "example": "대체공휴일 — 삼일절"
+            "description": "비고. 지금은 모두 null 이다 — 동기화도 규칙 계산 행도 대체공휴일을 이름에 담는다(2026-10-30)."
           }
         },
         "required": [
