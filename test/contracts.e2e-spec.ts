@@ -274,6 +274,9 @@ describe('근로계약 목록 (e2e)', () => {
       expect(where.OR).toEqual(columns.map((c) => ({ [c]: true })));
       expect(prisma.contract.findUnique).not.toHaveBeenCalled();
       expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+      // 근무지 선택지는 범위 · 점포를 읽는다 — 그것도 닿지 않는다
+      expect(scope.getManageableStores).not.toHaveBeenCalled();
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
     },
   );
 
