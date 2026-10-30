@@ -169,7 +169,7 @@ export class MyContractViewsService {
           },
         },
       });
-      // 직원 필기 서명 · 보낸 원본은 싣지 않는다(myDocumentWhere)
+      // 직원 앱이 쓰는 종류만(myDocumentWhere) — 필기 서명 · 보낸 원본은 없다
       const documents = await tx.contractDocument.findMany({
         where: myDocumentWhere(contractId),
         select: { contractDocumentId: true, kind: true, fileName: true },

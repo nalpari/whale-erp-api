@@ -385,6 +385,15 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
       data: { sentAt: before },
     });
     await download(contractId, old.contractDocumentId, auth).expect(404);
+    const reverted = await request(app.getHttpServer())
+      .get(`/me/contracts/${contractId}`)
+      .set('Authorization', `Bearer ${auth}`)
+      .expect(200);
+    expect(
+      (
+        reverted.body as { documents: { contractDocumentId: number }[] }
+      ).documents.map((d) => d.contractDocumentId),
+    ).toEqual([paper.contractDocumentId]);
 
     // 관리자는 기록이라 둘 다 본다
     const adminDetail = await request(app.getHttpServer())

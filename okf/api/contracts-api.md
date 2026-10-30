@@ -1048,8 +1048,8 @@ apply to reading.
   - `mismatches` — `identityMismatches` against the account, exactly what 날인 would 409 with
     (`EMPTY_CONTRACT_IDENTITY` when there is no party row); `signable` = `awaitingSignature` and no
     mismatches.
-  - `documents` — `{ contractDocumentId, kind, fileName }`, without the 직원 필기 서명 (`SIGNATURE`) and without any
-    보낸 원본 (`SENT_ORIGINAL`, `myDocumentWhere`): one made before the 관리자 corrected the 근로자 and re-sent — or one that
+  - `documents` — `{ contractDocumentId, kind, fileName }`, only the kinds the app uses (`myDocumentWhere` allow-list
+    `MY_DOCUMENT_KINDS`: 처리 완료본 · 종이 계약 근로계약서 · 임금계약서) — so no 직원 필기 서명, and no 보낸 원본: one made before the 관리자 corrected the 근로자 and re-sent — or one that
     becomes 「current」 again when a failed re-send is undone and `sent_at` goes back — can carry another person's
     이름 · 생년월일 · 번호 (api #211 review, twice). The app only uses the 처리 완료본 and 종이 계약 files. The 관리자
     detail keeps listing every send's 보낸 원본 as the record.
@@ -1071,7 +1071,7 @@ apply to reading.
   filename*=UTF-8''…` is set on the S3 response, not by this API). The app hands that file to the share sheet.
   The path ends in `/download-url` like every other download route here, because the reply is a URL, not the file.
   - Not mine (same `myContractWhere`) → the detail's 404 body. Then the file must belong to that contract and be
-    one `documents` lists (not `SIGNATURE` or `SENT_ORIGINAL` — same `myDocumentWhere`) → else 404 「파일을 찾을 수 없습니다.」 — so another contract's
+    one `documents` lists (same `myDocumentWhere`) → else 404 「파일을 찾을 수 없습니다.」 — so another contract's
     file id under my contract is 404 too.
   - **처리 완료본 (`SIGNED_COPY`) only for executed contracts** — `SIGNED`, or `ENDED` with a `SIGNED → ENDED`
     status history row (any actor: the nightly end or an admin replacement), or an old `ENDED` with no history at

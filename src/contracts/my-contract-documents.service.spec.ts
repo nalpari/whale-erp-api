@@ -8,8 +8,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import type { StorageService } from '../storage/storage.service';
 import { MyContractDocumentsService } from './my-contract-documents.service';
 
-const SENT_AT = new Date('2026-10-20T01:00:00.000Z');
-
 /** 직원 앱 근로계약 파일 내려받기 주소(WHALEERP-146 · 149) */
 describe('MyContractDocumentsService', () => {
   let prisma: {
@@ -32,9 +30,7 @@ describe('MyContractDocumentsService', () => {
   beforeEach(() => {
     prisma = {
       contract: {
-        findFirst: jest
-          .fn()
-          .mockResolvedValue({ status: 'SIGNED', sentAt: SENT_AT }),
+        findFirst: jest.fn().mockResolvedValue({ status: 'SIGNED' }),
       },
       contractDocument: {
         findFirst: jest
@@ -99,7 +95,10 @@ describe('MyContractDocumentsService', () => {
     expect(args.where).toEqual({
       contractDocumentId: 5,
       contractId: 41,
-      kind: { notIn: ['SIGNATURE', 'SENT_ORIGINAL'] },
+      // 직원 앱이 쓰는 종류만 — 처리 완료본 · 종이 계약 날인본 · 임금계약서
+      kind: {
+        in: ['SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT'],
+      },
     });
   });
 
@@ -159,7 +158,7 @@ describe('MyContractDocumentsService', () => {
     },
   );
 
-  it.each(['SENT_ORIGINAL', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT'])(
+  it.each(['PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT'])(
     '처리 완료본이 아닌 파일(%s)은 서명 대기에서도 받는다',
     async (kind) => {
       prisma.contract.findFirst.mockResolvedValue({
@@ -191,7 +190,10 @@ describe('MyContractDocumentsService', () => {
     expect(args.where).toEqual({
       contractDocumentId: 5,
       contractId: 41,
-      kind: { notIn: ['SIGNATURE', 'SENT_ORIGINAL'] },
+      // 직원 앱이 쓰는 종류만 — 처리 완료본 · 종이 계약 날인본 · 임금계약서
+      kind: {
+        in: ['SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT'],
+      },
     });
     prisma.contractDocument.findFirst.mockResolvedValue(null);
     await expect(service().downloadUrl(77, 41, 5)).rejects.toThrow(
