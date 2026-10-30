@@ -99,8 +99,7 @@ describe('MyContractDocumentsService', () => {
     expect(args.where).toEqual({
       contractDocumentId: 5,
       contractId: 41,
-      kind: { not: 'SIGNATURE' },
-      OR: [{ kind: { not: 'SENT_ORIGINAL' } }, { sentAt: SENT_AT }],
+      kind: { notIn: ['SIGNATURE', 'SENT_ORIGINAL'] },
     });
   });
 
@@ -184,7 +183,7 @@ describe('MyContractDocumentsService', () => {
     await expect(service().downloadUrl(77, 41, 5)).rejects.toThrow('s3 down');
   });
 
-  it('보낸 원본은 지금 발송분만 — 근로자 정보를 고쳐 다시 보내기 전 원본은 404(다른 사람 정보가 들어 있을 수 있다, api #211 리뷰)', async () => {
+  it('보낸 원본은 직원 앱이 받지 않는다 — 고치기 전 · 되돌린 발송의 원본에 다른 사람 정보가 있을 수 있다(api #211 리뷰)', async () => {
     await service().downloadUrl(77, 41, 5);
     const [args] = prisma.contractDocument.findFirst.mock.calls[0] as [
       Prisma.ContractDocumentFindFirstArgs,
@@ -192,8 +191,7 @@ describe('MyContractDocumentsService', () => {
     expect(args.where).toEqual({
       contractDocumentId: 5,
       contractId: 41,
-      kind: { not: 'SIGNATURE' },
-      OR: [{ kind: { not: 'SENT_ORIGINAL' } }, { sentAt: SENT_AT }],
+      kind: { notIn: ['SIGNATURE', 'SENT_ORIGINAL'] },
     });
     prisma.contractDocument.findFirst.mockResolvedValue(null);
     await expect(service().downloadUrl(77, 41, 5)).rejects.toThrow(

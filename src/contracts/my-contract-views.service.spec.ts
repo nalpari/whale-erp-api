@@ -362,17 +362,13 @@ describe('MyContractViewsService', () => {
         contractId: 41,
         staffMember: { accountId: 77 },
       });
-      // 직원 필기 서명은 싣지 않고, 보낸 원본은 지금 발송분만 — 고쳐 다시 보내기 전 원본에는 다른 사람 정보가 있을 수 있다
+      // 직원 필기 서명 · 보낸 원본은 싣지 않는다 — 보낸 원본에는 고치기 전 · 되돌린 발송의 다른 사람 정보가 있을 수 있다
       // (api #211 리뷰)
       expect(tx.contractDocument.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
             contractId: 41,
-            kind: { not: 'SIGNATURE' },
-            OR: [
-              { kind: { not: 'SENT_ORIGINAL' } },
-              { sentAt: new Date('2026-10-20T01:00:00.000Z') },
-            ],
+            kind: { notIn: ['SIGNATURE', 'SENT_ORIGINAL'] },
           },
         }),
       );

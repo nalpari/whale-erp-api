@@ -346,14 +346,14 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
         status,
       });
     }
-    // 처리 완료본이 아닌 파일은 서명 대기에서도 받는다
+    // 처리 완료본이 아닌 파일(종이 계약 날인본)은 서명 대기에서도 받는다
     const waiting = await contract(me, 'PENDING_SIGNATURE');
-    const original = await document(waiting, 'SENT_ORIGINAL');
-    await download(waiting, original.contractDocumentId, auth).expect(200);
+    const paper = await document(waiting, 'PAPER_EMPLOYMENT_CONTRACT');
+    await download(waiting, paper.contractDocumentId, auth).expect(200);
     expect(storage.downloadUrl).toHaveBeenCalledTimes(3);
   });
 
-  it('보낸 원본은 지금 발송분만 보이고 받는다 — 근로자 정보를 고쳐 다시 보내기 전 원본은 상세에 없고 404(api #211 리뷰)', async () => {
+  it('보낸 원본은 직원 앱에 없다 — 고치기 전 · 되돌린 발송의 원본에 다른 사람 정보가 있을 수 있어 상세에 없고 404(api #211 리뷰)', async () => {
     const me = await account();
     const auth = await token(me);
     const contractId = await contract(me, 'PENDING_SIGNATURE');
@@ -363,9 +363,10 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
       where: { contractId },
       data: { contractMethod: 'ELECTRONIC', sentAt: now },
     });
-    // 앞 발송분 — 고치기 전 다른 사람(A)의 정보로 만든 원본
+    // 앞 발송분 — 고치기 전 다른 사람(A)의 정보로 만든 원본. 재발송이 실패해 되돌리면 계약 발송 일시가 이 시각으로 돌아간다
     const old = await document(contractId, 'SENT_ORIGINAL', 'a.pdf', before);
     const current = await document(contractId, 'SENT_ORIGINAL', 'b.pdf', now);
+    const paper = await document(contractId, 'WAGE_CONTRACT', '임금계약서.pdf');
 
     const detail = await request(app.getHttpServer())
       .get(`/me/contracts/${contractId}`)
@@ -375,8 +376,14 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
       (
         detail.body as { documents: { contractDocumentId: number }[] }
       ).documents.map((d) => d.contractDocumentId),
-    ).toEqual([current.contractDocumentId]);
-    await download(contractId, current.contractDocumentId, auth).expect(200);
+    ).toEqual([paper.contractDocumentId]);
+    await download(contractId, current.contractDocumentId, auth).expect(404);
+    await download(contractId, old.contractDocumentId, auth).expect(404);
+    // 계약 발송 일시가 앞 발송으로 되돌아가도(undo) 직원 앱에는 여전히 없다
+    await prisma.contract.update({
+      where: { contractId },
+      data: { sentAt: before },
+    });
     await download(contractId, old.contractDocumentId, auth).expect(404);
 
     // 관리자는 기록이라 둘 다 본다
@@ -388,7 +395,11 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
       (
         adminDetail.body as { documents: { contractDocumentId: number }[] }
       ).documents.map((d) => d.contractDocumentId),
-    ).toEqual([old.contractDocumentId, current.contractDocumentId]);
+    ).toEqual([
+      old.contractDocumentId,
+      current.contractDocumentId,
+      paper.contractDocumentId,
+    ]);
   });
 
   it('관리자 토큰 403 · 토큰 없음 401', async () => {

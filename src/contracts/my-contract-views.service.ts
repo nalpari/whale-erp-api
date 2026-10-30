@@ -169,9 +169,9 @@ export class MyContractViewsService {
           },
         },
       });
-      // 직원 필기 서명은 싣지 않고 보낸 원본은 지금 발송분만(myDocumentWhere)
+      // 직원 필기 서명 · 보낸 원본은 싣지 않는다(myDocumentWhere)
       const documents = await tx.contractDocument.findMany({
-        where: myDocumentWhere(contractId, c.sentAt),
+        where: myDocumentWhere(contractId),
         select: { contractDocumentId: true, kind: true, fileName: true },
         orderBy: { contractDocumentId: 'asc' },
       });
