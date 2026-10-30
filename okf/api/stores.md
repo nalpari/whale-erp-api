@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-10-29T02:30:00Z
+    last_modified: 2026-10-30T06:00:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
@@ -160,9 +160,10 @@ accounts out of customer stores unless the caller passes the tab BP, and its `hi
 staff personal data — a BM manages franchise stores even though it may not see
 their staff.
 
-`GET /stores/options`, the 근로계약서 근무지 dropdown, is a different question
-("where may I write a contract"), takes no menu permission and stays with its own
-rules — see [Contracts API](/api/contracts-api.md).
+The 근로계약서 근무지 dropdown is a different question ("where may I write a
+contract") with its own rules. It was `GET /stores/options` until 2026-10-30 and is
+now `GET /contracts/store-options` under the 근로계약 menu permission (WHALEERP-638)
+— see [Contracts API](/api/contracts-api.md).
 
 # Status moves one way
 
@@ -408,8 +409,10 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
 # Traps
 
 - `GET /stores` was the 근무지 dropdown until 2026-10-14. That moved to
-  `/stores/options`, and front's `contracts/new/load-form-data.ts` has to follow —
-  deploy the two together, or the 근로계약 screen's 근무지 list goes empty.
+  `/stores/options`, then on 2026-10-30 to `/contracts/store-options`
+  (WHALEERP-638), and front's `contracts/new/load-form-data.ts` has to follow each
+  time. The old path is removed, so ship api and front back to back — between
+  the two the 근로계약 작성 · 이어 쓰기 screens show the error screen.
 - The 업태 · 종목 limit is 50 (DB CHECK, ERD); the demo's 30 was not followed.
 - The list and excel `keyword` goes through `containsText`: Prisma's `contains`
   passes `%` · `_` · `\` to LIKE as wildcards, so a raw `_` would match every store.

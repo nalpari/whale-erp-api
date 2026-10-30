@@ -20,6 +20,7 @@ const permissionOf = (controller: { prototype: object }, method: string) => {
 describe('근로계약 api 메뉴 권한', () => {
   it.each<[string, unknown]>([
     ['list', 'read'],
+    ['storeOptions', ['create', 'update']],
     ['create', 'create'],
     ['createPaper', 'create'],
     ['findOne', 'read'],

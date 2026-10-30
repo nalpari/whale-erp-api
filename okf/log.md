@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: main 병합(ponyta, main #221 까지): okf 충돌은 양쪽 기록을 살렸다.
+* **Update**: [Contracts API](/api/contracts-api.md) · [Store management](/api/stores.md) — 근로계약 근무지 선택지를 `GET /stores/options` 에서 `GET /contracts/store-options`(작성 또는 수정 권한, `@TargetBp()`)로 옮겼다(WHALEERP-638). 메뉴 권한 없는 경로라 가드가 탭 BP 를 정하지 않아 플랫폼 계정은 근무지가 없어 근로계약을 쓸 수 없었다. 플랫폼 계정이 헤더 없이 부르면 다른 근로계약 경로와 같은 400. 비밀번호 e2e 의 「메뉴 권한 없는 업무 API」 확인은 `GET /notifications` 로 바꿨다. 옛 경로를 지워 api 와 front 를 잇달아 배포한다(api 만 나가면 옛 front 의 작성 · 이어 쓰기가 오류 화면).
 * **Update**: main 병합(api exeggcute, main #218 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — 점포 목록 버전의 재료를 「점포 · 매핑의 최근 수정 시각 + 개수」에서 **행마다 (id, updated_at, is_deleted)** 로 바꿨다(review-pr). `@updatedAt` 은 커밋이 아니라 쿼리를 만들 때 시각이라, 늦게 커밋된 폐점(t1)이 먼저 커밋된 수정(t2 > t1) 뒤에 오면 최근 시각도 개수도 그대로여서 다른 PC 가 폐점 점포를 계속 보였다 — 같은 밀리초 수정과 매핑 맞바꿈도 같은 식으로 놓쳤다. 버전이 계정을 사용 중 · 미삭제 조건으로 다시 읽어, 판정 뒤 쓸 수 없게 됐으면 매핑을 뺀 버전 대신 403 이다. 단위 spec 과 e2e 에 늦은 커밋 · 맞바꿈 경우를 넣었다. 조회 수 · 인덱스 · 직원 앱 접근 설명을 고쳤고 description 에 이 기능을 넣었다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — 점포 목록 버전 `GET /bp-codes/{bpCodeId}/stores-version`(front 요청). 관리자 웹이 새로고침 · 메뉴 이동 · 창 포커스 때 버전만 묻고 바뀌었을 때만 점포 목록을 다시 받는다 — 여러 PC 의 점포 등록 · 수정 · 폐점 · 삭제와 담당 점포 매핑 · 관리 범위 변경을 잡는다. 재료는 그 BP 점포의 `max(updated_at)`(지운 행 포함) · 지우지 않은 점포 수, BP · 가맹 계정이면 자기 매핑의 `max(updated_at)`(지운 행 포함) · 살아 있는 매핑 수 · 계정 `updated_at` — 해시로 준다. 권한 · 오류는 점포 목록과 같다(`bpStoresAccess`). 선택 요청이던 `GET /auth/admin/me/stores`(login-info 의 stores 만, `{ items, total }`)도 만들었다. 리뷰 반영: 두 경로 모두 강제 비밀번호 변경 중에는 403 으로 맞췄고, 「버전을 먼저 받고 목록을 받는다」와 시각 · 개수 방식의 한계를 적었다.

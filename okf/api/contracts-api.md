@@ -1,19 +1,19 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T06:00:00Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-29T08:20:16Z
+    last_modified: 2026-10-30T06:00:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -50,10 +50,6 @@ sources:
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
     last_modified: 2026-10-29T05:17:36Z
-  - id: stores-service
-    resource: ../../src/stores/stores.service.ts
-    title: StoresService (근무지 선택지)
-    last_modified: 2026-10-28T08:41:55Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
@@ -193,9 +189,10 @@ a 직원 not yet joined has no account, so counts as not consented)
   body that would fail the service's own checks still gets the 400; DTO validation
   comes before it. The service methods take `bp` as an optional last argument
   (absent = the account's own BP, the pre-618 behaviour), so callers and unit specs
-  kept their shape. `GET /stores/options` (the 근무지 dropdown) does **not** read
-  the header yet — a platform account sees no 근무지 there and cannot write a
-  contract until that route moves too.
+  kept their shape. The 근무지 dropdown moved here for the same reason
+  (`GET /contracts/store-options`, WHALEERP-638): as `GET /stores/options` it had
+  no menu permission, so the guard set no tab BP and a platform account saw no
+  근무지 and could not write a contract.
 - **Store names cost a second query.** `stores` is 1팀's table and has no
   Prisma relation to `contracts`, so `include` cannot reach it. A `storeName`
   filter first looks up matching `store_id`s (no match → `storeId: { in: [] }`,
@@ -1136,7 +1133,7 @@ only — a 종이 계약 has no body.
   row exists (nothing wrote them before; the new CHECK would refuse such rows without `sent_at`).
 - Admins see both kinds in `GET /contracts/:id` `documents` and download them through the existing route.
 
-# GET /stores/options
+# GET /contracts/store-options
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
 undeleted and not `CLOSED`, by name, and only the stores the admin may write
@@ -1145,10 +1142,17 @@ contract rule above: a new contract has no 직원 whose consent could open it).
 403 for an account that is not in use. It moved from `GET /stores` on 2026-10-14,
 when that path became the 점포 정보 관리 list ([Store management](/api/stores.md));
 the two answer different questions — this one is "where may I write a contract",
-that one is "what may I manage" — so they stay separate.[^stores-service]
+that one is "what may I manage" — so they stay separate. On 2026-10-30 it moved
+again from `GET /stores/options` to here (WHALEERP-638): only a `@MenuPermission`
+route gets the tab BP from the guard, so it now needs 근로계약 작성 or 수정 permission
+(the screens that call it need the same) and follows the tab BP — a platform account
+gets the chosen BP's stores, and without the header the same 400 as the other
+contract routes. Front's `contracts/new/load-form-data.ts` follows. The old path is
+gone, so the two must ship back to back: api alone breaks the old front's 작성 ·
+이어 쓰기 screens (its 404 is not caught, the error screen shows) until front
+follows.[^contracts-service]
 
 [^create-dto]: CreateContractDto
-[^stores-service]: StoresService (근무지 선택지)
 [^contracts-controller]: ContractsController
 [^contracts-service]: ContractsService
 [^contract-duplicates]: 계약 중복 검사 (WHALEERP-129)
