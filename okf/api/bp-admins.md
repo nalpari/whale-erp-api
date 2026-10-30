@@ -4,7 +4,7 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:37:43Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T02:37:43Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
@@ -36,7 +36,7 @@ reset.[^bp-admins-service]
 
 | Route | Menu permission |
 |---|---|
-| `GET /bp-admins` | 조회 — `{ items, total, inactiveCount }`, newest first |
+| `GET /bp-admins` | 조회 — `{ items, total, inactiveCount }`, newest first. Filters (all AND): `keyword` · `storeIds` · `storeTypeCode` · `roleGroupId` · `roleTypeCodes` (BA · FM · FA, comma or repeated; empty or absent = all three — the role filter, 2026-10-30) · `accountStatus` |
 | `GET /bp-admins/role-groups?roleTypeCode=` | 조회 — the role-group choices for the filter and the form, without needing MN000013 |
 | `GET /bp-admins/store-options?roleTypeCode=&adminAccountId=` | 조회 — only the caller's stores that can be picked (no 폐점; for FM, none another master holds) |
 | `GET /bp-admins/login-id-availability?loginId=` | 등록 |
