@@ -411,7 +411,8 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
 - `GET /stores` was the 근무지 dropdown until 2026-10-14. That moved to
   `/stores/options`, then on 2026-10-30 to `/contracts/store-options`
   (WHALEERP-638), and front's `contracts/new/load-form-data.ts` has to follow each
-  time — deploy api first, or the 근로계약 screen's 근무지 list breaks.
+  time. The old path is removed, so ship api and front back to back — between
+  the two the 근로계약 작성 · 이어 쓰기 screens show the error screen.
 - The 업태 · 종목 limit is 50 (DB CHECK, ERD); the demo's 30 was not followed.
 - The list and excel `keyword` goes through `containsText`: Prisma's `contains`
   passes `%` · `_` · `\` to LIKE as wildcards, so a raw `_` would match every store.

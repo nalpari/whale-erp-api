@@ -50,10 +50,10 @@ sources:
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
     last_modified: 2026-10-29T05:17:36Z
-  - id: stores-service
+  - id: contracts-store-options
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService.storeOptions (근무지 선택지)
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-10-30T05:30:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
@@ -1151,11 +1151,13 @@ again from `GET /stores/options` to here (WHALEERP-638): only a `@MenuPermission
 route gets the tab BP from the guard, so it now needs 근로계약 작성 or 수정 permission
 (the screens that call it need the same) and follows the tab BP — a platform account
 gets the chosen BP's stores, and without the header the same 400 as the other
-contract routes. Front's `contracts/new/load-form-data.ts` follows; deploy api
-first.[^stores-service]
+contract routes. Front's `contracts/new/load-form-data.ts` follows. The old path is
+gone, so the two must ship back to back: api alone breaks the old front's 작성 ·
+이어 쓰기 screens (its 404 is not caught, the error screen shows) until front
+follows.[^contracts-store-options]
 
 [^create-dto]: CreateContractDto
-[^stores-service]: ContractsService.storeOptions (근무지 선택지)
+[^contracts-store-options]: ContractsService.storeOptions (근무지 선택지)
 [^contracts-controller]: ContractsController
 [^contracts-service]: ContractsService
 [^contract-duplicates]: 계약 중복 검사 (WHALEERP-129)

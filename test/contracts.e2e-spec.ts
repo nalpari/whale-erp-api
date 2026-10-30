@@ -227,16 +227,20 @@ describe('근로계약 목록 (e2e)', () => {
 
   it('토큰이 없으면 401', async () => {
     await get('/contracts').expect(401);
+    await get('/contracts/store-options').expect(401);
   });
 
   it('직원 앱 토큰이면 403', async () => {
     await get('/contracts', 'account').expect(403);
+    await get('/contracts/store-options', 'account').expect(403);
   });
 
   // 「근로계약 관리」(/contracts) 메뉴 권한을 가드가 먼저 본다(WHALEERP-592) — 없으면 서비스까지 가지 않는다
   it.each<[string, string, string[]]>([
     ['get', '/contracts/5', ['isReadable']],
     ['get', '/contracts/5/documents/3/download-url', ['isReadable']],
+    // 근무지 선택지는 작성 · 이어 쓰기 화면이 쓴다 — 조회 권한만으로는 받지 않는다(WHALEERP-638)
+    ['get', '/contracts/store-options', ['isCreatable', 'isUpdatable']],
     ['post', '/contracts', ['isCreatable']],
     ['post', '/contracts/paper', ['isCreatable']],
     // 이어 쓰기는 작성 또는 수정으로 받고 서비스가 상태대로 다시 묻는다
@@ -540,9 +544,18 @@ describe('근로계약 목록 (e2e)', () => {
     ['page 가 0 이면', '/contracts?page=0'],
     ['없는 상태 값이면', '/contracts?status=DONE'],
     ['모르는 쿼리면', '/contracts?sort=name'],
+    [
+      '근무지 선택지 pageSize 가 200 을 넘으면',
+      '/contracts/store-options?pageSize=201',
+    ],
+    [
+      '근무지 선택지 page 가 너무 크면',
+      '/contracts/store-options?page=10000001',
+    ],
   ])('%s 400', async (_, path) => {
     await get(path, 'admin').expect(400);
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
+    expect(prisma.store.findMany).not.toHaveBeenCalled();
   });
 
   describe('POST /contracts', () => {
