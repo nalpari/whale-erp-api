@@ -365,7 +365,26 @@ describe('근로계약 목록 (e2e)', () => {
   it('사용 중인 관리자 계정이 아니면 403', async () => {
     scope.getManageableStores.mockResolvedValue(null);
     await get('/contracts', 'admin').expect(403);
+    await get('/contracts/store-options', 'admin').expect(403);
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
+    expect(prisma.store.findMany).not.toHaveBeenCalled();
+  });
+
+  // BP · 가맹 계정은 헤더 없이 소속 BP 의 관리 점포다(WHALEERP-638 — 옛 GET /stores/options 와 같은 모양)
+  it('근무지 선택지는 { items, total } 이고 소속 BP 의 관리 점포로 거른다', async () => {
+    prisma.store.findMany.mockResolvedValueOnce([
+      { storeId: 11, name: '서초점' },
+    ]);
+    prisma.store.count.mockResolvedValueOnce(1);
+    const res = await get(
+      '/contracts/store-options?pageSize=200',
+      'admin',
+    ).expect(200);
+    expect(res.body).toEqual({
+      items: [{ storeId: 11, name: '서초점' }],
+      total: 1,
+    });
+    expect(scope.getManageableStores).toHaveBeenCalledWith(1, OWN_BP);
   });
 
   it('업무 범위 안 점포의 계약만 읽는다', async () => {

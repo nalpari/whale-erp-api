@@ -9,11 +9,11 @@ sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T06:00:00Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-29T08:20:16Z
+    last_modified: 2026-10-30T06:00:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -50,10 +50,6 @@ sources:
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
     last_modified: 2026-10-29T05:17:36Z
-  - id: contracts-store-options
-    resource: ../../src/contracts/contracts.service.ts
-    title: ContractsService.storeOptions (근무지 선택지)
-    last_modified: 2026-10-30T05:30:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
@@ -1154,10 +1150,9 @@ gets the chosen BP's stores, and without the header the same 400 as the other
 contract routes. Front's `contracts/new/load-form-data.ts` follows. The old path is
 gone, so the two must ship back to back: api alone breaks the old front's 작성 ·
 이어 쓰기 screens (its 404 is not caught, the error screen shows) until front
-follows.[^contracts-store-options]
+follows.[^contracts-service]
 
 [^create-dto]: CreateContractDto
-[^contracts-store-options]: ContractsService.storeOptions (근무지 선택지)
 [^contracts-controller]: ContractsController
 [^contracts-service]: ContractsService
 [^contract-duplicates]: 계약 중복 검사 (WHALEERP-129)

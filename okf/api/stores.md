@@ -13,7 +13,7 @@ sources:
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-10-29T02:30:00Z
+    last_modified: 2026-10-30T06:00:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
