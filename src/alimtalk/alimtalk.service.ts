@@ -224,14 +224,15 @@ function buttonsOf(
   links: readonly string[],
 ): AlimtalkButton[] {
   const problem = alimtalkButtonProblem(templateCode, variables);
-  const button = alimtalkButtonOf(templateCode);
-  if (problem === 'NO_BUTTON_NAME' || (links.length && !button))
+  if (problem?.kind === 'NO_BUTTON_NAME')
     throw new Error(`알림톡 템플릿 ${templateCode} 의 버튼 이름이 없습니다`);
-  if (problem === 'LINK_MISMATCH')
+  if (problem?.kind === 'LINK_MISMATCH')
     throw new Error(
-      `알림톡 템플릿 ${templateCode} 의 버튼 링크 변수는 ${button?.link} 하나여야 합니다`,
+      `알림톡 템플릿 ${templateCode} 의 버튼 링크 변수는 ${problem.link} 하나여야 합니다`,
     );
+  const button = alimtalkButtonOf(templateCode);
   const [link] = links;
+  // 문제가 없으면 버튼이 없는 템플릿은 링크도 없다 — button 확인은 타입을 좁히려는 것이다
   if (link === undefined || !button) return [];
   if (!WEB_URL.test(link))
     throw new Error(

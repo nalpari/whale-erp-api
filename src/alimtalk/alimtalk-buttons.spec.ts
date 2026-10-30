@@ -21,27 +21,33 @@ describe('alimtalk-buttons', () => {
       alimtalkButtonProblem(code, [{ name: '초대코드' }, link]),
     ).toBeNull();
     // 표시가 없음 · 다른 변수로 옮김 · 둘 이상(api #219 리뷰)
-    expect(alimtalkButtonProblem(code, [{ name: '링크' }])).toBe(
-      'LINK_MISMATCH',
-    );
+    expect(alimtalkButtonProblem(code, [{ name: '링크' }])).toEqual({
+      kind: 'LINK_MISMATCH',
+      link: '링크',
+      marked: [],
+    });
     expect(
       alimtalkButtonProblem(code, [
         { name: '링크' },
         { name: '초대코드', isButtonLink: true },
       ]),
-    ).toBe('LINK_MISMATCH');
+    ).toEqual({ kind: 'LINK_MISMATCH', link: '링크', marked: ['초대코드'] });
     expect(
       alimtalkButtonProblem(code, [
         link,
         { name: '근무지', isButtonLink: true },
       ]),
-    ).toBe('LINK_MISMATCH');
+    ).toEqual({
+      kind: 'LINK_MISMATCH',
+      link: '링크',
+      marked: ['링크', '근무지'],
+    });
   });
 
   it('버튼을 달지 않는 템플릿에는 버튼 링크 변수가 없어야 한다', () => {
     expect(alimtalkButtonProblem('TALK_X', [{ name: 'a' }])).toBeNull();
     expect(
       alimtalkButtonProblem('TALK_X', [{ name: 'a', isButtonLink: true }]),
-    ).toBe('NO_BUTTON_NAME');
+    ).toEqual({ kind: 'NO_BUTTON_NAME', marked: ['a'] });
   });
 });
