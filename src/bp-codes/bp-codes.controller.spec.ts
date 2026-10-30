@@ -16,7 +16,7 @@ describe('BpCodesController — 공통코드', () => {
   beforeEach(async () => {
     scope = {
       bpStoresAccess: jest.fn().mockResolvedValue('allowed'),
-      bpStoresVersion: jest.fn().mockResolvedValue('v1'),
+      bpStoresVersion: jest.fn().mockResolvedValue({ version: 'v1' }),
     };
     codes = { forBpId: jest.fn().mockResolvedValue({ STORE_TYPE: [] }) };
     const module = await Test.createTestingModule({
@@ -89,6 +89,13 @@ describe('BpCodesController — 공통코드', () => {
 
     it('사용할 수 없는 관리자 계정은 403', async () => {
       scope.bpStoresAccess.mockResolvedValue('unavailable');
+      await expect(controller.findStoresVersion(admin, '7')).rejects.toThrow(
+        new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
+      );
+    });
+
+    it('판정 뒤 버전을 만드는 사이 계정을 쓸 수 없게 됐어도 403', async () => {
+      scope.bpStoresVersion.mockResolvedValue('unavailable');
       await expect(controller.findStoresVersion(admin, '7')).rejects.toThrow(
         new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
       );

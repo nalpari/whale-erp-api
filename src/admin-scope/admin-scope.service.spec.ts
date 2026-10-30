@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import type { AuthUser } from '../auth/auth.types';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AdminScopeService,
@@ -21,9 +22,8 @@ describe('AdminScopeService', () => {
       findFirst: jest.Mock;
       findMany: jest.Mock;
       count: jest.Mock;
-      aggregate: jest.Mock;
     };
-    adminStoreMapping: { count: jest.Mock; aggregate: jest.Mock };
+    adminStoreMapping: { count: jest.Mock; findMany: jest.Mock };
     bpCode: { findFirst: jest.Mock; findMany: jest.Mock; count: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -51,11 +51,10 @@ describe('AdminScopeService', () => {
           .fn()
           .mockResolvedValue([{ storeId: 5, storeTypeCode: 'DIRECT' }]),
         count: jest.fn().mockResolvedValue(0),
-        aggregate: jest.fn().mockResolvedValue({ _max: { updatedAt: null } }),
       },
       adminStoreMapping: {
         count: jest.fn().mockResolvedValue(1),
-        aggregate: jest.fn().mockResolvedValue({ _max: { updatedAt: null } }),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       bpCode: {
         findFirst: jest.fn().mockResolvedValue({ bpCodeId: 7 }),
@@ -715,81 +714,102 @@ describe('AdminScopeService', () => {
       roleTypeCode: 'PA',
       bpCode: { isPlatform: true },
     };
-    const stores = (updatedAt: Date | null, live: number) => {
-      prisma.store.aggregate.mockResolvedValue({ _max: { updatedAt } });
-      prisma.store.count.mockResolvedValue(live);
-    };
-    const mappings = (updatedAt: Date | null, live: number) => {
-      prisma.adminStoreMapping.aggregate.mockResolvedValue({
-        _max: { updatedAt },
-      });
-      prisma.adminStoreMapping.count.mockResolvedValue(live);
+    const row = (storeId: number, updatedAt = T1, isDeleted = false) => ({
+      storeId,
+      updatedAt,
+      isDeleted,
+    });
+    const stores = (...rows: ReturnType<typeof row>[]) =>
+      prisma.store.findMany.mockResolvedValue(rows);
+    const mappings = (...rows: ReturnType<typeof row>[]) =>
+      prisma.adminStoreMapping.findMany.mockResolvedValue(rows);
+    const versionOf = async (user: AuthUser) => {
+      const result = await scope.bpStoresVersion(user, 7);
+      if (!result || result === 'unavailable')
+        throw new Error(`버전이 아니다: ${String(result)}`);
+      return result.version;
     };
 
-    it('점포의 최근 수정 시각은 지운 행까지 보고, 지우지 않은 점포 수를 함께 센다', async () => {
+    it('점포는 지운 행까지 모든 행의 (id, 수정 시각, 지움)을 읽는다', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(platform);
-      stores(T1, 3);
-      const version = await scope.bpStoresVersion(admin, 7);
-      expect(typeof version).toBe('string');
+      stores(row(1), row(2));
+      await expect(versionOf(admin)).resolves.toEqual(expect.any(String));
       // 삭제(is_deleted = true)도 updated_at 을 바꾸므로 지운 행을 빼지 않는다
-      expect(prisma.store.aggregate).toHaveBeenCalledWith({
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
         where: { bpCodeId: 7 },
-        _max: { updatedAt: true },
-      });
-      expect(prisma.store.count).toHaveBeenCalledWith({
-        where: { bpCodeId: 7, isDeleted: false },
+        select: { storeId: true, updatedAt: true, isDeleted: true },
+        orderBy: { storeId: 'asc' },
       });
     });
 
-    it('점포가 바뀌면(수정 시각 · 지우지 않은 수) 버전이 바뀌고, 같으면 같다', async () => {
+    it('점포 행이 하나라도 바뀌면 버전이 바뀌고, 같으면 같다', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(platform);
-      stores(T1, 3);
-      const before = await scope.bpStoresVersion(admin, 7);
-      await expect(scope.bpStoresVersion(admin, 7)).resolves.toBe(before);
-      stores(T2, 3);
-      await expect(scope.bpStoresVersion(admin, 7)).resolves.not.toBe(before);
-      // 같은 밀리초에 바뀌어도 수가 다르면 다르다
-      stores(T1, 2);
-      await expect(scope.bpStoresVersion(admin, 7)).resolves.not.toBe(before);
+      stores(row(1, T2), row(2));
+      const before = await versionOf(admin);
+      await expect(versionOf(admin)).resolves.toBe(before);
+      // 늦게 커밋된 수정 — 다른 행의 최근 시각(T2)보다 이른 시각이 찍혀도 바뀐다
+      stores(row(1, T2), row(2, new Date(T1.getTime() + 1)));
+      await expect(versionOf(admin)).resolves.not.toBe(before);
+      // 지움 표시만 바뀌어도
+      stores(row(1, T2), row(2, T1, true));
+      await expect(versionOf(admin)).resolves.not.toBe(before);
+      // 점포 추가
+      stores(row(1, T2), row(2), row(3));
+      await expect(versionOf(admin)).resolves.not.toBe(before);
     });
 
     it('플랫폼 계정은 BP 전체를 보므로 점포만 담는다 — 매핑은 읽지 않는다', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(platform);
-      stores(T1, 3);
-      await scope.bpStoresVersion(admin, 7);
-      expect(prisma.adminStoreMapping.aggregate).not.toHaveBeenCalled();
-      expect(prisma.adminStoreMapping.count).not.toHaveBeenCalled();
+      stores(row(1));
+      await versionOf(admin);
+      expect(prisma.adminStoreMapping.findMany).not.toHaveBeenCalled();
     });
 
-    it('BP · 가맹 계정은 담당 점포 매핑(지운 행 포함)과 관리 범위(계정 수정 시각)도 담는다', async () => {
-      prisma.adminAccount.findFirst.mockResolvedValue(bpAdmin());
-      stores(T1, 3);
-      mappings(T1, 2);
-      const before = await scope.bpStoresVersion(admin, 7);
-      expect(prisma.adminStoreMapping.aggregate).toHaveBeenCalledWith({
-        where: { adminAccountId: 9 },
-        _max: { updatedAt: true },
+    it('계정은 사용 중인 것만 읽는다 — 그사이 쓸 수 없게 됐으면 매핑을 빼고 답하지 않고 unavailable', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(null);
+      stores(row(1));
+      await expect(scope.bpStoresVersion(admin, 7)).resolves.toBe(
+        'unavailable',
+      );
+      expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
+        where: {
+          adminAccountId: 9,
+          isDeleted: false,
+          accountStatusCode: 'ACTIVE',
+        },
+        select: {
+          updatedAt: true,
+          roleTypeCode: true,
+          bpCode: { select: { isPlatform: true } },
+        },
       });
-      expect(prisma.adminStoreMapping.count).toHaveBeenCalledWith({
-        where: { adminAccountId: 9, isDeleted: false },
+    });
+
+    it('BP · 가맹 계정은 담당 점포 매핑(지운 행 포함)과 계정 수정 시각도 담는다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue(bpAdmin());
+      stores(row(1), row(2));
+      mappings(row(1), row(2, T1, true));
+      const before = await versionOf(admin);
+      expect(prisma.adminStoreMapping.findMany).toHaveBeenCalledWith({
+        where: { adminAccountId: 9 },
+        select: { storeId: true, updatedAt: true, isDeleted: true },
+        orderBy: { storeId: 'asc' },
       });
 
-      mappings(T2, 2); // 매핑 추가 · 해제
-      const afterMapping = await scope.bpStoresVersion(admin, 7);
+      // 같은 수로 맞바꿈(1 해제 · 2 되살림)
+      mappings(row(1, T2, true), row(2, T2));
+      const afterMapping = await versionOf(admin);
       expect(afterMapping).not.toBe(before);
-      prisma.adminAccount.findFirst.mockResolvedValue(bpAdmin(T2)); // is_all_stores 변경
-      await expect(scope.bpStoresVersion(admin, 7)).resolves.not.toBe(
-        afterMapping,
-      );
+      // 관리 범위(is_all_stores) · 상태 변경은 계정 수정 시각으로
+      prisma.adminAccount.findFirst.mockResolvedValue(bpAdmin(T2));
+      await expect(versionOf(admin)).resolves.not.toBe(afterMapping);
     });
 
     it('직원 앱은 계정 · 매핑이 없으니 점포만 담는다', async () => {
-      stores(T1, 3);
-      await expect(scope.bpStoresVersion(staff, 7)).resolves.toEqual(
-        expect.any(String),
-      );
+      stores(row(1));
+      await expect(versionOf(staff)).resolves.toEqual(expect.any(String));
       expect(prisma.adminAccount.findFirst).not.toHaveBeenCalled();
-      expect(prisma.adminStoreMapping.aggregate).not.toHaveBeenCalled();
+      expect(prisma.adminStoreMapping.findMany).not.toHaveBeenCalled();
     });
 
     it('없거나 지운 BP · 플랫폼 BP 면 null', async () => {
@@ -799,7 +819,7 @@ describe('AdminScopeService', () => {
         where: { bpCodeId: 7, isDeleted: false, isPlatform: false },
         select: { bpCodeId: true },
       });
-      expect(prisma.store.aggregate).not.toHaveBeenCalled();
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
     });
   });
 

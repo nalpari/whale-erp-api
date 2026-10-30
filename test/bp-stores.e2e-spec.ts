@@ -305,7 +305,21 @@ describe('BP 점포 목록 (e2e, DB)', () => {
         where: { storeId: added.storeId },
         data: { isDeleted: true },
       });
-      expect((await versionOf(bpCodeId, pmToken)).version).not.toBe(afterEdit);
+      const afterDelete = (await versionOf(bpCodeId, pmToken)).version;
+      expect(afterDelete).not.toBe(afterEdit);
+
+      // 늦게 커밋된 수정 — @updatedAt 은 쿼리를 만들 때 시각이라 이미 본 다른 행보다 이른 시각이 찍힐 수 있다.
+      // 최근 수정 시각 하나로는 놓치지만 행마다 보므로 잡힌다.
+      const older = await prisma.store.findUniqueOrThrow({
+        where: { storeId: storeIds[0] },
+      });
+      await prisma.store.update({
+        where: { storeId: storeIds[0] },
+        data: { updatedAt: new Date(older.updatedAt.getTime() + 1) },
+      });
+      expect((await versionOf(bpCodeId, pmToken)).version).not.toBe(
+        afterDelete,
+      );
     });
 
     it('BP · 가맹 관리자는 관리 범위 · 담당 점포 매핑이 바뀌면 바뀌고, 플랫폼 계정은 영향이 없다', async () => {
@@ -330,12 +344,25 @@ describe('BP 점포 목록 (e2e, DB)', () => {
         '가 점포',
       ]);
 
-      // 해제는 지움 표시 — 지운 행까지 보므로 잡힌다
+      // 같은 수로 맞바꿈(가 해제 · 나 추가) — 해제는 지움 표시라 지운 행까지 보므로 잡힌다
       await prisma.adminStoreMapping.updateMany({
         where: { adminAccountId: bmId(), storeId: storeIds[1] },
         data: { isDeleted: true },
       });
-      expect((await versionOf(bpCodeId, bmToken)).version).not.toBe(mapped);
+      await prisma.adminStoreMapping.create({
+        data: { adminAccountId: bmId(), storeId: storeIds[0] },
+      });
+      const swapped = (await versionOf(bpCodeId, bmToken)).version;
+      expect(swapped).not.toBe(mapped);
+      expect((await myStores(bmToken)).items.map((s) => s.name)).toEqual([
+        '나 점포',
+      ]);
+
+      await prisma.adminStoreMapping.updateMany({
+        where: { adminAccountId: bmId(), storeId: storeIds[0] },
+        data: { isDeleted: true },
+      });
+      expect((await versionOf(bpCodeId, bmToken)).version).not.toBe(swapped);
       expect((await myStores(bmToken)).total).toBe(0);
 
       // 플랫폼 계정은 매핑 없이 BP 전체를 본다

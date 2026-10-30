@@ -93,10 +93,10 @@ export class BpCodesController {
 
   /**
    * 그 BP 점포 목록의 버전 — 관리자 웹이 새로고침 · 메뉴 이동 · 창 포커스 때 버전만 묻고, 바뀌었을 때만 점포 목록
-   * (자기 BP 는 로그인 정보의 stores, 연 BP 는 위 점포 목록)을 다시 받는다. 여러 PC 에서 같은 계정으로 쓸 때 다른 PC 의
-   * 점포 등록 · 수정 · 폐점 · 삭제와 담당 점포 매핑 · 관리 범위 변경을 잡는다(BP · 가맹 관리자만 매핑 · 범위까지).
-   * 볼 수 있는 BP 와 오류는 점포 목록과 같다(bpStoresAccess) — 볼 수 없는 BP · 플랫폼 BP 는 404, 사용 중인 관리자
-   * 계정이 아니면 403.
+   * (자기 BP 는 `GET /auth/admin/me/stores`, 연 BP 는 위 점포 목록)을 다시 받는다 — 버전을 먼저 받고 목록을 받는다.
+   * 여러 PC 에서 같은 계정으로 쓸 때 다른 PC 의 점포 등록 · 수정 · 폐점 · 삭제와 담당 점포 매핑 · 관리 범위 변경을
+   * 잡는다(BP · 가맹 관리자만 매핑 · 범위까지). 볼 수 있는 BP 와 오류는 점포 목록과 같다(bpStoresAccess) — 볼 수 없는
+   * BP · 플랫폼 BP 는 404, 사용 중인 관리자 계정이 아니면 403(판정 뒤 버전을 만드는 사이에 바뀌어도).
    */
   @ApiForbiddenResponse({ description: '사용할 수 없는 관리자 계정' })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
@@ -111,8 +111,10 @@ export class BpCodesController {
       throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     if (access === 'denied') throw new NotFoundException(NOT_FOUND_MESSAGE);
     const version = await this.scope.bpStoresVersion(user, bpCodeId);
+    if (version === 'unavailable')
+      throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     if (version === null) throw new NotFoundException(NOT_FOUND_MESSAGE);
-    return { version };
+    return version;
   }
 
   /**

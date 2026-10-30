@@ -1,10 +1,10 @@
 ---
 type: API
 title: Admin authentication
-description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), and a platform user's stores and 공통코드 of a picked BP.
+description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, and the store list version (`stores-version`, `me/stores`) the header store picker refreshes by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T05:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -73,11 +73,11 @@ sources:
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · stores-version · code-items — 플랫폼 사용자의 BP 선택과 진입
-    last_modified: 2026-10-30T05:00:00Z
+    last_modified: 2026-10-30T07:00:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService — 직원 · 점포 판정의 탭 BP 인자(scopeAdmin)
-    last_modified: 2026-10-30T05:00:00Z
+    last_modified: 2026-10-30T07:00:00Z
 ---
 
 # Routes
@@ -605,27 +605,39 @@ manager's store mappings or 관리 점포 범위 changed — has to reach the ot
 filters. 관리자 웹 asks `GET /bp-codes/{bpCodeId}/stores-version` on refresh, menu change and window focus,
 and re-reads the stores (`GET /auth/admin/me/stores` for its own BP, `GET /bp-codes/{id}/stores` for a picked
 one) only when the value changed (front 요청, 2026-10-29). Access and errors are the stores route's
-(`bpStoresAccess`): PM · PA any customer BP, everyone else their own; another BP or the platform BP 404, an
-unusable account 403.
+(`bpStoresAccess`): PM · PA any customer BP, BP · 가맹 관리자 their own, 직원 앱 a BP holding a store of
+their joined, employed staff record; another BP or the platform BP 404, an unusable account 403 — also when
+it became unusable between that check and the version being built (the version reads the account again,
+`ACTIVE` and undeleted, and answers 403 rather than a version without the mapping part).
 
-`AdminScopeService.bpStoresVersion` hashes (SHA-256, base64url, 22 chars — the raw times and counts are not
-exposed, and the format may change):
+`AdminScopeService.bpStoresVersion` hashes (SHA-256, base64url, 22 chars — ids and times are not exposed,
+and the format may change):
 
-- the BP's `stores` `max(updated_at)` **including deleted rows** — deletion is a flag, so it moves
-  `updated_at` — and the count of undeleted stores, so two changes in one millisecond still differ;
-- for a BP · 가맹 account only (their scope is mappings): their `admin_store_mappings` `max(updated_at)`,
-  deleted rows included (unassigning sets the flag), the count of live mappings, and their
-  `admin_accounts.updated_at` (`is_all_stores`). PM · PA and 직원 앱 see the whole BP, so stores only.
+- **every** `stores` row of the BP, **deleted rows included** — deletion is a flag, so it moves
+  `updated_at` — as `(store_id, updated_at, is_deleted)` in `store_id` order;
+- for a BP · 가맹 account only (their scope is mappings): every `admin_store_mappings` row of theirs, the
+  same way (unassigning sets the flag), and their `admin_accounts.updated_at` — that catches 관리 점포 범위
+  (`is_all_stores`) and status changes. Any other edit of the account moves it too, which only costs one
+  extra re-read. PM · PA and 직원 앱 see the whole BP, so stores only.
+
+**Why every row, not `max(updated_at)` and a count** (first version, changed after review on 2026-10-30):
+`@updatedAt` is stamped when Prisma builds the query, not at commit, and the store transactions lock rows
+and write history before committing. A 폐점 stamped t1 that commits after an edit stamped t2 > t1 leaves the
+maximum at t2 and the count unchanged, so the version would never move and the other PCs would keep showing
+the store as open until some later change. An edit in the same millisecond as the latest one, and a mapping
+swapped for another (same count), were missed the same way. Per-row material moves whenever any row's
+values do, whatever the commit order. Unit spec and e2e both cover the late-commit case.
 
 The 대표 이미지 is not in it — the picker does not show it, and it does not touch the store row. Login does
-not change it either: a login does not move `admin_accounts.updated_at` (admin-auth e2e). Every query is on
-`stores_bp_code_id_idx` or the mapping primary key, two to five small reads per call.
+not change it either: a login does not move `admin_accounts.updated_at` (admin-auth e2e). The reads are
+`bp_codes` by primary key, the BP's stores on `stores_bp_code_id_idx` (one row per store, deleted ones
+included, so the cost grows with the BP's store count), and for an admin the account by primary key; a
+BP · 가맹 account adds its mappings on the mapping primary key's leading `admin_account_id`. With
+`bpStoresAccess` that is four to six reads per call besides the session check.
 
 **Ask the version before the list, never after.** Read the list first and a change landing in between is
 inside the stored version but not in the list, so the picker keeps the old list until something else changes;
-read the version first and the worst case is one extra re-read next time. The version is built from row times
-and counts, not from the list itself, so a change committed late with an earlier `updated_at` than one already
-seen can go unnoticed until the next change — accepted as front's request specified it.
+read the version first and the worst case is one extra re-read next time.
 
 # Which BP's 공통코드 rows
 
