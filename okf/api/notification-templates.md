@@ -4,8 +4,12 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:30:00Z }
 sources:
+  - id: staff-invitation-kakao-registered
+    resource: ../../prisma/migrations/20261030174743_team3_staff_invitation_kakao_registered/migration.sql
+    title: 가입 초대 알림톡 본문 · 카카오 템플릿 코드를 카카오 등록본과 같게 (WHALEERP-636)
+    last_modified: 2026-10-30T08:47:43Z
   - id: reject-notices-without-reason
     resource: ../../prisma/migrations/20261030120100_team3_reject_notices_without_reason/migration.sql
     title: 근로계약 거부 · 소속 추가 거절 알림 4건에서 사유 줄 · 변수를 뺌 (WHALEERP-635)
@@ -85,6 +89,13 @@ sources:
   바꾸고(운영자가 고친 문구는 그대로), 되돌리기 원본은 늘 바꾼다. 코드 · 이름 · 채널 · 수신 설정 묶음 · 사용 여부 · 카카오 템플릿
   코드는 그대로이고 변경 이력은 남기지 않는다.
   예외로 `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_RESENT` 는 엑셀의 재발송 문구 대신 `PUSH_PAYSLIP_SENT` · `EMAIL_PAYSLIP_SENT` 의 새 문구를 따른다 — 다시 보내도 처음 발송과 같은 문구(NTF-20 유지, 2026-10-29 노영주).
+- **가입 초대 알림톡 = 카카오 등록본**(WHALEERP-636, 2026-10-30 등록). 알림톡은 등록한 본문과 글자 · 줄바꿈까지 같아야 나간다.
+  `20261030174743_team3_staff_invitation_kakao_registered` 가 `TALK_STAFF_INVITATION` 의 `body` · `default_body` 를 등록본(빈 줄 없는 다섯 줄 —
+  「#{근무지}에서 근로계약서를 보내려고 합니다.」 … 「초대 코드와 링크는 30일 동안 쓸 수 있습니다.」)으로, `kakao_template_code` 를
+  `WHALE_INVITE_01` 에서 등록한 코드 `TALK_STAFF_INVITATION` 으로 바꾼다. 운영자가 고친 문구도 덮어쓴다 — 등록본과 다르면 카카오가
+  거절해 대체 문자로만 간다. 변수 목록은 되돌리기 원본(근무지 · 초대코드 · 링크=버튼 링크)으로 맞춘다 — 발송 코드가 이 셋만 넘긴다.
+  제목(null) · 버튼(「가입하기」, 코드가 싣는다)은 그대로다. 대체 문자는 이 본문 끝에 링크를
+  붙여 「아래 링크를 누르면」과 맞는다.
 - **템플릿 코드**는 고칠 수 있다. 형식(`^[A-Z][A-Z0-9_]*$`)과 고유만 보고 겹치면 409. 채널을 바꿔도 코드가 저절로 바뀌지
   않는다. 발송 코드가 이 값으로 부르므로 화면이 「발송 코드도 함께 바꿔야 합니다」 확인을 받는다.
 
