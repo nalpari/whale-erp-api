@@ -24,6 +24,17 @@ export class BizppurioError extends Error {
 }
 
 /**
+ * 알림톡 버튼(`content.at.button`). 지금은 웹링크(WL)만 보낸다 — 이름은 카카오에 등록한 버튼 이름과 같아야 하고(28자까지),
+ * WL 은 `url_mobile` 이 필수다. 템플릿에 버튼이 등록돼 있으면 요청에도 실어야 한다(비즈뿌리오 BIZAPI 레퍼런스).
+ */
+export type AlimtalkButton = {
+  name: string;
+  type: 'WL';
+  url_mobile: string;
+  url_pc?: string;
+};
+
+/**
  * POST /v3/message 요청 본문. 지금은 알림톡(at)만 보낸다. `resend` · `recontent` 를
  * 넣으면 알림톡이 실패했을 때 비즈뿌리오가 문자로 대신 보낸다. 그때 `from` 이
  * 발신번호다(사전 등록 번호).
@@ -40,6 +51,7 @@ export type BizppurioMessage = {
       templatecode: string;
       message: string;
       title?: string;
+      button?: AlimtalkButton[];
     };
   };
   resend?: { first: 'sms' | 'lms' };

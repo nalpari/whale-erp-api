@@ -4,6 +4,7 @@ import { findSendableTemplate } from '../notification-templates/find-template';
 import { renderTemplate } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  type AlimtalkButton,
   BizppurioClient,
   BizppurioError,
   type BizppurioMessage,
@@ -44,6 +45,20 @@ export const isMobilePhone = (phone: string) =>
 const SMS_MAX_BYTES = 90;
 const LMS_SUBJECT = '[WHALE ERP]';
 const LOG_REASON_LENGTH = 1000;
+// 버튼 링크는 웹 주소만 싣는다(메일 버튼과 같다)
+const WEB_URL = /^https?:\/\//i;
+
+/**
+ * 버튼 링크 변수(isButtonLink)가 있는 알림톡 템플릿의 버튼 이름(WHALEERP-636). 카카오에 등록 · 검수한 버튼 이름과 글자
+ * 하나까지 같아야 한다 — 다르면 비즈뿌리오가 거절한다(28자까지). 템플릿 변수 목록이 아니라 코드에 두는 까닭: 변수 목록은
+ * 템플릿 관리 화면이 저장할 때 아는 칸만 남겨, 거기에 둔 이름은 화면에서 한 번 저장하면 지워진다(메일 버튼 「바로가기」도
+ * 코드에 있다). 템플릿 코드로 찾는다 — 발송 코드가 템플릿을 부르는 이름이다.
+ * TODO(WHALEERP-636): 두 이름은 제안값이다 — 재영 님이 카카오 등록 이름을 정하면 그 값으로 바꾼다.
+ */
+export const ALIMTALK_BUTTON_NAMES: Readonly<Record<string, string>> = {
+  TALK_STAFF_INVITATION: '가입하기',
+  TALK_STAFF_AFFILIATION_REQUEST: '요청 확인하기',
+};
 
 /**
  * 알림톡 발송의 공통 진입점. 각 도메인은 이 서비스만 주입받아 쓴다.
@@ -73,8 +88,9 @@ export class AlimtalkService {
   ) {}
 
   /**
-   * 알림톡이 실패했을 때 문자로 대신 보내는가(BIZPPURIO_SMS_FROM 이 있는가). 버튼을 아직 보내지 않아 버튼 링크는
-   * 대체 문자에만 실린다 — 링크가 꼭 가야 하는 호출부는 보내기 전에 확인한다.
+   * 알림톡이 실패했을 때 문자로 대신 보내는가(BIZPPURIO_SMS_FROM 이 있는가). 버튼 링크는 알림톡 버튼과 대체 문자 끝에
+   * 함께 실린다. 카카오가 아직 검수하지 않은 템플릿(본문 · 버튼이 등록과 다름)은 알림톡이 거절되고 대체 문자로만 닿으므로,
+   * 링크가 꼭 가야 하는 호출부는 보내기 전에 확인한다.
    */
   hasSmsFallback(): boolean {
     return this.config.smsFrom !== null;
@@ -105,6 +121,7 @@ export class AlimtalkService {
       input.variables,
       input.maskedVariables,
     );
+    const button = buttonsOf(templateCode, links);
 
     // CHECK notification_templates_alimtalk_fields 가 ALIMTALK 행에 값을 보장한다.
     const kakaoTemplateCode = template.kakaoTemplateCode as string;
@@ -123,6 +140,7 @@ export class AlimtalkService {
             senderkey: this.config.senderKey,
             templatecode: kakaoTemplateCode,
             message: body,
+            ...(button.length ? { button } : {}),
           },
         },
         // 문자에는 버튼이 없어 버튼 링크를 본문 끝에 줄을 바꿔 붙인다. 그러지 않으면
@@ -200,6 +218,33 @@ export class AlimtalkService {
       );
     }
   }
+}
+
+/**
+ * 버튼 링크 값마다 웹링크(WL) 버튼 하나. PC 카카오톡에도 보이게 모바일 · PC 링크를 같은 값으로 싣는다(PC 링크가 없으면
+ * PC 에서는 버튼이 보이지 않는다). 이름이 정해지지 않은 템플릿 · 웹 주소가 아닌 링크는 보내기 전에 던진다 — 오류 메시지에
+ * 링크(토큰)는 담지 않는다. 링크가 없으면(선택 변수를 비움) 버튼도 없다.
+ */
+function buttonsOf(
+  templateCode: string,
+  links: readonly string[],
+): AlimtalkButton[] {
+  if (!links.length) return [];
+  const name = Object.hasOwn(ALIMTALK_BUTTON_NAMES, templateCode)
+    ? ALIMTALK_BUTTON_NAMES[templateCode]
+    : undefined;
+  if (!name)
+    throw new Error(`알림톡 템플릿 ${templateCode} 의 버튼 이름이 없습니다`);
+  if (!links.every((link) => WEB_URL.test(link)))
+    throw new Error(
+      `알림톡 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,
+    );
+  return links.map((link) => ({
+    name,
+    type: 'WL',
+    url_mobile: link,
+    url_pc: link,
+  }));
 }
 
 /**

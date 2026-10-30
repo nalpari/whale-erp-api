@@ -4,16 +4,16 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-15T06:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:17:05Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-10-08T04:19:37Z
+    last_modified: 2026-10-30T02:17:05Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
-    last_modified: 2026-10-08T02:08:10Z
+    last_modified: 2026-10-30T02:17:05Z
   - id: bizppurio-config
     resource: ../../src/alimtalk/bizppurio.config.ts
     title: BIZPPURIO_* env validation at startup
@@ -62,12 +62,22 @@ table's CHECK refuses one without the other. Values the log row would reject —
 empty `related.type`, a `related.id` or `sentBy` outside `1..2147483647` — throw
 before anything is sent, so a caller bug cannot send messages that leave no row.
 
-**That call does not deliver a working invitation yet.** `링크` is a button-link
-variable (`isButtonLink: true`): the body has no `#{링크}`, so `send` requires
-the value but the 알림톡 itself does not carry it — the Bizppurio request has no
-`at.button`. Only the SMS fallback carries the link, appended to the text (below),
-and the fallback is off unless `BIZPPURIO_SMS_FROM` is set.
-See Not built.
+`링크` is a button-link variable (`isButtonLink: true`): the body has no `#{링크}`,
+so the link travels as a **button** (WHALEERP-636). Every button-link value becomes one
+web-link button in `content.at.button` — `{ name, type: 'WL', url_mobile, url_pc }`, the same
+link for mobile and PC (without `url_pc` the button is hidden in PC KakaoTalk). The SMS
+fallback still appends the link to the text (below).
+
+The button **name** must match, letter for letter, the name registered with Kakao for that
+template (28 characters max; Bizppurio rejects a mismatch, and a template registered with a
+button must be sent with it). It lives in code, `ALIMTALK_BUTTON_NAMES` keyed by
+`templateCode` — not in the template's variable list, because the template admin screen keeps
+only the fields it knows and one save there would wipe it (the mail button's 「바로가기」 is
+in code too). A template with a button-link value but no entry there, or a link that is not
+http(s), throws before anything is sent; the error carries the template code, never the link.
+An optional link left empty sends no button. The two names (`TALK_STAFF_INVITATION` 「가입하기」,
+`TALK_STAFF_AFFILIATION_REQUEST` 「요청 확인하기」) are proposals until 재영 confirms the
+Kakao registration.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`
@@ -106,8 +116,9 @@ Every `BizppurioError` carries `path` (`/v1/token` or `/v3/message`): a failure 
 (not a mobile number, bad `related` · `sentBy`, template off, variables that do not
 match) is thrown before any request too. `isMobilePhone` lets a caller run the number
 check before it writes, and `hasSmsFallback()` says whether `BIZPPURIO_SMS_FROM` is set —
-the only way a button link reaches anyone while buttons are not sent (근로계약 가입 초대 requires it
-until the button and the re-approved Kakao text are in — api #74 review).
+the only way a button link reaches anyone while Kakao has not approved the template — an unapproved
+body or button makes the 알림톡 itself fail (근로계약 가입 초대 · 소속 추가 확인 요청 require it until the
+re-approved Kakao text and button are in — api #74 review).
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s
@@ -232,11 +243,5 @@ and resend can each take it, so one `send` can wait up to about two minutes.
 
 Result polling and confirm, and 429/5xx retries.
 
-Button links are not sent in the 알림톡. The request has no `at.button`, so a
-template whose link lives in a button — `TALK_STAFF_INVITATION` today — goes out
-without it, or is rejected if Kakao registered the template with a button; only
-the SMS fallback carries the link (above). Sending buttons (Bizppurio `at.button`, type WL) needs the
-button name Kakao approved for the template, which is not recorded. The first caller of
-`TALK_STAFF_INVITATION` is 근로계약 발송 (`POST /contracts/:contractId/send`, 2026-10-16), which
-went ahead without the button. Its button is the 초대 링크 (`/invite#token=…`, JOIN-7) — the
-초대 코드 the 직원 can type instead is in the body.
+Button types other than web link (WL). Kakao approval of the two templates' new text and
+buttons — until then the 알림톡 is rejected and only the SMS fallback reaches the 직원.
