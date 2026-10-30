@@ -2,7 +2,10 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { ListPlatformAdminsDto } from './list-platform-admins.dto';
+import {
+  ListPlatformAdminsDto,
+  PlatformRoleGroupsQueryDto,
+} from './list-platform-admins.dto';
 import {
   CreatePlatformAdminDto,
   UpdatePlatformAdminDto,
@@ -15,6 +18,17 @@ const check = async <T extends object>(cls: new () => T, plain: object) => {
 };
 
 describe('플랫폼 관리자 입력 형식', () => {
+  it.each([
+    [{}, []],
+    [{ purpose: 'filter' }, []],
+    [{ purpose: 'foo' }, ['purpose']],
+    [{ purpose: '' }, ['purpose']],
+  ])('권한 목록 purpose %p → 오류 %p', async (plain, errors) => {
+    expect((await check(PlatformRoleGroupsQueryDto, plain)).errors).toEqual(
+      errors,
+    );
+  });
+
   const create = {
     loginId: 'seojun01',
     name: '이서준',
