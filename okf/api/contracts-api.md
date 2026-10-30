@@ -423,7 +423,10 @@ force on `startDate`: the 공통코드 `MINIMUM_WAGE` row (플랫폼고정, BP00
 skipped (malformed with a warning log). No row in force on `startDate` (before the first 시행일)
 → not checked — earlier years are not seeded, and old 종이 계약 must still register. Migration
 `20261030140000_team3_minimum_wage_code` seeds 2026 = 10,320원 only; a new year is one more 상세
-in 공통코드 관리. `GET /contracts/minimum-wages` (작성 or 수정 권한) returns `{ items:
+in 공통코드 관리 — register it after the 고시 (August) and before 1 January, or contracts starting
+that year are checked against the previous year's lower value. Only the 상세's 사용 상태 counts:
+turning the group off does not turn the check off (법정 하한), and a 코드명 like `10,320` drops that
+row (the check then passes for its dates — keep 코드명 digits only). `GET /contracts/minimum-wages` (작성 or 수정 권한) returns `{ items:
 [{ effectiveDate, hourlyWage }] }` ascending, for the 작성 화면's 시급 help and 수습 check.
 
 **초대 유형 is decided, not sent.** On 초안 저장 (a new `POST`, or a `PUT` that

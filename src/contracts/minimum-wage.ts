@@ -39,7 +39,8 @@ export function parseMinimumWage(
 
 /**
  * 사용 중인 최저임금 전부, 시행일 오름차순. 형식이 틀린 행은 빼고 경고를 남긴다 — 공통코드 화면에서 코드명을 잘못
- * 고쳐도 저장이 500 이 되지 않게(그 행만 없는 것과 같다).
+ * 고쳐도 저장이 500 이 되지 않게(그 행만 없는 것과 같다). 상세의 사용 상태만 보고 그룹의 사용 상태는 보지 않는다 —
+ * 법정 하한이라 그룹을 사용중지해도 검사는 꺼지지 않는다(시행일 하나를 빼려면 그 상세를 사용중지한다).
  */
 export async function readMinimumWages(
   prisma: Pick<PrismaService, 'codeItem'>,
