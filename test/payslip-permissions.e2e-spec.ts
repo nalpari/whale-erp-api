@@ -23,11 +23,12 @@ describe('급여명세서 권한 (e2e, DB)', () => {
   let otherBpCodeId: number;
   const storeIds: Record<'direct' | 'direct2' | 'franchise' | 'other', number> =
     { direct: 0, direct2: 0, franchise: 0, other: 0 };
-  const admins: Record<'bm' | 'ba' | 'fm' | 'fa', number> = {
+  const admins: Record<'bm' | 'ba' | 'fm' | 'fa' | 'pm', number> = {
     bm: 0,
     ba: 0,
     fm: 0,
     fa: 0,
+    pm: 0,
   };
   const groupIds: number[] = [];
   const accountIds: number[] = [];
@@ -139,6 +140,21 @@ describe('급여명세서 권한 (e2e, DB)', () => {
       storeIds.franchise,
     ]);
     await admin('fa', 'FA', await group('FA', admins.fm), [storeIds.franchise]);
+    // 플랫폼 계정 — 플랫폼 BP 소속 PM. 상단에서 고른 BP(X-Bp-Code-Id)의 점포 전부를 다룬다(WHALEERP-637)
+    ({ adminAccountId: admins.pm } = await prisma.adminAccount.create({
+      data: {
+        loginId: `paypermpm${n}`,
+        bpCodeId: (
+          await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } })
+        ).bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'PM',
+        roleGroupId: (await master('PM000001')).roleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        isAllStores: true,
+        accountStatusCode: 'ACTIVE',
+      },
+    }));
 
     slips.direct = await payslip(storeIds.direct, '가직영', false, 'DRAFTING');
     slips.direct2 = await payslip(storeIds.direct2, '나직영', false, 'SENT');
@@ -327,10 +343,13 @@ describe('급여명세서 권한 (e2e, DB)', () => {
     method: 'get' | 'post' | 'put',
     path: string,
     status: number,
+    bp?: number,
   ) => {
     const req = request(app.getHttpServer())
       [method](path)
       .set('Authorization', `Bearer ${await adminToken(admins[who])}`);
+    // 상단에서 고른 BP — 화면 주소 /bp/{id} 에서 front 가 싣는다(WHALEERP-637)
+    if (bp !== undefined) req.set('X-Bp-Code-Id', String(bp));
     // 상태 바꾸기(확정 · 다시 계산 · 발송)는 본문 updatedAt 이 있어야 한다 — 형식 오류(400)가 아니라 범위 판정까지 가게
     return (
       method === 'post'
@@ -461,6 +480,103 @@ describe('급여명세서 권한 (e2e, DB)', () => {
     );
     for (const s of [slips.direct, slips.other])
       await call('fa', 'post', `/payslips/${s.payslipId}/confirm`, 404);
+  });
+
+  it('플랫폼 계정 — 고른 BP(X-Bp-Code-Id)의 명세서만, 헤더가 없으면 범위를 보기 전에 400(WHALEERP-637)', async () => {
+    const picked = (
+      await call('pm', 'get', `/payslips?month=${month}`, 200, bpCodeId)
+    ).body as ListBody;
+    expect([...new Set(picked.items.map((i) => i.storeId))].sort()).toEqual(
+      [storeIds.direct, storeIds.direct2, storeIds.franchise].sort(),
+    );
+    await call(
+      'pm',
+      'get',
+      `/payslips/${slips.direct.payslipId}`,
+      200,
+      bpCodeId,
+    );
+    // 다른 BP 를 고르면 그 BP 의 명세서만 — 처음 BP 의 명세서는 없는 것과 같다
+    await call(
+      'pm',
+      'get',
+      `/payslips/${slips.direct.payslipId}`,
+      404,
+      otherBpCodeId,
+    );
+    await call(
+      'pm',
+      'get',
+      `/payslips/${slips.other.payslipId}`,
+      200,
+      otherBpCodeId,
+    );
+    // BP 를 받는 경로 전부 — 하나라도 bp 를 빠뜨리면 400 이 아니라 빈 200 · 404 가 되어 여기서 드러난다(③리뷰). 본문은 형식 검사(400)를
+    // 지나 범위 판정까지 가게 맞는 모양으로 싣는다
+    const id = slips.direct.payslipId;
+    const status = { updatedAt: new Date().toISOString() };
+    for (const [method, path, body] of [
+      ['get', `/payslips?month=${month}`],
+      ['get', `/payslips/summary?month=${month}&storeId=${storeIds.direct}`],
+      ['get', `/payslips/candidates?month=${month}`],
+      ['post', '/payslips', { staffMemberId: 1, month }],
+      ['post', '/payslips/bulk', { month }],
+      ['post', '/payslips/send', { month }],
+      ['get', `/payslips/${id}`],
+      ['get', `/payslips/${id}/previous-values`],
+      [
+        'put',
+        `/payslips/${id}`,
+        {
+          ...status,
+          isPremiumApplied: true,
+          isWithholdingApplied: false,
+          items: [],
+        },
+      ],
+      ['post', `/payslips/${id}/recalculate`, status],
+      ['post', `/payslips/${id}/confirm`, status],
+      ['post', `/payslips/${id}/cancel-confirmation`, status],
+      ['post', `/payslips/${id}/send`, status],
+      ['post', `/payslips/${id}/resend`, status],
+    ] as const) {
+      const res = await request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${await adminToken(admins.pm)}`)
+        .send(body ?? {});
+      expect([path, res.status]).toEqual([path, 400]);
+      expect((res.body as { message: string }).message).toBe(
+        '급여명세서를 볼 BP 를 골라 주세요.',
+      );
+    }
+    // 고친 뒤 상세도 고른 BP 로 다시 읽는다 — 소속(플랫폼) BP 로 읽으면 바뀐 뒤 404 다(②리뷰)
+    const { updatedAt } = (
+      await call(
+        'pm',
+        'get',
+        `/payslips/${slips.direct.payslipId}`,
+        200,
+        bpCodeId,
+      )
+    ).body as { updatedAt: string };
+    const recalculated = await request(app.getHttpServer())
+      .post(`/payslips/${slips.direct.payslipId}/recalculate`)
+      .set('Authorization', `Bearer ${await adminToken(admins.pm)}`)
+      .set('X-Bp-Code-Id', String(bpCodeId))
+      .send({ updatedAt })
+      .expect(200);
+    expect((recalculated.body as { payslipId: number }).payslipId).toBe(
+      slips.direct.payslipId,
+    );
+    // BP 계정은 헤더가 없어도 소속 BP 이고, 남의 BP 를 실으면 가드가 403
+    await call('bm', 'get', `/payslips/${slips.direct.payslipId}`, 200);
+    await call(
+      'bm',
+      'get',
+      `/payslips/${slips.direct.payslipId}`,
+      403,
+      otherBpCodeId,
+    );
   });
 
   it('직원 — 자기에게 발송된 명세서만, 남의 것 · 발송 전 것은 404 · 관리자 경로는 403', async () => {

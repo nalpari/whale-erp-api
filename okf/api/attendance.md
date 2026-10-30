@@ -4,12 +4,12 @@ title: Attendance
 description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(출퇴근 탭 진입 · 버튼 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T06:50:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:31:17Z }
 sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
     title: 관리자 웹 일별 출퇴근 GET /attendance-records/daily(WHALEERP-217)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T02:31:31Z
   - id: day-status
     resource: ../../src/attendance/attendance-day-status.ts
     title: 일별 출퇴근 상태 판정(API 전용 enum AttendanceDayStatus)
@@ -205,7 +205,9 @@ sources:
   * 남은 것: 관리자 · 본사 조회는 위치정보 「제공」으로 보지 않아 `PROVIDE` 줄을 남기지 않는다 — 법무 확인 대기(2026-10-26 재영).
     DB 수준의 수정 · 삭제 막기(트리거 · 권한)는 없다, ATT-24 한계(위 「1차의 한계」).
 * **223 조회 · 보정 권한** — 경로마다 메뉴 권한(읽기: 일별 · 기간 · 이력, 등록: 대신 등록 · 선택지, 수정: 보정 · 이상 없음), 모든 경로가
-  관리 범위(`getManageableStores`)로 거르고, 본사에게 가려지는 가맹 직원은 일별 · 기간 줄(이력 포함) · 이력 · 보정 · 이상 없음 · 대신 등록 ·
+  관리 범위(`getManageableStores`)로 거르고 — BP 는 탭의 BP 다(WHALEERP-637: `AttendanceRecordsController` 전부가 `@TargetBp()` 로 받아
+  `targetStores` 로 넘긴다. 플랫폼 계정은 고른 고객 BP 의 점포 전부, 헤더 없이 부르면 범위를 보기 전에 400 「출퇴근 기록을 볼 BP 를 골라 주세요.」,
+  BP · 가맹 계정은 그대로) — 본사에게 가려지는 가맹 직원은 일별 · 기간 줄(이력 포함) · 이력 · 보정 · 이상 없음 · 대신 등록 ·
   선택지 모두 빠지거나 404(e2e). 직원 토큰은 관리자 경로 403, 직원은 내 소속 기록만 보고 고치는 경로가 없다. 메뉴는 읽기 권한이 없으면
   헤더에서 빠지고 주소로 들어와도 막힌다. 직원 앱 이력은 이름 없는 관리자를 로그인 아이디 대신 「관리자」로, 권한 그룹 없이 내린다.
   * 가맹마스터(FM000001)의 MN000025 에 등록 · 수정을 열었다 — 1차에는 가맹도 보정 · 대신 등록을 한다(운영 정책 ATT-37, 2026-10-26

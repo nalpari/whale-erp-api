@@ -26,6 +26,7 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
   let bpCodeId: number;
   let otherBpCodeId: number;
   let bmId: number;
+  let pmId: number;
   let directStoreId: number;
   let franchiseStoreId: number;
   let otherStoreId: number;
@@ -83,6 +84,26 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
         passwordHash: '!',
         roleTypeCode: 'BM',
         roleGroupId: roleGroup.roleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        isAllStores: true,
+        accountStatusCode: 'ACTIVE',
+      },
+    }));
+
+    // 플랫폼 계정 — 플랫폼 BP 소속 PM. 상단에서 고른 BP(X-Bp-Code-Id)의 점포 전부를 다룬다(WHALEERP-637)
+    ({ adminAccountId: pmId } = await prisma.adminAccount.create({
+      data: {
+        loginId: `attrecpm${n}`,
+        bpCodeId: (
+          await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } })
+        ).bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'PM',
+        roleGroupId: (
+          await prisma.roleGroup.findFirstOrThrow({
+            where: { roleCode: 'PM000001' },
+          })
+        ).roleGroupId,
         joinPathCode: 'PLATFORM_REGISTERED',
         isAllStores: true,
         accountStatusCode: 'ACTIVE',
@@ -215,10 +236,13 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
     await prisma.authSession.deleteMany({ where: accounts });
     await prisma.locationConsent.deleteMany({ where: accounts });
     await prisma.account.deleteMany({ where: accounts });
-    if (bmId !== undefined) {
-      await prisma.adminSession.deleteMany({ where: { adminAccountId: bmId } });
-      await prisma.adminAccount.deleteMany({ where: { adminAccountId: bmId } });
-    }
+    const adminIds = [bmId, pmId].filter((id) => id !== undefined);
+    await prisma.adminSession.deleteMany({
+      where: { adminAccountId: { in: adminIds } },
+    });
+    await prisma.adminAccount.deleteMany({
+      where: { adminAccountId: { in: adminIds } },
+    });
     await prisma.store.deleteMany({
       where: {
         storeId: { in: [directStoreId, franchiseStoreId, otherStoreId] },
@@ -230,19 +254,17 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
     await app.close();
   });
 
-  const adminToken = async () =>
+  const adminToken = async (sub = bmId) =>
     (
-      await app
-        .get(AdminSessionService)
-        .issue({ adminAccountId: bmId }, (sid) =>
-          app.get(JwtService).signAsync({
-            sub: bmId,
-            type: 'admin',
-            loginId: `admin${bmId}`,
-            typ: 'access',
-            sid,
-          }),
-        )
+      await app.get(AdminSessionService).issue({ adminAccountId: sub }, (sid) =>
+        app.get(JwtService).signAsync({
+          sub,
+          type: 'admin',
+          loginId: `admin${sub}`,
+          typ: 'access',
+          sid,
+        }),
+      )
     ).accessToken;
   const get = async (path: string, status: number) =>
     request(app.getHttpServer())
@@ -387,6 +409,69 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       )
       .set('Authorization', `Bearer ${token}`)
       .expect(403);
+  });
+
+  it('플랫폼 계정 — 고른 BP(X-Bp-Code-Id)의 기록만, 헤더가 없으면 범위를 보기 전에 400(WHALEERP-637)', async () => {
+    const asPm = async (path: string, status: number, bp?: number) => {
+      const req = request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${await adminToken(pmId)}`);
+      if (bp !== undefined) req.set('X-Bp-Code-Id', String(bp));
+      return req.expect(status);
+    };
+    const daily = `/attendance-records/daily?date=${ymd(yesterday)}`;
+    const ids = async (bp: number) =>
+      ((await asPm(daily, 200, bp)).body as { items: Row[] }).items.map(
+        (r) => r.staffMemberId,
+      );
+    expect(await ids(bpCodeId)).toContain(directStaffId);
+    expect(await ids(otherBpCodeId)).not.toContain(directStaffId);
+    const { attendanceRecordId } =
+      await prisma.attendanceRecord.findFirstOrThrow({
+        where: { staffMemberId: directStaffId, kind: 'CHECK_IN' },
+      });
+    const history = `/attendance-records/${attendanceRecordId}/history`;
+    await asPm(history, 200, bpCodeId);
+    await asPm(history, 404, otherBpCodeId);
+    // 고치는 경로도 다른 BP 를 고르면 없는 것과 같다(바꾸지 않는다)
+    await request(app.getHttpServer())
+      .post(`/attendance-records/${attendanceRecordId}/review`)
+      .set('Authorization', `Bearer ${await adminToken(pmId)}`)
+      .set('X-Bp-Code-Id', String(otherBpCodeId))
+      .expect(404);
+    // BP 를 받는 경로 전부 — 하나라도 bp 를 빠뜨리면 400 이 아니라 빈 200 · 404 가 되어 여기서 드러난다(③리뷰)
+    const recordPath = `/attendance-records/${attendanceRecordId}`;
+    for (const [method, path, body] of [
+      ['get', daily],
+      ['get', `/attendance-records?from=${ymd(yesterday)}&to=${ymd(today)}`],
+      ['get', history],
+      ['get', `/attendance-records/proxy-staff?date=${ymd(yesterday)}`],
+      [
+        'post',
+        '/attendance-records/proxy',
+        {
+          staffMemberId: directStaffId,
+          date: ymd(yesterday),
+          checkInTime: '09:00',
+          reason: '대신 등록',
+        },
+      ],
+      [
+        'post',
+        `${recordPath}/correction`,
+        { checkInTime: '09:00', reason: '보정' },
+      ],
+      ['post', `${recordPath}/review`],
+    ] as const) {
+      const res = await request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${await adminToken(pmId)}`)
+        .send(body ?? {});
+      expect([path, res.status]).toEqual([path, 400]);
+      expect((res.body as { message: string }).message).toBe(
+        '출퇴근 기록을 볼 BP 를 골라 주세요.',
+      );
+    }
   });
 
   const post = async (path: string, body: object, status: number) =>

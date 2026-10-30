@@ -44,6 +44,9 @@ import { stale, statusConflict } from './payslip-edit.service';
 import { PayslipListService } from './payslip-list.service';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 import { monthRange, pickedStores, storeNames } from './payslip-shared';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
+import { targetStores } from '../admin-scope/target-stores';
+import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
 
 /** 직원 앱의 명세서 상세 경로(직원 근무 앱 `/pay/[payslipId]`). */
 const STAFF_APP_PAYSLIP_PATH = '/pay/';
@@ -133,8 +136,9 @@ export class PayslipSendService {
     adminAccountId: number,
     payslipId: number,
     dto: PayslipStatusChangeDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    return this.sendOne(adminAccountId, payslipId, dto, 'CONFIRMED');
+    return this.sendOne(adminAccountId, payslipId, dto, 'CONFIRMED', bp);
   }
 
   /** 재발송 — 발송 완료만. 재발송 템플릿(문구는 처음 발송과 같다, 쟁점 NOTI-6 · #605). */
@@ -142,8 +146,9 @@ export class PayslipSendService {
     adminAccountId: number,
     payslipId: number,
     dto: PayslipStatusChangeDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    return this.sendOne(adminAccountId, payslipId, dto, 'SENT');
+    return this.sendOne(adminAccountId, payslipId, dto, 'SENT', bp);
   }
 
   /**
@@ -154,8 +159,15 @@ export class PayslipSendService {
   async sendMany(
     adminAccountId: number,
     dto: SendPayslipsDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipSendResultDto | null> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      PAYSLIP_BP_NOT_CHOSEN,
+    );
     if (!manageable) return null;
     const result: PayslipSendResultDto = { sent: [], failed: [] };
     const stores = await pickedStores(
@@ -247,8 +259,15 @@ export class PayslipSendService {
     payslipId: number,
     dto: PayslipStatusChangeDto,
     from: PayslipStatus,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      PAYSLIP_BP_NOT_CHOSEN,
+    );
     const target =
       manageable &&
       (await this.prisma.payslip.findFirst({
@@ -307,7 +326,7 @@ export class PayslipSendService {
           });
       }
     }
-    return this.detail.findOne(adminAccountId, payslipId);
+    return this.detail.findOne(adminAccountId, payslipId, bp);
   }
 
   /** 한 장 보내기. 설정 · 받는 곳이 없으면 쓰지 않고 실패. 그 밖은 클래스 주석의 순서. */
