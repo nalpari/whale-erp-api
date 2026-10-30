@@ -308,9 +308,12 @@ export class ContractDetailDto extends ContractTermsDto {
   /** 최종 처리일(ISO 8601) — 가장 최근 상태 변경 일시. 이력이 없으면 null */
   @ApiProperty({ nullable: true, type: String })
   lastProcessedAt: string | null;
-  /** 직원이 남긴 거부 사유 — 거부된 계약에만, 그 밖은 null */
+  /**
+   * 직원이 남긴 마지막 수정 요청 사유(1~100자, WHALEERP-635). 다시 요청하면 바뀌고 관리자가 고쳐 다시 보내도 남는다 — 상태와
+   * 상관없이 준다(화면은 수정 요청일 때만 보인다). 수정 요청한 적이 없거나 사유를 받기 전의 수정 요청이면 null
+   */
   @ApiProperty({ nullable: true, type: String })
-  rejectReason: string | null;
+  correctionReason: string | null;
   /**
    * 재발송 횟수 — 처음 발송 뒤 다시 보낸 횟수(재발송 · 고쳐 다시 보냄). 알림 없이 날인 기한만 새로 잡은 것도 센다. 알림톡이 나가지
    * 않으면 되돌려 빼지만, 드물게 다른 요청과 겹친 실패 · 그사이 다른 요청이 초대를 무효로 해 보내지 않은 재발송은 빼지 못해 실제보다

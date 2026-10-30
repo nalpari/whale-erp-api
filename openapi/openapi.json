@@ -8990,16 +8990,6 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RejectMyContractDto"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "",
@@ -9010,9 +9000,6 @@
                 }
               }
             }
-          },
-          "400": {
-            "description": "사유 500자 넘음 · null"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -9035,7 +9022,7 @@
             "bearer": []
           }
         ],
-        "summary": "거부 — 사유는 선택(500자)",
+        "summary": "거부 — 사유는 받지 않는다(WHALEERP-635). 본문을 읽지 않아(@Body 없음) 사유를 싣던 옛 직원 앱의 요청도 400 없이 받는다 —\n전역 ValidationPipe 의 forbidNonWhitelisted 는 @Body 로 받는 DTO 에만 걸린다.",
         "tags": [
           "MyContracts"
         ]
@@ -9054,6 +9041,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestMyContractCorrectionDto"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "",
@@ -9064,6 +9061,9 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "사유 없음 · 비었음(앞뒤 공백을 지운 뒤) · 100자 넘음"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -9086,7 +9086,7 @@
             "bearer": []
           }
         ],
-        "summary": "수정 요청 — 계약서가 틀렸을 때(대조 결과와 상관없이). 따로 받는 내용은 없다",
+        "summary": "수정 요청 — 계약서가 틀렸을 때(대조 결과와 상관없이). 사유는 필수(1~100자, WHALEERP-635)",
         "tags": [
           "MyContracts"
         ]
@@ -16379,22 +16379,12 @@
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RejectAffiliationRequestDto"
-              }
-            }
-          }
-        },
         "responses": {
           "204": {
             "description": ""
           },
           "400": {
-            "description": "형식 오류 · 사유 500자 넘음"
+            "description": "형식 오류(요청 ID)"
           },
           "401": {
             "description": "토큰 없음 · 접속 종료 · 탈퇴 계정"
@@ -23505,7 +23495,7 @@
           },
           "isResend": {
             "type": "boolean",
-            "description": "같은 계약에 앞서 나간 발송이 있었다(재발송 · 고쳐 다시 보냄)"
+            "description": "같은 계약으로 앞서 직원에게 나갔을 수 있는 발송(성공 · 접수 여부 모름)이 있었다 — 재발송 · 고쳐 다시 보냄. 계약 재발송 횟수와는 다를 수 있다"
           },
           "failureReason": {
             "type": "string",
@@ -26013,10 +26003,10 @@
             "nullable": true,
             "description": "최종 처리일(ISO 8601) — 가장 최근 상태 변경 일시. 이력이 없으면 null"
           },
-          "rejectReason": {
+          "correctionReason": {
             "type": "string",
             "nullable": true,
-            "description": "직원이 남긴 거부 사유 — 거부된 계약에만, 그 밖은 null"
+            "description": "직원이 남긴 마지막 수정 요청 사유(1~100자, WHALEERP-635). 다시 요청하면 바뀌고 관리자가 고쳐 다시 보내도 남는다 — 상태와\n상관없이 준다(화면은 수정 요청일 때만 보인다). 수정 요청한 적이 없거나 사유를 받기 전의 수정 요청이면 null"
           },
           "previousContractId": {
             "type": "number",
@@ -26118,7 +26108,7 @@
           "lastSentAt",
           "signDeadlineAt",
           "lastProcessedAt",
-          "rejectReason",
+          "correctionReason",
           "previousContractId",
           "registeredAt",
           "registeredBy",
@@ -26274,15 +26264,6 @@
           "signedAt"
         ]
       },
-      "RejectMyContractDto": {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "maxLength": 500
-          }
-        }
-      },
       "MyContractActionResponseDto": {
         "type": "object",
         "properties": {
@@ -26300,6 +26281,21 @@
         "required": [
           "contractId",
           "status"
+        ]
+      },
+      "RequestMyContractCorrectionDto": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "수정 요청 사유 — 앞뒤 공백을 지운 뒤 1~100자",
+            "minLength": 1,
+            "maxLength": 100,
+            "example": "시급이 안내받은 금액과 다릅니다"
+          }
+        },
+        "required": [
+          "reason"
         ]
       },
       "MyContractListItemDto": {
@@ -33243,16 +33239,6 @@
           "storeName",
           "contractIds"
         ]
-      },
-      "RejectAffiliationRequestDto": {
-        "type": "object",
-        "properties": {
-          "reason": {
-            "type": "string",
-            "description": "거절 사유 — 함께 온 계약의 거부 사유로도 남는다",
-            "maxLength": 500
-          }
-        }
       },
       "BpHolidayTargetResponseDto": {
         "type": "object",

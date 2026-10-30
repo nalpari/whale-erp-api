@@ -31,7 +31,7 @@ import { AttachmentFieldsInterceptor } from '../storage/upload-check';
 import { ContractIdPipe } from './contract-id.pipe';
 import {
   MyContractActionResponseDto,
-  RejectMyContractDto,
+  RequestMyContractCorrectionDto,
   SignedMyContractResponseDto,
   SignMyContractDto,
 } from './dto/my-contract-action.dto';
@@ -126,29 +126,34 @@ export class MyContractsController {
     );
   }
 
-  /** 거부 — 사유는 선택(500자) */
+  /**
+   * 거부 — 사유는 받지 않는다(WHALEERP-635). 본문을 읽지 않아(@Body 없음) 사유를 싣던 옛 직원 앱의 요청도 400 없이 받는다 —
+   * 전역 ValidationPipe 의 forbidNonWhitelisted 는 @Body 로 받는 DTO 에만 걸린다.
+   */
   @Post(':contractId/reject')
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: MyContractActionResponseDto })
-  @ApiBadRequestResponse({ description: '사유 500자 넘음 · null' })
   @ApiConflictResponse({ description: STATE_CONFLICT })
   reject(
     @Param('contractId', ContractIdPipe) contractId: number,
-    @Body() body: RejectMyContractDto,
     @CurrentUser() user: AuthUser,
   ): Promise<MyContractActionResponseDto> {
-    return this.contracts.reject(user.id, contractId, body.reason);
+    return this.contracts.reject(user.id, contractId);
   }
 
-  /** 수정 요청 — 계약서가 틀렸을 때(대조 결과와 상관없이). 따로 받는 내용은 없다 */
+  /** 수정 요청 — 계약서가 틀렸을 때(대조 결과와 상관없이). 사유는 필수(1~100자, WHALEERP-635) */
   @Post(':contractId/correction-request')
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: MyContractActionResponseDto })
+  @ApiBadRequestResponse({
+    description: '사유 없음 · 비었음(앞뒤 공백을 지운 뒤) · 100자 넘음',
+  })
   @ApiConflictResponse({ description: STATE_CONFLICT })
   requestCorrection(
     @Param('contractId', ContractIdPipe) contractId: number,
+    @Body() body: RequestMyContractCorrectionDto,
     @CurrentUser() user: AuthUser,
   ): Promise<MyContractActionResponseDto> {
-    return this.contracts.requestCorrection(user.id, contractId);
+    return this.contracts.requestCorrection(user.id, contractId, body.reason);
   }
 }

@@ -518,8 +518,8 @@ describe('MyContractsService', () => {
 
   describe('거부 · 수정 요청', () => {
     it.each<[string, (s: MyContractsService) => Promise<unknown>]>([
-      ['거부', (s) => s.reject(77, 41, undefined, NOW)],
-      ['수정 요청', (s) => s.requestCorrection(77, 41, NOW)],
+      ['거부', (s) => s.reject(77, 41, NOW)],
+      ['수정 요청', (s) => s.requestCorrection(77, 41, '사유', NOW)],
     ])(
       '%s도 직원 행 → 계약 행을 잠그고, 퇴직한 직원이면 409 STAFF_RETIRED',
       async (_label, run) => {
@@ -538,13 +538,14 @@ describe('MyContractsService', () => {
       },
     );
 
-    it('거부 — 내 계약인지 본 뒤 사유와 함께 거부로', async () => {
-      await expect(
-        service().reject(77, 41, ' 근무 시간이 달라요 ', NOW),
-      ).resolves.toEqual({ contractId: 41, status: 'REJECTED' });
+    it('거부 — 내 계약인지 본 뒤 거부로(사유는 받지 않는다, WHALEERP-635)', async () => {
+      await expect(service().reject(77, 41, NOW)).resolves.toEqual({
+        contractId: 41,
+        status: 'REJECTED',
+      });
       expect(tx.contract.updateMany).toHaveBeenCalledWith({
         where: { contractId: 41, status: 'PENDING_SIGNATURE' },
-        data: { rejectReason: '근무 시간이 달라요', status: 'REJECTED' },
+        data: { status: 'REJECTED' },
       });
     });
 
@@ -552,7 +553,7 @@ describe('MyContractsService', () => {
       await service().sign(77, 41, file(), SENT_ISO, NOW);
       expect(notice.statusChanged).toHaveBeenCalledWith('SIGNED', 41, 501);
 
-      await service().reject(77, 41, '근무 시간이 달라요', NOW);
+      await service().reject(77, 41, NOW);
       expect(notice.statusChanged).toHaveBeenLastCalledWith(
         'REJECTED',
         41,
@@ -566,18 +567,9 @@ describe('MyContractsService', () => {
         signDeadlineAt: new Date('2026-10-01T00:00:00.000Z'),
       });
       await service()
-        .reject(77, 41, undefined, NOW)
+        .reject(77, 41, NOW)
         .catch(() => undefined);
       expect(notice.statusChanged).not.toHaveBeenCalled();
-    });
-
-    it('거부 사유는 선택이다', async () => {
-      await service().reject(77, 41, undefined, NOW);
-      expect(
-        (tx.contract.updateMany.mock.calls[0] as unknown[])[0],
-      ).toMatchObject({
-        data: { rejectReason: null },
-      });
     });
 
     it('거부도 날인 기한이 지났으면 409 SIGN_DEADLINE_PASSED — 바꾸지 않는다', async () => {
@@ -585,30 +577,35 @@ describe('MyContractsService', () => {
         status: 'PENDING_SIGNATURE',
         signDeadlineAt: NOW,
       });
-      const e = await thrown(service().reject(77, 41, undefined, NOW));
+      const e = await thrown(service().reject(77, 41, NOW));
       expect(bodyOf(e)).toMatchObject({ code: 'SIGN_DEADLINE_PASSED' });
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
-    it('수정 요청 — 대조 결과와 상관없이 서명 대기면 받는다', async () => {
+    it('수정 요청 — 대조 결과와 상관없이 서명 대기면 받고 사유를 함께 남긴다', async () => {
       tx.contract.findFirst.mockResolvedValue(
         mine({
           contractParty: { ...mine().contractParty, enteredName: '홍길순' },
         }),
       );
-      await expect(service().requestCorrection(77, 41, NOW)).resolves.toEqual({
+      await expect(
+        service().requestCorrection(77, 41, '이름이 틀렸습니다', NOW),
+      ).resolves.toEqual({
         contractId: 41,
         status: 'CORRECTION_REQUESTED',
       });
       expect(tx.contract.updateMany).toHaveBeenCalledWith({
         where: { contractId: 41, status: 'PENDING_SIGNATURE' },
-        data: { status: 'CORRECTION_REQUESTED' },
+        data: {
+          correctionReason: '이름이 틀렸습니다',
+          status: 'CORRECTION_REQUESTED',
+        },
       });
     });
 
     it.each<[string, (s: MyContractsService) => Promise<unknown>]>([
-      ['거부', (s) => s.reject(77, 41, undefined, NOW)],
-      ['수정 요청', (s) => s.requestCorrection(77, 41, NOW)],
+      ['거부', (s) => s.reject(77, 41, NOW)],
+      ['수정 요청', (s) => s.requestCorrection(77, 41, '사유', NOW)],
     ])('%s — 남의 계약이면 404, 바꾸지 않는다', async (_label, run) => {
       tx.contract.findFirst.mockResolvedValue(null);
       const e = await thrown(run(service()));

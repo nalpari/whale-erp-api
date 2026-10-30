@@ -30,7 +30,6 @@ import type {
   AffiliationRequestDto,
   AcceptAffiliationRequestDto,
   AcceptAffiliationResponseDto,
-  RejectAffiliationRequestDto,
 } from './dto/affiliation-request.dto';
 import { asksHqSharingConsentAt } from './hq-sharing-consent';
 import { sameName } from '../contracts/identity-match';
@@ -258,15 +257,12 @@ export class AffiliationRequestsService {
     });
   }
 
-  /** 거절 — 요청 · 함께 온 발송 대기 계약을 거절 · 거부로 닫고 같은 사유를 남긴다. 레코드는 둔다 */
+  /** 거절 — 요청 · 함께 온 발송 대기 계약을 거절 · 거부로 닫는다. 사유는 받지 않는다(WHALEERP-635). 레코드는 둔다 */
   async reject(
     accountId: number,
     invitationId: number,
-    dto: RejectAffiliationRequestDto,
     now = new Date(),
   ): Promise<void> {
-    // 길이 · 앞뒤 공백은 DTO 가 본다(근로계약서 거부와 같다)
-    const rejectReason = dto.reason || null;
     const done = await this.prisma.$transaction(async (tx) => {
       const { request } = await this.lockRequest(
         tx,
@@ -277,7 +273,7 @@ export class AffiliationRequestsService {
       const { staffMemberId, storeId, name } = request.staffMember;
       const rejected = await tx.invitation.updateMany({
         where: { invitationId, status: 'SENT' },
-        data: { status: 'REJECTED', respondedAt: now, rejectReason },
+        data: { status: 'REJECTED', respondedAt: now },
       });
       if (rejected.count === 0) throw answered();
       const closed = await transitionMany(
@@ -287,11 +283,6 @@ export class AffiliationRequestsService {
         'REJECTED',
         'STAFF',
       );
-      if (closed.length)
-        await tx.contract.updateMany({
-          where: { contractId: { in: closed } },
-          data: { rejectReason },
-        });
       const writers = await tx.contract.findMany({
         where: { contractId: { in: closed } },
         select: { createdBy: true },

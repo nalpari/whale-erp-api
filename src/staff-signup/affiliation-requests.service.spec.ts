@@ -311,7 +311,7 @@ describe('AffiliationRequestsService', () => {
         'AFFILIATION_REQUEST_NOT_FOUND',
       );
       request({}, { name: '김철수' });
-      expect((await codeOf(service().reject(5, 41, {}, NOW))).code).toBe(
+      expect((await codeOf(service().reject(5, 41, NOW))).code).toBe(
         'AFFILIATION_REQUEST_NOT_FOUND',
       );
       // 이미 수락해 이 계정에 이어진 요청은 그 뒤 관리자가 이름을 바꿔도 본인에게 409(이미 답함)다
@@ -324,7 +324,7 @@ describe('AffiliationRequestsService', () => {
       );
       // 거절은 레코드가 이어지지 않아 본인이 답했다는 증거가 없다 — 이름이 바뀐 뒤에는 남의 요청과 같은 404(상태를 드러내지 않는다)
       request({ status: 'REJECTED' }, { name: '김철수' });
-      expect((await codeOf(service().reject(5, 41, {}, NOW))).code).toBe(
+      expect((await codeOf(service().reject(5, 41, NOW))).code).toBe(
         'AFFILIATION_REQUEST_NOT_FOUND',
       );
       expect(tx.invitation.updateMany).not.toHaveBeenCalled();
@@ -343,18 +343,14 @@ describe('AffiliationRequestsService', () => {
   });
 
   describe('reject', () => {
-    it('요청 · 발송 대기 계약을 거절 · 거부로 닫고 같은 사유를 남긴다 — 계약을 쓴 관리자에게 운영 알림(커밋 뒤)', async () => {
+    it('요청 · 발송 대기 계약을 거절 · 거부로 닫는다(사유는 받지 않는다, WHALEERP-635) — 계약을 쓴 관리자에게 운영 알림(커밋 뒤)', async () => {
       request();
       // 계약을 쓴 관리자(9)가 지금도 그 근무지를 맡고 있다
       (storeManagers as jest.Mock).mockResolvedValueOnce([9, 71]);
-      await service().reject(5, 41, { reason: '다른 곳에서 일해요' }, NOW);
+      await service().reject(5, 41, NOW);
       expect(tx.invitation.updateMany).toHaveBeenCalledWith({
         where: { invitationId: 41, status: 'SENT' },
-        data: {
-          status: 'REJECTED',
-          respondedAt: NOW,
-          rejectReason: '다른 곳에서 일해요',
-        },
+        data: { status: 'REJECTED', respondedAt: NOW },
       });
       expect(tx.contract.updateManyAndReturn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -362,10 +358,8 @@ describe('AffiliationRequestsService', () => {
           data: { status: 'REJECTED' },
         }),
       );
-      expect(tx.contract.updateMany).toHaveBeenCalledWith({
-        where: { contractId: { in: [7] } },
-        data: { rejectReason: '다른 곳에서 일해요' },
-      });
+      // 닫은 계약에 따로 남기는 칸은 없다
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
       // 레코드는 두고 잇지 않는다
       expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
       expect(ops.notify).toHaveBeenCalledWith({
@@ -381,16 +375,11 @@ describe('AffiliationRequestsService', () => {
       );
     });
 
-    it('사유가 없으면 남기지 않고, 함께 온 계약이 없으면 근무지 관리자에게 알린다', async () => {
+    it('함께 온 계약이 없으면 근무지 관리자에게 알린다', async () => {
       request();
       tx.contract.updateManyAndReturn.mockResolvedValue([]);
       tx.contract.findMany.mockResolvedValue([]);
-      await service().reject(5, 41, {}, NOW);
-      expect(
-        (tx.invitation.updateMany.mock.calls as unknown[][])[0][0],
-      ).toMatchObject({
-        data: { rejectReason: null },
-      });
+      await service().reject(5, 41, NOW);
       expect(storeManagers).toHaveBeenCalledWith(prisma, 19);
       expect(ops.notify).toHaveBeenCalledWith(
         expect.objectContaining({ recipients: [71] }),
@@ -399,7 +388,7 @@ describe('AffiliationRequestsService', () => {
 
     it('계약을 쓴 관리자가 비활성이거나 그 근무지를 더 맡지 않으면(storeManagers 에 없음) 근무지 관리자에게 보낸다(api #164 리뷰)', async () => {
       request();
-      await service().reject(5, 41, {}, NOW);
+      await service().reject(5, 41, NOW);
       expect(ops.notify).toHaveBeenCalledWith(
         expect.objectContaining({ recipients: [71] }),
       );
@@ -408,7 +397,7 @@ describe('AffiliationRequestsService', () => {
     it('잠근 뒤 바꾸려는데 다른 요청(수락)이 먼저 답했으면 409 AFFILIATION_REQUEST_ANSWERED — 계약 · 알림은 없다', async () => {
       request();
       tx.invitation.updateMany.mockResolvedValue({ count: 0 });
-      expect(await codeOf(service().reject(5, 41, {}, NOW))).toEqual({
+      expect(await codeOf(service().reject(5, 41, NOW))).toEqual({
         status: 409,
         code: 'AFFILIATION_REQUEST_ANSWERED',
       });
@@ -419,7 +408,7 @@ describe('AffiliationRequestsService', () => {
     it('운영 알림이 실패해도 거절은 그대로다(로그만)', async () => {
       request();
       ops.notify.mockRejectedValue(new Error('db'));
-      await expect(service().reject(5, 41, {}, NOW)).resolves.toBeUndefined();
+      await expect(service().reject(5, 41, NOW)).resolves.toBeUndefined();
     });
   });
 

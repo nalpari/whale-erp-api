@@ -884,8 +884,6 @@ model Invitation {
   status             InvitationStatus
   /// 응답 일시
   respondedAt        DateTime?         @map("responded_at") @db.Timestamptz(6)
-  /// 거절 사유 — 소속 확인 거절
-  rejectReason       String?           @map("reject_reason")
   staffMember        StaffMember       @relation(fields: [staffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "invitations_staff_member_id_fkey")
   linkHolds          LinkHold[]
 
@@ -1035,8 +1033,8 @@ model Contract {
   resendCount                Int?                       @default(0) @map("resend_count")
   /// 갱신 예정 알림 일시 — 갱신 예정 알림 · 메일을 보낸 때 — 계약마다 한 번 (WHALEERP-152, 2026-10-26 김민식)
   renewalNotifiedAt          DateTime?                  @map("renewal_notified_at") @db.Timestamptz(6)
-  /// 거부 사유
-  rejectReason               String?                    @map("reject_reason")
+  /// 수정 요청 사유 — 직원이 쓴 글, 100자
+  correctionReason           String?                    @map("correction_reason")
   /// 작성 관리자
   createdBy                  Int                        @map("created_by")
   /// 등록 일시
