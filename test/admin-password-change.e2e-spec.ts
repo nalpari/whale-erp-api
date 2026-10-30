@@ -119,7 +119,7 @@ describe('관리자 강제 비밀번호 변경 (e2e, DB)', () => {
     expect(account.isPasswordChangeRequired).toBe(true);
     expect(account.isTermsAgreementRequired).toBe(true);
 
-    const blocked = await authed('get', '/stores/options', accessToken);
+    const blocked = await authed('get', '/notifications', accessToken);
     expect(blocked.status).toBe(403);
     expect(messageOf(blocked)).toBe(PASSWORD_CHANGE_REQUIRED_MESSAGE);
   });
@@ -195,8 +195,8 @@ describe('관리자 강제 비밀번호 변경 (e2e, DB)', () => {
     });
     expect(res.status).toBe(204);
 
-    // 같은 접근 토큰으로 업무 API 가 열린다(점포 선택지).
-    expect((await authed('get', '/stores/options', accessToken)).status).toBe(
+    // 같은 접근 토큰으로 업무 API 가 열린다(운영 알림 목록).
+    expect((await authed('get', '/notifications', accessToken)).status).toBe(
       200,
     );
     // 초기 비밀번호 만료로 잘려 있던 세션이 풀린다.

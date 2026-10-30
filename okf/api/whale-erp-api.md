@@ -4,7 +4,7 @@ title: Whale ERP API
 description: NestJS 11 HTTP service over PostgreSQL via Prisma; every route needs a bearer token.
 tags: [nestjs, api, typescript]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:00:00Z }
 sources:
   - id: package-json
     resource: ../../package.json
@@ -184,9 +184,8 @@ count. Two consequences:
   compares the generated file with every `enum` in `schema.prisma` by DB name
   (`@@map`), values and order.
 
-`ContractsModule` (`/contracts` — list, 근로계약서 초안 저장, 임시저장 이어 쓰기 · 삭제, and the
-nightly contract expiry job) and `StoresModule` (`/stores` — the 점포 정보 관리 menu, and `GET /stores/options`, the
-근무지 lookup) are in `AppModule` — see [Contracts API](/api/contracts-api.md),
+`ContractsModule` (`/contracts` — list, 근로계약서 초안 저장, 임시저장 이어 쓰기 · 삭제, `GET /contracts/store-options`
+(the 근무지 lookup), and the nightly contract expiry job) and `StoresModule` (`/stores` — the 점포 정보 관리 menu) are in `AppModule` — see [Contracts API](/api/contracts-api.md),
 [Store management](/api/stores.md) and
 [Employment Contract Batch](/api/employment-contract-batch.md).
 The generated `AppController` still answers `/` with `Hello World!` and can go
