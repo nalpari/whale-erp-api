@@ -19,7 +19,6 @@ import {
   INVALID_SESSION_MESSAGE,
 } from '../auth-session/auth-session.service';
 import { AccountAuthService } from '../auth/account-auth.service';
-import type { LoginResponseDto } from '../auth/dto/login.response.dto';
 import {
   AttemptState,
   CLEARED_ATTEMPT_STATE,
@@ -47,8 +46,15 @@ import type {
   AcceptMyInvitationResponseDto,
   MyInvitationListResponseDto,
 } from './dto/my-invitation.dto';
-import type { StaffSignupDto } from './dto/staff-signup.dto';
-import { asksHqSharingConsentAt } from './hq-sharing-consent';
+import type {
+  StaffSignupDto,
+  StaffSignupResponseDto,
+} from './dto/staff-signup.dto';
+import {
+  asksHqSharingConsentAt,
+  hqSharingConsentRecordOf,
+  warnStaleHqSharingVersion,
+} from './hq-sharing-consent';
 import { sameName } from '../contracts/identity-match';
 
 /** 번호 · 코드가 맞는 초대가 없다 — 어느 쪽이 틀렸는지, 그 번호로 초대가 있는지 알리지 않는다(JOIN-7) */
@@ -135,7 +141,13 @@ type LiveInvitation = {
 
 /** 트랜잭션 안에서 정하고 밖에서 처리하는 결과 — 안에서 던지면 「가입 불가」 기록까지 되돌아간다 */
 type SignupOutcome =
-  | { kind: 'joined'; accountId: number; email: string; realName: string }
+  | {
+      kind: 'joined';
+      accountId: number;
+      email: string;
+      realName: string;
+      hqSharingConsentRecorded: boolean | null;
+    }
   | {
       kind: 'under_age';
       invitationId: number;
@@ -206,7 +218,7 @@ export class StaffSignupService {
   }
 
   /** 가입(가이드 ③) — 마치면 로그인된 상태다(가이드 ④) */
-  async signup(dto: StaffSignupDto): Promise<LoginResponseDto> {
+  async signup(dto: StaffSignupDto): Promise<StaffSignupResponseDto> {
     const weak = validateNewPassword(dto.password, dto.email);
     if (weak) throw new BadRequestException(weak);
     const today = kstToday().toISOString().slice(0, 10);
@@ -259,9 +271,11 @@ export class StaffSignupService {
             store: store.name,
           };
 
-        const consented =
-          asksHqSharingConsentAt(store.storeTypeCode) &&
-          dto.hqSharingConsented === true;
+        // 보인 문구 버전이 지금과 다르면 가입은 마치고 동의만 남기지 않는다(ATT-30 v253)
+        const hqSharingConsentRecorded = hqSharingConsentRecordOf(
+          asksHqSharingConsentAt(store.storeTypeCode),
+          dto,
+        );
         const account = await tx.account.create({
           data: {
             email: dto.email,
@@ -275,7 +289,7 @@ export class StaffSignupService {
             address: dto.address,
             addressDetail: dto.addressDetail || null,
             status: 'JOINED',
-            ...(consented
+            ...(hqSharingConsentRecorded
               ? {
                   isHqSharingConsented: true,
                   hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
@@ -302,7 +316,7 @@ export class StaffSignupService {
           'PENDING_SIGNATURE',
           'STAFF',
         );
-        return { kind: 'joined', ...account };
+        return { kind: 'joined', ...account, hqSharingConsentRecorded };
       });
     } catch (e) {
       if (
@@ -326,20 +340,30 @@ export class StaffSignupService {
       });
     }
 
+    warnStaleHqSharingVersion(
+      this.logger,
+      '가입',
+      outcome.accountId,
+      dto,
+      outcome.hqSharingConsentRecorded,
+    );
     // 가입이 커밋된 뒤 접속 상태를 연다 — 여기서 실패해도 가입은 끝났고, 직원은 로그인 화면에서 들어온다
     const session = await this.sessions.issue({
       accountId: outcome.accountId,
       deviceIdentifier: dto.deviceIdentifier,
     });
-    return this.accountAuth.loginResponseOf(
-      {
-        accountId: outcome.accountId,
-        email: outcome.email,
-        realName: outcome.realName,
-        status: 'JOINED',
-      },
-      session,
-    );
+    return {
+      ...(await this.accountAuth.loginResponseOf(
+        {
+          accountId: outcome.accountId,
+          email: outcome.email,
+          realName: outcome.realName,
+          status: 'JOINED',
+        },
+        session,
+      )),
+      hqSharingConsentRecorded: outcome.hqSharingConsentRecorded,
+    };
   }
 
   /**
@@ -413,7 +437,7 @@ export class StaffSignupService {
     dto: AcceptMyInvitationDto,
   ): Promise<AcceptMyInvitationResponseDto> {
     const { phone } = await this.accountOf(this.prisma, accountId);
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 가입 · 근로계약 저장 · 재발송과 같은 순서로 번호부터 잡는다(api #81 리뷰) — 근무지 더하기와 재발송이 교착하지 않게
       await lockPeople(tx, [phone]);
       // 계정 행도 잠그고 읽는다 — 옛 문구 버전 동의를 다시 쓰는 사이 내 정보에서 철회하면(MyConsentService 도 이 행을 잠근다)
@@ -452,11 +476,13 @@ export class StaffSignupService {
           invitation.invitationId,
           alreadyAdded,
         );
-      if (
+      // 보인 문구 버전이 지금과 다르면 근무지는 더하고 동의만 남기지 않는다(ATT-30 v253)
+      const hqSharingConsentRecorded = hqSharingConsentRecordOf(
         asksHqSharingConsentAt(store.storeTypeCode) &&
-        !hqSharingAgreedOf(account) &&
-        dto.hqSharingConsented === true
-      )
+          !hqSharingAgreedOf(account),
+        dto,
+      );
+      if (hqSharingConsentRecorded)
         // 철회했던 계정이 다시 동의하면 철회 시각을 지운다 — 동의 중에는 철회 시각이 없다(accounts_hq_sharing_consent_fields)
         await tx.account.update({
           where: { accountId },
@@ -483,8 +509,17 @@ export class StaffSignupService {
         staffMemberId,
         storeId: invitation.staffMember.storeId,
         storeName: store.name,
+        hqSharingConsentRecorded,
       };
     });
+    warnStaleHqSharingVersion(
+      this.logger,
+      '근무지 더하기',
+      accountId,
+      dto,
+      result.hqSharingConsentRecorded,
+    );
+    return result;
   }
 
   /** 로그인한 계정 — 가드가 접속을 확인한 뒤 탈퇴했을 수 있다 */

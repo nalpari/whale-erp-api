@@ -134,7 +134,7 @@ describe('AlimtalkService', () => {
     await expect(service.send(input)).rejects.toBe(error);
     expect(logged()).toMatchObject({
       result: 'FAILED',
-      failureReason: 'code=2000 http=200: bad',
+      failureReason: 'code=2000 http=200 path=unknown: bad',
       messageKey: null,
     });
     expect(logged().referenceKey).toBe(sent().refkey);
@@ -147,7 +147,7 @@ describe('AlimtalkService', () => {
     await expect(service.send(input)).rejects.toThrow();
     expect(logged()).toMatchObject({
       result: 'FAILED',
-      failureReason: `code=undefined http=undefined: ${message}`,
+      failureReason: `code=undefined http=undefined path=unknown: ${message}`,
     });
   });
 
@@ -189,7 +189,8 @@ describe('AlimtalkService', () => {
     await expect(service.send(input)).rejects.toBe('socket hang up');
     expect(logged()).toMatchObject({
       result: 'FAILED',
-      failureReason: 'code=undefined http=undefined: socket hang up',
+      failureReason:
+        'code=undefined http=undefined path=unknown: socket hang up',
     });
   });
 

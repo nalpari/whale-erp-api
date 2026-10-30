@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ContractStatus } from '@prisma/client';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import type { SendContractResponseDto } from './dto/send-contract.response.dto';
 import {
@@ -13,6 +14,7 @@ import {
   channelOf,
   deliveredStatusOf,
 } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import {
   REOPENED_STATUSES,
   RESENDABLE_STATUSES,
@@ -60,6 +62,7 @@ export class ContractSendService {
     private readonly prisma: PrismaService,
     private readonly contracts: ContractsService,
     private readonly delivery: ContractDeliveryService,
+    private readonly files: ContractFilesService,
   ) {}
 
   async send(
@@ -67,10 +70,13 @@ export class ContractSendService {
     contractId: number,
     now = new Date(),
     expected: { status?: ContractStatus; sentAt?: string } = {},
+    bp?: TargetBpContext,
   ): Promise<SendResult> {
+    await this.contracts.checkTargetBp(bp);
     const scoped = await this.contracts.scopedContractOf(
       adminAccountId,
       contractId,
+      bp,
     );
     const { pending, status, joined, sent } = await this.prisma.$transaction(
       async (tx) => {
@@ -197,6 +203,8 @@ export class ContractSendService {
       throw new ConflictException(
         '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
       );
+    // 나갔으면(답한 것 포함) 그 발송의 보낸 원본을 만든다(WHALEERP-131) — 기다리지 않는다
+    this.files.afterSent(contractId);
     // 그사이 직원이 소속 추가 확인 요청에 답했으면 계약은 그 답으로 서명 대기(기한은 수락부터) · 거부다 — 지금 값을 싣는다(api #164 리뷰)
     if (dispatched === 'ANSWERED') {
       const c = await this.prisma.contract.findUnique({
@@ -227,10 +235,16 @@ export class ContractSendService {
    * 종료로 바꾸고 이력(관리자)을 남기며, 그 직원 레코드에 나간 초대(코드 · 링크)를 무효로 한다. 행은 지우지 않는다. 남은 가입 전
    * 직원 레코드는 퇴직 처리로 정리한다(CTR-25). 발송 대기가 아니면 409(지금 상태를 싣는다). 잠금 순서는 재발송과 같다.
    */
-  async end(adminAccountId: number, contractId: number): Promise<EndResult> {
+  async end(
+    adminAccountId: number,
+    contractId: number,
+    bp?: TargetBpContext,
+  ): Promise<EndResult> {
+    await this.contracts.checkTargetBp(bp);
     const scoped = await this.contracts.scopedContractOf(
       adminAccountId,
       contractId,
+      bp,
     );
     await this.prisma.$transaction(async (tx) => {
       await lockPeople(tx, [scoped.phone]);

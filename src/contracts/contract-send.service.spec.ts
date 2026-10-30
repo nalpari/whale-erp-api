@@ -4,6 +4,7 @@ import {
   ContractDeliveryService,
   SEND_VALID_MS,
 } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractSendService } from './contract-send.service';
 import { SIGNED_ONCE } from './signed-contract';
 import { ContractsService } from './contracts.service';
@@ -46,8 +47,10 @@ describe('ContractSendService (재발송)', () => {
     $transaction: jest.Mock;
     contract: { findUnique: jest.Mock };
   };
-  let contracts: { scopedContractOf: jest.Mock };
+  let contracts: { checkTargetBp: jest.Mock; scopedContractOf: jest.Mock };
   let delivery: { prepare: jest.Mock; dispatch: jest.Mock };
+  // 보낸 원본 만들기(WHALEERP-131) — 나간 뒤 부르는지만 본다
+  let files: { afterSent: jest.Mock };
   const PENDING = { invitationId: 50 };
 
   const service = () =>
@@ -55,6 +58,7 @@ describe('ContractSendService (재발송)', () => {
       prisma as unknown as PrismaService,
       contracts as unknown as ContractsService,
       delivery as unknown as ContractDeliveryService,
+      files as unknown as ContractFilesService,
     );
 
   beforeEach(() => {
@@ -92,6 +96,7 @@ describe('ContractSendService (재발송)', () => {
       contract: { findUnique: jest.fn() },
     };
     contracts = {
+      checkTargetBp: jest.fn().mockResolvedValue(undefined),
       scopedContractOf: jest
         .fn()
         .mockResolvedValue({ storeId: 11, phone: PHONE }),
@@ -100,6 +105,7 @@ describe('ContractSendService (재발송)', () => {
       prepare: jest.fn().mockResolvedValue(PENDING),
       dispatch: jest.fn().mockResolvedValue(true),
     };
+    files = { afterSent: jest.fn() };
   });
 
   it.each(['PENDING_SEND', 'PENDING_SIGNATURE'])(
@@ -586,6 +592,13 @@ describe('ContractSendService (재발송)', () => {
     await expect(service().send(9, 7, NOW)).rejects.toThrow(
       '다른 요청이 먼저 근로계약을 고쳤습니다',
     );
+    // 나가지 않은 발송은 보낸 원본도 없다
+    expect(files.afterSent).not.toHaveBeenCalled();
+  });
+
+  it('나갔으면 그 발송의 보낸 원본을 만든다(WHALEERP-131) — 직원이 먼저 답한 것도', async () => {
+    await service().send(9, 7, NOW);
+    expect(files.afterSent).toHaveBeenCalledWith(7);
   });
 
   it('보내기가 실패하면 그 오류를 그대로 낸다', async () => {
@@ -593,5 +606,6 @@ describe('ContractSendService (재발송)', () => {
     await expect(service().send(9, 7, NOW)).rejects.toThrow(
       BadGatewayException,
     );
+    expect(files.afterSent).not.toHaveBeenCalled();
   });
 });

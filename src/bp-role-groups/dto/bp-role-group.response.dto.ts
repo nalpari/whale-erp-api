@@ -47,8 +47,8 @@ export class BpRoleGroupListResponseDto {
 
 export class BpRoleGroupDetailResponseDto extends BpRoleGroupSummaryResponseDto {
   /**
-   * 역할로 권한명 · 설명 · 메뉴를 고칠 수 있고 본인이 연결된 그룹도 아닌가 — BM 은 그 BP 의 BA, FM 은 본인 FA. false 의
-   * 이유는 editBlockedReason. 메뉴 권한은 화면이 합친다.
+   * 역할로 권한명 · 설명을 고칠 수 있는가 — BM 은 그 BP 의 BA, FM 은 본인 FA. 본인이 연결된 그룹도 고친다(재영
+   * 2026-10-30). false 의 이유는 editBlockedReason. 메뉴 칸은 메뉴 트리의 칸별 값을 본다(본인 연결은 거기서 막힌다).
    */
   isEditable: boolean;
   /** 고칠 수 없는 이유. 한글은 GET /enums/PlatformRoleGroupLockReason. */

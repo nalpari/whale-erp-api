@@ -37,7 +37,29 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       stored.delete(key);
       return Promise.resolve();
     }),
+    // 처리 완료본(WHALEERP-131)이 서명 PNG 를 다시 읽는다
+    get: jest.fn((key: string) => {
+      const body = stored.get(key);
+      return body
+        ? Promise.resolve(body)
+        : Promise.reject(new Error(`없는 키 ${key}`));
+    }),
+    downloadUrl: jest.fn((key: string) =>
+      Promise.resolve(`https://storage.test/${key}`),
+    ),
   };
+
+  /** 날인 뒤 기다리지 않고 만드는 처리 완료본(WHALEERP-131) — 생길 때까지(최대 10초) 기다린다 */
+  async function signedCopyOf(contractId: number) {
+    for (let i = 0; i < 100; i++) {
+      const row = await prisma.contractDocument.findFirst({
+        where: { contractId, kind: 'SIGNED_COPY' },
+      });
+      if (row) return row;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    throw new Error(`처리 완료본이 생기지 않았다 contract=${contractId}`);
+  }
 
   beforeAll(async () => {
     if (process.env.APP_ENV !== 'test' || !process.env.DATABASE_URL)
@@ -101,6 +123,15 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
 
   afterAll(async () => {
     if (!prisma) return;
+    // 날인마다 응답 뒤에 처리 완료본을 만든다 — 다 만들어진 뒤 지운다(지운 뒤 들어오면 계약을 지우지 못한다)
+    const signedIds = await prisma.contractDocument.findMany({
+      where: {
+        kind: 'SIGNATURE',
+        contract: { staffMemberId: { in: staffIds } },
+      },
+      select: { contractId: true },
+    });
+    for (const { contractId } of signedIds) await signedCopyOf(contractId);
     const byStaff = { contract: { staffMemberId: { in: staffIds } } };
     await prisma.contractDocument.deleteMany({ where: byStaff });
     await prisma.contractStatusHistory.deleteMany({ where: byStaff });
@@ -277,13 +308,15 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     expect(
       c.contractStatusHistories.map((h) => [h.fromStatus, h.toStatus, h.actor]),
     ).toEqual([['PENDING_SIGNATURE', 'SIGNED', 'STAFF']]);
-    expect(c.contractDocuments).toEqual([
+    // 처리 완료본은 응답 뒤에 만든다 — 서명 행만 본다(완료본은 아래 테스트)
+    const signature = c.contractDocuments.filter((d) => d.kind === 'SIGNATURE');
+    expect(signature).toEqual([
       expect.objectContaining({
         kind: 'SIGNATURE',
         fileName: `서명-${contractId}.png`,
       }),
     ]);
-    expect(stored.get(c.contractDocuments[0].storageKey)).toEqual(png);
+    expect(stored.get(signature[0].storageKey)).toEqual(png);
     expect(c.contractParty).toMatchObject({
       zipCode: '04001',
       address: '서울 마포구 동교로 1',
@@ -295,7 +328,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     // contracts e2e 가 본다(상세는 관계를 동시에 읽어 연결이 하나인 PGlite 에서 끊긴다)
     await request(app.getHttpServer())
       .get(
-        `/contracts/${contractId}/documents/${c.contractDocuments[0].contractDocumentId}/download-url`,
+        `/contracts/${contractId}/documents/${signature[0].contractDocumentId}/download-url`,
       )
       .set('Authorization', `Bearer ${await admin()}`)
       .expect(404);
@@ -583,23 +616,25 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     const d = await post(
       `/me/contracts/${othersContract}/correction-request`,
       auth,
+      { reason: '사유' },
     ).expect(404);
     // 후보 계정으로만 이어진 계약에 수정 요청해도 같은 404
     const e = await post(
       `/me/contracts/${candidateOnly}/correction-request`,
       auth,
+      { reason: '사유' },
     ).expect(404);
     expect(c.body).toEqual(a.body);
     expect(d.body).toEqual(a.body);
     expect(e.body).toEqual(a.body);
-    // 두 계약 모두 상태 · 거부 사유 · 상태 이력이 그대로다
+    // 두 계약 모두 상태 · 수정 요청 사유 · 상태 이력이 그대로다
     for (const contractId of [othersContract, candidateOnly]) {
       expect(
         await prisma.contract.findUniqueOrThrow({
           where: { contractId },
-          select: { status: true, rejectReason: true },
+          select: { status: true, correctionReason: true },
         }),
-      ).toEqual({ status: 'PENDING_SIGNATURE', rejectReason: null });
+      ).toEqual({ status: 'PENDING_SIGNATURE', correctionReason: null });
       expect(
         await prisma.contractStatusHistory.count({
           where: {
@@ -611,43 +646,76 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     }
   });
 
-  it('거부 사유는 선택이다 — 비우면 남기지 않는다', async () => {
-    const a = await account();
-    const { contractId } = await pending(a);
-    await post(`/me/contracts/${contractId}/reject`, await token(a.accountId))
-      .expect(200)
-      .expect((r) =>
-        expect(r.body).toEqual({ contractId, status: 'REJECTED' }),
-      );
-    expect(
-      await prisma.contract.findUniqueOrThrow({ where: { contractId } }),
-    ).toMatchObject({ status: 'REJECTED', rejectReason: null });
+  it('거부는 본문 없이 받는다 — 빈 본문 · 사유를 싣던 옛 직원 앱 모두 200(forbidNonWhitelisted 400 이 아님, WHALEERP-635)', async () => {
+    for (const body of [undefined, { reason: '가'.repeat(501) }]) {
+      const a = await account();
+      const { contractId } = await pending(a);
+      const req = request(app.getHttpServer())
+        .post(`/me/contracts/${contractId}/reject`)
+        .set('Authorization', `Bearer ${await token(a.accountId)}`);
+      await (body ? req.send(body) : req)
+        .expect(200)
+        .expect((r) =>
+          expect(r.body).toEqual({ contractId, status: 'REJECTED' }),
+        );
+      expect(
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId },
+          select: { status: true, correctionReason: true },
+        }),
+      ).toEqual({ status: 'REJECTED', correctionReason: null });
+    }
   });
 
-  it('거부 사유 길이는 앞뒤 공백을 지운 뒤로 센다', async () => {
-    const a = await account();
-    const { contractId } = await pending(a);
-    const reason = '가'.repeat(500);
-    await post(`/me/contracts/${contractId}/reject`, await token(a.accountId), {
-      reason: ` ${reason}
-`,
-    }).expect(200);
-    expect(
-      await prisma.contract.findUniqueOrThrow({ where: { contractId } }),
-    ).toMatchObject({ status: 'REJECTED', rejectReason: reason });
-  });
+  it.each([
+    ['사유 없음', {}, '수정 요청 사유를 입력해 주세요.'],
+    ['빈칸', { reason: '' }, '수정 요청 사유를 입력해 주세요.'],
+    ['공백만', { reason: ' \n ' }, '수정 요청 사유를 입력해 주세요.'],
+    ['null', { reason: null }, '수정 요청 사유를 입력해 주세요.'],
+    [
+      '101자',
+      { reason: '가'.repeat(101) },
+      '수정 요청 사유는 100자 이하로 입력해 주세요.',
+    ],
+  ])(
+    '수정 요청 — %s 이면 400 과 문구 하나, 상태 · 사유는 그대로',
+    async (_, body, message) => {
+      const a = await account();
+      const { contractId } = await pending(a);
+      const res = await post(
+        `/me/contracts/${contractId}/correction-request`,
+        await token(a.accountId),
+        body,
+      ).expect(400);
+      expect((res.body as { message: unknown }).message).toEqual([message]);
+      expect(
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId },
+          select: { status: true, correctionReason: true },
+        }),
+      ).toEqual({ status: 'PENDING_SIGNATURE', correctionReason: null });
+    },
+  );
 
-  it('수정 요청 — 서명 대기면 받는다', async () => {
+  it('수정 요청 — 서명 대기면 받고 앞뒤 공백을 지운 사유(100자까지)를 남긴다', async () => {
     const a = await account();
     const { contractId } = await pending(a);
+    const reason = '가'.repeat(100);
     await post(
       `/me/contracts/${contractId}/correction-request`,
       await token(a.accountId),
-    ).expect(200);
+      { reason: ` ${reason}\n` },
+    )
+      .expect(200)
+      .expect((r) =>
+        expect(r.body).toEqual({ contractId, status: 'CORRECTION_REQUESTED' }),
+      );
     expect(
-      (await prisma.contract.findUniqueOrThrow({ where: { contractId } }))
-        .status,
-    ).toBe('CORRECTION_REQUESTED');
+      await prisma.contract.findUniqueOrThrow({
+        where: { contractId },
+        select: { status: true, correctionReason: true },
+      }),
+    ).toEqual({ status: 'CORRECTION_REQUESTED', correctionReason: reason });
   });
 
   it('서명이 없으면 400, 관리자 토큰은 403', async () => {
@@ -745,8 +813,13 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       awaitingSignature: false,
       signable: false,
       worker: { address: '서울 마포구 동교로 1' },
-      documents: [],
     });
+    // 처리 완료본(WHALEERP-131)은 응답 뒤에 생겨 있을 수도 없을 수도 있다 — 서명 이미지가 없는 것만 본다
+    expect(
+      (after.body as { documents: { kind: string }[] }).documents.filter(
+        (doc) => doc.kind !== 'SIGNED_COPY',
+      ),
+    ).toEqual([]);
   });
 
   it('상세 — 본인 대조가 틀리면 다른 항목을 싣고 날인할 수 없다(날인은 409 와 같은 항목)', async () => {
@@ -842,5 +915,102 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       data: { status: 'DRAFT' },
     });
     await get(`/me/contracts/${draft}`, auth).expect(404);
+  });
+  it('날인하면 사용자 칸을 그때 점포 정보로 고정하고, 응답 뒤 서명을 합성한 처리 완료본을 만든다 — 직원이 받는다(WHALEERP-131 · 149)', async () => {
+    await prisma.storeBusinessProfile.create({
+      data: {
+        storeId,
+        bizTradeName: '날인 때 상호',
+        bizRegistrationNumber: '1234567890',
+        bizCeoName: '김대표',
+        bizAddress: '서울 마포구 양화로 1',
+      },
+    });
+    try {
+      const a = await account();
+      const auth = await token(a.accountId);
+      const { contractId, sentAt } = await pending(a);
+      await sign(contractId, auth, sentAt).expect(200);
+      expect(
+        await prisma.contractParty.findUniqueOrThrow({ where: { contractId } }),
+      ).toMatchObject({
+        employerName: '날인 때 상호',
+        employerCeoName: '김대표',
+        employerRegistrationNumber: '1234567890',
+        employerAddress: '서울 마포구 양화로 1',
+        employerPhone: null,
+        employerFixedAt: expect.any(Date) as unknown,
+        // 제2조도 날인 시점 값 — 근무 장소를 비운 계약은 그때 점포명, 직무는 직원 레코드(계약 칸이 빈 옛 계약)
+        fixedWorkLocation: '날인 테스트 직영점',
+        fixedJobTitle: '매장',
+      });
+
+      const copy = await signedCopyOf(contractId);
+      expect(copy).toMatchObject({
+        fileName: `근로계약서-처리완료본-${contractId}.pdf`,
+        sentAt,
+      });
+      const pdf = stored.get(copy.storageKey)!;
+      expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+      // 서명 이미지가 합성됐다
+      expect(pdf.toString('latin1')).toContain('/Subtype /Image');
+
+      // 날인 뒤 상호가 바뀌어도 상세의 사용자 칸은 고정한 값 — 완료본과 같다
+      await prisma.storeBusinessProfile.update({
+        where: { storeId },
+        data: { bizTradeName: '바뀐 상호' },
+      });
+      const detail = await request(app.getHttpServer())
+        .get(`/me/contracts/${contractId}`)
+        .set('Authorization', `Bearer ${auth}`)
+        .expect(200);
+      const body = detail.body as {
+        employer: object;
+        articles: unknown[];
+        documents: unknown[];
+      };
+      expect(body.employer).toMatchObject({ tradeName: '날인 때 상호' });
+      // 점포 이름이 바뀌어도 제2조는 날인 때 점포명
+      await prisma.store.update({
+        where: { storeId },
+        data: { name: '바뀐 점포명' },
+      });
+      try {
+        const again = await request(app.getHttpServer())
+          .get(`/me/contracts/${contractId}`)
+          .set('Authorization', `Bearer ${auth}`)
+          .expect(200);
+        expect(
+          (again.body as { articles: { blocks: { text?: string }[] }[] })
+            .articles[1].blocks[0].text,
+        ).toBe('날인 테스트 직영점에서 매장 업무를 한다.');
+      } finally {
+        // 단언이 실패해도 뒤 테스트가 점포명을 그대로 보게 되돌린다
+        await prisma.store.update({
+          where: { storeId },
+          data: { name: '날인 테스트 직영점' },
+        });
+      }
+      expect(body.articles).toHaveLength(10);
+      expect(body.documents).toEqual([
+        expect.objectContaining({
+          contractDocumentId: copy.contractDocumentId,
+          kind: 'SIGNED_COPY',
+        }),
+      ]);
+
+      // 직원 앱 처리 완료본 내보내기(149) — 실제 SIGNED_COPY 의 주소를 받는다
+      const url = await request(app.getHttpServer())
+        .get(
+          `/me/contracts/${contractId}/documents/${copy.contractDocumentId}/download-url`,
+        )
+        .set('Authorization', `Bearer ${auth}`)
+        .expect(200);
+      expect(url.body).toEqual({
+        url: `https://storage.test/${copy.storageKey}`,
+      });
+    } finally {
+      await prisma.storeBusinessProfile.deleteMany({ where: { storeId } });
+    }
   });
 });

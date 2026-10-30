@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:44:33Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-29T08:20:16Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -30,10 +30,18 @@ sources:
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
     last_modified: 2026-10-29T05:44:42Z
+  - id: contract-template
+    resource: ../../src/contracts/contract-template.ts
+    title: 근로계약서 조항 템플릿 (WHALEERP-131)
+    last_modified: 2026-10-29T07:30:00Z
+  - id: contract-files
+    resource: ../../src/contracts/contract-files.service.ts
+    title: 보낸 원본 · 처리 완료본 만들기 · 채우기 배치 (WHALEERP-131)
+    last_modified: 2026-10-29T07:30:00Z
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
-    last_modified: 2026-10-23T09:40:00Z
+    last_modified: 2026-10-29T08:20:16Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -169,9 +177,25 @@ a 직원 not yet joined has no account, so counts as not consented)
   not 폐점 is checked either way — a draft whose store closed after it was saved
   is 404 「근무지 점포를 찾을 수 없습니다.」 even when kept at the same store, so
   it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403
-  on the list (`getManageableStores` is null). 플랫폼 관리자 (PM · PA) manage no
-  customer store until this module passes the tab BP (`@TargetBp()`, WHALEERP-618), so
-  they see an empty list.[^admin-scope]
+  on the list (`getManageableStores` is null).[^admin-scope]
+- **The BP is the tab's, not the account's** (WHALEERP-618, 2026-10-29). Every
+  관리자 웹 route here (`ContractsController` and `ContractSendController`'s
+  send · end) takes `@TargetBp()` — the guard reads `X-Bp-Code-Id`, which front
+  puts on from `/bp/{bpCodeId}/contracts…` — and passes it to every
+  `AdminScopeService` call (`getManageableStores` · `canManageStaffAt`). A BP or
+  가맹 account gets its own BP (another BP in the header is the guard's 403), so
+  nothing changes for it. A platform account (PM · PA) works on every store of the
+  chosen customer BP. A platform account **without** the header lands on its own
+  platform BP, which has no stores — `ContractsService.checkTargetBp` answers 400
+  「근로계약을 볼 BP 를 골라 주세요.」 before any scope check (one `bp_codes` read,
+  platform callers only; a platform BP in the header is already the guard's 404, so
+  a platform target means the header was missing). It runs first on each route, so a
+  body that would fail the service's own checks still gets the 400; DTO validation
+  comes before it. The service methods take `bp` as an optional last argument
+  (absent = the account's own BP, the pre-618 behaviour), so callers and unit specs
+  kept their shape. `GET /stores/options` (the 근무지 dropdown) does **not** read
+  the header yet — a platform account sees no 근무지 there and cannot write a
+  contract until that route moves too.
 - **Store names cost a second query.** `stores` is 1팀's table and has no
   Prisma relation to `contracts`, so `include` cannot reach it. A `storeName`
   filter first looks up matching `store_id`s (no match → `storeId: { in: [] }`,
@@ -563,7 +587,11 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
 - `firstSentAt` — the first history row into 발송 대기 or 서명 대기 (its DB time, so a few ms off the request time);
   `lastSentAt` — `contracts.sent_at`, rewritten on every send; `signDeadlineAt`; `lastProcessedAt` — the newest
   history row.
-- `rejectReason` — only when the contract is 거부 (the column is kept on other statuses but not shown).
+- `correctionReason` — the 수정 요청 사유 the 직원 wrote (1–100 chars, WHALEERP-635, 2026-10-30), only while the contract is
+  수정 요청 (null otherwise, and for a request made before reasons were taken). The column outlives a 관리자 fix-and-resend
+  and a second request overwrites it, but the detail hides it on other statuses so an old reason is not read as current
+  (as `rejectReason` used to be gated on 거부). There is no 거부 사유 any more (`contracts.reject_reason`
+  dropped in `20261030120000_team3_contract_correction_reason`, old values not moved).
 - `resendCount` — `contracts.resend_count`, counted in `ContractDeliveryService.prepare` when a contract that had
   been sent is sent again (재발송, 수정 요청 고침, 근로자 정보 수정) and taken back by `undo` when the 알림톡 did not go
   out. A resend that only set a new deadline with no notice (joined 직원 with a switched-off template or a withdrawn
@@ -586,6 +614,24 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   app notice).
   Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503) or the account being 재직 at this
   store already (409) still fail when sent.
+- `taxProfile` — the 직원's 신고 정보, read-only (WHALEERP-155, 2026-10-29 김민식): `{ status, rrnMasked, bankName,
+  accountNumber }`. It hangs on the 직원 record (`StaffTaxProfile` is 1:1 by `staffMemberId`), not the contract, so an
+  old contract shows the 직원's **current** values. The visibility check (`canManageStaffAccount`) uses the same target
+  BP as the detail (`@TargetBp()`, WHALEERP-618) — without it a platform account viewing a customer BP always got `HIDDEN`. `status`:
+  - `OK` — `rrnMasked` is 앞 6자리 + 뒷자리 첫 자 (`900101-1******`, `maskRrn` — masked **here**, the raw number never
+    leaves the API), `bankName` the BANK 공통코드 label (`bankNameOf`, `src/common/bank-name.ts`, shared with the 직원
+    상세 급여 계좌; the code itself when missing), `accountNumber` the full number (no hyphen, not masked — same as
+    WHALEERP-183).
+  - `NONE` — the 직원 has not entered it, whatever the contract's status or method.
+  - `HIDDEN` — 본사 역할(BM · BA) looking at a 가맹 점포 직원's contract (they can open it with 본사 제공 동의). Judged
+    by `AdminScopeService.canManageStaffAccount`, the same rule as the 직원 상세 급여 계좌 (재영 2026-10-29, TAX-07 ·
+    TAX-08); the row is neither read nor decrypted. It is judged on the 직원 record's store, not the contract's — the 신고
+    정보 belongs to the record (the two can differ when a 가입한 직원's 임시저장 moves to another 근무지).
+  - `UNAVAILABLE` — no `PERSONAL_DATA_ENCRYPTION_KEY`, or a column will not decrypt / the decrypted 주민번호 is malformed.
+    Unlike the 직원 상세 요약 (503/500 for the whole area), **the detail still returns 200** — only this field fails.
+    The log names the record and column, never the value.
+
+  Every value field is null unless `status` is `OK`. The 관리자웹 shows `NONE` and `HIDDEN` alike as 「-」.
 
 # 소속 추가 확인 요청 (WHALEERP-130 · 144, 2026-10-26 재영)
 
@@ -639,8 +685,7 @@ only the 재발송. All of them go through `ContractDeliveryService`.[^contract-
 **거부 · 만료 재발송** (WHALEERP-153, 운영 정책 CTR-10 · 2026-10-26 재영): `POST …/send` also takes a 거부 or 만료
 contract and sends **the same terms** again — no interval limit. It goes back to the status a send gives (앱 직원 →
 서명 대기, 가입 초대 · 소속 추가 확인 요청 → 발송 대기 — a number with an account gets a new 소속 추가 확인 요청,
-WHALEERP-130) with a history row from 거부 · 만료, a new 30-day deadline and `resend_count + 1`; the
-거부 사유 stays on the row. Before reopening it is refused (409) when the store is closed or deleted (a store whose
+WHALEERP-130) with a history row from 거부 · 만료, a new 30-day deadline and `resend_count + 1`. Before reopening it is refused (409) when the store is closed or deleted (a store whose
 only contracts are 거부 · 만료 can be closed), when the 직원 is 퇴직 or has any 퇴직일 set — past or future, the same
 rule as sending a 재계약 임시저장 (CTR-25 — write a new contract when they come back; api #158 review), when another contract is in progress at the same store and phone (two
 would come alive), when its 계약 기간 has already ended (it would end the day it is signed — write a new contract; api #158 code-review),
@@ -780,10 +825,13 @@ mail only (`optionalMailServiceProvider`, like 문의 답변).
   even if that one also ends inside the 30 days (`needsRenewal`, api #150 review),
   stamps it in the same transaction, and notifies after the commit, keyed by the contract ID — once per contract,
   even if sending then fails (mail logs have no contract column to dedupe on).
-- The 거부 운영 알림 template has no 근무지; passing a variable the template lacks throws in the renderer, so the
-  service builds each template's variables separately. An empty 거부 사유 is sent as 「없음」 (the renderer would leave
-  「사유 · 」 blank). Nothing here throws — failures are
-  logged.
+- 날인 · 거부 · 만료 all pass 직원이름 · 근무지 to both templates. The 거부 templates lost 거부사유 in
+  `20261030120100_team3_reject_notices_without_reason` (WHALEERP-635), on top of the same day's wording pass
+  `20261030093710`: the 운영 알림's 「- 거부 사유: #{거부사유}」 line became 「- 근무지: #{근무지}」 like 날인 · 만료 (김민식)
+  and the 메일 lost that line. The same migration drops 「- 거절 사유: #{거절사유}」 from the two 소속 추가 거절
+  templates (the code never passed it). Operator edits were overwritten (none on the dev DB, 2026-10-30). Passing a
+  variable the template lacks throws in the renderer, so that migration and this code ship together. Nothing here
+  throws — failures are logged.
 
 # Fixing the 근로자 before 날인: PATCH /contracts/:contractId/worker
 
@@ -854,7 +902,7 @@ a change means a new contract that replaces it.
   outside `from` — with **409 `CONTRACT_STATUS_CONFLICT`** carrying the
   current `status` and 「…입니다. 화면을 새로 고쳐 지금 상태를 확인해 주세요.」.
   Nothing is written, so the previous status stays. `data` is written with
-  the status (거부 사유 · 발송 일시 …).
+  the status (수정 요청 사유 · 발송 일시 …).
 - `transitionMany(tx, where, from, to, actor)` is the batch form
   (`updateManyAndReturn` + one history row each); the 서명 기한 만료 batch
   uses it.
@@ -862,12 +910,12 @@ a change means a new contract that replaces it.
   contract is not touched and answers 409 with `status: SIGNED`. Past
   `sign_deadline_at` it answers **409 `SIGN_DEADLINE_PASSED`** even before the
   만료 batch runs; turning it into 만료 stays the batch's job.
-- `requestCorrection` — 서명 대기 → 수정 요청 (`STAFF`), nothing else carried (2026-10-16).
+- `requestCorrection` — 서명 대기 → 수정 요청 (`STAFF`), writing `correction_reason` in the same UPDATE (WHALEERP-635 —
+  the DTO's trimmed 1–100 chars). A later request overwrites it; a 관리자 fix-and-resend never clears it.
   Past `sign_deadline_at` it is **409 `SIGN_DEADLINE_PASSED`**, like 날인 — an expired
   invitation is not revived by a 수정 요청 before the batch runs (api #58 review).
-- `rejectContract` — 서명 대기 → 거부 (`STAFF`). `reject_reason` is optional (WHALEERP-145, 2026-10-21):
-  trimmed, empty is NULL, over 500 chars 400. Past `sign_deadline_at` it is 409 `SIGN_DEADLINE_PASSED`
-  like the other two.
+- `rejectContract` — 서명 대기 → 거부 (`STAFF`), nothing else carried — no reason since WHALEERP-635 (2026-10-30;
+  it was optional, WHALEERP-145). Past `sign_deadline_at` it is 409 `SIGN_DEADLINE_PASSED` like the other two.
 - The 직원 앱 routes are [Staff app: 날인 · 거부 · 수정 요청](#staff-app-날인--거부--수정-요청) below.
 - Moved onto it: `PUT` 임시저장 → 발송 대기 · 서명 대기, 대체 (발송 대기 · 서명 대기 →
   종료), the 만료 batch. 퇴직 처리 (`staff-members/retirement.service.ts`)
@@ -947,18 +995,30 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   `kind = SIGNATURE` (`서명-{id}.png`, sha256) and **copies the account's address into
   `contract_parties` (`zip_code` · `address` · `address_detail`, `filled_at` now)** so the signed contract
   does not change with later address edits (`filled_at` is set here — the column note 「가입 완료 시」 is
-  the logical ERD's older wording). On a failure the uploaded key is deleted only when no
+  the logical ERD's older wording). The same update **fixes the 사용자 칸 at signing time** — `employer_name`
+  (상호, else 점포명) · `employer_ceo_name` · `employer_registration_number` · `employer_address` ·
+  `employer_address_detail` (사업자 주소) · `employer_phone` (점포 연락처) · `employer_fixed_at` from the store and its
+  `store_business_profiles` (`employerOf` in `contract-files.service.ts`), and **제2조 too** — `fixed_work_location`
+  (근무 장소, or the 점포명 when empty) · `fixed_job_title` (the contract's 직무, or the 직원 레코드's when an old contract
+  has none; 2026-10-30 김민식, api #211 review) — so a later store rename or 직무 change does not alter the signed text
+  (WHALEERP-131, 2026-10-29 김민식: the 처리 완료본
+  uses 날인 시점 값 — the app showed the live store values when the 직원 signed, and a later edit cannot be traced
+  back). On a failure the uploaded key is deleted only when no
   `contract_documents` row points at it (the commit may have gone through with only the reply lost —
   deleting would leave a 체결 완료 contract whose 처리 완료본 can never be made); if that lookup fails
   too, the key is kept and logged. A failed upload also tries a delete (a timeout may have stored it). 200
   `{ contractId, status: SIGNED, signedAt }` — `signedAt` is the history row's `changed_at` (DB clock).
 - The `SIGNATURE` document is **not shown to the 관리자**: `GET /contracts/:id` leaves it out of
   `documents` and its download URL is 404 — it is the material the 처리 완료본 (131) merges.
-- **`POST …/reject`** — JSON `{ reason? }` (≤ 500 after trimming, `null` is 400). 200 `{ contractId, status: REJECTED }`.
-- **`POST …/correction-request`** — no body. Taken whatever the 대조 says (a wrong wage is a reason too —
-  WHALEERP-125 「계약서가 틀렸으면」). 200 `{ contractId, status: CORRECTION_REQUESTED }`.
-- The 처리 완료본 (signature merged into a PDF, `SIGNED_COPY`) is WHALEERP-131; 날인 · 거부 알림 is
-  WHALEERP-154. The 처리 시각 and actor are the history row (`STAFF`); the 직원 is the account linked to
+- **`POST …/reject`** — no body read (no `@Body`, WHALEERP-635), so an old 직원 앱 still sending `{ reason }` is not a
+  `forbidNonWhitelisted` 400 — that check only runs on a `@Body` DTO. 200 `{ contractId, status: REJECTED }`.
+- **`POST …/correction-request`** — JSON `{ reason }`, required (`RequestMyContractCorrectionDto`, WHALEERP-635):
+  NFC, trimmed, then 1–100 chars (`CORRECTION_REASON_MAX`). One check, so a 400 carries exactly one message —
+  「수정 요청 사유를 입력해 주세요.」 (missing · not a string · empty) or 「수정 요청 사유는 100자 이하로 입력해 주세요.」
+  (the 직원 앱 joins array messages). Taken whatever the 대조 says (a wrong wage is a reason too — WHALEERP-125
+  「계약서가 틀렸으면」). 200 `{ contractId, status: CORRECTION_REQUESTED }`.
+- After the commit the 처리 완료본 (`SIGNED_COPY`, below) is made without waiting (`ContractFilesService.afterSigned`);
+  날인 · 거부 알림 is WHALEERP-154. The 처리 시각 and actor are the history row (`STAFF`); the 직원 is the account linked to
   the record (1:1), so no extra column.
 
 # Staff app: 내 계약 목록 · 상세
@@ -989,18 +1049,30 @@ apply to reading.
     직원 레코드's 직무, and the address fixed at 날인 — empty before). An old contract with no party row
     shows the 직원 레코드's 이름 · 번호 like the 관리자 detail; the 대조 still uses an empty contract.
   - `employer` — the 사용자 칸: the store's name · phone · address and its `store_business_profiles` 상호 ·
-    사업자등록번호 · 대표자 · 사업장 주소 (null until registered). A missing store row is broken data → 500.
+    사업자등록번호 · 대표자 · 사업장 주소 (null until registered). A missing store row is broken data → 500. Once
+    the party row holds the 사용자 칸 (fixed at 날인, or written by the backfill), `tradeName` · `ceoName` · `registrationNumber` · `bizAddress` ·
+    `bizAddressDetail` · `storePhone` are the fixed values (the 처리 완료본's), `tradeName` holding the 점포명 when the
+    store had no 상호; `storeName`, the store address and `bizZipCode` stay live.
   - `account` — 「본인인증으로 확인된 정보」: the account's 이름 · 번호 · 생년월일 · 성별 · 외국인 여부 ·
     주소.
   - `mismatches` — `identityMismatches` against the account, exactly what 날인 would 409 with
     (`EMPTY_CONTRACT_IDENTITY` when there is no party row); `signable` = `awaitingSignature` and no
     mismatches.
-  - `documents` — `{ contractDocumentId, kind, fileName }`, without the 직원 필기 서명 (`SIGNATURE`).
+  - `documents` — `{ contractDocumentId, kind, fileName }`, only the kinds the app uses (`myDocumentWhere` allow-list
+    `MY_DOCUMENT_KINDS`: 처리 완료본 · 종이 계약 근로계약서 · 임금계약서) — so no 직원 필기 서명, and no 보낸 원본: one made before the 관리자 corrected the 근로자 and re-sent — or one that
+    becomes 「current」 again when a failed re-send is undone and `sent_at` goes back — can carry another person's
+    이름 · 생년월일 · 번호 (api #211 review, twice). The app only uses the 처리 완료본 and 종이 계약 files. The 관리자
+    detail keeps listing every send's 보낸 원본 as the record.
     Each one downloads through the route below.
   - `sentAt` is what the app sends back on 날인 (a different value is 409 `CONTRACT_RESENT`).
-- **Clause text** is not built here: there is no clause template yet (노무사 검토 중, mockup
-  `contract.html`), so the API gives values and the app lays out 제1~10조; the template moves to
-  WHALEERP-131.
+- **`articles`** — 제1~10조 from the clause template (`contract-template.ts`, WHALEERP-131), the same one the
+  보낸 원본 · 처리 완료본 PDFs use: `{ title, blocks }`, a block being `TEXT` (`text`), `TABLE` (제3조 요일 표:
+  `header`, `tableRows[{ cells, off }]`) or `VALUES` (`values[{ label, value }]`, empty values left out). The first
+  `TEXT` follows the title on the same line. The wording is the 직원 앱's 원안 moved here as is (휴일 · 연차 · 가산
+  조항 wait for the 노무사 review, PAY-5); a change re-renders signed contracts in the app but not their PDFs. One
+  addition: an old contract with no 주휴일 but 주 15시간 이상 says 「주휴일이 정해지지 않았다.」 instead of the 15시간 미만
+  sentence, which would contradict its own 제3조. 제3조's hours use `weeklyMinutesOf` / `dayMinutesOf`
+  (`contract-terms.ts`), the same calculation as the save check.
 - Reads run in one transaction only so Prisma sends the relation queries one after another (PGlite e2e).
 - **`GET /me/contracts/:contractId/documents/:contractDocumentId/download-url`** (WHALEERP-146 종이 계약
   날인본 · 임금계약서, 149 처리 완료본 내보내기; `MyContractDocumentsController`, its own controller so the 날인
@@ -1009,7 +1081,7 @@ apply to reading.
   filename*=UTF-8''…` is set on the S3 response, not by this API). The app hands that file to the share sheet.
   The path ends in `/download-url` like every other download route here, because the reply is a URL, not the file.
   - Not mine (same `myContractWhere`) → the detail's 404 body. Then the file must belong to that contract and be
-    one `documents` lists (`kind ≠ SIGNATURE`) → else 404 「파일을 찾을 수 없습니다.」 — so another contract's
+    one `documents` lists (same `myDocumentWhere`) → else 404 「파일을 찾을 수 없습니다.」 — so another contract's
     file id under my contract is 404 too.
   - **처리 완료본 (`SIGNED_COPY`) only for executed contracts** — `SIGNED`, or `ENDED` with a `SIGNED → ENDED`
     status history row (any actor: the nightly end or an admin replacement), or an old `ENDED` with no history at
@@ -1017,12 +1089,52 @@ apply to reading.
     대기 · 서명 대기 · 수정 요청, so the status alone is not enough. Otherwise **409 `CONTRACT_STATUS_CONFLICT`**
     with the current `status` — the same code and fields as a refused transition, with its own message (「처리 완료본은
     체결이 끝난 근로계약에서만 받을 수 있습니다.」, not 「새로 고쳐 상태를 확인」). 409 rather than 404 because the detail
-    does list the file; it is the state that refuses. The detail still lists a `SIGNED_COPY` whatever the status (no
-    such rows exist yet — WHALEERP-131); the app should offer it only for executed contracts. This is a third
+    does list the file; it is the state that refuses. The detail still lists a `SIGNED_COPY` whatever the status; the
+    app should offer it only for executed contracts. This is a third
     "executed" rule next to `SIGNED_ONCE` and `contractCovers`; unifying them waits for the open contracts PRs. `SENT_ORIGINAL` · `PAPER_EMPLOYMENT_CONTRACT` · `WAGE_CONTRACT` have no state gate.
   - 404 · 409 come before the storage check; storage not configured → 503 (as 날인). A failure building the URL
     propagates (500), as in the 관리자 route.
-  - Nothing writes `SIGNED_COPY` yet (WHALEERP-131); the gate is tested with rows written directly.
+  - `SIGNED_COPY` rows come from `ContractFilesService` (below); the gate is tested with rows written directly, and
+    `my-contracts.e2e-spec.ts` downloads a real one after 날인.
+
+# 근로계약서 파일: 보낸 원본 · 처리 완료본
+
+WHALEERP-131 (2026-10-29). `ContractFilesService` renders A4 PDFs (`contract-pdf.ts`, pdfkit, the payslip PDF's
+Pretendard fonts) from the clause template above plus the 사용자 · 근로자 칸 and a 서명 칸. Electronic contracts
+only — a 종이 계약 has no body.
+
+- **보낸 원본 (`SENT_ORIGINAL`)** — one per 발송: `contract_documents.sent_at` = the contract's `sent_at`. Made after
+  a send that went out (or that the 직원 answered first) — `ContractsService.settledResult` (저장 · 고쳐 보냄 · 근로자
+  정보 수정) and `ContractSendService.send` (재발송) call `afterSent` without waiting. 사용자 칸 = the store now;
+  근로자 주소 is always empty (it is fixed at 날인, so it was not on the contract when sent — even when the batch
+  makes the file after the 직원 signed); the 서명 칸 is empty and a note says it is the pre-signature copy.
+  A re-send makes a new one; earlier ones stay. File `근로계약서-보낸원본-{id}-{KST yyyymmddHHMM}.pdf`.
+- **처리 완료본 (`SIGNED_COPY`)** — one per contract, needs the `SIGNATURE` row; the PNG is read back from storage
+  and drawn in the 서명 칸. 사용자 칸 = the values on the party row (`employer_*`, fixed at 날인). A contract signed
+  before those columns existed is made with the store's current values, logged, and those values are written to
+  `employer_*` · `fixed_work_location` · `fixed_job_title` in the same transaction as the file row so the app detail
+  shows what the PDF shows; `employer_fixed_at`
+  stays NULL — that NULL is the record that they are not 날인 시점 값. `employer_fixed_at` is the `→ SIGNED` history
+  row's time (DB clock), the same as `signedAt`.
+  계약 체결일 = the latest `→ SIGNED` history row (KST date). File `근로계약서-처리완료본-{id}.pdf`.
+- **One copy each**: partial unique index `(contract_id, kind, sent_at) WHERE kind IN ('SENT_ORIGINAL', 'SIGNED_COPY')`
+  plus a CHECK that those kinds carry `sent_at`. `make` reads under REPEATABLE READ (the terms and `sent_at` of one
+  moment), uploads, then inserts; the loser of a race gets P2002, deletes its upload and answers `EXISTS`. A failed
+  insert keeps the file only if a row points at it (commit may have gone through), like 날인.
+- **채우기 배치** (`ContractFilesScheduler`, `contract-files`, every 10 minutes, `waitForCompletion`, no batch lock —
+  the PDFs must not sit in the 60-second lock transaction; the unique index keeps one copy): up to 50 체결 계약 with a
+  `SIGNATURE` but no `SIGNED_COPY` (the **백필** for contracts signed before this shipped, and retries of a failed
+  `afterSigned`), and up to 50 contracts sent **5 minutes to 24 hours ago** with no 보낸 원본 for that `sent_at`. The
+  lower bound skips sends still being dispatched or undone; older sends are not filled — the store values of that
+  moment are unknown, and a 보낸 원본 the batch makes late carries the store values of the batch run. A contract whose
+  make throws is left out of the next runs for an hour (in process memory, `FILL_RETRY_AFTER_MS`) so a few contracts
+  that always fail (a lost signature object, an image pdfkit cannot read) cannot hold the first 50 places forever.
+  Storage not configured → nothing.
+- **제2조 of a signed contract** (app `articles`, `worker.jobTitle` and the 처리 완료본) uses the fixed 근무 장소 · 직무
+  when the party row has them; unsigned contracts and 보낸 원본 use the live values.
+- **Known limits**: Before running the migration on a database, check that no `SENT_ORIGINAL` · `SIGNED_COPY`
+  row exists (nothing wrote them before; the new CHECK would refuse such rows without `sent_at`).
+- Admins see both kinds in `GET /contracts/:id` `documents` and download them through the existing route.
 
 # GET /stores/options
 

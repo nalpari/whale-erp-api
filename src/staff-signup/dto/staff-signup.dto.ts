@@ -15,6 +15,8 @@ import {
 import { IsDateOnly } from '../../common/is-date-only';
 import { IsSendableEmail } from '../../mail/is-sendable-email';
 import { MAX_EMAIL_LENGTH } from '../../mail/mail-address';
+import { LoginResponseDto } from '../../auth/dto/login.response.dto';
+import { IsHqSharingConsentVersion } from '../hq-sharing-consent';
 import { InvitationLookupDto } from './invitation-lookup.dto';
 
 const trim = ({ value }: { value: unknown }) =>
@@ -95,10 +97,28 @@ export class StaffSignupDto extends InvitationLookupDto {
   @IsBoolean()
   hqSharingConsented?: boolean;
 
+  /**
+   * 본사 제공 동의 문구 버전 — 화면이 보인 문구의 버전(예: v1.0, ATT-30 v252). hqSharingConsented 가 true 일 때
+   * 싣는다(실었으면 비지 않은 64자 이하 문자열 — 아니면 400), 아니면 보지 않는다. 빠지거나(null 포함) 지금 버전과 다르면 가입은 그대로
+   * 마치고 동의만 남기지 않는다 — 응답의 hqSharingConsentRecorded 가 false 다(예전 앱 · 배포 어긋남에도 막지 않는다, v253)
+   */
+  @IsHqSharingConsentVersion()
+  hqSharingConsentVersion?: string;
+
   /** 이 기기 — 로그인과 같다. 같은 기기의 앞 접속을 끝낸다 */
   @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
   deviceIdentifier?: string;
+}
+
+/** 가입 응답 — 로그인 응답에 본사 제공 동의를 남겼는지를 더한다 */
+export class StaffSignupResponseDto extends LoginResponseDto {
+  /**
+   * 본사 제공 동의를 남겼는지(ATT-30 v253). true 남김 · false 동의했지만 보인 문구 버전이 지금과 다르거나 싣지 않아(예전 앱) 남기지 않음(가입은
+   * 마쳤다 — 앱은 내 정보에서 다시 동의하라고 알린다) · null 남길 동의가 없음(직영 점포 · 동의하지 않음)
+   */
+  @ApiProperty({ nullable: true, type: Boolean })
+  hqSharingConsentRecorded: boolean | null;
 }

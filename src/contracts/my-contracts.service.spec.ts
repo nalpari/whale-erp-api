@@ -2,6 +2,7 @@ import { HttpException, Logger } from '@nestjs/common';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractNoticeService } from './contract-notice.service';
 import { MY_CONTRACT_STATUSES } from './my-contract-scope';
 import { MyContractsService } from './my-contracts.service';
@@ -25,15 +26,22 @@ describe('MyContractsService', () => {
     contractDocument: { create: jest.Mock; findFirst: jest.Mock };
     contractParty: { update: jest.Mock };
     staffMember: { updateMany: jest.Mock };
+    store: { findUniqueOrThrow: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let storage: { put: jest.Mock; delete: jest.Mock };
   // 날인 · 거부 알림(WHALEERP-154) — 무엇을 넘기는지만 본다(ContractNoticeService 는 따로 시험한다)
   let notice: { statusChanged: jest.Mock };
+  // 처리 완료본 만들기(WHALEERP-131) — 커밋 뒤 부르는지만 본다(ContractFilesService 는 따로 시험한다)
+  let files: { afterSigned: jest.Mock };
 
   /** 내 계약 — 서명 대기 · 기한 안 · 계약서 값과 계정 값이 같다 */
   const mine = (o: Record<string, unknown> = {}) => ({
     status: 'PENDING_SIGNATURE',
+    storeId: 3,
+    // 제2조 — 근무 장소를 비운 계약(날인 때 점포명으로 고정)
+    workLocation: null,
+    jobTitle: '바리스타',
     sentAt: SENT,
     signDeadlineAt: new Date('2026-11-19T01:00:00.000Z'),
     contractParty: {
@@ -46,6 +54,7 @@ describe('MyContractsService', () => {
     staffMember: {
       employmentStatus: 'EMPLOYED',
       retiredDate: null,
+      jobTitle: '매장',
       account: {
         realName: '홍길동',
         phone: '01090145563',
@@ -64,6 +73,7 @@ describe('MyContractsService', () => {
       prisma as unknown as PrismaService,
       (withStorage ? storage : null) as unknown as StorageService | null,
       notice as unknown as ContractNoticeService,
+      files as unknown as ContractFilesService,
     );
   const file = () => ({ buffer: png, size: png.length });
   const thrown = async (run: Promise<unknown>) => {
@@ -97,6 +107,7 @@ describe('MyContractsService', () => {
 
   beforeEach(() => {
     notice = { statusChanged: jest.fn().mockResolvedValue(undefined) };
+    files = { afterSigned: jest.fn() };
     jest.spyOn(Logger.prototype, 'error').mockImplementation();
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     tx = {
@@ -127,6 +138,20 @@ describe('MyContractsService', () => {
       },
       contractParty: { update: jest.fn() },
       staffMember: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      // 날인 때 고정하는 사용자 칸(WHALEERP-131)
+      store: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({
+          name: '강남점',
+          phone: '0212345678',
+          businessProfile: {
+            bizTradeName: null,
+            bizRegistrationNumber: '1234567890',
+            bizCeoName: '김대표',
+            bizAddress: '서울 강남구 테헤란로 1',
+            bizAddressDetail: null,
+          },
+        }),
+      },
     };
     prisma = {
       ...tx,
@@ -205,8 +230,23 @@ describe('MyContractsService', () => {
           address: '서울 마포구 동교로 1',
           addressDetail: '2층',
           filledAt: NOW,
+          // 사용자 칸은 날인 시점 점포 정보 — 상호가 없으면 점포명(WHALEERP-131)
+          employerName: '강남점',
+          employerCeoName: '김대표',
+          employerRegistrationNumber: '1234567890',
+          employerAddress: '서울 강남구 테헤란로 1',
+          employerAddressDetail: null,
+          employerPhone: '0212345678',
+          // 체결 이력의 처리 시각(DB 시계) — 응답의 signedAt 과 같다
+          employerFixedAt: HISTORY_AT,
+          // 제2조도 날인 시점 값 — 근무 장소가 비면 그때 점포명, 직무는 계약 칸(2026-10-30 김민식)
+          fixedWorkLocation: '강남점',
+          fixedJobTitle: '바리스타',
         },
       });
+      expect(tx.store.findUniqueOrThrow).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { storeId: 3 } }),
+      );
       // 입사일이 비어 있으면 계약 시작일로(WHALEERP-613)
       expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
         where: {
@@ -432,6 +472,8 @@ describe('MyContractsService', () => {
         service().sign(77, 41, file(), SENT_ISO, NOW),
       ).rejects.toThrow('DB 끊김');
       expect(storage.delete).toHaveBeenCalled();
+      // 커밋이 끊겨 실제로 체결됐을 수 있는 경우는 채우기 배치가 완료본을 만든다
+      expect(files.afterSigned).not.toHaveBeenCalled();
     });
 
     it.each<[string, () => void]>([
@@ -518,8 +560,8 @@ describe('MyContractsService', () => {
 
   describe('거부 · 수정 요청', () => {
     it.each<[string, (s: MyContractsService) => Promise<unknown>]>([
-      ['거부', (s) => s.reject(77, 41, undefined, NOW)],
-      ['수정 요청', (s) => s.requestCorrection(77, 41, NOW)],
+      ['거부', (s) => s.reject(77, 41, NOW)],
+      ['수정 요청', (s) => s.requestCorrection(77, 41, '사유', NOW)],
     ])(
       '%s도 직원 행 → 계약 행을 잠그고, 퇴직한 직원이면 409 STAFF_RETIRED',
       async (_label, run) => {
@@ -538,21 +580,24 @@ describe('MyContractsService', () => {
       },
     );
 
-    it('거부 — 내 계약인지 본 뒤 사유와 함께 거부로', async () => {
-      await expect(
-        service().reject(77, 41, ' 근무 시간이 달라요 ', NOW),
-      ).resolves.toEqual({ contractId: 41, status: 'REJECTED' });
+    it('거부 — 내 계약인지 본 뒤 거부로(사유는 받지 않는다, WHALEERP-635)', async () => {
+      await expect(service().reject(77, 41, NOW)).resolves.toEqual({
+        contractId: 41,
+        status: 'REJECTED',
+      });
       expect(tx.contract.updateMany).toHaveBeenCalledWith({
         where: { contractId: 41, status: 'PENDING_SIGNATURE' },
-        data: { rejectReason: '근무 시간이 달라요', status: 'REJECTED' },
+        data: { status: 'REJECTED' },
       });
     });
 
     it('날인 · 거부가 커밋되면 그 상태 이력을 사건 키로 관리자에게 알린다(WHALEERP-154)', async () => {
       await service().sign(77, 41, file(), SENT_ISO, NOW);
       expect(notice.statusChanged).toHaveBeenCalledWith('SIGNED', 41, 501);
+      // 처리 완료본도 커밋 뒤에 만든다(WHALEERP-131)
+      expect(files.afterSigned).toHaveBeenCalledWith(41);
 
-      await service().reject(77, 41, '근무 시간이 달라요', NOW);
+      await service().reject(77, 41, NOW);
       expect(notice.statusChanged).toHaveBeenLastCalledWith(
         'REJECTED',
         41,
@@ -566,18 +611,10 @@ describe('MyContractsService', () => {
         signDeadlineAt: new Date('2026-10-01T00:00:00.000Z'),
       });
       await service()
-        .reject(77, 41, undefined, NOW)
+        .reject(77, 41, NOW)
         .catch(() => undefined);
       expect(notice.statusChanged).not.toHaveBeenCalled();
-    });
-
-    it('거부 사유는 선택이다', async () => {
-      await service().reject(77, 41, undefined, NOW);
-      expect(
-        (tx.contract.updateMany.mock.calls[0] as unknown[])[0],
-      ).toMatchObject({
-        data: { rejectReason: null },
-      });
+      expect(files.afterSigned).not.toHaveBeenCalled();
     });
 
     it('거부도 날인 기한이 지났으면 409 SIGN_DEADLINE_PASSED — 바꾸지 않는다', async () => {
@@ -585,30 +622,35 @@ describe('MyContractsService', () => {
         status: 'PENDING_SIGNATURE',
         signDeadlineAt: NOW,
       });
-      const e = await thrown(service().reject(77, 41, undefined, NOW));
+      const e = await thrown(service().reject(77, 41, NOW));
       expect(bodyOf(e)).toMatchObject({ code: 'SIGN_DEADLINE_PASSED' });
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
-    it('수정 요청 — 대조 결과와 상관없이 서명 대기면 받는다', async () => {
+    it('수정 요청 — 대조 결과와 상관없이 서명 대기면 받고 사유를 함께 남긴다', async () => {
       tx.contract.findFirst.mockResolvedValue(
         mine({
           contractParty: { ...mine().contractParty, enteredName: '홍길순' },
         }),
       );
-      await expect(service().requestCorrection(77, 41, NOW)).resolves.toEqual({
+      await expect(
+        service().requestCorrection(77, 41, '이름이 틀렸습니다', NOW),
+      ).resolves.toEqual({
         contractId: 41,
         status: 'CORRECTION_REQUESTED',
       });
       expect(tx.contract.updateMany).toHaveBeenCalledWith({
         where: { contractId: 41, status: 'PENDING_SIGNATURE' },
-        data: { status: 'CORRECTION_REQUESTED' },
+        data: {
+          correctionReason: '이름이 틀렸습니다',
+          status: 'CORRECTION_REQUESTED',
+        },
       });
     });
 
     it.each<[string, (s: MyContractsService) => Promise<unknown>]>([
-      ['거부', (s) => s.reject(77, 41, undefined, NOW)],
-      ['수정 요청', (s) => s.requestCorrection(77, 41, NOW)],
+      ['거부', (s) => s.reject(77, 41, NOW)],
+      ['수정 요청', (s) => s.requestCorrection(77, 41, '사유', NOW)],
     ])('%s — 남의 계약이면 404, 바꾸지 않는다', async (_label, run) => {
       tx.contract.findFirst.mockResolvedValue(null);
       const e = await thrown(run(service()));

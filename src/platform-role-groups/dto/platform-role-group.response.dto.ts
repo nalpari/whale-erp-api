@@ -42,7 +42,7 @@ export class PlatformRoleGroupSummaryListResponseDto {
 }
 
 export class PlatformRoleGroupDetailResponseDto extends PlatformRoleGroupSummaryResponseDto {
-  /** 권한명 · 설명을 고칠 수 있는가. 메뉴 칸은 메뉴 트리의 칸별 값을 본다. */
+  /** 권한명 · 설명을 고칠 수 있는가. 본인이 연결된 권한도 고친다(재영 2026-10-30). 메뉴 칸은 메뉴 트리의 칸별 값을 본다. */
   isEditable: boolean;
   /** 고칠 수 없는 이유. 고칠 수 있으면 null. 한글은 GET /enums/PlatformRoleGroupLockReason. */
   @ApiProperty({

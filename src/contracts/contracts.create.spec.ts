@@ -10,7 +10,9 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractsService, type PaperDocument } from './contracts.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 
@@ -162,6 +164,8 @@ describe('ContractsService.create', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: storage },
         { provide: ContractDeliveryService, useValue: delivery },
+        { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
+        { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -666,7 +670,12 @@ describe('ContractsService.create', () => {
     await expect(service.create(dto(), 5)).rejects.toThrow(
       '근무지 점포를 찾을 수 없습니다.',
     );
-    expect(scope.canManageStaffAt).toHaveBeenCalledWith(5, 11, false);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(
+      5,
+      11,
+      false,
+      undefined,
+    );
     expect(prisma.staffMember.create).not.toHaveBeenCalled();
   });
 
@@ -866,6 +875,8 @@ describe('ContractsService.create', () => {
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: null },
           { provide: ContractDeliveryService, useValue: delivery },
+          { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
+          { provide: PERSONAL_DATA_KEY, useValue: null },
         ],
       }).compile();
       await expect(
@@ -1082,6 +1093,8 @@ describe('ContractsService.create', () => {
           { provide: AdminScopeService, useValue: scope },
           { provide: STORAGE, useValue: null },
           { provide: ContractDeliveryService, useValue: delivery },
+          { provide: ContractFilesService, useValue: { afterSent: jest.fn() } },
+          { provide: PERSONAL_DATA_KEY, useValue: null },
         ],
       }).compile();
       prisma.contract.findUnique.mockResolvedValueOnce({

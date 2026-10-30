@@ -203,6 +203,8 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
           storageKey: `contracts/${signed}/0b8f3c1e-5d2a-4f6b-9c7d-1a2b3c4d5e6f.pdf`,
           fileName: 'a.pdf',
           checksum: 'x',
+          // 보낸 원본 · 처리 완료본은 어느 발송의 것인지 있어야 한다(CHECK, WHALEERP-131)
+          sentAt: new Date(),
         },
         {
           contractId: signed,
@@ -210,6 +212,7 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
           storageKey: `contracts/${signed}/1b8f3c1e-5d2a-4f6b-9c7d-1a2b3c4d5e6f.pdf`,
           fileName: 'b.pdf',
           checksum: 'x',
+          sentAt: new Date(),
         },
       ],
     });

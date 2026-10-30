@@ -1,14 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { EmploymentType } from '@prisma/client';
-import { Transform } from 'class-transformer';
-import {
-  IsBoolean,
-  IsOptional,
-  IsString,
-  MaxLength,
-  ValidateIf,
-} from 'class-validator';
-import { REJECT_REASON_MAX } from '../../contracts/contract-status';
+import { IsBoolean, IsOptional } from 'class-validator';
+import { IsHqSharingConsentVersion } from '../hq-sharing-consent';
 
 /**
  * 소속 추가 확인 요청 하나(WHALEERP-130 · 144). 직원 앱이 로그인 뒤 팝업 · 나의 정보 - 소속 점포 · 요청 화면에 보인다. 근무지 ·
@@ -63,6 +56,14 @@ export class AcceptAffiliationRequestDto {
   @IsOptional()
   @IsBoolean()
   hqSharingConsented?: boolean;
+
+  /**
+   * 본사 제공 동의 문구 버전 — 화면이 보인 문구의 버전(예: v1.0, ATT-30 v252). hqSharingConsented 가 true 일 때
+   * 싣는다(실었으면 비지 않은 64자 이하 문자열 — 아니면 400), 아니면 보지 않는다. 빠지거나(null 포함) 지금 버전과 다르면 수락은 그대로
+   * 마치고 동의만 남기지 않는다 — 응답의 hqSharingConsentRecorded 가 false 다(예전 앱 · 배포 어긋남에도 막지 않는다, v253)
+   */
+  @IsHqSharingConsentVersion()
+  hqSharingConsentVersion?: string;
 }
 
 /** 수락 결과 — 앱이 그 소속의 날인 대기 근로계약서로 간다 */
@@ -75,20 +76,11 @@ export class AcceptAffiliationResponseDto {
 
   /** 서명 대기로 넘어간 근로계약 — 날인 기한은 수락한 때부터 30일 */
   contractIds: number[];
-}
 
-/** 거절 — 사유(선택, JOIN-5). 근로계약서 거부(RejectMyContractDto)와 같은 규칙 — 앞뒤 공백을 지운 뒤 500자까지, 비면 남기지 않는다 */
-export class RejectAffiliationRequestDto {
-  /** 거절 사유 — 함께 온 계약의 거부 사유로도 남는다 */
-  @ApiPropertyOptional({ maxLength: REJECT_REASON_MAX })
-  // 보내지 않았을 때만 건너뛴다 — null 은 400
-  @ValidateIf((_: object, value: unknown) => value !== undefined)
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.normalize('NFC').trim() : value,
-  )
-  @IsString()
-  @MaxLength(REJECT_REASON_MAX, {
-    message: `거절 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요.`,
-  })
-  reason?: string;
+  /**
+   * 본사 제공 동의를 남겼는지(ATT-30 v253). true 남김 · false 동의했지만 보인 문구 버전이 지금과 다르거나 싣지 않아(예전 앱) 남기지 않음(계정의 동의는
+   * 그대로 — 앱은 내 정보에서 다시 동의하라고 알린다) · null 남길 동의가 없음(묻지 않는 요청 · 이미 동의함 · 동의하지 않음)
+   */
+  @ApiProperty({ nullable: true, type: Boolean })
+  hqSharingConsentRecorded: boolean | null;
 }

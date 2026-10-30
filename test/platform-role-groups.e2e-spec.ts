@@ -408,17 +408,25 @@ describe('플랫폼 권한 관리 (e2e, DB)', () => {
       });
     });
 
-    it('본인이 연결된 권한은 403, 플랫폼 마스터 메뉴 저장은 409', async () => {
-      const self = await call(
+    it('본인이 연결된 권한은 권한명 · 설명만 고치고 메뉴 저장은 403, 플랫폼 마스터 메뉴 저장은 409', async () => {
+      const selfName = await call(
         'put',
         `/platform-role-groups/${paGroupId}`,
         paId,
         {
-          name: '플랫폼 관리자',
+          name: `PA 호출자 ${n}`,
+          description: '본인 연결 수정',
           updatedAt: await updatedAtOf(paGroupId),
         },
       );
-      expect(self.status).toBe(403);
+      expect(selfName.status).toBe(204);
+      const selfMenus = await call(
+        'put',
+        `/platform-role-groups/${paGroupId}/menus`,
+        paId,
+        { menus: [], updatedAt: await updatedAtOf(paGroupId) },
+      );
+      expect(selfMenus.status).toBe(403);
       const pmMenus = await call(
         'put',
         `/platform-role-groups/${pmGroupId}/menus`,

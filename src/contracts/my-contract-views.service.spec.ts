@@ -362,10 +362,16 @@ describe('MyContractViewsService', () => {
         contractId: 41,
         staffMember: { accountId: 77 },
       });
-      // 직원 필기 서명은 싣지 않는다
+      // 직원 앱이 쓰는 종류만 싣는다 — 필기 서명 · 보낸 원본(고치기 전 · 되돌린 발송의 다른 사람 정보가 있을 수 있다)은 없다
+      // (api #211 리뷰)
       expect(tx.contractDocument.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { contractId: 41, kind: { not: 'SIGNATURE' } },
+          where: {
+            contractId: 41,
+            kind: {
+              in: ['SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT'],
+            },
+          },
         }),
       );
     });
@@ -399,6 +405,60 @@ describe('MyContractViewsService', () => {
       tx.contract.findFirst.mockResolvedValue(detail({ status: 'SIGNED' }));
       const d = await service().findOne(77, 41, NOW);
       expect(d).toMatchObject({ awaitingSignature: false, signable: false });
+    });
+
+    it('조항은 PDF 와 같은 템플릿으로 싣는다(WHALEERP-131) — 근무 장소 · 직무 · 요일 표', async () => {
+      const d = await service().findOne(77, 41, NOW);
+      expect(d.articles).toHaveLength(10);
+      expect(d.articles[1]).toEqual({
+        title: '제2조(근무장소와 업무)',
+        blocks: [{ type: 'TEXT', text: '홍대점에서 바리스타 업무를 한다.' }],
+      });
+      expect(d.articles[2].blocks[1]).toMatchObject({
+        type: 'TABLE',
+        tableRows: expect.arrayContaining([
+          {
+            cells: ['화', '10:00', '16:00', '12:00–13:00', '5시간'],
+            off: false,
+          },
+        ]) as unknown,
+      });
+    });
+
+    it('날인한 계약은 사용자 칸을 날인 때 고정한 값으로 준다 — 처리 완료본과 같다(WHALEERP-131)', async () => {
+      tx.contract.findFirst.mockResolvedValue(
+        detail({
+          status: 'SIGNED',
+          contractParty: {
+            ...party,
+            employerName: '옛 상호',
+            employerCeoName: '옛 대표',
+            employerRegistrationNumber: '9998887776',
+            employerAddress: '옛 주소',
+            employerAddressDetail: '3층',
+            employerPhone: '0299990000',
+            employerFixedAt: NOW,
+            fixedWorkLocation: '옛 근무 장소',
+            fixedJobTitle: '옛 직무',
+          },
+        }),
+      );
+      const d = await service().findOne(77, 41, NOW);
+      // 제2조 · 근로자 직무도 날인 때 고정한 값(2026-10-30 김민식)
+      expect(d.articles[1].blocks[0]).toEqual({
+        type: 'TEXT',
+        text: '옛 근무 장소에서 옛 직무 업무를 한다.',
+      });
+      expect(d.worker.jobTitle).toBe('옛 직무');
+      expect(d.employer).toMatchObject({
+        storeName: '웨일 카페 홍대점',
+        tradeName: '옛 상호',
+        ceoName: '옛 대표',
+        registrationNumber: '9998887776',
+        bizAddress: '옛 주소',
+        bizAddressDetail: '3층',
+        storePhone: '0299990000',
+      });
     });
 
     it('사업자 정보가 없으면 그 칸은 비운다', async () => {

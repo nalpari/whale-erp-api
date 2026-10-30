@@ -20,6 +20,7 @@ import type {
   AdminStatus,
   ListPlatformAdminsDto,
   PageDto,
+  RoleGroupPurpose,
 } from './dto/list-platform-admins.dto';
 import type {
   CreatePlatformAdminResponseDto,
@@ -188,16 +189,29 @@ export class PlatformAdminsService {
     return row === null;
   }
 
-  /** 등록 · 수정 화면의 사용자 권한 선택지. PA 에게는 PM 그룹을 빼고 준다. */
+  /**
+   * 이메일을 쓸 수 있는가. 등록 화면이 칸을 벗어날 때 미리 묻는다 — 등록의 409 와 같은 판정(findEmailOwner)이다.
+   * 그 사이 누가 먼저 가져가면 등록이 409 로 막는다.
+   */
+  async isEmailAvailable(email: string): Promise<boolean> {
+    return (await this.findEmailOwner(this.prisma, email)) === null;
+  }
+
+  /**
+   * 등록 · 수정 화면의 사용자 권한 선택지. PA 에게는 PM 그룹을 빼고 준다.
+   * 목록 필터용(`filter`)은 PA 도 목록에 보이는 마스터 계정을 거를 수 있게 PM · PA 그룹을 다 준다.
+   */
   async roleGroups(
     callerId: number,
+    purpose?: RoleGroupPurpose,
   ): Promise<PlatformRoleGroupListResponseDto> {
     const caller = await this.permissions.caller(callerId);
+    const seesMaster = purpose === 'filter' || caller.roleTypeCode === MASTER;
     const items = await this.prisma.roleGroup.findMany({
       where: {
         isDeleted: false,
         roleTypeCode: {
-          in: caller.roleTypeCode === MASTER ? PLATFORM_ROLE_TYPES : ['PA'],
+          in: seesMaster ? PLATFORM_ROLE_TYPES : ['PA'],
         },
         bpCode: { isPlatform: true },
       },

@@ -168,10 +168,27 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
     contractId: number,
     kind: ContractDocumentKind,
     fileName = '근로계약서 (최종).pdf',
+    sentAt: Date = new Date(),
   ) {
     const storageKey = `contracts/${contractId}/${randomUUID()}.pdf`;
+    // 보낸 원본 · 처리 완료본은 계약이 보낸 것 — 보낸 적 없는 계약이면 그 발송 일시를 계약에도 적는다(직원 앱은 지금
+    // 발송분의 보낸 원본만 보인다)
+    if (kind === 'SENT_ORIGINAL' || kind === 'SIGNED_COPY')
+      await prisma.contract.updateMany({
+        where: { contractId, sentAt: null },
+        data: { sentAt },
+      });
     const { contractDocumentId } = await prisma.contractDocument.create({
-      data: { contractId, kind, storageKey, fileName, checksum: 'e2e' },
+      data: {
+        contractId,
+        kind,
+        storageKey,
+        fileName,
+        checksum: 'e2e',
+        // 보낸 원본 · 처리 완료본은 어느 발송의 것인지 있어야 한다(CHECK, WHALEERP-131)
+        sentAt:
+          kind === 'SENT_ORIGINAL' || kind === 'SIGNED_COPY' ? sentAt : null,
+      },
     });
     return { contractDocumentId, storageKey, fileName };
   }
@@ -329,11 +346,69 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
         status,
       });
     }
-    // 처리 완료본이 아닌 파일은 서명 대기에서도 받는다
+    // 처리 완료본이 아닌 파일(종이 계약 날인본)은 서명 대기에서도 받는다
     const waiting = await contract(me, 'PENDING_SIGNATURE');
-    const original = await document(waiting, 'SENT_ORIGINAL');
-    await download(waiting, original.contractDocumentId, auth).expect(200);
+    const paper = await document(waiting, 'PAPER_EMPLOYMENT_CONTRACT');
+    await download(waiting, paper.contractDocumentId, auth).expect(200);
     expect(storage.downloadUrl).toHaveBeenCalledTimes(3);
+  });
+
+  it('보낸 원본은 직원 앱에 없다 — 고치기 전 · 되돌린 발송의 원본에 다른 사람 정보가 있을 수 있어 상세에 없고 404(api #211 리뷰)', async () => {
+    const me = await account();
+    const auth = await token(me);
+    const contractId = await contract(me, 'PENDING_SIGNATURE');
+    const before = new Date('2026-10-01T00:00:00.000Z');
+    const now = new Date('2026-10-20T01:00:00.000Z');
+    await prisma.contract.update({
+      where: { contractId },
+      data: { contractMethod: 'ELECTRONIC', sentAt: now },
+    });
+    // 앞 발송분 — 고치기 전 다른 사람(A)의 정보로 만든 원본. 재발송이 실패해 되돌리면 계약 발송 일시가 이 시각으로 돌아간다
+    const old = await document(contractId, 'SENT_ORIGINAL', 'a.pdf', before);
+    const current = await document(contractId, 'SENT_ORIGINAL', 'b.pdf', now);
+    const paper = await document(contractId, 'WAGE_CONTRACT', '임금계약서.pdf');
+
+    const detail = await request(app.getHttpServer())
+      .get(`/me/contracts/${contractId}`)
+      .set('Authorization', `Bearer ${auth}`)
+      .expect(200);
+    expect(
+      (
+        detail.body as { documents: { contractDocumentId: number }[] }
+      ).documents.map((d) => d.contractDocumentId),
+    ).toEqual([paper.contractDocumentId]);
+    await download(contractId, current.contractDocumentId, auth).expect(404);
+    await download(contractId, old.contractDocumentId, auth).expect(404);
+    // 계약 발송 일시가 앞 발송으로 되돌아가도(undo) 직원 앱에는 여전히 없다
+    await prisma.contract.update({
+      where: { contractId },
+      data: { sentAt: before },
+    });
+    await download(contractId, old.contractDocumentId, auth).expect(404);
+    const reverted = await request(app.getHttpServer())
+      .get(`/me/contracts/${contractId}`)
+      .set('Authorization', `Bearer ${auth}`)
+      .expect(200);
+    expect(
+      (
+        reverted.body as { documents: { contractDocumentId: number }[] }
+      ).documents.map((d) => d.contractDocumentId),
+    ).toEqual([paper.contractDocumentId]);
+
+    // 관리자는 기록이라 둘 다 본다
+    const adminDetail = await request(app.getHttpServer())
+      .get(`/contracts/${contractId}`)
+      .set('Authorization', `Bearer ${await admin()}`)
+      .expect(200);
+    expect(
+      (
+        adminDetail.body as { documents: { contractDocumentId: number }[] }
+      ).documents.map((d) => d.contractDocumentId),
+    ).toEqual([
+      old.contractDocumentId,
+      current.contractDocumentId,
+      paper.contractDocumentId,
+    ]);
   });
 
   it('관리자 토큰 403 · 토큰 없음 401', async () => {

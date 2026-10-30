@@ -1,4 +1,10 @@
-import { EmploymentType, Prisma, PrismaClient, Weekday } from '@prisma/client';
+import {
+  ContractStatus,
+  EmploymentType,
+  Prisma,
+  PrismaClient,
+  Weekday,
+} from '@prisma/client';
 import { addDays, kstDayStart, kstToday } from '../staff-members/kst-date';
 import { addDay, mondayOf } from './pay-calculation';
 
@@ -118,18 +124,65 @@ export const missingDetail = (days: readonly MissingDay[]) =>
     ),
   )}.`;
 
+/**
+ * 「급여 기간에 확인 필요 출퇴근 기록이 2건 있습니다.」. 달을 걸친 첫 주의 앞 달 날에 센 기록이 있으면(`fromLeadDays` > 0) 그 날짜
+ * 범위를 밝힌다 — 그 달 출퇴근 화면에서 찾지 못하지 않게. 앞 달 날이 하루면 그 날 하나만.
+ */
+export const flaggedDetail = (
+  count: number,
+  fromLeadDays: number,
+  leadDays: readonly string[],
+) => {
+  const lead = leadDays.length
+    ? [...new Set([leadDays[0], leadDays.at(-1)!])].map(mmdd).join(' ~ ')
+    : '';
+  return `${fromLeadDays > 0 && lead ? `급여 기간과 첫 주 앞 달 날(${lead})` : '급여 기간'}에 확인 필요 출퇴근 기록이 ${count}건 있습니다.`;
+};
+
+/**
+ * 확인 필요 사유가 남은 기록. 출근 · 짝 퇴근은 급여 계산과 같은 기준이다 — 짝은 출근한 날의 것이라(자정을 넘긴 퇴근도) 짝
+ * 퇴근은 그 출근이 범위 안일 때. 퇴근 시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지 않는 다음
+ * 달에 붙고, 지급하는 달 명세서는 검토 없이 확정된다(PR #159 리뷰). 출근 없는 퇴근은 급여 계산에 들어가지 않는 출근 누락의
+ * 신호라 자기 시각으로, 급여 기간 안의 것만 센다(`orphanFrom`) — 앞 달 날의 것은 앞 달 명세서가 알린다(api #206 리뷰).
+ */
+const flaggedWhere = (
+  staffMemberId: number,
+  recordedAt: { gte: Date; lt: Date },
+  orphanFrom: Date,
+): Prisma.AttendanceRecordWhereInput => ({
+  staffMemberId,
+  reviewReason: { not: null },
+  OR: [
+    { kind: 'CHECK_IN', recordedAt },
+    ...(orphanFrom < recordedAt.lt
+      ? [
+          {
+            kind: 'CHECK_OUT' as const,
+            checkInAttendanceRecordId: null,
+            recordedAt: {
+              gte: orphanFrom > recordedAt.gte ? orphanFrom : recordedAt.gte,
+              lt: recordedAt.lt,
+            },
+          },
+        ]
+      : []),
+    { kind: 'CHECK_OUT', checkInAttendanceRecord: { recordedAt } },
+  ],
+});
+
 export const afterEndDetail = (r: { end: string; days: string[] }) =>
   `근로계약 만료일(${r.end}) 뒤 출퇴근 기록이 ${r.days.length}일 있습니다 — ${listed(r.days.map(mmdd))}.`;
 
 /**
- * 명세서 하나의 출퇴근 검토 대기 사유. 급여 기간(한국)의 그 직원 레코드 출퇴근 기록과 급여 기간에 걸친 근로계약(`contractIds`)을 본다.
+ * 명세서 하나의 출퇴근 검토 대기 사유. 급여 기간(한국, 달을 걸친 첫 주는 그 주 월요일부터)의 그 직원 레코드 출퇴근 기록과 급여 기간에 걸친 근로계약(`contractIds`)을 본다.
  * - 출퇴근 누락: 급여 기간 안 출근이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다.」, 있으면 빠진 날과 일수(오늘은 아직 끝나지 않아 어제까지).
  * - 계약 만료 후 기록: 가장 늦은 계약 종료일 뒤에 출근한 날.
  * - 확인 필요 기록 포함: 확인 필요 사유가 남은(검토 전) 기록 건수(ATT-11) — 짝 퇴근은 출근한 날로 센다(급여 계산과 같다). 확인 필요
  *   기록도 급여 계산에는 넣는다.
- * - 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날)은 퇴근 미등록도 출퇴근 누락에 넣는다. 그 날의 실근무는 이 달 계산에
- *   늘 들어간다 — 이 달이 주를 맡으면 주휴 금액에, 앞 달이 맡으면 주 40시간 연장에(`weeksOf`, PR #193 리뷰). 같은 날이 앞 달
- *   명세서에도 실린다. 기록 없음 · 계약 만료 후 기록은 급여 기간 안의 날만 본다.
+ * - 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날)은 퇴근 미등록도 출퇴근 누락에, 확인 필요 기록(출근 · 짝 퇴근 —
+ *   출근 없는 퇴근은 급여 기간 안의 것만, `flaggedWhere`)도 건수에 넣는다. 그
+ *   날의 실근무는 이 달 계산에 늘 들어간다 — 이 달이 주를 맡으면 주휴 금액에, 앞 달이 맡으면 주 40시간 연장에(`weeksOf`, PR #193
+ *   리뷰 · 운영 정책 v247 PAY-06). 같은 날이 앞 달 명세서에도 실린다. 기록 없음 · 계약 만료 후 기록은 급여 기간 안의 날만 본다.
  */
 export async function attendanceReviewReasons(
   db: Db,
@@ -150,7 +203,7 @@ export async function attendanceReviewReasons(
     new Date(`${mondayOf(periodStart)}T00:00:00Z`),
   );
   const to = kstDayStart(addDays(basis.periodEndDate, 1));
-  const [contracts, staff, checkIns, flagged] = await Promise.all([
+  const [contracts, staff, checkIns, flagged, flaggedLead] = await Promise.all([
     db.contract.findMany({
       where: { contractId: { in: [...basis.contractIds] } },
       select: {
@@ -174,27 +227,23 @@ export async function attendanceReviewReasons(
         _count: { select: { attendanceRecordsAsCheckIn: true } },
       },
     }),
-    // 급여 계산과 같은 기준으로 센다 — 짝은 출근한 날의 것이라(자정을 넘긴 퇴근도) 짝 퇴근은 그 출근이 기간 안일 때, 출근 없는
-    // 퇴근은 자기 시각으로. 퇴근 시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지 않는 다음 달에 붙고,
-    // 지급하는 달 명세서는 검토 없이 확정된다(PR #159 리뷰)
     db.attendanceRecord.count({
-      where: {
-        staffMemberId: basis.staffMemberId,
-        reviewReason: { not: null },
-        OR: [
-          { kind: 'CHECK_IN', recordedAt: { gte: from, lt: to } },
-          {
-            kind: 'CHECK_OUT',
-            checkInAttendanceRecordId: null,
-            recordedAt: { gte: from, lt: to },
-          },
-          {
-            kind: 'CHECK_OUT',
-            checkInAttendanceRecord: { recordedAt: { gte: from, lt: to } },
-          },
-        ],
-      },
+      where: flaggedWhere(
+        basis.staffMemberId,
+        { gte: checkInFrom, lt: to },
+        from,
+      ),
     }),
+    // 그중 앞 달 날 것 — 문구에 그 날짜를 밝힐지 정한다
+    leadDays.length
+      ? db.attendanceRecord.count({
+          where: flaggedWhere(
+            basis.staffMemberId,
+            { gte: checkInFrom, lt: from },
+            from,
+          ),
+        })
+      : 0,
   ]);
 
   const checkedIn = new Map<string, boolean>();
@@ -242,7 +291,7 @@ export async function attendanceReviewReasons(
   if (flagged > 0)
     reasons.push({
       reviewReason: 'ATTENDANCE_NEEDS_REVIEW',
-      detail: `급여 기간에 확인 필요 출퇴근 기록이 ${flagged}건 있습니다.`,
+      detail: flaggedDetail(flagged, flaggedLead, leadDays),
     });
   return reasons;
 }
@@ -329,6 +378,60 @@ export function effectiveEnd(
   if (c.status !== 'ENDED' || !closedAt) return end;
   const closed = kstDate(closedAt);
   return end && end < closed ? end : closed;
+}
+
+/**
+ * 확정 가능일에서 계약 종료일을 끄는 갱신 상태 — 보낸 것(발송 대기 · 서명 대기 · 수정 요청)만. 임시저장은 보내지 않았으니 치지 않는다 —
+ * 「가장 최근 계약」(`NOT_IDLE_RENEWAL`)도 임시저장 재계약을 뺀다(2026-10-30 재영, api #206 재리뷰)
+ */
+const SENT_RENEWAL: ContractStatus[] = [
+  'PENDING_SEND',
+  'PENDING_SIGNATURE',
+  'CORRECTION_REQUESTED',
+];
+
+/**
+ * 명세서를 확정할 수 있는 첫날(한국 날짜) — 퇴직일 · 마지막 계약 종료일 · 급여 기간 마지막 날 가운데 가장 빠른 날의 다음 날
+ * (운영 정책 PAY-06 v251, 2026-10-29 재영). 기간 중 퇴직 · 계약 종료한 직원도 퇴직 후 14일 청산 기한(근로기준법 제36조) 안에
+ * 확정 · 발송할 수 있게. 계약 종료일은 급여 기간 계약(`contractIds`)의 효력 끝(`effectiveEnd`) 중 가장 늦은 날이고, 무기한
+ * 계약이 하나라도 있거나 계약이 없으면 보지 않는다. 그 계약들의 보낸 갱신(`SENT_RENEWAL` — 발송 대기 · 서명 대기 · 수정 요청, 체결 전)이
+ * 급여 기간 마지막 날까지 시작하면(시작일 없는 것 포함) 그때도 보지 않는다 — 계약이 끝나도 이어서 일할 수 있어, 남은 날 근무가 빠진 채 확정되지 않게(api #206 리뷰).
+ * 퇴직일은 그래도 본다.
+ */
+export async function confirmableFrom(
+  db: Db,
+  basis: {
+    staffMemberId: number;
+    contractIds: readonly number[];
+    periodEndDate: Date;
+  },
+): Promise<string> {
+  const [contracts, staff, renewing] = await Promise.all([
+    db.contract.findMany({
+      where: { contractId: { in: [...basis.contractIds] } },
+      select: CONTRACT_END_SELECT,
+    }),
+    db.staffMember.findUniqueOrThrow({
+      where: { staffMemberId: basis.staffMemberId },
+      select: { retiredDate: true },
+    }),
+    // 급여 기간 계약의 갱신(직전 계약)만 — 무관하게 남은 옛 임시저장이 앞당김을 끄지 않게. 급여 기간 마지막 날까지 시작하는 것
+    // (시작일 없는 것 포함)만 — 다음 달에 시작하는 갱신은 남은 날을 메우지 않는다
+    db.contract.count({
+      where: {
+        staffMemberId: basis.staffMemberId,
+        status: { in: SENT_RENEWAL },
+        previousContractId: { in: [...basis.contractIds] },
+        OR: [{ startDate: null }, { startDate: { lte: basis.periodEndDate } }],
+      },
+    }),
+  ]);
+  const ends = contracts.map(effectiveEnd);
+  const candidates = [ymd(basis.periodEndDate)];
+  if (staff.retiredDate) candidates.push(ymd(staff.retiredDate));
+  if (renewing === 0 && ends.length && !ends.includes(null))
+    candidates.push((ends as string[]).sort().at(-1)!);
+  return addDay(candidates.sort()[0], 1);
 }
 
 /** 급여 기간에 효력이 있던 근로계약(`validContractWhere`) — 늦게 시작한 것부터 */

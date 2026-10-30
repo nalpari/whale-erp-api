@@ -9,7 +9,9 @@ import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
+import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import { ContractsService } from './contracts.service';
 import { UpdateWorkerDto } from './dto/update-worker.dto';
 import { HQ_SHARING_CONSENT_VERSION } from '../admin-scope/hq-sharing';
@@ -31,6 +33,7 @@ beforeEach(() => {
 
 describe('ContractsService.updateWorker', () => {
   let service: ContractsService;
+  let files: { afterSent: jest.Mock };
   let scope: { canManageStaffAt: jest.Mock };
   let tx: {
     $queryRaw: jest.Mock;
@@ -145,6 +148,7 @@ describe('ContractsService.updateWorker', () => {
         }),
       },
     };
+    files = { afterSent: jest.fn() };
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ContractsService,
@@ -152,6 +156,8 @@ describe('ContractsService.updateWorker', () => {
         { provide: AdminScopeService, useValue: scope },
         { provide: STORAGE, useValue: null },
         { provide: ContractDeliveryService, useValue: delivery },
+        { provide: ContractFilesService, useValue: files },
+        { provide: PERSONAL_DATA_KEY, useValue: null },
       ],
     }).compile();
     service = module.get(ContractsService);
@@ -438,6 +444,8 @@ describe('ContractsService.updateWorker', () => {
       status: 'ENDED',
       draftAction: null,
     });
+    // 나가지 않은 발송은 보낸 원본도 없다(WHALEERP-131)
+    expect(files.afterSent).not.toHaveBeenCalled();
   });
 
   it('보내기 전에 직원이 소속 추가 확인 요청에 답했으면(ANSWERED) 지금 상태를 싣고 처리 결과는 둔다(api #164 리뷰)', async () => {
@@ -450,12 +458,16 @@ describe('ContractsService.updateWorker', () => {
       status: 'PENDING_SIGNATURE',
       draftAction: 'AFFILIATION_CONFIRM',
     });
+    // 직원이 본 발송이라 보낸 원본을 만든다(WHALEERP-131)
+    expect(files.afterSent).toHaveBeenCalledWith(7);
   });
 
   it('보냈으면 다시 읽지 않고, 보내지 않았는데 지금 상태를 읽다 실패하면 502 SEND_UNCONFIRMED — 계산한 상태로 답하지 않는다', async () => {
     await service.updateWorker(9, 7, dto());
     // 범위 확인 한 번뿐 — 보낸 뒤 다시 읽지 않는다
     expect(prisma.contract.findUnique).toHaveBeenCalledTimes(1);
+    // 나갔으니 그 발송의 보낸 원본을 만든다(WHALEERP-131)
+    expect(files.afterSent).toHaveBeenCalledWith(7);
 
     delivery.dispatch.mockResolvedValue(false);
     prisma.contract.findUnique

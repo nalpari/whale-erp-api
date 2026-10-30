@@ -17,6 +17,7 @@ import {
 } from '../admin-scope/hq-sharing';
 import { sameMillisecond } from '../common/updated-at';
 import { PrismaService } from '../prisma/prisma.service';
+import { kstToday } from '../staff-members/kst-date';
 import { PayslipStatusChangeDto, SavePayslipDto } from './dto/payslip-edit.dto';
 import {
   PayslipAdditionalItemsResponseDto,
@@ -27,6 +28,7 @@ import { PayslipListService } from './payslip-list.service';
 import {
   ATTENDANCE_REVIEW_REASONS,
   attendanceReviewReasons,
+  confirmableFrom,
   periodContractIds,
   contractsEmploymentMixed,
   reviewReasonsOf,
@@ -39,6 +41,9 @@ import {
 } from './payslip-calculation';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 import { amountOf, dateOnly, isShown, ITEM_ORDER } from './payslip-shared';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
+import { targetStores } from '../admin-scope/target-stores';
+import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
 
 type Tx = Prisma.TransactionClient;
 
@@ -175,8 +180,9 @@ export class PayslipEditService {
   async previousValues(
     adminAccountId: number,
     payslipId: number,
+    bp?: TargetBpContext,
   ): Promise<PayslipPreviousResponseDto> {
-    const current = await this.locate(adminAccountId, payslipId);
+    const current = await this.locate(adminAccountId, payslipId, bp);
     const previous = await this.prisma.payslip.findFirst({
       where: {
         staffMemberId: current.staffMemberId,
@@ -230,8 +236,9 @@ export class PayslipEditService {
     adminAccountId: number,
     payslipId: number,
     dto: SavePayslipDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    const current = await this.locate(adminAccountId, payslipId);
+    const current = await this.locate(adminAccountId, payslipId, bp);
     if (!EDITABLE.includes(current.status))
       throw statusConflict(current.status);
     if (dto.isWithholdingApplied && current.employmentType !== 'PART_TIME')
@@ -375,7 +382,7 @@ export class PayslipEditService {
           },
         });
     });
-    return this.detail.findOne(adminAccountId, payslipId);
+    return this.detail.findOne(adminAccountId, payslipId, bp);
   }
 
   /**
@@ -390,8 +397,9 @@ export class PayslipEditService {
     adminAccountId: number,
     payslipId: number,
     dto: PayslipStatusChangeDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    const current = await this.locate(adminAccountId, payslipId);
+    const current = await this.locate(adminAccountId, payslipId, bp);
     if (!EDITABLE.includes(current.status))
       throw statusConflict(current.status);
     await this.prisma.$transaction(async (tx) => {
@@ -454,20 +462,23 @@ export class PayslipEditService {
         },
       });
     });
-    return this.detail.findOne(adminAccountId, payslipId);
+    return this.detail.findOne(adminAccountId, payslipId, bp);
   }
 
   /**
    * 확정. 작성 중 · 검토 중만(아니면 409). 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를 켜면 소득세 · 지방소득세 대신
    * 원천징수)가 하나라도 미입력이면 422 DEDUCTION_MISSING 과 그 항목. 검토 사유가 있어도 확정하는 것이 「확인」이다 —
-   * 확인하지 않은 사유에 확정 시각을 확인 일시로 남긴다.
+   * 확인하지 않은 사유에 확정 시각을 확인 일시로 남긴다. 확정할 수 있는 날(`confirmableFrom` — 퇴직일 · 마지막 계약 종료일 · 급여
+   * 기간 마지막 날 가운데 가장 빠른 날의 다음 날, 한국. 그 계약의 보낸 갱신(임시저장 제외)이 기간 안에 시작하면 계약 종료일은 보지 않는다) 전이면 422 PERIOD_NOT_ENDED — 남은 날의 근무가 빠진 명세서가 발송되지
+   * 않게 막는다. 초안은 그 전에도 미리 보기로 만든다(운영 정책 PAY-06 v247 · v251).
    */
   async confirm(
     adminAccountId: number,
     payslipId: number,
     dto: PayslipStatusChangeDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    const current = await this.locate(adminAccountId, payslipId);
+    const current = await this.locate(adminAccountId, payslipId, bp);
     if (!EDITABLE.includes(current.status))
       throw statusConflict(current.status);
     const now = new Date();
@@ -477,6 +488,18 @@ export class PayslipEditService {
         confirmedAt: now,
         confirmedBy: adminAccountId,
       });
+      // 확정할 수 있는 날은 트랜잭션 안에서 본다 — 밖에서 본 뒤 그사이 퇴직일을 지우면 기간 중에 확정되지 않게(막히면 되돌린다)
+      const from = await confirmableFrom(tx, {
+        ...current,
+        contractIds: await this.contractIdsOf(tx, current),
+      });
+      if (dateOnly(kstToday(now)) < from)
+        throw new UnprocessableEntityException({
+          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          error: 'Unprocessable Entity',
+          code: 'PERIOD_NOT_ENDED',
+          message: `아직 확정할 수 없습니다. ${from} 부터 확정할 수 있습니다 — 급여 기간 마지막 날(그 전에 퇴직하거나 계약이 끝나면 그날. 진행 중인 갱신 계약이 있으면 급여 기간 마지막 날)이 지나야 합니다.`,
+        });
       const missing = (await this.lines(tx, payslipId)).filter(
         (l) =>
           l.itemCategory !== 'EARNING' &&
@@ -509,7 +532,7 @@ export class PayslipEditService {
         },
       });
     });
-    return this.detail.findOne(adminAccountId, payslipId);
+    return this.detail.findOne(adminAccountId, payslipId, bp);
   }
 
   /**
@@ -520,8 +543,9 @@ export class PayslipEditService {
     adminAccountId: number,
     payslipId: number,
     dto: PayslipStatusChangeDto,
+    bp?: TargetBpContext,
   ): Promise<PayslipDetailResponseDto | null> {
-    const current = await this.locate(adminAccountId, payslipId);
+    const current = await this.locate(adminAccountId, payslipId, bp);
     if (!CONFIRMED.includes(current.status))
       throw statusConflict(current.status);
     await this.prisma.$transaction(async (tx) => {
@@ -550,7 +574,7 @@ export class PayslipEditService {
         },
       });
     });
-    return this.detail.findOne(adminAccountId, payslipId);
+    return this.detail.findOne(adminAccountId, payslipId, bp);
   }
 
   /** 급여 기간에 걸친 체결 완료 근로계약 — 계산은 날마다 그날 계약으로 한다(2026-10-26) */
@@ -622,8 +646,18 @@ export class PayslipEditService {
    * 관리 범위 안에서 찾고, 가려지는 명세서(본사 역할 · 동의 없는 가맹 점포 직원)는 없는 것과 같은 404 — 상세와 같은 판정.
    * 사용 중인 관리자가 아니어도 404 다(상세와 같다).
    */
-  private async locate(adminAccountId: number, payslipId: number) {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+  private async locate(
+    adminAccountId: number,
+    payslipId: number,
+    bp?: TargetBpContext,
+  ) {
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      PAYSLIP_BP_NOT_CHOSEN,
+    );
     const found =
       manageable &&
       (await this.prisma.payslip.findFirst({

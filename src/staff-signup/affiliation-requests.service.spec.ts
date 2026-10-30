@@ -1,4 +1,4 @@
-import { HttpException } from '@nestjs/common';
+import { HttpException, Logger } from '@nestjs/common';
 import { SEND_VALID_MS } from '../contracts/contract-delivery.service';
 import type { OpsNotificationService } from '../notifications/ops-notification.service';
 import { storeManagers } from '../notifications/recipients';
@@ -131,6 +131,7 @@ describe('AffiliationRequestsService', () => {
         staffMemberId: 19,
         storeName: '모리커피 연남점',
         contractIds: [7],
+        hqSharingConsentRecorded: null,
       });
       expect(tx.invitation.updateMany).toHaveBeenCalledWith({
         where: { invitationId: 41, status: 'SENT' },
@@ -169,7 +170,15 @@ describe('AffiliationRequestsService', () => {
         name: '모리커피 합정점',
         storeTypeCode: 'FRANCHISE',
       });
-      await service().accept(5, 41, { hqSharingConsented: true }, NOW);
+      await service().accept(
+        5,
+        41,
+        {
+          hqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        },
+        NOW,
+      );
       expect(tx.account.update).toHaveBeenCalledWith({
         where: { accountId: 5 },
         data: {
@@ -179,6 +188,34 @@ describe('AffiliationRequestsService', () => {
           hqSharingWithdrawnAt: null,
         },
       });
+    });
+
+    it('보인 문구 버전이 지금과 다르면 수락은 마치고 동의만 남기지 않는다 — 응답 false · 경고 로그(ATT-30 v253)', async () => {
+      request();
+      tx.store.findUnique.mockResolvedValue({
+        name: '모리커피 합정점',
+        storeTypeCode: 'FRANCHISE',
+      });
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      await expect(
+        service().accept(
+          5,
+          41,
+          { hqSharingConsented: true, hqSharingConsentVersion: 'v0.9' },
+          NOW,
+        ),
+      ).resolves.toMatchObject({
+        staffMemberId: 19,
+        hqSharingConsentRecorded: false,
+      });
+      expect(tx.account.update).not.toHaveBeenCalled();
+      expect(tx.staffMember.updateMany).toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('shown="v0.9"'),
+      );
+      warn.mockRestore();
     });
 
     it('가맹 점포여도 동의하지 않았거나(false) 이미 동의한 계정이면 쓰지 않는다', async () => {
@@ -196,7 +233,15 @@ describe('AffiliationRequestsService', () => {
         hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
       });
       request();
-      await service().accept(5, 41, { hqSharingConsented: true }, NOW);
+      await service().accept(
+        5,
+        41,
+        {
+          hqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        },
+        NOW,
+      );
       expect(tx.account.update).not.toHaveBeenCalled();
     });
 
@@ -213,7 +258,15 @@ describe('AffiliationRequestsService', () => {
         hqSharingConsentVersion: 'v0.9',
       });
       request();
-      await service().accept(5, 41, { hqSharingConsented: true }, NOW);
+      await service().accept(
+        5,
+        41,
+        {
+          hqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+        },
+        NOW,
+      );
       expect(tx.account.update).toHaveBeenCalledWith({
         where: { accountId: 5 },
         data: expect.objectContaining({
@@ -311,7 +364,7 @@ describe('AffiliationRequestsService', () => {
         'AFFILIATION_REQUEST_NOT_FOUND',
       );
       request({}, { name: '김철수' });
-      expect((await codeOf(service().reject(5, 41, {}, NOW))).code).toBe(
+      expect((await codeOf(service().reject(5, 41, NOW))).code).toBe(
         'AFFILIATION_REQUEST_NOT_FOUND',
       );
       // 이미 수락해 이 계정에 이어진 요청은 그 뒤 관리자가 이름을 바꿔도 본인에게 409(이미 답함)다
@@ -324,7 +377,7 @@ describe('AffiliationRequestsService', () => {
       );
       // 거절은 레코드가 이어지지 않아 본인이 답했다는 증거가 없다 — 이름이 바뀐 뒤에는 남의 요청과 같은 404(상태를 드러내지 않는다)
       request({ status: 'REJECTED' }, { name: '김철수' });
-      expect((await codeOf(service().reject(5, 41, {}, NOW))).code).toBe(
+      expect((await codeOf(service().reject(5, 41, NOW))).code).toBe(
         'AFFILIATION_REQUEST_NOT_FOUND',
       );
       expect(tx.invitation.updateMany).not.toHaveBeenCalled();
@@ -343,18 +396,14 @@ describe('AffiliationRequestsService', () => {
   });
 
   describe('reject', () => {
-    it('요청 · 발송 대기 계약을 거절 · 거부로 닫고 같은 사유를 남긴다 — 계약을 쓴 관리자에게 운영 알림(커밋 뒤)', async () => {
+    it('요청 · 발송 대기 계약을 거절 · 거부로 닫는다(사유는 받지 않는다, WHALEERP-635) — 계약을 쓴 관리자에게 운영 알림(커밋 뒤)', async () => {
       request();
       // 계약을 쓴 관리자(9)가 지금도 그 근무지를 맡고 있다
       (storeManagers as jest.Mock).mockResolvedValueOnce([9, 71]);
-      await service().reject(5, 41, { reason: '다른 곳에서 일해요' }, NOW);
+      await service().reject(5, 41, NOW);
       expect(tx.invitation.updateMany).toHaveBeenCalledWith({
         where: { invitationId: 41, status: 'SENT' },
-        data: {
-          status: 'REJECTED',
-          respondedAt: NOW,
-          rejectReason: '다른 곳에서 일해요',
-        },
+        data: { status: 'REJECTED', respondedAt: NOW },
       });
       expect(tx.contract.updateManyAndReturn).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -362,10 +411,8 @@ describe('AffiliationRequestsService', () => {
           data: { status: 'REJECTED' },
         }),
       );
-      expect(tx.contract.updateMany).toHaveBeenCalledWith({
-        where: { contractId: { in: [7] } },
-        data: { rejectReason: '다른 곳에서 일해요' },
-      });
+      // 닫은 계약에 따로 남기는 칸은 없다
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
       // 레코드는 두고 잇지 않는다
       expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
       expect(ops.notify).toHaveBeenCalledWith({
@@ -381,16 +428,11 @@ describe('AffiliationRequestsService', () => {
       );
     });
 
-    it('사유가 없으면 남기지 않고, 함께 온 계약이 없으면 근무지 관리자에게 알린다', async () => {
+    it('함께 온 계약이 없으면 근무지 관리자에게 알린다', async () => {
       request();
       tx.contract.updateManyAndReturn.mockResolvedValue([]);
       tx.contract.findMany.mockResolvedValue([]);
-      await service().reject(5, 41, {}, NOW);
-      expect(
-        (tx.invitation.updateMany.mock.calls as unknown[][])[0][0],
-      ).toMatchObject({
-        data: { rejectReason: null },
-      });
+      await service().reject(5, 41, NOW);
       expect(storeManagers).toHaveBeenCalledWith(prisma, 19);
       expect(ops.notify).toHaveBeenCalledWith(
         expect.objectContaining({ recipients: [71] }),
@@ -399,7 +441,7 @@ describe('AffiliationRequestsService', () => {
 
     it('계약을 쓴 관리자가 비활성이거나 그 근무지를 더 맡지 않으면(storeManagers 에 없음) 근무지 관리자에게 보낸다(api #164 리뷰)', async () => {
       request();
-      await service().reject(5, 41, {}, NOW);
+      await service().reject(5, 41, NOW);
       expect(ops.notify).toHaveBeenCalledWith(
         expect.objectContaining({ recipients: [71] }),
       );
@@ -408,7 +450,7 @@ describe('AffiliationRequestsService', () => {
     it('잠근 뒤 바꾸려는데 다른 요청(수락)이 먼저 답했으면 409 AFFILIATION_REQUEST_ANSWERED — 계약 · 알림은 없다', async () => {
       request();
       tx.invitation.updateMany.mockResolvedValue({ count: 0 });
-      expect(await codeOf(service().reject(5, 41, {}, NOW))).toEqual({
+      expect(await codeOf(service().reject(5, 41, NOW))).toEqual({
         status: 409,
         code: 'AFFILIATION_REQUEST_ANSWERED',
       });
@@ -419,7 +461,7 @@ describe('AffiliationRequestsService', () => {
     it('운영 알림이 실패해도 거절은 그대로다(로그만)', async () => {
       request();
       ops.notify.mockRejectedValue(new Error('db'));
-      await expect(service().reject(5, 41, {}, NOW)).resolves.toBeUndefined();
+      await expect(service().reject(5, 41, NOW)).resolves.toBeUndefined();
     });
   });
 

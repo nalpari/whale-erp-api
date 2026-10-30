@@ -30,9 +30,12 @@ import type {
   AffiliationRequestDto,
   AcceptAffiliationRequestDto,
   AcceptAffiliationResponseDto,
-  RejectAffiliationRequestDto,
 } from './dto/affiliation-request.dto';
-import { asksHqSharingConsentAt } from './hq-sharing-consent';
+import {
+  asksHqSharingConsentAt,
+  hqSharingConsentRecordOf,
+  warnStaleHqSharingVersion,
+} from './hq-sharing-consent';
 import { sameName } from '../contracts/identity-match';
 
 type Db = Prisma.TransactionClient | PrismaService;
@@ -175,7 +178,7 @@ export class AffiliationRequestsService {
     dto: AcceptAffiliationRequestDto,
     now = new Date(),
   ): Promise<AcceptAffiliationResponseDto> {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const { account, request } = await this.lockRequest(
         tx,
         accountId,
@@ -204,11 +207,13 @@ export class AffiliationRequestsService {
         where: { storeId },
         select: { name: true, storeTypeCode: true },
       });
-      if (
+      // 보인 문구 버전이 지금과 다르면 수락은 마치고 동의만 남기지 않는다(ATT-30 v253, 근무지 더하기와 같다)
+      const hqSharingConsentRecorded = hqSharingConsentRecordOf(
         asksHqSharingConsentAt(store?.storeTypeCode) &&
-        !hqSharingAgreedOf(account) &&
-        dto.hqSharingConsented === true
-      )
+          !hqSharingAgreedOf(account),
+        dto,
+      );
+      if (hqSharingConsentRecorded)
         // 철회했던 계정이 다시 동의하면 철회 시각을 지운다 — 근무지 더하기와 같다(accounts_hq_sharing_consent_fields)
         await tx.account.update({
           where: { accountId },
@@ -254,19 +259,25 @@ export class AffiliationRequestsService {
         staffMemberId,
         storeName: store?.name ?? '',
         contractIds: moved,
+        hqSharingConsentRecorded,
       };
     });
+    warnStaleHqSharingVersion(
+      this.logger,
+      '소속 추가 수락',
+      accountId,
+      dto,
+      result.hqSharingConsentRecorded,
+    );
+    return result;
   }
 
-  /** 거절 — 요청 · 함께 온 발송 대기 계약을 거절 · 거부로 닫고 같은 사유를 남긴다. 레코드는 둔다 */
+  /** 거절 — 요청 · 함께 온 발송 대기 계약을 거절 · 거부로 닫는다. 사유는 받지 않는다(WHALEERP-635). 레코드는 둔다 */
   async reject(
     accountId: number,
     invitationId: number,
-    dto: RejectAffiliationRequestDto,
     now = new Date(),
   ): Promise<void> {
-    // 길이 · 앞뒤 공백은 DTO 가 본다(근로계약서 거부와 같다)
-    const rejectReason = dto.reason || null;
     const done = await this.prisma.$transaction(async (tx) => {
       const { request } = await this.lockRequest(
         tx,
@@ -277,7 +288,7 @@ export class AffiliationRequestsService {
       const { staffMemberId, storeId, name } = request.staffMember;
       const rejected = await tx.invitation.updateMany({
         where: { invitationId, status: 'SENT' },
-        data: { status: 'REJECTED', respondedAt: now, rejectReason },
+        data: { status: 'REJECTED', respondedAt: now },
       });
       if (rejected.count === 0) throw answered();
       const closed = await transitionMany(
@@ -287,11 +298,6 @@ export class AffiliationRequestsService {
         'REJECTED',
         'STAFF',
       );
-      if (closed.length)
-        await tx.contract.updateMany({
-          where: { contractId: { in: closed } },
-          data: { rejectReason },
-        });
       const writers = await tx.contract.findMany({
         where: { contractId: { in: closed } },
         select: { createdBy: true },

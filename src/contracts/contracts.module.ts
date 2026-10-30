@@ -2,12 +2,15 @@ import { Module } from '@nestjs/common';
 import { AdminScopeModule } from '../admin-scope/admin-scope.module';
 import { AlimtalkModule } from '../alimtalk/alimtalk.module';
 import { BatchModule } from '../batch/batch.module';
+import { personalDataKeyProvider } from '../common/personal-data-key.provider';
 import { optionalMailServiceProvider } from '../mail/mail.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { StorageModule } from '../storage/storage.module';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractExpiryScheduler } from './contract-expiry.scheduler';
 import { ContractExpiryService } from './contract-expiry.service';
+import { ContractFilesScheduler } from './contract-files.scheduler';
+import { ContractFilesService } from './contract-files.service';
 import { ContractNoticeService } from './contract-notice.service';
 import { ContractSendController } from './contract-send.controller';
 import { ContractSendService } from './contract-send.service';
@@ -48,8 +51,11 @@ import { MyContractsService } from './my-contracts.service';
     MyContractDocumentsService,
     ContractExpiryService,
     ContractExpiryScheduler,
+    ContractFilesService,
+    ContractFilesScheduler,
     ContractNoticeService,
     optionalMailServiceProvider,
+    personalDataKeyProvider,
   ],
 })
 export class ContractsModule {}

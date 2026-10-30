@@ -1,4 +1,5 @@
 import {
+  HttpStatus,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -16,6 +17,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { currentLocationTermsVersion } from './location-terms';
 
 const NOT_AGREED_MESSAGE = '위치정보 수집에 동의한 상태가 아닙니다.';
+/** 화면이 보인 본사 제공 동의 문구 버전이 지금 것과 다름(ATT-30 v252) — 직원 앱이 이 사유를 그대로 보인다 */
+export const HQ_SHARING_TERMS_CHANGED =
+  '사업자 제공 동의 내용이 바뀌었습니다. 화면을 새로 고쳐 바뀐 내용을 확인한 뒤 다시 동의해 주세요.';
 
 /**
  * 직원 앱 내 정보의 동의 두 가지 (WHALEERP-193). 위치정보 동의(ATT-23 · ATT-26)는 `location_consents` 의 행이고, 철회하지
@@ -137,9 +141,19 @@ export class MyConsentService {
 
   /**
    * 본사 제공 동의 — 처음이든 철회 뒤든, 더는 받아 주지 않는 문구 버전에 동의했던 뒤든(ATT-30). 앞의 동의 · 철회를
-   * 덮는다(A안, 2026-10-13 재영). 계정에 하나라 소속 가맹 점포 모두에 같이 적용된다
+   * 덮는다(A안, 2026-10-13 재영). 계정에 하나라 소속 가맹 점포 모두에 같이 적용된다.
+   * `shownVersion`(화면이 보여 준 문구 버전)은 지금 버전과 같아야 한다 — 다르면 409(code HQ_SHARING_TERMS_CHANGED)로 거절한다
+   * (ATT-30 v252, 「이미 동의함」보다 먼저 — 상수 비교라 잠그기 전에 본다). 문구는 앱에 묶여 있어 새로 고쳐야 새 문구가 보이므로 사유도 그렇게 말한다.
    */
-  agreeHqSharing(accountId: number): Promise<void> {
+  async agreeHqSharing(accountId: number, shownVersion: string): Promise<void> {
+    // 상수와 견주는 일이라 잠그기 전에 본다 — 예전 화면이 거듭 보내도 계정 행을 잠그지 않는다. 화면은 code 로 가른다
+    if (shownVersion !== HQ_SHARING_CONSENT_VERSION)
+      throw new ConflictException({
+        statusCode: HttpStatus.CONFLICT,
+        error: 'Conflict',
+        code: 'HQ_SHARING_TERMS_CHANGED',
+        message: HQ_SHARING_TERMS_CHANGED,
+      });
     return this.locked(accountId, async (tx, account) => {
       if (hqSharingAgreedOf(account))
         throw new ConflictException('이미 본사 제공에 동의했습니다.');

@@ -312,6 +312,37 @@ describe('BpAdminsService', () => {
       );
     });
 
+    it('역할을 고르면 그 역할만 — 목록 · total · 미사용 건수가 같은 조건', async () => {
+      await service.list(2, bp, {
+        page: 1,
+        pageSize: 20,
+        roleTypeCodes: ['FM', 'FA'],
+      });
+      expect(whereOf()).toEqual(
+        partial({ roleTypeCode: { in: ['FM', 'FA'] } }),
+      );
+      expect(prisma.adminAccount.count).toHaveBeenCalledWith(
+        partial({
+          where: partial({ roleTypeCode: { in: ['FM', 'FA'] } }),
+        }),
+      );
+      expect(prisma.adminAccount.count).toHaveBeenCalledWith(
+        partial({
+          where: partial({
+            roleTypeCode: { in: ['FM', 'FA'] },
+            accountStatusCode: 'INACTIVE',
+          }),
+        }),
+      );
+    });
+
+    it('역할을 비워 보내면 세 역할 모두', async () => {
+      await service.list(2, bp, { page: 1, pageSize: 20, roleTypeCodes: [] });
+      expect(whereOf()).toEqual(
+        partial({ roleTypeCode: { in: ['BA', 'FM', 'FA'] } }),
+      );
+    });
+
     it('점포 수는 살아 있는 매핑만 센다 — _count 에는 where 만 (select 를 넣으면 Prisma 가 거부한다)', async () => {
       await service.list(2, bp, { page: 1, pageSize: 20 });
       const { select } = argOf<{ select: Record<string, unknown> }>(
@@ -879,6 +910,46 @@ describe('BpAdminsService', () => {
           changedBy: 1,
         }),
       ]);
+    });
+
+    describe('저장 중 유일값 충돌(P2002)', () => {
+      // pg 어댑터는 충돌한 제약을 meta.driverAdapterError.cause.constraint 에 담는다.
+      const dup = (constraint: object) =>
+        new Prisma.PrismaClientKnownRequestError('dup', {
+          code: 'P2002',
+          clientVersion: 'x',
+          meta: {
+            driverAdapterError: {
+              cause: { kind: 'UniqueConstraintViolation', constraint },
+            },
+          },
+        });
+
+      it.each([
+        [{ index: 'admin_accounts_email_key' }],
+        [{ fields: ['email'] }],
+      ])('이메일 고유 인덱스(%j)면 409 이메일 중복', async (constraint) => {
+        prisma.adminAccount.updateMany.mockRejectedValueOnce(dup(constraint));
+        await expect(
+          service.update(1, bp, 2, input(2, { email: 'new@test.invalid' })),
+        ).rejects.toThrow(
+          '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.',
+        );
+      });
+
+      it('이메일이 아닌 제약의 충돌은 이메일 중복이 아니라 「먼저 바꿨다」 409', async () => {
+        prisma.adminAccount.updateMany.mockRejectedValueOnce(
+          dup({ index: 'admin_store_mappings_pkey' }),
+        );
+        await expect(
+          service.update(1, bp, 2, input(2, { name: '새이름' })),
+        ).rejects.toThrow('다른 사용자가 이 계정을 먼저 바꿨습니다.');
+      });
+    });
+
+    it('전화번호 변경은 「연락처」로 남긴다 — 다른 관리자 계정 화면과 같은 이름', async () => {
+      await service.update(1, bp, 2, input(2, { phone: '0212345678' }));
+      expect(historyRows()).toEqual([partial({ field: '연락처' })]);
     });
 
     it('범위 밖 매핑은 남긴다 — 일부 점포 담당이 범위 안 점포만 바꾼다', async () => {
