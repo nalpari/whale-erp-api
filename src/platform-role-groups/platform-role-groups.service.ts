@@ -58,12 +58,12 @@ const SUMMARY_SELECT = {
   updater: ACTOR,
   _count: {
     select: {
-      // 메뉴 등록 여부 — 서비스와 관계없이 조회가 켜진 메뉴가 하나라도 있는가.
+      // 메뉴 등록 여부 — 서비스와 관계없이 조회가 켜진 사용 메뉴가 하나라도 있는가. 사용중지 메뉴의 보존 권한은 세지 않는다.
       menus: {
         where: {
           isDeleted: false,
           isReadable: true,
-          menu: { isDeleted: false },
+          menu: { isDeleted: false, status: 'ACTIVE' },
         },
       },
       adminAccounts: { where: { isDeleted: false } },
