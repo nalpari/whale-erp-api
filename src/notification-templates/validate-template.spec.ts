@@ -167,6 +167,32 @@ describe('validateTemplate', () => {
     );
   });
 
+  it('알림톡은 버튼 링크 변수를 하나만 둔다 — 메일은 여럿이어도 된다(WHALEERP-636)', () => {
+    const second = {
+      name: '링크2',
+      label: '두 번째 링크',
+      isRequired: false,
+      sampleValue: 'https://y',
+      isButtonLink: true,
+    };
+    const talk = (extra: TemplateInput['variables']) =>
+      mail({
+        channel: 'ALIMTALK',
+        templateCode: 'TALK_X',
+        title: null,
+        kakaoTemplateCode: 'KAKAO_X',
+        body: '#{직원이름} 님 근무지 #{근무지}',
+        variables: [...mail().variables, ...extra],
+      });
+    expect(validateTemplate(talk([]))).toEqual([]);
+    expect(validateTemplate(talk([second]))).toContain(
+      '알림톡은 버튼 링크 변수를 하나만 둘 수 있습니다.',
+    );
+    expect(
+      validateTemplate(mail({ variables: [...mail().variables, second] })),
+    ).toEqual([]);
+  });
+
   it('NUL 이 든 값은 받지 않는다', () => {
     expect(validateTemplate(mail({ body: '근무지\u0000' }))).toContain(
       '제어 문자(NUL)는 쓸 수 없습니다.',

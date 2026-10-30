@@ -4,7 +4,7 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-30T00:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:30:18Z }
 sources:
   - id: wording-cleanup
     resource: ../../prisma/migrations/20261030093710_team3_notification_template_wording/migration.sql
@@ -33,7 +33,7 @@ sources:
   - id: validate
     resource: ../../src/notification-templates/validate-template.ts
     title: 저장 검사(validateTemplate)
-    last_modified: 2026-10-13T07:30:00Z
+    last_modified: 2026-10-30T02:30:18Z
   - id: controller
     resource: ../../src/notification-templates/notification-templates.controller.ts
     title: /notification-templates (플랫폼 관리자만)
@@ -89,7 +89,8 @@ sources:
 - 채널별: 운영 알림 · 앱 푸시 · 메일은 제목 · 본문 필수, 알림톡은 제목 없이 본문 · 카카오 템플릿 코드 필수(NTF-22 · 23).
   수신 설정 묶음은 앱 푸시만. 앱 푸시는 제목 40자 · 본문 100자(NOTIFY-4).
 - 변수 목록: 이름 필수 · 겹치지 않음 · `#` · 중괄호 · 공백 없음, 표시 이름 필수, 50개까지. 「버튼 링크」(`isButtonLink`)는
-  메일 · 알림톡 변수에만(NOTIFY-20).
+  메일 · 알림톡 변수에만(NOTIFY-20). 알림톡은 버튼 링크 변수를 하나까지만 — 카카오에 등록한 버튼 하나만 싣고 둘 이상이면 발송이
+  보내기 전에 던진다(WHALEERP-636, [Kakao Alimtalk](/api/alimtalk.md)). 이미 둘 이상 저장된 행은 다음 저장 때 막힌다.
 - 제목 · 본문의 `#{…}` 가 모두 목록 안에 있는지, 닫히지 않은 `#{` 가 없는지 — 「본문 2번째 줄: …」처럼 위치를 알려 준다.
   필수 변수(버튼 링크 제외)는 제목 · 본문 어딘가에 있어야 한다.
 - NUL 은 받지 않는다.

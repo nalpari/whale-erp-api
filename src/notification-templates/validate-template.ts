@@ -98,6 +98,9 @@ export function validateTemplate(t: TemplateInput): string[] {
     if (v.isButtonLink && !BUTTON_LINK_CHANNELS.includes(t.channel))
       add(`${at} 버튼 링크는 메일 · 알림톡 변수에만 씁니다.`);
   });
+  // 알림톡은 카카오에 등록한 버튼 하나만 싣는다 — 둘 이상이면 발송이 보내기 전에 던진다(WHALEERP-636, AlimtalkService)
+  if (alimtalk && t.variables.filter((v) => v.isButtonLink).length > 1)
+    add('알림톡은 버튼 링크 변수를 하나만 둘 수 있습니다.');
 
   const used = new Set<string>();
   const scan = (where: string, text: string) =>
