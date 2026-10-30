@@ -1,9 +1,12 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: main 병합(api mareep, main #222 까지): okf/log 충돌은 양쪽 기록을 살렸다.
+* **Update**: api #225 code-review — 근로계약 발송 전 버튼 설정 검사 503 로그(종류 · 표시된 변수 · 기대 변수 이름만, 값 없음)를 단위 테스트로 묶었다.
+* **Update**: api #219 후속 — 머지 뒤에 올라 main 에 빠진 `20803b4f`(버튼 검사 결과에 기대 링크 변수 · 표시 변수 싣기)를 옮기고, `test/contracts.e2e-spec.ts` 의 템플릿 mock 에 `링크` 버튼 링크 표시를 넣어 #219 버튼 검사(503)에 맞췄다(main 에서 13건 실패).
 * **Update**: [Contracts API](/api/contracts-api.md) — WHALEERP-595: 수습 중 시급이 지금 최저임금의 90% 이상인지 저장(`POST` · `PUT /contracts`) 때 본다(계약 시작일과 상관없이). 최저임금은 공통코드 하나(`MINIMUM_WAGE` · 상세 `HOURLY`, 코드명 시급 숫자, 플랫폼고정 · BP 미적용)로 두고 매년 값을 고친다 — 데이터 마이그레이션 `20261030145813_team3_minimum_wage_code` 가 10,320원을 넣는다. 코드가 없거나 · 사용 중지 · 숫자 아니면 400(2026-10-30 김민식 결정, 시행일별 행 방식을 걷음). 작성 화면용 `GET /contracts/minimum-wage`(작성 · 수정 권한)를 더했다. 스키마 변경 없음.
 * **Update**: main 병합(api krabby, main #223 까지): okf/log 충돌은 양쪽 기록을 살렸다.
-* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Notification templates](/api/notification-templates.md) · [Contracts API](/api/contracts-api.md) — api #219 리뷰(노영주) 참고 1 · 2: 버튼을 다는 템플릿마다 링크 변수 이름까지 둔다(`ALIMTALK_BUTTONS` — 이름 · `링크`). 버튼 링크 표시가 그 변수 하나가 아니면(없음 · 초대코드 · 근무지로 옮김 · 둘) 저장 · 근로계약 발송 전 검사 · 발송이 모두 막는다(`LINK_MISMATCH`). 링크 origin 비교는 링크가 늘 `STAFF_APP_URL` 에서 나와 두지 않았다.
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Notification templates](/api/notification-templates.md) · [Contracts API](/api/contracts-api.md) — api #219 리뷰(노영주) 참고 1 · 2: 버튼을 다는 템플릿마다 링크 변수 이름까지 둔다(`ALIMTALK_BUTTONS` — 이름 · `링크`). 버튼 링크 표시가 그 변수 하나가 아니면(없음 · 초대코드 · 근무지로 옮김 · 둘) 저장 · 근로계약 발송 전 검사 · 발송이 모두 막는다(`LINK_MISMATCH`). 링크 origin 비교는 링크가 늘 `STAFF_APP_URL` 에서 나와 두지 않았다. 검사 결과는 기대 링크 변수와 표시된 변수 이름을 함께 주고, 근로계약 발송 전 검사 503 의 로그에 그 이름을 남긴다.
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Notification templates](/api/notification-templates.md) · [Contracts API](/api/contracts-api.md) — api #219 code-review: 버튼 이름 · 버튼 설정 검사를 `src/alimtalk/alimtalk-buttons.ts`(`alimtalkButtonProblem`)로 모아 발송 · 근로계약 발송 전 검사(503, 쓰기 전) · 템플릿 저장 검사가 같이 쓴다 — 설정 오류가 커밋 뒤 「다시 보내 주세요」로 보이지 않게. 저장 검사는 버튼 이름이 없는 템플릿 코드의 알림톡 버튼 링크도 막는다.
 * **Update**: main 병합(api krabby, main #218 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api krabby, main #216 까지): okf/log 충돌은 양쪽 기록을 살렸다.

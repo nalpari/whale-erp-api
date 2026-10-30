@@ -208,7 +208,7 @@ describe('근로계약 목록 (e2e)', () => {
       channel: 'ALIMTALK',
       title: null,
       body: '…',
-      variables: [],
+      variables: [{ name: '링크', isButtonLink: true }],
       kakaoTemplateCode: 'WHALE_INVITE_01',
     });
     prisma.store.findUnique

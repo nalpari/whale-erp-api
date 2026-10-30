@@ -37,7 +37,7 @@ sources:
   - id: validate
     resource: ../../src/notification-templates/validate-template.ts
     title: 저장 검사(validateTemplate)
-    last_modified: 2026-10-30T06:04:46Z
+    last_modified: 2026-10-30T06:18:28Z
   - id: controller
     resource: ../../src/notification-templates/notification-templates.controller.ts
     title: /notification-templates (플랫폼 관리자만)

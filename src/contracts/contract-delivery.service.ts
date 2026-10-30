@@ -268,7 +268,7 @@ export class ContractDeliveryService {
     const buttonProblem = alimtalkButtonProblem(template, found.variables);
     if (buttonProblem) {
       this.logger.error(
-        `${what} 템플릿 버튼 설정이 맞지 않음: ${buttonProblem}`,
+        `${what} 템플릿 버튼 설정이 맞지 않음: ${buttonProblem.kind} 버튼 링크 표시=[${buttonProblem.marked.join(', ')}]${buttonProblem.kind === 'LINK_MISMATCH' ? ` 기대=${buttonProblem.link}` : ''}`,
       );
       throw new ServiceUnavailableException(
         `${what} 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.`,
