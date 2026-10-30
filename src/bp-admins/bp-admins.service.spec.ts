@@ -937,7 +937,7 @@ describe('BpAdminsService', () => {
         );
       });
 
-      it('다른 표의 충돌(점포 매핑)은 이메일 중복이 아니라 「먼저 바꿨다」 409', async () => {
+      it('이메일이 아닌 제약의 충돌은 이메일 중복이 아니라 「먼저 바꿨다」 409', async () => {
         prisma.adminAccount.updateMany.mockRejectedValueOnce(
           dup({ index: 'admin_store_mappings_pkey' }),
         );

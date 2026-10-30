@@ -770,7 +770,7 @@ export class BpAdminsService {
           });
       })
       .catch((error: unknown) => {
-        // 이메일 인덱스만 이메일 중복이다 — 점포 매핑 등 다른 충돌은 그 사이 누가 먼저 바꾼 것이다.
+        // 이메일 인덱스만 이메일 중복이다. 다른 유일값 충돌은 지금 경로에 없지만(점포 매핑은 skipDuplicates), 생기면 경합으로 본다.
         if (isUniqueViolation(error))
           throw new ConflictException(
             isEmailKeyViolation(error) ? EMAIL_TAKEN : CHANGED_MEANWHILE,
