@@ -8,7 +8,11 @@ import { fakeBizppurio } from './fake-alimtalk';
 import { STORAGE } from './../src/storage/storage.module';
 import { ContractExpiryService } from '../src/contracts/contract-expiry.service';
 import { ContractNoticeService } from '../src/contracts/contract-notice.service';
-import { rejectContract, signContract } from '../src/contracts/contract-status';
+import {
+  rejectContract,
+  requestCorrection,
+  signContract,
+} from '../src/contracts/contract-status';
 import { ContractsService } from '../src/contracts/contracts.service';
 import { ContractSendService } from '../src/contracts/contract-send.service';
 import { SIGNED_ONCE } from '../src/contracts/signed-contract';
@@ -73,7 +77,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       where: { contractId },
       select: {
         status: true,
-        rejectReason: true,
+        correctionReason: true,
         contractStatusHistories: {
           orderBy: { contractStatusHistoryId: 'asc' },
           select: { fromStatus: true, toStatus: true, actor: true },
@@ -180,16 +184,14 @@ describe('계약 상태 전환 (e2e, DB)', () => {
     );
   });
 
-  it('거부하면 거부 사유를 함께 저장한다. 거부된 계약은 날인할 수 없다', async () => {
+  it('거부는 상태만 바꾼다(사유는 받지 않는다, WHALEERP-635). 거부된 계약은 날인할 수 없다', async () => {
     const contractId = await sent();
 
-    await prisma.$transaction((tx) =>
-      rejectContract(tx, contractId, ' 근무 시간이 달라요 '),
-    );
+    await prisma.$transaction((tx) => rejectContract(tx, contractId));
     const rejected = await stateOf(contractId);
     expect(rejected).toMatchObject({
       status: 'REJECTED',
-      rejectReason: '근무 시간이 달라요',
+      correctionReason: null,
     });
     expect(rejected.contractStatusHistories.at(-1)).toEqual({
       fromStatus: 'PENDING_SIGNATURE',
@@ -199,6 +201,56 @@ describe('계약 상태 전환 (e2e, DB)', () => {
 
     await conflictOf(prisma.$transaction((tx) => signContract(tx, contractId)));
     expect((await stateOf(contractId)).status).toBe('REJECTED');
+  });
+
+  it('수정 요청은 사유를 같은 트랜잭션에서 남기고, 다시 요청하면 덮어쓰며, 관리자가 고쳐 다시 보내도 지우지 않는다(WHALEERP-635)', async () => {
+    const phone = nextPhone();
+    const { contractId } = await contracts.create(dto(phone), adminId);
+    const signing = (deadline = new Date(Date.now() + 86_400_000)) =>
+      prisma.contract.update({
+        where: { contractId },
+        data: {
+          status: 'PENDING_SIGNATURE',
+          sentAt: new Date(),
+          signDeadlineAt: deadline,
+        },
+      });
+    await signing();
+
+    await prisma.$transaction((tx) =>
+      requestCorrection(tx, contractId, '시급이 다릅니다'),
+    );
+    expect(await stateOf(contractId)).toMatchObject({
+      status: 'CORRECTION_REQUESTED',
+      correctionReason: '시급이 다릅니다',
+    });
+
+    // 관리자가 고쳐 저장하면 곧바로 다시 보낸다(계정 없는 번호라 발송 대기) — 사유는 남는다
+    await contracts.update(adminId, contractId, dto(phone));
+    expect(await stateOf(contractId)).toMatchObject({
+      status: 'PENDING_SEND',
+      correctionReason: '시급이 다릅니다',
+    });
+
+    // 다시 서명 대기에서 수정을 요청하면 덮어쓴다
+    await signing();
+    await prisma.$transaction((tx) =>
+      requestCorrection(tx, contractId, '근무 요일이 다릅니다'),
+    );
+    expect((await stateOf(contractId)).correctionReason).toBe(
+      '근무 요일이 다릅니다',
+    );
+
+    // 받지 못한 수정 요청(기한 지남)은 사유도 바꾸지 않는다
+    await signing(BEFORE_NOW);
+    await conflictOf(
+      prisma.$transaction((tx) =>
+        requestCorrection(tx, contractId, '다른 사유'),
+      ),
+    );
+    expect((await stateOf(contractId)).correctionReason).toBe(
+      '근무 요일이 다릅니다',
+    );
   });
 
   it('날인 기한이 지나면 배치 전에도 날인을 받지 않고, 배치는 만료로 바꾼 뒤 날인을 막는다', async () => {
@@ -446,7 +498,6 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       await prisma.contract.update({
         where: { contractId },
         data: {
-          rejectReason: '근무 시간이 달라요',
           endDate: new Date(
             Date.UTC(
               today.getUTCFullYear(),
@@ -481,9 +532,15 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect(
         await notificationOf(`NTF_CONTRACT_SIGNED:${900_002 + n}`),
       ).not.toBeNull();
-      expect(
-        (await notificationOf(`NTF_CONTRACT_REJECTED:${900_003 + n}`))?.body,
-      ).toContain('근무 시간이 달라요');
+      // 거부 알림은 사유 없이 근무지를 보인다(WHALEERP-635 — 20261030120100 템플릿)
+      const rejected = await notificationOf(
+        `NTF_CONTRACT_REJECTED:${900_003 + n}`,
+      );
+      expect(rejected?.title).toBe('근로계약서 서명 거부');
+      expect(rejected?.body).toMatch(
+        /^남도현 님이 근로계약서 서명을 거부했습니다\.\n\n- 근무지: .+\n\n필요하면/,
+      );
+      expect(rejected?.body).not.toContain('사유');
       const renewal = await notificationOf(
         `NTF_CONTRACT_RENEWAL_DUE:${contractId}`,
       );
@@ -1548,9 +1605,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
   describe('거부 · 만료 재발송 (WHALEERP-153)', () => {
     it('가입 전 직원의 거부 계약은 가입 초대로 다시 보내 발송 대기가 되고, 이력 · 재발송 횟수가 남는다', async () => {
       const contractId = await sent();
-      await prisma.$transaction((tx) =>
-        rejectContract(tx, contractId, '시급이 달라요'),
-      );
+      await prisma.$transaction((tx) => rejectContract(tx, contractId));
 
       const result = await app
         .get(ContractSendService)
@@ -1578,7 +1633,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
 
     it('같은 사람의 체결 완료 계약이 따로 있으면 거부 계약을 되살리지 않고, 상세의 재발송 버튼도 숨긴다(api #158 code-review)', async () => {
       const contractId = await sent();
-      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      await prisma.$transaction((tx) => rejectContract(tx, contractId));
       const { staffMemberId } = await prisma.contract.findUniqueOrThrow({
         where: { contractId },
         select: { staffMemberId: true },
@@ -1605,7 +1660,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
 
     it('겹치지 않아도 더 늦게 시작한 체결 완료가 있으면 되살리지 않는다 — 먼저 끝난 체결 완료는 막지 않는다(api #158 code-review)', async () => {
       const contractId = await sent();
-      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      await prisma.$transaction((tx) => rejectContract(tx, contractId));
       const { staffMemberId } = await prisma.contract.update({
         where: { contractId },
         data: {
@@ -1645,7 +1700,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
 
     it('기간이 끝나 배치가 닫은 체결 계약과 겹쳐도 되살리지 않는다 — 날인 뒤 처리와 같은 기준(api #158 재리뷰 참고 1)', async () => {
       const contractId = await sent();
-      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      await prisma.$transaction((tx) => rejectContract(tx, contractId));
       const { staffMemberId } = await prisma.contract.update({
         where: { contractId },
         data: {
@@ -1681,7 +1736,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
 
     it('조기 재계약 C2 의 재계약 C3 를 되살릴 때 줄의 앞 계약 C1 때문에 막지 않는다 — 만들 때와 같은 판정(api #158 재리뷰 참고 2)', async () => {
       const contractId = await sent();
-      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      await prisma.$transaction((tx) => rejectContract(tx, contractId));
       const { staffMemberId } = await prisma.contract.findUniqueOrThrow({
         where: { contractId },
         select: { staffMemberId: true },
@@ -1723,7 +1778,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
 
     it('시작일이 빈 거부 계약도 상세가 열리고, 다른 체결 완료가 있으면 기간을 몰라 되살리지 않는다(api #158 code-review)', async () => {
       const contractId = await sent();
-      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      await prisma.$transaction((tx) => rejectContract(tx, contractId));
       const { staffMemberId } = await prisma.contract.update({
         where: { contractId },
         data: { startDate: null },
@@ -1753,7 +1808,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
 
     it('계약 기간이 끝난 거부 계약은 되살리지 않는다(api #158 code-review)', async () => {
       const contractId = await sent();
-      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      await prisma.$transaction((tx) => rejectContract(tx, contractId));
       await prisma.contract.update({
         where: { contractId },
         data: {
@@ -1788,7 +1843,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
 
     it('서명 대기로 본 화면에서 보내면 그사이 거부된 계약을 되살리지 않는다 — 409 CONTRACT_STATUS_CONFLICT(front #136 재리뷰)', async () => {
       const contractId = await sent();
-      await prisma.$transaction((tx) => rejectContract(tx, contractId, null));
+      await prisma.$transaction((tx) => rejectContract(tx, contractId));
 
       await expect(
         app.get(ContractSendService).send(adminId, contractId, new Date(), {
