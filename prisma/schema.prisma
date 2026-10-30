@@ -3177,7 +3177,7 @@ model PublicHoliday {
   publicHolidayId Int                 @id @default(autoincrement()) @map("public_holiday_id")
   /// 날짜 — 한 날짜에 한 건
   holidayDate     DateTime            @map("holiday_date") @db.Date
-  /// 연도 — 2000~2050
+  /// 연도 — 2000~2100
   year            Int
   /// 휴일명
   name            String

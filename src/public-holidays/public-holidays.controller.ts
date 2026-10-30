@@ -27,7 +27,7 @@ export class PublicHolidaysController {
   /** 공식 휴일 — 월을 주면 그 달(캘린더), 없으면 그 해 전체(목록). 날짜순, 페이지 없이. */
   @Get()
   @MenuPermission('read', { platformOnly: true })
-  @ApiBadRequestResponse({ description: '연도 2000~2050 · 월 1~12 밖' })
+  @ApiBadRequestResponse({ description: '연도 2000~2100 · 월 1~12 밖' })
   async list(
     @Query() query: ListPublicHolidaysQueryDto,
   ): Promise<PublicHolidayListResponseDto> {

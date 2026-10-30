@@ -254,7 +254,7 @@ describe('플랫폼 휴일 관리 (e2e, DB)', () => {
   it.each([
     ['연도 없음', '/public-holidays'],
     ['연도 1999', '/public-holidays?year=1999'],
-    ['연도 2051', '/public-holidays?year=2051'],
+    ['연도 2101', '/public-holidays?year=2101'],
     ['월 0', '/public-holidays?year=2026&month=0'],
     ['월 13', '/public-holidays?year=2026&month=13'],
   ])('%s 는 400', async (_, path) => {

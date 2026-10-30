@@ -4,7 +4,7 @@ title: Platform holidays
 description: 관리자 웹 「플랫폼 휴일 관리」(MN000217) — GET /public-holidays reads the 공식 휴일 of a year (목록) or a month (캘린더) with the synchronization status; read-only, no route changes a holiday. A monthly batch (public-holiday-sync) aligns 올해 · 다음 해 with the 공휴일 API.
 tags: [admin, holiday, platform, team1, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T06:42:37Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:19:13Z }
 sources:
   - id: public-holidays-controller
     resource: ../../src/public-holidays/public-holidays.controller.ts
@@ -13,11 +13,11 @@ sources:
   - id: public-holidays-service
     resource: ../../src/public-holidays/public-holidays.service.ts
     title: PublicHolidaysService (year · month range, synchronization status)
-    last_modified: 2026-10-30T06:42:37Z
+    last_modified: 2026-10-30T07:19:13Z
   - id: public-holidays-query
     resource: ../../src/public-holidays/dto/list-public-holidays-query.dto.ts
-    title: year 2000~2050 · month 1~12 query
-    last_modified: 2026-10-30T06:42:37Z
+    title: year 2000~2100 · month 1~12 query
+    last_modified: 2026-10-30T07:21:57Z
   - id: holiday-api-client
     resource: ../../src/public-holidays/holiday-api.client.ts
     title: HolidayApiClient — 한국천문연구원 특일 정보 getRestDeInfo, a year at a time
@@ -33,7 +33,7 @@ sources:
   - id: public-holiday-sync-service
     resource: ../../src/public-holidays/public-holiday-sync.service.ts
     title: PublicHolidaySyncService — API outside the transaction, apply and log under runExclusive
-    last_modified: 2026-10-30T06:42:37Z
+    last_modified: 2026-10-30T07:19:13Z
   - id: public-holiday-sync-scheduler
     resource: ../../src/public-holidays/public-holiday-sync.scheduler.ts
     title: 매월 1일 04:00 KST, public-holiday-sync
@@ -53,10 +53,8 @@ Both answer `{ year, month, items, total, synchronization }`. `items` are
 paging — a year is at most a few dozen rows. `total` is the count shown next to the
 heading (「공식 휴일 N일」). `month` is `null` for a year query.
 
-`year` is required and must be 2000~2050, `month` 1~12; anything else is 400 with
-「연도는 2000년부터 2050년까지 조회할 수 있습니다.」 / 「월은 1~12 사이로 보내 주세요.」.[^public-holidays-query]
-The bounds are `FIRST_PUBLIC_HOLIDAY_YEAR` · `LAST_PUBLIC_HOLIDAY_YEAR` (`public-holiday-years.ts`), the same range
-as the CHECK `public_holidays_year_range`.
+`year` is required and must be 2000~2100 (the table's range), `month` 1~12; anything else is 400 with
+「연도는 2000년부터 2100년까지 조회할 수 있습니다.」 / 「월은 1~12 사이로 보내 주세요.」.[^public-holidays-query]
 An empty `month=` is not "no month": the query string is coerced to `0` and gets the
 month 400, like the other query DTOs (none of them maps `''` to absent). **The 목록 view
 leaves `month` out of the URL** rather than sending it empty (사용자 결정, 2026-10-26).
@@ -75,13 +73,12 @@ One row per date: when two holidays fall on one day the row carries both names
 (`어린이날 · 부처님오신날`, 2025-05-05), as [Team 1 physical schema](/domain/team1-physical-schema.md)
 explains.
 
-**The table covers 2000–2050** (2026-10-30, 재영). It was 2000–2100, but the lunar conversion table
-(한국천문연구원) ends in 2050, so 2051–2100 held solar holidays only — 설날 · 부처님오신날 · 추석 were missing,
-and the synchronization, which only fetches 올해 · 다음 해, would never have filled them for decades. Rather
-than keep years that look complete and are not, `20261030153929_team1_public_holidays_until_2050` deleted those 487 rows and narrowed the
-CHECK to 2000–2050; the query DTO and the synchronization (`syncYearsOf` skips a next year past 2050) follow.
-[BP holidays](/api/bp-holidays.md) still accept dates up to 2100-12-31 and say 「public_holidays 와 같은
-2000~2100」 in comments — not changed yet; after 2050 a BP holiday simply has no 공식 휴일 to show beside it.
+**2051–2100 hold solar holidays only** — the lunar conversion table (한국천문연구원) ends in 2050, so those
+years have no 설날 · 부처님오신날 · 추석, and the synchronization, which only fetches 올해 · 다음 해, will not
+reach them for decades. They are not hidden (2026-10-30, 재영 — 「막을 이유가 없다」): cutting the table to
+2050 and then capping only this query were both tried and dropped the same day, so the rows, the CHECK and the
+query all stay 2000~2100, and [BP holidays](/api/bp-holidays.md) still show those solar days. A screen reading a
+year past 2050 is expected to know it is incomplete.
 
 # Synchronization status
 
@@ -129,7 +126,7 @@ years.[^holiday-api-module]
   「기독탄신일」. Until 2026-10-30 the rule-computed rows said 「신정」 · 「성탄절」 · 「설날 연휴」 ·
   「추석 연휴」 and put 대체공휴일 in 비고 (「대체공휴일 — 삼일절」), so a list read differently across the
   year the synchronization had covered, and a calendar (names only) hid which day was a substitute. That
-  had been accepted; `20261030153929_team1_public_holidays_until_2050` instead rewrote every `RULE` row to the API's spelling — 신정 →
+  had been accepted; `20261030153929_team1_public_holiday_api_names` instead rewrote every `RULE` row (2000–2100) to the API's spelling — 신정 →
   1월1일, 성탄절 → 기독탄신일, 설 · 추석 앞뒤 날 → 설날 · 추석 (the API names all three days alike), a
   substitute → 「대체공휴일(본 휴일)」 with 비고 NULL — checked against the 2026 rows the API wrote. 대체공휴일
   of 설날 · 추석 · 기독탄신일 did not occur in 2026, so their spelling follows the same pattern by inference.
@@ -172,11 +169,11 @@ year then shows in `failedYears` although the table is current, until the next r
 (노동절, 전국동시지방선거, 제헌절) and updated 19, 2027 created 4 and updated 20, nothing
 deleted. On the shared database 2026 created 4 and updated 18 — 2026-03-02 had been deleted
 by hand just before, so it came back as a new `PUBLIC_API` row. `test/public-holiday-sync.e2e-spec.ts`
-runs the rules on 2050, the table's last year: it replaces that year with eight solar `RULE` rows at the
-start, uses a fake client, and restores the year afterwards.
+runs the rules on 2050, the last year with its lunar holidays: it replaces that year with eight solar `RULE` rows at
+the start, uses a fake client, and restores the year afterwards.
 
-What it does not do: no manual-run route, nothing past 2050, and no reconciliation report of API
-against rule.
+What it does not do: no manual-run route, no lunar back-fill of 2051–2100 (the API answers only years it has
+published), and no reconciliation report of API against rule.
 
 # Permission
 
@@ -202,7 +199,7 @@ menu URL migration fails a unit test instead of turning every request into 403.
 
 [^public-holidays-controller]: /public-holidays 경로와 메뉴 권한(경로로 찾는 MN000217, 플랫폼 전용)
 [^public-holidays-service]: PublicHolidaysService — 연도 · 월 범위와 동기화 상태
-[^public-holidays-query]: 연도 2000~2050 · 월 1~12 조회 조건
+[^public-holidays-query]: 연도 2000~2100 · 월 1~12 조회 조건
 [^holiday-api-client]: 공휴일 API 클라이언트(한국천문연구원 특일 정보 getRestDeInfo, 연도 하나씩)
 [^holiday-api-module]: HOLIDAY_SERVICE_KEY 선택 설정(운영은 error 로그)
 [^public-holiday-sync-plan]: 날짜로 비교해 추가 · 수정 · 시각만 · 삭제를 정하는 계획

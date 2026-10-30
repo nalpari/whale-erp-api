@@ -5,7 +5,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import type { ListPublicHolidaysQueryDto } from './dto/list-public-holidays-query.dto';
 import type { PublicHolidayListResponseDto } from './dto/public-holiday.response.dto';
-import { syncYearsOf } from './public-holiday-years';
 
 const LATEST_FIRST: Prisma.PublicHolidaySynchronizationLogOrderByWithRelationInput[] =
   [{ synchronizedAt: 'desc' }, { synchronizationId: 'desc' }];
@@ -38,7 +37,7 @@ export class PublicHolidaysService {
             },
           };
     const thisYear = kstToday(now).getUTCFullYear();
-    const syncYears = syncYearsOf(thisYear);
+    const syncYears = [thisYear, thisYear + 1];
     // 한 연결에서 차례로 읽는다 — 화면 하나에 연결을 넷씩 잡지 않게.
     const [rows, lastSucceeded, ...latest] = await this.prisma.$transaction([
       this.prisma.publicHoliday.findMany({

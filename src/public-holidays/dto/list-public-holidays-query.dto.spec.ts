@@ -12,7 +12,7 @@ const errorsOf = (query: Record<string, string>) =>
 describe('ListPublicHolidaysQueryDto', () => {
   it.each([
     [{ year: '2000' }],
-    [{ year: '2050' }],
+    [{ year: '2100' }],
     [{ year: '2026', month: '1' }],
     [{ year: '2026', month: '12' }],
   ])('%j 는 받는다', (query) => {
@@ -30,12 +30,12 @@ describe('ListPublicHolidaysQueryDto', () => {
   it.each([
     [{}],
     [{ year: '1999' }],
-    [{ year: '2051' }],
+    [{ year: '2101' }],
     [{ year: '2026.5' }],
     [{ year: 'abc' }],
   ])('연도 %j 는 거부한다', (query) => {
     expect(errorsOf(query)).toContain(
-      '연도는 2000년부터 2050년까지 조회할 수 있습니다.',
+      '연도는 2000년부터 2100년까지 조회할 수 있습니다.',
     );
   });
 
