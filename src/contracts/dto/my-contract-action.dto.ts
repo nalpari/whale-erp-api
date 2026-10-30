@@ -1,17 +1,29 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { ContractStatus } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import {
-  IsISO8601,
-  IsString,
-  Matches,
-  MaxLength,
-  ValidateIf,
-} from 'class-validator';
-import { REJECT_REASON_MAX } from '../contract-status';
+import { IsISO8601, Matches, ValidateBy } from 'class-validator';
 
-/** 보내지 않았을 때만 건너뛴다 — null 은 400(@IsOptional 은 null 도 건너뛴다) */
-const sent = (_: object, value: unknown) => value !== undefined;
+/** 수정 요청 사유 길이 상한(WHALEERP-635). 직원 앱 입력칸과 맞춘다 — NFC 로 맞추고 앞뒤 공백을 지운 뒤 센다. */
+export const CORRECTION_REASON_MAX = 100;
+
+/**
+ * 수정 요청 사유 — 다듬은 뒤 1~100자 문자열. 검사 하나로 묶어 400 문구가 늘 하나다 — 따로 두면 사유가 없을 때 「입력해 주세요」와
+ * 「100자 이하로」가 함께 나가고, 직원 앱은 배열 문구를 이어 붙여 보인다.
+ */
+const CorrectionReason = () =>
+  ValidateBy({
+    name: 'correctionReason',
+    validator: {
+      validate: (v: unknown) =>
+        typeof v === 'string' &&
+        v.length > 0 &&
+        v.length <= CORRECTION_REASON_MAX,
+      defaultMessage: (args) =>
+        typeof args?.value === 'string' && args.value.length > 0
+          ? `수정 요청 사유는 ${CORRECTION_REASON_MAX}자 이하로 입력해 주세요.`
+          : '수정 요청 사유를 입력해 주세요.',
+    },
+  });
 
 /**
  * 직원 날인(WHALEERP-145) — multipart 의 텍스트 칸. 서명 이미지는 파일 칸 `signature`(PNG).
@@ -32,18 +44,22 @@ export class SignMyContractDto {
   sentAt: string;
 }
 
-/** 직원 거부 — 사유는 선택이다(WHALEERP-145). 앞뒤 공백을 지우고(길이도 지운 뒤로 센다), 비면 남기지 않는다 */
-export class RejectMyContractDto {
-  @ApiPropertyOptional({ maxLength: REJECT_REASON_MAX })
-  @ValidateIf(sent)
+/**
+ * 직원 수정 요청 — 사유는 필수다(WHALEERP-635, 2026-10-30 김민식). NFC 로 맞추고 앞뒤 공백을 지운 뒤 1~100자. 선택지는 두지 않는다.
+ * 없거나 문자열이 아니거나 비면 「입력해 주세요」, 넘치면 「100자 이하로」.
+ */
+export class RequestMyContractCorrectionDto {
+  @ApiProperty({
+    description: '수정 요청 사유 — 앞뒤 공백을 지운 뒤 1~100자',
+    minLength: 1,
+    maxLength: CORRECTION_REASON_MAX,
+    example: '시급이 안내받은 금액과 다릅니다',
+  })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.normalize('NFC').trim() : value,
   )
-  @IsString()
-  @MaxLength(REJECT_REASON_MAX, {
-    message: `거부 사유는 ${REJECT_REASON_MAX}자 이하로 입력해 주세요.`,
-  })
-  reason?: string;
+  @CorrectionReason()
+  reason: string;
 }
 
 export class MyContractActionResponseDto {

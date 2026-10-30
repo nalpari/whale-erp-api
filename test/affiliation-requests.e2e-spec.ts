@@ -93,7 +93,6 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       select: {
         status: true,
         signDeadlineAt: true,
-        rejectReason: true,
         contractStatusHistories: {
           orderBy: { contractStatusHistoryId: 'asc' },
           select: { fromStatus: true, toStatus: true, actor: true },
@@ -314,9 +313,9 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
     await expect(
       requests.accept(r.accountId, r.invitationId, {}),
     ).rejects.toEqual(notFound);
-    await expect(
-      requests.reject(r.accountId, r.invitationId, {}),
-    ).rejects.toEqual(notFound);
+    await expect(requests.reject(r.accountId, r.invitationId)).rejects.toEqual(
+      notFound,
+    );
     expect((await contractOf(r.contractId)).status).toBe('PENDING_SEND');
     // 공백만 다른 같은 이름이면 그 계정 요청이다(날인 본인 대조와 같은 기준)
     await prisma.staffMember.update({
@@ -328,16 +327,11 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
     ).toEqual([r.invitationId]);
   });
 
-  it('거절하면 요청 · 함께 온 계약을 거절 · 거부로 닫고 같은 사유를 남긴다 — 레코드는 두고 초안을 쓴 관리자에게 알린다', async () => {
+  it('거절하면 요청 · 함께 온 계약을 거절 · 거부로 닫는다(사유는 받지 않는다, WHALEERP-635) — 레코드는 두고 초안을 쓴 관리자에게 알린다', async () => {
     const r = await requested();
-    await requests.reject(r.accountId, r.invitationId, {
-      reason: '다른 곳에서 일해요',
-    });
+    await requests.reject(r.accountId, r.invitationId);
     const c = await contractOf(r.contractId);
-    expect(c).toMatchObject({
-      status: 'REJECTED',
-      rejectReason: '다른 곳에서 일해요',
-    });
+    expect(c).toMatchObject({ status: 'REJECTED' });
     expect(c.contractStatusHistories.at(-1)).toEqual({
       fromStatus: 'PENDING_SEND',
       toStatus: 'REJECTED',
@@ -346,9 +340,9 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
     expect(
       await prisma.invitation.findUniqueOrThrow({
         where: { invitationId: r.invitationId },
-        select: { status: true, rejectReason: true },
+        select: { status: true },
       }),
-    ).toEqual({ status: 'REJECTED', rejectReason: '다른 곳에서 일해요' });
+    ).toEqual({ status: 'REJECTED' });
     expect(
       await prisma.staffMember.findUniqueOrThrow({
         where: { staffMemberId: r.staffMemberId },
@@ -361,13 +355,16 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       },
       select: {
         title: true,
+        body: true,
         relatedType: true,
         relatedId: true,
         notificationRecipients: { select: { adminAccountId: true } },
       },
     });
+    // 거절 사유 줄은 없다(WHALEERP-635 — 20261030120100 템플릿)
     expect(notice).toEqual({
       title: '소속 추가 거절',
+      body: '남도현 님이 소속 추가 요청을 거절했습니다.\n\n- 근무지: 소속 추가 점포\n\n필요하면 소속 추가를 다시 요청해 주세요.',
       relatedType: 'STAFF_MEMBER',
       relatedId: r.staffMemberId,
       notificationRecipients: [{ adminAccountId: adminId }],
@@ -376,16 +373,14 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
     const other = await account(nextPhone());
     expect(
       codeOf(
-        await requests
-          .reject(other, r.invitationId, {})
-          .catch((e: unknown) => e),
+        await requests.reject(other, r.invitationId).catch((e: unknown) => e),
       ),
     ).toBe('AFFILIATION_REQUEST_NOT_FOUND');
   });
 
   it('거절한 요청의 계약을 재발송하면 발송 대기로 되살리고 새 요청을 보낸다 — 수락하면 서명 대기(WHALEERP-153 · 130)', async () => {
     const r = await requested();
-    await requests.reject(r.accountId, r.invitationId, {});
+    await requests.reject(r.accountId, r.invitationId);
     expect((await contractOf(r.contractId)).status).toBe('REJECTED');
 
     bizppurio.sendMessage.mockClear();
@@ -556,30 +551,19 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
         .set('Authorization', auth)
         .send({})
         .expect(404);
-      const long = await http()
-        .post(`/me/affiliation-requests/${r.invitationId}/reject`)
-        .set('Authorization', auth)
-        .send({ reason: 'ㄱ'.repeat(501) })
-        .expect(400);
-      expect(JSON.stringify(long.body)).toContain('500자 이하');
-      expect((await contractOf(r.contractId)).status).toBe('PENDING_SEND');
-
       // 목록은 요청 제한(10분 10번)에 묶이지 않는다 — 앱이 열 때마다 읽는다
       for (let i = 0; i < 11; i++)
         await http()
           .get('/me/affiliation-requests')
           .set('Authorization', auth)
           .expect(200);
-      // 앞뒤 공백은 지운 뒤 센다 — 500자 + 공백은 받는다(근로계약서 거부와 같다)
+      // 본문은 읽지 않는다 — 사유를 싣던 옛 직원 앱(501자 포함)도 forbidNonWhitelisted 400 없이 거절된다(WHALEERP-635)
       await http()
         .post(`/me/affiliation-requests/${r.invitationId}/reject`)
         .set('Authorization', auth)
-        .send({ reason: ` ${'ㄱ'.repeat(500)} ` })
+        .send({ reason: 'ㄱ'.repeat(501) })
         .expect(204);
-      expect(await contractOf(r.contractId)).toMatchObject({
-        status: 'REJECTED',
-        rejectReason: 'ㄱ'.repeat(500),
-      });
+      expect((await contractOf(r.contractId)).status).toBe('REJECTED');
     });
 
     it('가맹점 요청 — 보인 문구 버전이 지금과 다르거나 빠지면 수락은 마치고 동의만 남기지 않는다(ATT-30 v252 · v253)', async () => {

@@ -1506,7 +1506,7 @@ export class ContractsService {
         draftAction: true,
         sentAt: true,
         signDeadlineAt: true,
-        rejectReason: true,
+        correctionReason: true,
         resendCount: true,
         previousContractId: true,
         // 이어지는 체결된 재계약 — 있으면 「새 계약」을 다시 띄우지 않는다(WHALEERP-156). 진행 중 재계약은 치지 않는다 — 새
@@ -1648,7 +1648,9 @@ export class ContractsService {
       lastSentAt: iso(c.sentAt),
       signDeadlineAt: iso(c.signDeadlineAt),
       lastProcessedAt: iso(c.contractStatusHistories[0]?.changedAt),
-      rejectReason: c.status === 'REJECTED' ? c.rejectReason : null,
+      // 사유는 고쳐 다시 보내도 행에 남지만, 지난 사유가 지금 사유처럼 읽히지 않게 수정 요청일 때만 준다(거부 사유와 같던 방식)
+      correctionReason:
+        c.status === 'CORRECTION_REQUESTED' ? c.correctionReason : null,
       resendCount: c.resendCount ?? 0,
       previousContractId: c.previousContractId,
       renewedBy: c.contractsAsPrevious[0]?.contractId ?? null,
