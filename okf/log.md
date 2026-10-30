@@ -1,10 +1,12 @@
 # Directory Update Log
 
 ## 2026-10-30
+* **Update**: main 병합(api chansey, main #217 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api chansey, main #211 · #214 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Platform role groups](/api/platform-role-groups.md) · [BP role groups](/api/bp-role-groups.md) · [Platform admins](/api/platform-admins.md) — api #215 review-pr 반영: PM000001 에 연결된 PM 도 권한명 · 설명은 고친다는 문장으로 고쳤고, 두 컨트롤러의 403 설명을 「본인이 연결된 권한(메뉴 권한 저장 · 삭제)」로 좁혔다. 이메일 중복 확인 400 사유(없음 · 형식 · 100자)를 적고, 쿼리 DTO 주석에 플랫폼 관리자 경로를 더했다. `purpose` 검증과 경로 선언 순서(`:id` 앞) 단위 테스트를 더했다.
 * **Update**: main 병합(api chansey, main 최신까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Platform role groups](/api/platform-role-groups.md) · [BP role groups](/api/bp-role-groups.md) — 본인이 연결된 권한 그룹도 권한명 · 설명은 고친다(재영 2026-10-30, front 요청). 수정(PUT)의 본인 연결 403 과 상세 `editBlockedReason` 의 `SELF_LINKED` 를 뺐다. 메뉴 권한 저장과 삭제의 본인 연결 차단은 그대로다(미리보기는 원래 본인 연결을 보지 않는다). 마이그레이션 없음.
+* **Update**: [BP admins](/api/bp-admins.md) — 목록 역할 필터 `roleTypeCodes`(BA · FM · FA, 쉼표 · 반복, 비우면 세 역할 모두). 관리자 웹 BP 관리자 관리 필터에 「역할」을 더했다(2026-10-30 사용자 요청 — BP 마스터 · BP 관리자가 볼 때 가맹 계정이 섞여 정신없다).
 * **Update**: [Contracts API](/api/contracts-api.md) · [Staff signup](/api/staff-signup.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — WHALEERP-635: 직원 수정 요청이 사유(필수, NFC · 앞뒤 공백 뺀 1~100자, 400 문구 하나)를 받아 `contracts.correction_reason` 에 남기고(다시 요청하면 덮어씀, 고쳐 다시 보내도 남음) 관리자 상세에 `correctionReason` 으로 준다. 근로계약서 거부 · 소속 추가 거절은 사유를 받지 않고 본문을 읽지 않는다. `contracts.reject_reason` · `invitations.reject_reason` 삭제(옮기지 않음), 거부 알림 두 템플릿에서 거부사유를 뺐다(운영 알림은 사유 줄을 「- 근무지: #{근무지}」로) · 소속 추가 거절 두 템플릿의 거절사유 줄도 뺐다([Notification templates](/api/notification-templates.md)).
 * **Update**: [Contracts API](/api/contracts-api.md) — api #211 재리뷰 블로커: 직원 앱 상세 `documents` · 내려받기에서 보낸 원본을 아예 뺀다(`myDocumentWhere`). 「지금 발송분만」으로는 재발송 실패 되돌림(undo)이 `sent_at` 을 앞 발송으로 돌려 옛 근로자 정보 원본이 다시 걸렸다. 직원 앱은 처리 완료본 · 종이 계약 파일만 쓴다. 관리자 상세는 그대로 모두 보인다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 제2조 근무 장소 · 직무도 날인 시점 값(2026-10-30 김민식, api #211 리뷰 정책 확인): 날인 때 `contract_parties.fixed_work_location`(비었으면 점포명) · `fixed_job_title`(비었으면 직원 직무)을 고정하고, 체결된 계약의 직원 앱 본문 · `worker.jobTitle` · 처리 완료본이 그 값을 쓴다. 백필도 만든 때 값을 적는다. 같은 PR 의 아직 적용되지 않은 마이그레이션 `20261030095715_team3_contract_files` 에 두 칸을 더했다.

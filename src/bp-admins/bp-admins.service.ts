@@ -164,8 +164,14 @@ export class BpAdminsService {
     query: ListBpAdminsDto,
   ): Promise<BpAdminListResponseDto> {
     const caller = await this.loadCaller(this.prisma, callerId, bp);
-    const { keyword, storeIds, storeTypeCode, roleGroupId, accountStatus } =
-      query;
+    const {
+      keyword,
+      storeIds,
+      storeTypeCode,
+      roleGroupId,
+      roleTypeCodes,
+      accountStatus,
+    } = query;
     const and: Prisma.AdminAccountWhereInput[] = [];
     if (caller.side !== 'HQ')
       and.push({
@@ -200,7 +206,10 @@ export class BpAdminsService {
     const where: Prisma.AdminAccountWhereInput = {
       bpCodeId: bp.bpCodeId,
       isDeleted: false,
-      roleTypeCode: { in: [...BP_ADMIN_ROLES] },
+      // 역할 필터(2026-10-30) — 비우거나 주지 않으면 세 역할 모두
+      roleTypeCode: {
+        in: roleTypeCodes?.length ? roleTypeCodes : [...BP_ADMIN_ROLES],
+      },
       accountStatusCode: accountStatus ?? { in: ['ACTIVE', 'INACTIVE'] },
       ...(roleGroupId && { roleGroupId }),
       AND: and,

@@ -312,6 +312,37 @@ describe('BpAdminsService', () => {
       );
     });
 
+    it('역할을 고르면 그 역할만 — 목록 · total · 미사용 건수가 같은 조건', async () => {
+      await service.list(2, bp, {
+        page: 1,
+        pageSize: 20,
+        roleTypeCodes: ['FM', 'FA'],
+      });
+      expect(whereOf()).toEqual(
+        partial({ roleTypeCode: { in: ['FM', 'FA'] } }),
+      );
+      expect(prisma.adminAccount.count).toHaveBeenCalledWith(
+        partial({
+          where: partial({ roleTypeCode: { in: ['FM', 'FA'] } }),
+        }),
+      );
+      expect(prisma.adminAccount.count).toHaveBeenCalledWith(
+        partial({
+          where: partial({
+            roleTypeCode: { in: ['FM', 'FA'] },
+            accountStatusCode: 'INACTIVE',
+          }),
+        }),
+      );
+    });
+
+    it('역할을 비워 보내면 세 역할 모두', async () => {
+      await service.list(2, bp, { page: 1, pageSize: 20, roleTypeCodes: [] });
+      expect(whereOf()).toEqual(
+        partial({ roleTypeCode: { in: ['BA', 'FM', 'FA'] } }),
+      );
+    });
+
     it('점포 수는 살아 있는 매핑만 센다 — _count 에는 where 만 (select 를 넣으면 Prisma 가 거부한다)', async () => {
       await service.list(2, bp, { page: 1, pageSize: 20 });
       const { select } = argOf<{ select: Record<string, unknown> }>(
