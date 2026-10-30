@@ -151,11 +151,12 @@ describe('ContractsService.create', () => {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findFirst: jest.fn(),
       },
-      // 최저임금 공통코드(WHALEERP-595) — 기본은 2026년 10,320원 하나
+      // 최저임금 공통코드(WHALEERP-595) — 기본은 2025년 10,030원 · 2026년 10,320원
       codeItem: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue([{ itemCode: 'D20260101', label: '10320' }]),
+        findMany: jest.fn().mockResolvedValue([
+          { itemCode: 'D20250101', label: '10030' },
+          { itemCode: 'D20260101', label: '10320' },
+        ]),
       },
     };
     storage = {
@@ -621,12 +622,47 @@ describe('ContractsService.create', () => {
         });
       });
 
-      it('시작일에 적용되는 값이 없으면(첫 시행일 전) 보지 않는다', async () => {
+      // 2025년 10,030원 → 9,027원(올림해도 9,027), 2026년 10,320원 → 9,288원. 시급 10,030원 · 감액 10% = 9,027원
+      it('2025-12-31 시작은 2025년 값(9,027원)으로 본다 — 저장', async () => {
         await service.create(
-          dto({ ...probation, wageAmount: 5000, startDate: '2025-12-31' }),
+          dto({ ...probation, wageAmount: 10030, startDate: '2025-12-31' }),
           1,
         );
         expect(prisma.staffMember.create).toHaveBeenCalled();
+      });
+
+      it('2026-01-01 시작은 2026년 값(9,288원)으로 본다 — 같은 시급이 400', async () => {
+        await expect(
+          service.create(
+            dto({ ...probation, wageAmount: 10030, startDate: '2026-01-01' }),
+            1,
+          ),
+        ).rejects.toThrow('최저임금의 90%(9,288원)');
+      });
+
+      it('첫 시행일(2025-01-01) 전에 시작하면 보지 않는다', async () => {
+        await service.create(
+          dto({ ...probation, wageAmount: 5000, startDate: '2024-12-31' }),
+          1,
+        );
+        expect(prisma.staffMember.create).toHaveBeenCalled();
+      });
+
+      // 행이 사용중지되거나 코드명이 숫자가 아니어서 빠져도 검사가 조용히 꺼지지 않는다(2026-10-30 김민식)
+      it('첫 시행일 이후인데 적용할 행이 없으면 400 이고 저장하지 않는다', async () => {
+        prisma.codeItem.findMany.mockResolvedValue([
+          { itemCode: 'D20250101', label: '10,030' }, // 형식이 틀려 빠짐
+          { itemCode: 'D20260101', label: '10320' },
+        ]);
+        await expect(
+          service.create(
+            dto({ ...probation, wageAmount: 20000, startDate: '2025-06-01' }),
+            1,
+          ),
+        ).rejects.toThrow(
+          '계약 시작일에 적용할 최저임금이 없습니다. 관리자에게 문의해 주세요.',
+        );
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
       });
 
       it('수습이 없으면 시급이 낮아도 보지 않고 공통코드도 읽지 않는다', async () => {

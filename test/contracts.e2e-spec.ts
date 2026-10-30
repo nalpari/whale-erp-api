@@ -842,6 +842,21 @@ describe('근로계약 목록 (e2e)', () => {
         expect(prisma.staffMember.create).not.toHaveBeenCalled();
       });
 
+      it('첫 시행일 이후인데 적용할 행이 없으면 400(공통코드 설정 문제)', async () => {
+        prisma.codeItem.findMany.mockResolvedValue([
+          { itemCode: 'D20260101', label: '10320' },
+        ]);
+        const res = await post({
+          ...probation,
+          startDate: '2025-06-01',
+          endDate: undefined,
+          wageAmount: 20000,
+        }).expect(400);
+        expect((res.body as { message: string }).message).toBe(
+          '계약 시작일에 적용할 최저임금이 없습니다. 관리자에게 문의해 주세요.',
+        );
+      });
+
       it('수습이 없으면 시급이 낮아도 보지 않는다', async () => {
         await post({ ...body, wageAmount: 5000 }).expect(201);
         expect(prisma.codeItem.findMany).not.toHaveBeenCalled();

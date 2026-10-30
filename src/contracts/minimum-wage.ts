@@ -10,6 +10,17 @@ import { parseDateOnly } from '../staff-members/kst-date';
  */
 export const MINIMUM_WAGE_GROUP = 'MINIMUM_WAGE';
 
+/**
+ * 첫 시행일 — 마이그레이션이 넣은 가장 이른 시행일(2025년 10,030원). 이날부터 시작하는 계약은 적용할 행이 꼭 있어야 한다 —
+ * 행이 사용중지되거나 코드명이 숫자가 아니어서 빠져도 검사가 조용히 꺼지지 않게 코드에 둔다(2026-10-30 김민식). 그보다 앞서
+ * 시작하는 계약은 값이 없어 보지 않는다. 더 이른 연도 행을 넣으면 이 값도 당긴다.
+ */
+export const MINIMUM_WAGE_CHECKED_FROM = '2025-01-01';
+
+/** 첫 시행일 이후 시작인데 적용할 최저임금 행이 없을 때(공통코드 설정 문제) */
+export const MINIMUM_WAGE_MISSING =
+  '계약 시작일에 적용할 최저임금이 없습니다. 관리자에게 문의해 주세요.';
+
 export interface MinimumWage {
   /** 시행일 YYYY-MM-DD */
   effectiveDate: string;
@@ -95,8 +106,8 @@ interface ProbationWageInput {
 
 /**
  * 수습 중 시급이 계약 시작일의 최저임금 90% 이상인지(WHALEERP-595). 수습 · 시급 · 시작일 중 하나라도 없으면(임시저장)
- * 보지 않는다 — 넣은 값만 보는 다른 검사와 같다. 시작일에 적용되는 최저임금이 없으면(첫 시행일 전 계약) 보지 않는다 —
- * 지난 연도 값을 지어 넣지 않았고, 그 무렵 종이 계약을 등록할 수 있어야 해서다.
+ * 보지 않는다 — 넣은 값만 보는 다른 검사와 같다. 첫 시행일(MINIMUM_WAGE_CHECKED_FROM) 전에 시작하는 계약은 보지 않는다 —
+ * 그 전 연도 값은 넣지 않았고, 그 무렵 종이 계약을 등록할 수 있어야 해서다. 첫 시행일 이후인데 적용할 행이 없으면 400 이다.
  */
 export function checkProbationWage(
   dto: ProbationWageInput,
@@ -105,8 +116,9 @@ export function checkProbationWage(
   const rate = dto.probationWageReductionRate ?? null;
   if (dto.probationMonths == null || rate === null) return;
   if (!dto.wageAmount || !dto.startDate) return;
+  if (dto.startDate < MINIMUM_WAGE_CHECKED_FROM) return;
   const minimum = minimumWageOn(wages, dto.startDate);
-  if (!minimum) return;
+  if (!minimum) throw new BadRequestException(MINIMUM_WAGE_MISSING);
   const floor = probationWageFloor(minimum.hourlyWage);
   if (probationWageOf(dto.wageAmount, rate) < floor)
     throw new BadRequestException(

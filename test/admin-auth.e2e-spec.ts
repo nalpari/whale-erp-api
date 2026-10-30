@@ -356,7 +356,8 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
       // 초기 데이터의 그룹(1팀 12 · 3팀 5)과 최저임금(MINIMUM_WAGE, WHALEERP-595).
       expect(Object.keys(codes)).toHaveLength(18);
       expect(codes.MINIMUM_WAGE).toEqual([
-        { value: 'D20260101', label: '10320', order: 1 },
+        { value: 'D20250101', label: '10030', order: 1 },
+        { value: 'D20260101', label: '10320', order: 2 },
       ]);
     });
   });
