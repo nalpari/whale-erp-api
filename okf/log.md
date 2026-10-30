@@ -4,6 +4,8 @@
 * **Update**: [Notification templates](/api/notification-templates.md) · [To-dos](/api/todos.md) — 알림 템플릿 기본 문구 42건을 「알림톡_템플릿_20261029.xlsx」 새 문구로 바꾸는 데이터 마이그레이션 `20261030093710_team3_notification_template_wording`(api petra). 급여명세서 재발송 2건은 엑셀 대신 처음 발송 새 문구를 따른다(NTF-20 유지). `default_*` 는 42건 모두, 지금 문구는 제목 · 본문 · 변수가 셋 다 옛 기본값일 때만. 변수 목록은 `NTF_AFFILIATION_REJECTED` · `EMAIL_AFFILIATION_REJECTED` 에 선택 변수 `거절사유` 만 더했다(발송은 아직 넘기지 않아 빈칸). 엑셀에 없는 기본 템플릿 4건과 `TALK_STAFF_INVITATION` 의 null 제목은 그대로. todos e2e 의 `PUSH_TODO_DUE_SOON` 제목 기대값을 새 문구로. work-schedule-notice.ts 주석만 새 제목에 맞췄다([Work schedules](/api/work-schedules.md)). 스키마 변경 없음.
 
 ## 2026-10-29
+* **Update**: main 병합(api grimer, main #208 · #209 까지): okf 충돌은 양쪽 기록을 살렸다. 근로계약 상세의 신고 정보(`taxProfileOf`)도 대상 BP 를 받는다(아래).
+* **Update**: [Contracts API](/api/contracts-api.md) — 관리자 웹 근로계약 경로(목록 · 상세 · 작성 · 종이 계약 · 이어 쓰기 · 당사자 정보 · 날인본 · 삭제 · 재발송 · 종료)가 `@TargetBp()` 로 대상 BP 를 받아 `AdminScopeService` 에 넘긴다(WHALEERP-618). 플랫폼 계정은 고른 고객 BP 의 점포 전부를 다루고, 헤더(X-Bp-Code-Id) 없이 부르면 범위를 보기 전에 400 「근로계약을 볼 BP 를 골라 주세요.」(`checkTargetBp`). BP · 가맹 계정은 그대로다. 근무지 선택지(`GET /stores/options`)는 아직 헤더를 보지 않는다.
 * **Update**: main 병합(api doduo, main #209 까지): okf 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api doduo, main #202 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Staff members](/api/staff-members.md) · [Alimtalk](/api/alimtalk.md) — api #208 판정 커밋 재리뷰: 단계를 모르는 실패는 `path=unknown` 으로 남겨 발송 이력에서 접수 여부 모름으로 읽는다(`local` · 보내기 전 실패로 보던 것을 걷음). 단계 이름 `TOKEN_PATH` · `MESSAGE_PATH` 를 import 없는 `failure-reason.ts` 하나에 두고 클라이언트도 쓴다. 비즈뿌리오 200 응답 본문이 `null` 이면 `returned no body`(단계 포함)로 던진다. `path=undefined` 옛 행은 칸이 없는 것처럼 본다.

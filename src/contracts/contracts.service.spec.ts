@@ -423,7 +423,7 @@ describe('ContractsService', () => {
 
     await service.list(9, { page: 1, pageSize: 20 });
 
-    expect(scope.getManageableStores).toHaveBeenCalledWith(9);
+    expect(scope.getManageableStores).toHaveBeenCalledWith(9, undefined);
     const [{ where }] = prisma.contract.findMany.mock.calls[0];
     expect(where).toEqual({
       OR: [
