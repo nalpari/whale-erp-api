@@ -1652,7 +1652,9 @@ export class ContractsService {
       lastSentAt: iso(c.sentAt),
       signDeadlineAt: iso(c.signDeadlineAt),
       lastProcessedAt: iso(c.contractStatusHistories[0]?.changedAt),
-      correctionReason: c.correctionReason,
+      // 사유는 고쳐 다시 보내도 행에 남지만, 지난 사유가 지금 사유처럼 읽히지 않게 수정 요청일 때만 준다(거부 사유와 같던 방식)
+      correctionReason:
+        c.status === 'CORRECTION_REQUESTED' ? c.correctionReason : null,
       resendCount: c.resendCount ?? 0,
       previousContractId: c.previousContractId,
       renewedBy: c.contractsAsPrevious[0]?.contractId ?? null,

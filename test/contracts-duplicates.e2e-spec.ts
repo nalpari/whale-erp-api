@@ -758,7 +758,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       );
     });
 
-    it('상세는 직원이 남긴 수정 요청 사유를 주고 거부 사유 칸은 없다 — 관리자가 고쳐 다시 보내도 남는다(WHALEERP-635)', async () => {
+    it('상세는 수정 요청된 계약에만 직원이 남긴 수정 요청 사유를 주고 거부 사유 칸은 없다 — 고쳐 다시 보내도 행에는 남는다(WHALEERP-635)', async () => {
       const phone = nextPhone();
       const { contractId } = await contracts.create(dto(phone), adminId);
       await prisma.contract.update({
@@ -772,10 +772,19 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       expect(requested.correctionReason).toBe('시급이 다릅니다');
       expect(requested).not.toHaveProperty('rejectReason');
 
+      // 고쳐 다시 보내면 행에는 남지만 상세는 수정 요청일 때만 준다
       await contracts.update(adminId, contractId, dto(phone));
       const resent = await contracts.findOne(adminId, contractId);
       expect(resent.status).toBe('PENDING_SEND');
-      expect(resent.correctionReason).toBe('시급이 다릅니다');
+      expect(resent.correctionReason).toBeNull();
+      expect(
+        (
+          await prisma.contract.findUniqueOrThrow({
+            where: { contractId },
+            select: { correctionReason: true },
+          })
+        ).correctionReason,
+      ).toBe('시급이 다릅니다');
     });
 
     it('발송 대기 계약을 종료로 닫으면 이력을 남기고 나간 초대를 무효로 한다 — 행은 남는다', async () => {

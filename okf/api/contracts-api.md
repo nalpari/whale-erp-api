@@ -579,9 +579,10 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
 - `firstSentAt` — the first history row into 발송 대기 or 서명 대기 (its DB time, so a few ms off the request time);
   `lastSentAt` — `contracts.sent_at`, rewritten on every send; `signDeadlineAt`; `lastProcessedAt` — the newest
   history row.
-- `correctionReason` — the last 수정 요청 사유 the 직원 wrote (1–100 chars, WHALEERP-635, 2026-10-30), given whatever the
-  status: a second request overwrites it and a 관리자 fix-and-resend keeps it, so the 화면 shows it only on 수정 요청. null
-  when there was no request or it came before reasons were taken. There is no 거부 사유 any more (`contracts.reject_reason`
+- `correctionReason` — the 수정 요청 사유 the 직원 wrote (1–100 chars, WHALEERP-635, 2026-10-30), only while the contract is
+  수정 요청 (null otherwise, and for a request made before reasons were taken). The column outlives a 관리자 fix-and-resend
+  and a second request overwrites it, but the detail hides it on other statuses so an old reason is not read as current
+  (as `rejectReason` used to be gated on 거부). There is no 거부 사유 any more (`contracts.reject_reason`
   dropped in `20261030120000_team3_contract_correction_reason`, old values not moved).
 - `resendCount` — `contracts.resend_count`, counted in `ContractDeliveryService.prepare` when a contract that had
   been sent is sent again (재발송, 수정 요청 고침, 근로자 정보 수정) and taken back by `undo` when the 알림톡 did not go
