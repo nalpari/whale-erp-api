@@ -735,7 +735,7 @@ export class BpAdminsService {
           !sameIds(stores.storeIds, target.storeIds);
         await record(tx, adminAccountId, by, [
           change('이름', row.name, input.name),
-          change('휴대전화', row.phone, input.phone),
+          change('연락처', row.phone, input.phone),
           change('이메일', row.email, input.email),
           change('권한 그룹', roleLabel(row.roleGroup), roleLabel(group)),
           storesChanged

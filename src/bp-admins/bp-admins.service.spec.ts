@@ -881,6 +881,11 @@ describe('BpAdminsService', () => {
       ]);
     });
 
+    it('전화번호 변경은 「연락처」로 남긴다 — 다른 관리자 계정 화면과 같은 이름', async () => {
+      await service.update(1, bp, 2, input(2, { phone: '0212345678' }));
+      expect(historyRows()).toEqual([partial({ field: '연락처' })]);
+    });
+
     it('범위 밖 매핑은 남긴다 — 일부 점포 담당이 범위 안 점포만 바꾼다', async () => {
       // 2(점포 1 · 2 담당)가 40(1 · 5)을 고쳐 1 을 빼고 2 를 더한다
       await service.update(2, bp, 40, input(40, { storeIds: [2] }));

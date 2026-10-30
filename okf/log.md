@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-30
+* **Update**: [BP admins](/api/bp-admins.md) — 전화번호 표기를 「휴대전화」에서 「연락처」로(2026-10-29 사용자 결정, front 요청). 400 문구 「연락처는 숫자 9~12자리입니다.」(플랫폼 관리자와 같음) · 본인 계정 403 문구 · 변경 이력 항목명. 이미 쌓인 이력 행의 「휴대전화」는 그대로 둔다. openapi 를 다시 내보내며 main 에 늦게 반영된 발송 이력 `isResend` 설명도 함께 바뀌었다. 마이그레이션 없음.
+
 ## 2026-10-29
 * **Update**: main 병합(api doduo, main #209 까지): okf 충돌은 양쪽 기록을 살렸다.
 * **Update**: main 병합(api doduo, main #202 까지): okf/log 충돌은 양쪽 기록을 살렸다.

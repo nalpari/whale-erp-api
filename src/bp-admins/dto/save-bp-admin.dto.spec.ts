@@ -2,7 +2,7 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { CreateBpAdminDto } from './save-bp-admin.dto';
 
-// BP 관리자 휴대전화는 점포 연락처와 같은 9~12자리다(DB CHECK admin_accounts_phone_format).
+// BP 관리자 연락처는 점포 연락처와 같은 9~12자리다(DB CHECK admin_accounts_phone_format).
 describe('CreateBpAdminDto phone', () => {
   const phoneErrors = (phone: unknown) =>
     validateSync(plainToInstance(CreateBpAdminDto, { phone }))
@@ -16,7 +16,7 @@ describe('CreateBpAdminDto phone', () => {
   it.each(['02123456', '0507203313345', '010-1234-5678'])(
     '%s 는 400 — 숫자 9~12자리만',
     (p) => {
-      expect(phoneErrors(p)).toEqual(['휴대전화는 숫자 9~12자리입니다.']);
+      expect(phoneErrors(p)).toEqual(['연락처는 숫자 9~12자리입니다.']);
     },
   );
 });
