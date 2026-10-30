@@ -492,6 +492,24 @@ ${link}`,
       expect(client.sendMessage).not.toHaveBeenCalled();
     });
 
+    it('버튼 링크 변수가 둘이면 보내지 않고 던진다 — 한 이름의 버튼만 등록한다', async () => {
+      findUnique.mockResolvedValue({
+        ...withLink(),
+        variables: [
+          ...withLink().variables,
+          { name: 'link2', isRequired: true, isButtonLink: true },
+        ],
+      });
+
+      await expect(
+        service.send({
+          ...invite,
+          variables: { name: '홍길동', link, link2: link },
+        }),
+      ).rejects.toThrow('버튼 링크는 하나만 쓸 수 있습니다');
+      expect(client.sendMessage).not.toHaveBeenCalled();
+    });
+
     it('버튼 링크(토큰)는 이력 · 로그에 남지 않는다', async () => {
       findUnique.mockResolvedValue(withLink());
 

@@ -25,7 +25,8 @@ export class BizppurioError extends Error {
 
 /**
  * 알림톡 버튼(`content.at.button`). 지금은 웹링크(WL)만 보낸다 — 이름은 카카오에 등록한 버튼 이름과 같아야 하고(28자까지),
- * WL 은 `url_mobile` 이 필수다. 템플릿에 버튼이 등록돼 있으면 요청에도 실어야 한다(비즈뿌리오 BIZAPI 레퍼런스).
+ * WL 은 `url_mobile` 이 필수다. 템플릿에 버튼이 등록돼 있으면 요청에도 실어야 한다(비즈뿌리오 BIZAPI 레퍼런스) — 빠지면
+ * 알림톡이 거절되고 대체 문자로 간다.
  */
 export type AlimtalkButton = {
   name: string;

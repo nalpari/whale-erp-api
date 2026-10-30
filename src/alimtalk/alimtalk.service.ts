@@ -221,9 +221,10 @@ export class AlimtalkService {
 }
 
 /**
- * 버튼 링크 값마다 웹링크(WL) 버튼 하나. PC 카카오톡에도 보이게 모바일 · PC 링크를 같은 값으로 싣는다(PC 링크가 없으면
- * PC 에서는 버튼이 보이지 않는다 — 직원 근무 앱은 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 이름이 정해지지 않은 템플릿 · 웹 주소가 아닌 링크는 보내기 전에 던진다 — 오류 메시지에
- * 링크(토큰)는 담지 않는다. 링크가 없으면(선택 변수를 비움) 버튼도 없다.
+ * 버튼 링크 값을 웹링크(WL) 버튼 하나로. PC 카카오톡에도 보이게 모바일 · PC 링크를 같은 값으로 싣는다(직원 근무 앱은
+ * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 이름이 정해지지 않은 템플릿, 웹 주소가 아닌 링크, 버튼 링크
+ * 변수가 둘 이상인 템플릿(한 이름의 버튼만 등록한다)은 보내기 전에 던진다 — 오류 메시지에 링크(토큰)는 담지 않는다.
+ * 링크가 없으면(선택 변수를 비움) 버튼도 없다 — 버튼을 등록한 템플릿이면 알림톡은 거절되고 대체 문자로 간다.
  */
 function buttonsOf(
   templateCode: string,
@@ -235,6 +236,10 @@ function buttonsOf(
     : undefined;
   if (!name)
     throw new Error(`알림톡 템플릿 ${templateCode} 의 버튼 이름이 없습니다`);
+  if (links.length > 1)
+    throw new Error(
+      `알림톡 템플릿 ${templateCode} 의 버튼 링크는 하나만 쓸 수 있습니다`,
+    );
   if (!links.every((link) => WEB_URL.test(link)))
     throw new Error(
       `알림톡 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,

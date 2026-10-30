@@ -74,10 +74,11 @@ button must be sent with it). It lives in code, `ALIMTALK_BUTTON_NAMES` keyed by
 `templateCode` — not in the template's variable list, because the template admin screen keeps
 only the fields it knows and one save there would wipe it (the mail button's 「바로가기」 is
 in code too). A template with a button-link value but no entry there, or a link that is not
-http(s), throws before anything is sent; the error carries the template code, never the link.
+http(s), or more than one button-link value (one named button is registered per template), throws
+before anything is sent; the error carries the template code, never the link.
 An optional link left empty sends no button. The two names (`TALK_STAFF_INVITATION` 「가입하기」,
 `TALK_STAFF_AFFILIATION_REQUEST` 「요청 확인하기」) and the same link for PC were fixed by 재영
-(2026-10-30); Kakao is registered with them. The link is registered as a fixed domain per
+(2026-10-30); the templates will be registered with Kakao under them (not yet approved). The link is registered as a fixed domain per
 environment with the path as a variable (`/invite#token=…`, `/affiliations`) — whether Kakao
 accepts a `#` in the variable part is still to be confirmed at registration.
 

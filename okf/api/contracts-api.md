@@ -786,7 +786,7 @@ resent — a new contract instead.
 - The 알림톡 carries the 초대 링크 as a web-link button (WHALEERP-636, name in
   `ALIMTALK_BUTTON_NAMES` — see [Kakao Alimtalk](/api/alimtalk.md)). The new body and the button
   still wait for Kakao to approve them, and a rejected 알림톡 is only seen in the result report — so
-  **a 가입 초대 without `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until the text
+  **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until the text
   and button are approved (api #74 review; the fallback carries the body with the code and the link).
 - Template `TALK_STAFF_INVITATION` moved to 근무지 · 초대코드 · 링크 (초대 링크),
   `invitations.invitation_code_hash` was added, and every `SENT` 가입 초대 without a code (sent
