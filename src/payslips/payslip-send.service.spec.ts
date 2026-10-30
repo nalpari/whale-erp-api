@@ -102,7 +102,9 @@ describe('PayslipSendService', () => {
   type Args = { where: Record<string, unknown>; data: Record<string, unknown> };
   const call = (mock: jest.Mock, i = 0) =>
     (mock.mock.calls as unknown[][])[i][0] as Args;
-  const send = () => service.send(9, 40, { updatedAt: UPDATED });
+  // 가드가 정한 대상 BP — 보낸 · 바꾼 뒤 상세도 이 BP 로 다시 읽는다(WHALEERP-637)
+  const bp = { bpCodeId: 2, isPlatformCaller: false };
+  const send = () => service.send(9, 40, { updatedAt: UPDATED }, bp);
 
   describe('send (발송)', () => {
     it('관리 범위 밖 · 가려지는 명세서는 404', async () => {
@@ -152,6 +154,7 @@ describe('PayslipSendService', () => {
 
     it('읽은 상태 · updatedAt 으로 먼저 잡고 메일을 보낸 뒤, 발송 완료 · 발송 이력(성공) · 처리 이력(발송)', async () => {
       await expect(send()).resolves.toEqual({ payslipId: 40 });
+      expect(detail.findOne).toHaveBeenLastCalledWith(9, 40, bp);
       const claim = call(prisma.payslip.updateMany, 0);
       const claimedAt = claim.data.updatedAt as Date;
       expect(claimedAt).toBeInstanceOf(Date);
@@ -301,11 +304,12 @@ describe('PayslipSendService', () => {
   });
 
   describe('resend (재발송)', () => {
-    const resend = () => service.resend(9, 40, { updatedAt: UPDATED });
+    const resend = () => service.resend(9, 40, { updatedAt: UPDATED }, bp);
 
     it('발송 완료만 — 재발송 템플릿, 상태는 그대로라 처리 이력의 상태 칸은 비운다', async () => {
       prisma.payslip.findFirst.mockResolvedValue(row({ status: 'SENT' }));
       await expect(resend()).resolves.toEqual({ payslipId: 40 });
+      expect(detail.findOne).toHaveBeenLastCalledWith(9, 40, bp);
       expect(call(prisma.payslip.updateMany, 0).where).toMatchObject({
         status: 'SENT',
       });

@@ -42,6 +42,9 @@ import type {
   ProxyStaffResponseDto,
 } from './dto/attendance-edit.dto';
 import type { AttendanceStoresQueryDto } from './dto/attendance-records.dto';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
+import { targetStores } from '../admin-scope/target-stores';
+import { ATTENDANCE_BP_NOT_CHOSEN } from './attendance-target-bp';
 
 type Tx = Prisma.TransactionClient;
 
@@ -192,8 +195,9 @@ export class AttendanceEditService {
     adminAccountId: number,
     recordId: number,
     dto: CorrectAttendanceDto,
+    bp?: TargetBpContext,
   ): Promise<AttendanceEditResultDto> {
-    const access = await this.access(adminAccountId);
+    const access = await this.access(adminAccountId, bp);
     return this.prisma.$transaction(async (tx) => {
       const pair = await this.lockedPair(tx, access, recordId);
       const day = pair.day;
@@ -360,8 +364,9 @@ export class AttendanceEditService {
   async review(
     adminAccountId: number,
     recordId: number,
+    bp?: TargetBpContext,
   ): Promise<AttendanceEditResultDto> {
-    const access = await this.access(adminAccountId);
+    const access = await this.access(adminAccountId, bp);
     return this.prisma.$transaction(async (tx) => {
       const pair = await this.lockedPair(tx, access, recordId);
       if (!pair.hasReason)
@@ -407,8 +412,9 @@ export class AttendanceEditService {
   async proxy(
     adminAccountId: number,
     dto: ProxyAttendanceDto,
+    bp?: TargetBpContext,
   ): Promise<AttendanceEditResultDto> {
-    const access = await this.access(adminAccountId);
+    const access = await this.access(adminAccountId, bp);
     const day = toDate(dto.date);
     assertEditable(day);
     if (day.getTime() > kstToday().getTime())
@@ -615,8 +621,9 @@ export class AttendanceEditService {
     adminAccountId: number,
     stores: AttendanceStoresQueryDto,
     dateYmd: string,
+    bp?: TargetBpContext,
   ): Promise<ProxyStaffResponseDto> {
-    const access = await this.access(adminAccountId);
+    const access = await this.access(adminAccountId, bp);
     const day = toDate(dateYmd);
     const storeIds = access.storeIds.filter(
       (id) =>
@@ -677,15 +684,22 @@ export class AttendanceEditService {
   async history(
     adminAccountId: number,
     recordId: number,
+    bp?: TargetBpContext,
   ): Promise<AttendanceHistoryResponseDto> {
-    const access = await this.access(adminAccountId);
+    const access = await this.access(adminAccountId, bp);
     const pair = await this.pairOf(this.prisma, access, recordId);
     return { items: await editHistory(this.prisma, pair.ids) };
   }
 
   /** 관리 점포와 본사에게 가려지는지. 사용 중인 관리자 계정이 아니면 403 */
-  private async access(adminAccountId: number) {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+  private async access(adminAccountId: number, bp?: TargetBpContext) {
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      ATTENDANCE_BP_NOT_CHOSEN,
+    );
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
     return {
