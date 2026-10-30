@@ -6,7 +6,7 @@ import { TOKEN_PATH } from '../alimtalk/failure-reason';
 export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
 /**
  * 소속 추가 확인 요청 알림톡 · 메일(사업자 · 근무지 · 고용형태 · 링크=직원 앱 요청 화면, WHALEERP-130 · 2026-10-26 재영). 카카오
- * 템플릿 WHALE_AFFILIATION_01 은 등록 · 검수 전이라 알림톡이 거절되고 대체 문자로 간다(가입 초대와 같다). 메일은 계정의 이메일로 —
+ * 템플릿 WHALE_AFFILIATION_01 은 등록 · 검수 전이라 알림톡이 거절되고 대체 문자로 간다(가입 초대는 2026-10-30 등록). 메일은 계정의 이메일로 —
  * 알림톡과 따로 가고 실패해도 저장을 되돌리지 않는다.
  */
 export const AFFILIATION_TEMPLATE = 'TALK_STAFF_AFFILIATION_REQUEST';

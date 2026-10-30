@@ -809,7 +809,7 @@ resent — a new contract instead.
 - The 알림톡 carries the 초대 링크 as a web-link button (WHALEERP-636, name in
   `ALIMTALK_BUTTONS` — see [Kakao Alimtalk](/api/alimtalk.md)). The 가입 초대 is registered with Kakao
   (2026-10-30, the DB body matches it) but the button URL form is still being checked, the 소속 추가 확인 요청
-  is not registered yet, and a server whose `STAFF_APP_URL` differs from the registered link (dev) is rejected;
+  is not registered yet, and a server whose `STAFF_APP_URL` differs from the registered link (dev) may be rejected;
   a rejected 알림톡 is only seen in the result report — so
   **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until both
   are registered and confirmed (api #74 review; the fallback carries the body with the code and the link).
@@ -820,7 +820,8 @@ resent — a new contract instead.
   before; the old `/invite/{token}` link) was made `EXPIRED` — the 관리자 sends again — with migration
   `20261020144028_team3_staff_invitation_code` — deploy right after the merge (the code passes `초대코드`; before the
   migration every 가입 초대 fails as an unknown variable and the save is undone). The Kakao
-  template text has to be re-approved to match.
+  template text has to be re-approved to match (registered 2026-10-30 under `TALK_STAFF_INVITATION` —
+  `20261030174743_team3_staff_invitation_kakao_registered`).
 - `ContractsModule` imports `AlimtalkModule`, so **the api does not start without
   `BIZPPURIO_*`** (2026-10-16 김민식 결정: required). e2e (`test/e2e-env.ts`) and
   `openapi:export` fill format-only values when they are empty.
