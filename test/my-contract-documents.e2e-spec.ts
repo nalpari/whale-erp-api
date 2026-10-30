@@ -171,6 +171,13 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
     sentAt: Date = new Date(),
   ) {
     const storageKey = `contracts/${contractId}/${randomUUID()}.pdf`;
+    // 보낸 원본 · 처리 완료본은 계약이 보낸 것 — 보낸 적 없는 계약이면 그 발송 일시를 계약에도 적는다(직원 앱은 지금
+    // 발송분의 보낸 원본만 보인다)
+    if (kind === 'SENT_ORIGINAL' || kind === 'SIGNED_COPY')
+      await prisma.contract.updateMany({
+        where: { contractId, sentAt: null },
+        data: { sentAt },
+      });
     const { contractDocumentId } = await prisma.contractDocument.create({
       data: {
         contractId,
