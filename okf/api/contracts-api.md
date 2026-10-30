@@ -809,8 +809,7 @@ resent — a new contract instead.
 - The 알림톡 carries the 초대 링크 as a web-link button (WHALEERP-636, name in
   `ALIMTALK_BUTTONS` — see [Kakao Alimtalk](/api/alimtalk.md)). The 가입 초대 is registered with Kakao
   (2026-10-30, the DB body matches it) but the button URL form is still being checked, the 소속 추가 확인 요청
-  is not registered yet, and a server whose `STAFF_APP_URL` differs from the registered link (dev) may be rejected;
-  a rejected 알림톡 is only seen in the result report — so
+  is not registered yet; a rejected 알림톡 is only seen in the result report — so
   **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until both
   are registered and confirmed (api #74 review; the fallback carries the body with the code and the link).
   The same pre-check is also 503 「… 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.」 when the template's button setup

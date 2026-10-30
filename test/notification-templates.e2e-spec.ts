@@ -221,7 +221,17 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       defaultBody: registered,
       kakaoTemplateCode: 'TALK_STAFF_INVITATION',
     });
-    // 발송 코드가 넘기는 변수(근무지 · 초대코드 · 링크=버튼 링크)와 맞는 기본 변수 목록
+    // 발송 코드가 넘기는 변수(근무지 · 초대코드 · 링크=버튼 링크)만 있고, 버튼 링크 표시는 링크 하나에만
+    const variables = row.variables as {
+      name: string;
+      isButtonLink?: boolean;
+    }[];
+    expect(variables.map((v) => v.name).sort()).toEqual(
+      ['근무지', '링크', '초대코드'].sort(),
+    );
+    expect(variables.filter((v) => v.isButtonLink).map((v) => v.name)).toEqual([
+      '링크',
+    ]);
     expect(row.variables).toEqual(row.defaultVariables);
   });
 

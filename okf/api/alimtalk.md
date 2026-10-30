@@ -94,9 +94,9 @@ the DB body and `kakao_template_code` match it, [Notification templates](/api/no
 whether the button URL is sent with or without `https://` is still being checked with Bizppurio);
 `TALK_STAFF_AFFILIATION_REQUEST` is not registered yet. The link
 is built from `STAFF_APP_URL` as before (`/invite#token=…`, `/affiliations`) and there is one Kakao
-template per message, not one per environment (재영 2026-10-30) — so a send from a server whose
-`STAFF_APP_URL` differs from the registered link (the dev server) may be rejected as an 알림톡 and
-reach the 직원 only as the SMS fallback.
+template per message, not one per environment (재영 2026-10-30). The registered invite button link is
+`https://#{가입링크}` — the whole address is a variable, so the dev server's `STAFF_APP_URL` does not
+make it differ.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`
@@ -135,8 +135,8 @@ Every `BizppurioError` carries `path` (`/v1/token` or `/v3/message`): a failure 
 (not a mobile number, bad `related` · `sentBy`, template off, variables that do not
 match) is thrown before any request too. `isMobilePhone` lets a caller run the number
 check before it writes, and `hasSmsFallback()` says whether `BIZPPURIO_SMS_FROM` is set —
-the only way a button link reaches anyone when Kakao rejects the 알림톡 — an unapproved body or button,
-or a link that differs from the registered one (dev server), makes the 알림톡 itself fail (근로계약 가입 초대 ·
+the only way a button link reaches anyone when Kakao rejects the 알림톡 — an unapproved body or button
+makes the 알림톡 itself fail (근로계약 가입 초대 ·
 소속 추가 확인 요청 require it: 소속 추가 is not registered yet and the invite's button URL form is still
 open — api #74 review).
 
