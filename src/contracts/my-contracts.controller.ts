@@ -126,10 +126,7 @@ export class MyContractsController {
     );
   }
 
-  /**
-   * 거부 — 사유는 받지 않는다(WHALEERP-635). 본문을 읽지 않아(@Body 없음) 사유를 싣던 옛 직원 앱의 요청도 400 없이 받는다 —
-   * 전역 ValidationPipe 의 forbidNonWhitelisted 는 @Body 로 받는 DTO 에만 걸린다.
-   */
+  /** 거부 — 사유는 받지 않는다(WHALEERP-635, 본문은 읽지 않는다) */
   @Post(':contractId/reject')
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: MyContractActionResponseDto })
@@ -138,6 +135,8 @@ export class MyContractsController {
     @Param('contractId', ContractIdPipe) contractId: number,
     @CurrentUser() user: AuthUser,
   ): Promise<MyContractActionResponseDto> {
+    // @Body 를 두지 않아 사유를 싣던 옛 직원 앱의 요청도 400 없이 받는다 — 전역 ValidationPipe 의 forbidNonWhitelisted 는 @Body 로
+    // 받는 DTO 에만 걸린다
     return this.contracts.reject(user.id, contractId);
   }
 

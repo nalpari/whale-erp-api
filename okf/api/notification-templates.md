@@ -6,6 +6,10 @@ tags: [notifications, templates, admin, platform]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
 sources:
+  - id: reject-notices-without-reason
+    resource: ../../prisma/migrations/20261030120100_team3_reject_notices_without_reason/migration.sql
+    title: 근로계약 거부 · 소속 추가 거절 알림 4건에서 사유 줄 · 변수를 뺌 (WHALEERP-635)
+    last_modified: 2026-10-30T10:00:00Z
   - id: wording-cleanup
     resource: ../../prisma/migrations/20261030093710_team3_notification_template_wording/migration.sql
     title: 기본 문구 42건을 「알림톡_템플릿_20261029.xlsx」 새 문구로 (운영자가 고친 문구는 그대로)

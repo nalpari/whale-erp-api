@@ -595,8 +595,10 @@ table document:
   the generator the 2026-10-20 way: a copy of front's catalog was generated before and after the change (the only drift
   was line endings), and the difference (`schema.sql` three lines, the table document) was applied here, with
   `schema.prisma` edited by hand (two fields) and front's `docs/erd/README.md` and physical screens changed in the
-  front PR. Dropping a column breaks the old code's default `SELECT *` on `contracts`, so the API deploy should be
-  migrate-then-start with no old instance left running.
+  front PR. Prisma lists every column in a query without `select`, so after this migration an old build fails on
+  `reject_reason` and before it a new build fails on `correction_reason` — reads and writes of `contracts` ·
+  `invitations` are 500 (42703) in between. Swap the container right after `db:deploy`, and any other local api on
+  the shared dev DB must pull main and run `prisma generate` again.
 - **The e-mail change pin is its own table, ahead of the logical ERD**
   (WHALEERP-191, 2026-10-20 노영주). `email_change_pins` keeps the same rules as
   the reset pin (hash only, five misses close it, 1-minute interval, 10 a day)
