@@ -42,7 +42,6 @@ import {
   UpdatePlatformRoleGroupDto,
 } from '../platform-role-groups/dto/save-platform-role-group.dto';
 import { NOT_FOUND } from '../platform-role-groups/platform-role-group-format';
-import { BP_ROLE_MENU } from './bp-role-group-access';
 import { BpRoleGroupMenusService } from './bp-role-group-menus.service';
 import { BpRoleGroupsService } from './bp-role-groups.service';
 import {
@@ -56,7 +55,7 @@ const NOT_FOUND_DESCRIPTION =
   '없거나 지운 권한 · 호출자 범위 밖 그룹(고정 권한 · 플랫폼 권한 · 다른 가맹 마스터의 FA 포함)';
 
 /**
- * BP 권한 그룹 관리(MN000013, /bp-role-groups). 경로마다 `@MenuPermission` 가드가 메뉴 권한(조회 · 등록 · 수정 ·
+ * BP 권한 그룹 관리(/bp-role-groups, 현재 MN000013). 경로마다 `@MenuPermission` 가드가 메뉴 권한(조회 · 등록 · 수정 ·
  * 삭제)과 대상 BP(X-Bp-Code-Id → `@TargetBp()`)를 정하고, 그다음 서비스가 역할 범위를 본다 — BM 은 그 BP 의 BA, FM 은
  * 본인 FA 만 쓰고, 나머지는 조회만 한다. 플랫폼 사용자는 헤더로 고객 BP 를 보내야 한다(없으면 400). 버튼 노출은
  * 화면이 메뉴 권한(usePagePermission)과 응답의 역할 플래그를 합쳐 정한다.
@@ -85,7 +84,7 @@ export class BpRoleGroupsController {
 
   /** 목록 — 권한 코드 순(BA 다음 FA), 쪽 나눔. creatableRoleTypeCode 는 역할로 정한 등록 유형이다. */
   @Get()
-  @MenuPermission(BP_ROLE_MENU, 'read')
+  @MenuPermission('read')
   async list(
     @CurrentUser() user: AuthUser,
     @TargetBp() bp: TargetBpContext,
@@ -100,7 +99,7 @@ export class BpRoleGroupsController {
 
   /** 등록 — BM 은 BA, FM 은 FA(관리계정 = 본인). 유형은 받지 않는다. */
   @Post()
-  @MenuPermission(BP_ROLE_MENU, 'create')
+  @MenuPermission('create')
   @ApiConflictResponse({
     description: '같은 이름의 권한(같은 BP · 같은 관리계정) · 권한 코드 소진',
   })
@@ -114,7 +113,7 @@ export class BpRoleGroupsController {
 
   /** 가맹마스터 보기 — FM000001 메뉴 트리, 모든 칸 읽기 전용. 가맹 관리자는 403. `:id` 보다 먼저 둔다. */
   @Get('franchise-master/menus')
-  @MenuPermission(BP_ROLE_MENU, 'read')
+  @MenuPermission('read')
   async franchiseMasterMenus(
     @CurrentUser() user: AuthUser,
     @TargetBp() bp: TargetBpContext,
@@ -126,7 +125,7 @@ export class BpRoleGroupsController {
 
   /** 상세 — 역할로 고칠 수 있는지 · 지울 수 있는지와 막힌 이유. */
   @Get(':id')
-  @MenuPermission(BP_ROLE_MENU, 'read')
+  @MenuPermission('read')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   async detail(
     @CurrentUser() user: AuthUser,
@@ -139,7 +138,7 @@ export class BpRoleGroupsController {
 
   /** 권한명 · 설명 수정. 상세의 updatedAt 을 함께 보낸다 — 그 사이 고쳐졌으면 409. */
   @Put(':id')
-  @MenuPermission(BP_ROLE_MENU, 'update')
+  @MenuPermission('update')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
@@ -156,7 +155,7 @@ export class BpRoleGroupsController {
 
   /** 메뉴 등록 팝업의 트리 — WHALE_ERP 메뉴, 칸마다 현재 값 · 바꿀 수 있는지 · 막힌 이유. */
   @Get(':id/menus')
-  @MenuPermission(BP_ROLE_MENU, 'read')
+  @MenuPermission('read')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   async menus(
     @CurrentUser() user: AuthUser,
@@ -169,7 +168,7 @@ export class BpRoleGroupsController {
 
   /** 메뉴 권한 저장 — 메뉴별 네 칸 + updatedAt. 응답의 updatedAt 으로 다음 저장을 한다. */
   @Put(':id/menus')
-  @MenuPermission(BP_ROLE_MENU, 'update')
+  @MenuPermission('update')
   @ApiBadRequestResponse({
     description:
       '숨긴 · 없는 메뉴, 같은 메뉴 두 번, 조회 없는 등록 · 수정 · 삭제, 상한(기준 고정 권한 ∩ 본인 권한) 밖 칸',
@@ -195,7 +194,7 @@ export class BpRoleGroupsController {
    * 같은 400 검사만 하고 역할 · 본인 연결 · updatedAt 은 보지 않는다.
    */
   @Post(':id/menus/preview')
-  @MenuPermission(BP_ROLE_MENU, 'read')
+  @MenuPermission('read')
   @HttpCode(HttpStatus.OK)
   @ApiBadRequestResponse({ description: '저장과 같은 검사' })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
@@ -215,7 +214,7 @@ export class BpRoleGroupsController {
 
   /** 삭제 대화상자 — 옮길 연결 사용자와 대체 후보(같은 BP · 유형 · 관리계정). */
   @Get(':id/deletion-candidates')
-  @MenuPermission(BP_ROLE_MENU, 'read')
+  @MenuPermission('read')
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   async deletionCandidates(
     @CurrentUser() user: AuthUser,
@@ -231,7 +230,7 @@ export class BpRoleGroupsController {
 
   /** 삭제(논리 삭제). 연결 사용자가 있으면 대체 그룹으로 옮긴 뒤 지운다. 지운 권한 코드는 다시 쓰지 않는다. */
   @Delete(':id')
-  @MenuPermission(BP_ROLE_MENU, 'delete')
+  @MenuPermission('delete')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNoContentResponse()
   @ApiBadRequestResponse({

@@ -4,16 +4,16 @@ title: BP role groups
 description: 관리자 웹 「BP 권한 그룹 관리」(MN000013) — BA · FA groups scoped by the caller's role, codes numbered per type, names unique per (BP, 관리계정), per-menu CRUD capped by the fixed role ∩ the caller's own rights, and deletion that moves linked admins.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:27:29Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T05:13:46Z }
 sources:
   - id: bp-role-groups-controller
     resource: ../../src/bp-role-groups/bp-role-groups.controller.ts
-    title: /bp-role-groups routes and the MN000013 permission per action
-    last_modified: 2026-10-30T02:27:29Z
+    title: /bp-role-groups routes and the menu permission per action (path form)
+    last_modified: 2026-10-30T05:13:46Z
   - id: bp-role-group-access
     resource: ../../src/bp-role-groups/bp-role-group-access.ts
     title: Caller scope, visible groups, writable type, cell block reasons, ceiling intersection
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T05:13:46Z
   - id: bp-role-groups-service
     resource: ../../src/bp-role-groups/bp-role-groups.service.ts
     title: BpRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
@@ -41,7 +41,9 @@ FM000001. The request is the 2026-10-20 「BP 권한 그룹 API 요청서」(제
 
 # Two checks, and who does which
 
-Every route carries `@MenuPermission(MN000013, action)` (no `platformOnly` — platform users read here),
+Every route carries the path form `@MenuPermission(action)` — judged by the menu whose URL is
+`/bp-role-groups` (now MN000013; until 2026-10-30 it named `MN000013` directly, which left the URL
+out of the API 권한 주소) — with no `platformOnly`, since platform users read here,
 then the service reads the caller (`MenuPermissionsService.caller`) and applies the
 role scope. **Button visibility is the screen's job**: 관리자 웹's `usePagePermission()` already
 holds the caller's MN000013 rights from login-info, and the api answers only the role part —
