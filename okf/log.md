@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-10-30
+* **Update**: [Payslips](/api/payslips.md) — api #206 재리뷰(재영 2026-10-30): 확정 가능일의 계약 종료일을 끄는 갱신에서 임시저장을 뺐다(`SENT_RENEWAL` — 발송 대기 · 서명 대기 · 수정 요청). 보내지 않은 임시저장 갱신 하나로 일찍 확정하지 못하던 것 — 「가장 최근 계약」(`NOT_IDLE_RENEWAL`)도 임시저장 재계약을 뺀다. 422 · Swagger 설명도 맞췄다. 단위 · e2e(임시저장 갱신이면 200).
+
 ## 2026-10-29
 * **Update**: main 병합(api electabuzz, main #208 · #209 까지): src/payslips/payslip-attendance-reasons.ts 충돌은 이 브랜치의 확인 필요 문구(`flaggedDetail`)를 남기고 main 의 문구 끝 마침표 규칙(1a37ed4e)을 맞췄다 — 422 PERIOD_NOT_ENDED 문구에도 마침표. okf 시각 충돌은 늦은 값, okf/log 는 양쪽 기록을 살렸다.
 * **Update**: [Payslips](/api/payslips.md) — api #206 최종 리뷰 블로커: 확정 가능일의 계약 종료일 앞당김을 그 계약들의 진행 중 갱신(`IN_PROGRESS` · `previousContractId`, 체결 전)이 급여 기간 마지막 날까지 시작하면(시작일 없는 것 포함) 쓰지 않는다 — 무관하게 남은 옛 임시저장은 치지 않는다 — 갱신 계약이 서명 대기인데 기간 중에 확정되어 남은 날 근무가 빠지던 것. 퇴직일은 그대로 본다. 422 문구 · Swagger 설명도 맞췄다. 단위 · e2e(계약 종료 다음 날 확정 200 · 갱신 서명 대기면 422 · 다음 달 시작 갱신이면 200).

@@ -249,7 +249,7 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
       );
     });
 
-    it('그 계약의 진행 중 갱신(체결 전)이 있으면 계약 종료일은 보지 않는다 — 퇴직일은 본다(api #206 리뷰)', async () => {
+    it('그 계약의 보낸 갱신(체결 전, 임시저장 제외)이 있으면 계약 종료일은 보지 않는다 — 퇴직일은 본다(api #206 리뷰)', async () => {
       count.mockResolvedValue(1);
       expect(await from([contract('2026-10-15')])).toBe('2026-11-01');
       expect(await from([contract('2026-10-15')], '2026-10-20')).toBe(
@@ -259,12 +259,8 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
         where: {
           staffMemberId: 7,
           status: {
-            in: [
-              'DRAFT',
-              'PENDING_SEND',
-              'PENDING_SIGNATURE',
-              'CORRECTION_REQUESTED',
-            ],
+            // 임시저장은 보내지 않아 치지 않는다(2026-10-30 재영)
+            in: ['PENDING_SEND', 'PENDING_SIGNATURE', 'CORRECTION_REQUESTED'],
           },
           // 급여 기간 계약의 갱신만, 급여 기간 마지막 날까지 시작하는 것만 — 다음 달에 시작하는 갱신은 남은 날을 메우지 않는다
           previousContractId: { in: [1] },

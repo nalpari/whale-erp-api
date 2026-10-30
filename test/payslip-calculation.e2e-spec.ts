@@ -615,7 +615,7 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     }
   });
 
-  it('기간 중 계약이 끝나면 다음 날부터 확정된다 — 그 계약의 갱신이 서명 대기면 막고, 다음 달에 시작하는 갱신은 막지 않는다(운영 정책 PAY-06 v251, api #206 리뷰)', async () => {
+  it('기간 중 계약이 끝나면 다음 날부터 확정된다 — 그 계약의 갱신이 서명 대기면 막고, 임시저장이거나 다음 달에 시작하는 갱신은 막지 않는다(운영 정책 PAY-06 v251, api #206 리뷰)', async () => {
     const { periodEndDate, status } = await prisma.payslip.findUniqueOrThrow({
       where: { payslipId },
     });
@@ -663,6 +663,18 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       }));
       const blocked = await confirm(422);
       expect((blocked.body as { code: string }).code).toBe('PERIOD_NOT_ENDED');
+
+      // 임시저장 갱신은 보내지 않았으니 막지 않는다(2026-10-30 재영, api #206 재리뷰)
+      await prisma.contract.update({
+        where: { contractId: renewalId },
+        data: { status: 'DRAFT' },
+      });
+      await confirm(200);
+      await cancel();
+      await prisma.contract.update({
+        where: { contractId: renewalId },
+        data: { status: 'PENDING_SIGNATURE' },
+      });
 
       // 갱신이 급여 기간 뒤(내일)에 시작하면 남은 날을 메우지 않는다 — 다시 확정된다
       await prisma.contract.update({
