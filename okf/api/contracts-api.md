@@ -1,7 +1,7 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:00:00Z }
@@ -14,6 +14,14 @@ sources:
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
     last_modified: 2026-10-30T06:00:00Z
+  - id: minimum-wage
+    resource: ../../src/contracts/minimum-wage.ts
+    title: 최저임금 공통코드 · 수습 중 시급 검사
+    last_modified: 2026-10-30T07:40:00Z
+  - id: minimum-wage-migration
+    resource: ../../prisma/migrations/20261030145813_team3_minimum_wage_code/migration.sql
+    title: 최저임금 공통코드 데이터 마이그레이션
+    last_modified: 2026-10-30T07:40:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -408,9 +416,24 @@ left for it.
 `probationWageReductionRate` (%, 0–10) go together or not at all (the DB CHECK
 `contracts_probation_pair` too). 수습 is only for 정직원 whose contract runs a
 year or more (end ≥ start + 1 year − 1 day) or has no end date (노무사 확인
-2026-10-14, 질문 19). The 90%-of-minimum-wage floor is checked by the 화면 only,
-until the minimum wage is managed in the system like a 공통코드 (2026-10-15).
-`GET` returns all three.
+2026-10-14, 질문 19). `GET` returns all three.
+
+**최저임금 90%** (WHALEERP-595, 2026-10-30 김민식 — 최저임금은 공통코드 하나로, 별도 테이블 없음,
+시행일마다 행을 늘리지 않고 값을 매년 고친다). With 수습 and 시급, `POST` · `PUT` (임시저장 too) check
+that 수습 중 시급 — `round(wageAmount × (100 − rate) / 100)` — is at least 90% (원 미만 올림) of the
+**current** minimum wage: 공통코드 `MINIMUM_WAGE` · 상세 `HOURLY` (플랫폼고정, BP000000 원본), 코드명 =
+시급 in 원, digits only (`10320`; `src/contracts/minimum-wage.ts`). The contract's `startDate` does
+not matter — a contract that started earlier (e.g. a late 종이 계약) is checked against today's value,
+and until the value is updated in January the previous year's applies (accepted by 김민식). Below it →
+400 「수습 중 시급은 최저임금의 90%(9,288원) 이상이어야 합니다.」 (the 원 amount is that floor). If the
+code is missing (or deleted), 사용 중지 (상세 or 그룹), or its 코드명 is not a number ≥ 1, saving such a
+contract is 400 with that cause (임시저장 is still saved — a setting problem should not lose a draft; 초안 저장 checks again) — 「최저임금 공통코드(MINIMUM_WAGE · HOURLY)가 없어 / 사용 중지되어 /
+의 코드명이 숫자가 아니어서 수습 중 시급을 확인할 수 없습니다. 플랫폼 관리자에게 문의해 주세요.」 — so the
+check never turns off silently. Without 수습 or 시급 the code is not read; it is read after the 범위 checks (403 · 404). The 계약서 본문 (`contract-template.ts`) prints 수습 중 시급 with the same integer formula. Migration
+`20261030145813_team3_minimum_wage_code` seeds 10,320원; update the 코드명 in 공통코드 관리 after the 고시
+(August) and before 1 January. `GET /contracts/minimum-wage` (작성 or 수정 권한) returns
+`{ hourlyWage, problem }` — the current value, or `hourlyWage: null` with the 400 sentence — for the
+작성 화면's 시급 help and 수습 check.
 
 **초대 유형 is decided, not sent.** On 초안 저장 (a new `POST`, or a `PUT` that
 leaves 임시저장) the newest account with that phone decides it: none → 가입 초대
