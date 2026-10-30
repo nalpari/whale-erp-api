@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
+import { ALIMTALK_BUTTON_NAMES } from '../alimtalk/alimtalk-buttons';
 import { AlimtalkService } from '../alimtalk/alimtalk.service';
 import { BizppurioError } from '../alimtalk/bizppurio.client';
 import { noticeStaff } from '../notifications/staff-notice';
@@ -690,6 +691,29 @@ describe('ContractDeliveryService', () => {
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('inactive'));
       } finally {
         warn.mockRestore();
+      }
+    });
+
+    it('버튼 링크가 있는데 그 템플릿 코드의 버튼 이름이 없으면 쓰기 전에 503(api #219)', async () => {
+      const names = ALIMTALK_BUTTON_NAMES as Record<string, string>;
+      const saved = names.TALK_STAFF_INVITATION;
+      delete names.TALK_STAFF_INVITATION;
+      try {
+        tx.notificationTemplate.findUnique.mockResolvedValue({
+          isActive: true,
+          channel: 'ALIMTALK',
+          title: null,
+          body: '…',
+          variables: [{ name: '링크', isButtonLink: true }],
+          kakaoTemplateCode: 'WHALE_INVITE_01',
+        });
+        await expect(service().prepare(t(), input(), NOW)).rejects.toThrow(
+          '가입 초대 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.',
+        );
+        expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+        expect(tx.contract.update).not.toHaveBeenCalled();
+      } finally {
+        names.TALK_STAFF_INVITATION = saved;
       }
     });
 

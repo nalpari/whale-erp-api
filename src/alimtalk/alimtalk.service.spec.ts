@@ -478,6 +478,18 @@ ${link}`,
       expect(create).not.toHaveBeenCalled();
     });
 
+    it('버튼 이름이 없는 템플릿은 선택 링크를 비워도 던진다 — 설정 오류를 그대로 내보내지 않는다', async () => {
+      findUnique.mockResolvedValue({
+        ...withLink(false),
+        templateCode: 'TALK_SCHEDULE',
+      });
+
+      await expect(
+        service.send({ ...input, variables: { name: '홍길동' } }),
+      ).rejects.toThrow('알림톡 템플릿 TALK_SCHEDULE 의 버튼 이름이 없습니다');
+      expect(client.sendMessage).not.toHaveBeenCalled();
+    });
+
     it('웹 주소가 아닌 버튼 링크는 보내지 않고 던진다 — 오류에 링크가 없다', async () => {
       findUnique.mockResolvedValue(withLink());
 

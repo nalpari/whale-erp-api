@@ -4,7 +4,7 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T04:48:59Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
 sources:
   - id: reject-notices-without-reason
     resource: ../../prisma/migrations/20261030120100_team3_reject_notices_without_reason/migration.sql

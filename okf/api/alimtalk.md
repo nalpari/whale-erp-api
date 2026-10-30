@@ -9,7 +9,7 @@ sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-10-30T02:17:05Z
+    last_modified: 2026-10-30T04:59:32Z
   - id: alimtalk-buttons
     resource: ../../src/alimtalk/alimtalk-buttons.ts
     title: 알림톡 버튼 이름과 버튼 설정 검사(WHALEERP-636)

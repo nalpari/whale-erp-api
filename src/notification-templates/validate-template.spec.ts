@@ -209,6 +209,12 @@ describe('validateTemplate', () => {
     expect(
       validateTemplate(talk(mail().variables.filter((v) => !v.isButtonLink))),
     ).toEqual([]);
+    // 코드 형식이 틀리면 코드 오류만 — 버튼 이름 안내는 내지 않는다
+    expect(
+      validateTemplate({ ...talk(mail().variables), templateCode: 'talk_x' }),
+    ).not.toContain(
+      '이 템플릿 코드는 알림톡 버튼 이름이 정해지지 않아 버튼 링크를 쓸 수 없습니다. 카카오에 등록한 버튼 이름을 개발팀에 알려 주세요.',
+    );
   });
 
   it('NUL 이 든 값은 받지 않는다', () => {

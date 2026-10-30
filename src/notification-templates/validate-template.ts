@@ -101,9 +101,11 @@ export function validateTemplate(t: TemplateInput): string[] {
   });
   // 알림톡은 카카오에 등록한 버튼 하나만, 그 템플릿 코드의 버튼 이름으로 싣는다 — 맞지 않으면 발송이 보내기 전에 던진다
   // (WHALEERP-636, alimtalk-buttons.ts)
-  const buttonProblem = alimtalk
-    ? alimtalkButtonProblem(t.templateCode, t.variables)
-    : null;
+  // 템플릿 코드 형식이 틀렸으면 그 오류만 — 「개발팀에 알려 주세요」로 잘못 보내지 않게
+  const buttonProblem =
+    alimtalk && CODE.test(t.templateCode)
+      ? alimtalkButtonProblem(t.templateCode, t.variables)
+      : null;
   if (buttonProblem === 'MULTIPLE_LINKS')
     add('알림톡은 버튼 링크 변수를 하나만 둘 수 있습니다.');
   if (buttonProblem === 'NO_BUTTON_NAME')
