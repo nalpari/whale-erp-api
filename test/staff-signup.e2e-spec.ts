@@ -561,7 +561,16 @@ describe('직원 가입 (e2e, DB)', () => {
         .post(`/me/invitations/${more.invitationId}/accept`)
         .set('Authorization', `Bearer ${accessToken}`)
         .send(payload);
-    await accept({ hqSharingConsented: true }).expect(400);
+    // 버전을 싣지 않는 예전 앱의 동의도 근무지는 더하고 동의만 남기지 않는다 — 다른 초대로 본다
+    const oldAppMore = await invited(franchiseStoreId, { phone: s.phone });
+    await request(app.getHttpServer())
+      .post(`/me/invitations/${oldAppMore.invitationId}/accept`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ hqSharingConsented: true })
+      .expect(200)
+      .expect((res) =>
+        expect(res.body).toMatchObject({ hqSharingConsentRecorded: false }),
+      );
     await accept({ hqSharingConsented: true, hqSharingConsentVersion: 'v0.9' })
       .expect(200)
       .expect({

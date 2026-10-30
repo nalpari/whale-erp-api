@@ -66,9 +66,9 @@ export class AcceptAffiliationRequestDto {
   hqSharingConsented?: boolean;
 
   /**
-   * 본사 제공 동의 문구 버전 — 화면이 보인 문구의 버전(예: v1.0, ATT-30 v252). hqSharingConsented 가 true 이면 반드시 싣고
-   * (없으면 400), 아니면 보지 않는다. 지금 버전과 다르면 수락은 그대로 마치고 동의만 남기지 않는다 — 응답의
-   * hqSharingConsentRecorded 가 false 다
+   * 본사 제공 동의 문구 버전 — 화면이 보인 문구의 버전(예: v1.0, ATT-30 v252). hqSharingConsented 가 true 일 때
+   * 싣는다(실었으면 비지 않은 64자 이하 문자열 — 아니면 400), 아니면 보지 않는다. 빠지거나 지금 버전과 다르면 수락은 그대로
+   * 마치고 동의만 남기지 않는다 — 응답의 hqSharingConsentRecorded 가 false 다(예전 앱 · 배포 어긋남에도 막지 않는다, v253)
    */
   @IsHqSharingConsentVersion()
   hqSharingConsentVersion?: string;
