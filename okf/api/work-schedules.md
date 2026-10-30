@@ -127,6 +127,16 @@ sources:
 - 템플릿이 없거나 · 채널이 다르거나 · 사용 안 함이거나 · 렌더할 수 없거나 · 재직이 아닌(퇴직한) 직원 레코드이거나 · 받을 계정이 없거나 탈퇴(`WITHDRAWN`)했거나 · 점포가 없거나 이름이 비면 알림 없이 저장만 하고 보내지 않은 사실을 로그로 남긴다(`work schedule notice SKIPPED …`, 운영 정책 NTF-25). 운영자가 템플릿을 잘못 고쳐도 관리자 저장이 막히면 안 된다. DB 오류는 저장째 되돌린다.
 - 실제 발송(FCM 등)은 #321 — 수행 임박 알림과 같이 발송 대기 행만 남긴다. `noticeScheduleChange` 는 변경 여러 건을 받아 「, 」로 묶는다 — 일괄 등록이 직원별로 묶어 부르고, 지난 주 복사도 그렇게 부른다(같은 트랜잭션 안에서). 여러 건은 시작 시각순으로 잇는다.
 
+## 근무스케줄 변경 메일 (WHALEERP-639)
+
+가입한 직원에게는 같은 내용을 메일로도 보낸다(운영 정책 NTF-14 · NTF-18 v262 — 가입한 직원의 알림톡은 근로계약서 발송 하나뿐이다).
+
+- 템플릿 `EMAIL_SCHEDULE_CHANGED`(근무스케줄 변경 메일, `20261030142820`). 본문은 `PUSH_SCHEDULE_CHANGED` 와 같은 문장이고 제목은 「[WHALE ERP] 근무스케줄 변경」, 변수는 근무지 · 변경내용 · 링크(버튼 — `STAFF_APP_URL` origin + `/work`, 직원 근무 앱 근무 탭).
+- `noticeScheduleChange` 는 앱 푸시 발송 대기를 만들었을 때만 보낼 메일(받는 사람 행 · 계정 이메일 · 변수)을 돌려준다. 그래서 알림이 없는 경우(퇴직 · 계정 없음 · 탈퇴 · 템플릿 문제 · 바뀐 것 없음)와 수신 설정 묶음을 끈 계정에는 메일도 없다. 메일 템플릿에는 묶음을 둘 수 없어(CHECK `notification_templates_preference_category_push_only`) 앱 푸시의 판정을 따른다.
+- 메일은 커밋 뒤에 보낸다(`sendScheduleMail`) — 등록 · 수정 · 삭제 · 일괄 등록(직원마다 한 통) · 지난 주 복사(직원마다 한 통). 롤백된 저장의 메일은 나가지 않는다. 요청 안에서 차례로 보내므로 복사 인원이 많으면 응답이 그만큼 늦다.
+- 메일 실패는 저장을 막지 않는다. 메일 설정(`MAIL_*`) · `STAFF_APP_URL` 이 없으면 보내지 않고 `work schedule mail SKIPPED` 로그만(알림함 줄은 남는다).
+- 이력: `notification_deliveries` 에 channel `EMAIL` 한 행 — 보냈으면 `sent_at` · `SUCCEEDED`, SMTP 실패면 `FAILED`(`sent_at` 없음). 보내기 전에 막힌 것(템플릿 꺼짐 · 주소 형식)은 행 없이 로그만. 메일 원문 이력 `mail_send_logs` 는 MailService 가 남긴다.
+
 # Staff app month
 
 `GET /me/work-schedules?staffMemberId=&month=YYYY-MM`(#205) — 직원 앱 토큰만, 관리자 토큰은 403. 직원 근무 앱 근무 탭의 월 달력이 쓴다.[^my-controller]

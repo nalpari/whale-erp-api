@@ -56,7 +56,12 @@ describe('근로계약 목록 (e2e)', () => {
       findMany: jest.fn(),
       findFirst: jest.fn(),
     },
-    store: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn() },
+    store: {
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      count: jest.fn(),
+    },
     invitation: {
       findMany: jest.fn(),
       count: jest.fn(),
@@ -227,16 +232,20 @@ describe('근로계약 목록 (e2e)', () => {
 
   it('토큰이 없으면 401', async () => {
     await get('/contracts').expect(401);
+    await get('/contracts/store-options').expect(401);
   });
 
   it('직원 앱 토큰이면 403', async () => {
     await get('/contracts', 'account').expect(403);
+    await get('/contracts/store-options', 'account').expect(403);
   });
 
   // 「근로계약 관리」(/contracts) 메뉴 권한을 가드가 먼저 본다(WHALEERP-592) — 없으면 서비스까지 가지 않는다
   it.each<[string, string, string[]]>([
     ['get', '/contracts/5', ['isReadable']],
     ['get', '/contracts/5/documents/3/download-url', ['isReadable']],
+    // 근무지 선택지는 작성 · 이어 쓰기 화면이 쓴다 — 조회 권한만으로는 받지 않는다(WHALEERP-638)
+    ['get', '/contracts/store-options', ['isCreatable', 'isUpdatable']],
     ['post', '/contracts', ['isCreatable']],
     ['post', '/contracts/paper', ['isCreatable']],
     // 이어 쓰기는 작성 또는 수정으로 받고 서비스가 상태대로 다시 묻는다
@@ -270,6 +279,9 @@ describe('근로계약 목록 (e2e)', () => {
       expect(where.OR).toEqual(columns.map((c) => ({ [c]: true })));
       expect(prisma.contract.findUnique).not.toHaveBeenCalled();
       expect(prisma.contract.updateMany).not.toHaveBeenCalled();
+      // 근무지 선택지는 범위 · 점포를 읽는다 — 그것도 닿지 않는다
+      expect(scope.getManageableStores).not.toHaveBeenCalled();
+      expect(prisma.store.findMany).not.toHaveBeenCalled();
     },
   );
 
@@ -358,7 +370,26 @@ describe('근로계약 목록 (e2e)', () => {
   it('사용 중인 관리자 계정이 아니면 403', async () => {
     scope.getManageableStores.mockResolvedValue(null);
     await get('/contracts', 'admin').expect(403);
+    await get('/contracts/store-options', 'admin').expect(403);
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
+    expect(prisma.store.findMany).not.toHaveBeenCalled();
+  });
+
+  // BP · 가맹 계정은 헤더 없이 소속 BP 의 관리 점포다(WHALEERP-638 — 옛 GET /stores/options 와 같은 모양)
+  it('근무지 선택지는 { items, total } 이고 소속 BP 의 관리 점포로 거른다', async () => {
+    prisma.store.findMany.mockResolvedValueOnce([
+      { storeId: 11, name: '서초점' },
+    ]);
+    prisma.store.count.mockResolvedValueOnce(1);
+    const res = await get(
+      '/contracts/store-options?pageSize=200',
+      'admin',
+    ).expect(200);
+    expect(res.body).toEqual({
+      items: [{ storeId: 11, name: '서초점' }],
+      total: 1,
+    });
+    expect(scope.getManageableStores).toHaveBeenCalledWith(1, OWN_BP);
   });
 
   it('업무 범위 안 점포의 계약만 읽는다', async () => {
@@ -404,6 +435,7 @@ describe('근로계약 목록 (e2e)', () => {
 
     it.each<[string, string]>([
       ['get', '/contracts'],
+      ['get', '/contracts/store-options'],
       ['get', '/contracts/7'],
       ['delete', '/contracts/7'],
       ['get', '/contracts/7/documents/3/download-url'],
@@ -441,6 +473,29 @@ describe('근로계약 목록 (e2e)', () => {
         .set('X-Bp-Code-Id', String(CUSTOMER_BP))
         .expect(404);
       expect(scope.canManageStaffAt).toHaveBeenCalledWith(1, 12, false, bp);
+    });
+
+    // 작성 화면의 근무지 선택지도 고른 BP 의 점포다 — `:contractId` 로 잡히지 않는다(WHALEERP-638)
+    it('근무지 선택지는 고른 BP 의 관리 점포로 거른다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'PM',
+        stores: [{ storeId: 12, storeTypeCode: 'FRANCHISE' }],
+      });
+      prisma.store.findMany.mockResolvedValueOnce([
+        { storeId: 12, name: '서초점' },
+      ]);
+      prisma.store.count.mockResolvedValueOnce(1);
+      const res = await get('/contracts/store-options?pageSize=200', 'admin')
+        .set('X-Bp-Code-Id', String(CUSTOMER_BP))
+        .expect(200);
+      expect(res.body).toEqual({
+        items: [{ storeId: 12, name: '서초점' }],
+        total: 1,
+      });
+      expect(scope.getManageableStores).toHaveBeenCalledWith(1, {
+        bpCodeId: CUSTOMER_BP,
+        isPlatformCaller: true,
+      });
     });
   });
 
@@ -537,9 +592,18 @@ describe('근로계약 목록 (e2e)', () => {
     ['page 가 0 이면', '/contracts?page=0'],
     ['없는 상태 값이면', '/contracts?status=DONE'],
     ['모르는 쿼리면', '/contracts?sort=name'],
+    [
+      '근무지 선택지 pageSize 가 200 을 넘으면',
+      '/contracts/store-options?pageSize=201',
+    ],
+    [
+      '근무지 선택지 page 가 너무 크면',
+      '/contracts/store-options?page=10000001',
+    ],
   ])('%s 400', async (_, path) => {
     await get(path, 'admin').expect(400);
     expect(prisma.contract.findMany).not.toHaveBeenCalled();
+    expect(prisma.store.findMany).not.toHaveBeenCalled();
   });
 
   describe('POST /contracts', () => {

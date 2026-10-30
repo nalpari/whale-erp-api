@@ -1,19 +1,19 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wages (최저임금 공통코드), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /stores/options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wages (최저임금 공통코드), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T05:50:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-10-30T05:50:00Z
+    last_modified: 2026-10-30T06:00:00Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-30T05:50:00Z
+    last_modified: 2026-10-30T06:00:00Z
   - id: minimum-wage
     resource: ../../src/contracts/minimum-wage.ts
     title: 최저임금 공통코드 · 수습 중 시급 검사
@@ -37,7 +37,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-10-29T05:44:42Z
+    last_modified: 2026-10-30T06:04:46Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -58,10 +58,6 @@ sources:
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
     last_modified: 2026-10-29T05:17:36Z
-  - id: stores-service
-    resource: ../../src/stores/stores.service.ts
-    title: StoresService (근무지 선택지)
-    last_modified: 2026-10-28T08:41:55Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
@@ -201,9 +197,10 @@ a 직원 not yet joined has no account, so counts as not consented)
   body that would fail the service's own checks still gets the 400; DTO validation
   comes before it. The service methods take `bp` as an optional last argument
   (absent = the account's own BP, the pre-618 behaviour), so callers and unit specs
-  kept their shape. `GET /stores/options` (the 근무지 dropdown) does **not** read
-  the header yet — a platform account sees no 근무지 there and cannot write a
-  contract until that route moves too.
+  kept their shape. The 근무지 dropdown moved here for the same reason
+  (`GET /contracts/store-options`, WHALEERP-638): as `GET /stores/options` it had
+  no menu permission, so the guard set no tab BP and a platform account saw no
+  근무지 and could not write a contract.
 - **Store names cost a second query.** `stores` is 1팀's table and has no
   Prisma relation to `contracts`, so `include` cannot reach it. A `storeName`
   filter first looks up matching `store_id`s (no match → `storeId: { in: [] }`,
@@ -428,13 +425,16 @@ force on `startDate`: the 공통코드 `MINIMUM_WAGE` row (플랫폼고정, BP00
 시행일 on or before it. Below it → 400 「수습 중 시급은 최저임금의 90%(9,288원) 이상이어야
 합니다.」 (the 원 amount is that floor). Row format (`src/contracts/minimum-wage.ts`): 상세코드 `D` +
 시행일 8자리 (`D20260101`), 코드명 시급 in 원, digits only (`10320`); malformed or 사용중지 rows are
-skipped (malformed with a warning log). No row in force on `startDate` (before the first 시행일)
-→ not checked — earlier years are not seeded, and old 종이 계약 must still register. Migration
-`20261030145813_team3_minimum_wage_code` seeds 2026 = 10,320원 only; a new year is one more 상세
+skipped (malformed with a warning log). Contracts starting before the first 시행일
+`MINIMUM_WAGE_CHECKED_FROM` (2025-01-01, fixed in code) are not checked — earlier years are not
+seeded, and old 종이 계약 must still register. From that date on, no row in force on `startDate` →
+400 「계약 시작일에 적용할 최저임금이 없습니다. 관리자에게 문의해 주세요.」, so a row dropped by
+사용중지 or a bad 코드명 cannot silently turn the check off (2026-10-30 김민식). Migration
+`20261030145813_team3_minimum_wage_code` seeds 2025 = 10,030원 and 2026 = 10,320원; a new year is one more 상세
 in 공통코드 관리 — register it after the 고시 (August) and before 1 January, or contracts starting
 that year are checked against the previous year's lower value. Only the 상세's 사용 상태 counts:
 turning the group off does not turn the check off (법정 하한), and a 코드명 like `10,320` drops that
-row — its dates fall back to the previous 시행일's value, or go unchecked if there is none (keep
+row — its dates fall back to the previous 시행일's value, or get that 400 if there is none (keep
 코드명 digits only). `GET /contracts/minimum-wages` (작성 or 수정 권한) returns `{ items:
 [{ effectiveDate, hourlyWage }] }` ascending, for the 작성 화면's 시급 help and 수습 check.
 
@@ -809,12 +809,13 @@ resent — a new contract instead.
     계약 행 (`lockContractWithStaff`).
   - 직원 목록 `contract.canResend` (and the deprecated `invitation.canResend`) mirrors this for a 가입 전 직원 — see
     [Staff members](/api/staff-members.md) (발송 대기 · 서명 대기 only).
-- The 알림톡 has **no button yet** — the common module does not send `at.button` and the
-  Kakao button name of `WHALE_INVITE_01` is not recorded. The 초대 링크 reaches the 직원 only
-  through the SMS fallback (`BIZPPURIO_SMS_FROM`). The new body also waits for Kakao to re-approve
-  it, and a rejected 알림톡 is only seen in the result report — so **a 가입 초대 without
-  `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until the button is sent and the
-  text is approved (api #74 review; the fallback then carries the body with the code and the link).
+- The 알림톡 carries the 초대 링크 as a web-link button (WHALEERP-636, name in
+  `ALIMTALK_BUTTONS` — see [Kakao Alimtalk](/api/alimtalk.md)). The new body and the button
+  still wait for Kakao to approve them, and a rejected 알림톡 is only seen in the result report — so
+  **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until the text
+  and button are approved (api #74 review; the fallback carries the body with the code and the link).
+  The same pre-check is also 503 「… 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.」 when the template's button setup
+  would make every send throw after the commit (`alimtalkButtonProblem` — the button-link mark is not on the `링크` variable alone, or no button name; api #219).
 - Template `TALK_STAFF_INVITATION` moved to 근무지 · 초대코드 · 링크 (초대 링크),
   `invitations.invitation_code_hash` was added, and every `SENT` 가입 초대 without a code (sent
   before; the old `/invite/{token}` link) was made `EXPIRED` — the 관리자 sends again — with migration
@@ -1159,7 +1160,7 @@ only — a 종이 계약 has no body.
   row exists (nothing wrote them before; the new CHECK would refuse such rows without `sent_at`).
 - Admins see both kinds in `GET /contracts/:id` `documents` and download them through the existing route.
 
-# GET /stores/options
+# GET /contracts/store-options
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
 undeleted and not `CLOSED`, by name, and only the stores the admin may write
@@ -1168,10 +1169,17 @@ contract rule above: a new contract has no 직원 whose consent could open it).
 403 for an account that is not in use. It moved from `GET /stores` on 2026-10-14,
 when that path became the 점포 정보 관리 list ([Store management](/api/stores.md));
 the two answer different questions — this one is "where may I write a contract",
-that one is "what may I manage" — so they stay separate.[^stores-service]
+that one is "what may I manage" — so they stay separate. On 2026-10-30 it moved
+again from `GET /stores/options` to here (WHALEERP-638): only a `@MenuPermission`
+route gets the tab BP from the guard, so it now needs 근로계약 작성 or 수정 permission
+(the screens that call it need the same) and follows the tab BP — a platform account
+gets the chosen BP's stores, and without the header the same 400 as the other
+contract routes. Front's `contracts/new/load-form-data.ts` follows. The old path is
+gone, so the two must ship back to back: api alone breaks the old front's 작성 ·
+이어 쓰기 screens (its 404 is not caught, the error screen shows) until front
+follows.[^contracts-service]
 
 [^create-dto]: CreateContractDto
-[^stores-service]: StoresService (근무지 선택지)
 [^contracts-controller]: ContractsController
 [^contracts-service]: ContractsService
 [^contract-duplicates]: 계약 중복 검사 (WHALEERP-129)

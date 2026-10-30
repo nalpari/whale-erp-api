@@ -16,7 +16,6 @@ import type { ExcelExportsService } from '../excel-exports/excel-exports.service
 import type { StoreExcelSource } from './store-excel.source';
 import type { StoreManagementService } from './store-management.service';
 import { StoresController } from './stores.controller';
-import type { StoresService } from './stores.service';
 
 const USER: AuthUser = { id: 5, type: 'admin', loginId: 'admin', sid: 1 };
 /** 가드가 X-Bp-Code-Id 로 정한 대상 BP(@TargetBp) */
@@ -45,7 +44,6 @@ describe('StoresController', () => {
     );
   });
 
-  const options = { options: jest.fn() };
   const management = {
     list: jest.fn(),
     detail: jest.fn(),
@@ -68,7 +66,6 @@ describe('StoresController', () => {
   const excelSource = { menuUrl: '/stores' };
   const res = { status: jest.fn() };
   const controller = new StoresController(
-    options as unknown as StoresService,
     management as unknown as StoreManagementService,
     excelExports as unknown as ExcelExportsService,
     excelSource as unknown as StoreExcelSource,
@@ -82,17 +79,6 @@ describe('StoresController', () => {
     expect(Reflect.getMetadata(USER_TYPES, StoresController)).toEqual([
       'admin',
     ]);
-  });
-
-  it('GET /stores/options 는 메뉴 권한 없이 업무 범위로만 거른 근무지 선택지다', async () => {
-    const page = { items: [], total: 0 };
-    options.options.mockResolvedValue(page);
-    await expect(
-      controller.options({ page: 1, pageSize: 200 }, USER),
-    ).resolves.toBe(page);
-    expect(options.options).toHaveBeenCalledWith(5, { page: 1, pageSize: 200 });
-    expect(methodMeta(MENU_PERMISSION, 'options')).toBeUndefined();
-    expect(methodMeta(GUARDS_METADATA, 'options')).toBeUndefined();
   });
 
   // 권한 판정은 가드가 한다 — 파이프 · 인터셉터 · 핸들러보다 먼저 돌아, 권한 없는 요청은 그 어디에도 닿지 않는다.
@@ -181,14 +167,6 @@ describe('StoresController', () => {
           (a) => a.index === 1 && a.factory === targetBpFactory,
         ),
       ).toBe(true);
-    });
-
-    it('근무지 선택지(options)는 받지 않는다 — 메뉴 권한이 없어 가드가 대상 BP 를 정하지 않는다(500)', () => {
-      expect(
-        argsOf(StoresController, 'options').some(
-          (a) => a.factory === targetBpFactory,
-        ),
-      ).toBe(false);
     });
   });
 

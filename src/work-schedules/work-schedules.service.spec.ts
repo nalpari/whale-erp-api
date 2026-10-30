@@ -5,9 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
+import * as notice from './work-schedule-notice';
 import { WorkSchedulesService } from './work-schedules.service';
 import {
   HQ_SHARING_CONSENTED,
@@ -64,6 +67,7 @@ const mockDb = () => ({
     findMany: jest.fn().mockResolvedValue([]),
   },
   adminAccount: { findMany: jest.fn().mockResolvedValue([]) },
+  notificationDelivery: { create: jest.fn() },
   $queryRaw: jest.fn().mockResolvedValue([]),
   $executeRaw: jest.fn().mockResolvedValue(1),
 });
@@ -73,8 +77,25 @@ describe('WorkSchedulesService', () => {
   let db: ReturnType<typeof mockDb>;
   let prisma: ReturnType<typeof mockDb> & { $transaction: jest.Mock };
   let scope: { getManageableStores: jest.Mock };
+  let mail: { send: jest.Mock } | null;
+  const build = async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        WorkSchedulesService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: AdminScopeService, useValue: scope },
+        { provide: OPTIONAL_MAIL_SERVICE, useValue: mail },
+        {
+          provide: ConfigService,
+          useValue: { get: () => 'https://staff.example.com' },
+        },
+      ],
+    }).compile();
+    service = module.get(WorkSchedulesService);
+  };
 
   beforeEach(async () => {
+    mail = { send: jest.fn().mockResolvedValue({ messageId: 'm' }) };
     db = mockDb();
     prisma = {
       ...db,
@@ -89,14 +110,7 @@ describe('WorkSchedulesService', () => {
         ],
       }),
     };
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        WorkSchedulesService,
-        { provide: PrismaService, useValue: prisma },
-        { provide: AdminScopeService, useValue: scope },
-      ],
-    }).compile();
-    service = module.get(WorkSchedulesService);
+    await build();
   });
 
   const body = {
@@ -1021,6 +1035,163 @@ describe('WorkSchedulesService', () => {
       await expect(
         service.histories(ADMIN, { storeId: 99 }),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('근무스케줄 변경 메일 (WHALEERP-639)', () => {
+    const scheduleMail = {
+      notificationRecipientId: 200,
+      to: 'staff@example.com',
+      variables: {
+        근무지: '연남점',
+        변경내용: '10월 21일(수) 09:00~18:00 추가',
+      },
+    };
+    let noticeSpy: jest.SpyInstance;
+    beforeEach(() => {
+      noticeSpy = jest
+        .spyOn(notice, 'noticeScheduleChange')
+        .mockResolvedValue(scheduleMail);
+    });
+    afterEach(() => noticeSpy.mockRestore());
+
+    it('커밋 뒤에 보낸다 — 트랜잭션이 끝나기 전에는 메일이 없다', async () => {
+      prisma.$transaction.mockImplementation(
+        async (work: (tx: typeof db) => unknown) => {
+          const result = await work(db);
+          expect(mail!.send).not.toHaveBeenCalled();
+          return result;
+        },
+      );
+      await service.create(ADMIN, body);
+      expect(mail!.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          templateCode: 'EMAIL_SCHEDULE_CHANGED',
+          to: 'staff@example.com',
+          variables: expect.objectContaining({
+            링크: 'https://staff.example.com/work',
+          }) as unknown,
+        }),
+      );
+      expect(db.notificationDelivery.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          channel: 'EMAIL',
+          result: 'SUCCEEDED',
+        }) as unknown,
+      });
+    });
+
+    it('저장이 되돌려지면 메일이 없다', async () => {
+      prisma.$transaction.mockImplementation(
+        async (work: (tx: typeof db) => unknown) => {
+          await work(db);
+          throw new Error('commit failed');
+        },
+      );
+      await expect(service.create(ADMIN, body)).rejects.toThrow(
+        'commit failed',
+      );
+      await expect(service.remove(ADMIN, 70)).rejects.toThrow();
+      expect(mail!.send).not.toHaveBeenCalled();
+    });
+
+    it('메일이 실패해도 저장은 그대로다', async () => {
+      mail!.send.mockRejectedValue(new Error('smtp down'));
+      await expect(service.create(ADMIN, body)).resolves.toMatchObject({
+        workScheduleId: 70,
+      });
+    });
+
+    it('메일 설정이 없으면(null) 알림만 만들고 메일은 건너뛴다', async () => {
+      mail = null;
+      await build();
+      await expect(service.create(ADMIN, body)).resolves.toMatchObject({
+        workScheduleId: 70,
+      });
+      expect(noticeSpy).toHaveBeenCalled();
+      expect(db.notificationDelivery.create).not.toHaveBeenCalled();
+    });
+
+    it('수정 · 삭제도 커밋 뒤에 한 통씩', async () => {
+      db.$queryRaw.mockResolvedValue([
+        {
+          start_at: new Date('2026-10-21T00:00:00.000Z'),
+          end_at: new Date('2026-10-21T09:00:00.000Z'),
+          break_minutes: 60,
+        },
+      ]);
+      const locked = { ...scheduleRow(), staffMember: { account: null } };
+      // 수정: 잠금 → 겹침(없음), 삭제: 잠금
+      db.workSchedule.findFirst
+        .mockResolvedValueOnce(locked)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(locked);
+      await service.update(ADMIN, 70, {
+        workDate: '2026-10-21',
+        startTime: '10:00',
+        endTime: '18:00',
+        breakMinutes: 60,
+      });
+      await service.remove(ADMIN, 70);
+      expect(mail!.send).toHaveBeenCalledTimes(2);
+    });
+
+    it('지난 주 복사는 커밋 뒤 직원마다 한 통, 미리보기는 없다', async () => {
+      db.workSchedule.findMany.mockResolvedValue([
+        scheduleRow({
+          staffMemberId: 12,
+          startAt: new Date('2026-10-12T00:00:00Z'),
+          endAt: new Date('2026-10-12T04:00:00Z'),
+        }),
+        scheduleRow({
+          staffMemberId: 11,
+          startAt: new Date('2026-10-13T00:00:00Z'),
+          endAt: new Date('2026-10-13T04:00:00Z'),
+        }),
+      ]);
+      const people = [
+        { staffMemberId: 11, name: '가', retiredDate: null, account: null },
+        { staffMemberId: 12, name: '나', retiredDate: null, account: null },
+      ];
+      db.staffMember.findMany.mockResolvedValueOnce(people);
+      await service.copyLastWeek(ADMIN, 3, '2026-10-19', false);
+      await new Promise((r) => setImmediate(r));
+      expect(mail!.send).not.toHaveBeenCalled();
+
+      db.staffMember.findMany.mockResolvedValueOnce(people);
+      prisma.$transaction.mockImplementation(
+        async (work: (tx: typeof db) => unknown) => {
+          const result = await work(db);
+          expect(mail!.send).not.toHaveBeenCalled();
+          return result;
+        },
+      );
+      await service.copyLastWeek(ADMIN, 3, '2026-10-19', true);
+      // 복사는 메일을 기다리지 않고 응답한다
+      await new Promise((r) => setImmediate(r));
+      expect(noticeSpy).toHaveBeenCalledTimes(2);
+      expect(mail!.send).toHaveBeenCalledTimes(2);
+    });
+
+    it('일괄 등록은 직원마다 한 통', async () => {
+      let id = 100;
+      db.workSchedule.create.mockImplementation(
+        ({ data }: { data: { staffMemberId: number } }) =>
+          Promise.resolve(scheduleRow({ ...data, workScheduleId: (id += 1) })),
+      );
+      await service.bulkCreate(ADMIN, {
+        workDate: '2026-10-21',
+        rows: [11, 12, 11].map((staffMemberId, i) => ({
+          staffMemberId,
+          startTime: ['09:00', '09:00', '17:00'][i],
+          endTime: ['13:00', '13:00', '21:00'][i],
+          breakMinutes: 0,
+        })),
+      });
+      // 일괄 등록은 메일을 기다리지 않고 응답한다
+      await new Promise((r) => setImmediate(r));
+      expect(noticeSpy).toHaveBeenCalledTimes(2);
+      expect(mail!.send).toHaveBeenCalledTimes(2);
     });
   });
 });

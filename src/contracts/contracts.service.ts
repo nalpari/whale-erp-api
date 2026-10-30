@@ -18,7 +18,10 @@ import {
   Prisma,
   StaffMemberJoinStatus,
 } from '@prisma/client';
-import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import {
+  AdminScopeService,
+  hidesPersonalData,
+} from '../admin-scope/admin-scope.service';
 import { hqVisibleWhere } from '../admin-scope/hq-visible';
 import {
   HQ_SHARING_SELECT,
@@ -99,6 +102,8 @@ import {
   CreatedContractResponseDto,
 } from './dto/create-contract.dto';
 import { ListContractsQueryDto } from './dto/list-contracts-query.dto';
+import { ListStoreOptionsQueryDto } from './dto/list-store-options-query.dto';
+import { StoreOptionListResponseDto } from './dto/store-option.response.dto';
 import {
   CONTRACT_TERMS_SELECT,
   contractTermsOf,
@@ -2430,6 +2435,43 @@ export class ContractsService {
     return {
       url: await storage.downloadUrl(document.storageKey, document.fileName),
     };
+  }
+
+  /**
+   * 작성 · 이어 쓰기 화면의 근무지 선택지(WHALEERP-638). 지운 점포와 폐점(STORE_STATUS CLOSED)은 고를 수 없다. 업무 범위
+   * (플랫폼 계정은 탭 BP 의 점포 전부) 안에서 직원 개인 정보를 다루는 점포만이다 — 본사 역할(BM · BA)에게 직영이 아닌 점포는
+   * 빠진다(새 근로계약과 같은 점포 단위 기준). 사용 중인 관리자 계정이 아니면 403.
+   */
+  async storeOptions(
+    adminAccountId: number,
+    { page, pageSize }: ListStoreOptionsQueryDto,
+    bp?: TargetBpContext,
+  ): Promise<StoreOptionListResponseDto> {
+    await this.checkTargetBp(bp);
+    const manageable = await this.scope.getManageableStores(adminAccountId, bp);
+    if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
+    const storeIds = manageable.stores
+      .filter(
+        // 근무지 선택지라 직원이 아직 없다 — 동의 없음으로 점포 단위 판단(새 근로계약과 같다).
+        (s) => !hidesPersonalData(manageable.roleTypeCode, s, false),
+      )
+      .map((s) => s.storeId);
+    const where: Prisma.StoreWhereInput = {
+      storeId: { in: storeIds },
+      isDeleted: false,
+      storeStatusCode: { not: 'CLOSED' },
+    };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.store.findMany({
+        where,
+        select: { storeId: true, name: true },
+        orderBy: [{ name: 'asc' }, { storeId: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.store.count({ where }),
+    ]);
+    return { items, total };
   }
 
   /** 목록. 업무 범위(플랫폼 계정은 탭 BP 의 점포 전부) 안 점포의 계약만이다. 사용 중인 관리자 계정이 아니면 403. */

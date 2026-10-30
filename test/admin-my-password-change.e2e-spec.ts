@@ -147,7 +147,7 @@ describe('마이페이지 내 비밀번호 변경 (e2e, DB)', () => {
     expect(res.status).toBe(204);
 
     // 같은 접근 토큰이 그대로 쓰인다 — 강제 재로그인이 없다.
-    expect((await authed('get', '/stores/options', accessToken)).status).toBe(
+    expect((await authed('get', '/notifications', accessToken)).status).toBe(
       200,
     );
     // 갱신 토큰도 그대로 쓰인다 — 다른 기기 세션도 끊지 않는다는 것의 대리 확인.
