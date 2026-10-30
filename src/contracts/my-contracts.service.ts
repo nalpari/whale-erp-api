@@ -12,6 +12,12 @@ import {
 import { Prisma } from '@prisma/client';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  ContractFilesService,
+  EMPLOYER_STORE_SELECT,
+  article2Of,
+  employerOf,
+} from './contract-files.service';
 import { ContractNoticeService } from './contract-notice.service';
 import { STORAGE, requireStorage } from '../storage/storage.module';
 import type { OptionalStorage } from '../storage/storage.module';
@@ -68,8 +74,17 @@ async function checkSignatureImage(buffer: Buffer): Promise<void> {
 }
 
 /** 날인에 쓰는 내 계약 — 상태 · 기한 · 발송 일시와 대조할 계약서 값 · 계정 값, 재직 여부 */
+/** 제2조 값 → 당사자 행 칸 */
+const fixedArticle2 = (a: ReturnType<typeof article2Of>) => ({
+  fixedWorkLocation: a.workLocation,
+  fixedJobTitle: a.jobTitle,
+});
+
 const MINE_SELECT = {
   status: true,
+  storeId: true,
+  workLocation: true,
+  jobTitle: true,
   sentAt: true,
   signDeadlineAt: true,
   contractParty: {
@@ -85,6 +100,7 @@ const MINE_SELECT = {
     select: {
       employmentStatus: true,
       retiredDate: true,
+      jobTitle: true,
       account: {
         select: {
           realName: true,
@@ -110,7 +126,8 @@ type MyContract = Prisma.ContractGetPayload<{ select: typeof MINE_SELECT }>;
  * - 상태 전환 · 이력 · 기한 검사는 contract-status 의 함수가 한다(서명 대기에서만, 기한이 지났으면 409).
  * - 퇴직했거나 퇴직일이 지난 직원(배치 전)은 409 STAFF_RETIRED — 퇴직한 뒤 날인하지 않게(CTR-25). 퇴직 확정과 같은 순서로
  *   직원 행 → 계약 행을 잠가, 퇴직 확정이 대기 계약을 닫는 사이 날인이 끼어들지 못하게 한다(api #101 리뷰).
- * - 처리 완료본(서명을 합성한 PDF)은 WHALEERP-131 이 만든다. 여기서는 서명 이미지와 상태까지다.
+ * - 처리 완료본(서명을 합성한 PDF)은 커밋 뒤 ContractFilesService 가 만든다(WHALEERP-131) — 응답은 기다리지 않고, 실패하면
+ *   채우기 배치가 다시 만든다. 날인 트랜잭션은 서명 이미지 · 상태와 완료본에 쓸 근로자 주소 · 사용자 칸(점포 정보)을 고정한다.
  * - 날인 · 거부가 커밋되면 그 계약을 맡은 사업자 관리자에게 알린다(운영 알림 · 메일, WHALEERP-154). 응답은 알림을 기다리지
  *   않는다 — SMTP 가 멈춰도 날인은 끝났다. 알림은 실패해도 던지지 않는다.
  */
@@ -122,6 +139,7 @@ export class MyContractsService {
     private readonly prisma: PrismaService,
     @Inject(STORAGE) private readonly storage: OptionalStorage,
     private readonly notice: ContractNoticeService,
+    private readonly files: ContractFilesService,
   ) {}
 
   /**
@@ -129,6 +147,8 @@ export class MyContractsService {
    * IDENTITY_MISMATCH(다른 항목), 직원은 수정 요청을 낸다. 서명 PNG 는 트랜잭션 밖에서 먼저 올린다(올리는 동안 행을
    * 쥐고 있지 않게). 잠근 뒤 다시 읽고 다시 대조한다 — 그사이 관리자가 근로자 정보를 고쳐 다시 보냈거나 퇴직 처리했을 수
    * 있다. 날인이 커밋되지 않았으면 올린 서명을 지운다. 날인할 때 계정 주소를 계약 당사자 칸에 옮겨 고정한다(처리 완료본도 이 값을 쓴다).
+   * 사용자 칸(상호 · 대표자 · 사업자등록번호 · 소재지 · 전화번호)도 그 시각의 점포 정보로 고정한다 — 처리 완료본은 날인 시점 값을
+   * 쓴다(WHALEERP-131, 2026-10-29 김민식). 직원이 날인 화면에서 본 값이고, 점포 정보는 바뀌어도 과거 값을 되살릴 수 없어서다.
    */
   async sign(
     accountId: number,
@@ -198,6 +218,12 @@ export class MyContractsService {
           },
         });
         const account = c.staffMember.account!;
+        // 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 날인째 되돌린다
+        const store = await tx.store.findUniqueOrThrow({
+          where: { storeId: c.storeId },
+          select: EMPLOYER_STORE_SELECT,
+        });
+        const employer = employerOf(store);
         await tx.contractParty.update({
           where: { contractId },
           data: {
@@ -205,6 +231,16 @@ export class MyContractsService {
             address: account.address,
             addressDetail: account.addressDetail,
             filledAt: lockedAt,
+            employerName: employer.name,
+            employerCeoName: employer.ceoName,
+            employerRegistrationNumber: employer.registrationNumber,
+            employerAddress: employer.address,
+            employerAddressDetail: employer.addressDetail,
+            employerPhone: employer.phone,
+            // 체결 이력의 처리 시각(DB 시계) — 응답 · 처리 완료본의 체결일과 같은 시각
+            employerFixedAt: signedAt,
+            // 제2조도 날인 시점 값 — 근무 장소가 비면 그때 점포명, 직무 칸이 빈 옛 계약은 그때 직원 직무(2026-10-30 김민식)
+            ...fixedArticle2(article2Of(c, store.name, null)),
           },
         });
       });
@@ -232,6 +268,7 @@ export class MyContractsService {
       throw error;
     }
     this.notify('SIGNED', contractId, historyId);
+    this.files.afterSigned(contractId);
     return { contractId, status: 'SIGNED', signedAt };
   }
 

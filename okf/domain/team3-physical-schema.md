@@ -491,7 +491,10 @@ table document:
   `payslips.sending_started_at` (중복 발송 방지, api #96 2026-10-21), the 재입사 link
   `staff_members.previous_staff_member_id` (a self foreign key to the same person's previous 재직 record,
   WHALEERP-615 2026-10-22), location
-  pause `location_consents.paused_at`, and `auth_sessions.refresh_token_hash` /
+  pause `location_consents.paused_at`, the 사용자 칸 fixed at 날인 `contract_parties.employer_*` ·
+  `employer_fixed_at` and 제2조 `fixed_work_location` · `fixed_job_title` (2026-10-30) and the 발송 a generated file belongs to `contract_documents.sent_at` (partial unique
+  `(contract_id, kind, sent_at)` for 보낸 원본 · 처리 완료본 — WHALEERP-131, 2026-10-29, migration
+  `20261030095715_team3_contract_files`), and `auth_sessions.refresh_token_hash` /
   `last_used_at` for multi-device logins kept 30 days after last use.
 - **`notification_templates` is the source of the wording, 알림톡 included**
   (재영, 2026-10-07). The 42 default rows are inserted by migration (40 at first, `EMAIL_LEAD_REPLY` and `NTF_SIGNUP_UNDER_AGE` later), the same way

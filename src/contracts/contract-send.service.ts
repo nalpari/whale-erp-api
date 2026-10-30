@@ -14,6 +14,7 @@ import {
   channelOf,
   deliveredStatusOf,
 } from './contract-delivery.service';
+import { ContractFilesService } from './contract-files.service';
 import {
   REOPENED_STATUSES,
   RESENDABLE_STATUSES,
@@ -61,6 +62,7 @@ export class ContractSendService {
     private readonly prisma: PrismaService,
     private readonly contracts: ContractsService,
     private readonly delivery: ContractDeliveryService,
+    private readonly files: ContractFilesService,
   ) {}
 
   async send(
@@ -201,6 +203,8 @@ export class ContractSendService {
       throw new ConflictException(
         '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
       );
+    // 나갔으면(답한 것 포함) 그 발송의 보낸 원본을 만든다(WHALEERP-131) — 기다리지 않는다
+    this.files.afterSent(contractId);
     // 그사이 직원이 소속 추가 확인 요청에 답했으면 계약은 그 답으로 서명 대기(기한은 수락부터) · 거부다 — 지금 값을 싣는다(api #164 리뷰)
     if (dispatched === 'ANSWERED') {
       const c = await this.prisma.contract.findUnique({

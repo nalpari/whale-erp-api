@@ -1,5 +1,6 @@
 export const BATCH_JOB = {
   CONTRACT_EXPIRE: 'contract-expire',
+  CONTRACT_FILES: 'contract-files',
   STAFF_RETIRE: 'staff-retire',
   LEAD_PURGE: 'lead-purge',
   TODO_DUE_SOON: 'todo-due-soon',

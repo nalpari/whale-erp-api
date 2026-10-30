@@ -204,10 +204,13 @@ export class ContractTermsDto {
   workDays: ContractDetailWorkDayDto[];
 }
 
-/** 종이 계약 날인본 한 개. 내려받기는 GET /contracts/:contractId/documents/:contractDocumentId/download-url */
+/**
+ * 계약서 파일 한 개 — 종이 계약 날인본 · 임금계약서, 전자계약의 보낸 원본(발송마다) · 처리 완료본(서명 합성, WHALEERP-131).
+ * 직원 필기 서명은 싣지 않는다. 내려받기는 GET /contracts/:contractId/documents/:contractDocumentId/download-url
+ */
 export class ContractDocumentDto {
   contractDocumentId: number;
-  /** 종이 계약 근로계약서 · 임금계약서 */
+  /** 종이 계약 근로계약서 · 임금계약서 · 보낸 원본 · 처리 완료본 */
   @ApiProperty({ enum: ContractDocumentKind, enumName: 'ContractDocumentKind' })
   kind: ContractDocumentKind;
   /** 올린 파일의 원래 이름 */

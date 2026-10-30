@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 68, 1팀 외래키 34, 부분 고유 인덱스 4, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 74, 1팀 외래키 37, 부분 고유 인덱스 6, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1080,32 +1080,50 @@ model ContractWorkDay {
 /// 계약 당사자 정보
 model ContractParty {
   /// 근로계약 — 1:1
-  contractId        Int       @id @map("contract_id")
+  contractId                 Int       @id @map("contract_id")
   /// 관리자 입력 이름
-  enteredName       String?   @map("entered_name")
+  enteredName                String?   @map("entered_name")
   /// 관리자 입력 휴대전화번호
-  enteredPhone      String?   @map("entered_phone")
+  enteredPhone               String?   @map("entered_phone")
   /// 관리자 입력 생년월일 — 만 19세 미만 차단용
-  enteredBirthDate  DateTime? @map("entered_birth_date") @db.Date
+  enteredBirthDate           DateTime? @map("entered_birth_date") @db.Date
   /// 관리자 입력 성별 — 남 · 여 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16)
-  enteredGender     Gender?   @map("entered_gender")
+  enteredGender              Gender?   @map("entered_gender")
   /// 관리자 입력 외국인 여부 — 체크하지 않으면 내국인 — 가입 값과 본인 대조 (WHALEERP-125, 2026-10-16)
-  isForeigner       Boolean   @default(false) @map("is_foreigner")
+  isForeigner                Boolean   @default(false) @map("is_foreigner")
   /// 본인인증 실명 — 실명이 다르면 실명 반영
-  verifiedName      String?   @map("verified_name")
+  verifiedName               String?   @map("verified_name")
   /// 본인인증 생년월일 — 실명이 다르면 실명 반영
-  verifiedBirthDate String?   @map("verified_birth_date")
+  verifiedBirthDate          String?   @map("verified_birth_date")
   /// 본인인증 휴대전화번호
-  verifiedPhone     String?   @map("verified_phone")
+  verifiedPhone              String?   @map("verified_phone")
   /// 우편번호 — 직원 입력
-  zipCode           String?   @map("zip_code")
+  zipCode                    String?   @map("zip_code")
   /// 기본주소 — 직원 입력, 검색 API 값
-  address           String?
+  address                    String?
   /// 상세주소 — 직원 입력
-  addressDetail     String?   @map("address_detail")
+  addressDetail              String?   @map("address_detail")
   /// 반영 일시 — 가입 완료 시 채움
-  filledAt          DateTime? @map("filled_at") @db.Timestamptz(6)
-  contract          Contract  @relation(fields: [contractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contract_parties_contract_id_fkey")
+  filledAt                   DateTime? @map("filled_at") @db.Timestamptz(6)
+  /// 사용자 상호 — 날인 때 점포 상호(없으면 점포명)를 고정 — 처리 완료본 사용자 칸 (WHALEERP-131, 2026-10-29 김민식)
+  employerName               String?   @map("employer_name")
+  /// 사용자 대표자 — 날인 때 고정 — 처리 완료본 사용자 칸 (WHALEERP-131)
+  employerCeoName            String?   @map("employer_ceo_name")
+  /// 사용자 사업자등록번호 — 날인 때 고정 — 처리 완료본 사용자 칸 (WHALEERP-131)
+  employerRegistrationNumber String?   @map("employer_registration_number")
+  /// 사용자 소재지 기본주소 — 날인 때 점포 사업자 주소를 고정 — 처리 완료본 사용자 칸 (WHALEERP-131)
+  employerAddress            String?   @map("employer_address")
+  /// 사용자 소재지 상세주소 — 날인 때 고정 — 처리 완료본 사용자 칸 (WHALEERP-131)
+  employerAddressDetail      String?   @map("employer_address_detail")
+  /// 사용자 전화번호 — 날인 때 점포 연락처를 고정 — 처리 완료본 사용자 칸 (WHALEERP-131)
+  employerPhone              String?   @map("employer_phone")
+  /// 사용자 고정 일시 — 날인 때 사용자 칸을 고정한 시각. NULL 이면 고정 전에 체결된 계약 — 처리 완료본은 만드는 시점의 점포 정보로 만든다 (WHALEERP-131, 2026-10-29 김민식)
+  employerFixedAt            DateTime? @map("employer_fixed_at") @db.Timestamptz(6)
+  /// 고정 근무 장소 — 날인 때 제2조 근무 장소(비었으면 그때 점포명)를 고정 — 체결된 계약의 본문 · 처리 완료본 (WHALEERP-131, 2026-10-30 김민식)
+  fixedWorkLocation          String?   @map("fixed_work_location")
+  /// 고정 직무 — 날인 때 제2조 직무(비었으면 그때 직원 직무)를 고정 — 체결된 계약의 본문 · 처리 완료본 (WHALEERP-131, 2026-10-30 김민식)
+  fixedJobTitle              String?   @map("fixed_job_title")
+  contract                   Contract  @relation(fields: [contractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contract_parties_contract_id_fkey")
 
   @@map("contract_parties")
 }
@@ -1124,6 +1142,8 @@ model ContractDocument {
   fileName           String               @map("file_name")
   /// 파일 해시
   checksum           String
+  /// 발송 일시 — 보낸 원본 · 처리 완료본이 담은 계약의 발송 일시(contracts.sent_at). 다른 파일은 NULL (WHALEERP-131, 2026-10-29 김민식)
+  sentAt             DateTime?            @map("sent_at") @db.Timestamptz(6)
   /// 생성 일시
   createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   contract           Contract             @relation(fields: [contractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "contract_documents_contract_id_fkey")
