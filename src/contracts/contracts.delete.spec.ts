@@ -173,7 +173,7 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
       },
     });
     await service.remove(9, 7);
-    expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, true);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, true, undefined);
   });
 
   it('가입 전(계정 없음) 직원의 계약은 동의하지 않은 것으로 범위를 묻는다', async () => {
@@ -182,13 +182,23 @@ describe('ContractsService.remove (임시저장 삭제)', () => {
       staffMember: { account: null },
     });
     await service.remove(9, 7);
-    expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, false);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(
+      9,
+      11,
+      false,
+      undefined,
+    );
   });
 
   it('업무 범위 밖 계약은 없는 것과 같게 404 — 아무것도 지우지 않는다', async () => {
     scope.canManageStaffAt.mockResolvedValue(false);
     await expect(service.remove(9, 7)).rejects.toThrow(NotFoundException);
-    expect(scope.canManageStaffAt).toHaveBeenCalledWith(9, 11, false);
+    expect(scope.canManageStaffAt).toHaveBeenCalledWith(
+      9,
+      11,
+      false,
+      undefined,
+    );
     expect(calls).toEqual([]);
   });
 

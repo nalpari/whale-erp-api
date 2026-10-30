@@ -367,7 +367,7 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       },
     });
     expect(notice).toEqual({
-      title: '남도현 님이 소속 추가 확인을 거절했습니다',
+      title: '소속 추가 거절',
       relatedType: 'STAFF_MEMBER',
       relatedId: r.staffMemberId,
       notificationRecipients: [{ adminAccountId: adminId }],
