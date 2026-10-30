@@ -187,6 +187,20 @@ describe('BpRoleGroupsService', () => {
       });
     });
 
+    it('메뉴 등록 수는 사용 메뉴에 조회가 켜진 행만 센다 — 사용중지 메뉴만 켜진 그룹은 0개 · 미등록', async () => {
+      prisma.roleGroup.findMany.mockResolvedValue([]);
+      prisma.roleGroup.count.mockResolvedValue(0);
+      await service.list(BA, { page: 1, pageSize: 20 });
+      const { select } = prisma.roleGroup.findMany.mock.calls[0][0];
+      expect(select._count.select.menus).toEqual({
+        where: {
+          isDeleted: false,
+          isReadable: true,
+          menu: { isDeleted: false, status: 'ACTIVE' },
+        },
+      });
+    });
+
     it('등록 유형은 역할로 정한다', async () => {
       expect(
         (await service.list(BM, { page: 1, pageSize: 20 }))

@@ -69,7 +69,7 @@ const SUMMARY_SELECT = {
         where: {
           isDeleted: false,
           isReadable: true,
-          menu: { isDeleted: false },
+          menu: { isDeleted: false, status: 'ACTIVE' },
         },
       },
       adminAccounts: { where: { isDeleted: false } },
