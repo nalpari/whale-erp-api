@@ -746,6 +746,12 @@ resent — a new contract instead.
     save — the save and the 알림함 row are done; the result is in `alimtalk_send_logs` (related `contract`), a
     pre-send failure (template off, …) is logged, a landline is skipped with a warning. It is **not** in the 직원 상세
     발송 이력 (that list is 가입 초대 · 소속 추가 확인 요청 only).
+  - It goes to the **account's** phone (the one whose 수신 설정 was read), not the record's.
+  - Just before sending, `dispatch` re-reads the contract and sends only if it is still this send — 서명 대기 with the
+    deadline this send set. If another request sent it again meanwhile (it sends with its own new deadline) or it was
+    signed · replaced · ended, the old 「서명해 주세요」 is skipped with a warning; two concurrent 재발송 therefore usually
+    send one 알림톡 (two when they do not overlap that way). The short gap between that read and the send remains, as
+    for the 가입 초대.
   - Not sent when the 직원 accepts a 소속 추가 확인 요청 in the app (that path writes `PUSH_CONTRACT_SENT` too, but the
     직원 has just acted in the app themself).
 - **Every send** sets `sent_at = now` and `sign_deadline_at = now + 30 days` and makes every
