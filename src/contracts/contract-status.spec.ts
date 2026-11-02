@@ -434,9 +434,11 @@ describe('refillHiredDate (퇴직 취소 · 퇴직일 변경)', () => {
 });
 
 describe('rejectContract (직원 거부)', () => {
+  const now = new Date('2026-10-14T00:00:00Z');
+
   it('서명 대기를 거부로 바꾼다 — 사유는 받지 않아 상태만 바꾼다(WHALEERP-635)', async () => {
     const d = db();
-    await rejectContract(tx(d), 7);
+    await rejectContract(tx(d), 7, now);
     expect(d.contract.updateMany).toHaveBeenCalledWith({
       where: { contractId: 7, status: 'PENDING_SIGNATURE' },
       data: { status: 'REJECTED' },
@@ -452,11 +454,7 @@ describe('rejectContract (직원 거부)', () => {
   });
 
   it('날인 기한이 지났으면 거부도 받지 않는다 — 상태는 그대로', async () => {
-    const now = new Date('2026-11-02T00:00:00Z');
-    const d = db({
-      status: 'PENDING_SIGNATURE',
-      signDeadlineAt: new Date('2026-11-01T00:00:00Z'),
-    });
+    const d = db({ status: 'PENDING_SIGNATURE', signDeadlineAt: now });
     const body = await conflictOf(rejectContract(tx(d), 7, now));
     expect(body).toMatchObject({ code: 'SIGN_DEADLINE_PASSED' });
     expect(d.contract.updateMany).not.toHaveBeenCalled();
@@ -464,7 +462,7 @@ describe('rejectContract (직원 거부)', () => {
 
   it('이미 체결 완료면 거부할 수 없다', async () => {
     const d = db({ status: 'SIGNED' });
-    await conflictOf(rejectContract(tx(d), 7));
+    await conflictOf(rejectContract(tx(d), 7, now));
     expect(d.contract.updateMany).not.toHaveBeenCalled();
   });
 });
