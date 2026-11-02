@@ -4,7 +4,7 @@ title: BP role groups
 description: 관리자 웹 「BP 권한 그룹 관리」(MN000013) — BA · FA groups scoped by the caller's role, codes numbered per type, names unique per (BP, 관리계정), per-menu CRUD capped by the fixed role ∩ the caller's own rights, and deletion that moves linked admins.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T05:58:47Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T02:32:49Z }
 sources:
   - id: bp-role-groups-controller
     resource: ../../src/bp-role-groups/bp-role-groups.controller.ts
@@ -17,7 +17,7 @@ sources:
   - id: bp-role-groups-service
     resource: ../../src/bp-role-groups/bp-role-groups.service.ts
     title: BpRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-30T05:58:47Z
+    last_modified: 2026-11-02T02:32:49Z
   - id: bp-role-group-menus-service
     resource: ../../src/bp-role-groups/bp-role-group-menus.service.ts
     title: BpRoleGroupMenusService (tree · save · preview · franchise-master view)
@@ -109,9 +109,12 @@ nothing is revoked, as on the platform side.
 # Differences from the request
 
 - `adminCount` keeps the platform meaning (undeleted admins, inactive included), not 「활성」.
-- `menuCount` · `isMenuRegistered` count only rows with 조회 on under a 사용 (`ACTIVE`) menu, as
-  on the platform side — the permission kept under a 사용중지 menu is not counted, so the list's
-  「등록 N개」 matches the checked cells in the 메뉴설정 popup (2026-10-30 재영).
+- `menuCount` · `isMenuRegistered` count only rows with 조회 on under a menu the popup can show —
+  undeleted and 사용 (`ACTIVE`) itself and up its whole parent chain (`VISIBLE_MENU_WHERE`), as on
+  the platform side. A permission kept under a 사용중지 menu, or under a child of a 사용중지 or deleted
+  parent (the child keeps its own `ACTIVE`), is not counted (2026-10-30 재영; parent chain
+  2026-11-02, api #226 review). Two gaps remain against the popup: the service's 사용 여부 is not
+  checked, and menus of every service are counted while this popup shows WHALE_ERP only.
 - No new partial unique index; the existing one already has this scope.
 - No `canCreate`, no `OUT_OF_BASE_ROLE` (see above).
 - An FA group of a deleted or inactive 가맹 마스터 stays visible to the BM read-only.

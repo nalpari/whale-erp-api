@@ -187,16 +187,28 @@ describe('BpRoleGroupsService', () => {
       });
     });
 
-    it('메뉴 등록 수는 사용 메뉴에 조회가 켜진 행만 센다 — 사용중지 메뉴만 켜진 그룹은 0개 · 미등록', async () => {
+    it('메뉴 등록 수는 팝업에 보이는 메뉴에 조회가 켜진 행만 센다 — 메뉴나 상위가 사용중지 · 삭제면 세지 않는다', async () => {
       prisma.roleGroup.findMany.mockResolvedValue([]);
       prisma.roleGroup.count.mockResolvedValue(0);
       await service.list(BA, { page: 1, pageSize: 20 });
       const { select } = prisma.roleGroup.findMany.mock.calls[0][0];
+      const live = { isDeleted: false, status: 'ACTIVE' };
       expect(select._count.select.menus).toEqual({
         where: {
           isDeleted: false,
           isReadable: true,
-          menu: { isDeleted: false, status: 'ACTIVE' },
+          menu: {
+            ...live,
+            OR: [
+              { parentMenuId: null },
+              {
+                parentMenu: {
+                  ...live,
+                  OR: [{ parentMenuId: null }, { parentMenu: live }],
+                },
+              },
+            ],
+          },
         },
       });
     });

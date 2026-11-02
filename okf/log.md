@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-02
+* **Update**: [BP role groups](/api/bp-role-groups.md) · [Platform role groups](/api/platform-role-groups.md) — api #226 review-pr 반영: 목록의 메뉴 등록 수 · 등록 여부가 메뉴 자신뿐 아니라 상위 메뉴까지 지우지 않은 사용 메뉴일 때만 센다(`VISIBLE_MENU_WHERE`, 팝업 `visibleMenus` 의 상위 판정과 같게). 상위를 사용중지하면 하위는 자기 상태가 `ACTIVE` 로 남아 목록이 「등록 N개」인데 팝업은 빈 칸이었다. 서비스 사용 여부 · BP 팝업의 WHALE_ERP 한정은 여전히 보지 않는다.
+
 ## 2026-10-30
 * **Update**: [BP holidays](/api/bp-holidays.md) — 변경 이력 항목명을 화면처럼 「대상점포」 · 「예외점포」(붙여 씀)로, 등록 요약의 점포 수 단위를 「예외 N개」로(「N개점」 아님, 2026-10-30 재영, front 요청). 막힘 사유 문구는 그대로. 옛 이력 행은 그대로 둔다 — 마이그레이션 없음.
 * **Update**: [BP role groups](/api/bp-role-groups.md) · [Platform role groups](/api/platform-role-groups.md) — 목록의 메뉴 등록 수(`menuCount`) · 등록 여부(`isMenuRegistered`)를 사용(`ACTIVE`) 메뉴의 조회 켜진 행만 센다. 사용중지 메뉴에 남긴 보존 권한까지 세어 목록 「등록 N개」와 메뉴설정 팝업의 켜진 칸 수가 달랐다(2026-10-30 재영, front 요청). 사용중지 메뉴만 켜진 그룹은 0개 · 미등록. 마이그레이션 없음.

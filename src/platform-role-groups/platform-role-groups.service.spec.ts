@@ -204,15 +204,27 @@ describe('PlatformRoleGroupsService', () => {
       expect(result.items[3].isMenuRegistered).toBe(false);
     });
 
-    it('메뉴 등록 여부는 사용 메뉴에 조회가 켜진 지우지 않은 행을, 관리자 수는 지우지 않은 관리자를 센다 — 사용중지 메뉴만 켜진 그룹은 미등록', async () => {
+    it('메뉴 등록 여부는 팝업에 보이는 메뉴에 조회가 켜진 지우지 않은 행을, 관리자 수는 지우지 않은 관리자를 센다 — 메뉴나 상위가 사용중지 · 삭제면 미등록', async () => {
       await service.list();
       const { select } = prisma.roleGroup.findMany.mock.calls[0][0];
+      const live = { isDeleted: false, status: 'ACTIVE' };
       expect(select._count.select).toEqual({
         menus: {
           where: {
             isDeleted: false,
             isReadable: true,
-            menu: { isDeleted: false, status: 'ACTIVE' },
+            menu: {
+              ...live,
+              OR: [
+                { parentMenuId: null },
+                {
+                  parentMenu: {
+                    ...live,
+                    OR: [{ parentMenuId: null }, { parentMenu: live }],
+                  },
+                },
+              ],
+            },
           },
         },
         adminAccounts: { where: { isDeleted: false } },

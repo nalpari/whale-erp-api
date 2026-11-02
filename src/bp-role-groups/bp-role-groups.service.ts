@@ -23,6 +23,7 @@ import type {
 import {
   isUniqueViolation,
   type Tx,
+  VISIBLE_MENU_WHERE,
 } from '../platform-role-groups/platform-role-group-access';
 import {
   CHANGED_MEANWHILE,
@@ -69,7 +70,7 @@ const SUMMARY_SELECT = {
         where: {
           isDeleted: false,
           isReadable: true,
-          menu: { isDeleted: false, status: 'ACTIVE' },
+          menu: VISIBLE_MENU_WHERE,
         },
       },
       adminAccounts: { where: { isDeleted: false } },

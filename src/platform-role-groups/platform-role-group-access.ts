@@ -11,6 +11,24 @@ import { type CellFlags, NO_FLAGS } from './role-menu-rules';
 export type Tx = Prisma.TransactionClient;
 export type Db = Tx | PrismaService;
 
+const LIVE_MENU = { isDeleted: false, status: 'ACTIVE' } as const;
+/**
+ * 메뉴 등록 팝업에 보이는 메뉴 — 자신과 상위가 모두 지우지 않은 사용 메뉴(visibleMenus 의 상위 판정을 DB 조건으로).
+ * 메뉴는 최대 3단계(menus_depth_range)라 상위 두 단계면 뿌리에 닿는다. 서비스 사용 여부는 보지 않는다.
+ */
+export const VISIBLE_MENU_WHERE = {
+  ...LIVE_MENU,
+  OR: [
+    { parentMenuId: null },
+    {
+      parentMenu: {
+        ...LIVE_MENU,
+        OR: [{ parentMenuId: null }, { parentMenu: LIVE_MENU }],
+      },
+    },
+  ],
+} satisfies Prisma.MenuWhereInput;
+
 /** 이 화면이 다루는 권한 그룹 — 플랫폼 BP 의 지우지 않은 PM · PA · BM · FM. BA · FA 는 BP 가 만든다. */
 export function platformRoleGroupWhere(
   roleGroupId?: number,
