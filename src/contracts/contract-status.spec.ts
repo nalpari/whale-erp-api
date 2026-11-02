@@ -18,6 +18,7 @@ import {
 } from './contract-status';
 
 // 계약 하나 — 잠근 뒤 읽는 값. 기본은 날인 기한이 남은 서명 대기다.
+// 기한은 먼 미래로 둔다 — 가까운 날짜면 그날이 지나 기본값이 「기한 지남」으로 바뀐다.
 const db = (
   row: {
     status: ContractStatus | null;
@@ -26,7 +27,7 @@ const db = (
     startDate?: Date | null;
   } | null = {
     status: 'PENDING_SIGNATURE',
-    signDeadlineAt: new Date('2026-11-01T00:00:00Z'),
+    signDeadlineAt: new Date('2099-12-31T00:00:00Z'),
   },
 ) => {
   const calls: string[] = [];
@@ -453,12 +454,18 @@ describe('rejectContract (직원 거부)', () => {
     });
   });
 
-  it('날인 기한이 지났으면 거부도 받지 않는다 — 상태는 그대로', async () => {
-    const d = db({ status: 'PENDING_SIGNATURE', signDeadlineAt: now });
-    const body = await conflictOf(rejectContract(tx(d), 7, now));
-    expect(body).toMatchObject({ code: 'SIGN_DEADLINE_PASSED' });
-    expect(d.contract.updateMany).not.toHaveBeenCalled();
-  });
+  it.each([
+    ['기한이 지금', now],
+    ['기한이 하루 전', new Date('2026-10-13T00:00:00Z')],
+  ])(
+    '날인 기한이 지났으면 거부도 받지 않는다 — 상태는 그대로(%s)',
+    async (_, signDeadlineAt) => {
+      const d = db({ status: 'PENDING_SIGNATURE', signDeadlineAt });
+      const body = await conflictOf(rejectContract(tx(d), 7, now));
+      expect(body).toMatchObject({ code: 'SIGN_DEADLINE_PASSED' });
+      expect(d.contract.updateMany).not.toHaveBeenCalled();
+    },
+  );
 
   it('이미 체결 완료면 거부할 수 없다', async () => {
     const d = db({ status: 'SIGNED' });
