@@ -1,7 +1,9 @@
 # Directory Update Log
 
 ## 2026-11-02
+* **Update**: main 병합(api sentret, main #228 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [BP role groups](/api/bp-role-groups.md) · [Platform role groups](/api/platform-role-groups.md) — api #226 review-pr 반영: 목록의 메뉴 등록 수 · 등록 여부가 메뉴 자신뿐 아니라 상위 메뉴까지 지우지 않은 사용 메뉴일 때만 센다(`VISIBLE_MENU_WHERE`, 팝업 `visibleMenus` 의 상위 판정과 같게). 상위를 사용중지하면 하위는 자기 상태가 `ACTIVE` 로 남아 목록이 「등록 N개」인데 팝업은 빈 칸이었다. BP 목록은 팝업처럼 WHALE_ERP 메뉴만 센다. 상위 두 단계는 메뉴 최대 3단계(`MAX_MENU_DEPTH`)에 기대므로 그 값을 단위 테스트로 고정했다. 서비스 사용 여부는 여전히 보지 않는다.
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) — 알림톡 버튼 링크 형식 확정(WHALEERP-636, 김민식 2026-11-02 · 비즈뿌리오 확인): 카카오 등록 버튼 링크가 `https://#{가입링크}` 라 버튼 `url_mobile` · `url_pc` 에는 앞의 `https://` 를 뗀 주소만 싣는다. https 가 아닌 링크(http 포함)는 보내기 전에 던지고, 근로계약 발송 전 검사는 `STAFF_APP_URL` 이 https 가 아니면 쓰기 전에 503. `STAFF_APP_URL` 값 · 대체 문자 · 메일 링크는 `https://` 포함 전체 주소 그대로.
 
 ## 2026-10-30
 * **Update**: [BP holidays](/api/bp-holidays.md) — 변경 이력 항목명을 화면처럼 「대상점포」 · 「예외점포」(붙여 씀)로, 등록 요약의 점포 수 단위를 「예외 N개」로(「N개점」 아님, 2026-10-30 재영, front 요청). 막힘 사유 문구는 그대로. 옛 이력 행은 그대로 둔다 — 마이그레이션 없음.
