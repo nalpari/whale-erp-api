@@ -143,7 +143,8 @@ match) is thrown before any request too. `isMobilePhone` lets a caller run the n
 check before it writes, and `hasSmsFallback()` says whether `BIZPPURIO_SMS_FROM` is set —
 the only way a button link reaches anyone when Kakao rejects the 알림톡 — an unapproved body or button
 makes the 알림톡 itself fail (근로계약 가입 초대 ·
-소속 추가 확인 요청 require it until 소속 추가 is registered too — api #74 review).
+소속 추가 확인 요청 require it until 소속 추가 is registered and the invite's scheme-less button is
+seen opening in a real send — api #74 review).
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s
