@@ -66,6 +66,8 @@ const DEFAULT_TEMPLATE_CODES = [
   'EMAIL_EXCEL_FAILED',
   'TALK_STAFF_INVITATION',
   'TALK_STAFF_AFFILIATION_REQUEST',
+  // 근로계약서 발송 알림톡(20261102114500, WHALEERP-619)
+  'TALK_STAFF_CONTRACT_SENT',
 ];
 
 describe('알림 템플릿 관리 (e2e, DB)', () => {
@@ -188,10 +190,11 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
   // 처음 넣은 40건은 20261013153521 이 복사했고, 41번째 EMAIL_LEAD_REPLY(WHALEERP-588) · 42번째 NTF_SIGNUP_UNDER_AGE
   // (20261021103042, 가입 불가 — 만 19세 미만) · 43 · 44번째 EMAIL_ · TALK_STAFF_AFFILIATION_REQUEST(20261027154954, 소속
   // 추가 확인 요청) · 45 · 46번째 EMAIL_EXCEL_READY · EMAIL_EXCEL_FAILED(20261028140448, 공통 엑셀) · 47번째
-  // EMAIL_SCHEDULE_CHANGED(20261030142820, 근무스케줄 변경 메일)는 자기 INSERT 에서
+  // EMAIL_SCHEDULE_CHANGED(20261030142820, 근무스케줄 변경 메일) · 48번째 TALK_STAFF_CONTRACT_SENT(20261102114500, 근로계약서 발송
+  // 알림톡)는 자기 INSERT 에서
   // 채운다. 건수가 아니라 코드로 본다 — 기본 템플릿을 더하면 okf naming 「기본 템플릿 코드」 표와 함께 이 목록에 더한다
   // (WHALEERP-617).
-  it('마이그레이션으로 넣은 기본 템플릿 47건에 기본 문구가 있다 (NOTIFY-17)', async () => {
+  it('마이그레이션으로 넣은 기본 템플릿 48건에 기본 문구가 있다 (NOTIFY-17)', async () => {
     const rows = await prisma.notificationTemplate.findMany({
       where: { defaultBody: { not: null } },
       select: { templateCode: true },
@@ -232,6 +235,35 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     expect(variables.filter((v) => v.isButtonLink).map((v) => v.name)).toEqual([
       '링크',
     ]);
+    expect(row.variables).toEqual(row.defaultVariables);
+  });
+
+  it('근로계약서 발송 알림톡이 카카오 등록본과 같다 — 카카오 코드 PUSH_CONTRACT_SENT, 버튼 · 링크 변수 없음(WHALEERP-619)', async () => {
+    const registered = [
+      '#{근무지}에서 근로계약서를 보냈습니다.',
+      '',
+      '- 서명 기한: #{날인기한}',
+      '',
+      '계약 내용을 확인하고 서명해 주세요.',
+    ].join('\n');
+    const row = await prisma.notificationTemplate.findUniqueOrThrow({
+      where: { templateCode: 'TALK_STAFF_CONTRACT_SENT' },
+    });
+    expect(row).toMatchObject({
+      channel: 'ALIMTALK',
+      title: null,
+      body: registered,
+      defaultBody: registered,
+      kakaoTemplateCode: 'PUSH_CONTRACT_SENT',
+      preferenceCategory: null,
+      isActive: true,
+    });
+    const variables = row.variables as {
+      name: string;
+      isButtonLink?: boolean;
+    }[];
+    expect(variables.map((v) => v.name)).toEqual(['근무지', '날인기한']);
+    expect(variables.some((v) => v.isButtonLink)).toBe(false);
     expect(row.variables).toEqual(row.defaultVariables);
   });
 

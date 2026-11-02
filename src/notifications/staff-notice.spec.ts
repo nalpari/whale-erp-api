@@ -59,7 +59,9 @@ describe('noticeStaff', () => {
 
   it('템플릿으로 문구를 채워 직원 알림 · 받는 사람 · 앱 푸시 발송 대기를 만든다', async () => {
     const tx = txWith();
-    await expect(noticeStaff(tx as never, logger, input)).resolves.toBe(true);
+    await expect(noticeStaff(tx as never, logger, input)).resolves.toBe(
+      'QUEUED',
+    );
     expect(tx.notification.create).toHaveBeenCalledWith({
       data: {
         notificationTarget: 'STAFF',
@@ -86,7 +88,9 @@ describe('noticeStaff', () => {
 
   it('수신 설정 묶음을 끈 직원은 알림함 줄만 — 앱 푸시 발송 대기가 없다', async () => {
     const tx = txWith({ off: true });
-    await expect(noticeStaff(tx as never, logger, input)).resolves.toBe(true);
+    await expect(noticeStaff(tx as never, logger, input)).resolves.toBe(
+      'MUTED',
+    );
     expect(tx.notificationRecipient.create).toHaveBeenCalled();
     expect(tx.notificationDelivery.create).not.toHaveBeenCalled();
   });

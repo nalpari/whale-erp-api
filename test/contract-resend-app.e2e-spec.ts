@@ -40,7 +40,8 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
     app = moduleFixture.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);
-    // 앱 알림 재발송은 알림톡을 보내지 않는다 — 불리면 실패로 드러나게 가로챈다
+    // 가입 초대 · 소속 추가 확인 요청만 접수 성공을 준다(테스트마다 mockResolvedValueOnce). 가입한 직원의 근로계약서 발송
+    // 알림톡(WHALEERP-619)은 이 실패를 받아도 재발송이 200 이어야 한다 — 저장 · 알림함 줄은 이미 끝났다
     alimtalkSend = jest
       .spyOn(app.get(AlimtalkService), 'send')
       .mockRejectedValue(new Error('알림톡을 보내면 안 된다'));
@@ -401,11 +402,23 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
     expect(kstDay(after.signDeadlineAt!)).not.toBe(
       kstDay(before.signDeadlineAt!),
     );
-    expect(alimtalkSend).not.toHaveBeenCalled();
+    // 근로계약서 발송 알림톡도 같은 변수로 한 번(WHALEERP-619) — 알림톡이 실패해도(가로챈 실패) 재발송은 200 이다
+    expect(alimtalkSend).toHaveBeenCalledTimes(1);
+    expect(alimtalkSend).toHaveBeenCalledWith({
+      templateCode: 'TALK_STAFF_CONTRACT_SENT',
+      to: expect.any(String) as string,
+      variables: {
+        근무지: '모리커피 연남점',
+        날인기한: kstDay(after.signDeadlineAt!),
+      },
+      related: { type: 'contract', id: ids.joinedSigning.contractId },
+      sentBy: expect.any(Number) as number,
+    });
 
-    // 한 번 더 보내면 알림도 한 줄 더 — 보낼 때마다 하나다
+    // 한 번 더 보내면 알림 · 알림톡도 한 번 더 — 보낼 때마다 하나다
     await send('joinedSigning', 200);
     expect(await noticesOf('joinedSigning')).toHaveLength(2);
+    expect(alimtalkSend).toHaveBeenCalledTimes(2);
   });
 
   it('가입한 직원의 발송 대기 계약은 서명 대기로 넘겨 보낸다 — 상태 이력(ADMIN) 한 줄', async () => {
@@ -424,7 +437,10 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
       },
     ]);
     expect(await noticesOf('joinedSend')).toHaveLength(1);
-    expect(alimtalkSend).not.toHaveBeenCalled();
+    expect(alimtalkSend).toHaveBeenCalledTimes(1);
+    expect(alimtalkSend).toHaveBeenCalledWith(
+      expect.objectContaining({ templateCode: 'TALK_STAFF_CONTRACT_SENT' }),
+    );
   });
 
   it('가입한 직원의 발송 대기 계약에 재발송 둘이 동시에 오면 둘 다 200 — 전환 이력은 한 줄, 알림은 두 줄', async () => {
@@ -447,7 +463,12 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
       { fromStatus: 'PENDING_SEND', toStatus: 'PENDING_SIGNATURE' },
     ]);
     expect(await noticesOf('joinedSendRace')).toHaveLength(2);
-    expect(alimtalkSend).not.toHaveBeenCalled();
+    // 근로계약서 발송 알림톡은 보내기 직전에 계약이 아직 그 발송 그대로인지 본다 — 앞 요청이 읽을 때 뒤 요청이 이미 새 기한을
+    // 썼을 때만 앞 요청이 빠진다. 뒤 요청은 앞 요청의 잠금이 풀린 뒤 쓰므로 대개 둘 다 나간다(알림함 줄은 늘 두 줄). 두 탭
+    // 재발송은 expectedSentAt 검사(409)가 막는다
+    const sends = alimtalkSend.mock.calls.length;
+    expect(sends).toBeGreaterThanOrEqual(1);
+    expect(sends).toBeLessThanOrEqual(2);
   });
 
   it('가입한 직원의 계정이 탈퇴했으면 기한만 새로 잡고 알림은 만들지 않는다(첫 발송과 같다, NTF-25)', async () => {
@@ -456,6 +477,7 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
     const after = await contractOf('joinedWithdrawn');
     expect(after.sentAt!.getTime()).toBeGreaterThan(before.sentAt!.getTime());
     expect(await noticesOf('joinedWithdrawn')).toHaveLength(0);
+    expect(alimtalkSend).not.toHaveBeenCalled();
   });
 
   it('소속 추가 확인(계정 있음 · 이 점포 미가입)은 소속 추가 확인 요청을 새로 보낸다 — 옛 서명 대기는 수락 전이라 발송 대기로, 날인 기한은 없앤다(WHALEERP-130)', async () => {

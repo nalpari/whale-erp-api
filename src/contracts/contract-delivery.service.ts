@@ -44,6 +44,7 @@ import {
   AFFILIATION_MAIL_TEMPLATE,
   AFFILIATION_TEMPLATE,
   CONTRACT_RELATED_TYPE,
+  CONTRACT_SENT_TEMPLATE,
   INVITATION_TEMPLATE,
   sendFailureKindOf,
   type SendFailureKind,
@@ -154,7 +155,24 @@ export type DeliveryInput = {
  */
 export type DispatchResult = boolean | 'ANSWERED';
 
-/** 커밋 뒤 보낼 가입 초대 · 소속 추가 확인 요청. 앱 알림(APP)은 보낼 것이 없어 null 이다. */
+/**
+ * 커밋 뒤 보낼 근로계약서 발송 알림톡(WHALEERP-619) — 가입한 직원이 앱으로 받을 때(APP). 직원 알림함 줄과 앱 푸시 발송 대기를
+ * 만들었을 때만 있다(수신 설정에서 근로계약서 묶음을 끈 직원 · 받을 계정이 없거나 탈퇴 · 알림함 템플릿을 쓸 수 없음은 없다).
+ */
+export type PendingContractNotice = {
+  kind: 'CONTRACT_SENT';
+  contractId: number;
+  /** 받을 번호 — 수신 설정을 본 그 계정의 번호 */
+  phone: string;
+  /** 이 발송이 잡은 서명 기한 — 보내기 직전에 계약이 아직 이 발송 그대로인지 본다 */
+  signDeadlineAt: Date;
+  variables: { 근무지: string; 날인기한: string };
+};
+
+/** 커밋 뒤 보낼 것 — 가입 초대 · 소속 추가 확인 요청, 또는 가입한 직원의 근로계약서 발송 알림톡. 보낼 것이 없으면 null 이다. */
+export type PendingDelivery = PendingInvite | PendingContractNotice;
+
+/** 커밋 뒤 보낼 가입 초대 · 소속 추가 확인 요청 */
 export type PendingInvite = DeliveryInput & {
   kind: 'INVITE' | 'AFFILIATION';
   /** 알림톡에 싣는 초대 코드 원문 — DB 에는 hashInvitationCode 값만. 소속 추가 확인 요청은 코드가 없어 null */
@@ -198,6 +216,7 @@ const failureOf = (e: unknown): { kind: SendFailureKind; code?: number } =>
  *   초대 발송으로 둔다. 상태는 호출부가 `deliveredStatusOf` 로 정해 바꾼다.
  * - `dispatch` 는 커밋 뒤에 가입 초대 알림톡을 보낸다 — 알림톡은 롤백이 없어서다(공통 모듈 규칙). 확실히 나가지
  *   않았으면 보내기 직전으로 되돌려 502 SEND_FAILED, 메시지 요청 뒤 응답이 끊겼으면 되돌리지 않고 502 SEND_UNCONFIRMED.
+ *   가입한 직원의 근로계약서 발송 알림톡(WHALEERP-619)도 커밋 뒤에 보내지만, 되돌리지 않고 실패해도 저장은 그대로다.
  *
  * 초대 코드는 알림톡 본문에 싣는다. 초대 링크(STAFF_APP_URL 의 `/invite#token=…`)는 버튼 변수라 알림톡 버튼과 대체 문자
  * 끝에 함께 실린다(WHALEERP-636). 버튼에는 앞의 `https://` 를 뗀 주소가 실리므로(등록 링크가 `https://#{변수}`) 직원 앱 주소가
@@ -289,14 +308,14 @@ export class ContractDeliveryService {
   }
 
   /**
-   * 저장 트랜잭션 안에서 보낼 준비를 한다(계약 행을 잠근 뒤 · 상태를 바꾼 뒤에 부른다). 가입 초대면 커밋 뒤 보낼 것을
-   * 돌려주고, 앱 알림이면 null 이다.
+   * 저장 트랜잭션 안에서 보낼 준비를 한다(계약 행을 잠근 뒤 · 상태를 바꾼 뒤에 부른다). 커밋 뒤 보낼 것을 돌려준다 — 가입 초대 ·
+   * 소속 추가 확인 요청, 가입한 직원이면 근로계약서 발송 알림톡(알림함 줄과 함께, 수신 설정을 따른다). 보낼 것이 없으면 null 이다.
    */
   async prepare(
     tx: Prisma.TransactionClient,
     input: DeliveryInput,
     now: Date,
-  ): Promise<PendingInvite | null> {
+  ): Promise<PendingDelivery | null> {
     const channel = channelOf(input.joined, input.draftAction);
     if (channel !== 'APP') await this.assertCanInvite(tx, input.phone, channel);
     const { staffMemberId } = input.before;
@@ -328,10 +347,8 @@ export class ContractDeliveryService {
         }),
       },
     });
-    if (channel === 'APP') {
-      if (input.joined) await this.noticeSent(tx, input, deadline);
-      return null;
-    }
+    if (channel === 'APP')
+      return input.joined ? this.noticeSent(tx, input, deadline) : null;
     if (channel === 'AFFILIATION')
       return this.prepareAffiliation(tx, input, now, deadline, previous, sent);
 
@@ -495,15 +512,22 @@ export class ContractDeliveryService {
    * 근로계약서 발송 직원 알림(PUSH_CONTRACT_SENT, #259) — 가입한 직원이 앱으로 받을 때. 저장 · 재발송 · 수정 요청 계약 고침이
    * 모두 이 길로 와 보낼 때마다 하나다. 받을 계정이 없거나(데이터 손상 — error) 탈퇴했으면(warn) 만들지 않고 남긴다(NTF-25).
    * 템플릿 문제로 만들지 못해도 저장은 그대로다(noticeStaff).
+   *
+   * 앱 푸시 발송 대기까지 만들었으면(수신 설정에서 근로계약서 묶음을 끄지 않음) 같은 변수의 근로계약서 발송 알림톡을 돌려준다
+   * (WHALEERP-619 — 1차에는 앱 푸시가 없어 알림톡이 바깥으로 나가는 유일한 길이다). 알림톡은 되돌릴 수 없어 커밋 뒤 dispatch 가
+   * 보낸다. 묶음을 끈 직원은 알림함 줄만 남고 알림톡은 없다.
    */
   private async noticeSent(
     tx: Prisma.TransactionClient,
     input: DeliveryInput,
     deadline: Date,
-  ): Promise<void> {
+  ): Promise<PendingContractNotice | null> {
     const staff = await tx.staffMember.findUnique({
       where: { staffMemberId: input.before.staffMemberId },
-      select: { accountId: true, account: { select: { status: true } } },
+      select: {
+        accountId: true,
+        account: { select: { status: true, phone: true } },
+      },
     });
     // 가입한 직원인데 계정이 없으면 데이터가 깨진 것이라 error(가입이 계정 연결 · 가입 완료를 한 번에 쓴다), 탈퇴는 있을 수
     // 있는 일이라 warn — 둘 다 알림 없이 기한만 새로 잡는다
@@ -511,13 +535,13 @@ export class ContractDeliveryService {
       this.logger.error(
         `contract notice SKIPPED contract=${input.contractId}: no account on a joined staff member`,
       );
-      return;
+      return null;
     }
     if (staff.account?.status === 'WITHDRAWN') {
       this.logger.warn(
         `contract notice SKIPPED contract=${input.contractId}: withdrawn account`,
       );
-      return;
+      return null;
     }
     const store = await tx.store.findUnique({
       where: { storeId: input.storeId },
@@ -525,16 +549,77 @@ export class ContractDeliveryService {
     });
     // 날인 기한은 한국 날짜로 — 템플릿 예시 「10월 30일」
     const day = new Date(deadline.getTime() + 9 * 60 * 60 * 1000);
-    await noticeStaff(tx, this.logger, {
+    const variables = {
+      근무지: store?.name ?? '',
+      날인기한: `${day.getUTCMonth() + 1}월 ${day.getUTCDate()}일`,
+    };
+    const notice = await noticeStaff(tx, this.logger, {
       templateCode: 'PUSH_CONTRACT_SENT',
       accountId: staff.accountId,
       relatedType: 'CONTRACT',
       relatedId: input.contractId,
-      variables: {
-        근무지: store?.name ?? '',
-        날인기한: `${day.getUTCMonth() + 1}월 ${day.getUTCDate()}일`,
-      },
+      variables,
     });
+    if (notice !== 'QUEUED' || !staff.account) return null;
+    return {
+      kind: 'CONTRACT_SENT',
+      contractId: input.contractId,
+      // 레코드 번호가 아니라 계정 번호 — 수신 설정을 본 그 사람에게 간다(계정 번호가 바뀌어도 옛 번호로 새지 않게)
+      phone: staff.account.phone,
+      signDeadlineAt: deadline,
+      variables,
+    };
+  }
+
+  /**
+   * 커밋 뒤 근로계약서 발송 알림톡을 보낸다(WHALEERP-619). 저장 · 알림함 줄은 이미 끝났으므로 실패해도 던지지 않는다 — 결과는
+   * 알림톡 발송 이력(alimtalk_send_logs, 관련 업무 = 계약)에 남고, 보내기 전 실패(템플릿 꺼짐 · 번호 등)는 로그로 남긴다(NTF-25).
+   * 버튼이 없는 템플릿이라 링크도 없다 — 대체 문자도 본문만 간다. 유선번호는 알림톡이 받지 않아 보내지 않는다.
+   * 보내기 직전에 계약이 아직 이 발송 그대로인지(서명 대기 · 이 발송이 잡은 기한) 다시 본다 — 커밋 뒤 다른 요청이 다시 보냈거나
+   * (그 요청이 새 기한으로 보낸다) 대체 · 종료 · 날인했으면 옛 기한의 「서명해 주세요」는 보내지 않는다. 동시 재발송은 뒤 요청이
+   * 앞 요청의 잠금이 풀린 뒤에 쓰므로 앞 요청의 재조회가 대개 먼저 끝나 둘 다 나갈 수 있다 — 두 탭 재발송은 expectedSentAt 검사(409)가
+   * 막는다. 읽은 뒤 보내기 전의 짧은 틈은 남는다(가입 초대와 같다). 재조회가 실패해도(연결 끊김 등) 던지지 않고 로그만 남긴다.
+   */
+  private async sendContractNotice(
+    pending: PendingContractNotice,
+    sentBy: number,
+  ): Promise<void> {
+    const { contractId } = pending;
+    try {
+      const now = await this.prisma.contract.findUnique({
+        where: { contractId },
+        select: { status: true, signDeadlineAt: true },
+      });
+      if (
+        now?.status !== 'PENDING_SIGNATURE' ||
+        now.signDeadlineAt?.getTime() !== pending.signDeadlineAt.getTime()
+      ) {
+        this.logger.warn(
+          `근로계약서 발송 알림톡을 보내지 않음: 계약 ${contractId} 를 그사이 다른 요청이 바꿨다(status=${now?.status})`,
+        );
+        return;
+      }
+      if (!isMobilePhone(pending.phone)) {
+        this.logger.warn(
+          `근로계약서 발송 알림톡을 보내지 않음: 계약 ${contractId} 의 번호가 휴대폰 번호가 아니다`,
+        );
+        return;
+      }
+      await this.alimtalk.send({
+        templateCode: CONTRACT_SENT_TEMPLATE,
+        to: pending.phone,
+        variables: pending.variables,
+        related: { type: CONTRACT_RELATED_TYPE, id: contractId },
+        sentBy,
+      });
+    } catch (e) {
+      // 비즈뿌리오 오류는 AlimtalkService 가 이력 · 로그로 남긴다 — 그 밖(재조회 · 보내기 전 검사)만 여기서 남긴다
+      if (!(e instanceof BizppurioError))
+        this.logger.error(
+          `근로계약서 발송 알림톡을 보내기 전에 실패 contract=${contractId}`,
+          e instanceof Error ? e.stack : String(e),
+        );
+    }
   }
 
   /**
@@ -547,13 +632,17 @@ export class ContractDeliveryService {
    * 그사이 직원이 답했으면(수락 · 거절 — 소속 추가 확인 요청은 커밋 직후 직원 앱 목록에 보여 알림톡 전에 답할 수 있다) 처리가
    * 끝난 것이라 보내지 않고 'ANSWERED' 다. 발송이 실패한 뒤 되돌리다 답한 것을 알아도 같다 — 답한 요청 · 그 계약은 건드리지
    * 않는다. 계약은 그 답으로 서명 대기 · 거부가 됐으니 호출부는 미리 계산한 상태가 아니라 지금 값을 다시 읽어 답한다.
-   * 보냈거나 보낼 것이 없으면 true.
+   * 보냈거나 보낼 것이 없으면 true. 가입한 직원의 근로계약서 발송 알림톡은 실패해도 true 다(sendContractNotice).
    */
   async dispatch(
-    pending: PendingInvite | null,
+    pending: PendingDelivery | null,
     sentBy: number,
   ): Promise<DispatchResult> {
     if (!pending) return true;
+    if (pending.kind === 'CONTRACT_SENT') {
+      await this.sendContractNotice(pending, sentBy);
+      return true;
+    }
     const { contractId } = pending;
     const mine = await this.prisma.invitation.findUnique({
       where: { invitationId: pending.invitationId },

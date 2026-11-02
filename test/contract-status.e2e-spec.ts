@@ -1890,6 +1890,40 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       expect(new Date(result.signDeadlineAt!).getTime()).toBeGreaterThan(
         Date.now(),
       );
+
+      // 근로계약서 발송 알림톡(WHALEERP-619) — 실제 AlimtalkService 가 DB 템플릿을 렌더해 등록본 그대로 · 버튼 없이 보내고 이력을 남긴다
+      const logsOf = () =>
+        prisma.alimtalkSendLog.findMany({
+          where: {
+            relatedType: 'contract',
+            relatedId: contractId,
+            templateCode: 'TALK_STAFF_CONTRACT_SENT',
+          },
+          select: { kakaoTemplateCode: true, result: true, body: true },
+        });
+      const logs = await logsOf();
+      expect(logs).toHaveLength(1);
+      expect(logs[0]).toMatchObject({
+        kakaoTemplateCode: 'PUSH_CONTRACT_SENT',
+        result: 'SUCCEEDED',
+      });
+      expect(logs[0].body).toMatch(
+        /^.+에서 근로계약서를 보냈습니다\.\n\n- 서명 기한: \d+월 \d+일\n\n계약 내용을 확인하고 서명해 주세요\.$/,
+      );
+      const client: ReturnType<typeof fakeBizppurio> = app.get(BizppurioClient);
+      const [message] = client.sendMessage.mock.calls.at(-1) as unknown as [
+        { content: { at: { templatecode: string; button?: unknown } } },
+      ];
+      expect(message.content.at.templatecode).toBe('PUSH_CONTRACT_SENT');
+      expect(message.content.at).not.toHaveProperty('button');
+
+      // 수신 설정에서 근로계약서 묶음을 끄면 알림함 줄만 — 다시 보내도 알림톡은 더 나가지 않는다
+      await prisma.notificationPreference.create({
+        data: { accountId, preferenceCategory: 'CONTRACT', isEnabled: false },
+      });
+      await app.get(ContractSendService).send(adminId, contractId);
+      expect(await logsOf()).toHaveLength(1);
+
       await prisma.$transaction((tx) => signContract(tx, contractId));
       expect((await stateOf(contractId)).status).toBe('SIGNED');
     });

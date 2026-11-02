@@ -23,6 +23,8 @@ export type StaffNoticeInput = {
  * 알림도 없다). 템플릿으로 문구를 채워 직원 알림과 받는 사람 한 줄을 만들고, 템플릿의 수신 설정 묶음을 끈 직원이 아니면
  * 앱 푸시 발송 대기 한 줄을 남긴다(NTF-14 — 끈 직원도 알림함 줄은 남는다). 실제 앱 푸시는 아직 없다(#261 · #321).
  *
+ * 만들었으면 앱 푸시 발송 대기까지 남겼는지('QUEUED') · 묶음을 꺼 알림함 줄만인지('MUTED')를 돌려준다 — 같은 때 알림톡을 보내는
+ * 근로계약서 발송(WHALEERP-619)이 이 판정을 따른다(근무스케줄 변경 메일과 같다 — 알림톡 템플릿에는 묶음을 둘 수 없다).
  * 템플릿을 쓸 수 없으면(없음 · 채널이 다름 · 사용 안 함 · 렌더 실패) 알림 없이 false — 운영자가 템플릿을 잘못 고쳐도
  * 관리자의 업무가 막히면 안 된다. 사용 안 함만 warn 이고 나머지는 고쳐야 할 일이라 error 다. DB 오류는 던진다.
  * 근무스케줄 저장 알림(work-schedule-notice.ts) · 수행 임박 알림과 같은 순서다.
@@ -31,7 +33,7 @@ export async function noticeStaff(
   tx: Prisma.TransactionClient,
   logger: Logger,
   input: StaffNoticeInput,
-): Promise<boolean> {
+): Promise<'QUEUED' | 'MUTED' | false> {
   const { templateCode } = input;
   const at = `${input.relatedType}=${input.relatedId}`;
   const row = await tx.notificationTemplate.findUnique({
@@ -95,12 +97,12 @@ export async function noticeStaff(
     },
     select: { accountId: true },
   });
-  if (!off)
-    await tx.notificationDelivery.create({
-      data: {
-        notificationRecipientId: recipient.notificationRecipientId,
-        channel: 'PUSH',
-      },
-    });
-  return true;
+  if (off) return 'MUTED';
+  await tx.notificationDelivery.create({
+    data: {
+      notificationRecipientId: recipient.notificationRecipientId,
+      channel: 'PUSH',
+    },
+  });
+  return 'QUEUED';
 }

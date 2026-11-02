@@ -207,7 +207,8 @@ describe('직원 알림 — 근로계약서 · 급여명세서 발송 (e2e, DB)'
         variables: { 급여월: '9월', 근무지: '모리커피 연남점' },
       }),
     ]);
-    expect(sent).toEqual([true, true, true]);
+    // 근로계약서 묶음을 끈 직원은 알림함 줄만(MUTED) — 근로계약서 발송 알림톡도 이 판정을 따른다(WHALEERP-619)
+    expect(sent).toEqual(['MUTED', 'QUEUED', 'QUEUED']);
 
     const rows = await prisma.notificationRecipient.findMany({
       where: { accountId },
