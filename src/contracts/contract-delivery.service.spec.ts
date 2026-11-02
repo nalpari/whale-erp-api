@@ -38,6 +38,8 @@ describe('ContractDeliveryService', () => {
   const NOW = new Date('2026-10-19T01:00:00Z');
   const DEADLINE = new Date(NOW.getTime() + SEND_VALID_MS);
   const PHONE = '01090145563';
+  // 가입한 직원의 계정 번호 — 근로계약서 발송 알림톡은 레코드 번호가 아니라 이 번호로 간다
+  const ACCOUNT_PHONE = '01077778888';
   const input = (over: Partial<DeliveryInput> = {}): DeliveryInput => ({
     contractId: 7,
     storeId: 11,
@@ -94,6 +96,7 @@ describe('ContractDeliveryService', () => {
   let prisma: {
     $transaction: jest.Mock;
     invitation: { findUnique: jest.Mock };
+    contract: { findUnique: jest.Mock };
   };
   let alimtalk: { send: jest.Mock; hasSmsFallback: jest.Mock };
   let appUrl: string | undefined;
@@ -130,9 +133,10 @@ describe('ContractDeliveryService', () => {
         update: jest.fn(),
         updateMany: jest.fn(),
         // 앱으로 받는 직원의 계정(근로계약서 발송 알림)
-        findUnique: jest
-          .fn()
-          .mockResolvedValue({ accountId: 5, account: { status: 'JOINED' } }),
+        findUnique: jest.fn().mockResolvedValue({
+          accountId: 5,
+          account: { status: 'JOINED', phone: ACCOUNT_PHONE },
+        }),
       },
       store: {
         findUnique: jest.fn().mockResolvedValue({ name: '모리커피 연남점' }),
@@ -172,6 +176,13 @@ describe('ContractDeliveryService', () => {
       // 보내기 직전에 다시 읽는 내 초대 — 기본은 아직 보냄
       invitation: {
         findUnique: jest.fn().mockResolvedValue({ status: 'SENT' }),
+      },
+      // 근로계약서 발송 알림톡을 보내기 직전에 다시 읽는 계약 — 기본은 이 발송 그대로(서명 대기 · 이 발송의 기한)
+      contract: {
+        findUnique: jest.fn().mockResolvedValue({
+          status: 'PENDING_SIGNATURE',
+          signDeadlineAt: DEADLINE,
+        }),
       },
     };
     alimtalk = {
@@ -330,7 +341,8 @@ describe('ContractDeliveryService', () => {
         expect(pending).toEqual({
           kind: 'CONTRACT_SENT',
           contractId: 7,
-          phone: PHONE,
+          phone: ACCOUNT_PHONE,
+          signDeadlineAt: DEADLINE,
           variables: {
             근무지: '모리커피 연남점',
             날인기한: `${kst.getUTCMonth() + 1}월 ${kst.getUTCDate()}일`,
@@ -887,6 +899,7 @@ describe('ContractDeliveryService', () => {
         kind: 'CONTRACT_SENT',
         contractId: 7,
         phone: PHONE,
+        signDeadlineAt: DEADLINE,
         variables: { 근무지: '모리커피 연남점', 날인기한: '11월 18일' },
         ...over,
       });
@@ -932,6 +945,38 @@ describe('ContractDeliveryService', () => {
           error.mockRestore();
         }
       });
+
+      it.each([
+        [
+          '다른 요청이 다시 보냈으면(기한이 바뀜 — 그 요청이 새 기한으로 보낸다)',
+          {
+            status: 'PENDING_SIGNATURE',
+            signDeadlineAt: new Date(DEADLINE.getTime() + 1000),
+          },
+        ],
+        [
+          '서명 대기가 아니면(날인 · 대체 · 종료)',
+          { status: 'SIGNED', signDeadlineAt: DEADLINE },
+        ],
+        ['계약이 없으면', null],
+      ])(
+        '보내기 직전에 계약이 이 발송 그대로가 아니면 보내지 않는다 — %s',
+        async (_, current) => {
+          prisma.contract.findUnique.mockResolvedValueOnce(current);
+          const warn = jest
+            .spyOn(Logger.prototype, 'warn')
+            .mockImplementation(() => undefined);
+          try {
+            await expect(service().dispatch(notice(), 9)).resolves.toBe(true);
+            expect(alimtalk.send).not.toHaveBeenCalled();
+            expect(warn).toHaveBeenCalledWith(
+              expect.stringContaining('그사이 다른 요청이 바꿨다'),
+            );
+          } finally {
+            warn.mockRestore();
+          }
+        },
+      );
 
       it('유선번호면 보내지 않고 warn — 알림톡이 받지 않는다', async () => {
         const warn = jest

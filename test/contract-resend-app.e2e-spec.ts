@@ -462,9 +462,12 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
     expect(history).toEqual([
       { fromStatus: 'PENDING_SEND', toStatus: 'PENDING_SIGNATURE' },
     ]);
-    // 알림이 두 줄이면 근로계약서 발송 알림톡도 두 번이다 — 보낼 때마다 하나다
     expect(await noticesOf('joinedSendRace')).toHaveLength(2);
-    expect(alimtalkSend).toHaveBeenCalledTimes(2);
+    // 근로계약서 발송 알림톡은 보내기 직전에 계약이 아직 그 발송 그대로인지 본다 — 앞 요청이 읽을 때 뒤 요청이 이미 새 기한을
+    // 썼으면 앞 요청은 보내지 않는다. 둘이 겹친 때에 따라 한 번 또는 두 번이다(알림함 줄은 늘 두 줄)
+    const sends = alimtalkSend.mock.calls.length;
+    expect(sends).toBeGreaterThanOrEqual(1);
+    expect(sends).toBeLessThanOrEqual(2);
   });
 
   it('가입한 직원의 계정이 탈퇴했으면 기한만 새로 잡고 알림은 만들지 않는다(첫 발송과 같다, NTF-25)', async () => {

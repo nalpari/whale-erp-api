@@ -162,7 +162,10 @@ export type DispatchResult = boolean | 'ANSWERED';
 export type PendingContractNotice = {
   kind: 'CONTRACT_SENT';
   contractId: number;
+  /** 받을 번호 — 수신 설정을 본 그 계정의 번호 */
   phone: string;
+  /** 이 발송이 잡은 서명 기한 — 보내기 직전에 계약이 아직 이 발송 그대로인지 본다 */
+  signDeadlineAt: Date;
   variables: { 근무지: string; 날인기한: string };
 };
 
@@ -521,7 +524,10 @@ export class ContractDeliveryService {
   ): Promise<PendingContractNotice | null> {
     const staff = await tx.staffMember.findUnique({
       where: { staffMemberId: input.before.staffMemberId },
-      select: { accountId: true, account: { select: { status: true } } },
+      select: {
+        accountId: true,
+        account: { select: { status: true, phone: true } },
+      },
     });
     // 가입한 직원인데 계정이 없으면 데이터가 깨진 것이라 error(가입이 계정 연결 · 가입 완료를 한 번에 쓴다), 탈퇴는 있을 수
     // 있는 일이라 warn — 둘 다 알림 없이 기한만 새로 잡는다
@@ -554,11 +560,13 @@ export class ContractDeliveryService {
       relatedId: input.contractId,
       variables,
     });
-    if (notice !== 'QUEUED') return null;
+    if (notice !== 'QUEUED' || !staff.account) return null;
     return {
       kind: 'CONTRACT_SENT',
       contractId: input.contractId,
-      phone: input.phone,
+      // 레코드 번호가 아니라 계정 번호 — 수신 설정을 본 그 사람에게 간다(계정 번호가 바뀌어도 옛 번호로 새지 않게)
+      phone: staff.account.phone,
+      signDeadlineAt: deadline,
       variables,
     };
   }
@@ -567,12 +575,28 @@ export class ContractDeliveryService {
    * 커밋 뒤 근로계약서 발송 알림톡을 보낸다(WHALEERP-619). 저장 · 알림함 줄은 이미 끝났으므로 실패해도 던지지 않는다 — 결과는
    * 알림톡 발송 이력(alimtalk_send_logs, 관련 업무 = 계약)에 남고, 보내기 전 실패(템플릿 꺼짐 · 번호 등)는 로그로 남긴다(NTF-25).
    * 버튼이 없는 템플릿이라 링크도 없다 — 대체 문자도 본문만 간다. 유선번호는 알림톡이 받지 않아 보내지 않는다.
+   * 보내기 직전에 계약이 아직 이 발송 그대로인지(서명 대기 · 이 발송이 잡은 기한) 다시 본다 — 커밋 뒤 다른 요청이 다시 보냈거나
+   * (그 요청이 새 기한으로 보낸다) 대체 · 종료 · 날인했으면 옛 기한의 「서명해 주세요」는 보내지 않는다. 동시 재발송이 두 번 나가는
+   * 것도 대개 이것으로 하나가 된다. 읽은 뒤 보내기 전의 짧은 틈은 남는다(가입 초대와 같다).
    */
   private async sendContractNotice(
     pending: PendingContractNotice,
     sentBy: number,
   ): Promise<void> {
     const { contractId } = pending;
+    const now = await this.prisma.contract.findUnique({
+      where: { contractId },
+      select: { status: true, signDeadlineAt: true },
+    });
+    if (
+      now?.status !== 'PENDING_SIGNATURE' ||
+      now.signDeadlineAt?.getTime() !== pending.signDeadlineAt.getTime()
+    ) {
+      this.logger.warn(
+        `근로계약서 발송 알림톡을 보내지 않음: 계약 ${contractId} 를 그사이 다른 요청이 바꿨다(status=${now?.status})`,
+      );
+      return;
+    }
     if (!isMobilePhone(pending.phone)) {
       this.logger.warn(
         `근로계약서 발송 알림톡을 보내지 않음: 계약 ${contractId} 의 번호가 휴대폰 번호가 아니다`,
