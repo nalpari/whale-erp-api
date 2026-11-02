@@ -16,7 +16,6 @@ import { BIZPPURIO_CONFIG, type BizppurioConfig } from './bizppurio.config';
 import {
   alimtalkButtonOf,
   alimtalkButtonProblem,
-  BUTTON_LINK_SCHEME,
   isButtonLinkUrl,
 } from './alimtalk-buttons';
 import { failureHeadOf } from './failure-reason';
@@ -228,8 +227,8 @@ export class AlimtalkService {
 
 /**
  * 버튼 링크 값을 웹링크(WL) 버튼 하나로. PC 카카오톡에도 보이게 모바일 · PC 링크를 같은 값으로 싣는다(직원 근무 앱은
- * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 등록한 버튼 링크가 `https://#{변수}` 라 앞의 `https://` 는 떼고
- * 싣는다 — 대체 문자 본문 끝 링크는 전체 주소 그대로다. 버튼 설정이 맞지 않는 템플릿(alimtalkButtonProblem)과 https 주소가
+ * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 링크는 `https://` 를 포함한 전체 주소 그대로 싣는다 — 앞을 떼고
+ * 보냈더니 카카오가 7101(파라미터 형식 오류)로 거절했다(2026-11-02 김민식). 대체 문자 본문 끝 링크도 같은 주소다. 버튼 설정이 맞지 않는 템플릿(alimtalkButtonProblem)과 https 주소가
  * 아닌 링크는 보내기 전에 던진다 — 오류 메시지에 링크(토큰)는 담지 않는다. 링크가 없으면(선택 변수를 비움) 버튼도 없다 —
  * 버튼을 등록한 템플릿이면 알림톡은 거절되고 대체 문자로 간다.
  */
@@ -253,8 +252,7 @@ function buttonsOf(
     throw new Error(
       `알림톡 템플릿 ${templateCode} 의 버튼 링크는 https 주소여야 합니다`,
     );
-  const url = link.replace(BUTTON_LINK_SCHEME, '');
-  return [{ name: button.name, type: 'WL', url_mobile: url, url_pc: url }];
+  return [{ name: button.name, type: 'WL', url_mobile: link, url_pc: link }];
 }
 
 /**
@@ -336,8 +334,9 @@ function requestForLog(
 }
 
 /**
- * 링크는 스킴(있으면) · 호스트만 그대로 두고 그 뒤(경로 · 쿼리 · fragment)는 가린 채 전체 글자 수를 붙인다 — 토큰은 fragment 에도
- * 경로에도 올 수 있다. 호스트 앞 사용자 정보(`user:pw@`)도 가린다. `staff.whale.test/invite#token=abc` → `staff.whale.test/***(34자)`
+ * 링크는 스킴(있으면) · 호스트와 그 뒤 첫 구분자(`/` `?` `#`)만 그대로 두고 나머지(경로 · 쿼리 · fragment)는 가린 채 전체 글자 수를
+ * 붙인다 — 토큰은 fragment 에도 경로에도 올 수 있다. 호스트 앞 사용자 정보(`user:pw@`)도 가린다.
+ * `https://staff.whale.test/invite#token=abc` → `https://staff.whale.test/***(41자)`
  */
 function maskLink(link: string): string {
   const [, scheme, host, rest] =
@@ -347,7 +346,7 @@ function maskLink(link: string): string {
   const shownHost = host.includes('@')
     ? `***@${host.slice(host.lastIndexOf('@') + 1)}`
     : host;
-  return `${scheme}${shownHost}${rest ? '/***' : ''}(${link.length}자)`;
+  return `${scheme}${shownHost}${rest ? `${rest[0]}***` : ''}(${link.length}자)`;
 }
 
 /** integer 컬럼에 들어가는 id — 1..2147483647 */

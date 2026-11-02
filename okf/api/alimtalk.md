@@ -4,16 +4,16 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-02T09:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T10:00:00Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-11-02T09:30:00Z
+    last_modified: 2026-11-02T10:00:00Z
   - id: alimtalk-buttons
     resource: ../../src/alimtalk/alimtalk-buttons.ts
     title: 알림톡 버튼 이름과 버튼 설정 검사(WHALEERP-636)
-    last_modified: 2026-11-02T01:30:00Z
+    last_modified: 2026-11-02T10:00:00Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
@@ -70,10 +70,11 @@ before anything is sent, so a caller bug cannot send messages that leave no row.
 so the link travels as a **button** (WHALEERP-636). Every button-link value becomes one
 web-link button in `content.at.button` — `{ name, type: 'WL', url_mobile, url_pc }`, the same
 link for mobile and PC (without `url_pc` the button is hidden in PC KakaoTalk). The link must start
-with `https://`, and the button carries it **without** that prefix (`staff-dev.whaleerp.co.kr/invite#token=…`):
-the button link registered with Kakao is `https://#{가입링크}`, so the scheme is already in the registration
-(김민식 2026-11-02, checked with Bizppurio). `STAFF_APP_URL` itself keeps `https://` — the reset mail, the
-SMS fallback and the 소속 추가 확인 mail use the full address. The SMS fallback still appends the full link
+with `https://`, and the button carries the **full** address, scheme included
+(`https://staff-dev.whaleerp.co.kr/invite#token=…`), even though the button link registered with Kakao is
+`https://#{가입링크}`. Sending it without the prefix (api #228, 2026-11-02) came back from Kakao as result 7101
+「파라미터 형식 오류」 and fell through to the SMS fallback; the same day it went back to the full address
+(김민식). The reset mail, the SMS fallback and the 소속 추가 확인 mail use the same full address. The SMS fallback still appends the full link
 to the text (below).
 
 The button **name** must match, letter for letter, the name registered with Kakao for that
@@ -100,9 +101,8 @@ the DB body and `kakao_template_code` match it, [Notification templates](/api/no
 is built from `STAFF_APP_URL` as before (`/invite#token=…`, `/affiliations`) and there is one Kakao
 template per message, not one per environment (재영 2026-10-30). The registered invite button link is
 `https://#{가입링크}` — everything after the scheme is a variable, so the dev server's `STAFF_APP_URL` does not
-make it differ. The same no-scheme rule applies to every button (김민식 2026-11-02), so
-`TALK_STAFF_AFFILIATION_REQUEST` must be registered with a button link of the same `https://#{…}` form —
-registered any other way, its button would carry an address without a scheme.
+make it differ. Every button sends the full `https://` address (김민식 2026-11-02), so
+`TALK_STAFF_AFFILIATION_REQUEST` is registered with a button link of the same `https://#{…}` form.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`
@@ -180,7 +180,7 @@ last four characters, the body is the template with **every** variable value
 masked (`messageLength` is the real length in UTF-16 units, which can differ from
 Kakao's count for emoji), the fallback SMS/LMS carries `messageBytes` (the real
 EUC-KR byte count Bizppurio checks against 90 · 2000), and each link keeps only
-scheme and host plus `/***(N자)` — a token can sit in the path as well as the
+scheme and host plus the first delimiter and `***(N자)` — a token can sit in the path as well as the
 fragment; user info before the host becomes `***@`.
 After the call comes `alimtalk ACCEPTED` or `alimtalk FAILED`. The rendered body
 itself is never logged — it carries names and invite links; in the table it is

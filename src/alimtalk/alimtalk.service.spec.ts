@@ -414,7 +414,7 @@ describe('AlimtalkService', () => {
     });
     const link = 'https://staff.whale.test/invite#token=secret-token';
 
-    it('버튼 링크 값을 등록한 이름의 웹링크 버튼으로 싣는다 — 모바일 · PC 같은 링크, 앞의 https:// 는 뗀다', async () => {
+    it('버튼 링크 값을 등록한 이름의 웹링크 버튼으로 싣는다 — 모바일 · PC 같은 링크, https:// 를 포함한 전체 주소', async () => {
       findUnique.mockResolvedValue(withLink());
 
       await service.send({
@@ -422,12 +422,11 @@ describe('AlimtalkService', () => {
         variables: { name: '홍길동', 링크: link },
       });
 
-      // 카카오 등록 버튼 링크가 `https://#{가입링크}` 라 스킴은 등록본에 있다 — 나머지(경로 · fragment 토큰)는 그대로
-      const url = 'staff.whale.test/invite#token=secret-token';
+      // 앞의 https:// 를 떼고 보냈더니 카카오가 7101(파라미터 형식 오류)로 거절했다 — 전체 주소 그대로
       expect(sent().content.at.button).toEqual([
-        { name: '가입하기', type: 'WL', url_mobile: url, url_pc: url },
+        { name: '가입하기', type: 'WL', url_mobile: link, url_pc: link },
       ]);
-      // 대체 문자에는 https:// 를 포함한 전체 주소가 본문 끝에 붙는다
+      // 대체 문자에도 같은 전체 주소가 본문 끝에 붙는다
       expect(
         sent().recontent?.lms?.message ?? sent().recontent?.sms?.message,
       ).toBe(
@@ -455,8 +454,8 @@ ${link}`,
         {
           name: ALIMTALK_BUTTONS.TALK_STAFF_AFFILIATION_REQUEST.name,
           type: 'WL',
-          url_mobile: 'staff.whale.test/affiliations',
-          url_pc: 'staff.whale.test/affiliations',
+          url_mobile: 'https://staff.whale.test/affiliations',
+          url_pc: 'https://staff.whale.test/affiliations',
         },
       ]);
       expect(
@@ -604,9 +603,9 @@ ${link}`,
               {
                 name: '가입하기',
                 type: 'WL',
-                // 스킴 없이 보냈는지가 보이게 앞부분은 그대로, 경로 · 토큰은 가리고 글자 수만
-                url_mobile: 'staff.whale.test/***(42자)',
-                url_pc: 'staff.whale.test/***(42자)',
+                // 스킴이 붙었는지 보이게 앞부분은 그대로, 경로 · 토큰은 가리고 글자 수만
+                url_mobile: 'https://staff.whale.test/***(50자)',
+                url_pc: 'https://staff.whale.test/***(50자)',
               },
             ],
           },
@@ -627,6 +626,53 @@ https://staff.whale.test/***(50자)`,
       expect(line).not.toContain('sender-key');
     });
 
+    it('요청 파라미터 로그 — 짧은 대체 문자는 SMS 로, 실제 바이트 수와 함께', async () => {
+      await service.send(input);
+
+      const [first] = logLog.mock.calls[0] as [string];
+      const params = JSON.parse(first.slice(first.indexOf('params=') + 7)) as {
+        recontent: unknown;
+      };
+      expect(params.recontent).toEqual({
+        sms: {
+          message: `${MASK}님, ${MASK} 근무가 변경되었습니다.`,
+          messageBytes: 37,
+        },
+      });
+    });
+
+    it('요청 파라미터 로그 — 발신번호가 없으면 대체 문자 칸이 없다', async () => {
+      config.smsFrom = null;
+
+      await service.send(input);
+
+      const [first] = logLog.mock.calls[0] as [string];
+      const params = JSON.parse(
+        first.slice(first.indexOf('params=') + 7),
+      ) as Record<string, unknown>;
+      expect(params).not.toHaveProperty('from');
+      expect(params).not.toHaveProperty('resend');
+      expect(params).not.toHaveProperty('recontent');
+    });
+
+    it('요청 파라미터 로그의 링크는 호스트 바로 뒤 구분자를 그대로 둔다', async () => {
+      findUnique.mockResolvedValue(withLink());
+
+      await service.send({
+        ...invite,
+        variables: {
+          name: '홍길동',
+          링크: 'https://staff.whale.test#token=secret-token',
+        },
+      });
+
+      const [first] = logLog.mock.calls[0] as [string];
+      expect(first).toContain(
+        '"url_mobile":"https://staff.whale.test#***(43자)"',
+      );
+      expect(first).not.toContain('secret-token');
+    });
+
     it('요청 파라미터 로그의 링크는 호스트 앞 사용자 정보도 가린다', async () => {
       findUnique.mockResolvedValue(withLink());
 
@@ -639,7 +685,9 @@ https://staff.whale.test/***(50자)`,
       });
 
       const [first] = logLog.mock.calls[0] as [string];
-      expect(first).toContain('"url_mobile":"***@staff.whale.test/***(38자)"');
+      expect(first).toContain(
+        '"url_mobile":"https://***@staff.whale.test/***(46자)"',
+      );
       expect(first).not.toContain('secret-pw');
     });
 

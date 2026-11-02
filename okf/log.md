@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-02
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) — 알림톡 버튼 `url_mobile` · `url_pc` 에 `https://` 를 포함한 전체 주소를 다시 싣는다(api #228 되돌림, 김민식 2026-11-02): 앞을 떼고 보냈더니 카카오 결과 7101 「파라미터 형식 오류」로 거절되고 대체 문자로만 갔다. https 가 아닌 링크를 막는 검사는 그대로. 요청 로그의 링크는 호스트 뒤 첫 구분자를 그대로 보인다.
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) — 알림톡을 보내기 전에 `alimtalk REQUEST` 로그 한 줄에 `/v3/message` 요청 본문 전체를 JSON 으로 남긴다(비즈뿌리오 결과 7101 「파라미터 형식 오류」 원인 확인용, 김민식 2026-11-02). 키 · 구조 · 템플릿 코드 · 버튼 이름 · 링크의 스킴 · 호스트는 그대로, 번호 · senderkey(끝 4자만) · 본문의 변수 값 전부 · 링크의 경로 뒤(`/***(N자)`)는 가린다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #230 리뷰 반영: 근로계약서 발송 알림톡의 보내기 직전 계약 재조회가 실패해도 던지지 않는다(저장은 이미 끝남 — 로그만). 동시 재발송은 대개 둘 다 나가고 두 탭 재발송은 `expectedSentAt`(409)이 막는다고 사실대로 고쳤다. 알림함 템플릿 `PUSH_CONTRACT_SENT` 를 끄면 알림톡도 끊긴다는 운영자 안내를 더했다.
 * **Update**: main 병합(api skrelp, main #229 까지): okf/log 충돌은 양쪽 기록을 살렸다.

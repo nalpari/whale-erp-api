@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-02T04:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T10:00:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -37,7 +37,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-11-02T04:30:00Z
+    last_modified: 2026-11-02T10:00:00Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -834,8 +834,9 @@ resent — a new contract instead.
   - 직원 목록 `contract.canResend` (and the deprecated `invitation.canResend`) mirrors this for a 가입 전 직원 — see
     [Staff members](/api/staff-members.md) (발송 대기 · 서명 대기 only).
 - The 알림톡 carries the 초대 링크 as a web-link button (WHALEERP-636, name in
-  `ALIMTALK_BUTTONS` — see [Kakao Alimtalk](/api/alimtalk.md)). The button carries the link without its
-  `https://` (the registered button link is `https://#{가입링크}`, 2026-11-02), so **a `STAFF_APP_URL` that is not
+  `ALIMTALK_BUTTONS` — see [Kakao Alimtalk](/api/alimtalk.md)). The button carries the full link, `https://`
+  included (the registered button link is `https://#{가입링크}`; the address without its scheme was rejected by Kakao
+  as 7101, 2026-11-02), so **a `STAFF_APP_URL` that is not
   https is 503 「직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 … 알림톡 버튼 링크를 보낼 수 없습니다.」 before anything is
   written** — production already refuses it at startup. The 가입 초대 is registered with Kakao (2026-10-30, the DB
   body matches it), the 소속 추가 확인 요청 is not registered yet; a rejected 알림톡 is only seen in the result report — so
