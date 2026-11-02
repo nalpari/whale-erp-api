@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-02T01:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T04:30:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -37,7 +37,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-11-02T01:30:00Z
+    last_modified: 2026-11-02T04:30:00Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -729,8 +729,25 @@ resent — a new contract instead.
   (`draft_action = SIGNUP_INVITE`) → a **가입 초대** 알림톡 `TALK_STAFF_INVITATION` (근무지 · 초대코드 · 링크)
   and the contract is **발송 대기** — "the invitation went out, waiting for 가입". 가입 완료, or an
   account for the number (소속 추가 · 복귀) → the **앱**, and the contract is **서명 대기** at once.
-  앱 알림 does not exist yet, so nothing is sent on that path today (2026-10-19 김민식 — it is
-  added with 앱 알림); the status and deadline are set all the same.
+  For a 가입 완료 직원 this writes the `PUSH_CONTRACT_SENT` 알림함 row and, after commit, the **근로계약서 발송
+  알림톡** `TALK_STAFF_CONTRACT_SENT` (WHALEERP-619, below) — the app push itself does not exist yet (#321).
+- **근로계약서 발송 알림톡** (WHALEERP-619, 2026-11-02 김민식 — registered with Kakao): whenever a 가입 완료 직원 gets
+  a contract through the app — save, 재발송, a 수정 요청 contract fixed and sent again — at the same moment as the
+  `PUSH_CONTRACT_SENT` 알림함 row. Body = the Kakao registration, word for word (「#{근무지}에서 근로계약서를 보냈습니다.」,
+  a blank line, 「- 서명 기한: #{날인기한}」, a blank line, 「계약 내용을 확인하고 서명해 주세요.」), variables 근무지 · 날인기한
+  (「10월 30일」, the same values as the 알림함 row), **no button** — the registration has none, so there is no
+  button-link variable and the SMS fallback carries the body only. Its **Kakao code is `PUSH_CONTRACT_SENT`** — the
+  same text as the 알림함 template's code, but a different template; our code stays `TALK_STAFF_CONTRACT_SENT` and
+  only `kakao_template_code` holds that value (migration `20261102114500`).
+  - It follows the 알림함 row's 수신 설정 decision (`noticeStaff` → `QUEUED`): a 직원 who switched off the 근로계약서
+    묶음 keeps the 알림함 row and gets no 알림톡; no account / withdrawn / unusable `PUSH_CONTRACT_SENT` template → no
+    알림함 row and no 알림톡 (like the 근무스케줄 변경 mail — an 알림톡 template cannot carry a 묶음).
+  - `prepare` returns it (`PendingContractNotice`) and `dispatch` sends it after commit. A failure never fails the
+    save — the save and the 알림함 row are done; the result is in `alimtalk_send_logs` (related `contract`), a
+    pre-send failure (template off, …) is logged, a landline is skipped with a warning. It is **not** in the 직원 상세
+    발송 이력 (that list is 가입 초대 · 소속 추가 확인 요청 only).
+  - Not sent when the 직원 accepts a 소속 추가 확인 요청 in the app (that path writes `PUSH_CONTRACT_SENT` too, but the
+    직원 has just acted in the app themself).
 - **Every send** sets `sent_at = now` and `sign_deadline_at = now + 30 days` and makes every
   earlier `SENT` invitation of the record `EXPIRED` — only the newest 초대 코드 · 링크 is live, and
   after a number is fixed the old number's code and link are dead. A 가입 초대 adds an `invitations` row: `SIGNUP`
@@ -787,8 +804,8 @@ resent — a new contract instead.
   - 가입 전 and no live account for the number: the 가입 초대 again — the status stays, a new code.
   - **가입 완료 (JOINED)**: the same 앱 알림 as the first send (WHALEERP-611) — `prepare` with
     `joined: true` writes the new `sent_at` · `sign_deadline_at` and one `PUSH_CONTRACT_SENT`
-    notice (알림함 row + 푸시 대기 row; the push itself is still #261 · #321). No 알림톡, so nothing
-    to undo — `dispatch(null)`. No 판별: the 직원's own record is 재직, so `decideInvitation`
+    notice (알림함 row + 푸시 대기 row; the push itself is still #261 · #321) plus, after commit, the 근로계약서 발송
+    알림톡 (above — nothing to undo; a failed 알림톡 is still 200). No 판별: the 직원's own record is 재직, so `decideInvitation`
     would say 「이미 재직 중」; `draftAction` stays what it was sent with. A 발송 대기 contract of a
     joined 직원 (signup moves them all to 서명 대기, so only odd data) is moved to 서명 대기 with an
     `ADMIN` history row first — the app does not show 발송 대기 contracts. A withdrawn account (no

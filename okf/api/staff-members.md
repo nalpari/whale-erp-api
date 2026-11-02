@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T08:20:16Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T04:30:00Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -261,6 +261,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 - **발송 이력**은 따로 쌓지 않고 알림톡 발송 이력(`alimtalk_send_logs`)에서 읽는다(2026-10-29 김민식 — 마이그레이션 없이).
   근로계약 발송(`ContractDeliveryService.dispatch`)이 남기는 줄 — 관련 업무 `contract`(`CONTRACT_RELATED_TYPE`) · 그 직원
   레코드의 계약 · 템플릿 `TALK_STAFF_INVITATION`(가입 초대) · `TALK_STAFF_AFFILIATION_REQUEST`(소속 추가 확인 요청)만이다.
+  가입한 직원에게 가는 근로계약서 발송 알림톡(`TALK_STAFF_CONTRACT_SENT`, WHALEERP-619)은 같은 관련 업무로 남지만 이 목록에는 싣지 않는다.
   **재발송**은 같은 계약으로 앞서 직원에게 나갔을 수 있는(성공 · 접수 여부 모름) 발송이 있을 때다 — 확실히 나가지 않은 실패(거절 ·
   보내기 전 실패)는 세지 않는다. 직원이 받은 기준이라 계약 `resend_count` 와는 다를 수 있다(보낸 계약이 되돌리기로 임시저장이 된 뒤
   다시 보내면 `resend_count` 는 세지 않지만 직원은 앞 초대를 받았다). **실패 사유 · 재시도 가능 여부**는

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-02
+* **Update**: [Contracts API](/api/contracts-api.md) · [Notification templates](/api/notification-templates.md) · [Operations notifications](/api/notifications-api.md) · [Staff members](/api/staff-members.md) · [Naming conventions](/conventions/naming.md) — 근로계약서 발송 알림톡(WHALEERP-619, 김민식 2026-11-02 — 카카오 등록본 기준): 가입한 직원에게 앱으로 보낼 때(저장 · 재발송 · 수정 요청 고쳐 다시 보냄) 알림함 `PUSH_CONTRACT_SENT` 와 같은 때 커밋 뒤 `TALK_STAFF_CONTRACT_SENT` 를 보낸다. 본문은 등록본 그대로(빈 줄 두 개), 버튼 · 링크 변수 없음, 카카오 템플릿 코드는 `PUSH_CONTRACT_SENT`(알림함 템플릿 코드와 글자만 같다). 수신 설정에서 근로계약서 묶음을 끄면 알림톡만 없다(`noticeStaff` 가 `'QUEUED'` · `'MUTED'` · `false` 를 돌려준다). 실패해도 저장은 200, 결과는 알림톡 발송 이력에만(직원 상세 발송 이력에는 싣지 않음). 48번째 기본 템플릿 마이그레이션 `20261102114500`(CRLF 체크아웃에서도 `\r` 없이, 등록본 전체 검증).
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) — 알림톡 버튼 링크 형식 확정(WHALEERP-636, 김민식 2026-11-02 · 비즈뿌리오 확인): 카카오 등록 버튼 링크가 `https://#{가입링크}` 라 버튼 `url_mobile` · `url_pc` 에는 앞의 `https://` 를 뗀 주소만 싣는다. https 가 아닌 링크(http 포함)는 보내기 전에 던지고, 근로계약 발송 전 검사는 `STAFF_APP_URL` 이 https 가 아니면 쓰기 전에 503. `STAFF_APP_URL` 값 · 대체 문자 · 메일 링크는 `https://` 포함 전체 주소 그대로.
 
 ## 2026-10-30
