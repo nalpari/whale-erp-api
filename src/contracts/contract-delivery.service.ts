@@ -197,8 +197,8 @@ const failureOf = (e: unknown): { kind: SendFailureKind; code?: number } =>
  *   않았으면 보내기 직전으로 되돌려 502 SEND_FAILED, 메시지 요청 뒤 응답이 끊겼으면 되돌리지 않고 502 SEND_UNCONFIRMED.
  *
  * 초대 코드는 알림톡 본문에 싣는다. 초대 링크(STAFF_APP_URL 의 `/invite#token=…`)는 버튼 변수라 알림톡 버튼과 대체 문자
- * 끝에 함께 실린다(WHALEERP-636). 바뀐 본문 · 버튼은 카카오 재검수 전이라 알림톡이 거절될 수 있어, 검수가 끝나기 전까지는
- * 대체 문자 발신번호가 없으면 쓰기 전에 막는다(api #74 리뷰) — 그러지 않으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다.
+ * 끝에 함께 실린다(WHALEERP-636). 가입 초대는 카카오에 등록됐지만 버튼 링크 형식은 확인 중이고 소속 추가 확인 요청은 등록 전이라
+ * 알림톡이 거절될 수 있어, 대체 문자 발신번호가 없으면 쓰기 전에 막는다(api #74 리뷰) — 그러지 않으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다.
  */
 @Injectable()
 export class ContractDeliveryService {
@@ -240,8 +240,8 @@ export class ContractDeliveryService {
       throw new ServiceUnavailableException(
         `직원 앱 주소(STAFF_APP_URL)가 없어 ${what} 링크를 보낼 수 없습니다.`,
       );
-    // 링크는 알림톡 버튼 변수다. 버튼은 싣지만(WHALEERP-636) 바뀐 본문 · 버튼은 카카오 재검수 전이라 알림톡이 거절될 수 있다 —
-    // 대체 문자가 없으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다(api #59 · #74 리뷰). 검수가 끝나면 다시 본다.
+    // 링크는 알림톡 버튼 변수다. 가입 초대는 카카오에 등록됐지만(WHALEERP-636) 버튼 링크 형식은 확인 중이고 소속 추가 확인 요청은
+    // 등록 전이라 알림톡이 거절될 수 있다 — 대체 문자가 없으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다(api #59 · #74 리뷰). 둘 다 등록 · 확인되면 다시 본다.
     if (!this.alimtalk.hasSmsFallback())
       throw new ServiceUnavailableException(
         `대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없어 ${what}를 보낼 수 없습니다.`,
