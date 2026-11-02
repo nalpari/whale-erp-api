@@ -47,6 +47,7 @@ import {
   AdminRefreshResponseDto,
 } from './dto/admin-login.response.dto';
 import { AdminLoginInfoResponseDto } from './dto/admin-login-info.response.dto';
+import { AdminLoginInfoVersionResponseDto } from './dto/admin-login-info-version.response.dto';
 import { AdminStoreListResponseDto } from './dto/admin-store-list.response.dto';
 import { AdminMyPasswordChangeDto } from './dto/admin-my-password-change.dto';
 import { AdminPasswordVerificationDto } from './dto/admin-password-verification.dto';
@@ -197,11 +198,13 @@ export class AdminAuthController {
 
   /**
    * 화면을 그릴 정보 — 계정 · 메뉴(+권한) · 관리 점포 · 공통코드. 부르는 시점의 값이다. 관리자 웹은 로그인
-   * 직후 한 번 받아 쓰고, 바뀐 값은 다시 로그인할 때 받는다. 업무 API 의 판정은 요청마다 현재 값으로 한다.
+   * 직후 받아 쓰고, 로그인 정보 버전(`me/login-info-version`)이 바뀌면 다시 받는다. 업무 API 의 판정은 요청마다
+   * 현재 값으로 한다. 지운 계정 401, 사용중지 · 탈퇴 계정 403.
    */
   @ApiBearerAuth()
   @UserTypes('admin')
   @AllowPasswordChangePending()
+  @ApiForbiddenResponse({ description: '사용할 수 없는 관리자 계정' })
   // 로그인 경로가 아니라 요청 제한 두 축을 모두 끈다(인증된 조회).
   @SkipThrottle({ ip: true, account: true })
   @Get('login-info')
@@ -228,6 +231,23 @@ export class AdminAuthController {
     if (user.type !== 'admin') throw new UnauthorizedException();
     const items = await this.loginInfo.stores(user.id);
     return { items, total: items.length };
+  }
+
+  /**
+   * 로그인 정보 버전 — 계정 상태 · 권한 그룹 · 메뉴 권한 · 메뉴 · 소속 BP 가 바뀌었는지. 관리자 웹이 새로고침 · 메뉴
+   * 이동 · 창 포커스 때 점포 목록 버전과 같이 묻고, 바뀌었으면 login-info 를 다시 받는다. `me/stores` 와 같이 강제
+   * 비밀번호 변경 중에는 403 이다. 지웠거나 사용 중이 아닌 계정은 403.
+   */
+  @ApiBearerAuth()
+  @UserTypes('admin')
+  @SkipThrottle({ ip: true, account: true })
+  @ApiForbiddenResponse({ description: '사용할 수 없는 관리자 계정' })
+  @Get('me/login-info-version')
+  getMyLoginInfoVersion(
+    @CurrentUser() user: AuthUser,
+  ): Promise<AdminLoginInfoVersionResponseDto> {
+    if (user.type !== 'admin') throw new UnauthorizedException();
+    return this.loginInfo.version(user.id);
   }
 
   /**
@@ -261,6 +281,7 @@ export class AdminAuthController {
   @ApiBearerAuth()
   @UserTypes('admin')
   @SkipThrottle({ ip: true, account: true })
+  @ApiForbiddenResponse({ description: '사용할 수 없는 관리자 계정' })
   @Get('me')
   getProfile(@CurrentUser() user: AuthUser): Promise<AdminProfileResponseDto> {
     if (user.type !== 'admin') throw new UnauthorizedException();

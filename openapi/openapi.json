@@ -606,6 +606,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "사용할 수 없는 관리자 계정"
           }
         },
         "security": [
@@ -613,7 +616,7 @@
             "bearer": []
           }
         ],
-        "summary": "화면을 그릴 정보 — 계정 · 메뉴(+권한) · 관리 점포 · 공통코드. 부르는 시점의 값이다. 관리자 웹은 로그인\n직후 한 번 받아 쓰고, 바뀐 값은 다시 로그인할 때 받는다. 업무 API 의 판정은 요청마다 현재 값으로 한다.",
+        "summary": "화면을 그릴 정보 — 계정 · 메뉴(+권한) · 관리 점포 · 공통코드. 부르는 시점의 값이다. 관리자 웹은 로그인\n직후 받아 쓰고, 로그인 정보 버전(`me/login-info-version`)이 바뀌면 다시 받는다. 업무 API 의 판정은 요청마다\n현재 값으로 한다. 지운 계정 401, 사용중지 · 탈퇴 계정 403.",
         "tags": [
           "AdminAuth"
         ]
@@ -641,6 +644,36 @@
           }
         ],
         "summary": "관리 점포만 — 로그인 정보의 `stores` 와 같은 목록을 `{ items, total }` 로. 관리자 웹이 점포 목록 버전\n(`GET /bp-codes/:id/stores-version`)이 바뀌었을 때 메뉴 · 공통코드 없이 점포만 다시 받는다. 버전 경로와 같이\n강제 비밀번호 변경 중에는 403 이다 — 그동안은 팝업만 열려 점포를 다시 받을 화면이 없다. 플랫폼 계정은 빈 목록,\n없거나 삭제된 계정은 401.",
+        "tags": [
+          "AdminAuth"
+        ]
+      }
+    },
+    "/auth/admin/me/login-info-version": {
+      "get": {
+        "operationId": "AdminAuthController_getMyLoginInfoVersion",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLoginInfoVersionResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "사용할 수 없는 관리자 계정"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "로그인 정보 버전 — 계정 상태 · 권한 그룹 · 메뉴 권한 · 메뉴 · 소속 BP 가 바뀌었는지. 관리자 웹이 새로고침 · 메뉴\n이동 · 창 포커스 때 점포 목록 버전과 같이 묻고, 바뀌었으면 login-info 를 다시 받는다. `me/stores` 와 같이 강제\n비밀번호 변경 중에는 403 이다. 지웠거나 사용 중이 아닌 계정은 403.",
         "tags": [
           "AdminAuth"
         ]
@@ -696,6 +729,9 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "사용할 수 없는 관리자 계정"
           }
         },
         "security": [
@@ -18108,6 +18144,19 @@
         "required": [
           "items",
           "total"
+        ]
+      },
+      "AdminLoginInfoVersionResponseDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "로그인 정보 버전 — 이전에 받은 값과 다르면 login-info 를 다시 받는다. 형식은 정해 두지 않으니 비교에만 쓴다.",
+            "example": "k3J9xQ0b2nXyK1pV0aWmTg"
+          }
+        },
+        "required": [
+          "version"
         ]
       },
       "AdminPasswordChangeDto": {
