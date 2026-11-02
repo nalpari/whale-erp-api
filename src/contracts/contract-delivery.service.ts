@@ -28,7 +28,10 @@ import {
   type OptionalMailService,
 } from '../mail/mail.module';
 import { sameName } from './identity-match';
-import { alimtalkButtonProblem } from '../alimtalk/alimtalk-buttons';
+import {
+  alimtalkButtonProblem,
+  isButtonLinkUrl,
+} from '../alimtalk/alimtalk-buttons';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
 import { PrismaService } from '../prisma/prisma.service';
@@ -243,7 +246,7 @@ export class ContractDeliveryService {
       );
     // 링크는 알림톡 버튼 변수이고, 카카오에 등록한 버튼 링크가 `https://#{변수}` 라 https 주소만 실을 수 있다(2026-11-02) — http 면
     // 커밋 뒤 발송이 늘 던지므로 쓰기 전에 막는다. 운영은 기동 검사(readStaffAppUrl)가 이미 https 만 받는다.
-    if (!/^https:\/\//i.test(this.appUrl))
+    if (!isButtonLinkUrl(this.appUrl))
       throw new ServiceUnavailableException(
         `직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 ${what} 알림톡 버튼 링크를 보낼 수 없습니다.`,
       );

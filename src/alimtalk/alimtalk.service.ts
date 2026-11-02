@@ -13,7 +13,12 @@ import {
   type BizppurioMessage,
 } from './bizppurio.client';
 import { BIZPPURIO_CONFIG, type BizppurioConfig } from './bizppurio.config';
-import { alimtalkButtonOf, alimtalkButtonProblem } from './alimtalk-buttons';
+import {
+  alimtalkButtonOf,
+  alimtalkButtonProblem,
+  BUTTON_LINK_SCHEME,
+  isButtonLinkUrl,
+} from './alimtalk-buttons';
 import { failureHeadOf } from './failure-reason';
 
 export type SendAlimtalkInput = {
@@ -49,9 +54,6 @@ export const isMobilePhone = (phone: string) =>
 const SMS_MAX_BYTES = 90;
 const LMS_SUBJECT = '[WHALE ERP]';
 const LOG_REASON_LENGTH = 1000;
-// 버튼 링크는 https 주소만 싣는다. 카카오에 등록한 버튼 링크가 `https://#{변수}` 라 스킴은 등록본에 이미 있다 —
-// 요청에는 그 뒷부분만 보낸다(2026-11-02 김민식, 비즈뿌리오 확인). http 는 등록 형식에 맞출 수 없어 보내기 전에 막는다.
-const HTTPS_URL = /^https:\/\//i;
 
 /**
  * 알림톡 발송의 공통 진입점. 각 도메인은 이 서비스만 주입받아 쓴다.
@@ -236,11 +238,11 @@ function buttonsOf(
   const [link] = links;
   // 문제가 없으면 버튼이 없는 템플릿은 링크도 없다 — button 확인은 타입을 좁히려는 것이다
   if (link === undefined || !button) return [];
-  if (!HTTPS_URL.test(link))
+  if (!isButtonLinkUrl(link))
     throw new Error(
       `알림톡 템플릿 ${templateCode} 의 버튼 링크는 https 주소여야 합니다`,
     );
-  const url = link.replace(HTTPS_URL, '');
+  const url = link.replace(BUTTON_LINK_SCHEME, '');
   return [{ name: button.name, type: 'WL', url_mobile: url, url_pc: url }];
 }
 

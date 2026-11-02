@@ -459,6 +459,9 @@ ${link}`,
           url_pc: 'staff.whale.test/affiliations',
         },
       ]);
+      expect(
+        sent().recontent?.lms?.message ?? sent().recontent?.sms?.message,
+      ).toMatch(/\nhttps:\/\/staff\.whale\.test\/affiliations$/);
     });
 
     it('버튼 링크 변수가 없는 템플릿 · 선택 링크를 비우면 버튼이 없다', async () => {

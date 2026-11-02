@@ -23,6 +23,14 @@ export function alimtalkButtonOf(
 }
 
 /**
+ * 버튼 링크로 실을 수 있는 주소인가(https 만). 카카오에 등록한 버튼 링크가 `https://#{변수}` 라 스킴은 등록본에 이미 있고, 요청에는
+ * 그 뒷부분만 보낸다(2026-11-02 김민식, 비즈뿌리오 확인) — http 는 등록 형식에 맞출 수 없다. 발송(AlimtalkService)과 근로계약 발송 전
+ * 검사가 같이 본다.
+ */
+export const BUTTON_LINK_SCHEME = /^https:\/\//i;
+export const isButtonLinkUrl = (link: string) => BUTTON_LINK_SCHEME.test(link);
+
+/**
  * 알림톡 템플릿의 버튼 설정이 보낼 수 있는 모양인가. 버튼을 다는 템플릿은 정해진 링크 변수 하나에만 버튼 링크 표시가 있어야
  * 하고(LINK_MISMATCH — 없음 · 다른 변수 · 둘 이상, 기대하는 링크 변수 이름을 함께 준다), 버튼을 달지 않는 템플릿에는 버튼 링크
  * 변수가 없어야 한다(NO_BUTTON_NAME). `marked` 는 버튼 링크를 표시한 변수 이름들이다(로그용 — 값이 아니라 이름이다).

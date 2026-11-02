@@ -13,7 +13,7 @@ sources:
   - id: alimtalk-buttons
     resource: ../../src/alimtalk/alimtalk-buttons.ts
     title: 알림톡 버튼 이름과 버튼 설정 검사(WHALEERP-636)
-    last_modified: 2026-10-30T06:18:28Z
+    last_modified: 2026-11-02T01:30:00Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
