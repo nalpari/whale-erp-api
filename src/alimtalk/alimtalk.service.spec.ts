@@ -626,6 +626,26 @@ https://staff.whale.test/***(50자)`,
       expect(line).not.toContain('sender-key');
     });
 
+    it('요청 파라미터 로그 — 빈 값은 가리지 않고 빈칸으로 둔다(비었는지 보이게)', async () => {
+      await service.send({ ...input, variables: { name: '홍길동', date: '' } });
+
+      const [first] = logLog.mock.calls[0] as [string];
+      expect(first).toContain(`"message":"${MASK}님,  근무가 변경되었습니다."`);
+      expect(first).not.toContain('홍길동');
+    });
+
+    it('요청 파라미터 로그 — 끝 / 하나뿐인 링크는 가린 표시 없이 그대로', async () => {
+      findUnique.mockResolvedValue(withLink());
+
+      await service.send({
+        ...invite,
+        variables: { name: '홍길동', 링크: 'https://staff.whale.test/' },
+      });
+
+      const [first] = logLog.mock.calls[0] as [string];
+      expect(first).toContain('"url_mobile":"https://staff.whale.test/(25자)"');
+    });
+
     it('요청 파라미터 로그 — 짧은 대체 문자는 SMS 로, 실제 바이트 수와 함께', async () => {
       await service.send(input);
 

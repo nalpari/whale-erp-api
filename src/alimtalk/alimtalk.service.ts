@@ -122,7 +122,7 @@ export class AlimtalkService {
     // 이력에는 가린 본문만 넘긴다 — record 가 보낸 원문에 손댈 수 없게.
     const attempt = { input, phone, kakaoTemplateCode, maskedBody };
     const referenceKey = randomUUID().replace(/-/g, '').slice(0, 20);
-    const message: BizppurioMessage = {
+    const request: BizppurioMessage = {
       account: this.config.account,
       type: 'at',
       refkey: referenceKey,
@@ -142,18 +142,21 @@ export class AlimtalkService {
         : smsFallback(this.config.smsFrom, [body, ...links].join('\n'))),
     };
     // 비즈뿌리오 · 카카오가 파라미터를 거절할 때(7101 등) 무엇을 보냈는지 보려고 요청 모양을 남긴다. 접수 뒤에야 결과가 오므로
-    // 보내기 전에 남긴다. 변수 값은 모두 가린 본문(이름 · 초대 코드가 들어간다), 링크는 스킴 · 호스트와 글자 수만 남긴다.
+    // 보내기 전에 남긴다. 변수 값은 모두 가린 본문(이름 · 초대 코드가 들어간다) — 빈 값은 빈칸 그대로 두어 비었는지 보이게 한다.
+    // 링크는 스킴 · 호스트와 글자 수만 남긴다.
     const shape = renderTemplate(
       template,
       input.variables,
-      Object.keys(input.variables),
+      Object.keys(input.variables).filter(
+        (name) => input.variables[name] !== '',
+      ),
     ).maskedBody;
     this.logger.log(
-      `alimtalk REQUEST template=${templateCode} referenceKey=${referenceKey} params=${JSON.stringify(requestForLog(message, shape, links))}`,
+      `alimtalk REQUEST template=${templateCode} referenceKey=${referenceKey} params=${JSON.stringify(requestForLog(request, shape, links))}`,
     );
     let messageKey: string | undefined;
     try {
-      const response = await this.client.sendMessage(message);
+      const response = await this.client.sendMessage(request);
       messageKey = response.messagekey;
     } catch (e) {
       // 네트워크 실패는 code 가 없어, 원인은 메시지로만 남는다. 로그 한 줄에는 메시지를
@@ -346,7 +349,9 @@ function maskLink(link: string): string {
   const shownHost = host.includes('@')
     ? `***@${host.slice(host.lastIndexOf('@') + 1)}`
     : host;
-  return `${scheme}${shownHost}${rest ? `${rest[0]}***` : ''}(${link.length}자)`;
+  // 구분자 하나뿐이면(`https://host/`) 가릴 것이 없으니 그대로 둔다
+  const shownRest = rest.length > 1 ? `${rest[0]}***` : rest;
+  return `${scheme}${shownHost}${shownRest}(${link.length}자)`;
 }
 
 /** integer 컬럼에 들어가는 id — 1..2147483647 */
