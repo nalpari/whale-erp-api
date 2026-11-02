@@ -574,6 +574,72 @@ ${link}`,
       expect(client.sendMessage).not.toHaveBeenCalled();
     });
 
+    it('보내기 전에 요청 파라미터를 로그한다 — 구조는 그대로, 토큰 · 변수 값 · 번호 · senderkey 는 가린다', async () => {
+      findUnique.mockResolvedValue(withLink());
+
+      await service.send({
+        ...invite,
+        variables: { name: '홍길동', 링크: link },
+      });
+
+      const line = (logLog.mock.calls as [string][])
+        .map(([l]) => l)
+        .find((l) => l.startsWith('alimtalk REQUEST'));
+      expect(line).toBeDefined();
+      const params: unknown = JSON.parse(
+        (line as string).slice((line as string).indexOf('params=') + 7),
+      );
+      expect(params).toEqual({
+        account: 'whale',
+        type: 'at',
+        refkey: expect.any(String) as string,
+        to: '010****5678',
+        content: {
+          at: {
+            senderkey: '***-key',
+            templatecode: 'KAKAO_SCHEDULE_01',
+            message: `${MASK}님, 아래 버튼을 눌러 가입해 주세요.`,
+            messageLength: '홍길동님, 아래 버튼을 눌러 가입해 주세요.'.length,
+            button: [
+              {
+                name: '가입하기',
+                type: 'WL',
+                // 스킴 없이 보냈는지가 보이게 앞부분은 그대로, 경로 · 토큰은 가리고 글자 수만
+                url_mobile: 'staff.whale.test/***(42자)',
+                url_pc: 'staff.whale.test/***(42자)',
+              },
+            ],
+          },
+        },
+        from: '0269280028',
+        resend: { first: 'lms' },
+        recontent: {
+          lms: {
+            subject: '[WHALE ERP]',
+            message: `${MASK}님, 아래 버튼을 눌러 가입해 주세요.
+https://staff.whale.test/***(50자)`,
+          },
+        },
+      });
+      expect(line).not.toContain('홍길동');
+      expect(line).not.toContain('sender-key');
+    });
+
+    it('요청 파라미터 로그는 비즈뿌리오가 거절해도 남는다', async () => {
+      findUnique.mockResolvedValue(withLink());
+      client.sendMessage.mockRejectedValue(new BizppurioError('bad', 2000));
+
+      await expect(
+        service.send({ ...invite, variables: { name: '홍길동', 링크: link } }),
+      ).rejects.toThrow('bad');
+
+      const [first] = logLog.mock.calls[0] as [string];
+      expect(first).toMatch(
+        /^alimtalk REQUEST template=TALK_STAFF_INVITATION /,
+      );
+      expect(first).not.toContain('secret-token');
+    });
+
     it('버튼 링크(토큰)는 이력 · 로그에 남지 않는다', async () => {
       findUnique.mockResolvedValue(withLink());
 
@@ -707,13 +773,17 @@ ${link}`,
       variables: { name: '홍길동', date: 'secret-date' },
     });
 
-    expect(logLog).toHaveBeenCalledTimes(1);
-    const [line] = logLog.mock.calls[0] as [string];
-    expect(line).toContain('TALK_SCHEDULE');
-    expect(line).toContain('mk-1');
-    expect(line).toContain('010****5678');
-    expect(line).not.toContain('01012345678');
-    expect(line).not.toContain('secret-date');
+    // 보내기 전 요청 파라미터 한 줄 + 접수 한 줄
+    expect(logLog).toHaveBeenCalledTimes(2);
+    const lines = (logLog.mock.calls as [string][]).map(([l]) => l);
+    const accepted = lines.find((l) => l.startsWith('alimtalk ACCEPTED'));
+    expect(accepted).toContain('TALK_SCHEDULE');
+    expect(accepted).toContain('mk-1');
+    expect(accepted).toContain('010****5678');
+    for (const line of lines) {
+      expect(line).not.toContain('01012345678');
+      expect(line).not.toContain('secret-date');
+    }
   });
 
   it('비즈뿌리오 오류는 코드를 남기고 그대로 던진다', async () => {

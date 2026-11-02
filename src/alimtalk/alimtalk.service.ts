@@ -123,27 +123,38 @@ export class AlimtalkService {
     // 이력에는 가린 본문만 넘긴다 — record 가 보낸 원문에 손댈 수 없게.
     const attempt = { input, phone, kakaoTemplateCode, maskedBody };
     const referenceKey = randomUUID().replace(/-/g, '').slice(0, 20);
+    const message: BizppurioMessage = {
+      account: this.config.account,
+      type: 'at',
+      refkey: referenceKey,
+      to: phone,
+      content: {
+        at: {
+          senderkey: this.config.senderKey,
+          templatecode: kakaoTemplateCode,
+          message: body,
+          ...(button.length ? { button } : {}),
+        },
+      },
+      // 문자에는 버튼이 없어 버튼 링크를 본문 끝에 줄을 바꿔 붙인다. 그러지 않으면
+      // 「아래 링크로 …」 만 남고 링크가 없는 문자가 간다. 발신번호가 없으면 대체하지 않는다.
+      ...(this.config.smsFrom === null
+        ? {}
+        : smsFallback(this.config.smsFrom, [body, ...links].join('\n'))),
+    };
+    // 비즈뿌리오 · 카카오가 파라미터를 거절할 때(7101 등) 무엇을 보냈는지 보려고 요청 모양을 남긴다. 접수 뒤에야 결과가 오므로
+    // 보내기 전에 남긴다. 변수 값은 모두 가린 본문(이름 · 초대 코드가 들어간다), 링크는 스킴 · 호스트와 글자 수만 남긴다.
+    const shape = renderTemplate(
+      template,
+      input.variables,
+      Object.keys(input.variables),
+    ).maskedBody;
+    this.logger.log(
+      `alimtalk REQUEST template=${templateCode} referenceKey=${referenceKey} params=${JSON.stringify(requestForLog(message, shape, links))}`,
+    );
     let messageKey: string | undefined;
     try {
-      const response = await this.client.sendMessage({
-        account: this.config.account,
-        type: 'at',
-        refkey: referenceKey,
-        to: phone,
-        content: {
-          at: {
-            senderkey: this.config.senderKey,
-            templatecode: kakaoTemplateCode,
-            message: body,
-            ...(button.length ? { button } : {}),
-          },
-        },
-        // 문자에는 버튼이 없어 버튼 링크를 본문 끝에 줄을 바꿔 붙인다. 그러지 않으면
-        // 「아래 링크로 …」 만 남고 링크가 없는 문자가 간다. 발신번호가 없으면 대체하지 않는다.
-        ...(this.config.smsFrom === null
-          ? {}
-          : smsFallback(this.config.smsFrom, [body, ...links].join('\n'))),
-      });
+      const response = await this.client.sendMessage(message);
       messageKey = response.messagekey;
     } catch (e) {
       // 네트워크 실패는 code 가 없어, 원인은 메시지로만 남는다. 로그 한 줄에는 메시지를
@@ -272,6 +283,62 @@ function eucKrBytes(text: string): number {
   let bytes = 0;
   for (const c of text) bytes += c.charCodeAt(0) < 0x80 ? 1 : 2;
   return bytes;
+}
+
+/**
+ * 로그용 요청 사본. 키 · 구조 · 버튼 이름 · 링크의 스킴 · 호스트는 보낸 그대로 두고, 번호 · senderkey · 본문의 변수 값 · 링크의
+ * 경로 뒤를 가린다. 본문은 `shape`(변수 값을 모두 가린 본문)로 바꾸고 원래 글자 수를 함께 싣는다.
+ */
+function requestForLog(
+  message: BizppurioMessage,
+  shape: string,
+  links: readonly string[],
+): unknown {
+  const { at } = message.content;
+  const fallback = [shape, ...links.map(maskLink)].join('\n');
+  const { sms, lms } = message.recontent ?? {};
+  return {
+    ...message,
+    to: maskPhone(message.to),
+    content: {
+      at: {
+        ...at,
+        senderkey: `***${at.senderkey.slice(-4)}`,
+        message: shape,
+        messageLength: at.message.length,
+        ...(at.button
+          ? {
+              button: at.button.map((b) => ({
+                ...b,
+                url_mobile: maskLink(b.url_mobile),
+                ...(b.url_pc === undefined
+                  ? {}
+                  : { url_pc: maskLink(b.url_pc) }),
+              })),
+            }
+          : {}),
+      },
+    },
+    ...(message.recontent
+      ? {
+          recontent: {
+            ...(sms ? { sms: { message: fallback } } : {}),
+            ...(lms ? { lms: { ...lms, message: fallback } } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * 링크는 스킴(있으면) · 호스트만 그대로 두고 그 뒤(경로 · 쿼리 · fragment)는 가린 채 전체 글자 수를 붙인다 — 토큰은 fragment 에도
+ * 경로에도 올 수 있다. `staff.whale.test/invite#token=abc` → `staff.whale.test/***(34자)`
+ */
+function maskLink(link: string): string {
+  const [, head, rest] = /^((?:[a-z][a-z0-9+.-]*:\/\/)?[^/?#]*)(.*)$/is.exec(
+    link,
+  ) as RegExpExecArray;
+  return `${head}${rest ? '/***' : ''}(${link.length}자)`;
 }
 
 /** integer 컬럼에 들어가는 id — 1..2147483647 */

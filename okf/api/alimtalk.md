@@ -4,12 +4,12 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-02T01:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T09:30:00Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-11-02T01:30:00Z
+    last_modified: 2026-11-02T09:30:00Z
   - id: alimtalk-buttons
     resource: ../../src/alimtalk/alimtalk-buttons.ts
     title: 알림톡 버튼 이름과 버튼 설정 검사(WHALEERP-636)
@@ -170,10 +170,18 @@ is already out, and a throw would invite a resend. It logs
 `sentBy`, never the error message — Prisma's message prints the whole `data`,
 number and body included. An unknown `sentBy` is the usual cause (P2003).
 
-The app log still has one line per attempt: `alimtalk ACCEPTED` or
-`alimtalk FAILED`, with the masked phone `010****5678`. The rendered body is
-never logged — it carries names and invite links; in the table it is masked
-only where the caller said so.
+The app log has two lines per attempt. Before the call, `alimtalk REQUEST`
+carries the whole `/v3/message` body as JSON so a parameter rejection that only
+shows up in the result report (Bizppurio 7101 「파라미터 형식 오류」, 2026-11-02
+김민식) can be matched to what was sent: keys, structure, `templatecode`, button
+name and type, and each link's scheme and host stay as sent, so a missing or
+doubled `https://` is visible. The phone is `010****5678`, `senderkey` keeps its
+last four characters, the body is the template with **every** variable value
+masked (`messageLength` is the real length), and each link keeps only scheme and
+host plus `/***(N자)` — a token can sit in the path as well as the fragment.
+After the call comes `alimtalk ACCEPTED` or `alimtalk FAILED`. The rendered body
+itself is never logged — it carries names and invite links; in the table it is
+masked only where the caller said so.
 
 # Templates live in `notification_templates`; code only seeds them
 

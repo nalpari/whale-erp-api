@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-02
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) — 알림톡을 보내기 전에 `alimtalk REQUEST` 로그 한 줄에 `/v3/message` 요청 본문 전체를 JSON 으로 남긴다(비즈뿌리오 결과 7101 「파라미터 형식 오류」 원인 확인용, 김민식 2026-11-02). 키 · 구조 · 템플릿 코드 · 버튼 이름 · 링크의 스킴 · 호스트는 그대로, 번호 · senderkey(끝 4자만) · 본문의 변수 값 전부 · 링크의 경로 뒤(`/***(N자)`)는 가린다.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #230 리뷰 반영: 근로계약서 발송 알림톡의 보내기 직전 계약 재조회가 실패해도 던지지 않는다(저장은 이미 끝남 — 로그만). 동시 재발송은 대개 둘 다 나가고 두 탭 재발송은 `expectedSentAt`(409)이 막는다고 사실대로 고쳤다. 알림함 템플릿 `PUSH_CONTRACT_SENT` 를 끄면 알림톡도 끊긴다는 운영자 안내를 더했다.
 * **Update**: main 병합(api skrelp, main #229 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Notification templates](/api/notification-templates.md) · [Operations notifications](/api/notifications-api.md) · [Staff members](/api/staff-members.md) · [Naming conventions](/conventions/naming.md) — 근로계약서 발송 알림톡(WHALEERP-619, 김민식 2026-11-02 — 카카오 등록본 기준): 가입한 직원에게 앱으로 보낼 때(저장 · 재발송 · 수정 요청 고쳐 다시 보냄) 알림함 `PUSH_CONTRACT_SENT` 와 같은 때 커밋 뒤 `TALK_STAFF_CONTRACT_SENT` 를 보낸다. 본문은 등록본 그대로(빈 줄 두 개), 버튼 · 링크 변수 없음, 카카오 템플릿 코드는 `PUSH_CONTRACT_SENT`(알림함 템플릿 코드와 글자만 같다). 수신 설정에서 근로계약서 묶음을 끄면 알림톡만 없다(`noticeStaff` 가 `'QUEUED'` · `'MUTED'` · `false` 를 돌려준다). 실패해도 저장은 200, 결과는 알림톡 발송 이력에만(직원 상세 발송 이력에는 싣지 않음). 48번째 기본 템플릿 마이그레이션 `20261102114500`(CRLF 체크아웃에서도 `\r` 없이, 등록본 전체 검증).
