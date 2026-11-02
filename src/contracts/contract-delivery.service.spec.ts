@@ -748,6 +748,31 @@ describe('ContractDeliveryService', () => {
       }
     });
 
+    // 운영이 아니면 기동 검사는 http 를 받는다 — 등록 버튼 링크가 `https://#{가입링크}` 라 커밋 뒤 발송이 늘 던진다
+    it.each([
+      ['가입 초대', 'SIGNUP_INVITE'],
+      ['소속 추가 확인 요청', 'AFFILIATION_CONFIRM'],
+    ] as const)(
+      '직원 앱 주소가 http 면 %s 는 503 — 주소가 없을 때와 다른 문구로 까닭을 알린다',
+      async (what, draftAction) => {
+        appUrl = 'http://localhost:3001';
+        await expect(
+          service().prepare(t(), input({ draftAction }), NOW),
+        ).rejects.toThrow(
+          `직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 ${what} 알림톡 버튼 링크를 보낼 수 없습니다.`,
+        );
+        expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+        expect(tx.contract.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('직원 앱 주소가 `https:` 뒤에 // 없이 적혀도 만들 링크가 https 면 막지 않는다 — 발송과 같은 판단', async () => {
+      appUrl = 'https:staff.whale.test';
+      await expect(
+        service().prepare(t(), input(), NOW),
+      ).resolves.not.toBeNull();
+    });
+
     it.each<[string, () => void, unknown, string | undefined]>([
       [
         '직원 앱 주소가 없으면 503',
