@@ -100,7 +100,9 @@ the DB body and `kakao_template_code` match it, [Notification templates](/api/no
 is built from `STAFF_APP_URL` as before (`/invite#token=…`, `/affiliations`) and there is one Kakao
 template per message, not one per environment (재영 2026-10-30). The registered invite button link is
 `https://#{가입링크}` — everything after the scheme is a variable, so the dev server's `STAFF_APP_URL` does not
-make it differ.
+make it differ. The same no-scheme rule applies to every button (김민식 2026-11-02), so
+`TALK_STAFF_AFFILIATION_REQUEST` must be registered with a button link of the same `https://#{…}` form —
+registered any other way, its button would carry an address without a scheme.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`
@@ -141,8 +143,7 @@ match) is thrown before any request too. `isMobilePhone` lets a caller run the n
 check before it writes, and `hasSmsFallback()` says whether `BIZPPURIO_SMS_FROM` is set —
 the only way a button link reaches anyone when Kakao rejects the 알림톡 — an unapproved body or button
 makes the 알림톡 itself fail (근로계약 가입 초대 ·
-소속 추가 확인 요청 require it: 소속 추가 is not registered yet and the invite's button URL form is still
-open — api #74 review).
+소속 추가 확인 요청 require it until 소속 추가 is registered too — api #74 review).
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s
