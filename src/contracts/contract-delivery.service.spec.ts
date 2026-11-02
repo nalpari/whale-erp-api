@@ -748,6 +748,14 @@ describe('ContractDeliveryService', () => {
       }
     });
 
+    it('직원 앱 주소가 http 면 503 — 주소가 없을 때와 다른 문구로 까닭을 알린다(등록 버튼 링크가 https://#{가입링크})', async () => {
+      appUrl = 'http://localhost:3001';
+      await expect(service().prepare(t(), input(), NOW)).rejects.toThrow(
+        '직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 가입 초대 알림톡 버튼 링크를 보낼 수 없습니다.',
+      );
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+    });
+
     it.each<[string, () => void, unknown, string | undefined]>([
       [
         '직원 앱 주소가 없으면 503',
