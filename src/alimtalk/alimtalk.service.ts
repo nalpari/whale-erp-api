@@ -287,7 +287,9 @@ function eucKrBytes(text: string): number {
 
 /**
  * 로그용 요청 사본. 키 · 구조 · 버튼 이름 · 링크의 스킴 · 호스트는 보낸 그대로 두고, 번호 · senderkey · 본문의 변수 값 · 링크의
- * 경로 뒤를 가린다. 본문은 `shape`(변수 값을 모두 가린 본문)로 바꾸고 원래 글자 수를 함께 싣는다.
+ * 경로 뒤를 가린다. 본문은 `shape`(변수 값을 모두 가린 본문)로 바꾸고 원래 글자 수(UTF-16 단위)를, 대체 문자는 비즈뿌리오가 세는
+ * EUC-KR 바이트 수(SMS 90 · LMS 2000 한도)를 함께 싣는다. 나머지는 펼쳐 그대로 싣는다 — `BizppurioMessage` 에 변수 값이 들어가는
+ * 칸(알림톡 `title` 등)을 더하면 여기서도 가린다.
  */
 function requestForLog(
   message: BizppurioMessage,
@@ -297,6 +299,7 @@ function requestForLog(
   const { at } = message.content;
   const fallback = [shape, ...links.map(maskLink)].join('\n');
   const { sms, lms } = message.recontent ?? {};
+  const messageBytes = eucKrBytes((sms ?? lms)?.message ?? '');
   return {
     ...message,
     to: maskPhone(message.to),
@@ -322,8 +325,10 @@ function requestForLog(
     ...(message.recontent
       ? {
           recontent: {
-            ...(sms ? { sms: { message: fallback } } : {}),
-            ...(lms ? { lms: { ...lms, message: fallback } } : {}),
+            ...(sms ? { sms: { message: fallback, messageBytes } } : {}),
+            ...(lms
+              ? { lms: { ...lms, message: fallback, messageBytes } }
+              : {}),
           },
         }
       : {}),
@@ -332,13 +337,17 @@ function requestForLog(
 
 /**
  * 링크는 스킴(있으면) · 호스트만 그대로 두고 그 뒤(경로 · 쿼리 · fragment)는 가린 채 전체 글자 수를 붙인다 — 토큰은 fragment 에도
- * 경로에도 올 수 있다. `staff.whale.test/invite#token=abc` → `staff.whale.test/***(34자)`
+ * 경로에도 올 수 있다. 호스트 앞 사용자 정보(`user:pw@`)도 가린다. `staff.whale.test/invite#token=abc` → `staff.whale.test/***(34자)`
  */
 function maskLink(link: string): string {
-  const [, head, rest] = /^((?:[a-z][a-z0-9+.-]*:\/\/)?[^/?#]*)(.*)$/is.exec(
-    link,
-  ) as RegExpExecArray;
-  return `${head}${rest ? '/***' : ''}(${link.length}자)`;
+  const [, scheme, host, rest] =
+    /^((?:[a-z][a-z0-9+.-]*:\/\/)?)([^/?#]*)(.*)$/is.exec(
+      link,
+    ) as RegExpExecArray;
+  const shownHost = host.includes('@')
+    ? `***@${host.slice(host.lastIndexOf('@') + 1)}`
+    : host;
+  return `${scheme}${shownHost}${rest ? '/***' : ''}(${link.length}자)`;
 }
 
 /** integer 컬럼에 들어가는 id — 1..2147483647 */

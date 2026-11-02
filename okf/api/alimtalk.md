@@ -177,8 +177,11 @@ shows up in the result report (Bizppurio 7101 「파라미터 형식 오류」, 
 name and type, and each link's scheme and host stay as sent, so a missing or
 doubled `https://` is visible. The phone is `010****5678`, `senderkey` keeps its
 last four characters, the body is the template with **every** variable value
-masked (`messageLength` is the real length), and each link keeps only scheme and
-host plus `/***(N자)` — a token can sit in the path as well as the fragment.
+masked (`messageLength` is the real length in UTF-16 units, which can differ from
+Kakao's count for emoji), the fallback SMS/LMS carries `messageBytes` (the real
+EUC-KR byte count Bizppurio checks against 90 · 2000), and each link keeps only
+scheme and host plus `/***(N자)` — a token can sit in the path as well as the
+fragment; user info before the host becomes `***@`.
 After the call comes `alimtalk ACCEPTED` or `alimtalk FAILED`. The rendered body
 itself is never logged — it carries names and invite links; in the table it is
 masked only where the caller said so.

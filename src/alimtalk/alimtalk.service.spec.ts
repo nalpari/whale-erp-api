@@ -618,11 +618,29 @@ ${link}`,
             subject: '[WHALE ERP]',
             message: `${MASK}님, 아래 버튼을 눌러 가입해 주세요.
 https://staff.whale.test/***(50자)`,
+            // 실제 대체 문자(링크 원문 포함)의 EUC-KR 바이트 — 90 을 넘어 LMS 다
+            messageBytes: 92,
           },
         },
       });
       expect(line).not.toContain('홍길동');
       expect(line).not.toContain('sender-key');
+    });
+
+    it('요청 파라미터 로그의 링크는 호스트 앞 사용자 정보도 가린다', async () => {
+      findUnique.mockResolvedValue(withLink());
+
+      await service.send({
+        ...invite,
+        variables: {
+          name: '홍길동',
+          링크: 'https://user:secret-pw@staff.whale.test/invite',
+        },
+      });
+
+      const [first] = logLog.mock.calls[0] as [string];
+      expect(first).toContain('"url_mobile":"***@staff.whale.test/***(38자)"');
+      expect(first).not.toContain('secret-pw');
     });
 
     it('요청 파라미터 로그는 비즈뿌리오가 거절해도 남는다', async () => {
