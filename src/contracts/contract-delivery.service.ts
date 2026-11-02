@@ -576,34 +576,35 @@ export class ContractDeliveryService {
    * 알림톡 발송 이력(alimtalk_send_logs, 관련 업무 = 계약)에 남고, 보내기 전 실패(템플릿 꺼짐 · 번호 등)는 로그로 남긴다(NTF-25).
    * 버튼이 없는 템플릿이라 링크도 없다 — 대체 문자도 본문만 간다. 유선번호는 알림톡이 받지 않아 보내지 않는다.
    * 보내기 직전에 계약이 아직 이 발송 그대로인지(서명 대기 · 이 발송이 잡은 기한) 다시 본다 — 커밋 뒤 다른 요청이 다시 보냈거나
-   * (그 요청이 새 기한으로 보낸다) 대체 · 종료 · 날인했으면 옛 기한의 「서명해 주세요」는 보내지 않는다. 동시 재발송이 두 번 나가는
-   * 것도 대개 이것으로 하나가 된다. 읽은 뒤 보내기 전의 짧은 틈은 남는다(가입 초대와 같다).
+   * (그 요청이 새 기한으로 보낸다) 대체 · 종료 · 날인했으면 옛 기한의 「서명해 주세요」는 보내지 않는다. 동시 재발송은 뒤 요청이
+   * 앞 요청의 잠금이 풀린 뒤에 쓰므로 앞 요청의 재조회가 대개 먼저 끝나 둘 다 나갈 수 있다 — 두 탭 재발송은 expectedSentAt 검사(409)가
+   * 막는다. 읽은 뒤 보내기 전의 짧은 틈은 남는다(가입 초대와 같다). 재조회가 실패해도(연결 끊김 등) 던지지 않고 로그만 남긴다.
    */
   private async sendContractNotice(
     pending: PendingContractNotice,
     sentBy: number,
   ): Promise<void> {
     const { contractId } = pending;
-    const now = await this.prisma.contract.findUnique({
-      where: { contractId },
-      select: { status: true, signDeadlineAt: true },
-    });
-    if (
-      now?.status !== 'PENDING_SIGNATURE' ||
-      now.signDeadlineAt?.getTime() !== pending.signDeadlineAt.getTime()
-    ) {
-      this.logger.warn(
-        `근로계약서 발송 알림톡을 보내지 않음: 계약 ${contractId} 를 그사이 다른 요청이 바꿨다(status=${now?.status})`,
-      );
-      return;
-    }
-    if (!isMobilePhone(pending.phone)) {
-      this.logger.warn(
-        `근로계약서 발송 알림톡을 보내지 않음: 계약 ${contractId} 의 번호가 휴대폰 번호가 아니다`,
-      );
-      return;
-    }
     try {
+      const now = await this.prisma.contract.findUnique({
+        where: { contractId },
+        select: { status: true, signDeadlineAt: true },
+      });
+      if (
+        now?.status !== 'PENDING_SIGNATURE' ||
+        now.signDeadlineAt?.getTime() !== pending.signDeadlineAt.getTime()
+      ) {
+        this.logger.warn(
+          `근로계약서 발송 알림톡을 보내지 않음: 계약 ${contractId} 를 그사이 다른 요청이 바꿨다(status=${now?.status})`,
+        );
+        return;
+      }
+      if (!isMobilePhone(pending.phone)) {
+        this.logger.warn(
+          `근로계약서 발송 알림톡을 보내지 않음: 계약 ${contractId} 의 번호가 휴대폰 번호가 아니다`,
+        );
+        return;
+      }
       await this.alimtalk.send({
         templateCode: CONTRACT_SENT_TEMPLATE,
         to: pending.phone,
@@ -612,7 +613,7 @@ export class ContractDeliveryService {
         sentBy,
       });
     } catch (e) {
-      // 비즈뿌리오 오류는 AlimtalkService 가 이력 · 로그로 남긴다 — 그 밖(보내기 전 검사)만 여기서 남긴다
+      // 비즈뿌리오 오류는 AlimtalkService 가 이력 · 로그로 남긴다 — 그 밖(재조회 · 보내기 전 검사)만 여기서 남긴다
       if (!(e instanceof BizppurioError))
         this.logger.error(
           `근로계약서 발송 알림톡을 보내기 전에 실패 contract=${contractId}`,

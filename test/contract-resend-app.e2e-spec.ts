@@ -464,7 +464,8 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
     ]);
     expect(await noticesOf('joinedSendRace')).toHaveLength(2);
     // 근로계약서 발송 알림톡은 보내기 직전에 계약이 아직 그 발송 그대로인지 본다 — 앞 요청이 읽을 때 뒤 요청이 이미 새 기한을
-    // 썼으면 앞 요청은 보내지 않는다. 둘이 겹친 때에 따라 한 번 또는 두 번이다(알림함 줄은 늘 두 줄)
+    // 썼을 때만 앞 요청이 빠진다. 뒤 요청은 앞 요청의 잠금이 풀린 뒤 쓰므로 대개 둘 다 나간다(알림함 줄은 늘 두 줄). 두 탭
+    // 재발송은 expectedSentAt 검사(409)가 막는다
     const sends = alimtalkSend.mock.calls.length;
     expect(sends).toBeGreaterThanOrEqual(1);
     expect(sends).toBeLessThanOrEqual(2);

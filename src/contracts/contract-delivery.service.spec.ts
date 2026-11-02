@@ -978,6 +978,25 @@ describe('ContractDeliveryService', () => {
         },
       );
 
+      it('보내기 직전 계약 재조회가 실패해도(연결 끊김 등) 던지지 않고 error 로그 — 저장은 이미 끝났다', async () => {
+        prisma.contract.findUnique.mockRejectedValueOnce(
+          new Error('connection lost'),
+        );
+        const error = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+        try {
+          await expect(service().dispatch(notice(), 9)).resolves.toBe(true);
+          expect(alimtalk.send).not.toHaveBeenCalled();
+          expect(error).toHaveBeenCalledWith(
+            '근로계약서 발송 알림톡을 보내기 전에 실패 contract=7',
+            expect.any(String),
+          );
+        } finally {
+          error.mockRestore();
+        }
+      });
+
       it('유선번호면 보내지 않고 warn — 알림톡이 받지 않는다', async () => {
         const warn = jest
           .spyOn(Logger.prototype, 'warn')
