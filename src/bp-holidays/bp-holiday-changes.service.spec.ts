@@ -209,6 +209,13 @@ describe('BpHolidayChangesService', () => {
           createMany: { data: [expect.objectContaining({ storeId: 13 })] },
         },
       });
+      // 점포 수 단위는 화면처럼 「개」다(2026-10-30).
+      expect(histories()).toEqual([
+        expect.objectContaining({
+          field: '등록',
+          afterValue: '임시 휴무 · 전체 점포 · 예외 1개 · 하루 · 2026-11-02',
+        }),
+      ]);
     });
 
     it('특정 점포 휴일은 대상 점포가 하나 이상이어야 한다', async () => {
@@ -304,9 +311,9 @@ describe('BpHolidayChangesService', () => {
           }) => [h.field, h.beforeValue, h.afterValue],
         ),
       ).toEqual([
-        ['대상 점포', null, '성수점 추가(2026-10-26부터)'],
-        ['대상 점포', '판교점', '판교점 빼기(2026-10-25까지)'],
-        ['대상 점포', '서초점', '서초점 빼기'],
+        ['대상점포', null, '성수점 추가(2026-10-26부터)'],
+        ['대상점포', '판교점', '판교점 빼기(2026-10-25까지)'],
+        ['대상점포', '서초점', '서초점 빼기'],
       ]);
     });
 
@@ -409,8 +416,8 @@ describe('BpHolidayChangesService', () => {
           ),
         ).toEqual([
           ['적용 범위', '일부 점포', '전체 점포'],
-          ['대상 점포', '판교점', '판교점 빼기'],
-          ['예외 점포', null, '성수점 추가(2026-11-02부터)'],
+          ['대상점포', '판교점', '판교점 빼기'],
+          ['예외점포', null, '성수점 추가(2026-11-02부터)'],
         ]);
       });
 

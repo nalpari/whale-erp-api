@@ -4,7 +4,7 @@ title: BP holidays
 description: 관리자 웹 「BP 휴일 관리」(MN000015) — rule-stored holidays whose dates are computed when read, month calendar · list, detail, change history, overlap check, create, update, force termination and deletion; past dates never change, stores join from today and leave as of yesterday.
 tags: [admin, holiday, bp, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:10:32Z }
 sources:
   - id: bp-holidays-controller
     resource: ../../src/bp-holidays/bp-holidays.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-holiday-changes
     resource: ../../src/bp-holidays/bp-holiday-changes.service.ts
     title: create · update · terminate · remove under a row lock
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T09:10:32Z
   - id: bp-holiday-access
     resource: ../../src/bp-holidays/bp-holiday-access.ts
     title: who manages what — manageAll, store scope, per-state actions
@@ -195,9 +195,12 @@ store cannot become a target store; each 400 names the reason and the store ids
 
 Every write appends to `bp_holiday_change_histories`: `등록` with a one-line summary, then
 `휴일명` · `설명` · `날짜` (`describeRule`, e.g. 「매주 · 시작 2026-10-30 · 종료일 없음」) ·
-`적용 범위`, one `대상 점포` / `예외 점포` row per store (「… 추가(2026-10-26부터)」,
+`적용 범위`, one `대상점포` / `예외점포` row per store (「… 추가(2026-10-26부터)」,
 「… 빼기(2026-10-25까지)」, 「… 빼기」), `강제 종료`, and `삭제`. The history route is
-the only place a deleted holiday still shows.
+the only place a deleted holiday still shows. Field names and the store-count unit follow
+관리자 웹 (2026-10-30 재영): 「대상점포」 · 「예외점포」 written solid, and the 등록 summary
+says 「전체 점포 · 예외 N개」, not 「N개점」. Rows written before keep 「대상 점포」 · 「예외 점포」
+and 「N개점」 — history is not rewritten.[^bp-holiday-changes]
 
 `POST /bp-holidays/overlaps` takes the same form (plus `bpHolidayId` when editing — it
 must be a holiday the caller can see, or 404; the holiday itself is left out, and a past

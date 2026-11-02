@@ -34011,7 +34011,8 @@
             "example": "정기휴무"
           },
           "field": {
-            "type": "string"
+            "type": "string",
+            "example": "대상점포"
           },
           "beforeValue": {
             "type": "string",

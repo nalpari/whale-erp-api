@@ -107,7 +107,7 @@ export class BpHolidayHistoryResponseDto {
   bpHolidayId: number;
   /** @example 정기휴무 */
   holidayName: string;
-  /** @example 대상 점포 */
+  /** @example 대상점포 */
   field: string;
   beforeValue: string | null;
   /** @example 온기식당 판교점 추가(2026-10-26부터) */
