@@ -187,7 +187,7 @@ describe('BpRoleGroupsService', () => {
       });
     });
 
-    it('메뉴 등록 수는 팝업에 보이는 메뉴에 조회가 켜진 행만 센다 — 메뉴나 상위가 사용중지 · 삭제면 세지 않는다', async () => {
+    it('메뉴 등록 수는 팝업에 보이는 메뉴에 조회가 켜진 행만 센다 — 메뉴나 상위가 사용중지 · 삭제이거나 WHALE_ERP 밖이면 세지 않는다', async () => {
       prisma.roleGroup.findMany.mockResolvedValue([]);
       prisma.roleGroup.count.mockResolvedValue(0);
       await service.list(BA, { page: 1, pageSize: 20 });
@@ -199,6 +199,7 @@ describe('BpRoleGroupsService', () => {
           isReadable: true,
           menu: {
             ...live,
+            serviceCode: { in: ['WHALE_ERP'] },
             OR: [
               { parentMenuId: null },
               {

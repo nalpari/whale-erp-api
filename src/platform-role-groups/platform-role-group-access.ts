@@ -14,7 +14,8 @@ export type Db = Tx | PrismaService;
 const LIVE_MENU = { isDeleted: false, status: 'ACTIVE' } as const;
 /**
  * 메뉴 등록 팝업에 보이는 메뉴 — 자신과 상위가 모두 지우지 않은 사용 메뉴(visibleMenus 의 상위 판정을 DB 조건으로).
- * 메뉴는 최대 3단계(menus_depth_range)라 상위 두 단계면 뿌리에 닿는다. 서비스 사용 여부는 보지 않는다.
+ * 메뉴는 최대 3단계(MAX_MENU_DEPTH · menus_depth_range)라 상위 두 단계면 뿌리에 닿는다 — 깊이를 늘리면 여기도 늘린다.
+ * 서비스 사용 여부는 보지 않는다.
  */
 export const VISIBLE_MENU_WHERE = {
   ...LIVE_MENU,

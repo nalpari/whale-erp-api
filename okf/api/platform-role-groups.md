@@ -4,7 +4,7 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-02T02:32:49Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T03:32:32Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
@@ -29,7 +29,7 @@ sources:
   - id: platform-role-group-access
     resource: ../../src/platform-role-groups/platform-role-group-access.ts
     title: Target lookup, flags, the caller's own 권한 관리 rights (callerRoleMenuRights, by PLATFORM_ROLE_MENU_URL), the popup-visible menu condition (VISIBLE_MENU_WHERE)
-    last_modified: 2026-11-02T02:32:49Z
+    last_modified: 2026-11-02T03:32:32Z
   - id: platform-role-group-dto
     resource: ../../src/platform-role-groups/dto/platform-role-group.response.dto.ts
     title: Response shapes — tree cells, blocked reasons, preview counts

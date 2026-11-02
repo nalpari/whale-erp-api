@@ -13,6 +13,7 @@ import {
   type MenuCaller,
   MenuPermissionsService,
 } from '../menu-permissions/menu-permissions.service';
+import { MAX_MENU_DEPTH } from '../platform-menus/platform-menu-rules';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlatformRoleGroupsService } from './platform-role-groups.service';
 
@@ -202,6 +203,10 @@ describe('PlatformRoleGroupsService', () => {
         adminCount: 2,
       });
       expect(result.items[3].isMenuRegistered).toBe(false);
+    });
+
+    it('보이는 메뉴 조건은 상위 두 단계까지 본다 — 메뉴가 3단계보다 깊어지면 VISIBLE_MENU_WHERE 도 늘려야 한다', () => {
+      expect(MAX_MENU_DEPTH).toBe(3);
     });
 
     it('메뉴 등록 여부는 팝업에 보이는 메뉴에 조회가 켜진 지우지 않은 행을, 관리자 수는 지우지 않은 관리자를 센다 — 메뉴나 상위가 사용중지 · 삭제면 미등록', async () => {
