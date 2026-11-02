@@ -4,7 +4,7 @@ title: Platform role groups
 description: 관리자 웹 「플랫폼 권한 관리」(MN000214) — the fixed roles and 플랫폼 관리자 추가 권한, their names, per-menu CRUD with the caller's own ceiling, revocation from BP · 가맹 마스터 cascading into every BA · FA group, and deletion that moves linked admins to a replacement.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:27:29Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T03:32:32Z }
 sources:
   - id: platform-role-groups-controller
     resource: ../../src/platform-role-groups/platform-role-groups.controller.ts
@@ -13,7 +13,7 @@ sources:
   - id: platform-role-groups-service
     resource: ../../src/platform-role-groups/platform-role-groups.service.ts
     title: PlatformRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-30T01:57:17Z
+    last_modified: 2026-11-02T02:32:49Z
   - id: platform-role-group-menus-service
     resource: ../../src/platform-role-groups/platform-role-group-menus.service.ts
     title: PlatformRoleGroupMenusService (tree · save · preview, revocation cascade)
@@ -28,8 +28,8 @@ sources:
     last_modified: 2026-10-29T05:17:36Z
   - id: platform-role-group-access
     resource: ../../src/platform-role-groups/platform-role-group-access.ts
-    title: Target lookup, flags, and the caller's own 권한 관리 rights (callerRoleMenuRights, by PLATFORM_ROLE_MENU_URL)
-    last_modified: 2026-10-21T01:46:17Z
+    title: Target lookup, flags, the caller's own 권한 관리 rights (callerRoleMenuRights, by PLATFORM_ROLE_MENU_URL), the popup-visible menu condition (VISIBLE_MENU_WHERE)
+    last_modified: 2026-11-02T03:32:32Z
   - id: platform-role-group-dto
     resource: ../../src/platform-role-groups/dto/platform-role-group.response.dto.ts
     title: Response shapes — tree cells, blocked reasons, preview counts
@@ -79,9 +79,12 @@ the id check, so a caller without the right gets 403 for a malformed body or an
 out-of-range id where it used to get 400 or 404. Callers with the right see no
 change.
 
-Each list item carries `isMenuRegistered` (any non-deleted row with 조회 on, whatever
-the service — a row under a 사용중지 menu or service counts, a deleted menu's row does
-not), `createdBy` / `updatedBy` as
+Each list item carries `isMenuRegistered` (any non-deleted row with 조회 on under a menu that
+is undeleted and 사용 itself and up its whole parent chain, whatever the service — a row kept under
+a 사용중지 or deleted menu, or under a child of one, does not count, since the 메뉴설정 popup does
+not show those menus; `VISIBLE_MENU_WHERE` is `visibleMenus`' parent check as a Prisma condition,
+two parent levels since menus stop at 3; 2026-10-30 재영, parent chain 2026-11-02, BP 목록 「등록
+N개」 too), `createdBy` / `updatedBy` as
 `{ name, loginId }` or null for seeded rows, and `adminCount` (non-deleted linked admins,
 미사용 included — the delete dialog uses it).
 

@@ -23,6 +23,7 @@ import type {
 import {
   isUniqueViolation,
   type Tx,
+  VISIBLE_MENU_WHERE,
 } from '../platform-role-groups/platform-role-group-access';
 import {
   CHANGED_MEANWHILE,
@@ -35,6 +36,7 @@ import {
 } from '../platform-role-groups/platform-role-group-format';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  BP_ROLE_SERVICES,
   type BpScope,
   canWrite,
   findBpRoleGroup,
@@ -65,11 +67,15 @@ const SUMMARY_SELECT = {
   manager: { select: { adminAccountId: true, loginId: true, name: true } },
   _count: {
     select: {
+      // 메뉴 등록 수 — BP 팝업에 보이는 메뉴(WHALE_ERP)에 조회가 켜진 행만 센다.
       menus: {
         where: {
           isDeleted: false,
           isReadable: true,
-          menu: { isDeleted: false },
+          menu: {
+            ...VISIBLE_MENU_WHERE,
+            serviceCode: { in: [...BP_ROLE_SERVICES] },
+          },
         },
       },
       adminAccounts: { where: { isDeleted: false } },

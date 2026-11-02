@@ -4,7 +4,7 @@ title: BP role groups
 description: 관리자 웹 「BP 권한 그룹 관리」(MN000013) — BA · FA groups scoped by the caller's role, codes numbered per type, names unique per (BP, 관리계정), per-menu CRUD capped by the fixed role ∩ the caller's own rights, and deletion that moves linked admins.
 tags: [admin, permission, menu, role]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T05:13:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T03:32:32Z }
 sources:
   - id: bp-role-groups-controller
     resource: ../../src/bp-role-groups/bp-role-groups.controller.ts
@@ -17,7 +17,7 @@ sources:
   - id: bp-role-groups-service
     resource: ../../src/bp-role-groups/bp-role-groups.service.ts
     title: BpRoleGroupsService (list · detail · create · update · deletionCandidates · remove)
-    last_modified: 2026-10-30T01:57:17Z
+    last_modified: 2026-11-02T03:32:32Z
   - id: bp-role-group-menus-service
     resource: ../../src/bp-role-groups/bp-role-group-menus.service.ts
     title: BpRoleGroupMenusService (tree · save · preview · franchise-master view)
@@ -109,6 +109,14 @@ nothing is revoked, as on the platform side.
 # Differences from the request
 
 - `adminCount` keeps the platform meaning (undeleted admins, inactive included), not 「활성」.
+- `menuCount` · `isMenuRegistered` count only rows with 조회 on under a menu the popup can show —
+  undeleted and 사용 (`ACTIVE`) itself and up its whole parent chain (`VISIBLE_MENU_WHERE`), as on
+  the platform side. A permission kept under a 사용중지 menu, or under a child of a 사용중지 or deleted
+  parent (the child keeps its own `ACTIVE`), is not counted (2026-10-30 재영; parent chain
+  2026-11-02, api #226 review), and only WHALE_ERP menus (`BP_ROLE_SERVICES`) are counted, since
+  that is all this popup shows. One gap remains against the popup: the service's 사용 여부 is not
+  checked. The parent chain is two levels because menus stop at 3 (`MAX_MENU_DEPTH`); a unit test
+  pins that value so a deeper tree trips it.
 - No new partial unique index; the existing one already has this scope.
 - No `canCreate`, no `OUT_OF_BASE_ROLE` (see above).
 - An FA group of a deleted or inactive 가맹 마스터 stays visible to the BM read-only.

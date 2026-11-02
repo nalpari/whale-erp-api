@@ -58,14 +58,14 @@ const DELETE_STARTED =
 /** 두 표(대상 · 예외 점포)의 같은 모양 — 기간 행 ID 칸 이름만 다르다. */
 const TABLES = {
   mappings: {
-    label: '대상 점포',
+    label: '대상점포',
     rows: (h: HolidayRow) =>
       h.storeMappings.map((p) => ({ ...p, id: p.holidayStoreMappingId })),
     model: (tx: Tx) => tx.holidayStoreMapping,
     idKey: 'holidayStoreMappingId',
   },
   excluded: {
-    label: '예외 점포',
+    label: '예외점포',
     rows: (h: HolidayRow) =>
       h.excludedStores.map((p) => ({ ...p, id: p.holidayExcludedStoreId })),
     model: (tx: Tx) => tx.holidayExcludedStore,
@@ -131,7 +131,7 @@ export class BpHolidayChangesService {
         select: { bpHolidayId: true },
       });
       const target = dto.isAllStores
-        ? `전체 점포${storeIds.length ? ` · 예외 ${storeIds.length}개점` : ''}`
+        ? `전체 점포${storeIds.length ? ` · 예외 ${storeIds.length}개` : ''}`
         : storeIds.map((id) => stores.get(id)).join(' · ');
       await this.record(tx, caller, bpHolidayId, [
         {
