@@ -207,6 +207,14 @@ describe('AdminLoginInfoService', () => {
     await expect(service.get(7)).rejects.toThrow(UnauthorizedException);
   });
 
+  // 관리자 웹은 이 경로의 「사용할 수 없는 계정」 403 에 로그아웃시킨다 — 삭제가 먼저 401 로 갈라져야 한다.
+  it('지웠으면서 탈퇴한 계정은 403 이 아니라 401', async () => {
+    prisma.adminAccount.findUnique.mockResolvedValue(
+      account({ isDeleted: true, accountStatusCode: 'WITHDRAWN' }),
+    );
+    await expect(service.get(7)).rejects.toThrow(UnauthorizedException);
+  });
+
   it('사용중지 · 탈퇴한 계정이면 403 — 화면 정보를 주지 않는다', async () => {
     for (const accountStatusCode of ['INACTIVE', 'WITHDRAWN']) {
       prisma.adminAccount.findUnique.mockResolvedValue(
@@ -287,6 +295,7 @@ describe('AdminLoginInfoService', () => {
       ['그룹 메뉴 추가', (s) => s.groupMenus.push(row(3))],
       ['그룹 메뉴 수정', (s) => (s.groupMenus[0] = row(1, 1))],
       ['그룹 메뉴 지움', (s) => (s.groupMenus[1] = row(2, 0, true))],
+      ['그룹 메뉴 행이 빠짐', (s) => s.groupMenus.pop()],
       ['메뉴 수정', (s) => (s.menus[2] = row(3, 1))],
       ['메뉴 추가', (s) => s.menus.push(row(4))],
       ['메뉴 지움', (s) => (s.menus[0] = row(1, 0, true))],
