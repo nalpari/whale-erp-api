@@ -213,6 +213,7 @@ const failureOf = (e: unknown): { kind: SendFailureKind; code?: number } =>
  *   초대 발송으로 둔다. 상태는 호출부가 `deliveredStatusOf` 로 정해 바꾼다.
  * - `dispatch` 는 커밋 뒤에 가입 초대 알림톡을 보낸다 — 알림톡은 롤백이 없어서다(공통 모듈 규칙). 확실히 나가지
  *   않았으면 보내기 직전으로 되돌려 502 SEND_FAILED, 메시지 요청 뒤 응답이 끊겼으면 되돌리지 않고 502 SEND_UNCONFIRMED.
+ *   가입한 직원의 근로계약서 발송 알림톡(WHALEERP-619)도 커밋 뒤에 보내지만, 되돌리지 않고 실패해도 저장은 그대로다.
  *
  * 초대 코드는 알림톡 본문에 싣는다. 초대 링크(STAFF_APP_URL 의 `/invite#token=…`)는 버튼 변수라 알림톡 버튼과 대체 문자
  * 끝에 함께 실린다(WHALEERP-636). 버튼에는 앞의 `https://` 를 뗀 주소가 실리므로(등록 링크가 `https://#{변수}`) 직원 앱 주소가

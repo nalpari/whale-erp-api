@@ -20,7 +20,8 @@ export const AFFILIATION_MAIL_TEMPLATE = 'EMAIL_STAFF_AFFILIATION_REQUEST';
 export const CONTRACT_SENT_TEMPLATE = 'TALK_STAFF_CONTRACT_SENT';
 
 /**
- * 가입 초대 · 소속 추가 확인 요청 알림톡의 관련 업무 유형(alimtalk_send_logs.related_type) — 직원 상세 발송 이력이 이 값으로 찾는다.
+ * 근로계약 발송(ContractDeliveryService) 알림톡 — 가입 초대 · 소속 추가 확인 요청 · 근로계약서 발송 — 의 관련 업무 유형
+ * (alimtalk_send_logs.related_type). 직원 상세 발송 이력이 이 값과 템플릿 코드(SEND_KIND_OF_TEMPLATE — 근로계약서 발송은 없다)로 찾는다.
  * 근로계약 알림(ContractNoticeService)은 'CONTRACT'(대문자)로 남겨 표기가 다르다 — 이미 쌓인 행이 있어 어느 쪽도 바꾸지 않는다.
  * 계약 관련 알림톡을 함께 찾으려면 둘 다 본다.
  */
