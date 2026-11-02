@@ -11,6 +11,13 @@ export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
  */
 export const AFFILIATION_TEMPLATE = 'TALK_STAFF_AFFILIATION_REQUEST';
 export const AFFILIATION_MAIL_TEMPLATE = 'EMAIL_STAFF_AFFILIATION_REQUEST';
+/**
+ * 근로계약서 발송 알림톡(근무지 · 날인기한, 버튼 없음 — WHALEERP-619) — 가입한 직원이 앱으로 받을 때 직원 알림함 PUSH_CONTRACT_SENT 와
+ * 같은 때 간다. 카카오 템플릿 코드는 **PUSH_CONTRACT_SENT**(2026-11-02 등록본)라 알림함 템플릿 코드와 이름이 같다 — 우리 템플릿
+ * 코드는 겹치지 않게 TALK_ 로 두고 kakao_template_code 에만 그 값을 넣었다. 직원 상세 발송 이력(가입 초대 · 소속 추가 확인 요청)에는
+ * 싣지 않는다 — 결과는 알림톡 발송 이력(alimtalk_send_logs)에만 남는다.
+ */
+export const CONTRACT_SENT_TEMPLATE = 'TALK_STAFF_CONTRACT_SENT';
 
 /**
  * 가입 초대 · 소속 추가 확인 요청 알림톡의 관련 업무 유형(alimtalk_send_logs.related_type) — 직원 상세 발송 이력이 이 값으로 찾는다.

@@ -22,6 +22,7 @@ import {
   INVITATION_CODE_CHARS,
   newInvitationCode,
   newInvitationToken,
+  type PendingContractNotice,
   type PendingInvite,
   restoredStatusOf,
   SEND_VALID_MS,
@@ -29,7 +30,7 @@ import {
 
 // 직원 알림은 staff-notice.spec.ts 가 본다 — 여기서는 부르는지만 본다
 jest.mock('../notifications/staff-notice', () => ({
-  noticeStaff: jest.fn().mockResolvedValue(true),
+  noticeStaff: jest.fn().mockResolvedValue('QUEUED'),
 }));
 
 // 근로계약 보내기(WHALEERP-136, 2026-10-19 재영 정정 — 저장하면 곧바로 보낸다). 알림톡은 커밋 뒤에
@@ -240,7 +241,11 @@ describe('ContractDeliveryService', () => {
 
   describe('prepare', () => {
     it('가입 초대 — 서명 기한 30일 · 초대(토큰은 해시로만) · 직원 초대 발송, 이 저장의 이력 줄을 기억한다', async () => {
-      const pending = await service().prepare(t(), input(), NOW);
+      const pending = (await service().prepare(
+        t(),
+        input(),
+        NOW,
+      )) as PendingInvite;
       expect(tx.contract.update).toHaveBeenCalledWith({
         where: { contractId: 7 },
         select: { employmentType: true, jobTitle: true },
@@ -270,12 +275,12 @@ describe('ContractDeliveryService', () => {
         expired: [],
       });
       // 코드는 JWT_SECRET 을 섞은 HMAC 만, 링크 토큰은 sha256 만 — 원문은 DB 에 없다
-      expect(pending!.code).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
+      expect(pending.code).toMatch(/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}$/);
       expect(created.data.invitationCodeHash).toBe(
-        hashInvitationCode(pending!.code!, SECRET),
+        hashInvitationCode(pending.code!, SECRET),
       );
-      expect(created.data.invitationToken).toBe(hashToken(pending!.token!));
-      expect(created.data.invitationToken).not.toContain(pending!.token!);
+      expect(created.data.invitationToken).toBe(hashToken(pending.token!));
+      expect(created.data.invitationToken).not.toContain(pending.token!);
       expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
@@ -316,12 +321,21 @@ describe('ContractDeliveryService', () => {
     });
 
     it.each([['가입한 직원', { joined: true }]])(
-      '%s 은 앱으로 받는다 — 기한만 잡고 앞 초대는 무효, 보낼 것은 없다(설정이 없어도)',
+      '%s 은 앱으로 받는다 — 기한만 잡고 앞 초대는 무효, 커밋 뒤 보낼 것은 근로계약서 발송 알림톡뿐이다(설정이 없어도)',
       async (_, over) => {
         appUrl = undefined;
         tx.invitation.findMany.mockResolvedValue([{ invitationId: 40 }]);
         const pending = await service().prepare(t(), input(over), NOW);
-        expect(pending).toBeNull();
+        const kst = new Date(DEADLINE.getTime() + 9 * 60 * 60 * 1000);
+        expect(pending).toEqual({
+          kind: 'CONTRACT_SENT',
+          contractId: 7,
+          phone: PHONE,
+          variables: {
+            근무지: '모리커피 연남점',
+            날인기한: `${kst.getUTCMonth() + 1}월 ${kst.getUTCDate()}일`,
+          },
+        });
         expect(tx.contract.update).toHaveBeenCalledWith(
           expect.objectContaining({
             data: expect.objectContaining({
@@ -453,12 +467,12 @@ describe('ContractDeliveryService', () => {
             .mockResolvedValue({ email: 'a@b.c', realName: '남도현' }),
         },
       });
-      const pending = await service().prepare(
+      const pending = (await service().prepare(
         t(),
         input({ draftAction: 'AFFILIATION_CONFIRM' }),
         NOW,
-      );
-      expect(pending?.affiliation).toMatchObject({ nameMismatch: true });
+      )) as PendingInvite;
+      expect(pending.affiliation).toMatchObject({ nameMismatch: true });
       prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
       const mail = { send: jest.fn().mockResolvedValue({}) };
       const warn = jest
@@ -511,12 +525,12 @@ describe('ContractDeliveryService', () => {
             .mockResolvedValue({ email: 'a@b.c', realName: '남도현' }),
         },
       });
-      const pending = await service().prepare(
+      const pending = (await service().prepare(
         t(),
         input({ draftAction: 'RETURN_CONFIRM' }),
         NOW,
-      );
-      expect(pending?.affiliation?.employmentType).toBe('정직원');
+      )) as PendingInvite;
+      expect(pending.affiliation?.employmentType).toBe('정직원');
       prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
       const mail = { send: jest.fn().mockResolvedValue({}) };
       await new ContractDeliveryService(
@@ -657,6 +671,19 @@ describe('ContractDeliveryService', () => {
         warn.mockRestore();
       }
     });
+
+    it.each([
+      ['수신 설정에서 근로계약서 묶음을 껐으면(알림함 줄만)', 'MUTED'],
+      ['알림함 템플릿을 쓸 수 없으면(알림 없음)', false],
+    ])(
+      '%s 근로계약서 발송 알림톡도 없다 — 알림톡은 앱 푸시 판정을 따른다(WHALEERP-619)',
+      async (_, result) => {
+        (noticeStaff as jest.Mock).mockResolvedValueOnce(result);
+        await expect(
+          service().prepare(t(), input({ joined: true }), NOW),
+        ).resolves.toBeNull();
+      },
+    );
 
     it('근로계약서 발송 알림 템플릿이 꺼져 있으면 알림 없이 보내기는 그대로다(재발송 200) — noticeStaff 가 건너뛴다', async () => {
       const notice = noticeStaff as jest.Mock;
@@ -853,6 +880,77 @@ describe('ContractDeliveryService', () => {
   });
 
   describe('dispatch', () => {
+    describe('근로계약서 발송 알림톡(가입한 직원, WHALEERP-619)', () => {
+      const notice = (
+        over: Partial<PendingContractNotice> = {},
+      ): PendingContractNotice => ({
+        kind: 'CONTRACT_SENT',
+        contractId: 7,
+        phone: PHONE,
+        variables: { 근무지: '모리커피 연남점', 날인기한: '11월 18일' },
+        ...over,
+      });
+
+      it('등록본 템플릿으로 보낸다 — 버튼 · 링크 변수 없이 근무지 · 날인기한만, 관련 업무는 계약 · 보낸 관리자', async () => {
+        await expect(service().dispatch(notice(), 9)).resolves.toBe(true);
+        expect(alimtalk.send).toHaveBeenCalledWith({
+          templateCode: 'TALK_STAFF_CONTRACT_SENT',
+          to: PHONE,
+          variables: { 근무지: '모리커피 연남점', 날인기한: '11월 18일' },
+          related: { type: 'contract', id: 7 },
+          sentBy: 9,
+        });
+        // 초대가 없어 초대 상태를 다시 읽지 않는다
+        expect(prisma.invitation.findUnique).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        [
+          '비즈뿌리오가 거절해도(이력 · 로그는 AlimtalkService 가)',
+          new BizppurioError('거절', 4100, 400),
+          false,
+        ],
+        [
+          '보내기 전에 실패해도(템플릿 꺼짐 등 — 여기서 error 로그)',
+          new Error('템플릿이 꺼져 있습니다'),
+          true,
+        ],
+      ])('%s 저장은 끝났으니 던지지 않고 true', async (_, failure, logged) => {
+        alimtalk.send.mockRejectedValueOnce(failure);
+        const error = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+        try {
+          await expect(service().dispatch(notice(), 9)).resolves.toBe(true);
+          if (logged)
+            expect(error).toHaveBeenCalledWith(
+              '근로계약서 발송 알림톡을 보내기 전에 실패 contract=7',
+              expect.any(String),
+            );
+          else expect(error).not.toHaveBeenCalled();
+        } finally {
+          error.mockRestore();
+        }
+      });
+
+      it('유선번호면 보내지 않고 warn — 알림톡이 받지 않는다', async () => {
+        const warn = jest
+          .spyOn(Logger.prototype, 'warn')
+          .mockImplementation(() => undefined);
+        try {
+          await expect(
+            service().dispatch(notice({ phone: '0212345678' }), 9),
+          ).resolves.toBe(true);
+          expect(alimtalk.send).not.toHaveBeenCalled();
+          expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining('휴대폰 번호가 아니다'),
+          );
+        } finally {
+          warn.mockRestore();
+        }
+      });
+    });
+
     it('보낼 것이 없으면(앱으로 받음) 아무것도 하지 않는다', async () => {
       await expect(service().dispatch(null, 9)).resolves.toBe(true);
       expect(alimtalk.send).not.toHaveBeenCalled();

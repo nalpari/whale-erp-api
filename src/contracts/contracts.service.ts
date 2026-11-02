@@ -69,7 +69,7 @@ import {
   channelOf,
   deliveredStatusOf,
   type DispatchResult,
-  type PendingInvite,
+  type PendingDelivery,
 } from './contract-delivery.service';
 import { ContractFilesService } from './contract-files.service';
 import {
@@ -1180,7 +1180,7 @@ export class ContractsService {
 
     const { result, pending } = await this.withDocuments<{
       result: CreatedContractResponseDto;
-      pending: PendingInvite | null;
+      pending: PendingDelivery | null;
     }>(documents, async (tx, saveDocuments) => {
       await lockPeople(tx, [dto.phone]);
       // 대체할 수 있는 직원 행을 id 순으로 먼저 — 대체가 계약 id 순으로 하나씩 잡으면 하루 배치와 엇갈린다(api #150 리뷰). 재계약의
@@ -1800,7 +1800,7 @@ export class ContractsService {
 
     const { result, pending } = await this.withDocuments<{
       result: CreatedContractResponseDto;
-      pending: PendingInvite | null;
+      pending: PendingDelivery | null;
     }>(documents, async (tx, saveDocuments) => {
       // 지금 번호와 새 번호를 둘 다 잠근다. 새 번호로만 잠그면, 번호를 바꾸는 사이 지금 번호로 저장하는 다른 요청이
       // 이 계약을 대체해 당사자 · 근무일이 지워진 계약이 남는다.
@@ -2166,7 +2166,7 @@ export class ContractsService {
 
     const { result, pending } = await this.withDocuments<{
       result: CreatedContractResponseDto;
-      pending: PendingInvite | null;
+      pending: PendingDelivery | null;
     }>([], async (tx) => {
       const before = await tx.contract.findUnique({
         where: { contractId },
