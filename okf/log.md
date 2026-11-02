@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-02
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) — 알림톡 버튼 링크 형식 확정(WHALEERP-636, 김민식 2026-11-02 · 비즈뿌리오 확인): 카카오 등록 버튼 링크가 `https://#{가입링크}` 라 버튼 `url_mobile` · `url_pc` 에는 앞의 `https://` 를 뗀 주소만 싣는다. https 가 아닌 링크(http 포함)는 보내기 전에 던지고, 근로계약 발송 전 검사는 `STAFF_APP_URL` 이 https 가 아니면 쓰기 전에 503. `STAFF_APP_URL` 값 · 대체 문자 · 메일 링크는 `https://` 포함 전체 주소 그대로.
+
 ## 2026-10-30
 * **Update**: [Notification templates](/api/notification-templates.md) — 가입 초대 알림톡(`TALK_STAFF_INVITATION`)이 카카오에 등록돼(WHALEERP-636) 본문 · 되돌리기 원본을 등록본과 같게, 카카오 템플릿 코드를 `WHALE_INVITE_01` → `TALK_STAFF_INVITATION` 으로 바꾼다(`20261030174743`, 운영자가 고친 문구도 덮고 변수 목록도 기본값으로). [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) 의 「승인 전」 설명을 가입 초대 등록 · 소속 추가 미등록으로 나눴다. 마이그레이션은 Windows 체크아웃(CRLF)에서도 본문에 `\r` 이 들지 않게 지우고, 등록본 전체 · `\r` 없음 · 알림톡 채널을 검증한다. 등록 버튼 링크가 `https://#{가입링크}`(주소 전체가 변수)라 「개발 서버 거절」 설명은 뺐다(api #227 code-review). 버튼 링크 형식(`https://` 포함 여부)은 비즈뿌리오 확인 뒤.
 * **Update**: main 병합(api teddiursa, main #225 까지): okf/log 충돌은 양쪽 기록을 살렸다.

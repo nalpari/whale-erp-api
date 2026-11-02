@@ -756,6 +756,13 @@ describe('ContractDeliveryService', () => {
         undefined,
       ],
       [
+        // 운영이 아니면 기동 검사는 http 를 받는다 — 등록 버튼 링크가 `https://#{가입링크}` 라 커밋 뒤 발송이 늘 던진다
+        '직원 앱 주소가 https 가 아니면(http) 503',
+        () => (appUrl = 'http://localhost:3001'),
+        ServiceUnavailableException,
+        undefined,
+      ],
+      [
         '대체 문자 발신번호가 없으면 503 — 링크가 닿을 길이 없다',
         () => alimtalk.hasSmsFallback.mockReturnValue(false),
         ServiceUnavailableException,

@@ -414,7 +414,7 @@ describe('AlimtalkService', () => {
     });
     const link = 'https://staff.whale.test/invite#token=secret-token';
 
-    it('버튼 링크 값을 등록한 이름의 웹링크 버튼으로 싣는다 — 모바일 · PC 같은 링크', async () => {
+    it('버튼 링크 값을 등록한 이름의 웹링크 버튼으로 싣는다 — 모바일 · PC 같은 링크, 앞의 https:// 는 뗀다', async () => {
       findUnique.mockResolvedValue(withLink());
 
       await service.send({
@@ -422,10 +422,12 @@ describe('AlimtalkService', () => {
         variables: { name: '홍길동', 링크: link },
       });
 
+      // 카카오 등록 버튼 링크가 `https://#{가입링크}` 라 스킴은 등록본에 있다 — 나머지(경로 · fragment 토큰)는 그대로
+      const url = 'staff.whale.test/invite#token=secret-token';
       expect(sent().content.at.button).toEqual([
-        { name: '가입하기', type: 'WL', url_mobile: link, url_pc: link },
+        { name: '가입하기', type: 'WL', url_mobile: url, url_pc: url },
       ]);
-      // 대체 문자에는 그대로 본문 끝에 붙는다
+      // 대체 문자에는 https:// 를 포함한 전체 주소가 본문 끝에 붙는다
       expect(
         sent().recontent?.lms?.message ?? sent().recontent?.sms?.message,
       ).toBe(
@@ -453,8 +455,8 @@ ${link}`,
         {
           name: ALIMTALK_BUTTONS.TALK_STAFF_AFFILIATION_REQUEST.name,
           type: 'WL',
-          url_mobile: 'https://staff.whale.test/affiliations',
-          url_pc: 'https://staff.whale.test/affiliations',
+          url_mobile: 'staff.whale.test/affiliations',
+          url_pc: 'staff.whale.test/affiliations',
         },
       ]);
     });
@@ -499,20 +501,26 @@ ${link}`,
       expect(client.sendMessage).not.toHaveBeenCalled();
     });
 
-    it('웹 주소가 아닌 버튼 링크는 보내지 않고 던진다 — 오류에 링크가 없다', async () => {
-      findUnique.mockResolvedValue(withLink());
+    it.each([
+      ['웹 주소가 아닌', 'javascript:secret-token'],
+      // 등록 버튼 링크가 `https://#{가입링크}` 라 http 주소는 맞출 수 없다
+      ['http', 'http://staff.whale.test/invite#token=secret-token'],
+    ])(
+      '%s 버튼 링크는 보내지 않고 던진다 — 오류에 링크가 없다',
+      async (_, badLink) => {
+        findUnique.mockResolvedValue(withLink());
 
-      const error = await service
-        .send({
-          ...invite,
-          variables: { name: '홍길동', 링크: 'javascript:secret-token' },
-        })
-        .catch((e: Error) => e);
+        const error = await service
+          .send({ ...invite, variables: { name: '홍길동', 링크: badLink } })
+          .catch((e: Error) => e);
 
-      expect((error as Error).message).toContain('http(s) 주소여야 합니다');
-      expect((error as Error).message).not.toContain('secret-token');
-      expect(client.sendMessage).not.toHaveBeenCalled();
-    });
+        expect((error as Error).message).toBe(
+          '알림톡 템플릿 TALK_STAFF_INVITATION 의 버튼 링크는 https 주소여야 합니다',
+        );
+        expect(client.sendMessage).not.toHaveBeenCalled();
+        expect(create).not.toHaveBeenCalled();
+      },
+    );
 
     it('버튼 링크 표시가 정해진 변수 하나가 아니면(둘) 보내지 않고 던진다 — 한 이름의 버튼만 등록한다', async () => {
       findUnique.mockResolvedValue({

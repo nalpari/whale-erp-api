@@ -4,12 +4,12 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-02T01:30:00Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
     title: AlimtalkService (look up, render, send, log)
-    last_modified: 2026-10-30T06:18:28Z
+    last_modified: 2026-11-02T01:30:00Z
   - id: alimtalk-buttons
     resource: ../../src/alimtalk/alimtalk-buttons.ts
     title: 알림톡 버튼 이름과 버튼 설정 검사(WHALEERP-636)
@@ -69,8 +69,12 @@ before anything is sent, so a caller bug cannot send messages that leave no row.
 `링크` is a button-link variable (`isButtonLink: true`): the body has no `#{링크}`,
 so the link travels as a **button** (WHALEERP-636). Every button-link value becomes one
 web-link button in `content.at.button` — `{ name, type: 'WL', url_mobile, url_pc }`, the same
-link for mobile and PC (without `url_pc` the button is hidden in PC KakaoTalk). The SMS
-fallback still appends the link to the text (below).
+link for mobile and PC (without `url_pc` the button is hidden in PC KakaoTalk). The link must start
+with `https://`, and the button carries it **without** that prefix (`staff-dev.whaleerp.co.kr/invite#token=…`):
+the button link registered with Kakao is `https://#{가입링크}`, so the scheme is already in the registration
+(김민식 2026-11-02, checked with Bizppurio). `STAFF_APP_URL` itself keeps `https://` — the reset mail, the
+SMS fallback and the 소속 추가 확인 mail use the full address. The SMS fallback still appends the full link
+to the text (below).
 
 The button **name** must match, letter for letter, the name registered with Kakao for that
 template (28 characters max; Bizppurio rejects a mismatch, and a template registered with a
@@ -84,18 +88,18 @@ the mark moved to another variable such as 초대코드 or 근무지, or two mar
 that value in the button URL or fail every send, api #219 review), and a template without one
 must mark none (`NO_BUTTON_NAME`). Three places apply it so a bad setup
 never shows up only after a commit: `send` (throws before anything is sent, as it does for a link
-that is not http(s) — the error carries the template code, never the link), the 근로계약 발송
+that is not https — `http://` included, it cannot fit the registered `https://…`; the error carries the
+template code, never the link), the 근로계약 발송
 pre-check (503 before anything is written, below) and the template save check
 ([Notification templates](/api/notification-templates.md)).
 An optional link left empty sends no button. The two names (`TALK_STAFF_INVITATION` 「가입하기」,
 `TALK_STAFF_AFFILIATION_REQUEST` 「요청 확인하기」) and the same link for PC were fixed by 재영
 (2026-10-30). `TALK_STAFF_INVITATION` is registered with Kakao under its own code (2026-10-30 —
-the DB body and `kakao_template_code` match it, [Notification templates](/api/notification-templates.md);
-whether the button URL is sent with or without `https://` is still being checked with Bizppurio);
+the DB body and `kakao_template_code` match it, [Notification templates](/api/notification-templates.md));
 `TALK_STAFF_AFFILIATION_REQUEST` is not registered yet. The link
 is built from `STAFF_APP_URL` as before (`/invite#token=…`, `/affiliations`) and there is one Kakao
 template per message, not one per environment (재영 2026-10-30). The registered invite button link is
-`https://#{가입링크}` — the whole address is a variable, so the dev server's `STAFF_APP_URL` does not
+`https://#{가입링크}` — everything after the scheme is a variable, so the dev server's `STAFF_APP_URL` does not
 make it differ.
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and

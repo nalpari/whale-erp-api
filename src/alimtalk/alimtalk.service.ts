@@ -49,8 +49,9 @@ export const isMobilePhone = (phone: string) =>
 const SMS_MAX_BYTES = 90;
 const LMS_SUBJECT = '[WHALE ERP]';
 const LOG_REASON_LENGTH = 1000;
-// 버튼 링크는 웹 주소만 싣는다(메일 버튼과 같다)
-const WEB_URL = /^https?:\/\//i;
+// 버튼 링크는 https 주소만 싣는다. 카카오에 등록한 버튼 링크가 `https://#{변수}` 라 스킴은 등록본에 이미 있다 —
+// 요청에는 그 뒷부분만 보낸다(2026-11-02 김민식, 비즈뿌리오 확인). http 는 등록 형식에 맞출 수 없어 보내기 전에 막는다.
+const HTTPS_URL = /^https:\/\//i;
 
 /**
  * 알림톡 발송의 공통 진입점. 각 도메인은 이 서비스만 주입받아 쓴다.
@@ -214,7 +215,8 @@ export class AlimtalkService {
 
 /**
  * 버튼 링크 값을 웹링크(WL) 버튼 하나로. PC 카카오톡에도 보이게 모바일 · PC 링크를 같은 값으로 싣는다(직원 근무 앱은
- * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 버튼 설정이 맞지 않는 템플릿(alimtalkButtonProblem)과 웹 주소가
+ * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 등록한 버튼 링크가 `https://#{변수}` 라 앞의 `https://` 는 떼고
+ * 싣는다 — 대체 문자 본문 끝 링크는 전체 주소 그대로다. 버튼 설정이 맞지 않는 템플릿(alimtalkButtonProblem)과 https 주소가
  * 아닌 링크는 보내기 전에 던진다 — 오류 메시지에 링크(토큰)는 담지 않는다. 링크가 없으면(선택 변수를 비움) 버튼도 없다 —
  * 버튼을 등록한 템플릿이면 알림톡은 거절되고 대체 문자로 간다.
  */
@@ -234,18 +236,12 @@ function buttonsOf(
   const [link] = links;
   // 문제가 없으면 버튼이 없는 템플릿은 링크도 없다 — button 확인은 타입을 좁히려는 것이다
   if (link === undefined || !button) return [];
-  if (!WEB_URL.test(link))
+  if (!HTTPS_URL.test(link))
     throw new Error(
-      `알림톡 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,
+      `알림톡 템플릿 ${templateCode} 의 버튼 링크는 https 주소여야 합니다`,
     );
-  return [
-    {
-      name: button.name,
-      type: 'WL',
-      url_mobile: link,
-      url_pc: link,
-    },
-  ];
+  const url = link.replace(HTTPS_URL, '');
+  return [{ name: button.name, type: 'WL', url_mobile: url, url_pc: url }];
 }
 
 /**
