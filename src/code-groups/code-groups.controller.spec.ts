@@ -58,19 +58,20 @@ describe('CodeGroupsController', () => {
     groupName: '고용 형태',
     manageOwnerCode: 'PLATFORM_PROVIDED' as const,
     status: 'ACTIVE' as const,
-    sortOrder: 1,
   };
   const groupUpdate = {
     groupCode: 'EMP_TYPE',
     groupName: '고용 형태',
     status: 'ACTIVE' as const,
     sortOrder: 1,
+    updatedAt: '2026-10-30T01:02:03.456Z',
   };
   const itemRow = {
     itemCode: 'FULL',
     label: '정직원',
     status: 'ACTIVE' as const,
     sortOrder: 1,
+    updatedAt: '2026-10-30T01:02:03.456Z',
   };
 
   const handlerOf = (method: keyof CodeGroupsController) =>

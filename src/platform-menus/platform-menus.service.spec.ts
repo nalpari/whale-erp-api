@@ -389,7 +389,7 @@ describe('PlatformMenusService', () => {
         service.create(PM, { ...body, url: '/staff/content' }),
       ).rejects.toThrow(
         new BadRequestException(
-          "메뉴 URL 은 '/' 하나로 시작하는 1뎁스 경로만 됩니다 — 소문자 · 숫자 · '-' 로, 구간은 '-' 로 잇습니다(예: /staff-content)",
+          "메뉴 URL은 '/' 하나로 시작하는 1뎁스 경로만 됩니다 — 소문자 · 숫자 · '-'로, 구간은 '-'로 잇습니다(예: /staff-content).",
         ),
       );
       expect(tx.menu.create).not.toHaveBeenCalled();
@@ -413,7 +413,7 @@ describe('PlatformMenusService', () => {
         service.create(PM, { ...body, url: '/m11' }),
       ).rejects.toThrow(
         new ConflictException(
-          '같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(MN000011).',
+          '같거나 겹치는 URL을 쓰는 사용 중 메뉴가 있습니다(MN000011).',
         ),
       );
       const query = tx.menu.findMany.mock.calls[0][0];
@@ -440,7 +440,7 @@ describe('PlatformMenusService', () => {
           service.create(PM, { ...body, url: '/platform-admins', status }),
         ).rejects.toThrow(
           new ConflictException(
-            '다른 메뉴가 API 권한 주소를 가져갈 수 없습니다: /platform-admins',
+            '다른 메뉴가 API 권한 주소를 가져갈 수 없습니다(/platform-admins).',
           ),
         );
         expect(tx.$executeRaw).toHaveBeenCalled();
@@ -540,7 +540,7 @@ describe('PlatformMenusService', () => {
         service.update(PM, 11, { ...body, url: '/m12', status: 'ACTIVE' }),
       ).rejects.toThrow(
         new ConflictException(
-          '같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(MN000012).',
+          '같거나 겹치는 URL을 쓰는 사용 중 메뉴가 있습니다(MN000012).',
         ),
       );
       expect(tx.menu.updateMany).not.toHaveBeenCalled();
@@ -567,7 +567,7 @@ describe('PlatformMenusService', () => {
             service.update(PM, 14, { ...body, url }),
           ).rejects.toThrow(
             new ConflictException(
-              'API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다: /m14',
+              'API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다(/m14).',
             ),
           );
           expect(tx.menu.updateMany).not.toHaveBeenCalled();
@@ -599,7 +599,7 @@ describe('PlatformMenusService', () => {
             }),
           ).rejects.toThrow(
             new ConflictException(
-              '다른 메뉴가 API 권한 주소를 가져갈 수 없습니다: /platform-admins',
+              '다른 메뉴가 API 권한 주소를 가져갈 수 없습니다(/platform-admins).',
             ),
           );
           expect(tx.menu.updateMany).not.toHaveBeenCalled();

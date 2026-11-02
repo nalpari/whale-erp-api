@@ -11,6 +11,25 @@ const check = async (plain: object) => {
 };
 
 describe('CodeItemInputDto — 상세 코드 한 행', () => {
+  // 화면 문구와 같은 말이다(front 와 맞춤, 2026-10-30).
+  it('형식 · 길이 문구', async () => {
+    const base = {
+      itemCode: 'FULL',
+      label: '정규직',
+      status: 'ACTIVE',
+      sortOrder: 1,
+    };
+    const messagesOf = async (plain: object) =>
+      (await validate(plainToInstance(CodeItemInputDto, plain))).flatMap((e) =>
+        Object.values(e.constraints ?? {}),
+      );
+    expect(await messagesOf({ ...base, itemCode: '1FULL' })).toEqual([
+      '영문 대문자로 시작해 영문·숫자·_로 입력해 주세요(최대 20자).',
+    ]);
+    expect(await messagesOf({ ...base, label: '가'.repeat(51) })).toEqual([
+      '코드명은 50자까지입니다.',
+    ]);
+  });
   const item = { label: '정규직', status: 'ACTIVE', sortOrder: 1 };
 
   it('소문자로 쳐도 대문자로 바꿔 받는다', async () => {

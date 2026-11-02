@@ -61,6 +61,7 @@ describe('ContractsService.create', () => {
       create: jest.Mock;
     };
     contractDocument: { createMany: jest.Mock; findFirst: jest.Mock };
+    codeItem: { findUnique: jest.Mock };
   };
   let storage: {
     put: jest.Mock<Promise<void>, [string, Buffer, string]>;
@@ -149,6 +150,15 @@ describe('ContractsService.create', () => {
       contractDocument: {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findFirst: jest.fn(),
+      },
+      // 최저임금 공통코드 MINIMUM_WAGE · HOURLY(WHALEERP-595) — 기본은 10,320원
+      codeItem: {
+        findUnique: jest.fn().mockResolvedValue({
+          label: '10320',
+          status: 'ACTIVE',
+          isDeleted: false,
+          codeGroup: { status: 'ACTIVE', isDeleted: false },
+        }),
       },
     };
     storage = {
@@ -564,6 +574,85 @@ describe('ContractsService.create', () => {
       await service.create(dto(), 1);
       expect(created().contracts).toMatchObject({
         create: { probationMonths: null, probationWageReductionRate: null },
+      });
+    });
+
+    // 수습 중 시급 = 시급 × (1 − 감액률)이 지금 최저임금(공통코드 하나, 시작일과 상관없이)의 90% 이상(WHALEERP-595).
+    // 10,320원 → 9,288원
+    describe('최저임금 90%', () => {
+      it('딱 90%(10,320원 × 90% = 9,288원)면 저장한다', async () => {
+        await service.create(dto({ ...probation, wageAmount: 10320 }), 1);
+        expect(created().contracts).toMatchObject({ create: probation });
+      });
+
+      it('1원 모자라면(10,319원 × 90% = 9,287원) 400 이고 저장하지 않는다', async () => {
+        await expect(
+          service.create(dto({ ...probation, wageAmount: 10319 }), 1),
+        ).rejects.toThrow(
+          '수습 중 시급은 최저임금의 90%(9,288원) 이상이어야 합니다.',
+        );
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      });
+
+      it('지난 날짜에 시작한 계약도 지금 값으로 본다', async () => {
+        await expect(
+          service.create(
+            dto({ ...probation, wageAmount: 10000, startDate: '2020-03-01' }),
+            1,
+          ),
+        ).rejects.toThrow('최저임금의 90%(9,288원)');
+      });
+
+      // 검사가 조용히 꺼지지 않게(2026-10-30 김민식)
+      it.each<[string, unknown, string]>([
+        ['코드가 없으면', null, '없어'],
+        [
+          '사용 중지면',
+          {
+            label: '10320',
+            status: 'INACTIVE',
+            isDeleted: false,
+            codeGroup: { status: 'ACTIVE', isDeleted: false },
+          },
+          '사용 중지',
+        ],
+        [
+          '코드명이 숫자가 아니면',
+          {
+            label: '10,320원',
+            status: 'ACTIVE',
+            isDeleted: false,
+            codeGroup: { status: 'ACTIVE', isDeleted: false },
+          },
+          '숫자가 아니어서',
+        ],
+      ])('최저임금 %s 400 이고 저장하지 않는다', async (_, row, cause) => {
+        prisma.codeItem.findUnique.mockResolvedValue(row);
+        await expect(
+          service.create(dto({ ...probation, wageAmount: 20000 }), 1),
+        ).rejects.toThrow(cause);
+        expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      });
+
+      it('수습이 없으면 시급이 낮아도 보지 않고 공통코드도 읽지 않는다', async () => {
+        await service.create(dto({ wageAmount: 5000 }), 1);
+        expect(prisma.codeItem.findUnique).not.toHaveBeenCalled();
+        expect(prisma.staffMember.create).toHaveBeenCalled();
+      });
+
+      it('수습이 없으면 최저임금 코드가 없어도 저장한다', async () => {
+        prisma.codeItem.findUnique.mockResolvedValue(null);
+        await service.create(dto(), 1);
+        expect(prisma.staffMember.create).toHaveBeenCalled();
+      });
+
+      it('임시저장도 넣은 값이면 본다', async () => {
+        await expect(
+          service.create(
+            dto({ ...probation, wageAmount: 9000, isTemporarySave: true }),
+            1,
+          ),
+        ).rejects.toThrow('최저임금의 90%');
       });
     });
   });

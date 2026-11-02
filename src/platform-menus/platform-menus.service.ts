@@ -399,11 +399,11 @@ export class PlatformMenusService {
     if (after === before) return;
     if (before && this.apiMenuUrls.has(before))
       throw new ConflictException(
-        `API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다: ${before}`,
+        `API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다(${before}).`,
       );
     if (after && this.apiMenuUrls.has(after))
       throw new ConflictException(
-        `다른 메뉴가 API 권한 주소를 가져갈 수 없습니다: ${after}`,
+        `다른 메뉴가 API 권한 주소를 가져갈 수 없습니다(${after}).`,
       );
   }
 
@@ -480,6 +480,6 @@ async function assertUrlFree(
   );
   if (clash)
     throw new ConflictException(
-      `같거나 겹치는 URL 을 쓰는 사용 중 메뉴가 있습니다(${clash.menuCode}).`,
+      `같거나 겹치는 URL을 쓰는 사용 중 메뉴가 있습니다(${clash.menuCode}).`,
     );
 }

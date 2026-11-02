@@ -3,9 +3,9 @@ export class PublicHolidayResponseDto {
   publicHolidayId: number;
   /** 날짜. @example 2026-03-02 */
   holidayDate: string;
-  /** 휴일명. @example 삼일절 */
+  /** 휴일명. 공공 API 표기 — 대체공휴일도 이름에 담는다. @example 대체공휴일(삼일절) */
   name: string;
-  /** 비고. 없으면 null(대체공휴일이면 그 사유). @example 대체공휴일 — 삼일절 */
+  /** 비고. 지금은 모두 null 이다 — 동기화도 규칙 계산 행도 대체공휴일을 이름에 담는다(2026-10-30). */
   note: string | null;
 }
 

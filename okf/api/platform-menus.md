@@ -4,16 +4,16 @@ title: Platform menus
 description: 관리자 웹 「플랫폼 메뉴 관리」(MN000215) — service tabs from 공통코드 SERVICE, the per-service menu tree, detail, create (global code numbering plus a PM000001 row), editing name · URL · status, and moving a menu with its subtree inside one service.
 tags: [admin, menu, permission]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T05:36:29Z }
 sources:
   - id: platform-menus-controller
     resource: ../../src/platform-menus/platform-menus.controller.ts
     title: /platform-menus routes and the menu permission per action (menu found by the path)
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-10-30T05:36:29Z
   - id: platform-menus-service
     resource: ../../src/platform-menus/platform-menus.service.ts
     title: PlatformMenusService (services · tree · detail · create · update · move)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T05:36:29Z
   - id: api-menu-urls
     resource: ../../src/platform-menus/api-menu-urls.service.ts
     title: API 권한 주소 — 경로 방식 @MenuPermission 컨트롤러의 경로 첫 단계(DiscoveryService)
@@ -29,15 +29,15 @@ sources:
   - id: platform-menu-format
     resource: ../../src/platform-menus/platform-menu-format.ts
     title: Menu code · URL pattern · messages
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T05:36:29Z
   - id: platform-menu-dto
     resource: ../../src/platform-menus/dto/save-platform-menu.dto.ts
     title: Input rules — name 20, URL pattern, move body
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-10-30T05:36:29Z
   - id: platform-menus-e2e
     resource: ../../test/platform-menus.e2e-spec.ts
     title: Real-DB proof — numbering, PM row, URL overlap, fixed API URLs, optimistic edit, concurrent create, move renumbering without a version bump
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-10-30T05:36:29Z
 ---
 
 # What it covers
@@ -103,8 +103,8 @@ The specification left these open; the user decided them when this was built.
   whose rights open `/stores/**`. Two active menus with one URL would let either menu's
   right open that API, and a renamed URL moves the API to another menu's right — or to
   nobody's, if no active menu has the path. The overlap 409 above is what keeps one URL
-  to one active menu; the message stays 「같거나 겹치는 URL 을 쓰는 사용 중 메뉴가
-  있습니다(MNxxxxxx)」. Behind it, since `20261021112158_team1_menus_active_url_unique`, the
+  to one active menu; the message stays 「같거나 겹치는 URL을 쓰는 사용 중 메뉴가
+  있습니다(MNxxxxxx).」. Behind it, since `20261021112158_team1_menus_active_url_unique`, the
   partial unique index `menus_url_active_key` (`url` among undeleted `ACTIVE` menus with a
   URL) stops a migration or hand-written SQL from inserting the same URL twice. It cannot
   express prefix overlaps (`/a` vs `/a/b`) — those are still the service's alone — and,
@@ -118,10 +118,10 @@ The specification left these open; the user decided them when this was built.
   recoverable only in the database (lock-out). So the service, inside the same lock as the
   overlap check, answers 409 when
   - a menu whose current URL is an API permission address gets a different URL or none —
-    「API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다: /x」;
+    「API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다(/x).」;
   - any other menu would take such an address, on create or edit and **whatever its
     status** (an inactive holder could be switched on after the owner is switched off) —
-    「다른 메뉴가 API 권한 주소를 가져갈 수 없습니다: /x」.
+    「다른 메뉴가 API 권한 주소를 가져갈 수 없습니다(/x).」.
 
   Name and status (사용 · 사용중지) stay editable — the 2026-10-16 decision above still
   holds, so switching MN000215 off still locks the screen. The API permission addresses

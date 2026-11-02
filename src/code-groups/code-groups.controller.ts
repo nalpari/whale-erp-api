@@ -59,13 +59,13 @@ export class CodeGroupsController {
     return this.codes.listGroups(query);
   }
 
-  /** 그룹 등록. 새 그룹 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다. */
+  /** 그룹 등록. 새 그룹 여러 개를 한 번에 — 하나라도 막히면 아무것도 생기지 않는다. 표시 순서는 api 가 지우지 않은 플랫폼고정 · 플랫폼제공 그룹 전체의 최대 + 1 부터 요청 순서대로 매긴다. */
   @Post()
   @MenuPermission('create', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiConflictResponse({
     description:
-      '이미 있는(지운 것 포함) 그룹 코드 · 요청 안에서 겹친 그룹 코드',
+      '이미 있는(지운 것 포함) 그룹 코드 · 요청 안에서 겹친 그룹 코드 · 매길 표시 순서가 integer 최댓값을 넘음',
   })
   async createGroups(
     @CurrentUser() user: AuthUser,
@@ -74,12 +74,15 @@ export class CodeGroupsController {
     await this.codes.createGroups(user.id, body.items);
   }
 
-  /** 그룹 수정. 기존 그룹 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다. */
+  /** 그룹 수정. 기존 그룹 여러 개를 한 번에 — 하나라도 없거나 그 사이 고쳐졌으면(행마다 updatedAt) 아무것도 고치지 않는다. */
   @Put()
   @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '고칠 그룹이 없음' })
-  @ApiConflictResponse({ description: '한 요청에 같은 그룹 코드가 두 번' })
+  @ApiConflictResponse({
+    description:
+      '한 요청에 같은 그룹 코드가 두 번 · 목록에서 읽은 뒤 다른 관리자가 먼저 수정(updatedAt 이 다름)',
+  })
   async updateGroups(
     @CurrentUser() user: AuthUser,
     @Body() body: UpdateCodeGroupsDto,
@@ -104,7 +107,7 @@ export class CodeGroupsController {
   @ApiNotFoundResponse({ description: '없는 그룹' })
   @ApiConflictResponse({
     description:
-      '이 그룹의 살아 있는 행(플랫폼 원본 · BP별 · BP전용)과 겹친 상세 코드 · 요청 안에서 겹친 상세 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록 · 되살림 — 지운 원본과 같은 코드는 되살린다',
+      '이 그룹의 살아 있는 플랫폼 원본 · BP전용 행과 겹친 상세 코드 · 요청 안에서 겹친 상세 코드 · 확인 뒤 다른 관리자가 같은 코드를 먼저 등록 · 되살림 — 지운 원본과 같은 코드는 BP 에 플랫폼제공 복사본이 살아 있어도 되살린다',
   })
   async createItems(
     @CurrentUser() user: AuthUser,
@@ -114,14 +117,14 @@ export class CodeGroupsController {
     await this.codes.createItems(user.id, groupCodeOf(groupCode), body.items);
   }
 
-  /** 상세 코드 수정. 기존 코드 여러 개를 한 번에 — 하나라도 없으면 아무것도 고치지 않는다. */
+  /** 상세 코드 수정. 기존 코드 여러 개를 한 번에 — 하나라도 없거나 그 사이 고쳐졌으면(행마다 updatedAt) 아무것도 고치지 않는다. */
   @Put(':groupCode/items')
   @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiNotFoundResponse({ description: '없는 그룹 · 고칠 상세 코드가 없음' })
   @ApiConflictResponse({
     description:
-      '한 요청에 같은 상세 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드',
+      '한 요청에 같은 상세 코드가 두 번 · 목록에서 읽은 뒤 다른 관리자가 먼저 수정(updatedAt 이 다름) · 먼저 지운 코드',
   })
   async updateItems(
     @CurrentUser() user: AuthUser,
@@ -133,7 +136,7 @@ export class CodeGroupsController {
 
   /**
    * 상세 코드 삭제(논리) — 플랫폼제공 그룹만, 여러 개를 한 번에, 하나라도 막히면 아무것도 지우지 않는다. 플랫폼 원본만
-   * 지우고 BP 에 복사된 행은 건드리지 않는다. 플랫폼고정 그룹은 시스템이 값을 참조해 409(사용 상태로 관리). 같은 코드로 다시 등록하면 되살아난다 — 단 어느 BP 에 복사본이 살아 있으면 등록이 409 다.
+   * 지우고 BP 에 복사된 행은 건드리지 않는다. 플랫폼고정 그룹은 시스템이 값을 참조해 409(사용 상태로 관리). 같은 코드로 다시 등록하면 되살아난다 — BP 에 플랫폼제공 복사본이 살아 있어도 되살린다.
    */
   @Delete(':groupCode/items')
   @MenuPermission('delete', { platformOnly: true })

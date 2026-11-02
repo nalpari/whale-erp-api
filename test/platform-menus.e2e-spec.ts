@@ -414,7 +414,7 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
         });
         expect(res.status).toBe(409);
         expect(res.body.message).toBe(
-          'API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다: /platform-admins',
+          'API 권한에 쓰이는 메뉴 주소라 바꿀 수 없습니다(/platform-admins).',
         );
         expect(
           await prisma.menu.findUniqueOrThrow({
@@ -436,7 +436,7 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
         });
         expect(taken.status).toBe(409);
         expect(taken.body.message).toBe(
-          '다른 메뉴가 API 권한 주소를 가져갈 수 없습니다: /platform-admins',
+          '다른 메뉴가 API 권한 주소를 가져갈 수 없습니다(/platform-admins).',
         );
 
         const { menuId } = await create({
@@ -455,7 +455,7 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
         });
         expect(res.status).toBe(409);
         expect(res.body.message).toBe(
-          '다른 메뉴가 API 권한 주소를 가져갈 수 없습니다: /platform-admins',
+          '다른 메뉴가 API 권한 주소를 가져갈 수 없습니다(/platform-admins).',
         );
         expect(
           await prisma.menu.findUniqueOrThrow({ where: { menuId } }),

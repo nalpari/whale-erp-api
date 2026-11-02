@@ -104,7 +104,7 @@ export class BpCodeGroupsController {
     );
   }
 
-  /** 상세 코드 수정 — 이 BP 의 행 여러 개를 한 번에. 하나라도 막히면 아무것도 고치지 않는다. */
+  /** 상세 코드 수정 — 이 BP 의 행 여러 개를 한 번에. 하나라도 막히거나 그 사이 고쳐졌으면(행마다 updatedAt) 아무것도 고치지 않는다. */
   @Put(':groupCode/items')
   @MenuPermission('update')
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -114,7 +114,7 @@ export class BpCodeGroupsController {
   })
   @ApiConflictResponse({
     description:
-      '한 요청에 같은 코드가 두 번 · 확인 뒤 다른 관리자가 먼저 지운 코드(「다른 관리자가 먼저 지운…저장해 주세요」)',
+      '한 요청에 같은 코드가 두 번 · 목록에서 읽은 뒤 다른 관리자가 먼저 수정(「다른 관리자가 먼저 수정했습니다…」) · 먼저 지운 코드(「다른 관리자가 먼저 지운…저장해 주세요.」)',
   })
   async updateItems(
     @CurrentUser() user: AuthUser,

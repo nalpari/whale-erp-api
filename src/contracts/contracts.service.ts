@@ -87,6 +87,12 @@ import {
 } from './contract-status';
 import { CONTRACTS_MENU } from './contracts-menu';
 import {
+  checkProbationWage,
+  type MinimumWage,
+  needsProbationWageCheck,
+  readMinimumWage,
+} from './minimum-wage';
+import {
   ContractDetailDto,
   ContractListResponseDto,
   ContractTaxProfileDto,
@@ -361,7 +367,8 @@ function oneYearLastDay(start: string): string {
 
 /**
  * 수습(노무사 확인 2026-10-14, 질문 19) — 정직원이고 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 둔다.
- * 기간(1~3개월) · 감액률(0~10%)은 함께 넣는다. 최저임금 90% 확인은 최저임금을 시스템이 관리하기 전까지 화면이 한다.
+ * 기간(1~3개월) · 감액률(0~10%)은 함께 넣는다. 최저임금 90% 확인은 공통코드를 읽어야 해 따로 본다(checkProbationWage,
+ * WHALEERP-595).
  */
 function checkProbation(dto: CreateContractDto): void {
   const months = dto.probationMonths ?? null;
@@ -983,6 +990,17 @@ export class ContractsService {
     @Inject(PERSONAL_DATA_KEY) private readonly key: Buffer | null,
   ) {}
 
+  /** 지금 최저임금 — 작성 화면이 시급 칸 도움말 · 수습 중 시급 확인에 쓴다(WHALEERP-595) */
+  minimumWage(): Promise<MinimumWage> {
+    return readMinimumWage(this.prisma);
+  }
+
+  /** 수습 중 시급이 최저임금의 90% 이상인지 — 수습과 시급이 있을 때만 공통코드를 읽는다 */
+  private async checkProbationWage(dto: CreateContractDto): Promise<void> {
+    if (!needsProbationWageCheck(dto)) return;
+    checkProbationWage(dto, await this.minimumWage(), !!dto.isTemporarySave);
+  }
+
   /**
    * 쓰기 트랜잭션을 돌리고, 실패하면 그 안에서 올린 날인본을 저장소에서 지운다(첨부 저장소 규칙 — put 뒤 DB 저장이
    * 실패하면 delete). 날인본이 없으면 저장소를 부르지 않는다(설정이 없는 환경에서도 전자계약은 저장된다).
@@ -1155,6 +1173,8 @@ export class ContractsService {
     // 재계약이면 직전 계약도 이 관리자의 범위 안이어야 한다(없거나 범위 밖이면 404 · 403)
     if (dto.previousContractId !== undefined)
       await this.scopedContractOf(adminAccountId, dto.previousContractId, bp);
+    // 공통코드를 읽어야 해 범위(403 · 404) 뒤에 본다 — 범위 밖 요청이 최저임금 400 을 먼저 받지 않게
+    await this.checkProbationWage(dto);
     const fields = contractFields(dto);
     const now = new Date();
 
@@ -1774,6 +1794,8 @@ export class ContractsService {
     // 연 뒤 다른 요청이 번호를 바꿨어도 여기서는 「바꿈」으로 보여 같은 403 이다 — 문구가 두 경우를 아우른다(5차 참고 3).
     if (!storeLevel && dto.phone !== scoped.phone)
       throw new ForbiddenException(PHONE_CHANGE_FORBIDDEN);
+    // 공통코드를 읽어야 해 범위(403 · 404) 뒤에 본다
+    await this.checkProbationWage(dto);
     const now = new Date();
 
     const { result, pending } = await this.withDocuments<{

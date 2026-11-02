@@ -15,7 +15,6 @@ const groupRow = {
   groupCode: 'BANK',
   groupName: '은행',
   status: 'ACTIVE',
-  sortOrder: 1,
 };
 const row = { ...groupRow, manageOwnerCode: 'PLATFORM_PROVIDED' };
 
@@ -30,6 +29,15 @@ describe('CreateCodeGroupDto — 새 그룹 한 행', () => {
       manageOwnerCode: 'BP_ONLY',
     });
     expect(errors.map((e) => e.property)).toEqual(['manageOwnerCode']);
+  });
+
+  // 표시 순서는 api 가 매긴다(전체 최대 + 1) — 화면이 보낸 값은 앱의 ValidationPipe 처럼 400 이다.
+  it('표시 순서는 받지 않는다', async () => {
+    const errors = await validate(
+      plainToInstance(CreateCodeGroupDto, { ...row, sortOrder: 6 }),
+      { whitelist: true, forbidNonWhitelisted: true },
+    );
+    expect(errors.map((e) => e.property)).toEqual(['sortOrder']);
   });
 
   it('행 형식은 그룹 행(CodeGroupInputDto)의 검증을 물려받는다', async () => {

@@ -24,18 +24,22 @@ export function alimtalkButtonOf(
 
 /**
  * 알림톡 템플릿의 버튼 설정이 보낼 수 있는 모양인가. 버튼을 다는 템플릿은 정해진 링크 변수 하나에만 버튼 링크 표시가 있어야
- * 하고(LINK_MISMATCH — 없음 · 다른 변수 · 둘 이상), 버튼을 달지 않는 템플릿에는 버튼 링크 변수가 없어야 한다(NO_BUTTON_NAME).
+ * 하고(LINK_MISMATCH — 없음 · 다른 변수 · 둘 이상, 기대하는 링크 변수 이름을 함께 준다), 버튼을 달지 않는 템플릿에는 버튼 링크
+ * 변수가 없어야 한다(NO_BUTTON_NAME). `marked` 는 버튼 링크를 표시한 변수 이름들이다(로그용 — 값이 아니라 이름이다).
  * 발송(AlimtalkService) · 근로계약 발송 전 검사 · 템플릿 저장 검사가 같이 본다 — 커밋 뒤 발송에서야 드러나 「다시 보내 주세요」로
  * 보이지 않게(api #219 code-review).
  */
 export function alimtalkButtonProblem(
   templateCode: string,
   variables: readonly { name: string; isButtonLink?: boolean }[],
-): 'LINK_MISMATCH' | 'NO_BUTTON_NAME' | null {
-  const links = variables.filter((v) => v.isButtonLink).map((v) => v.name);
+):
+  | { kind: 'LINK_MISMATCH'; link: string; marked: string[] }
+  | { kind: 'NO_BUTTON_NAME'; marked: string[] }
+  | null {
+  const marked = variables.filter((v) => v.isButtonLink).map((v) => v.name);
   const button = alimtalkButtonOf(templateCode);
-  if (!button) return links.length ? 'NO_BUTTON_NAME' : null;
-  return links.length === 1 && links[0] === button.link
+  if (!button) return marked.length ? { kind: 'NO_BUTTON_NAME', marked } : null;
+  return marked.length === 1 && marked[0] === button.link
     ? null
-    : 'LINK_MISMATCH';
+    : { kind: 'LINK_MISMATCH', link: button.link, marked };
 }

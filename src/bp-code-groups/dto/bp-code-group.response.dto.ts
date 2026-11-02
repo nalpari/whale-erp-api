@@ -42,6 +42,8 @@ export class BpCodeItemResponseDto {
   /** 관리 주체 — 플랫폼이 등록해 복사된 코드는 플랫폼제공, 이 BP 가 더하거나 되살린 코드는 BP전용. */
   @ApiProperty({ enum: [PLATFORM_PROVIDED_OWNER_CODE, BP_ONLY_OWNER_CODE] })
   manageOwnerCode: string;
+  /** 최종 수정 시각. 수정(PUT) 때 그 행의 updatedAt 으로 그대로 보낸다. */
+  updatedAt: Date;
   /**
    * 플랫폼 원본이 사용중지인가(안내용). BP전용은 늘 거짓. 플랫폼제공 그룹에서 BP 는 이 값과 관계없이 사용 상태를
    * 자유롭게 바꾼다(2026-10-22 결정).

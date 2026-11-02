@@ -13,7 +13,7 @@ sources:
   - id: menu-permission-urls-spec
     resource: ../../src/auth/menu-permission-urls.spec.ts
     title: 컨트롤러 경로 ↔ 메뉴 URL 대응표(23개)
-    last_modified: 2026-10-21T08:37:49Z
+    last_modified: 2026-10-30T05:13:46Z
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
@@ -461,8 +461,10 @@ All `@MenuPermission` routes, 1팀's and 3팀's (점포 · 플랫폼 관리자 �
 문의사항 · 도입문의, 공지사항 · FAQ 관리와 고객지원) moved to the path form the same
 day, each after checking that its controller path's first segment is its menu's
 URL; no route uses a menu code now. `src/auth/menu-permission-urls.spec.ts` pins
-that table — each of the 23 controller classes (근로계약 · 재발송 joined on 2026-10-21,
-WHALEERP-592; 직원 상세 요약 the same day, WHALEERP-183; BP 공통코드 관리 on 2026-10-22) against the `menus.url` its
+that table — each of the 27 controller classes (근로계약 · 재발송 joined on 2026-10-21,
+WHALEERP-592; 직원 상세 요약 the same day, WHALEERP-183; BP 공통코드 관리 on 2026-10-22; BP 권한 그룹 관리 on
+2026-10-30 — it was merged after the switch with `MN000013` codes and missed it, so `/bp-role-groups` was
+absent from the API 권한 주소 and its menu URL could be renamed) against the `menus.url` its
 migration set — so renaming a controller path fails a unit test instead of
 silently moving the API to another menu.
 

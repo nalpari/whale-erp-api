@@ -2,10 +2,7 @@ import type {
   NotificationTemplateChannel,
   PreferenceCategory,
 } from '@prisma/client';
-import {
-  alimtalkButtonOf,
-  alimtalkButtonProblem,
-} from '../alimtalk/alimtalk-buttons';
+import { alimtalkButtonProblem } from '../alimtalk/alimtalk-buttons';
 import { NO_NUL } from '../common/no-nul';
 
 export type TemplateVariableInput = {
@@ -109,11 +106,11 @@ export function validateTemplate(t: TemplateInput): string[] {
     alimtalk && CODE.test(t.templateCode)
       ? alimtalkButtonProblem(t.templateCode, t.variables)
       : null;
-  if (buttonProblem === 'LINK_MISMATCH')
+  if (buttonProblem?.kind === 'LINK_MISMATCH')
     add(
-      `이 알림톡의 버튼 링크는 #{${alimtalkButtonOf(t.templateCode)?.link}} 변수 하나에만 표시합니다.`,
+      `이 알림톡의 버튼 링크는 #{${buttonProblem.link}} 변수 하나에만 표시합니다.`,
     );
-  if (buttonProblem === 'NO_BUTTON_NAME')
+  if (buttonProblem?.kind === 'NO_BUTTON_NAME')
     add(
       '이 템플릿 코드는 알림톡 버튼 이름이 정해지지 않아 버튼 링크를 쓸 수 없습니다. 카카오에 등록한 버튼 이름을 개발팀에 알려 주세요.',
     );

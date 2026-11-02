@@ -1,10 +1,10 @@
 ---
 type: API Endpoint
 title: Contracts API
-description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
+description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:30:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -14,6 +14,14 @@ sources:
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
     last_modified: 2026-10-30T06:00:00Z
+  - id: minimum-wage
+    resource: ../../src/contracts/minimum-wage.ts
+    title: 최저임금 공통코드 · 수습 중 시급 검사
+    last_modified: 2026-10-30T07:40:00Z
+  - id: minimum-wage-migration
+    resource: ../../prisma/migrations/20261030145813_team3_minimum_wage_code/migration.sql
+    title: 최저임금 공통코드 데이터 마이그레이션
+    last_modified: 2026-10-30T07:40:00Z
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
@@ -29,7 +37,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-10-30T06:04:46Z
+    last_modified: 2026-10-30T08:47:43Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -408,9 +416,24 @@ left for it.
 `probationWageReductionRate` (%, 0–10) go together or not at all (the DB CHECK
 `contracts_probation_pair` too). 수습 is only for 정직원 whose contract runs a
 year or more (end ≥ start + 1 year − 1 day) or has no end date (노무사 확인
-2026-10-14, 질문 19). The 90%-of-minimum-wage floor is checked by the 화면 only,
-until the minimum wage is managed in the system like a 공통코드 (2026-10-15).
-`GET` returns all three.
+2026-10-14, 질문 19). `GET` returns all three.
+
+**최저임금 90%** (WHALEERP-595, 2026-10-30 김민식 — 최저임금은 공통코드 하나로, 별도 테이블 없음,
+시행일마다 행을 늘리지 않고 값을 매년 고친다). With 수습 and 시급, `POST` · `PUT` (임시저장 too) check
+that 수습 중 시급 — `round(wageAmount × (100 − rate) / 100)` — is at least 90% (원 미만 올림) of the
+**current** minimum wage: 공통코드 `MINIMUM_WAGE` · 상세 `HOURLY` (플랫폼고정, BP000000 원본), 코드명 =
+시급 in 원, digits only (`10320`; `src/contracts/minimum-wage.ts`). The contract's `startDate` does
+not matter — a contract that started earlier (e.g. a late 종이 계약) is checked against today's value,
+and until the value is updated in January the previous year's applies (accepted by 김민식). Below it →
+400 「수습 중 시급은 최저임금의 90%(9,288원) 이상이어야 합니다.」 (the 원 amount is that floor). If the
+code is missing (or deleted), 사용 중지 (상세 or 그룹), or its 코드명 is not a number ≥ 1, saving such a
+contract is 400 with that cause (임시저장 is still saved — a setting problem should not lose a draft; 초안 저장 checks again) — 「최저임금 공통코드(MINIMUM_WAGE · HOURLY)가 없어 / 사용 중지되어 /
+의 코드명이 숫자가 아니어서 수습 중 시급을 확인할 수 없습니다. 플랫폼 관리자에게 문의해 주세요.」 — so the
+check never turns off silently. Without 수습 or 시급 the code is not read; it is read after the 범위 checks (403 · 404). The 계약서 본문 (`contract-template.ts`) prints 수습 중 시급 with the same integer formula. Migration
+`20261030145813_team3_minimum_wage_code` seeds 10,320원; update the 코드명 in 공통코드 관리 after the 고시
+(August) and before 1 January. `GET /contracts/minimum-wage` (작성 or 수정 권한) returns
+`{ hourlyWage, problem }` — the current value, or `hourlyWage: null` with the 400 sentence — for the
+작성 화면's 시급 help and 수습 check.
 
 **초대 유형 is decided, not sent.** On 초안 저장 (a new `POST`, or a `PUT` that
 leaves 임시저장) the newest account with that phone decides it: none → 가입 초대
@@ -784,10 +807,11 @@ resent — a new contract instead.
   - 직원 목록 `contract.canResend` (and the deprecated `invitation.canResend`) mirrors this for a 가입 전 직원 — see
     [Staff members](/api/staff-members.md) (발송 대기 · 서명 대기 only).
 - The 알림톡 carries the 초대 링크 as a web-link button (WHALEERP-636, name in
-  `ALIMTALK_BUTTONS` — see [Kakao Alimtalk](/api/alimtalk.md)). The new body and the button
-  still wait for Kakao to approve them, and a rejected 알림톡 is only seen in the result report — so
-  **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until the text
-  and button are approved (api #74 review; the fallback carries the body with the code and the link).
+  `ALIMTALK_BUTTONS` — see [Kakao Alimtalk](/api/alimtalk.md)). The 가입 초대 is registered with Kakao
+  (2026-10-30, the DB body matches it) but the button URL form is still being checked, the 소속 추가 확인 요청
+  is not registered yet; a rejected 알림톡 is only seen in the result report — so
+  **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until both
+  are registered and confirmed (api #74 review; the fallback carries the body with the code and the link).
   The same pre-check is also 503 「… 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.」 when the template's button setup
   would make every send throw after the commit (`alimtalkButtonProblem` — the button-link mark is not on the `링크` variable alone, or no button name; api #219).
 - Template `TALK_STAFF_INVITATION` moved to 근무지 · 초대코드 · 링크 (초대 링크),
@@ -795,7 +819,8 @@ resent — a new contract instead.
   before; the old `/invite/{token}` link) was made `EXPIRED` — the 관리자 sends again — with migration
   `20261020144028_team3_staff_invitation_code` — deploy right after the merge (the code passes `초대코드`; before the
   migration every 가입 초대 fails as an unknown variable and the save is undone). The Kakao
-  template text has to be re-approved to match.
+  template text has to be re-approved to match (registered 2026-10-30 under `TALK_STAFF_INVITATION` —
+  `20261030174743_team3_staff_invitation_kakao_registered`).
 - `ContractsModule` imports `AlimtalkModule`, so **the api does not start without
   `BIZPPURIO_*`** (2026-10-16 김민식 결정: required). e2e (`test/e2e-env.ts`) and
   `openapi:export` fill format-only values when they are empty.

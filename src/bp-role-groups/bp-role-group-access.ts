@@ -23,9 +23,6 @@ import {
   type MenuOp,
 } from '../platform-role-groups/role-menu-rules';
 
-/** 메뉴 「BP 권한 그룹 관리」(/bp-role-groups) */
-export const BP_ROLE_MENU = 'MN000013';
-
 /** 이 화면이 다루는 권한 유형 — BP 관리자 · 가맹 관리자. 응답 DTO 의 enum 도 이 목록을 쓴다. */
 export const BP_ROLE_GROUP_TYPES = ['BA', 'FA'] as const;
 export type BpRoleType = (typeof BP_ROLE_GROUP_TYPES)[number];
