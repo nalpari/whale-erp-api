@@ -33,7 +33,7 @@ export class AdminProfileService {
 
   async get(adminAccountId: number): Promise<AdminProfileResponseDto> {
     const account = await this.find(this.prisma, adminAccountId);
-    // 사용중지 · 탈퇴도 세션은 남는다(가드는 상태를 보지 않는다) — 로그인 정보와 같은 403.
+    // 사용중지는 세션이 남는다(가드는 상태를 보지 않는다 — 탈퇴는 그때 세션을 끊는다). 로그인 정보와 같은 403.
     if (account.accountStatusCode !== 'ACTIVE')
       throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     return this.toDto(account);

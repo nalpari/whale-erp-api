@@ -44,12 +44,13 @@ export class AdminLoginInfoService {
 
   /**
    * 로그인 정보 버전(`GET /auth/admin/me/login-info-version`) — 이전 값과 다르면 관리자 웹이 login-info 를 다시 받는다.
-   * 재료는 내 계정 · 권한 그룹 · 그 그룹 메뉴 권한(지운 행 포함) · 메뉴 전체(지운 행 포함) · 소속 BP 의 행마다
-   * `updatedAt` · `isDeleted`. 최근 시각 · 개수로 줄이지 않는 이유는 점포 목록 버전과 같다 — `@updatedAt` 은 커밋이
-   * 아니라 쿼리를 만들 때 시각이라, 늦게 커밋된 수정이 먼저 커밋된 것보다 이른 시각을 가질 수 있다.
+   * 재료는 내 계정 · 소속 BP 의 `updatedAt`, 권한 그룹 · 그 그룹 메뉴 권한(지운 행 포함) · 메뉴 전체(지운 행 포함)의
+   * 행마다 `updatedAt` · `isDeleted`. 최근 시각 · 개수로 줄이지 않는 이유는 점포 목록 버전과 같다 — `@updatedAt` 은
+   * 커밋이 아니라 쿼리를 만들 때 시각이라, 늦게 커밋된 수정이 먼저 커밋된 것보다 이른 시각을 가질 수 있다.
    *
-   * 공통코드 `SERVICE` 사용중지로 메뉴가 빠지는 것은 담지 않는다 — 그 변경은 다시 로그인할 때 반영된다.
-   * 계정은 사용 중 · 지우지 않은 것만 읽는다. 확인과 계산 사이에 상태가 바뀌어도 같은 조회라 403 이 된다.
+   * 공통코드(`SERVICE` 사용중지로 빠지는 메뉴 포함)는 담지 않는다 — 늦어도 다음 로그인 때, 다른 이유로 버전이 바뀌면
+   * 그때 함께 반영된다. 계정은 사용 중 · 지우지 않은 것만 읽어, 상태 확인과 해시에 쓰는 `updatedAt` 이 한 조회에서
+   * 나온다. 읽은 뒤 바뀐 상태는 다음 호출에서 403 이다.
    */
   async version(adminAccountId: number): Promise<{ version: string }> {
     const account = await this.prisma.adminAccount.findFirst({
@@ -117,8 +118,9 @@ export class AdminLoginInfoService {
     // 세션은 살아 있어도(삭제 뒤 최대 1시간) 삭제된 계정의 화면 정보는 주지 않는다.
     if (!account || account.isDeleted)
       throw new UnauthorizedException('만료되었거나 종료된 접속입니다.');
-    // 사용중지 · 탈퇴도 세션은 남는다(가드는 상태를 보지 않는다). 관리자 웹은 이 경로의 이 문구에 로그아웃시킨다
-    // (front 요청, 2026-11-02 — 다른 업무 경로에서는 안내 뒤 이전 화면).
+    // 사용중지는 세션이 남는다(가드는 상태를 보지 않는다). 탈퇴는 그때 세션을 끊어 보통 401 이 먼저 나지만 같은
+    // 판정으로 막는다. 관리자 웹은 이 경로의 이 문구에 로그아웃시킨다(front 요청, 2026-11-02 — 다른 업무 경로에서는
+    // 안내 뒤 이전 화면).
     if (account.accountStatusCode !== 'ACTIVE')
       throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
 
