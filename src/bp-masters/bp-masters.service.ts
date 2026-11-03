@@ -807,8 +807,8 @@ export class BpMastersService {
     return [
       bp.accountStatusCode === WITHDRAWN && '탈퇴한 BP는 삭제할 수 없습니다.',
       master.lastLoginAt &&
-        'BP 마스터가 로그인한 적이 있어 삭제할 수 없습니다.',
-      subAdmins > 0 && '하위 관리자 계정이 있어 삭제할 수 없습니다.',
+        'BP 마스터 계정으로 로그인한 이력이 있어 삭제할 수 없습니다.',
+      subAdmins > 0 && '하위 관리자 계정이 등록되어 있어 삭제할 수 없습니다.',
       stores > 0 && '등록된 점포가 있어 삭제할 수 없습니다.',
     ].filter((r): r is string => typeof r === 'string');
   }
