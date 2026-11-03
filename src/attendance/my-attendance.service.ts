@@ -184,7 +184,7 @@ export class MyAttendanceService {
             HttpStatus.UNPROCESSABLE_ENTITY,
             'Unprocessable Entity',
             'STORE_CLOSED',
-            '폐점한 근무지라 출근할 수 없습니다. 근무지 관리자에게 문의해 주세요.',
+            '이 근무지에서는 출근을 등록할 수 없습니다. 근무지 관리자에게 문의해 주세요.',
           ),
         );
       const store = await storeOf(tx, member.storeId);
