@@ -82,10 +82,15 @@ export class StorageService {
     return `${domain}/${ownerId}/${randomUUID()}.${kind.toLowerCase()}`;
   }
 
+  /** newKey 모양이고 1차 폴더가 아닌 키인지 — put · downloadUrl · delete 가 받는 키. 여러 키를 지우기 전에 미리 볼 때 쓴다. */
+  static isStoredKey(key: string): boolean {
+    const root = KEY_PATTERN.exec(key)?.[1];
+    return !!root && !FIRST_GEN_ROOTS.includes(root);
+  }
+
   /** 1차 폴더를 건드리거나 newKey 모양이 아닌 키는 S3 를 부르기 전에 막는다. */
   private static assertKey(key: string): void {
-    const root = KEY_PATTERN.exec(key)?.[1];
-    if (!root || FIRST_GEN_ROOTS.includes(root))
+    if (!StorageService.isStoredKey(key))
       throw new Error(`저장소 키 형식이 아닙니다: ${key}`);
   }
 
