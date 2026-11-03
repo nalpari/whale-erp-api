@@ -67,3 +67,45 @@ describe('AdminAuthController getMyStores', () => {
     expect(Reflect.getMetadata('THROTTLER:SKIPaccount', handler)).toBe(true);
   });
 });
+
+// 계정 상태 · 권한이 바뀌었는지 — 관리자 웹이 점포 목록 버전과 같이 묻고, 바뀌었으면 login-info 를 다시 받는다.
+describe('AdminAuthController getMyLoginInfoVersion', () => {
+  const handler = Object.getOwnPropertyDescriptor(
+    AdminAuthController.prototype,
+    'getMyLoginInfoVersion',
+  )?.value as object;
+
+  it('GET me/login-info-version, 관리자 토큰만', () => {
+    expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(
+      RequestMethod.GET,
+    );
+    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(
+      'me/login-info-version',
+    );
+    expect(Reflect.getMetadata(USER_TYPES, handler)).toEqual(['admin']);
+  });
+
+  it('me/stores 와 같이 강제 비밀번호 변경 중에는 막고, 요청 제한은 끈다', () => {
+    expect(
+      Reflect.getMetadata(ALLOW_PASSWORD_CHANGE_PENDING, handler),
+    ).toBeUndefined();
+    expect(Reflect.getMetadata('THROTTLER:SKIPip', handler)).toBe(true);
+    expect(Reflect.getMetadata('THROTTLER:SKIPaccount', handler)).toBe(true);
+  });
+
+  it('로그인한 계정의 버전을 그대로 준다', async () => {
+    const version = jest.fn().mockResolvedValue({ version: 'v1' });
+    const controller = Object.create(
+      AdminAuthController.prototype,
+    ) as AdminAuthController;
+    Object.assign(controller, { loginInfo: { version } });
+    await expect(
+      controller.getMyLoginInfoVersion({
+        type: 'admin',
+        id: 7,
+        sid: 's',
+      } as never),
+    ).resolves.toEqual({ version: 'v1' });
+    expect(version).toHaveBeenCalledWith(7);
+  });
+});

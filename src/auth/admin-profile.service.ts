@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +8,7 @@ import { Prisma } from '@prisma/client';
 import { sameMillisecond } from '../common/updated-at';
 import { voidTempPasswordsForEmailChange } from '../platform-admins/admin-password';
 import { PrismaService } from '../prisma/prisma.service';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from './access-messages';
 import type { AdminProfileUpdateDto } from './dto/admin-profile-update.dto';
 import type { AdminProfileResponseDto } from './dto/admin-profile.response.dto';
 
@@ -31,6 +33,9 @@ export class AdminProfileService {
 
   async get(adminAccountId: number): Promise<AdminProfileResponseDto> {
     const account = await this.find(this.prisma, adminAccountId);
+    // 사용중지는 세션이 남는다(가드는 상태를 보지 않는다 — 탈퇴는 그때 세션을 끊는다). 로그인 정보와 같은 403.
+    if (account.accountStatusCode !== 'ACTIVE')
+      throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     return this.toDto(account);
   }
 

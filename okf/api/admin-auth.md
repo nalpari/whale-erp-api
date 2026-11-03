@@ -1,10 +1,10 @@
 ---
 type: API
 title: Admin authentication
-description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, and the store list version (`stores-version`, `me/stores`) the header store picker refreshes by.
+description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, the store list version (`stores-version`, `me/stores`) the header store picker refreshes by, and the login info version (`me/login-info-version`) the screen re-reads login-info by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T07:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T01:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -24,12 +24,12 @@ sources:
     last_modified: 2026-10-22T04:31:00Z
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
-    title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts · me/password-change · me/password-verifications, GET /auth/admin/login-info · me · me/bp · me/email-availability · me/stores, PATCH /auth/admin/me · me/bp, POST /auth/admin/me/bp/business-verification
-    last_modified: 2026-10-30T05:00:00Z
+    title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts · me/password-change · me/password-verifications, GET /auth/admin/login-info · me · me/bp · me/email-availability · me/stores · me/login-info-version, PATCH /auth/admin/me · me/bp, POST /auth/admin/me/bp/business-verification
+    last_modified: 2026-11-02T08:10:00Z
   - id: admin-profile-service
     resource: ../../src/auth/admin-profile.service.ts
-    title: 마이페이지 내 정보(F-AMTDCK > S-JXKHCM) — get · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
-    last_modified: 2026-10-29T05:17:36Z
+    title: 마이페이지 내 정보(F-AMTDCK > S-JXKHCM) — get(사용 중이 아니면 403) · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
+    last_modified: 2026-11-02T08:10:00Z
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
     title: BpProfileService — 마이페이지 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영 · 지우기) · 사업자 번호 검사
@@ -44,8 +44,8 @@ sources:
     last_modified: 2026-10-29T05:17:36Z
   - id: admin-login-info-service
     resource: ../../src/auth/admin-login-info.service.ts
-    title: Login info — account, menu tree with CRUD, managed stores, codes
-    last_modified: 2026-10-30T05:00:00Z
+    title: Login info — account, menu tree with CRUD, managed stores, codes; its version (account · role group · group menus · menus · BP rows)
+    last_modified: 2026-11-03T01:00:00Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check, target BP (X-Bp-Code-Id → @TargetBp())'
@@ -91,9 +91,10 @@ sources:
 | `POST /auth/admin/temporary-passwords` | yes | `{ name, loginId, email }` → 202 once a 1-hour temporary password is mailed; no match 404 (아이디 찾기's wording), mail not sent 503 `TEMPORARY_PASSWORD_SEND_FAILED` |
 | `POST /auth/admin/login-id-find-attempts` | yes | `{ name, email }` → `{ maskedLoginId }` for an active match, else the same 404 |
 | `POST /auth/admin/password-change` | admin | `{ newPassword, newPasswordConfirm, isTermsAgreed? }` → 204. 강제 변경 — no current password asked |
-| `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call |
-| `GET /auth/admin/me/stores` | admin | only login-info's `stores`, as `{ items, total }` — same rule (platform `[]`, deleted account 401; an unused or withdrawn one gets `[]`, as login-info does, while the version route answers it 403), 403 during a forced password change like the version route (only the popup is open then), not throttled. 관리자 웹 calls it when the stores version below changes, instead of re-reading menus and codes |
-| `GET /auth/admin/me` | admin | 마이페이지(S-JXKHCM) — `{ loginId, name, phone, email, roleTypeCode, createdAt, lastLoginAt }` for the signed-in admin's own account only (`CurrentUser().id`, never a BP/customer context) |
+| `GET /auth/admin/login-info` | admin | `{ account, menus, stores, codes }` as of the call. Deleted account 401, 미사용 · 탈퇴 403 `ACCOUNT_UNAVAILABLE_MESSAGE` (2026-11-02) |
+| `GET /auth/admin/me/login-info-version` | admin | `{ version }` — compare only. Changes when the account, its role group, that group's menu permissions, any menu or the account's BP changes. Missing, deleted, 미사용 or 탈퇴 account 403 `ACCOUNT_UNAVAILABLE_MESSAGE`; 403 during a forced password change like `me/stores`; not throttled (an authenticated read polled on focus) |
+| `GET /auth/admin/me/stores` | admin | only login-info's `stores`, as `{ items, total }` — same rule (platform `[]`, deleted account 401; an unused or withdrawn one gets `[]` with 200 — `listStores` finds only an `ACTIVE` account — while login-info and both version routes answer it 403), 403 during a forced password change like the version route (only the popup is open then), not throttled. 관리자 웹 calls it when the stores version below changes, instead of re-reading menus and codes |
+| `GET /auth/admin/me` | admin | 마이페이지(S-JXKHCM) — `{ loginId, name, phone, email, roleTypeCode, createdAt, lastLoginAt }` for the signed-in admin's own account only (`CurrentUser().id`, never a BP/customer context). Deleted 404, 미사용 · 탈퇴 403 `ACCOUNT_UNAVAILABLE_MESSAGE` (2026-11-02) |
 | `PATCH /auth/admin/me` | admin | `{ name, phone, email, updatedAt }` → 204. Changing `email` does **not** check the current password (S-JXKHCM, user decision 2026-10-22 · confirmed 2026-10-23). The check added by the 2026-10-21 adversarial review was removed knowingly — a stolen access token alone can again change the login email and intercept a mailed temp-password via `POST /auth/admin/temporary-passwords`; the user was told and accepted it. With the check gone, a token-only caller can also learn whether an email is taken from the 409 (the same is already possible through `GET /auth/admin/me/email-availability`). `currentPassword` was kept for a while as an ignored optional field so the old front build didn't hit `forbidNonWhitelisted` 400; front #125 stopped sending it and the field is now gone (2026-10-26) — sending it now gets 400. my-profile(직원 앱)'s email-change keeps its own current-password check. `updatedAt` is the optimistic-lock token from `GET /me` — `updateMany` with `sameMillisecond(updatedAt)`, 409 if another admin (e.g. via platform-admins) saved first (same review round — the original diff had no concurrency check and silently overwrote concurrent edits). Re-checks email uniqueness (excluding `WITHDRAWN`) inside the same transaction, 409 on conflict; if email changed, invalidates every live `temporary_passwords` row for the account (used ones too) (an account-takeover path via the mailed temp-password flow otherwise survives an email change) and re-arms `isInitialPasswordUnsent` if any were invalidated and the account has no usable password (`'!'`) — the shared `voidTempPasswordsForEmailChange`, so a signed-in admin (who has one) never gets it; logs changed fields to `admin_change_histories` with `updatedBy` set to the signed-in admin. Account axis throttled on the signed-in user, not the request's own `email` field (the default account tracker keys on `body.email`, which this route's caller controls) |
 | `GET /auth/admin/me/email-availability?email=` | admin | `{ available }` for 마이페이지's blur/Enter check — DTO-validated (400 on missing/malformed `email`, fixed from a prior 500). No `@SkipThrottle` (아이디 · 이메일 중복 확인은 기본 한도를 둔다는 결정, api #37 과 같다) |
 | `POST /auth/admin/me/password-change` | admin | `{ currentPassword, newPassword, newPasswordConfirm }` → 204. 마이페이지 자기 비밀번호 변경(S-PTWREE) — 강제 변경(위)과 달리 현재 비밀번호를 먼저 본다. 자세한 순서·임시 비밀번호 처리는 아래 「Self-service password change」 |
@@ -390,13 +391,19 @@ not expired, owned by the token's subject — but **not the account status**:
 미사용 · 삭제 · 탈퇴 do not cut a signed-in session; `refresh` refuses them, so
 the session ends within the hour (front `auth.md`, 2026-10-07).
 
-# Screen info is fetched once; permission is checked every time
+# Screen info is fetched at login and on a version change; permission is checked every time
 
 Policy (front `auth.md` · `system.md` `PL-AMTMVC`, 2026-10-13): 관리자 웹 calls
 `login-info` right after login and draws menus, buttons and the store selector
-from it; changed roles, menus or store mappings reach the screen at the next
-login. The API does not snapshot anything — `login-info` returns current values,
-and "next login" holds only because the web calls it once.
+from it; changed roles, menus or store mappings reached the screen only at the
+next login until 2026-11-02 (see below for the versions that now carry them). The API does not snapshot anything — `login-info` returns current values,
+and "next login" held only because the web called it once.
+
+Since 2026-11-02 the web also asks the login info version below and calls
+`login-info` again when it moved, so a changed role group, menu or account status
+reaches an open screen at the next refresh, menu change or window focus instead
+(front 요청). `login-info` itself answers a 미사용 or 탈퇴 account 403 now — before,
+it checked deletion only and gave such a session its screen.
 
 Business routes instead check **current** values on every request:
 `@MenuPermission('update')` adds `@UserTypes('admin')` and a guard
@@ -569,7 +576,7 @@ of wording is announced to front.
 |---|---|---|
 | Forced password change not done (guard) | 「서비스 이용을 위해 비밀번호를 변경해 주세요.」 | reopen the change popup |
 | No menu permission (`@MenuPermission`), a platform-only screen called by a non-platform account (`@MenuPermission(…, { platformOnly: true })`, other `isPlatformAdmin` callers), a token of the wrong kind (`@UserTypes`) | 「접근 권한이 없습니다. 관리자에게 문의해 주세요.」 | show it, go back (`history.back()`, home if none) |
-| Deleted, 미사용 or 탈퇴 account still holding a live session | 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」 | show it, go back |
+| Deleted, 미사용 or 탈퇴 account still holding a live session | 「사용할 수 없는 계정입니다. 관리자에게 문의해 주세요.」 | show it, go back — but from `login-info` and `GET /auth/admin/me` (미사용 · 탈퇴 — deleted is 401 · 404 there) and the two version routes, show it and **sign out** (front 요청, 2026-11-02): those are asked on refresh and focus, so going back would repeat on every focus until the session ends |
 | One area of a screen that shows another menu's data — 직원 상세 요약's 근로계약 · 근무스케줄 · 급여명세서 · TO-DO (`READ_DENIED_MESSAGE`, WHALEERP-183) — without that menu's read | 「조회 권한이 없습니다.」 | show it in that area only; the rest of the screen stays |
 
 The fourth exists because the screen does not leave: the guard already let the
@@ -641,6 +648,55 @@ BP · 가맹 account adds its mappings on the mapping primary key's leading `adm
 inside the stored version but not in the list, so the picker keeps the old list until something else changes;
 read the version first and the worst case is one extra re-read next time.
 
+# Login info version
+
+`GET /auth/admin/me/login-info-version` is the store list version's partner for
+`login-info`: 관리자 웹 asks both at once on refresh, menu change and window focus,
+and calls `login-info` again only when this one moved (front 요청, 2026-11-02).
+`AdminLoginInfoService.version` reads the account first — undeleted and `ACTIVE`
+in the same query, so the status it checked and the `updated_at` it hashes come from
+one row; a status change committed after that read is a 403 on the next call — and
+then, together, its role group, that group's `role_group_menus` and
+`menus`, and its `bp_codes` row. Hashed the same way as the store version (SHA-256,
+base64url, 22 chars), for the same reason per row rather than `max` and a count:
+
+| Part | Rows | Catches |
+|---|---|---|
+| account | own `admin_accounts.updated_at` | name · e-mail · role group · 관리 점포 범위 (a status other than `ACTIVE` is a 403, not a new version) |
+| group | own `role_groups` row, `updated_at` · `is_deleted` | the group itself |
+| groupMenus | every `role_group_menus` row of the group, deleted included, `menu_id` order | 조회 · 등록 · 수정 · 삭제 per menu |
+| menus | every `menus` row, deleted included, `menu_id` order, with `parent_menu_id` · `sort_order` · `depth` | name · URL · status · added · deleted, and moves — 플랫폼 메뉴 관리's move keeps `updated_at` (so an open edit form does not 409), so the position is hashed itself |
+| bp | own `bp_codes.updated_at` | the BP's status |
+
+Not in it: 공통코드 `SERVICE` turned off (its menus drop out of `login-info`) and
+other 공통코드 edits — those reach the screen at the next login at the latest, or
+with the next re-read when something else moves the version. A permission-popup
+save with no change still bumps `role_groups.updated_at` for its optimistic lock, and
+so the version; the cost is one extra `login-info`, accepted. A login does not move
+it (it keeps `admin_accounts.updated_at`, admin-auth e2e). `menus` is the whole
+table (tens of rows, growing with 플랫폼 메뉴 관리), read on every call; that was
+accepted as small.
+
+**Ask the version before `login-info`, as with the stores.** Right after login the
+web has no version to compare with: take the version first, then `login-info`. In the
+other order a change landing between the two is inside the stored version but not on
+the screen, and stays hidden until something else changes.
+
+**A BP that is 미사용 or 탈퇴 is not refused here, only reported.** Login does not
+check the BP's status either — setting a BP 미사용 takes every live admin account
+of the BP (BM · BA · FM · FA) down in the same transaction (`BpMastersService.changeStatus`;
+re-activation raises only the master), and 탈퇴 withdraws the master and every sub-admin,
+so those accounts are already refused as accounts — and a
+version that moves on the BP row lets the web re-read and see it. If BP status is
+ever enforced, it is enforced at login first, and this route follows.
+
+Sessions are not revoked when an account is set 미사용 (BP status change, admin
+status change) yet — `admin_sessions.revoked_at`, a later piece of work — which is
+why these 403s exist: such an account keeps a live session until it expires. 탈퇴
+(`admin-withdrawal.service.ts`) does revoke them, so for it the 403 is a backstop.
+`PATCH /auth/admin/me` and `me/email-availability` still do not check the status;
+they close with the session revocation.
+
 # Which BP's 공통코드 rows
 
 Rows are stored per BP. A 플랫폼제공 group is always read from **the BP's own**
@@ -660,7 +716,7 @@ Three ways in, by who is asking (재영, 2026-10-13):
   `BP000000` anyway, and which let anyone read any BP's codes without signing in
   (below). Before that it was `GET /code-items?bpCode=`, and before that
   `GET /code-items/platform-fixed`.
-- **The account's own BP** — `login-info.codes`; no call after login.
+- **The account's own BP** — `login-info.codes`; re-read only with `login-info` (at login, or when its version moves).
 - **Any BP the caller may see, after login** — `GET /bp-codes/{bpCodeId}/code-items`,
   by id like everything after login, with the stores route's rule
   (`AdminScopeService.bpStoresAccess`, 2026-10-21 — before that any signed-in
