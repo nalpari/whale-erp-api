@@ -1,10 +1,10 @@
 ---
 type: API
 title: Payslip list, detail and draft creation
-description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth).
+description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:31:17Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T07:54:27Z }
 sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
@@ -38,6 +38,10 @@ sources:
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
     last_modified: 2026-10-21T05:50:00Z
+  - id: purge
+    resource: ../../src/payslips/payslip-purge.ts
+    title: 급여명세서 보존 기간 파기 payslip-purge (WHALEERP-649)
+    last_modified: 2026-11-03T07:54:27Z
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답 · 쿼리(my-payslip.response.dto.ts · my-payslip-list.query.dto.ts)
@@ -334,6 +338,27 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 
 다시 보내면 직원 앱은 지금 값을 본다 — 명세서는 한 장이고 이전 발송 값을 따로 두지 않는다(이전 금액 비교 없음). 발송 완료에서
 확정을 취소하면 다시 보낼 때까지 직원 앱에 「검토 중」으로 금액 없이 보인다(위 「직원 앱」).
+
+# 보존 기간 파기: payslip-purge (WHALEERP-649)
+
+`PayslipPurgeScheduler` 가 매일 한국 시각 04:50 에 `runExclusive` 안에서 `payslip-purge` 를 돌린다(운영 정책 RET-02, 파기 기준은
+노무사 · 법무 검토로 확정 2026-11-03 재영).[^purge] 만든 시각(`created_at`)을 한국 날짜로 세어 생성일 + 3년이 지난 명세서를 지운다 —
+출퇴근 · 근무스케줄 파기와 같이 생성일 + 3년 당일까지 남고 다음 날 지운다. 상태 · 재직과 상관없고, 직원 계정이 탈퇴해도 같은
+기준이다(RET-07). 직원 앱은 만든 지 꼭 3년이 되는 순간부터 이미 보이지 않으므로(PAY-4) 그날 남은 행은 화면에 나오지 않는다.
+
+- 한 번에 5000건(`PAYSLIP_PURGE_BATCH_SIZE`), 생성일 · id 순으로 `FOR UPDATE` 로 잠근 뒤 지운다. 밀린 분량은 다음 날.
+- 외래키가 모두 RESTRICT 라 딸린 행부터 지운다 — 항목 · 검토 사유 · 발송 기록 · 처리 이력. 그 명세서의 알림(`related_type
+  'PAYSLIP'`, 직원 앱 발송 알림)은 외래키가 없지만 받는 사람 · 발송까지 함께 지운다. 명세서 파일은 저장하지 않는다(PDF 는 내려받을 때 만든다).
+- 지운 건수는 `payslip-purge RAN processed=N` 로그다.
+- 퇴직자 근로계약 파기(`contract-purge`, 05:00, WHALEERP-645)는 명세서가 가리키는 계약이 있는 레코드를 건너뛴다. 이 배치가 먼저
+  돌아 명세서를 지우면, 퇴직일 + 3년이 지난 레코드는 그날 계약 파기부터 지울 대상이 된다(한도 · 파일 조건에 따라 밀릴 수 있다,
+  e2e `payslip-purge.e2e-spec.ts`).
+- 대상 고르기는 `created_at` 인덱스 없이 표를 훑는다 — 출퇴근 파기(`received_at`)와 같다. 하루 한 번이라 받아들였다.
+- 한 번에 5000장이면 딸린 행(항목 여러 줄 · 처리 이력 · 발송 · 알림)까지 10만 행 넘게 한 트랜잭션에서 지울 수 있다. 지금 규모
+  (점포 · 월마다 수십 장)에서는 60초 안이라 보고 재지 않았다 — 한 달 생성량이 하루 5000 × 30을 넘으면 밀린 분량이 줄지 않으니
+  그때 건수 · 시각을 다시 본다.
+
+[^purge]: 급여명세서 보존 기간 파기 payslip-purge (WHALEERP-649)
 
 # 직원 앱 명세서 PDF (GET /me/payslips/:id/pdf, PAY-2)
 

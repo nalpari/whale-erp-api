@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-03
+* **Update**: [Payslips](/api/payslips.md) · [Contracts API](/api/contracts-api.md) · [Employment Contract Batch](/api/employment-contract-batch.md) — 급여명세서 보존 기간 파기 `payslip-purge`(WHALEERP-649, RET-02 · RET-07): 매일 한국 04:50, 생성일 + 3년이 지난 명세서를 항목 · 검토 사유 · 발송 기록 · 처리 이력 · 알림과 함께 5000건씩 지운다. 05:00 계약 파기가 건너뛰던 명세서 있는 퇴직자 레코드는 그날부터 지울 대상이 된다.
 * **Update**: [Staff retirement](/api/staff-retirement.md) — 점포 폐점 순간의 퇴직 `retireStore(tx, storeId, closedDate, adminAccountId)`(WHALEERP-648, 1팀 요청 기준으로 #237 의 `retireAllForStoreClosing` 을 바꿈). 점포(1팀) → 직원 → 계정 순 잠금, 열린 출근 409 재확인, 대기 계약 4종 즉시 종료 · SENT 초대 만료 · 퇴직일 정하기(임시저장만 있던 가입 전 레코드 포함)만 하고 확정은 다음 날 `retireDue` 가 한다. 반환값 `retiringStaff`(폐점 확인 647 의 퇴직될 직원과 같은 기준, 임시저장만 있던 가입 전은 퇴직일만 정하고 세지 않음) 외 5개. 직원 → 점포 순으로 잡는 경로(재발송 · 근무스케줄 · TO-DO)와의 교착 위험(출퇴근 포함)은 알려진 위험으로 남김.
 * **Update**: [Contracts API](/api/contracts-api.md) · [My profile](/api/my-profile.md) — api #238 리뷰 반영(WHALEERP-645): 퇴직자 계약 파기는 대상을 잠그지 않고 퇴직일 순으로 500건씩 읽어 고르고, 파일을 지울 수 없을 레코드(저장소 키 형식이 아닌 파일 · 저장소 설정 없이 파일 있음)는 빼고 그 수를 남긴다 — 늘 실패하는 레코드가 창을 막지 않고, 그런 레코드는 파일 일부만 지워지지도 않는다(`StorageService.isStoredKey`). 고른 레코드는 한 번에 직원 행 id 순으로 잠근다(계약 등록과 교착하지 않게) — 신고 정보 파기도 퇴직일 순으로 고르고 id 순으로 잠근다. 파일 없는 레코드는 저장소 설정이 없어도 지운다.
 * **Update**: main 병합(api kirlia, main #237 까지): okf/log 충돌은 양쪽 기록을 살렸다.
