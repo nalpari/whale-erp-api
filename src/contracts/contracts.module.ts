@@ -12,6 +12,7 @@ import { ContractExpiryService } from './contract-expiry.service';
 import { ContractFilesScheduler } from './contract-files.scheduler';
 import { ContractFilesService } from './contract-files.service';
 import { ContractNoticeService } from './contract-notice.service';
+import { ContractPurgeScheduler, ContractPurgeService } from './contract-purge';
 import { ContractSendController } from './contract-send.controller';
 import { ContractSendService } from './contract-send.service';
 import { ContractsController } from './contracts.controller';
@@ -54,6 +55,8 @@ import { MyContractsService } from './my-contracts.service';
     ContractFilesService,
     ContractFilesScheduler,
     ContractNoticeService,
+    ContractPurgeService,
+    ContractPurgeScheduler,
     optionalMailServiceProvider,
     personalDataKeyProvider,
   ],

@@ -30,6 +30,25 @@ const MAX_PAST_MONTHS = 3;
 
 type Tx = Prisma.TransactionClient;
 
+/** `retireStore` 의 반환값 — 1팀이 폐점 결과 안내와 점포 변경 이력에 쓴다 (폐점 확인 서비스와 같은 이름 · 뜻). */
+export interface StoreClosingRetirementResult {
+  /**
+   * 퇴직될 직원 수 — 폐점 확인 서비스(647)의 퇴직될 직원과 같은 기준. 임시저장만 있던 가입 전 레코드는 퇴직일을 정하지만
+   * 세지 않는다(`draftContracts` 로 드러남)
+   */
+  retiringStaff: number;
+  /** 퇴직일을 폐점일로 당긴 수 */
+  pulledForwardStaff: number;
+  /** 종료로 닫은 임시저장 계약 수 */
+  draftContracts: number;
+  /** 종료로 닫은 발송 대기 계약 수 */
+  pendingSendContracts: number;
+  /** 종료로 닫은 서명 대기 + 수정 요청 계약 수 */
+  pendingSignatureContracts: number;
+  /** 만료로 바꾼 발송(SENT) 초대 수 */
+  expiredInvitations: number;
+}
+
 /** 퇴직을 확정하는 쪽. 배치면 SYSTEM, 지난 날짜로 바로 처리하면 그 관리자다. */
 type Finalizer =
   { actor: 'SYSTEM' } | { actor: 'ADMIN'; adminAccountId: number };
@@ -233,83 +252,135 @@ export class RetirementService {
   }
 
   /**
-   * 점포(들) 폐점 때 소속 직원을 폐점일로 퇴직 확정한다 (WHALEERP-646). 호출한 쪽(폐점) 트랜잭션 안에서 부른다 —
-   * 예외는 삼키지 않으니 하나라도 실패하면 폐점째 되돌아간다.
+   * 점포 폐점 순간의 퇴직 처리 (WHALEERP-648, 운영 정책 CTR-31). 1팀 폐점 api(`PUT /stores/:id`)가 **점포 행을 `FOR UPDATE` 로
+   * 잡고 CLOSED 로 바꾸는 트랜잭션 안에서** 부른다 — 예외는 삼키지 않으니 하나라도 실패하면 폐점째 되돌아간다.
+   * 직원 알림은 보내지 않는다. `closedDate` 는 한국 날짜(00:00Z date-only)로 맞춰 쓴다 — 시각이 섞여 와도 된다.
    *
-   * 열린 출근 검사(`assertNoOpenCheckIn`)와 날짜 범위 검사(`assertDateAllowed`)는 하지 않는다 — 폐점 전 검증은
-   * 별도 메소드의 몫이고, 퇴직일은 폐점일(오늘)이다. 입사일이 폐점일보다 미래여도 폐점일로 처리한다(WHALEERP-613).
+   * 잠금 순서는 점포(1팀이 먼저) → 직원 → 계정이다. 그 점포의 재직(EMPLOYED) 직원 행을 `staff_member_id` 오름차순으로
+   * `FOR NO KEY UPDATE`, 그 직원들의 계정 행(중복 제거)을 `account_id` 오름차순으로 `FOR UPDATE` — `lockStaff` 의 직원 → 계정
+   * 순서를 따른다. 잠근 뒤 직원마다 열린 출근(`assertNoOpenCheckIn`, 퇴직 처리와 같은 기준)을 다시 보고 하나라도 있으면
+   * 409 `OPEN_CHECK_IN` 으로 트랜잭션째 되돌린다.
    *
-   * - 이미 퇴직 · 임시저장 계약만 있는 가입 전 레코드: 건너뛴다(폐점을 막지 않는다. 임시저장 계약은 그대로 둔다).
-   * - 퇴직일 없음: 폐점일로 저장(RETIRE 로그)하고 바로 확정.
-   * - 퇴직일이 폐점일보다 뒤: 폐점일로 앞당긴다(CANCEL 옛 날짜 + RETIRE 폐점일, 처리 시각 같음) 하고 바로 확정.
-   * - 퇴직일이 폐점일 이전 또는 같은 날: 그 퇴직일 그대로 바로 확정(배치가 할 일을 앞당길 뿐 결과는 같다).
+   * 폐점 순간 이 메소드가 하는 것:
+   * - 그 점포(`contracts.store_id`)의 대기 계약 4종(임시저장 · 발송 대기 · 서명 대기 · 수정 요청)을 종료로 닫고 상태 이력(ADMIN)을
+   *   남긴다. 「임시저장 계약만 있는 가입 전 레코드」의 임시저장도 함께 닫힌다(그 레코드도 아래에서 퇴직일이 정해진다).
+   * - 그 점포 직원 레코드에 나간 `SENT` 초대는 종류 구분 없이 모두 만료로 바꾼다.
+   * - 퇴직 대상(그 점포의 재직 레코드 전부 — 임시저장만 있던 가입 전 레코드도 포함: 그 임시저장이 위에서 닫혀 재직으로 세지므로)의 퇴직일을 정한다. 퇴직일 없음 → 폐점일(`schedule`:
+   *   RETIRE 로그 · 걸친 체결 계약 행). 폐점일보다 뒤 → 폐점일로 당김(CANCEL 옛 날짜 + RETIRE 폐점일, 처리 시각 같음).
+   *   폐점일 이전 또는 같은 날 → 그대로(로그 없음). 입사일이 폐점일 뒤여도 폐점일로 정한다(막지 않음).
    *
-   * 직원 행만 `FOR NO KEY UPDATE` 로 잠근다(`lockStaffRowOnly`) — 계정 행은 잠그지 않는다. 계정 데이터는 여기서 바뀌지 않는다.
-   * 대상은 `storeIds` 점포들의 재직 직원 전부이고, **직원 id 전역 오름차순**으로 한 번에 잡는다. BP 탈퇴는 닫을 점포 전부를
-   * 한 번에 넘긴다 — 점포별로 나눠 부르면 잠금이 전역 id 순이 아니어서 계약 하루 배치 등과 교착할 수 있다.
-   * 빈 배열이면 아무것도 하지 않고, 중복 id 는 무시한다. 단일 점포는 `[storeId]` 로 부른다.
-   * `closedDate` 는 한국 날짜(00:00Z date-only)로 맞춰 쓴다 — 시각이 섞여 와도 된다.
-   * 대상 조회와 직원 잠금 사이에 새로 생긴 재직 레코드는 퇴직되지 않을 수 있다 — 매우 짧은 틈이라 받아들인 위험이다(2026-11-03 노영주).
+   * **퇴직 확정(`finalize`)은 하지 않는다** — 상태는 EMPLOYED 로 남고, 다음 날 `retireDue` 배치가 근무스케줄 삭제 · 개인 TO-DO
+   * 배정 해제를 한다(계약 · 초대는 위에서 이미 닫혀 배치가 다시 닫을 것이 없어도 문제없다). 시작일이 폐점일 뒤인 체결 완료 계약은
+   * 그대로 둔다(CTR-31, 출근은 WHALEERP-643 이 막는다).
    *
-   * 사용 조건:
-   * - 폐점 트랜잭션에서 **점포 행을 잠그기(`lockStore` FOR UPDATE) 전에** 부른다. 거부 · 만료 계약 재발송 · 근무스케줄 저장 ·
-   *   TO-DO 등록이 직원 → 점포 순으로 잡으므로, 점포를 먼저 잡고 부르면 교착(40P01)이 난다.
-   * - 열린 출근 검증은 이 메소드 밖(호출한 쪽 · 별도 검증 메소드)의 몫이다. 여기서는 하지 않는다.
-   * @returns retired 확정한 직원 수. skipped 는 잠근 뒤 이미 퇴직으로 바뀌었거나 임시저장만 있는 가입 전이라 건너뛴 수 +
-   *   확정이 false 인 수 — 처음부터 재직이 아니라 조회되지 않은 레코드는 세지 않는다.
+   * @returns 1팀이 결과 안내와 점포 변경 이력에 쓴다 (폐점 확인 서비스 WHALEERP-647 과 같은 이름 · 뜻).
+   *   - `retiringStaff`: 퇴직될 직원 수 — 폐점 확인 서비스(647)의 퇴직될 직원과 같은 기준: 그 점포의 재직 레코드 중 임시저장만 있는 가입 전이 아닌 것 전부(퇴직일 없음 · 당김 · 폐점일 이전/같은 날 모두). 임시저장만 있던 가입 전 레코드는 퇴직일을 정하지만 세지 않는다(`draftContracts` 로 드러난다)
+   *   - `pulledForwardStaff`: 퇴직일을 폐점일로 당긴 수
+   *   - `draftContracts`: 종료로 닫은 임시저장 계약 수
+   *   - `pendingSendContracts`: 종료로 닫은 발송 대기 계약 수
+   *   - `pendingSignatureContracts`: 종료로 닫은 서명 대기 + 수정 요청 계약 수
+   *   - `expiredInvitations`: 만료로 바꾼 발송(SENT) 초대 수
    */
-  async retireAllForStoreClosing(
+  async retireStore(
     tx: Tx,
-    storeIds: number[],
+    storeId: number,
+    closedDate: Date,
     adminAccountId: number,
-    closedAt: Date,
     now: Date = new Date(),
-  ): Promise<{ retired: number; skipped: number }> {
-    const ids = [...new Set(storeIds)];
-    if (ids.length === 0) return { retired: 0, skipped: 0 };
-    const closedDate = kstToday(closedAt);
+  ): Promise<StoreClosingRetirementResult> {
+    const closed = kstToday(closedDate);
+
+    // 점포(1팀) → 직원 → 계정 순으로 잠근다. FOR NO KEY UPDATE 는 잠근 뒤의 행 값으로 조건을 다시 본다.
+    const locked = await tx.$queryRaw<
+      { staff_member_id: number; account_id: number | null }[]
+    >`SELECT staff_member_id, account_id FROM staff_members WHERE store_id = ${storeId} AND employment_status = 'EMPLOYED' ORDER BY staff_member_id FOR NO KEY UPDATE`;
+    const accountIds = [
+      ...new Set(
+        locked.flatMap(({ account_id }) =>
+          account_id === null ? [] : [account_id],
+        ),
+      ),
+    ].sort((x, y) => x - y);
+    if (accountIds.length > 0)
+      await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id IN (${Prisma.join(accountIds)}) ORDER BY account_id FOR UPDATE`;
+
+    for (const { staff_member_id } of locked)
+      await assertNoOpenCheckIn(tx, staff_member_id);
+
+    // 조회와 잠금 사이에 생긴 재직 레코드는 퇴직되지 않을 수 있다 — 1팀이 점포를 FOR UPDATE 로 잡는 동안은 새 직원 레코드 insert(외래키)가
+    // 막히지만, FOR NO KEY UPDATE 로 바꾸면 틈이 생긴다. 짧은 틈이라 받아들인 위험(2026-11-03 노영주).
+    // 임시저장만 있던 가입 전 레코드도 퇴직일은 정한다 — 아래에서 그 임시저장이 닫혀 재직으로 세지므로(CTR-29) 퇴직일을 정해 둬야
+    // 다음 날 배치가 확정한다.
     const members = await tx.staffMember.findMany({
-      where: { storeId: { in: ids }, employmentStatus: 'EMPLOYED' },
-      select: { staffMemberId: true },
+      where: { staffMemberId: { in: locked.map((l) => l.staff_member_id) } },
+      select: { staffMemberId: true, joinStatus: true, retiredDate: true },
       orderBy: { staffMemberId: 'asc' },
     });
-    let retired = 0;
-    let skipped = 0;
-    for (const { staffMemberId } of members) {
-      // 잠근 뒤의 값으로 판단한다 — 고르는 사이 바뀐 직원을 놓치지 않게
-      const staff = await this.lockStaffRowOnly(tx, staffMemberId);
-      if (
-        staff.employmentStatus === 'RETIRED' ||
-        (await this.isDraftOnlyPreJoin(tx, staffMemberId, staff))
-      ) {
-        skipped += 1;
-        continue;
+    let retiringStaff = 0;
+    let pulledForwardStaff = 0;
+    for (const { staffMemberId, joinStatus, retiredDate } of members) {
+      // 퇴직될 직원으로 세는 기준(폐점 확인 647 과 같다)은 계약을 닫기 전에 판정한다 — 이 루프는 계약을 닫기 전이다
+      const counted = !(await this.isDraftOnlyPreJoin(tx, staffMemberId, {
+        joinStatus,
+      }));
+      if (counted) retiringStaff += 1;
+      if (retiredDate !== null && retiredDate <= closed) continue;
+      if (retiredDate !== null) {
+        await tx.staffMemberRetirementLog.create({
+          data: {
+            staffMemberId,
+            action: 'CANCEL',
+            retiredDate,
+            processedBy: adminAccountId,
+            processedAt: now,
+          },
+        });
+        pulledForwardStaff += 1;
       }
-      let retiredDate = staff.retiredDate;
-      if (retiredDate === null || retiredDate > closedDate) {
-        if (retiredDate !== null)
-          await tx.staffMemberRetirementLog.create({
-            data: {
-              staffMemberId,
-              action: 'CANCEL',
-              retiredDate,
-              processedBy: adminAccountId,
-              processedAt: now,
-            },
-          });
-        await this.schedule(tx, adminAccountId, staffMemberId, closedDate, now);
-        retiredDate = closedDate;
-      }
-      if (
-        await this.finalize(tx, staffMemberId, retiredDate, {
-          actor: 'ADMIN',
-          adminAccountId,
-        })
-      )
-        retired += 1;
-      else skipped += 1;
+      await this.schedule(tx, adminAccountId, staffMemberId, closed, now);
     }
-    return { retired, skipped };
+
+    const ended = await this.endPendingContracts(tx, { storeId }, 'ADMIN');
+    const { count: expiredInvitations } = await tx.invitation.updateMany({
+      where: { status: 'SENT', staffMember: { storeId } },
+      data: { status: 'EXPIRED' },
+    });
+    return {
+      retiringStaff,
+      pulledForwardStaff,
+      draftContracts: ended.DRAFT ?? 0,
+      pendingSendContracts: ended.PENDING_SEND ?? 0,
+      pendingSignatureContracts:
+        (ended.PENDING_SIGNATURE ?? 0) + (ended.CORRECTION_REQUESTED ?? 0),
+      expiredInvitations,
+    };
+  }
+
+  /** 대기 계약 4종을 종료로 닫고 상태 이력을 남긴다. 상태별로 닫은 수를 돌려준다. */
+  private async endPendingContracts(
+    tx: Tx,
+    where: Prisma.ContractWhereInput,
+    actor: StatusChangeActor,
+  ): Promise<Partial<Record<ContractStatus, number>>> {
+    const counts: Partial<Record<ContractStatus, number>> = {};
+    for (const status of PENDING_CONTRACT_STATUSES) {
+      const ended = await tx.contract.updateManyAndReturn({
+        where: { ...where, status },
+        data: { status: 'ENDED' },
+        select: { contractId: true },
+      });
+      if (ended.length === 0) continue;
+      counts[status] = ended.length;
+      await tx.contractStatusHistory.createMany({
+        data: ended.map(({ contractId }) => ({
+          contractId,
+          fromStatus: status,
+          toStatus: 'ENDED' as const,
+          actor,
+        })),
+      });
+    }
+    return counts;
   }
 
   /** 지난 날짜면 배치를 기다리지 않고 지금 처리한 관리자로 확정한다. 오늘은 지난 날짜가 아니다. */
@@ -419,23 +490,7 @@ export class RetirementService {
       data: { status: 'EXPIRED' },
     });
 
-    const actor: StatusChangeActor = by.actor;
-    for (const status of PENDING_CONTRACT_STATUSES) {
-      const ended = await tx.contract.updateManyAndReturn({
-        where: { staffMemberId, status },
-        data: { status: 'ENDED' },
-        select: { contractId: true },
-      });
-      if (ended.length > 0)
-        await tx.contractStatusHistory.createMany({
-          data: ended.map(({ contractId }) => ({
-            contractId,
-            fromStatus: status,
-            toStatus: 'ENDED' as const,
-            actor,
-          })),
-        });
-    }
+    await this.endPendingContracts(tx, { staffMemberId }, by.actor);
     return true;
   }
 
@@ -581,12 +636,6 @@ export class RetirementService {
         '퇴직일 전날까지만 취소하거나 퇴직일을 바꿀 수 있습니다.',
       );
     return { retiredDate: staff.retiredDate, hiredDate: staff.hiredDate };
-  }
-
-  /** 직원 행만 잠그고 읽는다 — 계정 행은 잠그지 않는다(폐점 일괄 퇴직용). */
-  private async lockStaffRowOnly(tx: Tx, staffMemberId: number) {
-    await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR NO KEY UPDATE`;
-    return this.findStaff(tx, staffMemberId);
   }
 
   private async lockStaff(tx: Tx, staffMemberId: number) {

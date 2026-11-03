@@ -54,6 +54,23 @@ describe('StorageService.newKey', () => {
   );
 });
 
+describe('StorageService.isStoredKey', () => {
+  it('newKey 가 만든 키 · 그 썸네일 키만 참이다', () => {
+    const key = StorageService.newKey('contracts', 3, 'PNG');
+    expect(StorageService.isStoredKey(key)).toBe(true);
+    expect(StorageService.isStoredKey(StorageService.thumbnailKey(key))).toBe(
+      true,
+    );
+  });
+
+  it.each(['contracts/3/a.pdf', '../x', '', 'contracts/3/'])(
+    '형식이 아닌 키(%s)는 거짓이다',
+    (key) => {
+      expect(StorageService.isStoredKey(key)).toBe(false);
+    },
+  );
+});
+
 describe('StorageService.put · delete', () => {
   it('put 은 버킷 · 키 · Content-Type 을 넣어 보낸다', async () => {
     const { s3, send } = fakeS3();

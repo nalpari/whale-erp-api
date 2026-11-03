@@ -11,5 +11,8 @@ export const BATCH_JOB = {
   EXCEL_DOWNLOAD_PURGE: 'excel-download-purge',
   BULK_EXPORT: 'bulk-export',
   BULK_EXPORT_FILE_PURGE: 'bulk-export-file-purge',
+  CONTRACT_PURGE: 'contract-purge',
+  TAX_PROFILE_PURGE: 'tax-profile-purge',
+  ACCOUNT_CHANGE_PURGE: 'account-change-purge',
 } as const;
 export type BatchJobName = (typeof BATCH_JOB)[keyof typeof BATCH_JOB];
