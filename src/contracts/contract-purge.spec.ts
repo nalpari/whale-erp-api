@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { BatchLockService } from '../batch/batch-lock.service';
 import { StorageService } from '../storage/storage.service';
 import {
+  CONTRACT_PURGE_MAX_SCAN_PAGES,
   CONTRACT_PURGE_SCAN_SIZE,
   ContractPurgeScheduler,
   ContractPurgeService,
@@ -42,6 +43,8 @@ const mockTx = ({
   payslipStaff = [] as number[],
   documents = [docOf(10, 1), docOf(20, 2)],
   schedules = [{ id: 7, contractId: 10 }],
+  /** 고른 뒤 잠그기 전에 퇴직이 취소된 레코드 — 잠금 쿼리가 돌려주지 않는다 */
+  cancelled = [] as number[],
 } = {}) => {
   const $queryRaw = jest.fn(
     (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -65,7 +68,10 @@ const mockTx = ({
       if (sql.includes('FOR NO KEY UPDATE OF s')) {
         const [picked] = values as [number[]];
         return Promise.resolve(
-          [...picked].sort((a, b) => a - b).map((id) => ({ id })),
+          [...picked]
+            .filter((id) => !cancelled.includes(id))
+            .sort((a, b) => a - b)
+            .map((id) => ({ id })),
         );
       }
       if (sql.includes('staff_member_id AS "staffMemberId" FROM contracts')) {
@@ -320,6 +326,37 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
     expect(staffLock(tx)[0].values[0]).toEqual([good]);
   });
 
+  it('고르기는 최대 쪽수까지만 읽는다 — 지울 수 없을 레코드를 날마다 끝없이 다시 읽지 않게', async () => {
+    const n = CONTRACT_PURGE_SCAN_SIZE * CONTRACT_PURGE_MAX_SCAN_PAGES + 1;
+    const staff = Array.from({ length: n }, (_, i) => i + 1);
+    const tx = mockTx({
+      staff,
+      locked: [],
+      documents: staff.map(badDoc),
+      schedules: [],
+    });
+    const service = setup(okStorage());
+    const { error } = silence(service);
+    await expect(run(service, tx)).resolves.toBe(0);
+    expect(picks(tx)).toHaveLength(CONTRACT_PURGE_MAX_SCAN_PAGES);
+    expect(error).toHaveBeenCalledWith(
+      `contract purge SKIPPED_FILES staff=${n - 1} (이번에 본 것): 저장소 키 형식이 아닌 파일이 있다`,
+    );
+  });
+
+  it('고른 뒤 잠그기 전에 퇴직이 취소된 레코드는 잠금 재확인에서 빠져 지우지 않는다', async () => {
+    const storage = okStorage();
+    const tx = mockTx({ cancelled: [1] });
+    await run(setup(storage), tx);
+    expect(staffLock(tx)[0].sql).toContain("employment_status = 'RETIRED'");
+    expect(staffLock(tx)[0].sql).toContain('retired_date <');
+    expect(storage.delete).toHaveBeenCalledTimes(1);
+    expect(storage.delete).toHaveBeenCalledWith(keyOf(20), {
+      thumbnail: false,
+    });
+    expect(deletedContracts(tx)).toEqual([20]);
+  });
+
   it('한 레코드에 형식이 아닌 키가 하나라도 있으면 그 레코드는 고르지 않는다', async () => {
     const tx = mockTx({
       staff: [1],
@@ -346,8 +383,9 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
     const { error } = silence(service);
     await expect(run(service, tx)).resolves.toBe(2);
     expect(deletedContracts(tx)).toEqual([10, 11]);
+    // 까닭을 나눠 남긴다 — 설정을 고칠지 자료를 고칠지 로그로 가른다
     expect(error).toHaveBeenCalledWith(
-      expect.stringContaining('SKIPPED_FILES staff=1'),
+      'contract purge SKIPPED_FILES staff=1 (이번에 본 것): 저장소 설정이 없다',
     );
   });
 

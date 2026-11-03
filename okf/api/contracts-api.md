@@ -1214,10 +1214,13 @@ only — a 종이 계약 has no body.
   a separate follow-up under WHALEERP-323 — until it exists, a 퇴직자 who ever got a payslip keeps the contracts.
 - **Pick without locks, then lock once in id order** (api #238 리뷰): `pickTargets` reads candidates oldest
   퇴직일 first, 500 at a time (`CONTRACT_PURGE_SCAN_SIZE`, keyset on `(retired_date, staff_member_id)`), without a
-  lock, until 100 are chosen. A record whose files cannot be deleted — a `storage_key` that is not a stored key
-  (`StorageService.isStoredKey`), or files while no storage is configured — is left out and counted
-  (`contract purge SKIPPED_FILES staff=N`, an error that needs a person), so however many such records pile
-  up they never hold the window; records without files are deleted even with no storage. The chosen staff
+  lock, until 100 are chosen, reading at most 10 pages (`CONTRACT_PURGE_MAX_SCAN_PAGES`, 5000 records) so the
+  re-reading never eats the file-deletion time. The cursor's 퇴직일 travels as text (`retired_date::text`), not
+  as a JS `Date`. A record whose files cannot be deleted — a `storage_key` that is not a stored key
+  (`StorageService.isStoredKey`), or files while no storage is configured — is left out and counted by reason
+  (`contract purge SKIPPED_FILES staff=N (이번에 본 것): <까닭>`, an error that needs a person; N counts only the
+  records this run read), so such records do not hold the window; records without files are deleted even
+  with no storage. More than 5000 of them in front would push the rest back — the log shows it every day. The chosen staff
   rows are then locked **once**, `FOR NO KEY UPDATE` in `staff_member_id` order — the order
   `lockStaffForReplace` and the daily contract batch use, so it cannot deadlock with a contract save — and
   퇴직 · the date are checked again under the lock. Then the contract rows `FOR UPDATE`, then payslips are read

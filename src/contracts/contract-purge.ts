@@ -18,6 +18,12 @@ export const CONTRACT_PURGE_BATCH_SIZE = 100;
 export const CONTRACT_PURGE_SCAN_SIZE = 500;
 
 /**
+ * 고르기가 읽는 최대 쪽수(5000 레코드). 지울 수 없을 레코드는 고쳐질 때까지 퇴직일 순 앞에 남아 날마다 다시 읽힌다 — 그 비용이
+ * 60초 안의 파일 삭제 시간을 잠식하지 않게 끊는다. 그보다 많이 쌓이면 뒤 퇴직자가 밀리지만 SKIPPED_FILES 로그가 날마다 알린다.
+ */
+export const CONTRACT_PURGE_MAX_SCAN_PAGES = 10;
+
+/**
  * 파일 삭제를 시작하는 시간 상한 — 함수 시작부터 잰다. 넘으면 파일이 남은 레코드는 다음 날. 한 레코드의 삭제가 저장소
  * 기한(25초)까지 걸려도 이 상한과 합쳐 runExclusive 의 60초 안에서 행을 지우고 커밋한다 — 잠금은 모두 파일보다 먼저 한 번에
  * 잡고, 파일 뒤의 문장은 알림 행 말고는 이미 잠근 행만 건드린다(알림은 읽음 표시 같은 짧은 쓰기만 겹친다).
@@ -164,22 +170,28 @@ export class ContractPurgeService {
   }
 
   /**
-   * 지울 레코드를 퇴직일이 이른 순으로 CONTRACT_PURGE_BATCH_SIZE 까지 고른다. 잠그지 않고 CONTRACT_PURGE_SCAN_SIZE 씩 읽으며,
-   * 파일을 지울 수 없을 레코드(형식이 아닌 키 · 저장소 없이 파일 있음)는 빼고 그 수를 남긴다 — 그런 레코드가 아무리 쌓여도 뒤
-   * 퇴직자를 고른다. 잠금은 부르는 쪽이 한 번에 id 순으로 잡는다.
+   * 지울 레코드를 퇴직일이 이른 순으로 CONTRACT_PURGE_BATCH_SIZE 까지 고른다. 잠그지 않고 CONTRACT_PURGE_SCAN_SIZE 씩
+   * (최대 CONTRACT_PURGE_MAX_SCAN_PAGES 쪽) 읽으며, 파일을 지울 수 없을 레코드(unremovableReason)는 빼고 이번에 본 수를 까닭별로
+   * 남긴다 — 그런 레코드가 쌓여도 뒤 퇴직자를 고른다. 잠금은 부르는 쪽이 한 번에 id 순으로 잡는다. 커서의 퇴직일은 글자로
+   * 주고받는다 — date 를 JS Date 로 바꿨다 되돌리는 동안 시간대 가정이 어긋나 같은 쪽을 다시 읽지 않게.
    */
   private async pickTargets(
     tx: Prisma.TransactionClient,
     before: Date,
   ): Promise<number[]> {
     const picked: number[] = [];
-    let unfit = 0;
-    let after: { retiredDate: Date; id: number } | null = null;
-    while (picked.length < CONTRACT_PURGE_BATCH_SIZE) {
-      const page: { id: number; retiredDate: Date }[] = await tx.$queryRaw<
-        { id: number; retiredDate: Date }[]
+    const unfit = new Map<string, number>();
+    let after: { retiredDate: string; id: number } | null = null;
+    for (
+      let pages = 0;
+      pages < CONTRACT_PURGE_MAX_SCAN_PAGES &&
+      picked.length < CONTRACT_PURGE_BATCH_SIZE;
+      pages += 1
+    ) {
+      const page: { id: number; retiredDate: string }[] = await tx.$queryRaw<
+        { id: number; retiredDate: string }[]
       >`
-        SELECT s.staff_member_id AS id, s.retired_date AS "retiredDate" FROM staff_members s
+        SELECT s.staff_member_id AS id, s.retired_date::text AS "retiredDate" FROM staff_members s
         WHERE s.employment_status = 'RETIRED' AND s.retired_date < ${before}::date
           AND (${after === null}::boolean
             OR (s.retired_date, s.staff_member_id) > (${after?.retiredDate ?? null}::date, ${after?.id ?? 0}::int))
@@ -190,33 +202,38 @@ export class ContractPurgeService {
         LIMIT ${CONTRACT_PURGE_SCAN_SIZE}
       `;
       if (page.length === 0) break;
-      const documents = await tx.contractDocument.findMany({
-        where: { contract: { staffMemberId: { in: page.map((s) => s.id) } } },
-        select: {
-          storageKey: true,
-          contract: { select: { staffMemberId: true } },
-        },
-      });
+      const keys = keysByStaff(
+        await tx.contractDocument.findMany({
+          where: { contract: { staffMemberId: { in: page.map((s) => s.id) } } },
+          select: {
+            storageKey: true,
+            contract: { select: { staffMemberId: true } },
+          },
+        }),
+      );
       for (const { id } of page) {
         if (picked.length === CONTRACT_PURGE_BATCH_SIZE) break;
-        const keys = documents
-          .filter((d) => d.contract.staffMemberId === id)
-          .map((d) => d.storageKey);
-        const fit =
-          keys.length === 0 ||
-          (this.storage !== null &&
-            keys.every((key) => StorageService.isStoredKey(key)));
-        if (fit) picked.push(id);
-        else unfit += 1;
+        const reason = this.unremovableReason(keys.get(id) ?? []);
+        if (reason === null) picked.push(id);
+        else unfit.set(reason, (unfit.get(reason) ?? 0) + 1);
       }
       after = page[page.length - 1];
       if (page.length < CONTRACT_PURGE_SCAN_SIZE) break;
     }
-    if (unfit > 0)
+    for (const [reason, n] of unfit)
       this.logger.error(
-        `contract purge SKIPPED_FILES staff=${unfit}: 저장소 키 형식이 아닌 파일이 있거나 저장소 설정이 없다`,
+        `contract purge SKIPPED_FILES staff=${n} (이번에 본 것): ${reason}`,
       );
     return picked;
+  }
+
+  /** 레코드의 파일을 지울 수 없는 까닭, 지울 수 있으면 null — 고르기 · 파일 삭제가 같은 판정을 쓴다. */
+  private unremovableReason(keys: string[]): string | null {
+    if (keys.length === 0) return null;
+    if (!this.storage) return '저장소 설정이 없다';
+    if (!keys.every((key) => StorageService.isStoredKey(key)))
+      return '저장소 키 형식이 아닌 파일이 있다';
+    return null;
   }
 
   /**
@@ -233,13 +250,15 @@ export class ContractPurgeService {
     staffMemberIds: number[],
     started: number,
   ): Promise<Set<number>> {
-    const documents = await tx.contractDocument.findMany({
-      where: { contractId: { in: contractIds } },
-      select: {
-        storageKey: true,
-        contract: { select: { staffMemberId: true } },
-      },
-    });
+    const keys = keysByStaff(
+      await tx.contractDocument.findMany({
+        where: { contractId: { in: contractIds } },
+        select: {
+          storageKey: true,
+          contract: { select: { staffMemberId: true } },
+        },
+      }),
+    );
     const deferred = new Set<number>();
     const defer = (staffMemberId: number, reason: string) => {
       deferred.add(staffMemberId);
@@ -249,10 +268,8 @@ export class ContractPurgeService {
     };
     const storage = this.storage;
     for (const staffMemberId of staffMemberIds) {
-      const keys = documents
-        .filter((d) => d.contract.staffMemberId === staffMemberId)
-        .map((d) => d.storageKey);
-      if (keys.length === 0) continue;
+      const own = keys.get(staffMemberId) ?? [];
+      if (own.length === 0) continue;
       // 실패하지 않고 느리기만 해도 60초를 넘겨 롤백되면(파일만 지워짐) 다음 날도 같은 자리에서 넘긴다 — 기한을 두고 남은 것을 미룬다
       if (Date.now() - started > FILE_DELETE_BUDGET_MS) {
         defer(
@@ -261,14 +278,18 @@ export class ContractPurgeService {
         );
         continue;
       }
-      if (!storage || !keys.every((key) => StorageService.isStoredKey(key))) {
-        defer(staffMemberId, '지울 수 없는 파일이 있어 지우지 않았다');
+      const reason = this.unremovableReason(own);
+      if (reason !== null || !storage) {
+        defer(
+          staffMemberId,
+          `${reason ?? '저장소 설정이 없다'} — 하나도 지우지 않았다`,
+        );
         continue;
       }
       try {
         // 계약서 파일은 썸네일이 없다(날인본 정리와 같다)
         await Promise.all(
-          keys.map((key) => storage.delete(key, { thumbnail: false })),
+          own.map((key) => storage.delete(key, { thumbnail: false })),
         );
       } catch (e) {
         defer(staffMemberId, String(e));
@@ -276,6 +297,19 @@ export class ContractPurgeService {
     }
     return deferred;
   }
+}
+
+/** 계약서 파일 키를 직원 레코드별로 묶는다. */
+function keysByStaff(
+  documents: { storageKey: string; contract: { staffMemberId: number } }[],
+): Map<number, string[]> {
+  const byStaff = new Map<number, string[]>();
+  for (const d of documents) {
+    const own = byStaff.get(d.contract.staffMemberId) ?? [];
+    own.push(d.storageKey);
+    byStaff.set(d.contract.staffMemberId, own);
+  }
+  return byStaff;
 }
 
 @Injectable()
