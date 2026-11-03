@@ -232,6 +232,86 @@ export class RetirementService {
     return retired;
   }
 
+  /**
+   * 점포(들) 폐점 때 소속 직원을 폐점일로 퇴직 확정한다 (WHALEERP-646). 호출한 쪽(폐점) 트랜잭션 안에서 부른다 —
+   * 예외는 삼키지 않으니 하나라도 실패하면 폐점째 되돌아간다.
+   *
+   * 열린 출근 검사(`assertNoOpenCheckIn`)와 날짜 범위 검사(`assertDateAllowed`)는 하지 않는다 — 폐점 전 검증은
+   * 별도 메소드의 몫이고, 퇴직일은 폐점일(오늘)이다. 입사일이 폐점일보다 미래여도 폐점일로 처리한다(WHALEERP-613).
+   *
+   * - 이미 퇴직 · 임시저장 계약만 있는 가입 전 레코드: 건너뛴다(폐점을 막지 않는다. 임시저장 계약은 그대로 둔다).
+   * - 퇴직일 없음: 폐점일로 저장(RETIRE 로그)하고 바로 확정.
+   * - 퇴직일이 폐점일보다 뒤: 폐점일로 앞당긴다(CANCEL 옛 날짜 + RETIRE 폐점일, 처리 시각 같음) 하고 바로 확정.
+   * - 퇴직일이 폐점일 이전 또는 같은 날: 그 퇴직일 그대로 바로 확정(배치가 할 일을 앞당길 뿐 결과는 같다).
+   *
+   * 직원 행만 `FOR NO KEY UPDATE` 로 잠근다(`lockStaffRowOnly`) — 계정 행은 잠그지 않는다. 계정 데이터는 여기서 바뀌지 않는다.
+   * 대상은 `storeIds` 점포들의 재직 직원 전부이고, **직원 id 전역 오름차순**으로 한 번에 잡는다. BP 탈퇴는 닫을 점포 전부를
+   * 한 번에 넘긴다 — 점포별로 나눠 부르면 잠금이 전역 id 순이 아니어서 계약 하루 배치 등과 교착할 수 있다.
+   * 빈 배열이면 아무것도 하지 않고, 중복 id 는 무시한다. 단일 점포는 `[storeId]` 로 부른다.
+   * `closedDate` 는 한국 날짜(00:00Z date-only)로 맞춰 쓴다 — 시각이 섞여 와도 된다.
+   * 대상 조회와 직원 잠금 사이에 새로 생긴 재직 레코드는 퇴직되지 않을 수 있다 — 매우 짧은 틈이라 받아들인 위험이다(2026-11-03 노영주).
+   *
+   * 사용 조건:
+   * - 폐점 트랜잭션에서 **점포 행을 잠그기(`lockStore` FOR UPDATE) 전에** 부른다. 거부 · 만료 계약 재발송 · 근무스케줄 저장 ·
+   *   TO-DO 등록이 직원 → 점포 순으로 잡으므로, 점포를 먼저 잡고 부르면 교착(40P01)이 난다.
+   * - 열린 출근 검증은 이 메소드 밖(호출한 쪽 · 별도 검증 메소드)의 몫이다. 여기서는 하지 않는다.
+   * @returns retired 확정한 직원 수. skipped 는 잠근 뒤 이미 퇴직으로 바뀌었거나 임시저장만 있는 가입 전이라 건너뛴 수 +
+   *   확정이 false 인 수 — 처음부터 재직이 아니라 조회되지 않은 레코드는 세지 않는다.
+   */
+  async retireAllForStoreClosing(
+    tx: Tx,
+    storeIds: number[],
+    adminAccountId: number,
+    closedAt: Date,
+    now: Date = new Date(),
+  ): Promise<{ retired: number; skipped: number }> {
+    const ids = [...new Set(storeIds)];
+    if (ids.length === 0) return { retired: 0, skipped: 0 };
+    const closedDate = kstToday(closedAt);
+    const members = await tx.staffMember.findMany({
+      where: { storeId: { in: ids }, employmentStatus: 'EMPLOYED' },
+      select: { staffMemberId: true },
+      orderBy: { staffMemberId: 'asc' },
+    });
+    let retired = 0;
+    let skipped = 0;
+    for (const { staffMemberId } of members) {
+      // 잠근 뒤의 값으로 판단한다 — 고르는 사이 바뀐 직원을 놓치지 않게
+      const staff = await this.lockStaffRowOnly(tx, staffMemberId);
+      if (
+        staff.employmentStatus === 'RETIRED' ||
+        (await this.isDraftOnlyPreJoin(tx, staffMemberId, staff))
+      ) {
+        skipped += 1;
+        continue;
+      }
+      let retiredDate = staff.retiredDate;
+      if (retiredDate === null || retiredDate > closedDate) {
+        if (retiredDate !== null)
+          await tx.staffMemberRetirementLog.create({
+            data: {
+              staffMemberId,
+              action: 'CANCEL',
+              retiredDate,
+              processedBy: adminAccountId,
+              processedAt: now,
+            },
+          });
+        await this.schedule(tx, adminAccountId, staffMemberId, closedDate, now);
+        retiredDate = closedDate;
+      }
+      if (
+        await this.finalize(tx, staffMemberId, retiredDate, {
+          actor: 'ADMIN',
+          adminAccountId,
+        })
+      )
+        retired += 1;
+      else skipped += 1;
+    }
+    return { retired, skipped };
+  }
+
   /** 지난 날짜면 배치를 기다리지 않고 지금 처리한 관리자로 확정한다. 오늘은 지난 날짜가 아니다. */
   private async finalizeIfPast(
     tx: Tx,
@@ -465,17 +545,26 @@ export class RetirementService {
     staffMemberId: number,
     staff: { joinStatus: string; employmentStatus: string },
   ): Promise<void> {
-    if (
-      staff.joinStatus !== 'JOINED' &&
-      (await client.contract.count({
-        where: { staffMemberId, status: { not: 'DRAFT' } },
-      })) === 0
-    )
+    if (await this.isDraftOnlyPreJoin(client, staffMemberId, staff))
       throw new ConflictException(
         '임시저장 근로계약만 있는 직원은 퇴직 처리 대신 임시저장을 지워 주세요.',
       );
     if (staff.employmentStatus === 'RETIRED')
       throw new ConflictException('이미 퇴직한 직원입니다.');
+  }
+
+  /** 가입 전이면서 임시저장이 아닌 계약이 하나도 없는 레코드 — 재직으로 세지 않는다. */
+  private async isDraftOnlyPreJoin(
+    client: Pick<Tx, 'contract'>,
+    staffMemberId: number,
+    staff: { joinStatus: string },
+  ): Promise<boolean> {
+    return (
+      staff.joinStatus !== 'JOINED' &&
+      (await client.contract.count({
+        where: { staffMemberId, status: { not: 'DRAFT' } },
+      })) === 0
+    );
   }
 
   /** 퇴직 예정(재직 + 퇴직일 있음)이고 퇴직일 전날까지인지 확인한다. 지금의 퇴직일과 입사일을 돌려준다. */
@@ -492,6 +581,12 @@ export class RetirementService {
         '퇴직일 전날까지만 취소하거나 퇴직일을 바꿀 수 있습니다.',
       );
     return { retiredDate: staff.retiredDate, hiredDate: staff.hiredDate };
+  }
+
+  /** 직원 행만 잠그고 읽는다 — 계정 행은 잠그지 않는다(폐점 일괄 퇴직용). */
+  private async lockStaffRowOnly(tx: Tx, staffMemberId: number) {
+    await tx.$queryRaw`SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR NO KEY UPDATE`;
+    return this.findStaff(tx, staffMemberId);
   }
 
   private async lockStaff(tx: Tx, staffMemberId: number) {

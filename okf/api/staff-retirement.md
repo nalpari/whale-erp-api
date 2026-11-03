@@ -4,12 +4,12 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-03T06:18:00Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
-    title: RetirementService (preview · retire · changeDate · cancel · retireDue)
-    last_modified: 2026-10-29T05:17:36Z
+    title: RetirementService (preview · retire · changeDate · cancel · retireDue · retireAllForStoreClosing)
+    last_modified: 2026-11-03T06:18:00Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
@@ -119,6 +119,66 @@ A date **in the past** (allowed up to 3 months back) is finalised on the spot by
 the same code, with actor `ADMIN` and the 관리자 as `changed_by` — waiting for
 midnight would show someone who already left as employed. Today's date is not
 in the past: they still work today.
+
+# Closing a store retires everyone at once
+
+WHALEERP-646, decided 2026-11-03 (노영주). `RetirementService.retireAllForStoreClosing(tx, storeIds, adminAccountId, closedDate, now?)`
+returns `{ retired, skipped }`. It is a method only — no route, no DTO, no migration —
+and `StaffMembersModule` already exports the service. 1팀 calls it from the 폐점 transaction
+(`StoreManagementService.update`) and from the BP-withdrawal forced closing, passing the
+store's `closedDate` (`kstToday()`). It runs **inside the caller's transaction** and does not
+swallow errors, so one failure rolls the closing back.[^retirement-service]
+
+Policy:
+
+1. Every 재직 직원 of that store is retired on the closing date.
+2. **No open-check-in check** (`assertNoOpenCheckIn` is not called) — the pre-closing
+   validation is a separate method owned by someone else. This one only updates.
+3. The retirement date is the closing date and is **finalized in the same transaction**
+   (`finalize` with `actor: ADMIN`; no waiting for the batch): schedules after the next
+   day deleted, personal TO-DO assignments released, sent invitations expired, pending
+   contracts ENDED. 체결 완료 contracts are not touched.
+4. Per record: RETIRED → skipped. A 가입 전 record with only 임시저장 contracts (the case where
+   `retire` answers 409) → skipped without an error, and its drafts are left alone (what to
+   do with them is undecided). No retirement date → store the closing date (`RETIRE` log
+   rows as `retire`) and finalize. Retirement date after the closing date → pulled forward
+   (`CANCEL` old date + `RETIRE` closing date, same `processed_at`, as `changeDate`) and
+   finalized. Retirement date on or before the closing date → kept and finalized with that
+   date (same result the batch would reach). The 3-month / hired-date range check
+   (`assertDateAllowed`) is not applied; a hired date after the closing date is fine
+   (WHALEERP-613).
+5. Only `EMPLOYED` records of the store are selected and locked one by one, in ascending
+   `staff_member_id` order across all given stores, by the staff row alone (`FOR NO KEY UPDATE`; `lockStaffRowOnly`).
+   The account row is **not** locked — no account data changes here (`retire` / `changeDate` /
+   `cancel` still use `lockStaff`, staff row then account row). The ascending order only
+   is global across `storeIds`; other lock orders are covered by the usage conditions below.
+   `storeIds` may be empty (no-op, `{0,0}`) or contain duplicates (ignored); `closedDate` is
+   normalized to the KST date (`kstToday`). `skipped` = records that turned RETIRED or were
+   draft-only 가입 전 after the lock, plus finalizes that returned false; records not employed
+   from the start are not selected and not counted.
+
+Because the batch's conditional update sees the record already RETIRED, `retireDue` run the
+next day processes none of them again.
+
+**Usage conditions for 1팀:**
+
+- (a) Call it in the closing transaction **before locking the store row** (`lockStore`
+  `FOR UPDATE`). Contract rejection, expired-contract resend (staff `FOR NO KEY UPDATE` → store `FOR SHARE`),
+  work-schedule save and TO-DO creation all take staff → store, so calling this after the
+  store is locked deadlocks (`40P01`).
+- (b) The open-check-in validation is **not** done here; it belongs to the caller or the
+  separate pre-closing validation method.
+- (c) The 폐점's in-progress-contract check (`assertNoContracts` — 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 ·
+  체결 완료) must not be used as a blocking condition for closing: this method ends the
+  pending contracts by finalizing the retirement. Only the 임시저장 contracts of a 가입 전
+  record that has nothing but drafts stay (it is skipped).
+- (d) Closing can exceed Prisma's default `$transaction` timeout of 5 seconds (a store with many
+  staff, a BP withdrawal), so call it with a larger `timeout` option.
+- (e) BP withdrawal passes **all stores it closes in one call** (`storeIds`) — splitting
+  per store makes the locks not follow the global `staff_member_id` order, and can deadlock with
+  e.g. the daily contract batch.
+- Accepted risk (2026-11-03 노영주): an employed record created between the target query and
+  the staff lock may not be retired — a very short gap.
 
 # An open check-in blocks retirement
 
@@ -284,7 +344,7 @@ as UTC midnight, and every helper in `kst-date.ts` works in that shape. A
 schedule's `start_at` is a timestamp, so "from the next day" is compared against
 `kstDayStart(retired_date + 1)` — 15:00 UTC of the retirement date.[^kst-date]
 
-[^retirement-service]: RetirementService (preview · retire · changeDate · cancel · retireDue)
+[^retirement-service]: RetirementService (preview · retire · changeDate · cancel · retireDue · retireAllForStoreClosing)
 [^retirement-controller]: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
 [^retirement-scheduler]: Midnight KST batch (staff-retire)
 [^admin-scope]: Which stores an 관리자 manages
