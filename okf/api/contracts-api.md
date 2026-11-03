@@ -1209,22 +1209,26 @@ only — a 종이 계약 has no body.
   files are deleted inside the 60-second transaction); the rest go the next day.
 - **급여명세서 blocks a record** (2026-11-03 김민식): `payslips.contract_id` is NOT NULL · RESTRICT and
   payslips are another area (생성일 + 3년, RET-02), so a record with any contract a payslip points at is
-  skipped whole, every day, until the payslips are purged. Such records are left out of the pick (they
-  never fill the 100) and counted in the log `contract purge SKIPPED_PAYSLIP staff=N`.
+  skipped whole, every day, until the payslips are gone. Such records are left out of the pick (they
+  never fill the 100) and counted in the log `contract purge SKIPPED_PAYSLIP staff=N`. **No payslip purge
+  exists yet** — until one is built, a 퇴직자 who ever got a payslip keeps the contracts.
 - **Locks**: staff rows `FOR NO KEY UPDATE` (same as 퇴직 취소 · contract writes), then the contract rows
-  `FOR UPDATE`, then payslips are read again — a payslip committed before the lock drops that record
+  `FOR UPDATE`, then payslips are read again. The rows that point at the contracts (work schedules,
+  retirement logs, other contracts' `previous_contract_id`) are locked too, all before any file is deleted,
+  so nothing after the files waits on someone else's transaction — a payslip committed before the lock drops that record
   instead of failing the batch with 23503 (logged as `SKIPPED_PAYSLIP_AFTER_LOCK staff=N`).
 - **Files first**: every `contract_documents.storage_key` of a record is deleted from storage
-  (`{ thumbnail: false }`) before any row. On the first failure (or with no storage configured while files
-  exist) that record and the rest wait for the next day (`contract purge FILES_DEFERRED staff=…`) — a
-  stuck S3 would otherwise eat the 25-second delete deadline per record. A slow but working storage is
-  capped too: once file deletion has taken 25 seconds (`FILE_DELETE_BUDGET_MS`) the remaining records wait,
-  so the rows are still deleted and committed inside the 60 seconds. A rollback after files are gone
+  (`{ thumbnail: false }`) before any row. A record whose delete fails (or that has files while no storage
+  is configured) waits for the next day and the next record goes on (`contract purge FILES_DEFERRED
+  staff=…`) — one key that always fails does not block the rest. Once 25 seconds have passed since the run
+  started (`FILE_DELETE_BUDGET_MS`), the remaining records wait too, so a slow or stuck S3 (25-second
+  deadline per delete) still leaves time to delete the rows and commit inside the 60 seconds. A rollback after files are gone
   leaves rows whose files are missing; the next run deletes them again (S3 treats a missing key as success).
 - **What else goes, in order** (2026-11-03 김민식): work schedules made from those contracts
   (`work_schedules.source_contract_id` — already past their own 생성일 + 3년) with their history and
   `WORK_SCHEDULE` notifications (`deleteWorkSchedules`, the same order as `work-schedule-purge`, after
-  locking them `FOR UPDATE`); `CONTRACT` 운영 알림 with recipients and deliveries; then
+  locking them `FOR UPDATE`); every `related_type = 'CONTRACT'` notification — 관리자 운영 알림 and 직원 앱
+  알림 such as 근로계약서 발송 — with recipients and deliveries; then
   `contract_documents` · `contract_status_histories` · `contract_parties` · `contract_work_days` · `contracts`.
 - **Unlinked, kept**: `staff_member_retirement_logs.contract_id` → NULL; any contract whose
   `previous_contract_id` points at a deleted one → NULL (also inside the record, since RESTRICT checks each

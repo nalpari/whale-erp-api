@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { BATCH_JOB } from '../batch/batch-job-names';
 import { BatchLockService } from '../batch/batch-lock.service';
 import { addMonths, kstToday } from './kst-date';
@@ -46,8 +46,8 @@ export async function purgeRetiredTaxProfiles(
   return targets.length;
 }
 
-/** 계약 · 급여와 같은 보존 기간을 따르는 변경 이력 항목(RET-04). 이메일 · 비밀번호 · 생년월일 이력은 남는다. */
-const RETAINED_FIELDS = ['PHONE', 'ADDRESS'] as const;
+/** 계약 · 급여와 같은 보존 기간으로 지우는 변경 이력 항목(RET-04). 이메일 · 비밀번호 · 생년월일 이력은 남는다. */
+const PURGED_FIELDS = ['PHONE', 'ADDRESS'] as const;
 
 /**
  * 계정의 휴대전화번호 · 주소 변경 이력을 계약 · 급여와 같은 보존 기간으로 지운다(RET-04, WHALEERP-645). 기준 날짜는
@@ -64,7 +64,7 @@ export async function purgeRetiredAccountChanges(
   const targets = await tx.$queryRaw<{ id: number }[]>`
     SELECT a.account_id AS id FROM accounts a
     WHERE EXISTS (SELECT 1 FROM account_change_histories h
-        WHERE h.account_id = a.account_id AND h.field IN ('PHONE', 'ADDRESS'))
+        WHERE h.account_id = a.account_id AND h.field::text IN (${Prisma.join(PURGED_FIELDS)}))
       AND EXISTS (SELECT 1 FROM staff_members s WHERE s.account_id = a.account_id)
       AND NOT EXISTS (SELECT 1 FROM staff_members s WHERE s.account_id = a.account_id
         AND (s.employment_status <> 'RETIRED' OR s.retired_date IS NULL OR s.retired_date >= ${before}::date))
@@ -78,7 +78,7 @@ export async function purgeRetiredAccountChanges(
   const { count } = await tx.accountChangeHistory.deleteMany({
     where: {
       accountId: { in: targets.map((t) => t.id) },
-      field: { in: [...RETAINED_FIELDS] },
+      field: { in: [...PURGED_FIELDS] },
       account: {
         staffMembers: {
           none: {

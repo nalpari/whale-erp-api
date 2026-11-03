@@ -14,12 +14,12 @@ import { deleteWorkSchedules } from '../work-schedules/work-schedule-purge';
 export const CONTRACT_PURGE_BATCH_SIZE = 100;
 
 /**
- * 파일 삭제에 쓰는 시간 상한. 넘으면 남은 레코드는 다음 날 — 한 레코드의 삭제가 저장소 기한(25초)까지 걸려도 이 상한과
- * 합쳐 runExclusive 의 60초 안에서 행을 지우고 커밋한다.
+ * 파일 삭제를 시작하는 시간 상한 — 함수 시작부터 잰다. 넘으면 남은 레코드는 다음 날. 한 레코드의 삭제가 저장소 기한(25초)까지
+ * 걸려도 이 상한과 합쳐 runExclusive 의 60초 안에서 행을 지우고 커밋한다 — 파일 뒤의 문장은 이미 잠근 행만 건드린다.
  */
 export const FILE_DELETE_BUDGET_MS = 25_000;
 
-/** 근로계약 운영 알림의 related_type(ContractNoticeService · 발송) — 알림톡 발송 기록의 'contract'(소문자)와 다르다 */
+/** 근로계약 알림의 related_type(관리자 운영 알림 · 직원 앱 알림) — 알림톡 발송 기록의 'contract'(소문자)와 다르다 */
 const NOTIFICATION_RELATED_TYPE = 'CONTRACT';
 
 @Injectable()
@@ -34,22 +34,25 @@ export class ContractPurgeService {
    * 지운 계약 건수를 돌려준다(배치 로그). 레코드 단위로 지운다 — 재계약 줄이 반쯤 끊기지 않게.
    *
    * - 급여명세서(payslips.contract_id, NOT NULL · RESTRICT — 다른 영역)가 가리키는 계약이 하나라도 있는 레코드는 통째로
-   *   건너뛴다. 명세서는 생성일 + 3년 파기라, 그 뒤 날마다 다시 보다가 지운다. 건너뛴 레코드 수를 로그로 남긴다(2026-11-03
-   *   김민식 확정). 대상을 고를 때부터 빼서 늘 남는 레코드가 한 번에 보는 수를 채우지 않게 한다.
+   *   건너뛴다. 날마다 다시 보고, 명세서가 없어진 다음 날 지운다. 건너뛴 레코드 수를 로그로 남긴다(2026-11-03 김민식 확정).
+   *   대상을 고를 때부터 빼서 늘 남는 레코드가 한 번에 보는 수를 채우지 않게 한다. 명세서 파기 배치(생성일 + 3년, RET-02)는
+   *   아직 없다 — 그것이 생기기 전까지 명세서를 받은 퇴직자의 계약은 남는다.
    * - 직원 행(퇴직 취소 · 계약 쓰기와 같은 FOR NO KEY UPDATE) → 계약 행(FOR UPDATE) 순으로 잠근 뒤 명세서를 다시 본다 — 잠그기
-   *   전에 만든 명세서를 놓쳐 계약 삭제가 23503 으로 배치째 실패하지 않게.
-   * - 저장소의 계약서 파일을 행보다 먼저 지운다. 지우다 실패하면 그 레코드와 남은 레코드는 다음 날로 미룬다 — 저장소가 멈췄으면
-   *   레코드마다 기한(25초)을 기다리다 60초를 넘기기 때문이다. 이미 지운 파일은 다음 날 다시 지워도 S3 가 성공으로 본다.
+   *   전에 만든 명세서를 놓쳐 계약 삭제가 23503 으로 배치째 실패하지 않게. 계약을 가리키는 근무스케줄 · 퇴직 처리 이력 · 다른
+   *   계약도 파일을 지우기 전에 잠근다.
+   * - 저장소의 계약서 파일을 행보다 먼저 지운다. 지우다 실패한 레코드는 다음 날로 미루고, 시간 상한(FILE_DELETE_BUDGET_MS,
+   *   이 함수 시작부터)을 넘기면 남은 레코드도 미룬다. 이미 지운 파일은 다음 날 다시 지워도 S3 가 성공으로 본다.
    *
    * 계약을 가리키는 행(2026-11-03 김민식 확정): 그 계약으로 만든 근무스케줄(work_schedules.source_contract_id)은 생성일 + 3년
-   * 파기 기한도 지났으니 변경 이력 · 관련 알림과 함께 지운다. 근로계약 운영 알림은 받는 사람 · 발송까지 지운다. 퇴직 처리
-   * 이력(contract_id)과 다른 레코드 계약의 직전 계약(previous_contract_id)은 연결만 비운다. 알림톡 발송 기록(alimtalk_send_logs,
-   * 외래키 없음)은 그대로 둔다.
+   * 파기 기한도 지났으니 변경 이력 · 관련 알림과 함께 지운다. related_type 'CONTRACT' 알림 — 관리자 운영 알림과 직원 앱 알림
+   * (근로계약서 발송 등) 모두 — 은 받는 사람 · 발송까지 지운다. 퇴직 처리 이력(contract_id)과 다른 레코드 계약의 직전
+   * 계약(previous_contract_id)은 연결만 비운다. 알림톡 발송 기록(alimtalk_send_logs, 외래키 없음)은 그대로 둔다.
    */
   async purgeRetiredContracts(
     tx: Prisma.TransactionClient,
     now: Date = new Date(),
   ): Promise<number> {
+    const started = Date.now();
     const before = retiredBefore(now);
     const [{ skipped }] = await tx.$queryRaw<{ skipped: number }[]>`
       SELECT count(*)::int AS skipped FROM staff_members s
@@ -89,20 +92,31 @@ export class ContractPurgeService {
         `contract purge SKIPPED_PAYSLIP_AFTER_LOCK staff=${blocked.size}`,
       );
     const purgeable = staff.map((s) => s.id).filter((id) => !blocked.has(id));
-    const done = await this.deleteFiles(tx, purgeable);
+    const candidates = locked
+      .filter((c) => purgeable.includes(c.staffMemberId))
+      .map((c) => c.id);
+    if (candidates.length === 0) return 0;
+    // 계약을 가리키는 행도 파일을 지우기 전에 잠근다 — 파일을 지운 뒤 남의 트랜잭션을 기다리다 60초를 넘기면 파일만 지워진다
+    const schedules = await tx.$queryRaw<{ id: number; contractId: number }[]>`
+      SELECT work_schedule_id AS id, source_contract_id AS "contractId" FROM work_schedules
+      WHERE source_contract_id = ANY(${candidates}::int[])
+      FOR UPDATE
+    `;
+    await tx.$queryRaw`
+      SELECT 1 FROM staff_member_retirement_logs WHERE contract_id = ANY(${candidates}::int[]) FOR UPDATE
+    `;
+    await tx.$queryRaw`
+      SELECT 1 FROM contracts WHERE previous_contract_id = ANY(${candidates}::int[]) FOR UPDATE
+    `;
+
+    const done = await this.deleteFiles(tx, purgeable, started);
     const ids = locked
       .filter((c) => done.includes(c.staffMemberId))
       .map((c) => c.id);
     if (ids.length === 0) return 0;
-
-    const schedules = await tx.$queryRaw<{ id: number }[]>`
-      SELECT work_schedule_id AS id FROM work_schedules
-      WHERE source_contract_id = ANY(${ids}::int[])
-      FOR UPDATE
-    `;
     await deleteWorkSchedules(
       tx,
-      schedules.map((s) => s.id),
+      schedules.filter((s) => ids.includes(s.contractId)).map((s) => s.id),
     );
     const notification = {
       relatedType: NOTIFICATION_RELATED_TYPE,
@@ -131,10 +145,15 @@ export class ContractPurgeService {
     return count;
   }
 
-  /** 레코드 순서대로 계약서 파일을 지우고, 다 지운 레코드를 돌려준다. 처음 실패한 레코드부터는 다음 날로 미룬다. */
+  /**
+   * 레코드 순서대로 계약서 파일을 지우고, 다 지운 레코드를 돌려준다. 지우다 실패한 레코드는 다음 날로 미루고 다음 레코드로
+   * 넘어간다 — 늘 실패하는 키(형식 · 권한) 하나가 뒤 레코드를 모두 막지 않게. 저장소가 멈춰 레코드마다 기한을 기다리는 것은
+   * 시간 상한이 끊는다.
+   */
   private async deleteFiles(
     tx: Prisma.TransactionClient,
     staffMemberIds: number[],
+    started: number,
   ): Promise<number[]> {
     const documents = await tx.contractDocument.findMany({
       where: { contract: { staffMemberId: { in: staffMemberIds } } },
@@ -143,7 +162,6 @@ export class ContractPurgeService {
         contract: { select: { staffMemberId: true } },
       },
     });
-    const started = Date.now();
     const done: number[] = [];
     for (const staffMemberId of staffMemberIds) {
       // 실패하지 않고 느리기만 해도 60초를 넘겨 롤백되면(파일만 지워짐) 다음 날도 같은 자리에서 넘긴다 — 기한을 두고 남은 것을 미룬다
@@ -161,7 +179,7 @@ export class ContractPurgeService {
           this.logger.error(
             `contract purge FILES_DEFERRED staff=${staffMemberId}: 저장소 설정이 없다`,
           );
-          break;
+          continue;
         }
         const storage = this.storage;
         try {
@@ -173,7 +191,7 @@ export class ContractPurgeService {
           this.logger.error(
             `contract purge FILES_DEFERRED staff=${staffMemberId}: ${String(e)}`,
           );
-          break;
+          continue;
         }
       }
       done.push(staffMemberId);

@@ -23,14 +23,16 @@ const mockTx = ({
     { storageKey: 'contracts/10/a.pdf', contract: { staffMemberId: 1 } },
     { storageKey: 'contracts/20/b.pdf', contract: { staffMemberId: 2 } },
   ],
-  schedules = [7],
+  schedules = [{ id: 7, contractId: 10 }],
 } = {}) => {
   const $queryRaw = jest
     .fn()
     .mockResolvedValueOnce([{ skipped }])
     .mockResolvedValueOnce(staff.map((id) => ({ id })))
     .mockResolvedValueOnce(locked)
-    .mockResolvedValueOnce(schedules.map((id) => ({ id })));
+    .mockResolvedValueOnce(schedules)
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([]);
   return {
     $queryRaw,
     payslip: {
@@ -92,6 +94,13 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
     expect(staffCall).toContain(100);
     expect(sqlAt(tx, 2)).toContain('FOR UPDATE');
     expect(sqlAt(tx, 3)).toContain('source_contract_id');
+    // 계약을 가리키는 행도 파일을 지우기 전에 잠근다
+    expect(sqlAt(tx, 4)).toContain('staff_member_retirement_logs');
+    expect(sqlAt(tx, 5)).toContain('previous_contract_id');
+    for (const i of [3, 4, 5]) expect(sqlAt(tx, i)).toContain('FOR UPDATE');
+    expect(tx.$queryRaw.mock.invocationCallOrder[5]).toBeLessThan(
+      storage.delete.mock.invocationCallOrder[0],
+    );
 
     expect(storage.delete).toHaveBeenCalledWith('contracts/10/a.pdf', {
       thumbnail: false,
@@ -172,12 +181,12 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
     expect(log).toHaveBeenCalledWith('contract purge SKIPPED_PAYSLIP staff=2');
   });
 
-  it('파일 삭제가 실패하면 그 레코드부터는 다음 날로 미루고 앞 레코드만 지운다', async () => {
+  it('파일 삭제가 실패한 레코드만 다음 날로 미루고 뒤 레코드는 지운다 — 늘 실패하는 키 하나가 뒤를 막지 않게', async () => {
     const storage = {
       delete: jest
         .fn()
-        .mockResolvedValueOnce(undefined)
-        .mockRejectedValueOnce(new Error('S3 down')),
+        .mockRejectedValueOnce(new Error('저장소 키 형식이 아닙니다'))
+        .mockResolvedValueOnce(undefined),
     };
     const tx = mockTx();
     const service = setup(storage);
@@ -189,9 +198,12 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
       )
       .mockImplementation(() => undefined);
     await run(service, tx);
+    expect(storage.delete).toHaveBeenCalledTimes(2);
     expect(tx.contract.deleteMany).toHaveBeenCalledWith({
-      where: { contractId: { in: [10, 11] } },
+      where: { contractId: { in: [20] } },
     });
+    // 미룬 레코드의 계약에서 만든 근무스케줄(7 ← 10)은 남는다
+    expect(tx.workSchedule.deleteMany).not.toHaveBeenCalled();
   });
 
   it('파일 삭제가 시간 상한을 넘으면 남은 레코드는 다음 날로 미룬다 — 느리기만 한 저장소로 60초를 넘기지 않게', async () => {
@@ -222,7 +234,7 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
     );
   });
 
-  it('첫 레코드 파일부터 실패하면 아무 행도 지우지 않는다', async () => {
+  it('모든 레코드의 파일 삭제가 실패하면 아무 행도 지우지 않는다', async () => {
     const storage = { delete: jest.fn().mockRejectedValue(new Error('down')) };
     const tx = mockTx();
     const service = setup(storage);
@@ -241,6 +253,29 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
   it('파일이 없는 레코드는 저장소 없이도 지운다', async () => {
     const tx = mockTx({ documents: [] });
     await expect(run(setup(null), tx)).resolves.toBe(3);
+  });
+
+  it('저장소 설정이 없으면 파일이 있는 레코드만 미룬다', async () => {
+    const tx = mockTx({
+      documents: [
+        { storageKey: 'contracts/20/b.pdf', contract: { staffMemberId: 2 } },
+      ],
+    });
+    const service = setup(null);
+    const error = jest
+      .spyOn(
+        (service as unknown as { logger: { error: (m: string) => void } })
+          .logger,
+        'error',
+      )
+      .mockImplementation(() => undefined);
+    await run(service, tx);
+    expect(tx.contract.deleteMany).toHaveBeenCalledWith({
+      where: { contractId: { in: [10, 11] } },
+    });
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('FILES_DEFERRED staff=2'),
+    );
   });
 
   it('지울 레코드가 없으면 아무것도 바꾸지 않는다', async () => {

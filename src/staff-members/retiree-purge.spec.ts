@@ -91,7 +91,7 @@ describe('purgeRetiredAccountChanges', () => {
     // 소속이 하나는 있고, 퇴직이 아니거나 퇴직일이 기준 이후인 소속은 없다
     expect(sql).toContain('EXISTS (SELECT 1 FROM staff_members');
     expect(sql).toContain('NOT EXISTS (SELECT 1 FROM staff_members');
-    expect(sql).toContain("field IN ('PHONE', 'ADDRESS')");
+    expect(sql).toContain('field::text IN (');
     expect(sql).toContain('FOR UPDATE');
     expect(call).toContainEqual(new Date('2023-11-04T00:00:00.000Z'));
     expect(tx.accountChangeHistory.deleteMany).toHaveBeenCalledWith({
