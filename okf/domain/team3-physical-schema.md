@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T06:20:00Z }
 sources:
   - id: contract-correction-reason
     resource: ../../prisma/migrations/20261030120000_team3_contract_correction_reason/migration.sql
@@ -118,6 +118,10 @@ sources:
     resource: ../../prisma/migrations/20261015104957_team3_notification_related_index/migration.sql
     title: 알림의 관련 업무 (related_type, related_id) 조회 인덱스
     last_modified: 2026-10-15T01:51:27Z
+  - id: contract-reference-indexes-migration
+    resource: ../../prisma/migrations/20261103061553_team3_contract_reference_indexes/migration.sql
+    title: 근로계약을 가리키는 외래키 칸 인덱스 (WHALEERP-645)
+    last_modified: 2026-11-03T06:20:00Z
 ---
 
 # Status
@@ -682,6 +686,13 @@ table document:
   its closing Korean `print` (cp949); `_build_prisma.py` then carries the duplicate
   fields into `schema.prisma`, which fails validation. Until the duplicate is fixed
   in `_model.py`, copy lines by hand.
+- **The columns that point at a contract are indexed** (2026-11-03, WHALEERP-645).
+  `payslips.contract_id`, `work_schedules.source_contract_id`,
+  `contracts.previous_contract_id` and `staff_member_retirement_logs.contract_id` had
+  no index, so every contract the 퇴직자 근로계약 파기 deletes made the RESTRICT checks
+  scan those tables whole. `20261103061553_team3_contract_reference_indexes` adds one index each; like the
+  notification index they were added to `_model.py` with only their lines copied into
+  the generated files.
 - **`leads.created_at` is filled by the database, not by Prisma** (2026-10-15,
   api #50 리뷰). Prisma 7 evaluates `@default(now())` in the app process
   (`new Date`) and sends the value, so the DDL's `DEFAULT CURRENT_TIMESTAMP` never

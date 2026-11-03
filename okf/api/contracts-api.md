@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T02:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T05:30:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -82,6 +82,10 @@ sources:
     resource: ../../src/contracts/my-contract-documents.service.ts
     title: 직원 앱 근로계약 파일 내려받기 주소 (WHALEERP-146 · 149)
     last_modified: 2026-10-29T05:17:36Z
+  - id: contract-purge
+    resource: ../../src/contracts/contract-purge.ts
+    title: 퇴직자 근로계약 파기 contract-purge (WHALEERP-645)
+    last_modified: 2026-11-03T05:30:00Z
 ---
 
 # What it is
@@ -1191,6 +1195,67 @@ only — a 종이 계약 has no body.
   row exists (nothing wrote them before; the new CHECK would refuse such rows without `sent_at`).
 - Admins see both kinds in `GET /contracts/:id` `documents` and download them through the existing route.
 
+# 퇴직자 근로계약 파기: contract-purge (WHALEERP-645)
+
+`ContractPurgeScheduler` runs `contract-purge` every day at 05:00 한국 시각 inside `runExclusive`
+(RET-01 · RET-07, 파기 기준은 노무사 · 법무 검토로 확정 2026-11-03 재영).[^contract-purge]
+
+- **Who**: staff records that are 퇴직 확정 (`employment_status = 'RETIRED'`) with `retired_date` more than
+  3 years ago in 한국 날짜 — the record stays through 퇴직일 + 3년 and goes the next day (`retiredBefore`;
+  2월 29일 퇴직은 3년 뒤 2월 28일까지). 퇴직 예정 (still `EMPLOYED` with a date) and 재직 records keep their
+  contracts. A withdrawn account changes nothing (RET-07). The staff record itself stays.
+- **Unit is the staff record**: all of its contracts go together, so a 재계약 chain is never half cut.
+  At most 100 records are deleted per run (`CONTRACT_PURGE_BATCH_SIZE`, smaller than the other purges' 5000
+  because files are deleted inside the 60-second transaction); the rest go the next day.
+- **급여명세서 blocks a record** (2026-11-03 김민식): `payslips.contract_id` is NOT NULL · RESTRICT and
+  payslips are another area (생성일 + 3년, RET-02), so a record with any contract a payslip points at is
+  skipped whole, every day, until the payslips are gone. Such records are left out of the pick (they
+  never fill the 100) and counted in the log `contract purge SKIPPED_PAYSLIP staff=N`. The payslip purge is
+  a separate follow-up under WHALEERP-323 — until it exists, a 퇴직자 who ever got a payslip keeps the contracts.
+- **Pick without locks, then lock once in id order** (api #238 리뷰): `pickTargets` reads candidates oldest
+  퇴직일 first, 500 at a time (`CONTRACT_PURGE_SCAN_SIZE`, keyset on `(retired_date, staff_member_id)`), without a
+  lock, until 100 are chosen, reading at most 10 pages (`CONTRACT_PURGE_MAX_SCAN_PAGES`, 5000 records) so the
+  re-reading never eats the file-deletion time. The cursor's 퇴직일 travels as text (`retired_date::text`), not
+  as a JS `Date`. A record whose files cannot be deleted — a `storage_key` that is not a stored key
+  (`StorageService.isStoredKey`), or files while no storage is configured — is left out and counted by reason
+  (`contract purge SKIPPED_FILES staff=N (이번에 본 것): <까닭>`, an error that needs a person; N counts only the
+  records this run read), so such records do not hold the window; records without files are deleted even
+  with no storage. More than 5000 of them in front would push the rest back — the log shows it every day. The chosen staff
+  rows are then locked **once**, `FOR NO KEY UPDATE` in `staff_member_id` order — the order
+  `lockStaffForReplace` and the daily contract batch use, so it cannot deadlock with a contract save — and
+  퇴직 · the date are checked again under the lock. Then the contract rows `FOR UPDATE`, then payslips are read
+  again: a payslip committed before the lock drops that record instead of failing the batch with 23503
+  (`SKIPPED_PAYSLIP_AFTER_LOCK staff=N`). The rows that point at the contracts (work schedules, retirement
+  logs, other contracts' `previous_contract_id`) are locked too — every lock is taken before any file is
+  deleted, so nothing after the files waits on someone else's transaction except the notification rows
+  (short writes such as 읽음 only). The four columns that point at a contract are indexed
+  (`20261103061553_team3_contract_reference_indexes`), so neither the RESTRICT checks nor these locks scan
+  whole tables.
+- **Files first**: the locked contracts' `contract_documents.storage_key`s are deleted from storage
+  (`{ thumbnail: false }`) record by record, in 퇴직일 order, before any row.
+  - Keys are checked again (a file added after the pick): a record with a key that cannot be deleted is
+    deferred with **no** file deleted (`contract purge FILES_DEFERRED staff=…`), so no record sits with part
+    of its files gone for a reason that never goes away.
+  - A delete that fails (S3 trouble) defers that record and the next goes on. Some of its files may already be
+    gone while the rows remain, so 내려받기 of those files fails until the next successful run deletes the rest
+    (S3 treats a missing key as success) — a transient failure heals the next day.
+  - Once 25 seconds have passed since the run started (`FILE_DELETE_BUDGET_MS`), records with files wait for
+    the next day (records without files are still deleted), so a slow or stuck S3 (25-second deadline per
+    delete) still leaves time to delete the rows and commit inside the 60 seconds. A rollback after files are
+    gone leaves rows whose files are missing; the next run deletes them again.
+- **What else goes, in order** (2026-11-03 김민식): work schedules made from those contracts
+  (`work_schedules.source_contract_id` — already past their own 생성일 + 3년) with their history and
+  `WORK_SCHEDULE` notifications (`deleteWorkSchedules`, the same order as `work-schedule-purge`, after
+  locking them `FOR UPDATE`); every `related_type = 'CONTRACT'` notification — 관리자 운영 알림 and 직원 앱
+  알림 such as 근로계약서 발송 — with recipients and deliveries; then
+  `contract_documents` · `contract_status_histories` · `contract_parties` · `contract_work_days` · `contracts`.
+- **Unlinked, kept**: `staff_member_retirement_logs.contract_id` → NULL, together with its
+  `previous_contract_end_date` (the CHECK `…_end_date_needs_contract` refuses a date without a contract); any contract whose
+  `previous_contract_id` points at a deleted one → NULL (also inside the record, since RESTRICT checks each
+  row at once). **Untouched**: 알림톡 발송 기록 (`alimtalk_send_logs.related_id`, no foreign key) and mail logs.
+- The log line `contract-purge RAN processed=N` counts deleted contracts. 신고 정보 · 계정 변경 이력 go in
+  their own jobs ([My profile](/api/my-profile.md)).
+
 # GET /contracts/store-options
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
@@ -1211,6 +1276,7 @@ gone, so the two must ship back to back: api alone breaks the old front's 작성
 follows.[^contracts-service]
 
 [^create-dto]: CreateContractDto
+[^contract-purge]: 퇴직자 근로계약 파기 contract-purge (WHALEERP-645)
 [^contracts-controller]: ContractsController
 [^contracts-service]: ContractsService
 [^contract-duplicates]: 계약 중복 검사 (WHALEERP-129)

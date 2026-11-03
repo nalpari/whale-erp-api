@@ -939,6 +939,7 @@ model StaffMemberRetirementLog {
   contract                   Contract?        @relation(fields: [contractId], references: [contractId], onDelete: Restrict, onUpdate: NoAction, map: "staff_member_retirement_logs_contract_id_fkey")
 
   @@index([staffMemberId, processedAt], map: "staff_member_retirement_logs_staff_member_id_processed_at_idx")
+  @@index([contractId], map: "staff_member_retirement_logs_contract_id_idx")
   @@map("staff_member_retirement_logs")
 }
 
@@ -1054,6 +1055,7 @@ model Contract {
 
   @@index([staffMemberId], map: "contracts_staff_member_id_idx")
   @@index([storeId, status], map: "contracts_store_id_status_idx")
+  @@index([previousContractId], map: "contracts_previous_contract_id_idx")
   @@map("contracts")
 }
 
@@ -1201,6 +1203,7 @@ model WorkSchedule {
   workScheduleHistories WorkScheduleHistory[]
 
   @@index([storeId, startAt], map: "work_schedules_store_id_start_at_idx")
+  @@index([sourceContractId], map: "work_schedules_source_contract_id_idx")
   @@map("work_schedules")
 }
 
@@ -1465,6 +1468,7 @@ model Payslip {
 
   @@unique([staffMemberId, periodStartDate, periodEndDate], map: "payslips_staff_member_id_period_start_date_period_end_date_key")
   @@index([storeId, periodStartDate], map: "payslips_store_id_period_start_date_idx")
+  @@index([contractId], map: "payslips_contract_id_idx")
   @@map("payslips")
 }
 

@@ -41,7 +41,22 @@ export async function purgeExpiredWorkSchedules(
     FOR UPDATE
   `;
   if (targets.length === 0) return 0;
-  const ids = targets.map((t) => t.id);
+  return deleteWorkSchedules(
+    tx,
+    targets.map((t) => t.id),
+  );
+}
+
+/**
+ * 근무스케줄과 그것을 가리키는 저장 알림(받는 사람 · 발송까지) · 변경 이력을 지운다 — 외래키가 RESTRICT 라 발송 → 받는 사람 →
+ * 알림, 변경 이력 → 근무스케줄 순이다. 부르는 쪽이 대상을 먼저 FOR UPDATE 로 잠근다(위 까닭). 퇴직자 근로계약 파기(WHALEERP-645)도
+ * 그 계약에서 만든 근무스케줄을 이것으로 지운다. 지운 근무스케줄 건수를 돌려준다.
+ */
+export async function deleteWorkSchedules(
+  tx: Prisma.TransactionClient,
+  ids: number[],
+): Promise<number> {
+  if (ids.length === 0) return 0;
   const notification = { relatedType: RELATED_TYPE, relatedId: { in: ids } };
   await tx.notificationDelivery.deleteMany({
     where: { notificationRecipient: { notification } },
