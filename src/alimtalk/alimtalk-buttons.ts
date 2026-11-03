@@ -24,8 +24,9 @@ export function alimtalkButtonOf(
 
 /**
  * 버튼 링크로 실을 수 있는 주소인가(https 만). 카카오에 등록한 버튼 링크가 `https://#{변수}` 라 http 는 등록 형식에 맞지 않는다.
- * 요청에는 `https://` 를 포함한 전체 주소를 싣는다 — 떼고 보내면 7101(파라미터 형식 오류)이다(2026-11-02 김민식). 발송
- * (AlimtalkService)과 근로계약 발송 전 검사가 같이 본다.
+ * 요청에는 `https://` 를 포함한 전체 주소를 싣는다 — 떼고 보낸 가입 초대가 비즈뿌리오 결과 7101(파라미터 형식 오류)로 거절돼
+ * 되돌렸다(2026-11-02 김민식). 전체 주소로 실제 발송에서 열리는지는 아직 확인 전이다. 발송(AlimtalkService)과 근로계약 발송 전
+ * 검사가 같이 본다.
  */
 export const BUTTON_LINK_SCHEME = /^https:\/\//i;
 export const isButtonLinkUrl = (link: string) => BUTTON_LINK_SCHEME.test(link);
