@@ -26,7 +26,6 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
   let storeId: number;
   let otherStoreId: number;
   let bmId: number;
-  let pmId: number;
   let sharedId: number;
   let hiddenId: number;
   const accountIds: number[] = [];
@@ -94,13 +93,6 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
         })
       ).adminAccountId;
     bmId = await admin(`close${n}`, 'BM', 'BM000001', bpCodeId);
-    pmId = await admin(
-      `closepm${n}`,
-      'PM',
-      'PM000001',
-      (await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } }))
-        .bpCodeId,
-    );
 
     // 가입 · 동의(보임), 가입 · 미동의(본사에게 가림) — 둘 다 어제 퇴근 없는 출근. 가린 쪽이 더 이르다
     sharedId = await staff('가동의', 'JOINED', true, [
@@ -259,7 +251,7 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     await prisma.account.deleteMany({
       where: { accountId: { in: accountIds } },
     });
-    const adminIds = [bmId, pmId].filter((id) => id !== undefined);
+    const adminIds = [bmId].filter((id) => id !== undefined);
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: adminIds } },
     });
@@ -270,8 +262,8 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     await app.close();
   });
 
-  it('본사 역할 — 가려진 직원의 열린 출근은 첫 건으로 고르지 않고 수만 센다 · 종료될 계약 · 퇴직될 직원 · 미확정 명세서', async () => {
-    const res = await storeClosingCheck(prisma, storeId, bmId);
+  it('본사 역할에게 가려지는 직원(미동의 가맹)의 열린 출근은 첫 건으로 고르지 않고 수만 센다 · 종료될 계약 · 퇴직될 직원 · 미확정 명세서', async () => {
+    const res = await storeClosingCheck(prisma, storeId, today);
     expect(res).toEqual({
       openCheckIns: {
         count: 1,
@@ -293,21 +285,21 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     });
   });
 
-  it('가리지 않는 역할(플랫폼)은 가장 이른 열린 출근이 첫 건이고 hiddenCount 0 · 트랜잭션 안에서도 같다', async () => {
+  it('트랜잭션 안에서 불러도 같다 — 가림은 부르는 관리자와 상관없이 본사 역할 기준', async () => {
     const res = await prisma.$transaction((tx) =>
-      storeClosingCheck(tx, storeId, pmId),
+      storeClosingCheck(tx, storeId, today),
     );
     expect(res.openCheckIns).toEqual({
-      count: 2,
-      hiddenCount: 0,
+      count: 1,
+      hiddenCount: 1,
       first: expect.objectContaining({
-        staffMemberId: hiddenId,
-        name: '나미동의',
+        staffMemberId: sharedId,
+        name: '가동의',
       }) as object,
     });
   });
 
-  it('폐점한 가맹 점포면 본사 역할에게 동의한 직원도 가려진다(v227) — 합계는 그대로 · 앱 퇴근 기한이 지난 출근', async () => {
+  it('폐점한 가맹 점포면 동의한 직원도 가려진다(v227) — 합계는 그대로 · 앱 퇴근 기한이 지난 출근', async () => {
     const stale = await prisma.attendanceRecord.create({
       data: {
         staffMemberId: sharedId,
@@ -318,8 +310,8 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
       },
     });
     try {
-      const pm = await storeClosingCheck(prisma, storeId, pmId);
-      expect(pm.openCheckIns.first).toEqual(
+      const open = await storeClosingCheck(prisma, storeId, today);
+      expect(open.openCheckIns.first).toEqual(
         expect.objectContaining({
           attendanceRecordId: stale.attendanceRecordId,
           isCheckOutExpired: true,
@@ -329,8 +321,8 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
         where: { storeId },
         data: { storeStatusCode: 'CLOSED', closedDate: today },
       });
-      const bm = await storeClosingCheck(prisma, storeId, bmId);
-      expect(bm.openCheckIns).toEqual({
+      const closed = await storeClosingCheck(prisma, storeId, today);
+      expect(closed.openCheckIns).toEqual({
         count: 0,
         hiddenCount: 3,
         first: null,
@@ -350,7 +342,7 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     const rollback = new Error('되돌림');
     await expect(
       prisma.$transaction(async (tx) => {
-        const check = await storeClosingCheck(tx, storeId, bmId);
+        const check = await storeClosingCheck(tx, storeId, today);
         const pending = { in: PENDING_CONTRACT_STATUSES };
         const before = await tx.contract.count({
           where: { staffMemberId: { in: staffIds }, status: pending },
@@ -370,7 +362,7 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
 
   it('없는 점포는 그대로 던진다', async () => {
     await expect(
-      storeClosingCheck(prisma, 2_147_483_000, bmId),
+      storeClosingCheck(prisma, 2_147_483_000, today),
     ).rejects.toThrow();
   });
 });

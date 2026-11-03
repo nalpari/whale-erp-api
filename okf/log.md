@@ -1,7 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-03
-* **Update**: [Staff retirement](/api/staff-retirement.md) · [Attendance](/api/attendance.md) — 폐점 확인 `storeClosingCheck(db, storeId, adminAccountId)`(WHALEERP-647, 운영 정책 CTR-31, 읽기만 · 경로 없음): 1팀 폐점이 수정 화면 · 확인 팝업 · 저장 직전 트랜잭션에서 부른다. 열린 출근(644와 같은 `openCheckInsOf`, 가려진 직원은 첫 건 없이 `hiddenCount`), 종료될 계약 · 퇴직될 직원(일괄 퇴직 648과 같은 대상), 미확정 명세서 수.
+* **Update**: [Staff retirement](/api/staff-retirement.md) · [Attendance](/api/attendance.md) — 폐점 확인 `storeClosingCheck(client, storeId, closedDate)`(WHALEERP-647, 운영 정책 CTR-31, 읽기만 · 경로 없음): 1팀 폐점이 수정 화면 · 확인 팝업 · 저장 직전 트랜잭션에서 부른다. 열린 출근(644와 같은 `openCheckInsOf`, 본사 역할에게 가려지는 직원은 부르는 관리자와 상관없이 첫 건 없이 `hiddenCount`), 종료될 계약 · 퇴직될 직원(일괄 퇴직 648과 같은 대상), 미확정 명세서 수.
 * **Update**: [Staff retirement](/api/staff-retirement.md) — 점포(들) 폐점 때 소속 재직 직원을 폐점일로 일괄 퇴직 확정하는 메소드 `retireAllForStoreClosing(tx, storeIds, …)`(WHALEERP-646, 경로 · DTO · 마이그레이션 없음). 열린 출근은 검사하지 않고, 퇴직일 없음 · 폐점일보다 뒤(앞당김) · 이전/같음을 모두 그 자리에서 `finalize` 한다. 이미 퇴직 · 임시저장만 있는 가입 전 레코드는 건너뛴다. BP 탈퇴는 점포 전부를 한 번에 넘긴다(전역 id 순 잠금). 1팀은 점포 잠금 전에 부르고 `$transaction` timeout 을 늘리며, 진행 중 계약 검사(`assertNoContracts`)를 막는 조건으로 쓰지 않는다.
 * **Update**: [Attendance](/api/attendance.md) — 점포의 열린 출근 조회 `GET /attendance-records/open-check-ins?storeId=`(WHALEERP-644): 폐점을 맡은 쪽이 폐점 전에 묻는다. 보정할 수 있는 3개월 안의 퇴근 없는 출근, 가려진 직원은 줄 없이 수만 `hiddenCount`(2026-11-03 재영), 범위 밖 404.
 * **Update**: [Attendance](/api/attendance.md) — 직원 앱 출근에서 폐점한 근무지를 422 `STORE_CLOSED` 로 막는다(WHALEERP-643). 화면 `checkInBlock` 도 계약보다 먼저 `STORE_CLOSED` 를 싣는다. 퇴근은 그대로 받는다(폐점 전에 연 출근을 닫아야 한다).

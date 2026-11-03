@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T06:36:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T06:55:31Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: store-closing-check
     resource: ../../src/staff-members/store-closing-check.ts
     title: storeClosingCheck — 폐점 확인(WHALEERP-647, 읽기만)
-    last_modified: 2026-11-03T06:36:31Z
+    last_modified: 2026-11-03T06:55:31Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
@@ -343,10 +343,10 @@ The permission (WHALEERP-586) is tested at both levels:
 
 # Checking before closing
 
-WHALEERP-647, 운영 정책 CTR-31. `storeClosingCheck(db, storeId, adminAccountId, now?)` is the separate pre-closing
+WHALEERP-647, 운영 정책 CTR-31. `storeClosingCheck(client, storeId, closedDate, now?)` (the inputs the work item names) is the separate pre-closing
 validation the section above leaves out — a plain function, read only, no route. 1팀 calls it from the store edit
 screen (`transitionCheck`), the closing confirmation popup and right before saving the closing inside its own
-transaction, passing the same `db` (PrismaService or the transaction) so all three see the same rows. Scope and
+transaction, passing the same `client` (PrismaService or the transaction) so all three see the same rows. Scope and
 permission are the caller's; whether to block the closing is the caller's decision too. Right before saving, call it
 before changing the store status and before `retireAllForStoreClosing` — after the retirement the contract and staff
 counts read 0, and on a closed 가맹 store consented staff are hidden too, so `first` may come back empty (the sum
@@ -356,15 +356,16 @@ It returns:
 
 - `openCheckIns: { count, hiddenCount, first }` — open check-ins of the store by the same rule as the admin
   open-check-in route (WHALEERP-644, shared `openCheckInsOf`: within the 3-month correction window, retired records
-  included). Staff hidden from the calling 관리자 (`hidesPersonalData` — 본사 역할 on a non-직영 store, unless the staff
-  consented and the store is not closed) are counted in `hiddenCount` only and never picked as `first` (2026-11-03 재영). Blocking must look at
+  included). Staff a 본사 역할 would not see (`hidesPersonalData` judged for 본사 역할 — on a non-직영 store, unless the staff
+  consented and the store is not closed) are counted in `hiddenCount` only and never picked as `first` — always, whoever calls, since the caller is not an input (2026-11-03 재영). Blocking must look at
   `count + hiddenCount`: a single retirement is blocked by an open check-in but `retireAllForStoreClosing` does not
   check, so this is the only place that catches it, and dropping the hidden ones would read as 0.
 - `endingContractCount` — 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 contracts of the staff the closing retires
   (what `finalize` ENDs).
 - `retiringStaffCount` — `EMPLOYED` records of the store minus draft-only 가입 전 records: the same set
-  `retireAllForStoreClosing` retires, so the confirmation number matches the result. The closing date does not change
-  either count (every employed record is retired; 체결 완료 contracts are never ENDed by retirement).
+  `retireAllForStoreClosing` retires, so the confirmation number matches the result. `closedDate` is taken like the
+  batch retirement's input but does not change either count today (every employed record is retired; 체결 완료
+  contracts are never ENDed by retirement).
 - `unconfirmedPayslipCount` — 작성 중 · 검토 중 payslips of the store. Retirement keeps payslips (PAY-4: the staff app
   shows sent ones for 3 years from creation, retired or not).
 
@@ -372,7 +373,7 @@ It reads without locks. A staff-app check-in that lands after the check but befo
 the account row, the batch retirement locks the staff row) can leave a retired person's open check-in at the closed
 store — a very short window, accepted as a risk; an 관리자 closes it by correction.
 
-A missing store or admin account throws Prisma's `PrismaClientKnownRequestError` (P2025) as is — the caller already resolved both.
+A missing store throws Prisma's `PrismaClientKnownRequestError` (P2025) as is — the caller already resolved it.
 
 # Dates
 

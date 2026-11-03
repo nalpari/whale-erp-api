@@ -19,8 +19,8 @@ const row = (
 
 describe('폐점 확인 storeClosingCheck (WHALEERP-647)', () => {
   const now = new Date('2026-11-03T01:00:00Z');
+  const closedDate = new Date('2026-11-03T00:00:00Z');
   const setup = (opts: {
-    role?: string;
     store?: { storeTypeCode: string; storeStatusCode: string };
     rows?: ReturnType<typeof row>[];
   }) => {
@@ -33,11 +33,6 @@ describe('폐점 확인 storeClosingCheck (WHALEERP-647)', () => {
           },
         ),
       },
-      adminAccount: {
-        findUniqueOrThrow: jest
-          .fn()
-          .mockResolvedValue({ roleTypeCode: opts.role ?? 'BM' }),
-      },
       attendanceRecord: {
         findMany: jest.fn().mockResolvedValue(opts.rows ?? []),
       },
@@ -47,7 +42,7 @@ describe('폐점 확인 storeClosingCheck (WHALEERP-647)', () => {
     };
     return {
       db,
-      run: () => storeClosingCheck(db as never, 7, 1, now),
+      run: () => storeClosingCheck(db as never, 7, closedDate, now),
     };
   };
   // 가린 직원(동의 없음)이 더 이르다
@@ -83,7 +78,7 @@ describe('폐점 확인 storeClosingCheck (WHALEERP-647)', () => {
     });
   });
 
-  it('본사 역할 — 가려진 직원은 첫 건으로 고르지 않고 hiddenCount 로만 센다', async () => {
+  it('본사 역할에게 가려지는 직원(미동의 가맹)은 부르는 관리자와 상관없이 첫 건으로 고르지 않고 hiddenCount 로만 센다', async () => {
     const { run } = setup({ rows });
     const { openCheckIns } = await run();
     expect(openCheckIns).toEqual({
@@ -99,16 +94,14 @@ describe('폐점 확인 storeClosingCheck (WHALEERP-647)', () => {
     });
   });
 
-  it('가리지 않는 역할 · 직영 점포는 가장 이른 것이 첫 건이다', async () => {
-    for (const opts of [
-      { role: 'PM' },
-      { store: { storeTypeCode: 'DIRECT', storeStatusCode: 'OPERATING' } },
-    ]) {
-      const { openCheckIns } = await setup({ ...opts, rows }).run();
-      expect(openCheckIns.count).toBe(2);
-      expect(openCheckIns.hiddenCount).toBe(0);
-      expect(openCheckIns.first?.name).toBe('나미동의');
-    }
+  it('직영 점포는 가리지 않는다 — 가장 이른 것이 첫 건이다', async () => {
+    const { openCheckIns } = await setup({
+      rows,
+      store: { storeTypeCode: 'DIRECT', storeStatusCode: 'OPERATING' },
+    }).run();
+    expect(openCheckIns.count).toBe(2);
+    expect(openCheckIns.hiddenCount).toBe(0);
+    expect(openCheckIns.first?.name).toBe('나미동의');
   });
 
   it('폐점한 가맹 점포면 동의한 직원도 가린다 — first 는 null, 합계는 그대로', async () => {
