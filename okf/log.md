@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-03
+* **Update**: [Contracts API](/api/contracts-api.md) · [My profile](/api/my-profile.md) · [Work schedules](/api/work-schedules.md) · [Employment contract batch](/api/employment-contract-batch.md) — 퇴직자 보존 기간 파기(WHALEERP-645, 파기 기준 노무사 · 법무 검토 확정 2026-11-03 재영): 퇴직 확정 레코드의 퇴직일 + 3년이 지나면(당일까지 남음, 한국 날짜) `contract-purge`(05:00)가 근로계약과 딸린 행 · 계약서 파일 · 그 계약에서 만든 근무스케줄(이력 · 알림 함께) · 근로계약 운영 알림을, `tax-profile-purge`(05:10)가 신고 정보와 이력을 지운다. `account-change-purge`(05:20)는 연결된 직원 레코드가 모두 퇴직하고 가장 늦은 퇴직일 + 3년이 지난 계정의 휴대전화번호 · 주소 이력만 지운다(김민식 2026-11-03). 급여명세서가 가리키는 계약이 있는 레코드는 통째로 건너뛰고 건수를 로그에 남긴다. 퇴직 처리 이력 · 다른 계약의 직전 계약 연결은 비우고, 알림톡 발송 기록은 그대로 둔다. 파일은 행보다 먼저 지우고, 실패하면 그 레코드부터 다음 날로 미룬다(한 번에 100 레코드). 마이그레이션 없음.
 * **Update**: [Attendance](/api/attendance.md) — 직원 앱 출근에서 폐점한 근무지를 422 `STORE_CLOSED` 로 막는다(WHALEERP-643). 화면 `checkInBlock` 도 계약보다 먼저 `STORE_CLOSED` 를 싣는다. 퇴근은 그대로 받는다(폐점 전에 연 출근을 닫아야 한다).
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) — api #231 리뷰 후속: 요청 로그 사본(`requestForLog`)을 허용 목록으로 바꿨다(알려진 칸만, 알림톡 `title` 은 있는지만 `********`). 되돌림이 덜 된 「스킴을 뗀 버튼」 설명을 전체 주소 기준으로, 소속 추가 템플릿은 등록할 때 같은 형식으로 고쳤다. 7101 근거는 관찰한 결과 한 건이고 전체 주소의 실제 발송 확인은 남은 일로 적었다.
 * **Update**: main 병합(api ponyta, main #233 까지): okf/log 충돌은 양쪽 기록을 살렸다.

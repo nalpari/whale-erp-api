@@ -4,7 +4,7 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
 tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T00:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T05:30:00Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
@@ -29,7 +29,7 @@ sources:
   - id: purge
     resource: ../../src/work-schedules/work-schedule-purge.ts
     title: 3년 보존 뒤 파기 배치 work-schedule-purge(#609)
-    last_modified: 2026-10-21T09:04:30Z
+    last_modified: 2026-11-03T05:30:00Z
   - id: plan
     resource: ../../docs/plans/2026-10-21-work-schedules.md
     title: 근무스케줄 API 계획 (#198, 2026-10-21 재영 결정 1~10 · Q1~Q3)
@@ -153,6 +153,7 @@ sources:
 - 세 문장이다: 대상을 `FOR UPDATE` 로 잠그고 → 그 ID 로 `work_schedule_histories`(외래키 RESTRICT) → 근무스케줄. 잠그기 전 스냅샷으로 이력을 지우면, 그사이 관리자가 고쳐 커밋한 이력을 놓쳐 근무스케줄 삭제가 23503 으로 배치째 실패한다. 관리자 쪽은 잠금을 기다렸다가 지워진 것을 보고 404 다. 지운 근무스케줄 수가 배치 로그(`work-schedule-purge RAN processed=…`)에 남는다.
 - 그 근무스케줄을 가리키는 저장 알림(`related_type = WORK_SCHEDULE`, 본문에 근무지 · 근무일 · 시각)도 발송 → 받는 사람 → 알림 순으로 같은 트랜잭션에서 지운다(Q13, 2026-10-21 재영 — 도입문의 파기와 같다). 「직원 알림함 14일」은 화면 표시 기간이지 행 보관 기간이 아니다. 묶음 알림은 첫 근무스케줄을 가리킨다.
 - 자정에 도는 다른 배치(퇴직 확정 · 도입문의 파기)와 겹치지 않게 03:00 이다.
+- 알림 → 이력 → 근무스케줄 삭제는 `deleteWorkSchedules` 로 떼어 두었다 — 퇴직자 근로계약 파기([Contracts API](/api/contracts-api.md), WHALEERP-645)가 그 계약에서 만든 근무스케줄(`source_contract_id`)을 잠근 뒤 이것으로 지운다.
 
 # Traps
 
