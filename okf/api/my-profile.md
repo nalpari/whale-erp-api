@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T09:00:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T05:30:00Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -79,6 +79,10 @@ sources:
     resource: ../../src/common/personal-data-mask.ts
     title: 주민등록번호 · 계좌번호 가림
     last_modified: 2026-10-20T05:01:41Z
+  - id: retiree-purge
+    resource: ../../src/staff-members/retiree-purge.ts
+    title: 신고 정보 · 계정 변경 이력 보존 기간 파기(WHALEERP-645)
+    last_modified: 2026-11-03T05:30:00Z
 ---
 
 # What it is
@@ -497,6 +501,25 @@ masked values only.
   RRN check is read in that same post-lock read. Checking existence first keeps the save from locking
   someone else's row.
 
+# Retention: 신고 정보 and 계정 변경 이력 (WHALEERP-645)
+
+Two daily jobs in `RetireePurgeScheduler`, each inside `runExclusive`, use the same date as
+[퇴직자 근로계약 파기](/api/contracts-api.md) (`retiredBefore` — 퇴직일 + 3년 당일까지 남고 다음 날, 한국 날짜).[^retiree-purge]
+
+- **`tax-profile-purge` (05:10, TAX-08)**: for 퇴직 확정 (`RETIRED`) records past the date, deletes
+  `staff_tax_profile_histories` then `staff_tax_profiles`. Payslips do not hold it back. 퇴직 예정 · 재직
+  records keep it; a withdrawn account follows the same rule (RET-07). Records are picked oldest 퇴직일 first and
+  the staff rows are taken `FOR NO KEY UPDATE` (like the 신고 정보 save and 퇴직 취소) in `staff_member_id`
+  order, the same order as a contract save (api #238 리뷰). The log counts staff records; at most 5000 per run.
+- **`account-change-purge` (05:20, RET-04)**: deletes an account's `PHONE` · `ADDRESS` rows of
+  `account_change_histories` when the account has at least one staff record (`staff_members.account_id`)
+  and every one of them is `RETIRED` with `retired_date` before the date — that is, the latest 퇴직일 + 3년
+  has passed (2026-11-03 김민식). An account with a 재직 or 퇴직 예정 record, or with no record at all, keeps
+  everything; `EMAIL` · `PASSWORD` · `BIRTH_DATE` rows always stay. The account row is taken `FOR UPDATE`
+  (the 주소 수정 lock), and the delete checks the membership rule again — a join committed while it waited
+  is seen by that later statement. The log counts deleted rows; at most 5000 accounts per run.
+
+[^retiree-purge]: 신고 정보 · 계정 변경 이력 보존 기간 파기(WHALEERP-645)
 [^my-profile-service]: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
 [^my-address-service]: MyAddressService — 주소 수정과 이력(WHALEERP-189)
 [^my-password-service]: MyPasswordService — 지금 비밀번호 확인 뒤 변경(WHALEERP-192)

@@ -1194,6 +1194,10 @@ CREATE INDEX "notification_deliveries_notification_recipient_id_idx" ON "notific
 CREATE INDEX "notifications_related_type_related_id_idx" ON "notifications" ("related_type", "related_id");
 CREATE INDEX "notification_template_histories_notification_template_id_idx" ON "notification_template_histories" ("notification_template_id");
 CREATE INDEX "staff_member_retirement_logs_staff_member_id_processed_at_idx" ON "staff_member_retirement_logs" ("staff_member_id", "processed_at");
+CREATE INDEX "payslips_contract_id_idx" ON "payslips" ("contract_id");
+CREATE INDEX "work_schedules_source_contract_id_idx" ON "work_schedules" ("source_contract_id");
+CREATE INDEX "contracts_previous_contract_id_idx" ON "contracts" ("previous_contract_id");
+CREATE INDEX "staff_member_retirement_logs_contract_id_idx" ON "staff_member_retirement_logs" ("contract_id");
 CREATE INDEX "password_reset_links_account_id_idx" ON "password_reset_links" ("account_id");
 CREATE INDEX "email_find_attempts_phone_key_attempted_at_idx" ON "email_find_attempts" ("phone_key", "attempted_at");
 CREATE INDEX "invitation_code_attempts_phone_key_attempted_at_idx" ON "invitation_code_attempts" ("phone_key", "attempted_at");
