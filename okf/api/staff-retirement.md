@@ -4,12 +4,12 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-03T06:20:00Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-03T06:18:00Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
     title: RetirementService (preview · retire · changeDate · cancel · retireDue · retireAllForStoreClosing)
-    last_modified: 2026-11-03T06:20:00Z
+    last_modified: 2026-11-03T06:18:00Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
@@ -122,7 +122,7 @@ in the past: they still work today.
 
 # Closing a store retires everyone at once
 
-WHALEERP-646, decided 2026-11-03 (노영주). `RetirementService.retireAllForStoreClosing(tx, storeId, adminAccountId, closedDate, now?)`
+WHALEERP-646, decided 2026-11-03 (노영주). `RetirementService.retireAllForStoreClosing(tx, storeIds, adminAccountId, closedDate, now?)`
 returns `{ retired, skipped }`. It is a method only — no route, no DTO, no migration —
 and `StaffMembersModule` already exports the service. 1팀 calls it from the 폐점 transaction
 (`StoreManagementService.update`) and from the BP-withdrawal forced closing, passing the
@@ -148,10 +148,14 @@ Policy:
    (`assertDateAllowed`) is not applied; a hired date after the closing date is fine
    (WHALEERP-613).
 5. Only `EMPLOYED` records of the store are selected and locked one by one, in ascending
-   `staff_member_id` order, by the staff row alone (`FOR NO KEY UPDATE`; `lockStaffRowOnly`).
+   `staff_member_id` order across all given stores, by the staff row alone (`FOR NO KEY UPDATE`; `lockStaffRowOnly`).
    The account row is **not** locked — no account data changes here (`retire` / `changeDate` /
    `cancel` still use `lockStaff`, staff row then account row). The ascending order only
-   covers staff of the same store; it does not protect against other lock orders (see below).
+   is global across `storeIds`; other lock orders are covered by the usage conditions below.
+   `storeIds` may be empty (no-op, `{0,0}`) or contain duplicates (ignored); `closedDate` is
+   normalized to the KST date (`kstToday`). `skipped` = records that turned RETIRED or were
+   draft-only 가입 전 after the lock, plus finalizes that returned false; records not employed
+   from the start are not selected and not counted.
 
 Because the batch's conditional update sees the record already RETIRED, `retireDue` run the
 next day processes none of them again.
@@ -164,10 +168,17 @@ next day processes none of them again.
   store is locked deadlocks (`40P01`).
 - (b) The open-check-in validation is **not** done here; it belongs to the caller or the
   separate pre-closing validation method.
-- The closing path's `assertNoContracts` must no longer block on 체결 완료
-  contracts, otherwise a store with staff on signed contracts can never close. Retirement leaves
-  signed contracts as they are (see above), so the guard has to look at something else or let
-  them through.
+- (c) The 폐점's in-progress-contract check (`assertNoContracts` — 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 ·
+  체결 완료) must not be used as a blocking condition for closing: this method ends the
+  pending contracts by finalizing the retirement. Only the 임시저장 contracts of a 가입 전
+  record that has nothing but drafts stay (it is skipped).
+- (d) Closing can exceed Prisma's default `$transaction` timeout of 5 seconds (a store with many
+  staff, a BP withdrawal), so call it with a larger `timeout` option.
+- (e) BP withdrawal passes **all stores it closes in one call** (`storeIds`) — splitting
+  per store makes the locks not follow the global `staff_member_id` order, and can deadlock with
+  e.g. the daily contract batch.
+- Accepted risk (2026-11-03 노영주): an employed record created between the target query and
+  the staff lock may not be retired — a very short gap.
 
 # An open check-in blocks retirement
 

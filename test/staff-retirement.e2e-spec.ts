@@ -912,11 +912,11 @@ describe('퇴직 처리 (e2e, DB)', () => {
   });
 
   describe('점포 폐점 일괄 퇴직 (WHALEERP-646)', () => {
-    const closingTx = (closingStoreId: number, closedDate: Date) =>
+    const closingTx = (closingStoreIds: number[], closedDate: Date) =>
       prisma.$transaction((tx) =>
         retirement.retireAllForStoreClosing(
           tx,
-          closingStoreId,
+          closingStoreIds,
           adminId,
           closedDate,
         ),
@@ -983,8 +983,8 @@ describe('퇴직 처리 (e2e, DB)', () => {
       const todoId = await personalTodo(noDate, false, closing);
       const otherSchedule = await scheduleOn(other, day(1));
 
-      await expect(closingTx(closing, day(0))).resolves.toEqual({
-        // 이미 퇴직한 직원은 조회하지 않으니 건너뜀은 임시저장만 있는 가입 전 레코드 하나다
+      await expect(closingTx([closing], day(0))).resolves.toEqual({
+        // skipped: 임시저장만 있는 가입 전 레코드 하나. 처음부터 퇴직이라 조회되지 않은 직원은 세지 않는다
         retired: 4,
         skipped: 1,
       });
@@ -1105,6 +1105,46 @@ describe('퇴직 처리 (e2e, DB)', () => {
           where: { staffMemberId: later },
         }),
       ).toBe(2);
+    });
+
+    it('여러 점포를 한 번 호출로 닫는다 — 점포마다 나누지 않고, 닫는 점포가 아닌 직원은 건드리지 않는다', async () => {
+      const mk = async () => {
+        const n = randomInt(100_000, 999_999);
+        const { storeId: id } = await prisma.store.create({
+          data: {
+            storeCode: `ST${n}`,
+            bpCodeId,
+            storeTypeCode: 'DIRECT',
+            name: '폐점 테스트 점포',
+            storeStatusCode: 'OPERATING',
+          },
+        });
+        closingStoreIds.push(id);
+        return id;
+      };
+      const [a, b] = [await mk(), await mk()];
+      const inA = await createStaff('JOINED', null, a);
+      const inB = await createStaff('JOINED', null, b);
+      const outside = await createStaff('JOINED', null, storeId);
+
+      await expect(
+        // 시각이 섞인 폐점일(한국 오늘 정오)도 한국 날짜로 맞춰진다
+        closingTx([a, b, a], new Date(day(0).getTime() + 3 * 3_600_000)),
+      ).resolves.toEqual({ retired: 2, skipped: 0 });
+
+      expect(await staffOf(inA)).toMatchObject({
+        employmentStatus: 'RETIRED',
+        retiredDate: day(0),
+      });
+      expect(await staffOf(inB)).toMatchObject({
+        employmentStatus: 'RETIRED',
+        retiredDate: day(0),
+      });
+      expect((await staffOf(outside)).employmentStatus).toBe('EMPLOYED');
+      await expect(closingTx([], day(0))).resolves.toEqual({
+        retired: 0,
+        skipped: 0,
+      });
     });
   });
 

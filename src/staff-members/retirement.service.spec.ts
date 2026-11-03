@@ -321,7 +321,7 @@ describe('RetirementService', () => {
   describe('점포 폐점 일괄 퇴직 retireAllForStoreClosing (WHALEERP-646)', () => {
     const closed = date('2026-10-08');
     const run = () =>
-      service.retireAllForStoreClosing(prisma as never, 10, 1, closed, now);
+      service.retireAllForStoreClosing(prisma as never, [10], 1, closed, now);
     /** 직원 id 별로 잠근 뒤 읽는 값을 정한다. */
     const members = (byId: Record<number, Record<string, unknown>>) => {
       prisma.staffMember.findMany.mockResolvedValue(
@@ -343,7 +343,7 @@ describe('RetirementService', () => {
 
       expect(prisma.staffMember.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { storeId: 10, employmentStatus: 'EMPLOYED' },
+          where: { storeId: { in: [10] }, employmentStatus: 'EMPLOYED' },
           orderBy: { staffMemberId: 'asc' },
         }),
       );
@@ -356,7 +356,7 @@ describe('RetirementService', () => {
 
       expect(prisma.staffMember.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { storeId: 10, employmentStatus: 'EMPLOYED' },
+          where: { storeId: { in: [10] }, employmentStatus: 'EMPLOYED' },
         }),
       );
       const queries = (prisma.$queryRaw.mock.calls as [string[]][]).map(
@@ -366,6 +366,73 @@ describe('RetirementService', () => {
       expect(queries[0]).toContain('staff_members');
       expect(queries[0]).toContain('FOR NO KEY UPDATE');
       expect(queries.join()).not.toContain('accounts');
+    });
+
+    it('여러 점포를 한 번에 받는다 — 중복 id 는 한 번만, 빈 배열이면 아무것도 하지 않는다', async () => {
+      await expect(
+        service.retireAllForStoreClosing(prisma as never, [], 1, closed, now),
+      ).resolves.toEqual({ retired: 0, skipped: 0 });
+      expect(prisma.staffMember.findMany).not.toHaveBeenCalled();
+
+      await service.retireAllForStoreClosing(
+        prisma as never,
+        [12, 10, 12],
+        1,
+        closed,
+        now,
+      );
+
+      expect(prisma.staffMember.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            storeId: { in: [12, 10] },
+            employmentStatus: 'EMPLOYED',
+          },
+          orderBy: { staffMemberId: 'asc' },
+        }),
+      );
+    });
+
+    it('폐점일에 시각이 섞여 들어와도 한국 날짜(00:00Z)로 맞춘다', async () => {
+      members({ 2: {} });
+
+      // UTC 10/07 16:30 = 한국 10/08 01:30
+      await service.retireAllForStoreClosing(
+        prisma as never,
+        [10],
+        1,
+        new Date('2026-10-07T16:30:00Z'),
+        now,
+      );
+
+      expect(prisma.staffMember.update).toHaveBeenCalledWith({
+        where: { staffMemberId: 2 },
+        data: { retiredDate: closed },
+      });
+      expect(finalize).toHaveBeenCalledWith(
+        prisma,
+        2,
+        closed,
+        expect.anything(),
+      );
+    });
+
+    it('skipped 는 잠근 뒤 퇴직이었거나 임시저장만 있는 가입 전이라 건너뛴 수 + 확정이 false 인 수다', async () => {
+      members({
+        2: { employmentStatus: 'RETIRED' },
+        3: { joinStatus: 'DRAFT' },
+        4: {},
+        5: {},
+      });
+      prisma.contract.count.mockImplementation(
+        ({ where }: { where: { staffMemberId: number } }) =>
+          Promise.resolve(where.staffMemberId === 3 ? 0 : 1),
+      );
+      finalize.mockImplementation((_tx, id: number) =>
+        Promise.resolve(id !== 5),
+      );
+
+      await expect(run()).resolves.toEqual({ retired: 1, skipped: 3 });
     });
 
     it('열린 출근을 검사하지 않는다 (2026-11-03)', async () => {
