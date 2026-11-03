@@ -12,6 +12,7 @@ import {
   purgeRetiredTaxProfiles,
 } from '../src/staff-members/retiree-purge';
 import { STORAGE } from '../src/storage/storage.module';
+import { StorageService } from '../src/storage/storage.service';
 
 // 퇴직자 근로계약 · 신고 정보 · 계정 변경 이력 파기(WHALEERP-645)를 실제 DB 로 확인한다 — 외래키(모두 RESTRICT)가 지우는
 // 순서를 막지 않는지, 급여명세서가 가리키는 레코드는 건너뛰는지, 퇴직일 + 3년 당일 · 퇴직 예정은 남는지. 목으로는 쿼리
@@ -162,19 +163,22 @@ describe('퇴직자 보존 기간 파기 (e2e, DB)', () => {
     const expired = await staff(accountA, expiredRetired);
     const first = await contract(expired);
     const renewal = await contract(expired, first);
+    // 파기는 저장소 키 형식(newKey)이 아닌 파일이 있는 레코드를 미룬다 — 실제 키 모양으로 만든다
+    const firstKey = StorageService.newKey('contracts', first, 'PDF');
+    const renewalKey = StorageService.newKey('contracts', renewal, 'PDF');
     await prisma.contractDocument.createMany({
       data: [
         {
           contractId: first,
           kind: 'PAPER_EMPLOYMENT_CONTRACT',
-          storageKey: `contracts/${first}/a.pdf`,
+          storageKey: firstKey,
           fileName: 'a.pdf',
           checksum: 'a',
         },
         {
           contractId: renewal,
           kind: 'WAGE_CONTRACT',
-          storageKey: `contracts/${renewal}/b.pdf`,
+          storageKey: renewalKey,
           fileName: 'b.pdf',
           checksum: 'b',
         },
@@ -290,10 +294,10 @@ describe('퇴직자 보존 기간 파기 (e2e, DB)', () => {
 
     // 건수는 일회용 DB 에 앞선 실행이 남긴 행까지 센다 — 아래에서 이 테스트의 행으로 본다
     expect(contracts.ran).toBe(true);
-    expect(storage.delete).toHaveBeenCalledWith(`contracts/${first}/a.pdf`, {
+    expect(storage.delete).toHaveBeenCalledWith(firstKey, {
       thumbnail: false,
     });
-    expect(storage.delete).toHaveBeenCalledWith(`contracts/${renewal}/b.pdf`, {
+    expect(storage.delete).toHaveBeenCalledWith(renewalKey, {
       thumbnail: false,
     });
     const gone = { contractId: { in: [first, renewal] } };

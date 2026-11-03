@@ -22,7 +22,7 @@ export function retiredBefore(now: Date = new Date()): Date {
 /**
  * 퇴직일로부터 3년이 지난 직원 레코드의 신고 정보와 신고 정보 이력을 지운다(TAX-08, WHALEERP-645). 퇴직 확정이 된
  * 레코드(RETIRED)만 본다 — 퇴직일만 잡힌 퇴직 예정(EMPLOYED)은 남는다. 계정이 탈퇴해도 같은 기준이다(RET-07).
- * 직원 레코드를 퇴직 취소 · 신고 정보 저장과 같은 잠금(FOR NO KEY UPDATE)으로 잡고 지운다 — 그사이 퇴직이 취소되면
+ * 직원 레코드를 퇴직 취소 · 신고 정보 저장과 같은 잠금(FOR NO KEY UPDATE)으로, id 순으로 잡고 지운다 — 그사이 퇴직이 취소되면
  * 기다렸다가 새 스냅샷에서 빠진다. 신고 정보를 지운 직원 레코드 수를 돌려준다(배치 로그).
  */
 export async function purgeRetiredTaxProfiles(
@@ -30,13 +30,19 @@ export async function purgeRetiredTaxProfiles(
   now: Date = new Date(),
 ): Promise<number> {
   const before = retiredBefore(now);
+  // 퇴직일이 이른 순으로 고르되 직원 행은 id 순으로 잠근다 — 계약 등록(lockStaffForReplace) · 하루 배치와 같은 순서라 교착하지
+  // 않는다(api #238 리뷰). 잠근 뒤 바깥 조건(퇴직 · 기준 날짜)을 다시 본다.
   const targets = await tx.$queryRaw<{ id: number }[]>`
     SELECT s.staff_member_id AS id FROM staff_members s
-    WHERE s.employment_status = 'RETIRED' AND s.retired_date < ${before}::date
-      AND (EXISTS (SELECT 1 FROM staff_tax_profiles p WHERE p.staff_member_id = s.staff_member_id)
-        OR EXISTS (SELECT 1 FROM staff_tax_profile_histories h WHERE h.staff_member_id = s.staff_member_id))
-    ORDER BY s.retired_date, s.staff_member_id
-    LIMIT ${PURGE_BATCH_SIZE}
+    WHERE s.staff_member_id IN (
+        SELECT t.staff_member_id FROM staff_members t
+        WHERE t.employment_status = 'RETIRED' AND t.retired_date < ${before}::date
+          AND (EXISTS (SELECT 1 FROM staff_tax_profiles p WHERE p.staff_member_id = t.staff_member_id)
+            OR EXISTS (SELECT 1 FROM staff_tax_profile_histories h WHERE h.staff_member_id = t.staff_member_id))
+        ORDER BY t.retired_date, t.staff_member_id
+        LIMIT ${PURGE_BATCH_SIZE})
+      AND s.employment_status = 'RETIRED' AND s.retired_date < ${before}::date
+    ORDER BY s.staff_member_id
     FOR NO KEY UPDATE OF s
   `;
   if (targets.length === 0) return 0;

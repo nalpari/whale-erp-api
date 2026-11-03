@@ -1205,29 +1205,41 @@ only — a 종이 계약 has no body.
   2월 29일 퇴직은 3년 뒤 2월 28일까지). 퇴직 예정 (still `EMPLOYED` with a date) and 재직 records keep their
   contracts. A withdrawn account changes nothing (RET-07). The staff record itself stays.
 - **Unit is the staff record**: all of its contracts go together, so a 재계약 chain is never half cut.
-  At most 100 records per run (`CONTRACT_PURGE_BATCH_SIZE`, smaller than the other purges' 5000 because
-  files are deleted inside the 60-second transaction); the rest go the next day.
+  At most 100 records are deleted per run (`CONTRACT_PURGE_BATCH_SIZE`, smaller than the other purges' 5000
+  because files are deleted inside the 60-second transaction); the rest go the next day. With no storage
+  configured the job does nothing (`contract purge SKIPPED_NO_STORAGE`, like the 일괄 저장 file purge).
 - **급여명세서 blocks a record** (2026-11-03 김민식): `payslips.contract_id` is NOT NULL · RESTRICT and
   payslips are another area (생성일 + 3년, RET-02), so a record with any contract a payslip points at is
   skipped whole, every day, until the payslips are gone. Such records are left out of the pick (they
-  never fill the 100) and counted in the log `contract purge SKIPPED_PAYSLIP staff=N`. **No payslip purge
-  exists yet** — until one is built, a 퇴직자 who ever got a payslip keeps the contracts.
-- **Locks**: staff rows `FOR NO KEY UPDATE` (same as 퇴직 취소 · contract writes), then the contract rows
-  `FOR UPDATE`, then payslips are read again. The rows that point at the contracts (work schedules,
-  retirement logs, other contracts' `previous_contract_id`) are locked too, all before any file is deleted,
-  so nothing after the files waits on someone else's transaction except the notification rows (short writes
-  such as 읽음 only). The four columns that point at a contract are indexed
-  (`20261103061553_team3_contract_reference_indexes`), so neither the RESTRICT checks nor these locks scan whole
-  tables — a payslip committed before the lock drops that record
-  instead of failing the batch with 23503 (logged as `SKIPPED_PAYSLIP_AFTER_LOCK staff=N`).
-- **Files first**: every `contract_documents.storage_key` of a record is deleted from storage
-  (`{ thumbnail: false }`) before any row. A record whose delete fails (or that has files while no storage
-  is configured) waits for the next day and the next record goes on — only the locked contracts' files are
-  picked, and records without files are deleted even after the time cap (`contract purge FILES_DEFERRED
-  staff=…`) — one key that always fails does not block the rest. Once 25 seconds have passed since the run
-  started (`FILE_DELETE_BUDGET_MS`), the remaining records wait too, so a slow or stuck S3 (25-second
-  deadline per delete) still leaves time to delete the rows and commit inside the 60 seconds. A rollback after files are gone
-  leaves rows whose files are missing; the next run deletes them again (S3 treats a missing key as success).
+  never fill the 100) and counted in the log `contract purge SKIPPED_PAYSLIP staff=N`. The payslip purge is
+  a separate follow-up under WHALEERP-323 — until it exists, a 퇴직자 who ever got a payslip keeps the contracts.
+- **Pick in 퇴직일 order, lock in id order** (api #238 리뷰): records are picked oldest 퇴직일 first without a
+  lock, then the staff rows are locked `FOR NO KEY UPDATE` in `staff_member_id` order — the order
+  `lockStaffForReplace` and the daily contract batch use, so it cannot deadlock with a contract save — and
+  퇴직 · the date are checked again under the lock. Then the contract rows `FOR UPDATE`, then payslips are read
+  again: a payslip committed before the lock drops that record instead of failing the batch with 23503
+  (`SKIPPED_PAYSLIP_AFTER_LOCK staff=N`). The rows that point at the contracts (work schedules, retirement
+  logs, other contracts' `previous_contract_id`) are locked too, all before any file is deleted, so nothing
+  after the files waits on someone else's transaction except the notification rows (short writes such as 읽음
+  only). The four columns that point at a contract are indexed
+  (`20261103061553_team3_contract_reference_indexes`), so neither the RESTRICT checks nor these locks scan
+  whole tables.
+- **A deferred record does not hold the window** (api #238 리뷰): a record whose files could not be deleted
+  is not picked again in the same run, and the run picks the next 퇴직자 until 100 records are deleted, no
+  candidate is left, or the time cap is reached. So records that always fail (however many) cannot stop the
+  records behind them; they are tried again first the next day and logged each time.
+- **Files first**: the locked contracts' `contract_documents.storage_key`s are deleted from storage
+  (`{ thumbnail: false }`) record by record, in 퇴직일 order, before any row.
+  - Every key of a record is checked first (`StorageService.isStoredKey`); if any is not a stored key the
+    record is deferred with **no** file deleted — a record that always fails never sits with part of its files
+    gone (`contract purge FILES_DEFERRED staff=…`, an error that needs a person).
+  - A delete that fails (S3 trouble) defers that record and the next goes on. Some of its files may already be
+    gone while the rows remain, so 내려받기 of those files fails until the next successful run deletes the rest
+    (S3 treats a missing key as success) — a transient failure heals the next day.
+  - Once 25 seconds have passed since the run started (`FILE_DELETE_BUDGET_MS`), records with files wait for
+    the next day (records without files are still deleted) and no more are picked, so a slow or stuck S3
+    (25-second deadline per delete) still leaves time to delete the rows and commit inside the 60 seconds. A
+    rollback after files are gone leaves rows whose files are missing; the next run deletes them again.
 - **What else goes, in order** (2026-11-03 김민식): work schedules made from those contracts
   (`work_schedules.source_contract_id` — already past their own 생성일 + 3년) with their history and
   `WORK_SCHEDULE` notifications (`deleteWorkSchedules`, the same order as `work-schedule-purge`, after

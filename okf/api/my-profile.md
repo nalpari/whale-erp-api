@@ -508,8 +508,9 @@ Two daily jobs in `RetireePurgeScheduler`, each inside `runExclusive`, use the s
 
 - **`tax-profile-purge` (05:10, TAX-08)**: for 퇴직 확정 (`RETIRED`) records past the date, deletes
   `staff_tax_profile_histories` then `staff_tax_profiles`. Payslips do not hold it back. 퇴직 예정 · 재직
-  records keep it; a withdrawn account follows the same rule (RET-07). The staff rows are taken
-  `FOR NO KEY UPDATE` like the 신고 정보 save and 퇴직 취소. The log counts staff records; at most 5000 per run.
+  records keep it; a withdrawn account follows the same rule (RET-07). Records are picked oldest 퇴직일 first and
+  the staff rows are taken `FOR NO KEY UPDATE` (like the 신고 정보 save and 퇴직 취소) in `staff_member_id`
+  order, the same order as a contract save (api #238 리뷰). The log counts staff records; at most 5000 per run.
 - **`account-change-purge` (05:20, RET-04)**: deletes an account's `PHONE` · `ADDRESS` rows of
   `account_change_histories` when the account has at least one staff record (`staff_members.account_id`)
   and every one of them is `RETIRED` with `retired_date` before the date — that is, the latest 퇴직일 + 3년

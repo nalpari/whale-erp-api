@@ -55,6 +55,9 @@ describe('purgeRetiredTaxProfiles', () => {
     expect(sql).toContain("employment_status = 'RETIRED'");
     expect(sql).toContain('retired_date <');
     expect(sql).toContain('FOR NO KEY UPDATE');
+    // 퇴직일 순으로 고르고 id 순으로 잠근다 — 계약 등록(lockStaffForReplace)과 같은 잠금 순서(api #238 리뷰)
+    expect(sql).toContain('ORDER BY t.retired_date, t.staff_member_id');
+    expect(sql).toMatch(/ORDER BY s\.staff_member_id\s+FOR NO KEY UPDATE OF s/);
     expect(call).toContainEqual(new Date('2023-11-04T00:00:00.000Z'));
     expect(call).toContain(5000);
     const where = { where: { staffMemberId: { in: [3, 8] } } };

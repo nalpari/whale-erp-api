@@ -1,15 +1,32 @@
 import { Test } from '@nestjs/testing';
 import type { Prisma } from '@prisma/client';
 import { BatchLockService } from '../batch/batch-lock.service';
-import type { StorageService } from '../storage/storage.service';
+import { StorageService } from '../storage/storage.service';
 import {
+  CONTRACT_PURGE_BATCH_SIZE,
   ContractPurgeScheduler,
   ContractPurgeService,
   FILE_DELETE_BUDGET_MS,
 } from './contract-purge';
 
 type Locked = { id: number; staffMemberId: number };
+type Doc = { storageKey: string; contract: { staffMemberId: number } };
 
+const keys = new Map<number, string>();
+const keyOf = (contractId: number) => {
+  if (!keys.has(contractId))
+    keys.set(contractId, StorageService.newKey('contracts', contractId, 'PDF'));
+  return keys.get(contractId) as string;
+};
+const docOf = (contractId: number, staffMemberId: number): Doc => ({
+  storageKey: keyOf(contractId),
+  contract: { staffMemberId },
+});
+
+/**
+ * $queryRaw 는 SQL 모양으로 가려 답한다 — 대상 고르기(퇴직일 순, 이미 본 레코드 빼기 · 남은 수 LIMIT) · 직원 잠금 · 계약 잠금 ·
+ * 근무스케줄 잠금. 그 밖의 잠금은 빈 배열.
+ */
 const mockTx = ({
   staff = [1, 2],
   locked = [
@@ -19,31 +36,71 @@ const mockTx = ({
   ] as Locked[],
   skipped = 0,
   payslipStaff = [] as number[],
-  documents = [
-    { storageKey: 'contracts/10/a.pdf', contract: { staffMemberId: 1 } },
-    { storageKey: 'contracts/20/b.pdf', contract: { staffMemberId: 2 } },
-  ],
+  documents = [docOf(10, 1), docOf(20, 2)],
   schedules = [{ id: 7, contractId: 10 }],
 } = {}) => {
-  const $queryRaw = jest
-    .fn()
-    .mockResolvedValueOnce([{ skipped }])
-    .mockResolvedValueOnce(staff.map((id) => ({ id })))
-    .mockResolvedValueOnce(locked)
-    .mockResolvedValueOnce(schedules)
-    .mockResolvedValueOnce([])
-    .mockResolvedValueOnce([]);
+  const $queryRaw = jest.fn(
+    (strings: TemplateStringsArray, ...values: unknown[]) => {
+      const sql = strings.join('?');
+      if (sql.includes('count(*)')) return Promise.resolve([{ skipped }]);
+      if (sql.includes('ORDER BY s.retired_date')) {
+        const [, tried, limit] = values as [Date, number[], number];
+        return Promise.resolve(
+          staff
+            .filter((id) => !tried.includes(id))
+            .slice(0, limit)
+            .map((id) => ({ id })),
+        );
+      }
+      if (sql.includes('FOR NO KEY UPDATE OF s')) {
+        const [picked] = values as [number[]];
+        return Promise.resolve(
+          [...picked].sort((a, b) => a - b).map((id) => ({ id })),
+        );
+      }
+      if (sql.includes('staff_member_id AS "staffMemberId" FROM contracts')) {
+        const [ids] = values as [number[]];
+        return Promise.resolve(
+          locked.filter((c) => ids.includes(c.staffMemberId)),
+        );
+      }
+      if (sql.includes('FROM work_schedules')) {
+        const [ids] = values as [number[]];
+        return Promise.resolve(
+          schedules.filter((s) => ids.includes(s.contractId)),
+        );
+      }
+      return Promise.resolve([]);
+    },
+  );
+  type InWhere = { where: { contractId: { in: number[] } } };
   return {
     $queryRaw,
     payslip: {
-      findMany: jest.fn().mockResolvedValue(
-        payslipStaff.map((staffMemberId) => ({
-          contract: { staffMemberId },
-        })),
+      findMany: jest.fn(({ where }: InWhere) =>
+        Promise.resolve(
+          locked
+            .filter(
+              (c) =>
+                where.contractId.in.includes(c.id) &&
+                payslipStaff.includes(c.staffMemberId),
+            )
+            .map((c) => ({ contract: { staffMemberId: c.staffMemberId } })),
+        ),
       ),
     },
     contractDocument: {
-      findMany: jest.fn().mockResolvedValue(documents),
+      findMany: jest.fn(({ where }: InWhere) =>
+        Promise.resolve(
+          documents.filter((d) =>
+            locked.some(
+              (c) =>
+                where.contractId.in.includes(c.id) &&
+                c.staffMemberId === d.contract.staffMemberId,
+            ),
+          ),
+        ),
+      ),
       deleteMany: jest.fn(),
     },
     notificationDelivery: { deleteMany: jest.fn() },
@@ -54,7 +111,9 @@ const mockTx = ({
     staffMemberRetirementLog: { updateMany: jest.fn() },
     contract: {
       updateMany: jest.fn(),
-      deleteMany: jest.fn().mockResolvedValue({ count: 3 }),
+      deleteMany: jest.fn(({ where }: InWhere) =>
+        Promise.resolve({ count: where.contractId.in.length }),
+      ),
     },
     contractStatusHistory: { deleteMany: jest.fn() },
     contractParty: { deleteMany: jest.fn() },
@@ -65,6 +124,14 @@ type Tx = ReturnType<typeof mockTx>;
 
 const NOW = new Date('2026-11-04T03:00:00Z');
 
+const sqlCalls = (tx: Tx) =>
+  tx.$queryRaw.mock.calls.map(([strings, ...values]) => ({
+    sql: strings.join('?'),
+    values,
+  }));
+const deletedContracts = (tx: Tx) =>
+  tx.contract.deleteMany.mock.calls.flatMap(([arg]) => arg.where.contractId.in);
+
 describe('ContractPurgeService.purgeRetiredContracts', () => {
   const setup = (storage: Pick<StorageService, 'delete'> | null) =>
     new ContractPurgeService(storage as StorageService | null);
@@ -74,44 +141,61 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
       tx as unknown as Prisma.TransactionClient,
       NOW,
     );
-  const sqlAt = (tx: Tx, i: number) =>
-    (tx.$queryRaw.mock.calls[i] as [TemplateStringsArray])[0].join('?');
+  const silence = (service: ContractPurgeService) => {
+    const logger = (
+      service as unknown as {
+        logger: { error: (m: string) => void; log: (m: string) => void };
+      }
+    ).logger;
+    return {
+      error: jest.spyOn(logger, 'error').mockImplementation(() => undefined),
+      log: jest.spyOn(logger, 'log').mockImplementation(() => undefined),
+    };
+  };
 
-  it('퇴직일 + 3년이 지난 퇴직 레코드를 잠그고, 파일 → 근무스케줄 · 알림 → 연결 비우기 → 딸린 행 → 계약 순으로 지운다', async () => {
+  it('퇴직일 + 3년이 지난 퇴직 레코드를 퇴직일 순으로 고르고 id 순으로 잠근 뒤, 파일 → 근무스케줄 · 알림 → 연결 비우기 → 딸린 행 → 계약 순으로 지운다', async () => {
     const storage = okStorage();
     const tx = mockTx();
     const count = await run(setup(storage), tx);
 
-    const staffCall = tx.$queryRaw.mock.calls[1] as unknown[];
-    const staffSql = sqlAt(tx, 1);
-    expect(staffSql).toContain("employment_status = 'RETIRED'");
-    expect(staffSql).toContain('retired_date <');
-    expect(staffSql).toContain(
+    const calls = sqlCalls(tx);
+    const pick = calls.find((c) => c.sql.includes('ORDER BY s.retired_date'));
+    expect(pick?.sql).toContain("employment_status = 'RETIRED'");
+    expect(pick?.sql).toContain('retired_date <');
+    expect(pick?.sql).toContain(
       'NOT EXISTS (SELECT 1 FROM contracts c JOIN payslips p',
     );
-    expect(staffSql).toContain('FOR NO KEY UPDATE OF s');
-    expect(staffCall).toContainEqual(new Date('2023-11-04T00:00:00.000Z'));
-    expect(staffCall).toContain(100);
-    expect(sqlAt(tx, 2)).toContain('FOR UPDATE');
-    expect(sqlAt(tx, 3)).toContain('source_contract_id');
+    expect(pick?.sql).not.toContain('FOR ');
+    expect(pick?.values).toEqual([
+      new Date('2023-11-04T00:00:00.000Z'),
+      [],
+      CONTRACT_PURGE_BATCH_SIZE,
+    ]);
+    // 잠금은 id 순 — 계약 등록(lockStaffForReplace)과 같은 순서
+    const lockStaff = calls.find((c) =>
+      c.sql.includes('FOR NO KEY UPDATE OF s'),
+    );
+    expect(lockStaff?.sql).toContain('ORDER BY s.staff_member_id');
+    expect(lockStaff?.sql).toContain("employment_status = 'RETIRED'");
     // 계약을 가리키는 행도 파일을 지우기 전에 잠근다
-    expect(sqlAt(tx, 4)).toContain('staff_member_retirement_logs');
-    expect(sqlAt(tx, 5)).toContain('previous_contract_id');
-    for (const i of [3, 4, 5]) expect(sqlAt(tx, i)).toContain('FOR UPDATE');
-    expect(tx.$queryRaw.mock.invocationCallOrder[5]).toBeLessThan(
+    const lastLock = calls.findIndex((c) =>
+      c.sql.includes('previous_contract_id = ANY'),
+    );
+    expect(calls[lastLock - 1].sql).toContain('staff_member_retirement_logs');
+    expect(calls[lastLock - 2].sql).toContain('FROM work_schedules');
+    expect(tx.$queryRaw.mock.invocationCallOrder[lastLock]).toBeLessThan(
       storage.delete.mock.invocationCallOrder[0],
     );
 
-    expect(storage.delete).toHaveBeenCalledWith('contracts/10/a.pdf', {
-      thumbnail: false,
-    });
-    expect(storage.delete).toHaveBeenCalledWith('contracts/20/b.pdf', {
-      thumbnail: false,
-    });
-    // 잠근 계약의 파일만 고른다
     expect(tx.contractDocument.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { contractId: { in: [10, 11, 20] } } }),
     );
+    expect(storage.delete).toHaveBeenCalledWith(keyOf(10), {
+      thumbnail: false,
+    });
+    expect(storage.delete).toHaveBeenCalledWith(keyOf(20), {
+      thumbnail: false,
+    });
     const ids = { in: [10, 11, 20] };
     expect(tx.workScheduleHistory.deleteMany).toHaveBeenCalledWith({
       where: { workScheduleId: { in: [7] } },
@@ -154,132 +238,176 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
     expect(count).toBe(3);
   });
 
-  it('잠근 뒤 급여명세서가 가리키는 계약이 보인 레코드는 통째로 건너뛴다', async () => {
+  it('잠근 뒤 급여명세서가 가리키는 계약이 보인 레코드는 통째로 건너뛰고 그 수를 남긴다', async () => {
     const storage = okStorage();
     const tx = mockTx({ payslipStaff: [1] });
-    await run(setup(storage), tx);
-    expect(tx.payslip.findMany).toHaveBeenCalledWith({
-      where: { contractId: { in: [10, 11, 20] } },
-      select: { contract: { select: { staffMemberId: true } } },
-    });
+    const service = setup(storage);
+    const { log } = silence(service);
+    await run(service, tx);
     expect(storage.delete).toHaveBeenCalledTimes(1);
-    expect(storage.delete).toHaveBeenCalledWith('contracts/20/b.pdf', {
+    expect(storage.delete).toHaveBeenCalledWith(keyOf(20), {
       thumbnail: false,
     });
-    expect(tx.contract.deleteMany).toHaveBeenCalledWith({
-      where: { contractId: { in: [20] } },
-    });
+    expect(deletedContracts(tx)).toEqual([20]);
+    expect(log).toHaveBeenCalledWith(
+      'contract purge SKIPPED_PAYSLIP_AFTER_LOCK staff=1',
+    );
   });
 
-  it('급여명세서 때문에 남은 레코드 수를 센다(대상 쿼리에서는 처음부터 빠진다)', async () => {
+  it('급여명세서 때문에 남은 레코드 수를 센다(대상 고르기에서는 처음부터 빠진다)', async () => {
     const tx = mockTx({ skipped: 2 });
     const service = setup(okStorage());
-    const log = jest
-      .spyOn(
-        (service as unknown as { logger: { log: (m: string) => void } }).logger,
-        'log',
-      )
-      .mockImplementation(() => undefined);
+    const { log } = silence(service);
     await run(service, tx);
-    expect(sqlAt(tx, 0)).toContain('count(*)');
+    expect(sqlCalls(tx)[0].sql).toContain('count(*)');
     expect(log).toHaveBeenCalledWith('contract purge SKIPPED_PAYSLIP staff=2');
   });
 
-  it('파일 삭제가 실패한 레코드만 다음 날로 미루고 뒤 레코드는 지운다 — 늘 실패하는 키 하나가 뒤를 막지 않게', async () => {
+  it('파일을 못 지워 미룬 레코드가 한 번에 지우는 수만큼 쌓여도 그 뒤 퇴직자를 더 골라 지운다 — 늘 실패하는 레코드가 창을 막지 않게', async () => {
+    const n = CONTRACT_PURGE_BATCH_SIZE;
+    const failing = Array.from({ length: n }, (_, i) => i + 1);
+    const good = n + 1;
+    const staff = [...failing, good];
+    const tx = mockTx({
+      staff,
+      locked: staff.map((id) => ({ id: id * 10, staffMemberId: id })),
+      // 저장소 키 형식이 아닌 파일 — 늘 같은 이유로 실패한다
+      documents: [
+        ...failing.map((id) => ({
+          storageKey: `legacy/${id}.pdf`,
+          contract: { staffMemberId: id },
+        })),
+        docOf(good * 10, good),
+      ],
+      schedules: [],
+    });
+    const storage = okStorage();
+    const service = setup(storage);
+    const { error } = silence(service);
+    await expect(run(service, tx)).resolves.toBe(1);
+    expect(deletedContracts(tx)).toEqual([good * 10]);
+    // 형식이 아닌 키는 하나도 지우지 않는다 — 파일 일부만 지워진 채 남지 않게
+    expect(storage.delete).toHaveBeenCalledTimes(1);
+    expect(storage.delete).toHaveBeenCalledWith(keyOf(good * 10), {
+      thumbnail: false,
+    });
+    expect(error).toHaveBeenCalledTimes(n);
+    // 두 번째 고르기는 이미 본 레코드를 빼고 남은 수만큼
+    const picks = sqlCalls(tx).filter((c) =>
+      c.sql.includes('ORDER BY s.retired_date'),
+    );
+    expect(picks[1].values[1]).toEqual(failing);
+    expect(picks[1].values[2]).toBe(n);
+  });
+
+  it('한 레코드에 형식이 아닌 키가 하나라도 있으면 그 레코드의 파일은 하나도 지우지 않는다', async () => {
+    const tx = mockTx({
+      staff: [1],
+      locked: [
+        { id: 10, staffMemberId: 1 },
+        { id: 11, staffMemberId: 1 },
+      ],
+      documents: [
+        docOf(10, 1),
+        { storageKey: 'legacy/11.pdf', contract: { staffMemberId: 1 } },
+      ],
+    });
+    const storage = okStorage();
+    const service = setup(storage);
+    const { error } = silence(service);
+    await expect(run(service, tx)).resolves.toBe(0);
+    expect(storage.delete).not.toHaveBeenCalled();
+    expect(tx.contract.deleteMany).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('FILES_DEFERRED staff=1'),
+    );
+  });
+
+  it('파일 삭제가 실패한 레코드만 다음 날로 미루고 뒤 레코드는 지운다 — 같은 실행에서 다시 고르지 않는다', async () => {
     const storage = {
       delete: jest
         .fn()
-        .mockRejectedValueOnce(new Error('저장소 키 형식이 아닙니다'))
-        .mockResolvedValueOnce(undefined),
+        .mockRejectedValueOnce(new Error('S3 down'))
+        .mockResolvedValue(undefined),
     };
     const tx = mockTx();
     const service = setup(storage);
-    jest
-      .spyOn(
-        (service as unknown as { logger: { error: (m: string) => void } })
-          .logger,
-        'error',
-      )
-      .mockImplementation(() => undefined);
+    silence(service);
     await run(service, tx);
     expect(storage.delete).toHaveBeenCalledTimes(2);
-    expect(tx.contract.deleteMany).toHaveBeenCalledWith({
-      where: { contractId: { in: [20] } },
-    });
+    expect(deletedContracts(tx)).toEqual([20]);
     // 미룬 레코드의 계약에서 만든 근무스케줄(7 ← 10)은 남는다
     expect(tx.workSchedule.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('파일 삭제가 시간 상한을 넘으면 남은 레코드는 다음 날로 미룬다 — 느리기만 한 저장소로 60초를 넘기지 않게', async () => {
+  it('파일 삭제가 시간 상한을 넘으면 파일이 있는 남은 레코드는 미루고 더 고르지 않는다', async () => {
     const clock = jest.spyOn(Date, 'now');
-    // 시작 0 → 첫 레코드 확인 0 → 둘째 레코드 확인 상한 + 1ms
+    // 시작 0 → 고르기 확인 0 → 첫 레코드 0 → 그 뒤로는 상한 + 1(둘째 레코드 · 다음 고르기 확인)
     clock
       .mockReturnValueOnce(0)
       .mockReturnValueOnce(0)
-      .mockReturnValueOnce(FILE_DELETE_BUDGET_MS + 1);
+      .mockReturnValueOnce(0)
+      .mockReturnValue(FILE_DELETE_BUDGET_MS + 1);
     const storage = okStorage();
     const tx = mockTx();
     const service = setup(storage);
-    const error = jest
-      .spyOn(
-        (service as unknown as { logger: { error: (m: string) => void } })
-          .logger,
-        'error',
-      )
-      .mockImplementation(() => undefined);
+    const { error } = silence(service);
     await run(service, tx);
     clock.mockRestore();
     expect(storage.delete).toHaveBeenCalledTimes(1);
-    expect(tx.contract.deleteMany).toHaveBeenCalledWith({
-      where: { contractId: { in: [10, 11] } },
-    });
+    expect(deletedContracts(tx)).toEqual([10, 11]);
     expect(error).toHaveBeenCalledWith(
       expect.stringContaining('FILES_DEFERRED staff=2'),
     );
+    expect(
+      sqlCalls(tx).filter((c) => c.sql.includes('ORDER BY s.retired_date')),
+    ).toHaveLength(1);
   });
 
   it('모든 레코드의 파일 삭제가 실패하면 아무 행도 지우지 않는다', async () => {
     const storage = { delete: jest.fn().mockRejectedValue(new Error('down')) };
     const tx = mockTx();
     const service = setup(storage);
-    jest
-      .spyOn(
-        (service as unknown as { logger: { error: (m: string) => void } })
-          .logger,
-        'error',
-      )
-      .mockImplementation(() => undefined);
+    silence(service);
     await expect(run(service, tx)).resolves.toBe(0);
     expect(tx.contract.deleteMany).not.toHaveBeenCalled();
     expect(tx.notification.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('파일이 없는 레코드는 저장소 없이도 지운다', async () => {
+  it('파일이 없는 레코드는 파일 삭제 없이 지운다', async () => {
+    const storage = okStorage();
     const tx = mockTx({ documents: [] });
-    await expect(run(setup(null), tx)).resolves.toBe(3);
+    await expect(run(setup(storage), tx)).resolves.toBe(3);
+    expect(storage.delete).not.toHaveBeenCalled();
   });
 
-  it('저장소 설정이 없으면 파일이 있는 레코드만 미룬다', async () => {
-    const tx = mockTx({
-      documents: [
-        { storageKey: 'contracts/20/b.pdf', contract: { staffMemberId: 2 } },
-      ],
-    });
+  it('파일은 퇴직일 순(고른 순서)으로 지운다 — 잠금만 id 순', async () => {
+    const storage = okStorage();
+    const tx = mockTx({ staff: [2, 1] });
+    await run(setup(storage), tx);
+    expect(storage.delete.mock.calls.map(([key]) => key as string)).toEqual([
+      keyOf(20),
+      keyOf(10),
+    ]);
+    const lockStaff = sqlCalls(tx).find((c) =>
+      c.sql.includes('FOR NO KEY UPDATE OF s'),
+    );
+    expect(lockStaff?.values[0]).toEqual([2, 1]);
+  });
+
+  it('저장소 설정이 없으면 아무것도 하지 않는다', async () => {
+    const tx = mockTx();
     const service = setup(null);
-    const error = jest
+    const warn = jest
       .spyOn(
-        (service as unknown as { logger: { error: (m: string) => void } })
+        (service as unknown as { logger: { warn: (m: string) => void } })
           .logger,
-        'error',
+        'warn',
       )
       .mockImplementation(() => undefined);
-    await run(service, tx);
-    expect(tx.contract.deleteMany).toHaveBeenCalledWith({
-      where: { contractId: { in: [10, 11] } },
-    });
-    expect(error).toHaveBeenCalledWith(
-      expect.stringContaining('FILES_DEFERRED staff=2'),
-    );
+    await expect(run(service, tx)).resolves.toBe(0);
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('contract purge SKIPPED_NO_STORAGE');
   });
 
   it('지울 레코드가 없으면 아무것도 바꾸지 않는다', async () => {
