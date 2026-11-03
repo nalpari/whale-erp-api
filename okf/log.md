@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-02
+* **Update**: [BP masters](/api/bp-masters.md) — 삭제 막힘 사유 문구를 front 말풍선 문구 정리에 맞춰 고쳤다(사용자 지정, front staryu 짝): 「BP 마스터 계정으로 로그인한 이력이 있어 삭제할 수 없습니다.」 · 「하위 관리자 계정이 등록되어 있어 삭제할 수 없습니다.」. 탈퇴 · 등록 점포 사유와 판정은 그대로.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #230 리뷰 반영: 근로계약서 발송 알림톡의 보내기 직전 계약 재조회가 실패해도 던지지 않는다(저장은 이미 끝남 — 로그만). 동시 재발송은 대개 둘 다 나가고 두 탭 재발송은 `expectedSentAt`(409)이 막는다고 사실대로 고쳤다. 알림함 템플릿 `PUSH_CONTRACT_SENT` 를 끄면 알림톡도 끊긴다는 운영자 안내를 더했다.
 * **Update**: main 병합(api skrelp, main #229 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Contracts API](/api/contracts-api.md) · [Notification templates](/api/notification-templates.md) · [Operations notifications](/api/notifications-api.md) · [Staff members](/api/staff-members.md) · [Naming conventions](/conventions/naming.md) — 근로계약서 발송 알림톡(WHALEERP-619, 김민식 2026-11-02 — 카카오 등록본 기준): 가입한 직원에게 앱으로 보낼 때(저장 · 재발송 · 수정 요청 고쳐 다시 보냄) 알림함 `PUSH_CONTRACT_SENT` 와 같은 때 커밋 뒤 `TALK_STAFF_CONTRACT_SENT` 를 보낸다. 본문은 등록본 그대로(빈 줄 두 개), 버튼 · 링크 변수 없음, 카카오 템플릿 코드는 `PUSH_CONTRACT_SENT`(알림함 템플릿 코드와 글자만 같다). 수신 설정에서 근로계약서 묶음을 끄면 알림톡만 없다(`noticeStaff` 가 `'QUEUED'` · `'MUTED'` · `false` 를 돌려준다). 실패해도 저장은 200, 결과는 알림톡 발송 이력에만(직원 상세 발송 이력에는 싣지 않음). 48번째 기본 템플릿 마이그레이션 `20261102114500`(CRLF 체크아웃에서도 `\r` 없이, 등록본 전체 검증).
