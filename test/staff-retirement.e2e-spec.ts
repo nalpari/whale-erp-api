@@ -237,6 +237,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
       where: { ...byStaff, kind: 'CHECK_OUT' },
     });
     await prisma.attendanceRecord.deleteMany({ where: byStaff });
+    await prisma.invitation.deleteMany({ where: byStaff });
     await prisma.staffMember.deleteMany({ where: byStaff });
     await prisma.authSession.deleteMany({
       where: { accountId: { in: accountIds } },
@@ -317,7 +318,12 @@ describe('퇴직 처리 (e2e, DB)', () => {
 
   const contractOf = (
     staffMemberId: number,
-    status: 'SIGNED' | 'DRAFT' | 'PENDING_SEND' | 'PENDING_SIGNATURE',
+    status:
+      | 'SIGNED'
+      | 'DRAFT'
+      | 'PENDING_SEND'
+      | 'PENDING_SIGNATURE'
+      | 'CORRECTION_REQUESTED',
     startDate: Date,
     endDate: Date | null,
     store = storeId,
@@ -911,20 +917,10 @@ describe('퇴직 처리 (e2e, DB)', () => {
     });
   });
 
-  describe('점포 폐점 일괄 퇴직 (WHALEERP-646)', () => {
-    const closingTx = (closingStoreIds: number[], closedDate: Date) =>
-      prisma.$transaction((tx) =>
-        retirement.retireAllForStoreClosing(
-          tx,
-          closingStoreIds,
-          adminId,
-          closedDate,
-        ),
-      );
-
-    it('재직 직원을 폐점일로 바로 확정한다 — 로그 · 스케줄 · 대기 계약 · TO-DO 를 정리하고 다른 점포는 건드리지 않으며, 이어 배치를 돌려도 다시 처리하지 않는다', async () => {
+  describe('점포 폐점 순간의 퇴직 retireStore (WHALEERP-648)', () => {
+    const newClosingStore = async () => {
       const n = randomInt(100_000, 999_999);
-      const { storeId: closing } = await prisma.store.create({
+      const { storeId: id } = await prisma.store.create({
         data: {
           storeCode: `ST${n}`,
           bpCodeId,
@@ -933,13 +929,52 @@ describe('퇴직 처리 (e2e, DB)', () => {
           storeStatusCode: 'OPERATING',
         },
       });
-      closingStoreIds.push(closing);
+      closingStoreIds.push(id);
+      return id;
+    };
+    /** 1팀 폐점 api 와 같이 — 점포 행을 먼저 FOR UPDATE 로 잡은 트랜잭션 안에서 부른다. */
+    const closingTx = (closing: number, closedDate: Date) =>
+      prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT 1 FROM stores WHERE store_id = ${closing} FOR UPDATE`;
+        return retirement.retireStore(tx, closing, closedDate, adminId);
+      });
+    const invite = (
+      staffMemberId: number,
+      invitationType:
+        'SIGNUP' | 'REINVITE' | 'AFFILIATION_CONFIRM' | 'RETURN_CONFIRM',
+      status: 'SENT' | 'ACCEPTED' = 'SENT',
+    ) =>
+      prisma.invitation.create({
+        data: {
+          staffMemberId,
+          invitationType,
+          // 가입 초대 · 재초대는 토큰이 필요하다(CHECK)
+          invitationToken:
+            invitationType === 'SIGNUP' || invitationType === 'REINVITE'
+              ? `tok-${randomInt(10_000_000, 99_999_999)}-${randomInt(10_000_000, 99_999_999)}`
+              : null,
+          channel: 'ALIMTALK',
+          sentAt: new Date(),
+          expiresAt: addDays(today, 30),
+          status,
+        },
+      });
+    const statusOfInvitation = async (invitationId: number) =>
+      (await prisma.invitation.findUniqueOrThrow({ where: { invitationId } }))
+        .status;
+    const statusOfContract = async (contractId: number) =>
+      (await prisma.contract.findUniqueOrThrow({ where: { contractId } }))
+        .status;
+
+    it('폐점 순간에는 퇴직일 · 로그 · 대기 계약 · 초대만 정하고 확정하지 않는다 — 다음 날 배치가 확정하고 스케줄 · TO-DO 를 정리하며, 다른 점포는 건드리지 않는다', async () => {
+      const closing = await newClosingStore();
       const noDate = await createStaff('JOINED', null, closing);
       const later = await createStaff('JOINED', null, closing);
       const earlier = await createStaff('JOINED', null, closing);
       const sameDay = await createStaff('JOINED', null, closing);
       const alreadyRetired = await createStaff('JOINED', null, closing);
       const draftOnly = await createStaff('DRAFT', null, closing);
+      const futureHired = await createStaff('JOINED', day(5), closing);
       const other = await createStaff('JOINED', null, storeId);
       await prisma.staffMember.update({
         where: { staffMemberId: later },
@@ -966,9 +1001,23 @@ describe('퇴직 처리 (e2e, DB)', () => {
       );
       const keep = await scheduleOn(noDate, day(0), closing);
       const removed = await scheduleOn(noDate, day(1), closing);
-      const pending = await contractOf(
+      const pendingSend = await contractOf(
         noDate,
         'PENDING_SEND',
+        day(1),
+        null,
+        closing,
+      );
+      const pendingSignature = await contractOf(
+        later,
+        'PENDING_SIGNATURE',
+        day(1),
+        null,
+        closing,
+      );
+      const correction = await contractOf(
+        earlier,
+        'CORRECTION_REQUESTED',
         day(1),
         null,
         closing,
@@ -980,20 +1029,42 @@ describe('퇴직 처리 (e2e, DB)', () => {
         null,
         closing,
       );
+      const futureSigned = await contractOf(
+        noDate,
+        'SIGNED',
+        day(5),
+        null,
+        closing,
+      );
       const todoId = await personalTodo(noDate, false, closing);
       const otherSchedule = await scheduleOn(other, day(1));
+      const otherDraft = await contractOf(other, 'DRAFT', day(1), null);
+      const inviteSignup = await invite(draftOnly, 'SIGNUP');
+      const inviteReinvite = await invite(noDate, 'REINVITE');
+      const inviteAffiliation = await invite(
+        alreadyRetired,
+        'AFFILIATION_CONFIRM',
+      );
+      const inviteReturn = await invite(later, 'RETURN_CONFIRM');
+      const accepted = await invite(noDate, 'SIGNUP', 'ACCEPTED');
+      const otherInvite = await invite(other, 'SIGNUP');
 
-      await expect(closingTx([closing], day(0))).resolves.toEqual({
-        // skipped: 임시저장만 있는 가입 전 레코드 하나. 처음부터 퇴직이라 조회되지 않은 직원은 세지 않는다
-        retired: 4,
-        skipped: 1,
+      await expect(closingTx(closing, day(0))).resolves.toEqual({
+        // 퇴직될 직원(폐점 확인 647 과 같은 기준): 재직 중이고 임시저장만 있는 가입 전이 아닌 것 — 퇴직일 없음 · 이전 · 같은 날 · 입사일이 폐점일 뒤 · 폐점일 뒤(당김). 이미 퇴직 · 임시저장만 있던 가입 전(퇴직일은 정하지만)은 세지 않는다
+        retiringStaff: 5,
+        pulledForwardStaff: 1,
+        draftContracts: 1,
+        pendingSendContracts: 1,
+        pendingSignatureContracts: 2,
+        expiredInvitations: 4,
       });
 
+      // 확정하지 않는다 — 상태는 EMPLOYED, 스케줄 · TO-DO 도 그대로
       expect(await staffOf(noDate)).toMatchObject({
-        employmentStatus: 'RETIRED',
+        employmentStatus: 'EMPLOYED',
         retiredDate: day(0),
       });
-      // 걸친 체결 계약 하나 → RETIRE 한 줄
+      // 걸친 체결 계약 하나 → RETIRE 한 줄. 시작일이 폐점일 뒤인 체결 계약은 그대로
       expect(await logsOf(noDate)).toEqual([
         expect.objectContaining({
           action: 'RETIRE',
@@ -1002,6 +1073,112 @@ describe('퇴직 처리 (e2e, DB)', () => {
           processedBy: adminId,
         }),
       ]);
+      expect(await statusOfContract(futureSigned.contractId)).toBe('SIGNED');
+      expect(await statusOfContract(signed.contractId)).toBe('SIGNED');
+      expect(
+        await prisma.workSchedule.count({
+          where: {
+            workScheduleId: {
+              in: [keep.workScheduleId, removed.workScheduleId],
+            },
+            isDeleted: false,
+          },
+        }),
+      ).toBe(2);
+      expect(await prisma.todoAssignee.count({ where: { todoId } })).toBe(1);
+
+      // 퇴직일이 뒤였던 직원: 폐점일로 당김 — CANCEL(옛 날짜) + RETIRE(폐점일), 처리 시각 같음
+      expect(await staffOf(later)).toMatchObject({
+        employmentStatus: 'EMPLOYED',
+        retiredDate: day(0),
+      });
+      const laterLogs = await logsOf(later);
+      expect(laterLogs.map((l) => [l.action, l.retiredDate])).toEqual([
+        ['CANCEL', day(7)],
+        ['RETIRE', day(0)],
+      ]);
+      expect(laterLogs[0].processedAt).toEqual(laterLogs[1].processedAt);
+
+      // 이전 · 같은 날: 그대로, 로그 없음
+      expect(await staffOf(earlier)).toMatchObject({ retiredDate: day(-2) });
+      expect(await staffOf(sameDay)).toMatchObject({ retiredDate: day(0) });
+      expect(await logsOf(earlier)).toEqual([]);
+      expect(await logsOf(sameDay)).toEqual([]);
+      // 이미 퇴직은 제외
+      expect(await staffOf(alreadyRetired)).toMatchObject({
+        employmentStatus: 'RETIRED',
+        retiredDate: day(-30),
+      });
+      // 임시저장만 있던 가입 전 레코드도 폐점일로 정한다 — 임시저장이 닫혀 재직으로 세지므로
+      expect(await staffOf(draftOnly)).toMatchObject({
+        employmentStatus: 'EMPLOYED',
+        retiredDate: day(0),
+      });
+      expect(await logsOf(draftOnly)).toEqual([
+        expect.objectContaining({ action: 'RETIRE', retiredDate: day(0) }),
+      ]);
+      // 입사일이 폐점일 뒤여도 폐점일로 정한다(막지 않음)
+      expect(await staffOf(futureHired)).toMatchObject({
+        employmentStatus: 'EMPLOYED',
+        retiredDate: day(0),
+      });
+
+      // 대기 계약 4종은 점포 기준으로 바로 종료 + 이력(ADMIN). 임시저장만 있는 레코드의 임시저장도 함께
+      for (const [contract, from] of [
+        [draftContract, 'DRAFT'],
+        [pendingSend, 'PENDING_SEND'],
+        [pendingSignature, 'PENDING_SIGNATURE'],
+        [correction, 'CORRECTION_REQUESTED'],
+      ] as const) {
+        expect(await statusOfContract(contract.contractId)).toBe('ENDED');
+        expect(
+          await prisma.contractStatusHistory.findMany({
+            where: { contractId: contract.contractId },
+          }),
+        ).toEqual([
+          expect.objectContaining({
+            fromStatus: from,
+            toStatus: 'ENDED',
+            actor: 'ADMIN',
+          }),
+        ]);
+      }
+      // 초대: 종류 구분 없이 SENT 만 만료, 이미 수락한 것은 그대로
+      for (const { invitationId } of [
+        inviteSignup,
+        inviteReinvite,
+        inviteAffiliation,
+        inviteReturn,
+      ])
+        expect(await statusOfInvitation(invitationId)).toBe('EXPIRED');
+      expect(await statusOfInvitation(accepted.invitationId)).toBe('ACCEPTED');
+
+      // 다른 점포는 그대로
+      expect((await staffOf(other)).employmentStatus).toBe('EMPLOYED');
+      expect(
+        (
+          await prisma.workSchedule.findUniqueOrThrow({
+            where: { workScheduleId: otherSchedule.workScheduleId },
+          })
+        ).isDeleted,
+      ).toBe(false);
+      expect(await statusOfContract(otherDraft.contractId)).toBe('DRAFT');
+      expect(await statusOfInvitation(otherInvite.invitationId)).toBe('SENT');
+
+      // 다음 날 배치가 확정한다 — 스케줄 삭제 · TO-DO 해제. 계약 · 초대는 이미 닫혀 다시 닫을 것이 없다
+      const historiesBefore = await prisma.contractStatusHistory.count({
+        where: { contractId: pendingSend.contractId },
+      });
+      await prisma.$transaction((tx) => retirement.retireDue(tx, day(1)));
+      for (const id of [
+        noDate,
+        later,
+        earlier,
+        sameDay,
+        draftOnly,
+        futureHired,
+      ])
+        expect((await staffOf(id)).employmentStatus).toBe('RETIRED');
       expect(
         (
           await prisma.workSchedule.findMany({
@@ -1014,136 +1191,66 @@ describe('퇴직 처리 (e2e, DB)', () => {
           })
         ).map((s) => s.isDeleted),
       ).toEqual([false, true]);
-      expect(
-        (
-          await prisma.contract.findUniqueOrThrow({
-            where: { contractId: pending.contractId },
-          })
-        ).status,
-      ).toBe('ENDED');
-      // 체결 완료 계약은 건드리지 않는다
-      expect(
-        (
-          await prisma.contract.findUniqueOrThrow({
-            where: { contractId: signed.contractId },
-          })
-        ).status,
-      ).toBe('SIGNED');
       expect(await prisma.todoAssignee.count({ where: { todoId } })).toBe(0);
-
-      // 퇴직일이 뒤였던 직원: 폐점일로 앞당김 — CANCEL(옛 날짜) + RETIRE(폐점일), 처리 시각 같음
-      expect(await staffOf(later)).toMatchObject({
-        employmentStatus: 'RETIRED',
-        retiredDate: day(0),
-      });
-      const laterLogs = await logsOf(later);
-      expect(laterLogs.map((l) => [l.action, l.retiredDate])).toEqual([
-        ['CANCEL', day(7)],
-        ['RETIRE', day(0)],
-      ]);
-      expect(laterLogs[0].processedAt).toEqual(laterLogs[1].processedAt);
-
-      // 이전 · 같은 날: 퇴직일 그대로 확정, 로그를 더하지 않는다
-      expect(await staffOf(earlier)).toMatchObject({
-        employmentStatus: 'RETIRED',
-        retiredDate: day(-2),
-      });
-      expect(await staffOf(sameDay)).toMatchObject({
-        employmentStatus: 'RETIRED',
-        retiredDate: day(0),
-      });
-      expect(await logsOf(earlier)).toEqual([]);
-
-      // 건너뜀: 이미 퇴직 · 임시저장만 있는 가입 전 레코드(임시저장 계약도 그대로)
-      expect(await staffOf(alreadyRetired)).toMatchObject({
-        retiredDate: day(-30),
-      });
-      expect(await staffOf(draftOnly)).toMatchObject({
-        employmentStatus: 'EMPLOYED',
-        retiredDate: null,
-      });
-      expect(
-        (
-          await prisma.contract.findUniqueOrThrow({
-            where: { contractId: draftContract.contractId },
-          })
-        ).status,
-      ).toBe('DRAFT');
-
-      // 다른 점포는 그대로
-      expect((await staffOf(other)).employmentStatus).toBe('EMPLOYED');
-      expect(
-        (
-          await prisma.workSchedule.findUniqueOrThrow({
-            where: { workScheduleId: otherSchedule.workScheduleId },
-          })
-        ).isDeleted,
-      ).toBe(false);
-
-      // 배치를 다음 날로 돌려도 이 직원들은 다시 처리하지 않는다
-      const historiesBefore = await prisma.contractStatusHistory.count({
-        where: { contractId: pending.contractId },
-      });
-      // 개발 DB 의 다른 테스트가 남긴 퇴직 예정자가 있을 수 있어 전체 건수가 아니라 이 점포의 대상 수를 본다
-      const dueCount = () =>
-        prisma.staffMember.count({
-          where: {
-            storeId: closing,
-            employmentStatus: 'EMPLOYED',
-            retiredDate: { lt: day(1) },
-          },
-        });
-      expect(await dueCount()).toBe(0);
-      await prisma.$transaction((tx) => retirement.retireDue(tx, day(1)));
       expect(
         await prisma.contractStatusHistory.count({
-          where: { contractId: pending.contractId },
+          where: { contractId: pendingSend.contractId },
         }),
       ).toBe(historiesBefore);
-      expect(
-        await prisma.staffMemberRetirementLog.count({
-          where: { staffMemberId: later },
-        }),
-      ).toBe(2);
+      expect(await logsOf(later)).toHaveLength(2);
+      expect(await statusOfContract(futureSigned.contractId)).toBe('SIGNED');
     });
 
-    it('여러 점포를 한 번 호출로 닫는다 — 점포마다 나누지 않고, 닫는 점포가 아닌 직원은 건드리지 않는다', async () => {
-      const mk = async () => {
-        const n = randomInt(100_000, 999_999);
-        const { storeId: id } = await prisma.store.create({
-          data: {
-            storeCode: `ST${n}`,
-            bpCodeId,
-            storeTypeCode: 'DIRECT',
-            name: '폐점 테스트 점포',
-            storeStatusCode: 'OPERATING',
-          },
-        });
-        closingStoreIds.push(id);
-        return id;
-      };
-      const [a, b] = [await mk(), await mk()];
-      const inA = await createStaff('JOINED', null, a);
-      const inB = await createStaff('JOINED', null, b);
-      const outside = await createStaff('JOINED', null, storeId);
-
-      await expect(
-        // 시각이 섞인 폐점일(한국 오늘 정오)도 한국 날짜로 맞춰진다
-        closingTx([a, b, a], new Date(day(0).getTime() + 3 * 3_600_000)),
-      ).resolves.toEqual({ retired: 2, skipped: 0 });
-
-      expect(await staffOf(inA)).toMatchObject({
-        employmentStatus: 'RETIRED',
-        retiredDate: day(0),
+    it('열린 출근이 있으면 409 OPEN_CHECK_IN 이고 폐점 트랜잭션째 되돌아가 아무것도 바뀌지 않는다', async () => {
+      const closing = await newClosingStore();
+      const working = await createStaff('JOINED', null, closing);
+      const later = await createStaff('JOINED', null, closing);
+      await prisma.staffMember.update({
+        where: { staffMemberId: later },
+        data: { retiredDate: day(7) },
       });
-      expect(await staffOf(inB)).toMatchObject({
-        employmentStatus: 'RETIRED',
-        retiredDate: day(0),
+      const pending = await contractOf(
+        later,
+        'PENDING_SEND',
+        day(1),
+        null,
+        closing,
+      );
+      const sent = await invite(later, 'REINVITE');
+      await prisma.attendanceRecord.create({
+        data: {
+          staffMemberId: working,
+          storeId: closing,
+          kind: 'CHECK_IN',
+          recordedAt: new Date(Date.now() - 60 * 60_000),
+          receivedAt: new Date(),
+        },
       });
-      expect((await staffOf(outside)).employmentStatus).toBe('EMPLOYED');
-      await expect(closingTx([], day(0))).resolves.toEqual({
-        retired: 0,
-        skipped: 0,
+
+      const err = await closingTx(closing, day(0)).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).getResponse()).toMatchObject({
+        statusCode: 409,
+        code: 'OPEN_CHECK_IN',
+      });
+      expect(await staffOf(working)).toMatchObject({ retiredDate: null });
+      expect(await staffOf(later)).toMatchObject({ retiredDate: day(7) });
+      expect(await logsOf(later)).toEqual([]);
+      expect(await statusOfContract(pending.contractId)).toBe('PENDING_SEND');
+      expect(await statusOfInvitation(sent.invitationId)).toBe('SENT');
+    });
+
+    it('재직 직원이 없는 점포도 0 으로 끝난다', async () => {
+      const closing = await newClosingStore();
+
+      await expect(closingTx(closing, day(0))).resolves.toEqual({
+        retiringStaff: 0,
+        pulledForwardStaff: 0,
+        draftContracts: 0,
+        pendingSendContracts: 0,
+        pendingSignatureContracts: 0,
+        expiredInvitations: 0,
       });
     });
   });

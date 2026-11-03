@@ -4,12 +4,12 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-03T06:18:00Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-03T07:08:00Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
-    title: RetirementService (preview · retire · changeDate · cancel · retireDue · retireAllForStoreClosing)
-    last_modified: 2026-11-03T06:18:00Z
+    title: RetirementService (preview · retire · changeDate · cancel · retireDue · retireStore)
+    last_modified: 2026-11-03T07:08:00Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
@@ -120,65 +120,102 @@ the same code, with actor `ADMIN` and the 관리자 as `changed_by` — waiting 
 midnight would show someone who already left as employed. Today's date is not
 in the past: they still work today.
 
-# Closing a store retires everyone at once
+# Closing a store sets the retirement dates (WHALEERP-648)
 
-WHALEERP-646, decided 2026-11-03 (노영주). `RetirementService.retireAllForStoreClosing(tx, storeIds, adminAccountId, closedDate, now?)`
-returns `{ retired, skipped }`. It is a method only — no route, no DTO, no migration —
-and `StaffMembersModule` already exports the service. 1팀 calls it from the 폐점 transaction
-(`StoreManagementService.update`) and from the BP-withdrawal forced closing, passing the
-store's `closedDate` (`kstToday()`). It runs **inside the caller's transaction** and does not
-swallow errors, so one failure rolls the closing back.[^retirement-service]
+운영 정책 CTR-31, decided 2026-11-03 (노영주: follow the 1팀 request document; this replaces the
+WHALEERP-646 `retireAllForStoreClosing(tx, storeIds, …)` of PR #237). `RetirementService.retireStore(tx, storeId, closedDate, adminAccountId, now?)`
+is a method only — no route, no DTO, no migration; `StaffMembersModule` already exports the service.
+1팀's 폐점 api (`PUT /stores/:id`) calls it **inside the transaction that has locked the store row
+(`FOR UPDATE`) and sets it CLOSED**, so one failure rolls the closing back. Exceptions are not swallowed
+and no notification goes to the staff. `closedDate` is normalised to the KST date (`kstToday`).[^retirement-service]
 
-Policy:
+**Lock order: store (1팀, first) → staff → account.** Inside the method: the store's `EMPLOYED` staff rows
+in ascending `staff_member_id`, `FOR NO KEY UPDATE`; then their account rows (rows with an `account_id`,
+de-duplicated) in ascending `account_id`, `FOR UPDATE` — the staff → account order of `lockStaff`. The
+conditions are re-evaluated after the lock, so a record that changed in between is not missed. After
+the locks every locked record gets the same open-check-in check as a normal retirement
+(`assertNoOpenCheckIn`: 3-month correction window, working until the day after check-in); one open
+check-in is 409 `OPEN_CHECK_IN` (same body as `retire`) and rolls the whole closing back.
 
-1. Every 재직 직원 of that store is retired on the closing date.
-2. **No open-check-in check** (`assertNoOpenCheckIn` is not called) — the pre-closing
-   validation is a separate method owned by someone else. This one only updates.
-3. The retirement date is the closing date and is **finalized in the same transaction**
-   (`finalize` with `actor: ADMIN`; no waiting for the batch): schedules after the next
-   day deleted, personal TO-DO assignments released, sent invitations expired, pending
-   contracts ENDED. 체결 완료 contracts are not touched.
-4. Per record: RETIRED → skipped. A 가입 전 record with only 임시저장 contracts (the case where
-   `retire` answers 409) → skipped without an error, and its drafts are left alone (what to
-   do with them is undecided). No retirement date → store the closing date (`RETIRE` log
-   rows as `retire`) and finalize. Retirement date after the closing date → pulled forward
-   (`CANCEL` old date + `RETIRE` closing date, same `processed_at`, as `changeDate`) and
-   finalized. Retirement date on or before the closing date → kept and finalized with that
-   date (same result the batch would reach). The 3-month / hired-date range check
-   (`assertDateAllowed`) is not applied; a hired date after the closing date is fine
-   (WHALEERP-613).
-5. Only `EMPLOYED` records of the store are selected and locked one by one, in ascending
-   `staff_member_id` order across all given stores, by the staff row alone (`FOR NO KEY UPDATE`; `lockStaffRowOnly`).
-   The account row is **not** locked — no account data changes here (`retire` / `changeDate` /
-   `cancel` still use `lockStaff`, staff row then account row). The ascending order only
-   is global across `storeIds`; other lock orders are covered by the usage conditions below.
-   `storeIds` may be empty (no-op, `{0,0}`) or contain duplicates (ignored); `closedDate` is
-   normalized to the KST date (`kstToday`). `skipped` = records that turned RETIRED or were
-   draft-only 가입 전 after the lock, plus finalizes that returned false; records not employed
-   from the start are not selected and not counted.
+**What happens at the closing moment (this method, same transaction):**
 
-Because the batch's conditional update sees the record already RETIRED, `retireDue` run the
-next day processes none of them again.
+1. The store's pending contracts (`contracts.store_id = storeId`; 임시저장 · 발송 대기 · 서명 대기 · 수정 요청)
+   become `ENDED` at once, with a `contract_status_histories` row (`actor` ADMIN; the history table has no
+   operator column). The drafts of a "임시저장만 있는 가입 전" record are closed too.
+2. Every `SENT` invitation on the store's staff records — sign-up, re-invite, affiliation confirm, return
+   confirm — becomes `EXPIRED`.
+3. The retirement date of each target (every `EMPLOYED` record of the store, **including a "임시저장만 있던 가입 전"
+   record** — its drafts were just ended, so it now counts as 재직 (CTR-29) and the next day's batch must retire it) is
+   decided the way `schedule` / `changeDate` do:
+   - no date → the closing date (`RETIRE` log rows, one per spanning 체결 완료 contract);
+   - date after the closing date → pulled forward to it (`CANCEL` old date + `RETIRE` closing date, same `processed_at`);
+   - date on or before the closing date → kept, no log;
+   - hired date after the closing date → the closing date anyway (WHALEERP-613); already `RETIRED` → excluded.
+4. 체결 완료 contracts that start after the closing date are left alone (CTR-31; check-in is blocked by WHALEERP-643).
 
-**Usage conditions for 1팀:**
+**What it does not do — the next day's `retireDue` batch does:** the record stays `EMPLOYED`
+(`finalize` is not called). Work-schedule deletion and personal TO-DO release happen when the batch finds
+`retired_date < today`. Contracts and invitations are already closed, so the batch has nothing left to
+close there; its conditional updates are no-ops for them.
 
-- (a) Call it in the closing transaction **before locking the store row** (`lockStore`
-  `FOR UPDATE`). Contract rejection, expired-contract resend (staff `FOR NO KEY UPDATE` → store `FOR SHARE`),
-  work-schedule save and TO-DO creation all take staff → store, so calling this after the
-  store is locked deadlocks (`40P01`).
-- (b) The open-check-in validation is **not** done here; it belongs to the caller or the
-  separate pre-closing validation method.
-- (c) The 폐점's in-progress-contract check (`assertNoContracts` — 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 ·
-  체결 완료) must not be used as a blocking condition for closing: this method ends the
-  pending contracts by finalizing the retirement. Only the 임시저장 contracts of a 가입 전
-  record that has nothing but drafts stay (it is skipped).
-- (d) Closing can exceed Prisma's default `$transaction` timeout of 5 seconds (a store with many
-  staff, a BP withdrawal), so call it with a larger `timeout` option.
-- (e) BP withdrawal passes **all stores it closes in one call** (`storeIds`) — splitting
-  per store makes the locks not follow the global `staff_member_id` order, and can deadlock with
-  e.g. the daily contract batch.
-- Accepted risk (2026-11-03 노영주): an employed record created between the target query and
-  the staff lock may not be retired — a very short gap.
+**Accepted risk (2026-11-03 노영주):** while 1팀 holds the store `FOR UPDATE`, inserting a new staff record
+(foreign key) is blocked; if 1팀 changes to `FOR NO KEY UPDATE`, a record created between the query and the lock may not
+be retired. The gap is short, so it is accepted.
+
+**Return value** (same names and meaning as the 폐점 확인 service, WHALEERP-647; 1팀 uses it for the result
+message and the store change history):
+
+| Field | Meaning |
+|---|---|
+| `retiringStaff` | staff who will retire — the same criterion as the 폐점 확인 service's (647): the store's `EMPLOYED` records that are not 「임시저장만 있는 가입 전」 (no date, pulled forward, on or before the closing date all counted). A 「임시저장만 있던 가입 전」 record still gets its date set but is not counted (it shows up in `draftContracts`) |
+| `pulledForwardStaff` | how many had the date pulled forward to the closing date |
+| `draftContracts` | 임시저장 contracts ended |
+| `pendingSendContracts` | 발송 대기 contracts ended |
+| `pendingSignatureContracts` | 서명 대기 + 수정 요청 contracts ended |
+| `expiredInvitations` | `SENT` invitations expired |
+
+**Known risk — lock order against the closing (not fixed here; 1팀 decides, see 「1팀이 정할 것」):** the closing
+takes store → staff, but these paths take staff → store, so running at the same time as a closing they can
+deadlock (`40P01`):
+
+- expired / rejected contract resend — staff `FOR NO KEY UPDATE` (`contract-status.ts:224`, called by
+  `contract-send.service.ts:136`) then `reopenBlockOf` takes the store `FOR SHARE` (`contract-reopen.ts:51-54`);
+- work-schedule save — staff `FOR NO KEY UPDATE` (`work-schedules.service.ts:1097`) then the insert at
+  `work-schedules.service.ts:973` takes the store foreign key;
+- TO-DO creation — the store's staff rows `FOR SHARE` (`todos.service.ts:190`) then `todo.createManyAndReturn`
+  (`todos.service.ts:215`, store foreign key);
+- staff-app check-in / check-out — account `FOR UPDATE` (`my-attendance.service.ts:404`) then
+  `attendanceRecord.create` (`my-attendance.service.ts:363`), whose `attendance_records_store_id_fkey` takes the store
+  `FOR KEY SHARE`; admin attendance register / correction — account (or staff, when there is no account) `FOR UPDATE`
+  (`attendance-edit.service.ts:442-445`, `:731-734`) then the inserts (`:302`, `:326`, `:549`, `:589`). These collide
+  with the closing's store `FOR UPDATE`, and the closing then waits for the same account `FOR UPDATE`: `40P01` is
+  possible, and a check-out on the closing day is common;
+- account → staff order (the closing takes staff → account, so these can deadlock): adding a workplace
+  (`staff-signup.service.ts:445` account `FOR UPDATE` then `:461` staff `FOR UPDATE`) and accepting an affiliation
+  request (`affiliation-requests.service.ts:371` account `FOR UPDATE` then `:379` staff `FOR UPDATE`);
+- staff → store foreign key: writing an employment contract (`lockStaffForReplace` staff `FOR NO KEY UPDATE`,
+  `contract-duplicates.ts:68`, called at `contracts.service.ts:1188`, then `tx.contract.create` at
+  `contracts.service.ts:1387`) and copying last week's work schedules (staff rows `FOR NO KEY UPDATE` at
+  `work-schedules.service.ts:801`, then `this.insert` at `:859` → `tx.workSchedule.create` at `:973`).
+
+The employee-side contract rejection (`my-contracts.service.ts:318`, `lockMine` staff `FOR SHARE`) was
+listed too, but no store lock was found in `rejectContract` (`contract-status.ts:543`); it is unconfirmed.
+The code is not changed.
+
+**1팀이 정할 것** (decisions for 1팀, not for 3팀 or 재영; 노영주 2026-11-03):
+
+1. How the store row is locked. `lockStore` is now `FOR UPDATE`, which collides with the foreign-key inserts
+   (`FOR KEY SHARE`) of attendance (staff app, admin register, correction), work schedules and TO-DOs: between a
+   check-in/out that took the account first and `retireStore` (waiting for the account `FOR UPDATE`) `40P01` can
+   happen. 1팀's document (D4) does not cover these foreign-key locks. `FOR NO KEY UPDATE` breaks that loop.
+2. The deadlock with the resend path (staff `FOR NO KEY UPDATE` → store `FOR SHARE`) remains even with 1 — how to
+   handle it (e.g. retry the closing on `40P01`) is 1팀's call.
+3. The closing transaction's `timeout` (a store with many staff exceeds Prisma's default 5 seconds), and the
+   precondition that 1팀 passes today (KST) as `closedDate` — this method does not check that it is today. With many
+   staff the account locks are held long, until the transaction ends.
+4. Closing several stores at once (e.g. BP withdrawal): calling `retireStore` once per store stacks the store, staff
+   and account locks store by store, so the order gets mixed (deadlock is possible when an account spans several
+   stores' staff). How to call it — e.g. in ascending store id — is 1팀's call.
 
 # An open check-in blocks retirement
 
@@ -344,7 +381,7 @@ as UTC midnight, and every helper in `kst-date.ts` works in that shape. A
 schedule's `start_at` is a timestamp, so "from the next day" is compared against
 `kstDayStart(retired_date + 1)` — 15:00 UTC of the retirement date.[^kst-date]
 
-[^retirement-service]: RetirementService (preview · retire · changeDate · cancel · retireDue · retireAllForStoreClosing)
+[^retirement-service]: RetirementService (preview · retire · changeDate · cancel · retireDue · retireStore)
 [^retirement-controller]: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
 [^retirement-scheduler]: Midnight KST batch (staff-retire)
 [^admin-scope]: Which stores an 관리자 manages
