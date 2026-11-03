@@ -796,6 +796,37 @@ describe('ContractDeliveryService', () => {
       }
     });
 
+    // 코드만 먼저 배포돼 DB 템플릿에 버튼 링크 변수(링크)가 남았으면 — 버튼이 없는 등록본(2026-11-03)이라 쓰기 전에 503
+    it('소속 추가 확인 요청 템플릿에 버튼 링크 변수가 남아 있으면 쓰기 전에 503 — NO_BUTTON_NAME, 아무것도 쓰지 않는다', async () => {
+      const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+      try {
+        tx.notificationTemplate.findUnique.mockResolvedValue({
+          isActive: true,
+          channel: 'ALIMTALK',
+          title: null,
+          body: '…',
+          variables: [{ name: '사업자' }, { name: '링크', isButtonLink: true }],
+          kakaoTemplateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+        });
+        await expect(
+          service().prepare(
+            t(),
+            input({ draftAction: 'AFFILIATION_CONFIRM' }),
+            NOW,
+          ),
+        ).rejects.toThrow(
+          '소속 추가 확인 요청 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.',
+        );
+        expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+        expect(tx.contract.update).not.toHaveBeenCalled();
+        expect(error).toHaveBeenCalledWith(
+          '소속 추가 확인 요청 템플릿 버튼 설정이 맞지 않음: NO_BUTTON_NAME 버튼 링크 표시=[링크]',
+        );
+      } finally {
+        error.mockRestore();
+      }
+    });
+
     // 운영이 아니면 기동 검사는 http 를 받는다 — 등록 버튼 링크가 `https://#{가입링크}` 라 커밋 뒤 발송이 늘 던진다
     it('직원 앱 주소가 http 면 가입 초대는 503 — 주소가 없을 때와 다른 문구로 까닭을 알린다', async () => {
       appUrl = 'http://localhost:3001';
