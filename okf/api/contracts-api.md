@@ -1213,11 +1213,13 @@ only — a 종이 계약 has no body.
   never fill the 100) and counted in the log `contract purge SKIPPED_PAYSLIP staff=N`.
 - **Locks**: staff rows `FOR NO KEY UPDATE` (same as 퇴직 취소 · contract writes), then the contract rows
   `FOR UPDATE`, then payslips are read again — a payslip committed before the lock drops that record
-  instead of failing the batch with 23503.
+  instead of failing the batch with 23503 (logged as `SKIPPED_PAYSLIP_AFTER_LOCK staff=N`).
 - **Files first**: every `contract_documents.storage_key` of a record is deleted from storage
   (`{ thumbnail: false }`) before any row. On the first failure (or with no storage configured while files
   exist) that record and the rest wait for the next day (`contract purge FILES_DEFERRED staff=…`) — a
-  stuck S3 would otherwise eat the 25-second delete deadline per record. A rollback after files are gone
+  stuck S3 would otherwise eat the 25-second delete deadline per record. A slow but working storage is
+  capped too: once file deletion has taken 25 seconds (`FILE_DELETE_BUDGET_MS`) the remaining records wait,
+  so the rows are still deleted and committed inside the 60 seconds. A rollback after files are gone
   leaves rows whose files are missing; the next run deletes them again (S3 treats a missing key as success).
 - **What else goes, in order** (2026-11-03 김민식): work schedules made from those contracts
   (`work_schedules.source_contract_id` — already past their own 생성일 + 3년) with their history and

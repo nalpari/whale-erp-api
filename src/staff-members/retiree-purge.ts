@@ -73,10 +73,23 @@ export async function purgeRetiredAccountChanges(
     FOR UPDATE OF a
   `;
   if (targets.length === 0) return 0;
+  // 소속 조건을 다시 본다 — 계정 행은 그대로라 잠금을 기다려도 위 판정은 처음 스냅샷이다. 그사이 커밋된 가입(새 재직 소속)은
+  // 잠근 뒤의 이 문장이 보고 빼낸다(requesting-code-review)
   const { count } = await tx.accountChangeHistory.deleteMany({
     where: {
       accountId: { in: targets.map((t) => t.id) },
       field: { in: [...RETAINED_FIELDS] },
+      account: {
+        staffMembers: {
+          none: {
+            OR: [
+              { employmentStatus: { not: 'RETIRED' } },
+              { retiredDate: null },
+              { retiredDate: { gte: before } },
+            ],
+          },
+        },
+      },
     },
   });
   return count;

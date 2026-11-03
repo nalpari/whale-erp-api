@@ -13,6 +13,12 @@ import { deleteWorkSchedules } from '../work-schedules/work-schedule-purge';
  */
 export const CONTRACT_PURGE_BATCH_SIZE = 100;
 
+/**
+ * 파일 삭제에 쓰는 시간 상한. 넘으면 남은 레코드는 다음 날 — 한 레코드의 삭제가 저장소 기한(25초)까지 걸려도 이 상한과
+ * 합쳐 runExclusive 의 60초 안에서 행을 지우고 커밋한다.
+ */
+export const FILE_DELETE_BUDGET_MS = 25_000;
+
 /** 근로계약 운영 알림의 related_type(ContractNoticeService · 발송) — 알림톡 발송 기록의 'contract'(소문자)와 다르다 */
 const NOTIFICATION_RELATED_TYPE = 'CONTRACT';
 
@@ -78,6 +84,10 @@ export class ContractPurgeService {
         })
       ).map((p) => p.contract.staffMemberId),
     );
+    if (blocked.size > 0)
+      this.logger.log(
+        `contract purge SKIPPED_PAYSLIP_AFTER_LOCK staff=${blocked.size}`,
+      );
     const purgeable = staff.map((s) => s.id).filter((id) => !blocked.has(id));
     const done = await this.deleteFiles(tx, purgeable);
     const ids = locked
@@ -133,8 +143,16 @@ export class ContractPurgeService {
         contract: { select: { staffMemberId: true } },
       },
     });
+    const started = Date.now();
     const done: number[] = [];
     for (const staffMemberId of staffMemberIds) {
+      // 실패하지 않고 느리기만 해도 60초를 넘겨 롤백되면(파일만 지워짐) 다음 날도 같은 자리에서 넘긴다 — 기한을 두고 남은 것을 미룬다
+      if (Date.now() - started > FILE_DELETE_BUDGET_MS) {
+        this.logger.error(
+          `contract purge FILES_DEFERRED staff=${staffMemberId}: 파일 삭제가 ${FILE_DELETE_BUDGET_MS}ms 를 넘었다`,
+        );
+        break;
+      }
       const keys = documents
         .filter((d) => d.contract.staffMemberId === staffMemberId)
         .map((d) => d.storageKey);

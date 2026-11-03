@@ -95,7 +95,22 @@ describe('purgeRetiredAccountChanges', () => {
     expect(sql).toContain('FOR UPDATE');
     expect(call).toContainEqual(new Date('2023-11-04T00:00:00.000Z'));
     expect(tx.accountChangeHistory.deleteMany).toHaveBeenCalledWith({
-      where: { accountId: { in: [11] }, field: { in: ['PHONE', 'ADDRESS'] } },
+      where: {
+        accountId: { in: [11] },
+        field: { in: ['PHONE', 'ADDRESS'] },
+        // 잠근 뒤 새 스냅샷으로 소속 조건을 다시 본다 — 그사이 생긴 재직 소속이 있으면 빠진다
+        account: {
+          staffMembers: {
+            none: {
+              OR: [
+                { employmentStatus: { not: 'RETIRED' } },
+                { retiredDate: null },
+                { retiredDate: { gte: new Date('2023-11-04T00:00:00.000Z') } },
+              ],
+            },
+          },
+        },
+      },
     });
     expect(count).toBe(4);
   });

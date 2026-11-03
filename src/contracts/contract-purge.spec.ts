@@ -2,7 +2,11 @@ import { Test } from '@nestjs/testing';
 import type { Prisma } from '@prisma/client';
 import { BatchLockService } from '../batch/batch-lock.service';
 import type { StorageService } from '../storage/storage.service';
-import { ContractPurgeScheduler, ContractPurgeService } from './contract-purge';
+import {
+  ContractPurgeScheduler,
+  ContractPurgeService,
+  FILE_DELETE_BUDGET_MS,
+} from './contract-purge';
 
 type Locked = { id: number; staffMemberId: number };
 
@@ -188,6 +192,34 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
     expect(tx.contract.deleteMany).toHaveBeenCalledWith({
       where: { contractId: { in: [10, 11] } },
     });
+  });
+
+  it('파일 삭제가 시간 상한을 넘으면 남은 레코드는 다음 날로 미룬다 — 느리기만 한 저장소로 60초를 넘기지 않게', async () => {
+    const clock = jest.spyOn(Date, 'now');
+    // 시작 0 → 첫 레코드 확인 0 → 둘째 레코드 확인 상한 + 1ms
+    clock
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(FILE_DELETE_BUDGET_MS + 1);
+    const storage = okStorage();
+    const tx = mockTx();
+    const service = setup(storage);
+    const error = jest
+      .spyOn(
+        (service as unknown as { logger: { error: (m: string) => void } })
+          .logger,
+        'error',
+      )
+      .mockImplementation(() => undefined);
+    await run(service, tx);
+    clock.mockRestore();
+    expect(storage.delete).toHaveBeenCalledTimes(1);
+    expect(tx.contract.deleteMany).toHaveBeenCalledWith({
+      where: { contractId: { in: [10, 11] } },
+    });
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining('FILES_DEFERRED staff=2'),
+    );
   });
 
   it('첫 레코드 파일부터 실패하면 아무 행도 지우지 않는다', async () => {

@@ -515,7 +515,8 @@ Two daily jobs in `RetireePurgeScheduler`, each inside `runExclusive`, use the s
   and every one of them is `RETIRED` with `retired_date` before the date — that is, the latest 퇴직일 + 3년
   has passed (2026-11-03 김민식). An account with a 재직 or 퇴직 예정 record, or with no record at all, keeps
   everything; `EMAIL` · `PASSWORD` · `BIRTH_DATE` rows always stay. The account row is taken `FOR UPDATE`
-  (the 주소 수정 lock). The log counts deleted rows; at most 5000 accounts per run.
+  (the 주소 수정 lock), and the delete checks the membership rule again — a join committed while it waited
+  is seen by that later statement. The log counts deleted rows; at most 5000 accounts per run.
 
 [^retiree-purge]: 신고 정보 · 계정 변경 이력 보존 기간 파기(WHALEERP-645)
 [^my-profile-service]: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
