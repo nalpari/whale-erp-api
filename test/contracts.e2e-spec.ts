@@ -203,14 +203,22 @@ describe('근로계약 목록 (e2e)', () => {
       .mockResolvedValue({ staffMemberId: 3, contracts: [{ contractId: 7 }] });
     // 저장하면 곧바로 보낸다(2026-10-19 재영) — 가입 초대 템플릿 · 초대 · 알림톡(실제로 보내지 않음)
     alimtalk.send.mockReset().mockResolvedValue({ referenceKey: 'r' });
-    prisma.notificationTemplate.findUnique.mockReset().mockResolvedValue({
-      isActive: true,
-      channel: 'ALIMTALK',
-      title: null,
-      body: '…',
-      variables: [{ name: '링크', isButtonLink: true }],
-      kakaoTemplateCode: 'WHALE_INVITE_01',
-    });
+    // 가입 초대는 버튼 링크 변수가 있고, 소속 추가 확인 요청은 카카오 등록본에 버튼이 없어 버튼 링크 변수도 없다(2026-11-03)
+    prisma.notificationTemplate.findUnique
+      .mockReset()
+      .mockImplementation(({ where }: { where: { templateCode: string } }) =>
+        Promise.resolve({
+          isActive: true,
+          channel: 'ALIMTALK',
+          title: null,
+          body: '…',
+          variables:
+            where.templateCode === 'TALK_STAFF_AFFILIATION_REQUEST'
+              ? [{ name: '사업자' }, { name: '근무지' }, { name: '고용형태' }]
+              : [{ name: '링크', isButtonLink: true }],
+          kakaoTemplateCode: where.templateCode,
+        }),
+      );
     prisma.store.findUnique
       .mockReset()
       .mockResolvedValue({ name: '모리커피 연남점' });
@@ -1679,7 +1687,6 @@ describe('근로계약 목록 (e2e)', () => {
             사업자: '모리커피',
             근무지: '모리커피 연남점',
             고용형태: '파트타이머',
-            링크: 'https://staff.e2e.test/affiliations',
           },
         }),
       );

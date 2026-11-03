@@ -75,7 +75,7 @@ export class ContractSendController {
   })
   @ApiServiceUnavailableResponse({
     description:
-      '가입 초대 · 소속 추가 확인 요청 알림톡일 때만 — 직원 앱 주소(STAFF_APP_URL)가 없음 · 대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없음 · 그 알림톡 템플릿이 없거나 꺼짐',
+      '가입 초대 · 소속 추가 확인 요청 알림톡일 때만 — 직원 앱 주소(STAFF_APP_URL)가 없거나 https 가 아님(가입 초대만 — 소속 추가 확인 요청 알림톡은 링크가 없다) · 대체 문자 발신번호(BIZPPURIO_SMS_FROM)가 없음 · 그 알림톡 템플릿이 없거나 꺼졌거나 버튼 설정이 맞지 않음',
   })
   send(
     @Param('contractId', ContractIdPipe) contractId: number,

@@ -4,12 +4,16 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-03T07:08:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T08:35:47Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
     title: RetirementService (preview · retire · changeDate · cancel · retireDue · retireStore)
     last_modified: 2026-11-03T07:08:00Z
+  - id: store-closing-check
+    resource: ../../src/staff-members/store-closing-check.ts
+    title: storeClosingCheck — 폐점 확인(WHALEERP-647, 읽기만)
+    last_modified: 2026-11-03T08:35:47Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
@@ -374,6 +378,40 @@ The permission (WHALEERP-586) is tested at both levels:
 - e2e: the same person's record at another store is untouched by retire, cancel
   and an immediate past-date finalisation.
 
+# Checking before closing
+
+WHALEERP-647, 운영 정책 CTR-31. `storeClosingCheck(client, storeId, closedDate, now?)` (the inputs the work item names) is
+the read-only pre-closing check — a plain function, no route. 1팀 calls it from the store edit screen (`transitionCheck`),
+the closing confirmation popup and right before saving the closing inside its own transaction, passing the same `client`
+(PrismaService or the transaction) so all three see the same rows. Scope and permission are the caller's; whether to block
+the closing is the caller's decision too. Right before saving, call it before `retireStore` — after it the pending
+contracts are already ENDed and the contract counts read 0. The staff and contract fields have the same names and meaning
+as `retireStore`'s return value (1팀 shows both in the closing messages).[^store-closing-check]
+
+It returns:
+
+- `openCheckIns: { count, hiddenCount, first }` — open check-ins of the store's `EMPLOYED` records, by the same rule as
+  the admin open-check-in route (WHALEERP-644, shared `openCheckInsOf`: within the 3-month correction window) but without
+  retired records — exactly what `retireStore` blocks on (`assertNoOpenCheckIn` per employed record); a retired record's
+  open check-in does not block the closing. Staff a 본사 역할 would not see (`hidesPersonalData` judged for 본사 역할 — on a non-직영 store, unless the staff
+  consented and the store is not closed) are counted in `hiddenCount` only and never picked as `first` — always, whoever
+  calls, since the caller is not an input (2026-11-03 재영). Blocking must look at `count + hiddenCount`: `retireStore`
+  answers 409 `OPEN_CHECK_IN` for any open check-in of an `EMPLOYED` record and rolls the closing back, so the
+  confirmation screen is where 1팀 can warn first.
+- `retiringStaff` — `EMPLOYED` records of the store minus draft-only 가입 전 records, the same count `retireStore` returns.
+- `draftContracts` · `pendingSendContracts` · `pendingSignatureContracts` (서명 대기 + 수정 요청) — the store's pending
+  contracts (`contracts.store_id`) by status, which `retireStore` ENDs at the closing moment (a draft-only 가입 전 record's
+  drafts included, a retired record's pending contracts on that store too). 체결 완료 contracts are never ENDed.
+  `closedDate` is taken like `retireStore`'s input but changes none of these counts today.
+- `unconfirmedPayslips` — 작성 중 · 검토 중 payslips of the store. Retirement keeps payslips (PAY-4: the staff app
+  shows sent ones for 3 years from creation, retired or not).
+
+It reads without locks; whatever changes between the check and the save, `retireStore` sees again after its locks
+(an open check-in is the 409, contracts and staff are ended and counted from the locked rows). The e2e checks the counts
+against a real `retireStore` run (rolled back).
+
+A missing store throws Prisma's `PrismaClientKnownRequestError` (P2025) as is — the caller already resolved it.
+
 # Dates
 
 "Today" is the Korean date (`kstToday`); date-only columns come back from Prisma
@@ -386,3 +424,4 @@ schedule's `start_at` is a timestamp, so "from the next day" is compared against
 [^retirement-scheduler]: Midnight KST batch (staff-retire)
 [^admin-scope]: Which stores an 관리자 manages
 [^kst-date]: KST "today" and date-only helpers
+[^store-closing-check]: storeClosingCheck — 폐점 확인(WHALEERP-647, 읽기만)
