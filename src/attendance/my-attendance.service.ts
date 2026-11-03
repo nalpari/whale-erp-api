@@ -162,7 +162,7 @@ export class MyAttendanceService {
   }
 
   /**
-   * 출근(211). 막는 것: 내 소속이 아님(404) · 위치정보 동의 없음 · 다시 동의 필요 · 일시 중지(403) · 오늘이 체결 완료 계약
+   * 출근(211). 막는 것: 내 소속이 아님(404) · 폐점한 근무지(422, WHALEERP-643) · 위치정보 동의 없음 · 다시 동의 필요 · 일시 중지(403) · 오늘이 체결 완료 계약
    * 기간 밖(422, ATT-12) · 위치를 보는데 근무지 좌표가 없음(422, ATT-36) · 어느 소속에든 열린 출근이 있음(409). 반경 밖은 막지 않고 `OUT_OF_RADIUS_CHECKIN` 을 붙여 받는다
    * (ATT-11). 위치를 보는 점포는 이번에 읽은 위치 읽음이 있어야 한다(400). 위치를 보지 않는 점포(위치 적용 꺼짐)는 동의를 보지
    * 않고 사유 · 위치 읽음도 받지 않는다.
@@ -173,6 +173,15 @@ export class MyAttendanceService {
   ): Promise<AttendanceRecordResultDto> {
     return this.locked(accountId, async (tx) => {
       const member = await membershipOf(tx, accountId, dto.staffMemberId);
+      if (await isStoreClosed(tx, member.storeId))
+        throw new UnprocessableEntityException(
+          rejection(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            'Unprocessable Entity',
+            'STORE_CLOSED',
+            '폐점한 근무지라 출근할 수 없습니다. 근무지 관리자에게 문의해 주세요.',
+          ),
+        );
       const store = await storeOf(tx, member.storeId);
       // 위치를 보는데 근무지 좌표가 없으면 앱이 반경을 판정할 수 없다 — 직원 위치가 필요 없는 검사라 서버도 막는다(ATT-36)
       if (
@@ -407,6 +416,19 @@ async function membershipOf(db: Db, accountId: number, staffMemberId: number) {
   });
   if (!member) throw new NotFoundException(MEMBERSHIP_NOT_FOUND);
   return member;
+}
+
+/**
+ * 폐점한 근무지인가(WHALEERP-643). 폐점은 진행 중 계약(SIGNED 등)만 막는데 출근의 계약 기간(`contractCovers`)은 체결 뒤
+ * 종료(ENDED)된 계약도 치고, 폐점과 계약 체결 사이에 틈도 있다 — 계약 확인에 기대지 않고 출근이 직접 본다. 퇴근은 보지
+ * 않는다 — 폐점 전에 연 출근을 닫아야 한다.
+ */
+async function isStoreClosed(db: Db, storeId: number): Promise<boolean> {
+  const closed = await db.store.findFirst({
+    where: { storeId, storeStatusCode: 'CLOSED' },
+    select: { storeId: true },
+  });
+  return closed !== null;
 }
 
 async function storeOf(db: Db, storeId: number): Promise<AttendanceStoreDto> {
