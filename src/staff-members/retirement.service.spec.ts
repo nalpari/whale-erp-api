@@ -23,6 +23,7 @@ describe('RetirementService', () => {
     $queryRaw: jest.Mock;
     staffMember: {
       findUnique: jest.Mock;
+      findMany: jest.Mock;
       update: jest.Mock;
       updateMany: jest.Mock;
     };
@@ -48,6 +49,7 @@ describe('RetirementService', () => {
       $queryRaw: jest.fn().mockResolvedValue([]),
       staffMember: {
         findUnique: jest.fn().mockResolvedValue(staff()),
+        findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
@@ -313,6 +315,252 @@ describe('RetirementService', () => {
         where: { staffMemberId: 2, status: 'SENT' },
         data: { status: 'EXPIRED' },
       });
+    });
+  });
+
+  describe('점포 폐점 일괄 퇴직 retireAllForStoreClosing (WHALEERP-646)', () => {
+    const closed = date('2026-10-08');
+    const run = () =>
+      service.retireAllForStoreClosing(prisma as never, [10], 1, closed, now);
+    /** 직원 id 별로 잠근 뒤 읽는 값을 정한다. */
+    const members = (byId: Record<number, Record<string, unknown>>) => {
+      prisma.staffMember.findMany.mockResolvedValue(
+        Object.keys(byId).map((id) => ({ staffMemberId: Number(id) })),
+      );
+      prisma.staffMember.findUnique.mockImplementation(
+        ({ where }: { where: { staffMemberId: number } }) =>
+          Promise.resolve(staff(byId[where.staffMemberId])),
+      );
+    };
+
+    it('직원이 없으면 0명이다', async () => {
+      await expect(run()).resolves.toEqual({ retired: 0, skipped: 0 });
+      expect(finalize).not.toHaveBeenCalled();
+    });
+
+    it('그 점포 직원만 고른다 — 직원 id 오름차순', async () => {
+      await run();
+
+      expect(prisma.staffMember.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { storeId: { in: [10] }, employmentStatus: 'EMPLOYED' },
+          orderBy: { staffMemberId: 'asc' },
+        }),
+      );
+    });
+
+    it('EMPLOYED 직원만 조회하고, 계정 행은 잠그지 않는다 — 직원 행만 FOR NO KEY UPDATE', async () => {
+      members({ 2: { accountId: 77 } });
+
+      await run();
+
+      expect(prisma.staffMember.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { storeId: { in: [10] }, employmentStatus: 'EMPLOYED' },
+        }),
+      );
+      const queries = (prisma.$queryRaw.mock.calls as [string[]][]).map(
+        ([strings]) => strings.join('?'),
+      );
+      expect(queries).toHaveLength(1);
+      expect(queries[0]).toContain('staff_members');
+      expect(queries[0]).toContain('FOR NO KEY UPDATE');
+      expect(queries.join()).not.toContain('accounts');
+    });
+
+    it('여러 점포를 한 번에 받는다 — 중복 id 는 한 번만, 빈 배열이면 아무것도 하지 않는다', async () => {
+      await expect(
+        service.retireAllForStoreClosing(prisma as never, [], 1, closed, now),
+      ).resolves.toEqual({ retired: 0, skipped: 0 });
+      expect(prisma.staffMember.findMany).not.toHaveBeenCalled();
+
+      await service.retireAllForStoreClosing(
+        prisma as never,
+        [12, 10, 12],
+        1,
+        closed,
+        now,
+      );
+
+      expect(prisma.staffMember.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            storeId: { in: [12, 10] },
+            employmentStatus: 'EMPLOYED',
+          },
+          orderBy: { staffMemberId: 'asc' },
+        }),
+      );
+    });
+
+    it('폐점일에 시각이 섞여 들어와도 한국 날짜(00:00Z)로 맞춘다', async () => {
+      members({ 2: {} });
+
+      // UTC 10/07 16:30 = 한국 10/08 01:30
+      await service.retireAllForStoreClosing(
+        prisma as never,
+        [10],
+        1,
+        new Date('2026-10-07T16:30:00Z'),
+        now,
+      );
+
+      expect(prisma.staffMember.update).toHaveBeenCalledWith({
+        where: { staffMemberId: 2 },
+        data: { retiredDate: closed },
+      });
+      expect(finalize).toHaveBeenCalledWith(
+        prisma,
+        2,
+        closed,
+        expect.anything(),
+      );
+    });
+
+    it('skipped 는 잠근 뒤 퇴직이었거나 임시저장만 있는 가입 전이라 건너뛴 수 + 확정이 false 인 수다', async () => {
+      members({
+        2: { employmentStatus: 'RETIRED' },
+        3: { joinStatus: 'DRAFT' },
+        4: {},
+        5: {},
+      });
+      prisma.contract.count.mockImplementation(
+        ({ where }: { where: { staffMemberId: number } }) =>
+          Promise.resolve(where.staffMemberId === 3 ? 0 : 1),
+      );
+      finalize.mockImplementation((_tx, id: number) =>
+        Promise.resolve(id !== 5),
+      );
+
+      await expect(run()).resolves.toEqual({ retired: 1, skipped: 3 });
+    });
+
+    it('열린 출근을 검사하지 않는다 (2026-11-03)', async () => {
+      members({ 2: {} });
+
+      await run();
+
+      expect(prisma.attendanceRecord.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('퇴직일이 없으면 폐점일로 저장하고 RETIRE 로그를 남긴 뒤 폐점일로 바로 확정한다', async () => {
+      members({ 2: {} });
+
+      await expect(run()).resolves.toEqual({ retired: 1, skipped: 0 });
+
+      expect(prisma.staffMember.update).toHaveBeenCalledWith({
+        where: { staffMemberId: 2 },
+        data: { retiredDate: closed },
+      });
+      expect(prisma.staffMemberRetirementLog.create).not.toHaveBeenCalled();
+      expect(prisma.staffMemberRetirementLog.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            action: 'RETIRE',
+            retiredDate: closed,
+            processedBy: 1,
+            processedAt: now,
+          }),
+        ],
+      });
+      expect(finalize).toHaveBeenCalledWith(prisma, 2, closed, {
+        actor: 'ADMIN',
+        adminAccountId: 1,
+      });
+    });
+
+    it('퇴직일이 폐점일보다 뒤면 앞당긴다 — CANCEL(옛 날짜) + RETIRE(폐점일), 처리 시각 같음', async () => {
+      members({ 2: { retiredDate: date('2026-10-20') } });
+
+      await run();
+
+      expect(prisma.staffMemberRetirementLog.create).toHaveBeenCalledWith({
+        data: {
+          staffMemberId: 2,
+          action: 'CANCEL',
+          retiredDate: date('2026-10-20'),
+          processedBy: 1,
+          processedAt: now,
+        },
+      });
+      expect(prisma.staffMemberRetirementLog.createMany).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            action: 'RETIRE',
+            retiredDate: closed,
+            processedAt: now,
+          }),
+        ],
+      });
+      expect(finalize).toHaveBeenCalledWith(
+        prisma,
+        2,
+        closed,
+        expect.anything(),
+      );
+    });
+
+    it.each(['2026-10-08', '2026-10-01'])(
+      '퇴직일이 폐점일 이전 · 같은 날(%s)이면 그대로 두고 그 퇴직일로 확정한다',
+      async (iso) => {
+        members({ 2: { retiredDate: date(iso) } });
+
+        await run();
+
+        expect(prisma.staffMember.update).not.toHaveBeenCalled();
+        expect(prisma.staffMemberRetirementLog.create).not.toHaveBeenCalled();
+        expect(
+          prisma.staffMemberRetirementLog.createMany,
+        ).not.toHaveBeenCalled();
+        expect(finalize).toHaveBeenCalledWith(
+          prisma,
+          2,
+          date(iso),
+          expect.anything(),
+        );
+      },
+    );
+
+    it('입사일이 폐점일보다 미래여도 폐점일로 처리한다 (WHALEERP-613)', async () => {
+      members({ 2: { hiredDate: date('2026-11-01') } });
+
+      await expect(run()).resolves.toEqual({ retired: 1, skipped: 0 });
+      expect(finalize).toHaveBeenCalledWith(
+        prisma,
+        2,
+        closed,
+        expect.anything(),
+      );
+    });
+
+    it('이미 퇴직한 직원과 임시저장 계약만 있는 가입 전 레코드는 건너뛴다 — 예외 없이', async () => {
+      members({
+        2: { employmentStatus: 'RETIRED', retiredDate: date('2026-09-01') },
+        3: { joinStatus: 'DRAFT' },
+        4: {},
+      });
+      // 보낸 계약 수: 3번(가입 전)만 0
+      prisma.contract.count.mockImplementation(
+        ({ where }: { where: { staffMemberId: number } }) =>
+          Promise.resolve(where.staffMemberId === 3 ? 0 : 1),
+      );
+
+      await expect(run()).resolves.toEqual({ retired: 1, skipped: 2 });
+
+      expect(finalize).toHaveBeenCalledTimes(1);
+      expect(finalize).toHaveBeenCalledWith(
+        prisma,
+        4,
+        closed,
+        expect.anything(),
+      );
+    });
+
+    it('확정이 실패하면 삼키지 않고 던진다 — 폐점 트랜잭션째 되돌아가게', async () => {
+      members({ 2: {} });
+      finalize.mockRejectedValue(new Error('boom'));
+
+      await expect(run()).rejects.toThrow('boom');
     });
   });
 

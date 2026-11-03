@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-03
+* **Update**: [Staff retirement](/api/staff-retirement.md) — 점포(들) 폐점 때 소속 재직 직원을 폐점일로 일괄 퇴직 확정하는 메소드 `retireAllForStoreClosing(tx, storeIds, …)`(WHALEERP-646, 경로 · DTO · 마이그레이션 없음). 열린 출근은 검사하지 않고, 퇴직일 없음 · 폐점일보다 뒤(앞당김) · 이전/같음을 모두 그 자리에서 `finalize` 한다. 이미 퇴직 · 임시저장만 있는 가입 전 레코드는 건너뛴다. BP 탈퇴는 점포 전부를 한 번에 넘긴다(전역 id 순 잠금). 1팀은 점포 잠금 전에 부르고 `$transaction` timeout 을 늘리며, 진행 중 계약 검사(`assertNoContracts`)를 막는 조건으로 쓰지 않는다.
 * **Update**: [Attendance](/api/attendance.md) — 점포의 열린 출근 조회 `GET /attendance-records/open-check-ins?storeId=`(WHALEERP-644): 폐점을 맡은 쪽이 폐점 전에 묻는다. 보정할 수 있는 3개월 안의 퇴근 없는 출근, 가려진 직원은 줄 없이 수만 `hiddenCount`(2026-11-03 재영), 범위 밖 404.
 * **Update**: [Attendance](/api/attendance.md) — 직원 앱 출근에서 폐점한 근무지를 422 `STORE_CLOSED` 로 막는다(WHALEERP-643). 화면 `checkInBlock` 도 계약보다 먼저 `STORE_CLOSED` 를 싣는다. 퇴근은 그대로 받는다(폐점 전에 연 출근을 닫아야 한다).
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) — api #231 리뷰 후속: 요청 로그 사본(`requestForLog`)을 허용 목록으로 바꿨다(알려진 칸만, 알림톡 `title` 은 있는지만 `********`). 되돌림이 덜 된 「스킴을 뗀 버튼」 설명을 전체 주소 기준으로, 소속 추가 템플릿은 등록할 때 같은 형식으로 고쳤다. 7101 근거는 관찰한 결과 한 건이고 전체 주소의 실제 발송 확인은 남은 일로 적었다.
