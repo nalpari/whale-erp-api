@@ -63,6 +63,7 @@ describe('MyAttendanceService', () => {
       },
       store: {
         findUniqueOrThrow: jest.fn().mockResolvedValue(STORE),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
       locationConsent: { findMany: jest.fn().mockResolvedValue([AGREED]) },
       termsVersion: {
@@ -133,6 +134,16 @@ describe('MyAttendanceService', () => {
           breakMinutes: 60,
         }),
       ]);
+    });
+
+    it('폐점한 근무지면 출근을 막는 까닭은 계약보다 먼저 STORE_CLOSED (WHALEERP-643)', async () => {
+      db.store.findFirst.mockResolvedValue({ storeId: 7 });
+      db.contract.findFirst.mockResolvedValue(null);
+      const res = await service.get(12, 30);
+      expect(res.checkInBlock).toEqual({
+        reason: 'STORE_CLOSED',
+        contractId: null,
+      });
     });
 
     it('내 소속이 아니면 404 — 소속 규칙은 직원 앱과 같다(체결 완료 · 가입 완료 · 재직)', async () => {
@@ -340,6 +351,20 @@ describe('MyAttendanceService', () => {
       expect(db.attendanceRecord.create).not.toHaveBeenCalled();
     });
 
+    it('폐점한 근무지면 422 STORE_CLOSED — 남기지 않는다(WHALEERP-643)', async () => {
+      db.store.findFirst.mockResolvedValue({ storeId: 7 });
+      const r = await codeOf(
+        service.checkIn(12, { staffMemberId: 30, locationReadId: 900 }),
+      );
+      expect(r.type).toBe(UnprocessableEntityException);
+      expect(r.body).toMatchObject({ code: 'STORE_CLOSED' });
+      expect(db.store.findFirst).toHaveBeenCalledWith({
+        where: { storeId: 7, storeStatusCode: 'CLOSED' },
+        select: { storeId: true },
+      });
+      expect(db.attendanceRecord.create).not.toHaveBeenCalled();
+    });
+
     it('계약도 서명 대기도 없으면 422 NO_CONTRACT', async () => {
       db.contract.findFirst.mockResolvedValue(null);
       const r = await codeOf(
@@ -440,6 +465,14 @@ describe('MyAttendanceService', () => {
       await service.checkOut(12, { staffMemberId: 30 });
       expect(db.attendanceRecord.create).toHaveBeenCalled();
       expect(db.locationAccessLog.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('폐점한 근무지여도 퇴근은 받는다 — 폐점 전에 연 출근을 닫아야 한다(WHALEERP-643)', async () => {
+      db.store.findFirst.mockResolvedValue({ storeId: 7 });
+      db.attendanceRecord.findFirst.mockResolvedValue(open);
+      await service.checkOut(12, { staffMemberId: 30, locationReadId: 900 });
+      expect(db.attendanceRecord.create).toHaveBeenCalled();
+      expect(db.store.findFirst).not.toHaveBeenCalled();
     });
 
     it('계약 기간은 보지 않는다 — 열린 출근을 닫지 못하면 기록이 더 망가진다', async () => {

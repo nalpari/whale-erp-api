@@ -12,7 +12,7 @@ import { addDays, kstToday } from '../src/staff-members/kst-date';
 
 // 직원 앱 출퇴근 등록을 실제 DB 로 확인한다(WHALEERP-210 · 211 · 212) — 계정 행 잠금으로 동시 출근 · 퇴근 중 하나만 남는지,
 // 열린 출근이 계정의 모든 소속에서 하나인지, 확인자료(수집 · 이용) 두 줄, 위치를 보지 않는 근무지, 일시 중지 403, 서명 대기
-// 422(ATT-12), 관리자 토큰 403.
+// 422(ATT-12), 폐점 422(WHALEERP-643), 관리자 토큰 403.
 describe('직원 앱 출퇴근 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -548,6 +548,45 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
       });
       await prisma.attendanceRecord.delete({
         where: { attendanceRecordId: stale.attendanceRecordId },
+      });
+    }
+  });
+
+  it('폐점한 근무지는 체결 완료 계약이 남아 있어도 화면에 STORE_CLOSED · 출근 422 STORE_CLOSED — 폐점 전에 연 출근의 퇴근은 받는다(WHALEERP-643)', async () => {
+    const token = await tokenOf(accountId);
+    await prisma.store.update({
+      where: { storeId: plainStoreId },
+      data: { storeStatusCode: 'CLOSED', closedDate: today },
+    });
+    try {
+      const view = await request(app.getHttpServer())
+        .get(`/me/attendance?staffMemberId=${plainStaffId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect((view.body as { checkInBlock: unknown }).checkInBlock).toEqual({
+        reason: 'STORE_CLOSED',
+        contractId: null,
+      });
+      const res = await post('check-in', token, {
+        staffMemberId: plainStaffId,
+      }).expect(422);
+      expect(res.body).toMatchObject({ code: 'STORE_CLOSED' });
+      await prisma.attendanceRecord.create({
+        data: {
+          staffMemberId: plainStaffId,
+          storeId: plainStoreId,
+          kind: 'CHECK_IN',
+          recordedAt: new Date(),
+          receivedAt: new Date(),
+        },
+      });
+      await post('check-out', token, { staffMemberId: plainStaffId }).expect(
+        201,
+      );
+    } finally {
+      await prisma.store.update({
+        where: { storeId: plainStoreId },
+        data: { storeStatusCode: 'OPERATING', closedDate: null },
       });
     }
   });
