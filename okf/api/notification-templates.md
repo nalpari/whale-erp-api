@@ -4,12 +4,12 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T09:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T08:51:00Z }
 sources:
   - id: staff-affiliation-kakao-registered
-    resource: ../../prisma/migrations/20261103093000_team3_staff_affiliation_kakao_registered/migration.sql
+    resource: ../../prisma/migrations/20261103175100_team3_staff_affiliation_kakao_registered/migration.sql
     title: 소속 추가 확인 요청 알림톡 카카오 템플릿 코드 · 본문을 카카오 등록본과 같게, 버튼 링크 변수 「링크」 뺌 (WHALEERP-130 후속)
-    last_modified: 2026-11-03T09:30:00Z
+    last_modified: 2026-11-03T08:51:00Z
   - id: contract-sent-alimtalk
     resource: ../../prisma/migrations/20261102114500_team3_contract_sent_alimtalk/migration.sql
     title: 48번째 기본 템플릿 TALK_STAFF_CONTRACT_SENT(근로계약서 발송 알림톡, 카카오 등록본 · 카카오 코드 PUSH_CONTRACT_SENT, WHALEERP-619)
@@ -105,7 +105,7 @@ sources:
   제목(null) · 버튼(「가입하기」, 코드가 싣는다)은 그대로다. 대체 문자는 이 본문 끝에 링크를
   붙여 「아래 링크를 누르면」과 맞는다.
 - **소속 추가 확인 요청 알림톡 = 카카오 등록본**(WHALEERP-130 후속, 2026-11-03 등록 — 기본형, 강조 제목 없음, 버튼 없음).
-  `20261103093000_team3_staff_affiliation_kakao_registered` 가 `TALK_STAFF_AFFILIATION_REQUEST` 의 `kakao_template_code` 를 등록 전
+  `20261103175100_team3_staff_affiliation_kakao_registered` 가 `TALK_STAFF_AFFILIATION_REQUEST` 의 `kakao_template_code` 를 등록 전
   임시 이름 `WHALE_AFFILIATION_01` 에서 등록한 코드 `TALK_STAFF_AFFILIATION_REQUEST` 로 바꾼다 — 그 전에는 비즈뿌리오가 알림톡을 거절해
   대체 문자로 갔다. 등록본 본문은 처음 넣은 기본 문구(`20261027154954`)와 같은 네 줄이고, `body` · `default_body` 를 그 값으로 맞춘다 —
   운영자가 고친 문구도 덮어쓴다. 등록본에 버튼이 없어 `variables` · `default_variables` 에서 버튼 링크 변수 「링크」를 빼고

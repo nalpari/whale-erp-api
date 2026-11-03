@@ -4,7 +4,7 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T09:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T08:51:00Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw

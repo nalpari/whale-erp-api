@@ -4,7 +4,7 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T09:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T08:51:00Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: alimtalk-buttons
     resource: ../../src/alimtalk/alimtalk-buttons.ts
     title: 알림톡 버튼 이름과 버튼 설정 검사(WHALEERP-636)
-    last_modified: 2026-11-03T02:30:00Z
+    last_modified: 2026-11-03T08:51:00Z
   - id: bizppurio-client
     resource: ../../src/alimtalk/bizppurio.client.ts
     title: Bizppurio REST client (token cache, 3002 retry)
@@ -100,7 +100,7 @@ and the same link for PC were fixed by 재영 (2026-10-30), and it is registered
 `TALK_STAFF_AFFILIATION_REQUEST` is registered under its own code too (2026-11-03), **without a button** (김민식
 confirmed). A send carrying the 「요청 확인하기」 button the code used to add was accepted (`1000`) under the new code
 but arrived as the 대체 문자 (2026-11-03 08:22Z), so the button and the 「링크」 variable are gone: `ALIMTALK_BUTTONS`
-no longer lists it, `20261103093000` drops 「링크」 from its variables, and the 직원 reaches the request by logging in
+no longer lists it, `20261103175100` drops 「링크」 from its variables, and the 직원 reaches the request by logging in
 to the app. Adding a button back means registering it with Kakao again together with both. The invite link is built
 from `STAFF_APP_URL` as before (`/invite#token=…`) and there is one Kakao
 template per message, not one per environment (재영 2026-10-30). The registered invite button link is

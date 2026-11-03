@@ -34,11 +34,11 @@ UPDATE "notification_templates" AS r
        "variables" = (
          SELECT COALESCE(jsonb_agg(e.value ORDER BY e.ordinality), '[]'::jsonb)
            FROM jsonb_array_elements(COALESCE(r."default_variables", r."variables")) WITH ORDINALITY AS e
-          WHERE e.value->>'name' <> '링크'),
+          WHERE (e.value->>'name') IS DISTINCT FROM '링크'),
        "default_variables" = (
          SELECT COALESCE(jsonb_agg(e.value ORDER BY e.ordinality), '[]'::jsonb)
            FROM jsonb_array_elements(COALESCE(r."default_variables", r."variables")) WITH ORDINALITY AS e
-          WHERE e.value->>'name' <> '링크'),
+          WHERE (e.value->>'name') IS DISTINCT FROM '링크'),
        "kakao_template_code" = 'TALK_STAFF_AFFILIATION_REQUEST',
        "updated_at" = now()
   FROM "_staff_affiliation_registered" AS t
