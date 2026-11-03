@@ -1,0 +1,376 @@
+import { randomInt } from 'node:crypto';
+import { INestApplication } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { App } from 'supertest/types';
+import { AppModule } from './../src/app.module';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
+import { PrismaService } from '../src/prisma/prisma.service';
+import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
+import {
+  PENDING_CONTRACT_STATUSES,
+  RetirementService,
+} from '../src/staff-members/retirement.service';
+import { storeClosingCheck } from '../src/staff-members/store-closing-check';
+
+// 폐점 확인(WHALEERP-647)을 실제 DB 로 확인한다 — 관계 조건(가입 전 임시저장만 있는 레코드 빼기, 퇴직될 직원의 계약)과
+// 본사 역할에게 가려지는 직원은 첫 건 없이 수만 세는 것, 트랜잭션 안에서 부르는 것.
+describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
+  let app: INestApplication<App>;
+  let prisma: PrismaService;
+  const today = kstToday();
+  const yesterday = addDays(today, -1);
+  const at = (day: Date, hh: number) =>
+    new Date(kstDayStart(day).getTime() + hh * 3600_000);
+
+  let bpCodeId: number;
+  let storeId: number;
+  let otherStoreId: number;
+  let bmId: number;
+  let pmId: number;
+  let sharedId: number;
+  let hiddenId: number;
+  const accountIds: number[] = [];
+  const staffIds: number[] = [];
+
+  beforeAll(async () => {
+    if (process.env.APP_ENV !== 'test' || !process.env.DATABASE_URL)
+      throw new Error(
+        'APP_ENV=test 와 일회용 DB 의 DATABASE_URL 을 주고 돌린다 — 공용 DB 에서 돌면 안 된다',
+      );
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleFixture.createNestApplication();
+    await app.init();
+    prisma = app.get(PrismaService);
+
+    const n = randomInt(100_000, 999_999);
+    ({ bpCodeId } = await prisma.bpCode.create({
+      data: {
+        bpCode: `BP${n}`,
+        isPlatform: false,
+        accountStatusCode: 'ACTIVE',
+        tradeName: '폐점 확인 BP',
+      },
+    }));
+    ({ storeId } = await prisma.store.create({
+      data: {
+        storeCode: `ST${n}`,
+        bpCodeId,
+        storeTypeCode: 'FRANCHISE',
+        name: '폐점 확인 가맹',
+        storeStatusCode: 'OPERATING',
+      },
+    }));
+    ({ storeId: otherStoreId } = await prisma.store.create({
+      data: {
+        storeCode: `ST${(n + 1) % 1_000_000}`,
+        bpCodeId,
+        storeTypeCode: 'FRANCHISE',
+        name: '폐점 확인 다른 점포',
+        storeStatusCode: 'OPERATING',
+      },
+    }));
+    const admin = async (
+      loginId: string,
+      roleTypeCode: string,
+      roleCode: string,
+      ownerBp: number,
+    ) =>
+      (
+        await prisma.adminAccount.create({
+          data: {
+            loginId,
+            bpCodeId: ownerBp,
+            passwordHash: '!',
+            roleTypeCode,
+            roleGroupId: (
+              await prisma.roleGroup.findFirstOrThrow({ where: { roleCode } })
+            ).roleGroupId,
+            joinPathCode: 'PLATFORM_REGISTERED',
+            isAllStores: true,
+            accountStatusCode: 'ACTIVE',
+          },
+        })
+      ).adminAccountId;
+    bmId = await admin(`close${n}`, 'BM', 'BM000001', bpCodeId);
+    pmId = await admin(
+      `closepm${n}`,
+      'PM',
+      'PM000001',
+      (await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } }))
+        .bpCodeId,
+    );
+
+    // 가입 · 동의(보임), 가입 · 미동의(본사에게 가림) — 둘 다 어제 퇴근 없는 출근. 가린 쪽이 더 이르다
+    sharedId = await staff('가동의', 'JOINED', true, [
+      'SIGNED',
+      'PENDING_SEND',
+      'DRAFT',
+    ]);
+    hiddenId = await staff('나미동의', 'JOINED', false, ['SIGNED']);
+    await punch(hiddenId, at(yesterday, 9));
+    await punch(sharedId, at(yesterday, 11));
+    // 가입 전 — 임시저장만(퇴직 대상 아님, 그 임시저장도 남는다), 서명 대기가 있음(퇴직 대상, 계약 종료)
+    await staff('다임시저장만', 'INVITED', false, ['DRAFT']);
+    await staff('라서명대기', 'INVITED', false, ['DRAFT', 'PENDING_SIGNATURE']);
+    // 가입했고 임시저장만 — 가입했으니 퇴직 대상이고 그 임시저장도 닫힌다. 가입 전 · 계약 없음 — 퇴직 대상 아님
+    await staff('바가입임시저장만', 'JOINED', false, ['DRAFT']);
+    await staff('사계약없음', 'INVITED', false, []);
+    // 다른 점포 — 무엇도 섞이지 않는다
+    const other = await staff(
+      '아다른점포',
+      'JOINED',
+      true,
+      ['PENDING_SEND'],
+      otherStoreId,
+    );
+    await punch(other, at(yesterday, 8), otherStoreId);
+    await payslip(other, 'DRAFTING', '07', otherStoreId);
+    // 이미 퇴직 — 세지 않는다
+    const retired = await staff('마퇴직', 'JOINED', false, ['PENDING_SEND']);
+    await prisma.staffMember.update({
+      where: { staffMemberId: retired },
+      data: { employmentStatus: 'RETIRED', retiredDate: addDays(today, -10) },
+    });
+    // 명세서 — 작성 중 · 검토 중만 센다
+    for (const [month, status] of [
+      ['07', 'DRAFTING'],
+      ['08', 'REVIEWING'],
+      ['09', 'SENT'],
+    ] as const)
+      await payslip(sharedId, status, month);
+  });
+
+  async function staff(
+    name: string,
+    joinStatus: 'JOINED' | 'INVITED',
+    consented: boolean,
+    statuses: ('SIGNED' | 'PENDING_SEND' | 'PENDING_SIGNATURE' | 'DRAFT')[],
+    store = storeId,
+  ) {
+    const n = randomInt(10_000_000, 99_999_999);
+    const accountId =
+      joinStatus === 'JOINED'
+        ? (
+            await prisma.account.create({
+              data: {
+                email: `close-${n}@test.invalid`,
+                passwordHash: '!',
+                realName: name,
+                birthDate: new Date('1990-01-01'),
+                phone: `010${n}`,
+                status: 'JOINED',
+                ...(consented
+                  ? {
+                      isHqSharingConsented: true,
+                      hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+                      hqSharingAgreedAt: new Date(),
+                    }
+                  : {}),
+              },
+            })
+          ).accountId
+        : null;
+    if (accountId) accountIds.push(accountId);
+    const { staffMemberId } = await prisma.staffMember.create({
+      data: {
+        storeId: store,
+        accountId,
+        name,
+        phone: `010${n}`,
+        employmentType: 'PART_TIME',
+        jobTitle: '홀',
+        joinStatus,
+      },
+    });
+    staffIds.push(staffMemberId);
+    for (const status of statuses)
+      await prisma.contract.create({
+        data: {
+          staffMemberId,
+          storeId: store,
+          employmentType: 'PART_TIME',
+          contractMethod: 'PAPER',
+          startDate: addDays(today, -30),
+          isHealthPensionInsured: false,
+          isEmploymentInjuryInsured: false,
+          status,
+          createdBy: bmId,
+        },
+      });
+    return staffMemberId;
+  }
+
+  async function punch(
+    staffMemberId: number,
+    recordedAt: Date,
+    store = storeId,
+  ) {
+    await prisma.attendanceRecord.create({
+      data: {
+        staffMemberId,
+        storeId: store,
+        kind: 'CHECK_IN',
+        recordedAt,
+        receivedAt: recordedAt,
+      },
+    });
+  }
+
+  async function payslip(
+    staffMemberId: number,
+    status: 'DRAFTING' | 'REVIEWING' | 'SENT',
+    month: string,
+    store = storeId,
+  ) {
+    const { contractId } = await prisma.contract.findFirstOrThrow({
+      where: { staffMemberId },
+    });
+    const d = (iso: string) => new Date(`${iso}T00:00:00Z`);
+    await prisma.payslip.create({
+      data: {
+        staffMemberId,
+        storeId: store,
+        contractId,
+        periodStartDate: d(`2026-${month}-01`),
+        periodEndDate: d(`2026-${month}-28`),
+        employmentType: 'PART_TIME',
+        attendanceStartDate: d(`2026-${month}-01`),
+        attendanceEndDate: d(`2026-${month}-28`),
+        status,
+        grossPayAmount: 1_000_000,
+        netPayAmount: 1_000_000,
+        ...(status === 'SENT' && {
+          confirmedAt: new Date(),
+          confirmedBy: bmId,
+        }),
+      },
+    });
+  }
+
+  afterAll(async () => {
+    if (!prisma) return;
+    const records = { staffMemberId: { in: staffIds } };
+    await prisma.payslip.deleteMany({ where: records });
+    await prisma.attendanceRecord.deleteMany({ where: records });
+    await prisma.contract.deleteMany({ where: records });
+    await prisma.staffMember.deleteMany({ where: records });
+    await prisma.account.deleteMany({
+      where: { accountId: { in: accountIds } },
+    });
+    const adminIds = [bmId, pmId].filter((id) => id !== undefined);
+    await prisma.adminAccount.deleteMany({
+      where: { adminAccountId: { in: adminIds } },
+    });
+    await prisma.store.deleteMany({
+      where: { storeId: { in: [storeId, otherStoreId] } },
+    });
+    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await app.close();
+  });
+
+  it('본사 역할 — 가려진 직원의 열린 출근은 첫 건으로 고르지 않고 수만 센다 · 종료될 계약 · 퇴직될 직원 · 미확정 명세서', async () => {
+    const res = await storeClosingCheck(prisma, storeId, bmId);
+    expect(res).toEqual({
+      openCheckIns: {
+        count: 1,
+        hiddenCount: 1,
+        first: {
+          attendanceRecordId: expect.any(Number) as number,
+          staffMemberId: sharedId,
+          name: '가동의',
+          recordedAt: at(yesterday, 11),
+          isCheckOutExpired: false,
+        },
+      },
+      // 가동의의 발송 대기 · 임시저장 + 라서명대기의 임시저장 · 서명 대기 + 바가입임시저장만의 임시저장. 다임시저장만의 임시저장(퇴직하지 않는다) · 퇴직한
+      // 마퇴직의 발송 대기는 아니다
+      endingContractCount: 5,
+      // 가동의 · 나미동의 · 라서명대기 · 바가입임시저장만
+      retiringStaffCount: 4,
+      unconfirmedPayslipCount: 2,
+    });
+  });
+
+  it('가리지 않는 역할(플랫폼)은 가장 이른 열린 출근이 첫 건이고 hiddenCount 0 · 트랜잭션 안에서도 같다', async () => {
+    const res = await prisma.$transaction((tx) =>
+      storeClosingCheck(tx, storeId, pmId),
+    );
+    expect(res.openCheckIns).toEqual({
+      count: 2,
+      hiddenCount: 0,
+      first: expect.objectContaining({
+        staffMemberId: hiddenId,
+        name: '나미동의',
+      }) as object,
+    });
+  });
+
+  it('폐점한 가맹 점포면 본사 역할에게 동의한 직원도 가려진다(v227) — 합계는 그대로 · 앱 퇴근 기한이 지난 출근', async () => {
+    const stale = await prisma.attendanceRecord.create({
+      data: {
+        staffMemberId: sharedId,
+        storeId,
+        kind: 'CHECK_IN',
+        recordedAt: at(addDays(today, -3), 9),
+        receivedAt: at(addDays(today, -3), 9),
+      },
+    });
+    try {
+      const pm = await storeClosingCheck(prisma, storeId, pmId);
+      expect(pm.openCheckIns.first).toEqual(
+        expect.objectContaining({
+          attendanceRecordId: stale.attendanceRecordId,
+          isCheckOutExpired: true,
+        }),
+      );
+      await prisma.store.update({
+        where: { storeId },
+        data: { storeStatusCode: 'CLOSED', closedDate: today },
+      });
+      const bm = await storeClosingCheck(prisma, storeId, bmId);
+      expect(bm.openCheckIns).toEqual({
+        count: 0,
+        hiddenCount: 3,
+        first: null,
+      });
+    } finally {
+      await prisma.store.update({
+        where: { storeId },
+        data: { storeStatusCode: 'OPERATING', closedDate: null },
+      });
+      await prisma.attendanceRecord.delete({
+        where: { attendanceRecordId: stale.attendanceRecordId },
+      });
+    }
+  });
+
+  it('퇴직될 직원 · 종료될 계약이 일괄 퇴직(retireAllForStoreClosing)의 실제 결과와 같다 — 되돌린다', async () => {
+    const rollback = new Error('되돌림');
+    await expect(
+      prisma.$transaction(async (tx) => {
+        const check = await storeClosingCheck(tx, storeId, bmId);
+        const pending = { in: PENDING_CONTRACT_STATUSES };
+        const before = await tx.contract.count({
+          where: { staffMemberId: { in: staffIds }, status: pending },
+        });
+        const { retired } = await app
+          .get(RetirementService)
+          .retireAllForStoreClosing(tx, [storeId], bmId, today);
+        const after = await tx.contract.count({
+          where: { staffMemberId: { in: staffIds }, status: pending },
+        });
+        expect(retired).toBe(check.retiringStaffCount);
+        expect(before - after).toBe(check.endingContractCount);
+        throw rollback;
+      }),
+    ).rejects.toBe(rollback);
+  });
+
+  it('없는 점포는 그대로 던진다', async () => {
+    await expect(
+      storeClosingCheck(prisma, 2_147_483_000, bmId),
+    ).rejects.toThrow();
+  });
+});
