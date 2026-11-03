@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T05:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T08:51:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -37,7 +37,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-11-03T02:30:00Z
+    last_modified: 2026-11-03T08:51:00Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -669,10 +669,13 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
   leaves alone) and marks the record 초대 발송. `sent_at` is set; **`sign_deadline_at` stays null** — the 30-day 날인 기한
   starts at acceptance (재영). 발송 대기 is never expired by the daily batch (it only expires 서명 대기); the invitation
   expires after 30 days and the contract stays 발송 대기, so 재발송 continues it.
-- **After commit** `dispatch` sends alimtalk `TALK_STAFF_AFFILIATION_REQUEST` (사업자 · 근무지 · 고용형태 · 링크 =
-  `STAFF_APP_URL` + `/affiliations`, no token — the 직원 must log in). Its Kakao code `WHALE_AFFILIATION_01` is not
-  registered yet (2026-10-27 김민식: SMS fallback first), so Bizppurio answers with the 대체 문자; the same checks as the
-  가입 초대 apply before writing (app URL · SMS sender · mobile number · template on — 503 · 409). Failure handling is the
+- **After commit** `dispatch` sends alimtalk `TALK_STAFF_AFFILIATION_REQUEST` (사업자 · 근무지 · 고용형태; no button and
+  no link — the 직원 logs in to the app to find the request). It is registered with Kakao under its own code
+  `TALK_STAFF_AFFILIATION_REQUEST` without a button (2026-11-03 김민식; until then it went out as the 대체 문자 under the
+  placeholder `WHALE_AFFILIATION_01`, [Notification templates](/api/notification-templates.md) ·
+  [Kakao Alimtalk](/api/alimtalk.md)). Before writing the same checks as the 가입 초대 apply except the app URL (SMS
+  sender · mobile number · template on and its button setup — 503 · 409); `STAFF_APP_URL` is only needed for the mail
+  link below, and without it the mail alone is skipped (logged). Failure handling is the
   가입 초대's: surely not sent → undo (invitation deleted, previous one revived, status back, 502 `SEND_FAILED`); unknown
   → 502 `SEND_UNCONFIRMED`. Undo leaves `candidate_account_id` as the save wrote it. The request shows in the 직원 app
   right after commit, so the 직원 may answer before the alimtalk: if the invitation is already `ACCEPTED` /
@@ -682,7 +685,8 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
   after a 판별 that changed the 초대 유형 (same phone included), the new 판별 stays (`draftAction`, `candidate_account_id`)
   and earlier invitations are not revived — the old channel no longer fits the number. An old-flow 서명 대기
   소속 확인 contract with no request row goes back to 서명 대기 with its old `sentAt` · deadline. Then mail
-  `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email — its failure, or no `MAIL_*`, is logged only. The mail is
+  `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email with the 링크 button (`STAFF_APP_URL` + `/affiliations`,
+  no token) — its failure, or no `MAIL_*` / `STAFF_APP_URL`, is logged only. The mail is
   sent only when the staff record's name (as entered — save, 이어 쓰기 and 근로자 정보 수정 write it first) matches
   that account's `realName` (`nameKey`, the 본인 대조 rule, also used by the 직원 앱 list through `sameName`): the mail goes to the
   account found by the phone, not to the entered number, so on a recycled number it would tell someone else the store and
@@ -837,16 +841,18 @@ resent — a new contract instead.
     계약 행 (`lockContractWithStaff`).
   - 직원 목록 `contract.canResend` (and the deprecated `invitation.canResend`) mirrors this for a 가입 전 직원 — see
     [Staff members](/api/staff-members.md) (발송 대기 · 서명 대기 only).
-- The 알림톡 carries the 초대 링크 as a web-link button (WHALEERP-636, name in
-  `ALIMTALK_BUTTONS` — see [Kakao Alimtalk](/api/alimtalk.md)). The button carries the full link, `https://`
+- The 가입 초대 알림톡 carries the 초대 링크 as a web-link button (WHALEERP-636, name in
+  `ALIMTALK_BUTTONS` — see [Kakao Alimtalk](/api/alimtalk.md)); the 소속 추가 확인 요청 알림톡 has no button and no link
+  (registered that way, 2026-11-03). The button carries the full link, `https://`
   included (the registered button link is `https://#{가입링크}`; the address without its scheme was rejected by Kakao
-  as 7101, 2026-11-02), so **a `STAFF_APP_URL` that is not
-  https is 503 「직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 … 알림톡 버튼 링크를 보낼 수 없습니다.」 before anything is
-  written** — production already refuses it at startup. The 가입 초대 is registered with Kakao (2026-10-30, the DB
-  body matches it), the 소속 추가 확인 요청 is not registered yet; a rejected 알림톡 is only seen in the result report — so
-  **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written**, until the
-  소속 추가 is registered and the 가입 초대's button (full `https://` address) is seen opening in a real send (api #74 review; the
-  fallback carries the body with the code and the link). The https check looks at the link the send will build
+  as 7101, 2026-11-02), so **for a 가입 초대 a `STAFF_APP_URL` that is not
+  https is 503 「직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 가입 초대 알림톡 버튼 링크를 보낼 수 없습니다.」 before anything is
+  written** — production already refuses it at startup. Both are registered with Kakao (가입 초대 2026-10-30, 소속 추가
+  확인 요청 2026-11-03, the DB bodies match them), but neither has yet been seen arriving as an 알림톡 in a real send (for
+  the 가입 초대, its full `https://` button address opening); a rejected 알림톡 is only seen in the result report — so
+  **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written** until that is seen
+  (api #74 review; the fallback carries the body — for the 가입 초대 with the code and the link, for the 소속 추가 확인
+  요청 the body alone). The https check looks at the link the send will build
   (same origin), not the raw `STAFF_APP_URL` text, so the two never disagree.
   The same pre-check is also 503 「… 알림톡 버튼 설정이 맞지 않아 보낼 수 없습니다.」 when the template's button setup
   would make every send throw after the commit (`alimtalkButtonProblem` — the button-link mark is not on the `링크` variable alone, or no button name; api #219).

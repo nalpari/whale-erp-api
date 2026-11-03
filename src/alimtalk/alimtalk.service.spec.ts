@@ -2,7 +2,6 @@ import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { MASK } from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
-import { ALIMTALK_BUTTONS } from './alimtalk-buttons';
 import { AlimtalkService } from './alimtalk.service';
 import {
   BizppurioClient,
@@ -435,32 +434,26 @@ ${link}`,
       );
     });
 
-    it('소속 추가 확인 요청도 같은 규칙이다', async () => {
+    // 카카오 등록본에 버튼이 없다(2026-11-03) — 버튼 링크 변수가 남아 있으면 보내기 전에 던진다(마이그레이션이 뺀다)
+    it('소속 추가 확인 요청은 버튼이 없는 템플릿이라 버튼 링크 변수가 있으면 던진다', async () => {
       findUnique.mockResolvedValue({
         ...withLink(),
         templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
       });
 
-      await service.send({
-        ...input,
-        templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
-        variables: {
-          name: '홍길동',
-          링크: 'https://staff.whale.test/affiliations',
-        },
-      });
-
-      expect(sent().content.at.button).toEqual([
-        {
-          name: ALIMTALK_BUTTONS.TALK_STAFF_AFFILIATION_REQUEST.name,
-          type: 'WL',
-          url_mobile: 'https://staff.whale.test/affiliations',
-          url_pc: 'https://staff.whale.test/affiliations',
-        },
-      ]);
-      expect(
-        sent().recontent?.lms?.message ?? sent().recontent?.sms?.message,
-      ).toMatch(/\nhttps:\/\/staff\.whale\.test\/affiliations$/);
+      await expect(
+        service.send({
+          ...input,
+          templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+          variables: {
+            name: '홍길동',
+            링크: 'https://staff.whale.test/affiliations',
+          },
+        }),
+      ).rejects.toThrow(
+        '알림톡 템플릿 TALK_STAFF_AFFILIATION_REQUEST 의 버튼 이름이 없습니다',
+      );
+      expect(client.sendMessage).not.toHaveBeenCalled();
     });
 
     it('버튼 링크 변수가 없는 템플릿 · 선택 링크를 비우면 버튼이 없다', async () => {
