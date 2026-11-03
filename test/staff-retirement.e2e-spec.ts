@@ -1050,8 +1050,8 @@ describe('퇴직 처리 (e2e, DB)', () => {
       const otherInvite = await invite(other, 'SIGNUP');
 
       await expect(closingTx(closing, day(0))).resolves.toEqual({
-        // 퇴직일을 정했거나 당긴 것: 퇴직일 없음 · 입사일이 폐점일 뒤 · 폐점일보다 뒤 · 임시저장만 있던 가입 전. 이전 · 같은 날 · 이미 퇴직은 세지 않는다
-        retiringStaff: 4,
+        // 퇴직될 직원(폐점 확인 647 과 같은 기준): 재직 중이고 임시저장만 있는 가입 전이 아닌 것 — 퇴직일 없음 · 이전 · 같은 날 · 입사일이 폐점일 뒤 · 폐점일 뒤(당김). 이미 퇴직 · 임시저장만 있던 가입 전(퇴직일은 정하지만)은 세지 않는다
+        retiringStaff: 5,
         pulledForwardStaff: 1,
         draftContracts: 1,
         pendingSendContracts: 1,

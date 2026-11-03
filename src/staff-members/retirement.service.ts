@@ -32,9 +32,12 @@ type Tx = Prisma.TransactionClient;
 
 /** `retireStore` 의 반환값 — 1팀이 폐점 결과 안내와 점포 변경 이력에 쓴다 (폐점 확인 서비스와 같은 이름 · 뜻). */
 export interface StoreClosingRetirementResult {
-  /** 이번에 퇴직일을 정했거나 당긴 레코드 수 — 임시저장만 있던 가입 전 레코드 포함 */
+  /**
+   * 퇴직될 직원 수 — 폐점 확인 서비스(647)의 퇴직될 직원과 같은 기준. 임시저장만 있던 가입 전 레코드는 퇴직일을 정하지만
+   * 세지 않는다(`draftContracts` 로 드러남)
+   */
   retiringStaff: number;
-  /** 그중 퇴직일을 폐점일로 당긴 수 */
+  /** 퇴직일을 폐점일로 당긴 수 */
   pulledForwardStaff: number;
   /** 종료로 닫은 임시저장 계약 수 */
   draftContracts: number;
@@ -271,8 +274,8 @@ export class RetirementService {
    * 그대로 둔다(CTR-31, 출근은 WHALEERP-643 이 막는다).
    *
    * @returns 1팀이 결과 안내와 점포 변경 이력에 쓴다 (폐점 확인 서비스 WHALEERP-647 과 같은 이름 · 뜻).
-   *   - `retiringStaff`: 이번에 퇴직일을 정했거나 당긴 레코드 수 — 임시저장만 있던 가입 전 레코드 포함 (이미 폐점일 이전으로 정해진 레코드는 세지 않는다)
-   *   - `pulledForwardStaff`: 그중 퇴직일을 폐점일로 당긴 수
+   *   - `retiringStaff`: 퇴직될 직원 수 — 폐점 확인 서비스(647)의 퇴직될 직원과 같은 기준: 그 점포의 재직 레코드 중 임시저장만 있는 가입 전이 아닌 것 전부(퇴직일 없음 · 당김 · 폐점일 이전/같은 날 모두). 임시저장만 있던 가입 전 레코드는 퇴직일을 정하지만 세지 않는다(`draftContracts` 로 드러난다)
+   *   - `pulledForwardStaff`: 퇴직일을 폐점일로 당긴 수
    *   - `draftContracts`: 종료로 닫은 임시저장 계약 수
    *   - `pendingSendContracts`: 종료로 닫은 발송 대기 계약 수
    *   - `pendingSignatureContracts`: 종료로 닫은 서명 대기 + 수정 요청 계약 수
@@ -304,16 +307,23 @@ export class RetirementService {
     for (const { staff_member_id } of locked)
       await assertNoOpenCheckIn(tx, staff_member_id);
 
-    // 임시저장만 있던 가입 전 레코드도 대상이다 — 아래에서 그 임시저장이 닫혀 재직으로 세지므로(CTR-29) 퇴직일을 정해 둬야
+    // 조회와 잠금 사이에 생긴 재직 레코드는 퇴직되지 않을 수 있다 — 1팀이 점포를 FOR UPDATE 로 잡는 동안은 새 직원 레코드 insert(외래키)가
+    // 막히지만, FOR NO KEY UPDATE 로 바꾸면 틈이 생긴다. 짧은 틈이라 받아들인 위험(2026-11-03 노영주).
+    // 임시저장만 있던 가입 전 레코드도 퇴직일은 정한다 — 아래에서 그 임시저장이 닫혀 재직으로 세지므로(CTR-29) 퇴직일을 정해 둬야
     // 다음 날 배치가 확정한다.
     const members = await tx.staffMember.findMany({
       where: { staffMemberId: { in: locked.map((l) => l.staff_member_id) } },
-      select: { staffMemberId: true, retiredDate: true },
+      select: { staffMemberId: true, joinStatus: true, retiredDate: true },
       orderBy: { staffMemberId: 'asc' },
     });
     let retiringStaff = 0;
     let pulledForwardStaff = 0;
-    for (const { staffMemberId, retiredDate } of members) {
+    for (const { staffMemberId, joinStatus, retiredDate } of members) {
+      // 퇴직될 직원으로 세는 기준(폐점 확인 647 과 같다)은 계약을 닫기 전에 판정한다 — 이 루프는 계약을 닫기 전이다
+      const counted = !(await this.isDraftOnlyPreJoin(tx, staffMemberId, {
+        joinStatus,
+      }));
+      if (counted) retiringStaff += 1;
       if (retiredDate !== null && retiredDate <= closed) continue;
       if (retiredDate !== null) {
         await tx.staffMemberRetirementLog.create({
@@ -328,7 +338,6 @@ export class RetirementService {
         pulledForwardStaff += 1;
       }
       await this.schedule(tx, adminAccountId, staffMemberId, closed, now);
-      retiringStaff += 1;
     }
 
     const ended = await this.endPendingContracts(tx, { storeId }, 'ADMIN');

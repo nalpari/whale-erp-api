@@ -494,11 +494,11 @@ describe('RetirementService', () => {
     });
 
     it.each(['2026-10-08', '2026-10-01'])(
-      '퇴직일이 폐점일 이전 · 같은 날(%s)이면 그대로 두고 로그도 남기지 않으며 세지 않는다',
+      '퇴직일이 폐점일 이전 · 같은 날(%s)이면 그대로 두고 로그도 남기지 않지만 퇴직될 직원으로는 센다',
       async (iso) => {
         members({ 2: { retiredDate: date(iso) } });
 
-        await expect(run()).resolves.toEqual(zero);
+        await expect(run()).resolves.toEqual({ ...zero, retiringStaff: 1 });
 
         expect(prisma.staffMember.update).not.toHaveBeenCalled();
         expect(prisma.staffMemberRetirementLog.create).not.toHaveBeenCalled();
@@ -535,7 +535,8 @@ describe('RetirementService', () => {
 
       await expect(run()).resolves.toEqual({
         ...zero,
-        retiringStaff: 2,
+        // 임시저장만 있던 가입 전 레코드(2번)는 퇴직일은 정하지만 세지 않는다 — draftContracts 로 드러난다
+        retiringStaff: 1,
         draftContracts: 2,
       });
 
