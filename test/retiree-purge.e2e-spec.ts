@@ -274,6 +274,18 @@ describe('퇴직자 보존 기간 파기 (e2e, DB)', () => {
     // 퇴직 예정(재직) — 퇴직일이 지났어도 확정 전이면 남는다
     const planned = await staff(null, expiredRetired, 'EMPLOYED');
     const plannedContract = await contract(planned);
+    // 저장소 키 형식이 아닌 파일이 있는 레코드는 고르지 않는다(파일 일부만 지워지지 않게) — 기한이 지나도 남는다
+    const unfit = await staff(null, expiredRetired);
+    const unfitContract = await contract(unfit);
+    await prisma.contractDocument.create({
+      data: {
+        contractId: unfitContract,
+        kind: 'PAPER_EMPLOYMENT_CONTRACT',
+        storageKey: `legacy/${unfitContract}.pdf`,
+        fileName: 'x.pdf',
+        checksum: 'x',
+      },
+    });
     // 소속이 없는 계정의 이력은 남는다
     const accountC = await account();
     await prisma.accountChangeHistory.create({
@@ -339,9 +351,11 @@ describe('퇴직자 보존 기간 파기 (e2e, DB)', () => {
     // 명세서가 가리키는 레코드 · 퇴직 예정은 계약이 남는다
     expect(
       await prisma.contract.count({
-        where: { contractId: { in: [paidContract, plannedContract] } },
+        where: {
+          contractId: { in: [paidContract, plannedContract, unfitContract] },
+        },
       }),
-    ).toBe(2);
+    ).toBe(3);
 
     // 신고 정보 — 지난 레코드는 명세서와 상관없이 지우고, + 3년 당일은 남는다
     expect(taxes.ran).toBe(true);
