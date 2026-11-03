@@ -36,7 +36,14 @@ describe('폐점 확인 storeClosingCheck (WHALEERP-647)', () => {
       attendanceRecord: {
         findMany: jest.fn().mockResolvedValue(opts.rows ?? []),
       },
-      contract: { count: jest.fn().mockResolvedValue(5) },
+      contract: {
+        groupBy: jest.fn().mockResolvedValue([
+          { status: 'DRAFT', _count: { _all: 3 } },
+          { status: 'PENDING_SEND', _count: { _all: 1 } },
+          { status: 'PENDING_SIGNATURE', _count: { _all: 2 } },
+          { status: 'CORRECTION_REQUESTED', _count: { _all: 1 } },
+        ]),
+      },
       staffMember: { count: jest.fn().mockResolvedValue(4) },
       payslip: { count: jest.fn().mockResolvedValue(2) },
     };
@@ -51,12 +58,15 @@ describe('폐점 확인 storeClosingCheck (WHALEERP-647)', () => {
     row(2, '가동의', consented, '2026-11-02T02:00:00Z'),
   ];
 
-  it('퇴직될 직원은 일괄 퇴직과 같다 — 재직이면서 가입했거나 임시저장 아닌 계약이 있음 · 종료될 계약은 그 직원의 대기 계약', async () => {
+  it('퇴직될 직원 · 계약은 retireStore 와 같은 이름 · 범위 — 재직이면서 가입했거나 임시저장 아닌 계약이 있는 직원, 점포의 대기 계약을 상태별로', async () => {
     const { db, run } = setup({});
     await expect(run()).resolves.toMatchObject({
-      endingContractCount: 5,
-      retiringStaffCount: 4,
-      unconfirmedPayslipCount: 2,
+      retiringStaff: 4,
+      draftContracts: 3,
+      pendingSendContracts: 1,
+      // 서명 대기 + 수정 요청
+      pendingSignatureContracts: 3,
+      unconfirmedPayslips: 2,
     });
     const retiring = {
       storeId: 7,
@@ -67,11 +77,10 @@ describe('폐점 확인 storeClosingCheck (WHALEERP-647)', () => {
       ],
     };
     expect(db.staffMember.count).toHaveBeenCalledWith({ where: retiring });
-    expect(db.contract.count).toHaveBeenCalledWith({
-      where: {
-        status: { in: PENDING_CONTRACT_STATUSES },
-        staffMember: retiring,
-      },
+    expect(db.contract.groupBy).toHaveBeenCalledWith({
+      by: ['status'],
+      where: { storeId: 7, status: { in: PENDING_CONTRACT_STATUSES } },
+      _count: { _all: true },
     });
     expect(db.payslip.count).toHaveBeenCalledWith({
       where: { storeId: 7, status: { in: ['DRAFTING', 'REVIEWING'] } },

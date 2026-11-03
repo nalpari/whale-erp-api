@@ -6,10 +6,7 @@ import { AppModule } from './../src/app.module';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
-import {
-  PENDING_CONTRACT_STATUSES,
-  RetirementService,
-} from '../src/staff-members/retirement.service';
+import { RetirementService } from '../src/staff-members/retirement.service';
 import { storeClosingCheck } from '../src/staff-members/store-closing-check';
 
 // 폐점 확인(WHALEERP-647)을 실제 DB 로 확인한다 — 관계 조건(가입 전 임시저장만 있는 레코드 빼기, 퇴직될 직원의 계약)과
@@ -276,12 +273,15 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
           isCheckOutExpired: false,
         },
       },
-      // 가동의의 발송 대기 · 임시저장 + 라서명대기의 임시저장 · 서명 대기 + 바가입임시저장만의 임시저장. 다임시저장만의 임시저장(퇴직하지 않는다) · 퇴직한
-      // 마퇴직의 발송 대기는 아니다
-      endingContractCount: 5,
-      // 가동의 · 나미동의 · 라서명대기 · 바가입임시저장만
-      retiringStaffCount: 4,
-      unconfirmedPayslipCount: 2,
+      // 가동의 · 나미동의 · 라서명대기 · 바가입임시저장만 — 다임시저장만(임시저장만 있는 가입 전)은 세지 않는다
+      retiringStaff: 4,
+      // 점포의 대기 계약 — 가동의 · 다임시저장만 · 라서명대기 · 바가입임시저장만의 임시저장
+      draftContracts: 4,
+      // 가동의 · 퇴직한 마퇴직의 발송 대기(점포 기준이라 퇴직 레코드 것도 닫힌다). 다른 점포 것은 아니다
+      pendingSendContracts: 2,
+      // 라서명대기의 서명 대기
+      pendingSignatureContracts: 1,
+      unconfirmedPayslips: 2,
     });
   });
 
@@ -338,23 +338,25 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     }
   });
 
-  it('퇴직될 직원 · 종료될 계약이 일괄 퇴직(retireAllForStoreClosing)의 실제 결과와 같다 — 되돌린다', async () => {
+  it('퇴직될 직원 · 종료될 계약이 폐점 순간의 퇴직(retireStore)의 실제 결과와 같다 — 되돌린다', async () => {
     const rollback = new Error('되돌림');
     await expect(
       prisma.$transaction(async (tx) => {
         const check = await storeClosingCheck(tx, storeId, today);
-        const pending = { in: PENDING_CONTRACT_STATUSES };
-        const before = await tx.contract.count({
-          where: { staffMemberId: { in: staffIds }, status: pending },
-        });
-        const { retired } = await app
+        // retireStore 는 재직 레코드의 열린 출근이 있으면 409 로 막는다 — 확인이 알린 열린 출근을 닫은 셈 치고 지운다
+        expect(check.openCheckIns.count + check.openCheckIns.hiddenCount).toBe(
+          2,
+        );
+        await tx.attendanceRecord.deleteMany({ where: { storeId } });
+        const res = await app
           .get(RetirementService)
-          .retireAllForStoreClosing(tx, [storeId], bmId, today);
-        const after = await tx.contract.count({
-          where: { staffMemberId: { in: staffIds }, status: pending },
+          .retireStore(tx, storeId, today, bmId);
+        expect(res).toMatchObject({
+          retiringStaff: check.retiringStaff,
+          draftContracts: check.draftContracts,
+          pendingSendContracts: check.pendingSendContracts,
+          pendingSignatureContracts: check.pendingSignatureContracts,
         });
-        expect(retired).toBe(check.retiringStaffCount);
-        expect(before - after).toBe(check.endingContractCount);
         throw rollback;
       }),
     ).rejects.toBe(rollback);
