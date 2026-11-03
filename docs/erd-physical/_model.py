@@ -683,6 +683,11 @@ INDEXES = [
     # changed_at 까지 넣으면 이름이 71바이트로 63바이트 한도를 넘는다. 템플릿 하나의 이력은 많지 않아 앞 열로 충분하다.
     ("notification_template_histories", ["notification_template_id"]),
     ("staff_member_retirement_logs", ["staff_member_id", "processed_at"]),
+    # 근로계약을 가리키는 외래키 칸 — 퇴직자 근로계약 파기의 외래키 검사 · 잠금이 표 전체를 훑지 않게(WHALEERP-645).
+    ("payslips", ["contract_id"]),
+    ("work_schedules", ["source_contract_id"]),
+    ("contracts", ["previous_contract_id"]),
+    ("staff_member_retirement_logs", ["contract_id"]),
     ("password_reset_links", ["account_id"]), ("email_find_attempts", ["phone_key", "attempted_at"]),
     ("invitation_code_attempts", ["phone_key", "attempted_at"]),
     ("staff_tax_profile_histories", ["staff_member_id", "changed_at"]),
