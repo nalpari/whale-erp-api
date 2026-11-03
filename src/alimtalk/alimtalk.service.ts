@@ -4,7 +4,10 @@ import {
   findSendableTemplate,
   type SendableTemplate,
 } from '../notification-templates/find-template';
-import { renderTemplate } from '../notification-templates/render-template';
+import {
+  MASK,
+  renderTemplate,
+} from '../notification-templates/render-template';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   type AlimtalkButton,
@@ -231,7 +234,7 @@ export class AlimtalkService {
 /**
  * 버튼 링크 값을 웹링크(WL) 버튼 하나로. PC 카카오톡에도 보이게 모바일 · PC 링크를 같은 값으로 싣는다(직원 근무 앱은
  * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 링크는 `https://` 를 포함한 전체 주소 그대로 싣는다 — 앞을 떼고
- * 보냈더니 카카오가 7101(파라미터 형식 오류)로 거절했다(2026-11-02 김민식). 대체 문자 본문 끝 링크도 같은 주소다. 버튼 설정이 맞지 않는 템플릿(alimtalkButtonProblem)과 https 주소가
+ * 보낸 가입 초대가 비즈뿌리오 결과 7101(파라미터 형식 오류)로 거절됐다(2026-11-02 김민식, 전체 주소의 실제 발송 확인 전). 대체 문자 본문 끝 링크도 같은 주소다. 버튼 설정이 맞지 않는 템플릿(alimtalkButtonProblem)과 https 주소가
  * 아닌 링크는 보내기 전에 던진다 — 오류 메시지에 링크(토큰)는 담지 않는다. 링크가 없으면(선택 변수를 비움) 버튼도 없다 —
  * 버튼을 등록한 템플릿이면 알림톡은 거절되고 대체 문자로 간다.
  */
@@ -289,8 +292,8 @@ function eucKrBytes(text: string): number {
 /**
  * 로그용 요청 사본. 키 · 구조 · 버튼 이름 · 링크의 스킴 · 호스트는 보낸 그대로 두고, 번호 · senderkey · 본문의 변수 값 · 링크의
  * 경로 뒤를 가린다. 본문은 `shape`(변수 값을 모두 가린 본문)로 바꾸고 원래 글자 수(UTF-16 단위)를, 대체 문자는 비즈뿌리오가 세는
- * EUC-KR 바이트 수(SMS 90 · LMS 2000 한도)를 함께 싣는다. 나머지는 펼쳐 그대로 싣는다 — `BizppurioMessage` 에 변수 값이 들어가는
- * 칸(알림톡 `title` 등)을 더하면 여기서도 가린다.
+ * EUC-KR 바이트 수(SMS 90 · LMS 2000 한도)를 함께 싣는다. 알려진 칸만 골라 싣는다 — `BizppurioMessage` 에 칸을 더하면 여기에도
+ * 적어야 로그에 보인다. 알림톡 `title`(강조 제목)은 변수 값이 들어갈 수 있어 있는지만 보인다.
  */
 function requestForLog(
   message: BizppurioMessage,
@@ -301,19 +304,23 @@ function requestForLog(
   const fallback = [shape, ...links.map(maskLink)].join('\n');
   const { sms, lms } = message.recontent ?? {};
   const messageBytes = eucKrBytes((sms ?? lms)?.message ?? '');
+  // 실을 칸을 하나씩 고른다(허용 목록) — 요청 타입에 칸이 늘어도 여기 적기 전에는 로그에 실리지 않는다
   return {
-    ...message,
+    account: message.account,
+    type: message.type,
+    refkey: message.refkey,
     to: maskPhone(message.to),
     content: {
       at: {
-        ...at,
         senderkey: `***${at.senderkey.slice(-4)}`,
+        templatecode: at.templatecode,
         message: shape,
-        messageLength: at.message.length,
+        ...(at.title === undefined ? {} : { title: MASK }),
         ...(at.button
           ? {
               button: at.button.map((b) => ({
-                ...b,
+                name: b.name,
+                type: b.type,
                 url_mobile: maskLink(b.url_mobile),
                 ...(b.url_pc === undefined
                   ? {}
@@ -321,14 +328,23 @@ function requestForLog(
               })),
             }
           : {}),
+        messageLength: at.message.length,
       },
     },
+    ...(message.from === undefined ? {} : { from: message.from }),
+    ...(message.resend ? { resend: { first: message.resend.first } } : {}),
     ...(message.recontent
       ? {
           recontent: {
             ...(sms ? { sms: { message: fallback, messageBytes } } : {}),
             ...(lms
-              ? { lms: { ...lms, message: fallback, messageBytes } }
+              ? {
+                  lms: {
+                    subject: lms.subject,
+                    message: fallback,
+                    messageBytes,
+                  },
+                }
               : {}),
           },
         }

@@ -270,7 +270,7 @@ export class ContractDeliveryService {
       throw new ServiceUnavailableException(
         `직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 ${what} 알림톡 버튼 링크를 보낼 수 없습니다.`,
       );
-    // 소속 추가 확인 요청은 카카오 등록 전이라 알림톡이 거절될 수 있고, 가입 초대는 등록됐지만(2026-10-30) 스킴을 뗀 버튼 링크가
+    // 소속 추가 확인 요청은 카카오 등록 전이라 알림톡이 거절될 수 있고, 가입 초대는 등록됐지만(2026-10-30) 버튼(전체 주소)이
     // 실제 발송에서 열리는지 아직 확인 전이다 — 대체 문자가 없으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다(api #59 ·
     // #74 리뷰). 둘 다 확인되면 다시 본다.
     if (!this.alimtalk.hasSmsFallback())
