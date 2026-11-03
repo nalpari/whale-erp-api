@@ -56,6 +56,8 @@ describe('퇴직 처리 (e2e, DB)', () => {
   let revokedRoleGroupId: number;
   const testRoleGroupIds: number[] = [];
   const staffIds: number[] = [];
+  /** 폐점 테스트가 만든 점포 — 다른 테스트의 직원이 섞이지 않게 따로 둔다 */
+  const closingStoreIds: number[] = [];
   const accountIds: number[] = [];
 
   beforeAll(async () => {
@@ -220,7 +222,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
     });
     await prisma.workSchedule.deleteMany({ where: byStaff });
     const todos = await prisma.todo.findMany({
-      where: { storeId: { in: [storeId, otherStoreId] } },
+      where: { storeId: { in: [storeId, otherStoreId, ...closingStoreIds] } },
       select: { todoId: true },
     });
     const todoIds = todos.map((t) => t.todoId);
@@ -267,7 +269,11 @@ describe('퇴직 처리 (e2e, DB)', () => {
       where: { roleGroupId: { in: testRoleGroupIds } },
     });
     await prisma.store.deleteMany({
-      where: { storeId: { in: [storeId, otherStoreId, franchiseStoreId] } },
+      where: {
+        storeId: {
+          in: [storeId, otherStoreId, franchiseStoreId, ...closingStoreIds],
+        },
+      },
     });
     await prisma.bpCode.deleteMany({ where: { bpCodeId } });
     await app.close();
@@ -276,6 +282,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
   async function createStaff(
     joinStatus: 'DRAFT' | 'INVITED' | 'JOINED' = 'JOINED',
     hiredDate: Date | null = null,
+    store = storeId,
   ) {
     const n = randomInt(10_000_000, 99_999_999);
     let accountId: number | null = null;
@@ -294,7 +301,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
     }
     const staff = await prisma.staffMember.create({
       data: {
-        storeId,
+        storeId: store,
         accountId,
         name: '홍길동',
         phone: `010${n}`,
@@ -901,6 +908,203 @@ describe('퇴직 처리 (e2e, DB)', () => {
       expect(first).toEqual([1, 1, 1]);
       expect(await counts()).toEqual(first);
       expect((await staffOf(staffId)).employmentStatus).toBe('RETIRED');
+    });
+  });
+
+  describe('점포 폐점 일괄 퇴직 (WHALEERP-646)', () => {
+    const closingTx = (closingStoreId: number, closedDate: Date) =>
+      prisma.$transaction((tx) =>
+        retirement.retireAllForStoreClosing(
+          tx,
+          closingStoreId,
+          adminId,
+          closedDate,
+        ),
+      );
+
+    it('재직 직원을 폐점일로 바로 확정한다 — 로그 · 스케줄 · 대기 계약 · TO-DO 를 정리하고 다른 점포는 건드리지 않으며, 이어 배치를 돌려도 다시 처리하지 않는다', async () => {
+      const n = randomInt(100_000, 999_999);
+      const { storeId: closing } = await prisma.store.create({
+        data: {
+          storeCode: `ST${n}`,
+          bpCodeId,
+          storeTypeCode: 'DIRECT',
+          name: '폐점 테스트 점포',
+          storeStatusCode: 'OPERATING',
+        },
+      });
+      closingStoreIds.push(closing);
+      const noDate = await createStaff('JOINED', null, closing);
+      const later = await createStaff('JOINED', null, closing);
+      const earlier = await createStaff('JOINED', null, closing);
+      const sameDay = await createStaff('JOINED', null, closing);
+      const alreadyRetired = await createStaff('JOINED', null, closing);
+      const draftOnly = await createStaff('DRAFT', null, closing);
+      const other = await createStaff('JOINED', null, storeId);
+      await prisma.staffMember.update({
+        where: { staffMemberId: later },
+        data: { retiredDate: day(7) },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId: earlier },
+        data: { retiredDate: day(-2) },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId: sameDay },
+        data: { retiredDate: day(0) },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId: alreadyRetired },
+        data: { employmentStatus: 'RETIRED', retiredDate: day(-30) },
+      });
+      const draftContract = await contractOf(
+        draftOnly,
+        'DRAFT',
+        day(1),
+        null,
+        closing,
+      );
+      const keep = await scheduleOn(noDate, day(0), closing);
+      const removed = await scheduleOn(noDate, day(1), closing);
+      const pending = await contractOf(
+        noDate,
+        'PENDING_SEND',
+        day(1),
+        null,
+        closing,
+      );
+      const signed = await contractOf(
+        noDate,
+        'SIGNED',
+        day(-10),
+        null,
+        closing,
+      );
+      const todoId = await personalTodo(noDate, false, closing);
+      const otherSchedule = await scheduleOn(other, day(1));
+
+      await expect(closingTx(closing, day(0))).resolves.toEqual({
+        // 이미 퇴직한 직원은 조회하지 않으니 건너뜀은 임시저장만 있는 가입 전 레코드 하나다
+        retired: 4,
+        skipped: 1,
+      });
+
+      expect(await staffOf(noDate)).toMatchObject({
+        employmentStatus: 'RETIRED',
+        retiredDate: day(0),
+      });
+      // 걸친 체결 계약 하나 → RETIRE 한 줄
+      expect(await logsOf(noDate)).toEqual([
+        expect.objectContaining({
+          action: 'RETIRE',
+          retiredDate: day(0),
+          contractId: signed.contractId,
+          processedBy: adminId,
+        }),
+      ]);
+      expect(
+        (
+          await prisma.workSchedule.findMany({
+            where: {
+              workScheduleId: {
+                in: [keep.workScheduleId, removed.workScheduleId],
+              },
+            },
+            orderBy: { workScheduleId: 'asc' },
+          })
+        ).map((s) => s.isDeleted),
+      ).toEqual([false, true]);
+      expect(
+        (
+          await prisma.contract.findUniqueOrThrow({
+            where: { contractId: pending.contractId },
+          })
+        ).status,
+      ).toBe('ENDED');
+      // 체결 완료 계약은 건드리지 않는다
+      expect(
+        (
+          await prisma.contract.findUniqueOrThrow({
+            where: { contractId: signed.contractId },
+          })
+        ).status,
+      ).toBe('SIGNED');
+      expect(await prisma.todoAssignee.count({ where: { todoId } })).toBe(0);
+
+      // 퇴직일이 뒤였던 직원: 폐점일로 앞당김 — CANCEL(옛 날짜) + RETIRE(폐점일), 처리 시각 같음
+      expect(await staffOf(later)).toMatchObject({
+        employmentStatus: 'RETIRED',
+        retiredDate: day(0),
+      });
+      const laterLogs = await logsOf(later);
+      expect(laterLogs.map((l) => [l.action, l.retiredDate])).toEqual([
+        ['CANCEL', day(7)],
+        ['RETIRE', day(0)],
+      ]);
+      expect(laterLogs[0].processedAt).toEqual(laterLogs[1].processedAt);
+
+      // 이전 · 같은 날: 퇴직일 그대로 확정, 로그를 더하지 않는다
+      expect(await staffOf(earlier)).toMatchObject({
+        employmentStatus: 'RETIRED',
+        retiredDate: day(-2),
+      });
+      expect(await staffOf(sameDay)).toMatchObject({
+        employmentStatus: 'RETIRED',
+        retiredDate: day(0),
+      });
+      expect(await logsOf(earlier)).toEqual([]);
+
+      // 건너뜀: 이미 퇴직 · 임시저장만 있는 가입 전 레코드(임시저장 계약도 그대로)
+      expect(await staffOf(alreadyRetired)).toMatchObject({
+        retiredDate: day(-30),
+      });
+      expect(await staffOf(draftOnly)).toMatchObject({
+        employmentStatus: 'EMPLOYED',
+        retiredDate: null,
+      });
+      expect(
+        (
+          await prisma.contract.findUniqueOrThrow({
+            where: { contractId: draftContract.contractId },
+          })
+        ).status,
+      ).toBe('DRAFT');
+
+      // 다른 점포는 그대로
+      expect((await staffOf(other)).employmentStatus).toBe('EMPLOYED');
+      expect(
+        (
+          await prisma.workSchedule.findUniqueOrThrow({
+            where: { workScheduleId: otherSchedule.workScheduleId },
+          })
+        ).isDeleted,
+      ).toBe(false);
+
+      // 배치를 다음 날로 돌려도 이 직원들은 다시 처리하지 않는다
+      const historiesBefore = await prisma.contractStatusHistory.count({
+        where: { contractId: pending.contractId },
+      });
+      // 개발 DB 의 다른 테스트가 남긴 퇴직 예정자가 있을 수 있어 전체 건수가 아니라 이 점포의 대상 수를 본다
+      const dueCount = () =>
+        prisma.staffMember.count({
+          where: {
+            storeId: closing,
+            employmentStatus: 'EMPLOYED',
+            retiredDate: { lt: day(1) },
+          },
+        });
+      expect(await dueCount()).toBe(0);
+      await prisma.$transaction((tx) => retirement.retireDue(tx, day(1)));
+      expect(
+        await prisma.contractStatusHistory.count({
+          where: { contractId: pending.contractId },
+        }),
+      ).toBe(historiesBefore);
+      expect(
+        await prisma.staffMemberRetirementLog.count({
+          where: { staffMemberId: later },
+        }),
+      ).toBe(2);
     });
   });
 

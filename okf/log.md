@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-03
+* **Update**: [Staff retirement](/api/staff-retirement.md) — 점포 폐점 때 소속 재직 직원을 폐점일로 일괄 퇴직 확정하는 메소드 `retireAllForStoreClosing`(WHALEERP-646, 경로 · DTO · 마이그레이션 없음). 열린 출근은 검사하지 않고, 퇴직일 없음 · 폐점일보다 뒤(앞당김) · 이전/같음을 모두 그 자리에서 `finalize` 한다. 이미 퇴직 · 임시저장만 있는 가입 전 레코드는 건너뛴다. 1팀은 폐점의 `assertNoContracts` 가 체결 완료 계약 때문에 막지 않게 바꿔야 한다.
 * **Update**: [Attendance](/api/attendance.md) — 직원 앱 출근에서 폐점한 근무지를 422 `STORE_CLOSED` 로 막는다(WHALEERP-643). 화면 `checkInBlock` 도 계약보다 먼저 `STORE_CLOSED` 를 싣는다. 퇴근은 그대로 받는다(폐점 전에 연 출근을 닫아야 한다).
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) — api #231 리뷰 후속: 요청 로그 사본(`requestForLog`)을 허용 목록으로 바꿨다(알려진 칸만, 알림톡 `title` 은 있는지만 `********`). 되돌림이 덜 된 「스킴을 뗀 버튼」 설명을 전체 주소 기준으로, 소속 추가 템플릿은 등록할 때 같은 형식으로 고쳤다. 7101 근거는 관찰한 결과 한 건이고 전체 주소의 실제 발송 확인은 남은 일로 적었다.
 * **Update**: main 병합(api ponyta, main #233 까지): okf/log 충돌은 양쪽 기록을 살렸다.
