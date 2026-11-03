@@ -4,8 +4,12 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-02T04:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T09:30:00Z }
 sources:
+  - id: staff-affiliation-kakao-registered
+    resource: ../../prisma/migrations/20261103093000_team3_staff_affiliation_kakao_registered/migration.sql
+    title: 소속 추가 확인 요청 알림톡 카카오 템플릿 코드 · 본문을 카카오 등록본과 같게, 버튼 링크 변수 「링크」 뺌 (WHALEERP-130 후속)
+    last_modified: 2026-11-03T09:30:00Z
   - id: contract-sent-alimtalk
     resource: ../../prisma/migrations/20261102114500_team3_contract_sent_alimtalk/migration.sql
     title: 48번째 기본 템플릿 TALK_STAFF_CONTRACT_SENT(근로계약서 발송 알림톡, 카카오 등록본 · 카카오 코드 PUSH_CONTRACT_SENT, WHALEERP-619)
@@ -100,6 +104,15 @@ sources:
   거절해 대체 문자로만 간다. 변수 목록은 되돌리기 원본(근무지 · 초대코드 · 링크=버튼 링크)으로 맞춘다 — 발송 코드가 이 셋만 넘긴다.
   제목(null) · 버튼(「가입하기」, 코드가 싣는다)은 그대로다. 대체 문자는 이 본문 끝에 링크를
   붙여 「아래 링크를 누르면」과 맞는다.
+- **소속 추가 확인 요청 알림톡 = 카카오 등록본**(WHALEERP-130 후속, 2026-11-03 등록 — 기본형, 강조 제목 없음, 버튼 없음).
+  `20261103093000_team3_staff_affiliation_kakao_registered` 가 `TALK_STAFF_AFFILIATION_REQUEST` 의 `kakao_template_code` 를 등록 전
+  임시 이름 `WHALE_AFFILIATION_01` 에서 등록한 코드 `TALK_STAFF_AFFILIATION_REQUEST` 로 바꾼다 — 그 전에는 비즈뿌리오가 알림톡을 거절해
+  대체 문자로 갔다. 등록본 본문은 처음 넣은 기본 문구(`20261027154954`)와 같은 네 줄이고, `body` · `default_body` 를 그 값으로 맞춘다 —
+  운영자가 고친 문구도 덮어쓴다. 등록본에 버튼이 없어 `variables` · `default_variables` 에서 버튼 링크 변수 「링크」를 빼고
+  사업자 · 근무지 · 고용형태만 남긴다 — 버튼을 실으면 알림톡이 거절돼 대체 문자로 간다. 코드도 이 템플릿의 버튼(「요청 확인하기」)을
+  뺐다([Kakao Alimtalk](/api/alimtalk.md)). 그래서 저장 검사가 이 템플릿의 버튼 링크 표시를 `NO_BUTTON_NAME` 으로 막는다 — 버튼을 넣으려면
+  카카오 재등록과 함께 코드를 고친다. 제목(null)은 그대로이고, 메일 `EMAIL_STAFF_AFFILIATION_REQUEST` 의 링크 버튼도 그대로다.
+  코드와 함께 배포한다 — 이 마이그레이션만 적용되면 옛 코드가 `LINK_MISMATCH`, 코드만 나가면 `NO_BUTTON_NAME` 으로 소속 추가 확인 요청을 막는다.
 - **템플릿 코드**는 고칠 수 있다. 형식(`^[A-Z][A-Z0-9_]*$`)과 고유만 보고 겹치면 409. 채널을 바꿔도 코드가 저절로 바뀌지
   않는다. 발송 코드가 이 값으로 부르므로 화면이 「발송 코드도 함께 바꿔야 합니다」 확인을 받는다.
 

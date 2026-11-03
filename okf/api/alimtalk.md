@@ -4,7 +4,7 @@ title: Kakao Alimtalk (Bizppurio)
 description: Shared entry point for sending Kakao Alimtalk through Bizppurio; where the wording lives, token caching, and what "sent" does and does not mean.
 tags: [notification, alimtalk, bizppurio, kakao]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T02:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T09:30:00Z }
 sources:
   - id: alimtalk-service
     resource: ../../src/alimtalk/alimtalk.service.ts
@@ -94,16 +94,18 @@ that is not https — `http://` included, it cannot fit the registered `https://
 template code, never the link), the 근로계약 발송
 pre-check (503 before anything is written, below) and the template save check
 ([Notification templates](/api/notification-templates.md)).
-An optional link left empty sends no button. The two names (`TALK_STAFF_INVITATION` 「가입하기」,
-`TALK_STAFF_AFFILIATION_REQUEST` 「요청 확인하기」) and the same link for PC were fixed by 재영
-(2026-10-30). `TALK_STAFF_INVITATION` is registered with Kakao under its own code (2026-10-30 —
-the DB body and `kakao_template_code` match it, [Notification templates](/api/notification-templates.md));
-`TALK_STAFF_AFFILIATION_REQUEST` is not registered yet. The link
-is built from `STAFF_APP_URL` as before (`/invite#token=…`, `/affiliations`) and there is one Kakao
+An optional link left empty sends no button. Only `TALK_STAFF_INVITATION` has a button: its name 「가입하기」
+and the same link for PC were fixed by 재영 (2026-10-30), and it is registered with Kakao under its own code
+(2026-10-30 — the DB body and `kakao_template_code` match it, [Notification templates](/api/notification-templates.md)).
+`TALK_STAFF_AFFILIATION_REQUEST` is registered under its own code too (2026-11-03), **without a button** (김민식
+confirmed). A send carrying the 「요청 확인하기」 button the code used to add was accepted (`1000`) under the new code
+but arrived as the 대체 문자 (2026-11-03 08:22Z), so the button and the 「링크」 variable are gone: `ALIMTALK_BUTTONS`
+no longer lists it, `20261103093000` drops 「링크」 from its variables, and the 직원 reaches the request by logging in
+to the app. Adding a button back means registering it with Kakao again together with both. The invite link is built
+from `STAFF_APP_URL` as before (`/invite#token=…`) and there is one Kakao
 template per message, not one per environment (재영 2026-10-30). The registered invite button link is
 `https://#{가입링크}` — everything after the scheme is a variable, so the dev server's `STAFF_APP_URL` does not
-make it differ. Every button sends the full `https://` address (김민식 2026-11-02), so
-`TALK_STAFF_AFFILIATION_REQUEST`, when it is registered, takes a button link of the same `https://#{…}` form.
+make it differ. Every button sends the full `https://` address (김민식 2026-11-02).
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`

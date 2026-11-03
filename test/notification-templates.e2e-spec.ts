@@ -238,6 +238,47 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     expect(row.variables).toEqual(row.defaultVariables);
   });
 
+  // 소속 추가 확인 요청 알림톡도 카카오에 등록했다(WHALEERP-130 후속, 2026-11-03 등록)
+  it('소속 추가 확인 요청 알림톡의 문구 · 카카오 템플릿 코드가 카카오 등록본과 같다', async () => {
+    const registered = [
+      '#{사업자} #{근무지}에서 소속 추가를 요청했습니다.',
+      '고용 형태: #{고용형태}',
+      'WHALE ERP 직원 근무 앱에 로그인해 요청을 확인하고 수락하면 근로계약서를 받을 수 있습니다.',
+      '요청은 30일 동안 유효합니다.',
+    ].join('\n');
+    const row = await prisma.notificationTemplate.findUniqueOrThrow({
+      where: { templateCode: 'TALK_STAFF_AFFILIATION_REQUEST' },
+    });
+    expect(row).toMatchObject({
+      channel: 'ALIMTALK',
+      title: null,
+      body: registered,
+      defaultBody: registered,
+      kakaoTemplateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+    });
+    // 등록본에 버튼이 없어 버튼 링크 변수(링크)를 뺐다 — 발송 코드가 넘기는 사업자 · 근무지 · 고용형태만
+    const variables = row.variables as {
+      name: string;
+      isButtonLink?: boolean;
+    }[];
+    expect(variables.map((v) => v.name)).toEqual([
+      '사업자',
+      '근무지',
+      '고용형태',
+    ]);
+    expect(variables.some((v) => v.isButtonLink)).toBe(false);
+    expect(row.variables).toEqual(row.defaultVariables);
+    // 메일은 그대로 링크 버튼을 싣는다(알림톡만 바뀜)
+    const mail = await prisma.notificationTemplate.findUniqueOrThrow({
+      where: { templateCode: 'EMAIL_STAFF_AFFILIATION_REQUEST' },
+    });
+    expect(
+      (mail.variables as { name: string; isButtonLink?: boolean }[]).find(
+        (v) => v.isButtonLink,
+      )?.name,
+    ).toBe('링크');
+  });
+
   it('근로계약서 발송 알림톡이 카카오 등록본과 같다 — 카카오 코드 PUSH_CONTRACT_SENT, 버튼 · 링크 변수 없음(WHALEERP-619)', async () => {
     const registered = [
       '#{근무지}에서 근로계약서를 보냈습니다.',

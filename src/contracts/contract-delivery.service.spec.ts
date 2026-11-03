@@ -142,15 +142,21 @@ describe('ContractDeliveryService', () => {
         findUnique: jest.fn().mockResolvedValue({ name: '모리커피 연남점' }),
       },
       notificationTemplate: {
-        findUnique: jest.fn().mockResolvedValue({
-          isActive: true,
-          channel: 'ALIMTALK',
-          title: null,
-          body: '…',
-          // 가입 초대 · 소속 추가 확인 요청은 링크 변수에 버튼 링크 표시가 있어야 보낸다(WHALEERP-636)
-          variables: [{ name: '링크', isButtonLink: true }],
-          kakaoTemplateCode: 'WHALE_INVITE_01',
-        }),
+        findUnique: jest.fn(({ where }: { where: { templateCode: string } }) =>
+          Promise.resolve({
+            isActive: true,
+            channel: 'ALIMTALK',
+            title: null,
+            body: '…',
+            // 가입 초대는 링크 변수에 버튼 링크 표시가 있어야 보낸다(WHALEERP-636). 소속 추가 확인 요청은 카카오 등록본에
+            // 버튼이 없어 버튼 링크 변수도 없다(2026-11-03)
+            variables:
+              where.templateCode === 'TALK_STAFF_AFFILIATION_REQUEST'
+                ? [{ name: '사업자' }, { name: '근무지' }, { name: '고용형태' }]
+                : [{ name: '링크', isButtonLink: true }],
+            kakaoTemplateCode: where.templateCode,
+          }),
+        ),
       },
       invitation: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -444,8 +450,8 @@ describe('ContractDeliveryService', () => {
           사업자: '모리커피',
           근무지: '모리커피 연남점',
           고용형태: '파트타이머',
-          링크: 'https://staff.whale.test/affiliations',
         };
+        // 알림톡은 버튼이 없는 등록본이라 링크를 넘기지 않고(2026-11-03), 메일만 직원 앱 요청 화면 링크를 싣는다
         expect(alimtalk.send).toHaveBeenCalledWith({
           templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
           to: PHONE,
@@ -456,7 +462,10 @@ describe('ContractDeliveryService', () => {
         expect(mail.send).toHaveBeenCalledWith({
           templateCode: 'EMAIL_STAFF_AFFILIATION_REQUEST',
           to: 'a@b.c',
-          variables,
+          variables: {
+            ...variables,
+            링크: 'https://staff.whale.test/affiliations',
+          },
         });
       },
     );
@@ -788,20 +797,90 @@ describe('ContractDeliveryService', () => {
     });
 
     // 운영이 아니면 기동 검사는 http 를 받는다 — 등록 버튼 링크가 `https://#{가입링크}` 라 커밋 뒤 발송이 늘 던진다
+    it('직원 앱 주소가 http 면 가입 초대는 503 — 주소가 없을 때와 다른 문구로 까닭을 알린다', async () => {
+      appUrl = 'http://localhost:3001';
+      await expect(
+        service().prepare(t(), input({ draftAction: 'SIGNUP_INVITE' }), NOW),
+      ).rejects.toThrow(
+        '직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 가입 초대 알림톡 버튼 링크를 보낼 수 없습니다.',
+      );
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+      expect(tx.contract.update).not.toHaveBeenCalled();
+    });
+
+    // 소속 추가 확인 요청 알림톡은 버튼 · 링크가 없다(카카오 등록본, 2026-11-03) — 직원 앱 주소는 메일 링크에만 쓴다
     it.each([
-      ['가입 초대', 'SIGNUP_INVITE'],
-      ['소속 추가 확인 요청', 'AFFILIATION_CONFIRM'],
-    ] as const)(
-      '직원 앱 주소가 http 면 %s 는 503 — 주소가 없을 때와 다른 문구로 까닭을 알린다',
-      async (what, draftAction) => {
-        appUrl = 'http://localhost:3001';
-        await expect(
-          service().prepare(t(), input({ draftAction }), NOW),
-        ).rejects.toThrow(
-          `직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 ${what} 알림톡 버튼 링크를 보낼 수 없습니다.`,
-        );
-        expect(tx.invitation.updateMany).not.toHaveBeenCalled();
-        expect(tx.contract.update).not.toHaveBeenCalled();
+      ['http', 'http://localhost:3001'],
+      ['없음', undefined],
+    ])(
+      '직원 앱 주소가 %s 이어도 소속 추가 확인 요청은 보낸다 — 알림톡은 링크 없이, 주소가 없으면 메일만 건너뛴다',
+      async (_, url) => {
+        appUrl = url;
+        tx.staffMember.update.mockResolvedValue({
+          name: '남도현',
+          employmentType: 'PART_TIME',
+          jobTitle: '홀',
+          candidateAccountId: 5,
+        });
+        tx.store.findUnique.mockResolvedValue({
+          name: '모리커피 연남점',
+          bpCode: { tradeName: '모리커피' },
+        });
+        Object.assign(tx, {
+          account: {
+            findUnique: jest
+              .fn()
+              .mockResolvedValue({ email: 'a@b.c', realName: '남도현' }),
+          },
+        });
+        const pending = (await service().prepare(
+          t(),
+          input({ draftAction: 'AFFILIATION_CONFIRM' }),
+          NOW,
+        )) as PendingInvite;
+        expect(pending.kind).toBe('AFFILIATION');
+        prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+        const mail = { send: jest.fn().mockResolvedValue({}) };
+        const warn = jest
+          .spyOn(Logger.prototype, 'warn')
+          .mockImplementation(() => undefined);
+        try {
+          await new ContractDeliveryService(
+            prisma as unknown as PrismaService,
+            alimtalk as unknown as AlimtalkService,
+            {
+              get: (key: string) => (key === 'JWT_SECRET' ? SECRET : appUrl),
+            } as unknown as ConfigService,
+            mail as never,
+          ).dispatch(pending, 1);
+          expect(alimtalk.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+              templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+              variables: {
+                사업자: '모리커피',
+                근무지: '모리커피 연남점',
+                고용형태: '파트타이머',
+              },
+            }),
+          );
+          if (url) {
+            // 메일 링크는 버튼 링크가 아니라 https 가 아니어도 싣는다
+            expect(mail.send).toHaveBeenCalledWith(
+              expect.objectContaining({
+                variables: expect.objectContaining({
+                  링크: 'http://localhost:3001/affiliations',
+                }) as object,
+              }),
+            );
+          } else {
+            expect(mail.send).not.toHaveBeenCalled();
+            expect(warn).toHaveBeenCalledWith(
+              expect.stringContaining('no STAFF_APP_URL'),
+            );
+          }
+        } finally {
+          warn.mockRestore();
+        }
       },
     );
 

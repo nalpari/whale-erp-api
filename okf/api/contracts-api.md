@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T05:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T09:30:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -669,10 +669,13 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
   leaves alone) and marks the record 초대 발송. `sent_at` is set; **`sign_deadline_at` stays null** — the 30-day 날인 기한
   starts at acceptance (재영). 발송 대기 is never expired by the daily batch (it only expires 서명 대기); the invitation
   expires after 30 days and the contract stays 발송 대기, so 재발송 continues it.
-- **After commit** `dispatch` sends alimtalk `TALK_STAFF_AFFILIATION_REQUEST` (사업자 · 근무지 · 고용형태 · 링크 =
-  `STAFF_APP_URL` + `/affiliations`, no token — the 직원 must log in). Its Kakao code `WHALE_AFFILIATION_01` is not
-  registered yet (2026-10-27 김민식: SMS fallback first), so Bizppurio answers with the 대체 문자; the same checks as the
-  가입 초대 apply before writing (app URL · SMS sender · mobile number · template on — 503 · 409). Failure handling is the
+- **After commit** `dispatch` sends alimtalk `TALK_STAFF_AFFILIATION_REQUEST` (사업자 · 근무지 · 고용형태; no button and
+  no link — the 직원 logs in to the app to find the request). It is registered with Kakao under its own code
+  `TALK_STAFF_AFFILIATION_REQUEST` without a button (2026-11-03 김민식; until then it went out as the 대체 문자 under the
+  placeholder `WHALE_AFFILIATION_01`, [Notification templates](/api/notification-templates.md) ·
+  [Kakao Alimtalk](/api/alimtalk.md)). Before writing the same checks as the 가입 초대 apply except the app URL (SMS
+  sender · mobile number · template on and its button setup — 503 · 409); `STAFF_APP_URL` is only needed for the mail
+  link below, and without it the mail alone is skipped (logged). Failure handling is the
   가입 초대's: surely not sent → undo (invitation deleted, previous one revived, status back, 502 `SEND_FAILED`); unknown
   → 502 `SEND_UNCONFIRMED`. Undo leaves `candidate_account_id` as the save wrote it. The request shows in the 직원 app
   right after commit, so the 직원 may answer before the alimtalk: if the invitation is already `ACCEPTED` /
@@ -682,7 +685,8 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
   after a 판별 that changed the 초대 유형 (same phone included), the new 판별 stays (`draftAction`, `candidate_account_id`)
   and earlier invitations are not revived — the old channel no longer fits the number. An old-flow 서명 대기
   소속 확인 contract with no request row goes back to 서명 대기 with its old `sentAt` · deadline. Then mail
-  `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email — its failure, or no `MAIL_*`, is logged only. The mail is
+  `EMAIL_STAFF_AFFILIATION_REQUEST` goes to the account's email with the 링크 button (`STAFF_APP_URL` + `/affiliations`,
+  no token) — its failure, or no `MAIL_*` / `STAFF_APP_URL`, is logged only. The mail is
   sent only when the staff record's name (as entered — save, 이어 쓰기 and 근로자 정보 수정 write it first) matches
   that account's `realName` (`nameKey`, the 본인 대조 rule, also used by the 직원 앱 list through `sameName`): the mail goes to the
   account found by the phone, not to the entered number, so on a recycled number it would tell someone else the store and
