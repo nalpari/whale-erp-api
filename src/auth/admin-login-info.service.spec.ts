@@ -235,11 +235,28 @@ describe('AdminLoginInfoService', () => {
       updatedAt: at(ms),
       isDeleted,
     });
+    // 메뉴 행은 위치(상위 · 순서 · 단계)도 담는다 — 옮기기는 updatedAt 을 원래 값으로 두기 때문이다.
+    const menu = (
+      menuId: number,
+      ms = 0,
+      isDeleted = false,
+      position: {
+        parentMenuId?: number | null;
+        sortOrder?: number;
+        depth?: number;
+      } = {},
+    ) => ({
+      ...row(menuId, ms, isDeleted),
+      parentMenuId: null as number | null,
+      sortOrder: menuId,
+      depth: 1,
+      ...position,
+    });
     const state = () => ({
       account: { updatedAt: at(0), roleGroupId: 3, bpCodeId: 2 },
       group: { updatedAt: at(0), isDeleted: false },
       groupMenus: [row(1), row(2)],
-      menus: [row(1), row(2), row(3)],
+      menus: [menu(1), menu(2), menu(3)],
       bp: { updatedAt: at(0) },
     });
     const versionOf = async (s: ReturnType<typeof state>) => {
@@ -280,7 +297,14 @@ describe('AdminLoginInfoService', () => {
       );
       // 지운 · 사용중지 메뉴도 담는다 — 사용 중이던 메뉴가 지워지거나 꺼져도 값이 바뀌어야 한다.
       expect(prisma.menu.findMany).toHaveBeenCalledWith({
-        select: { menuId: true, updatedAt: true, isDeleted: true },
+        select: {
+          menuId: true,
+          updatedAt: true,
+          isDeleted: true,
+          parentMenuId: true,
+          sortOrder: true,
+          depth: true,
+        },
         orderBy: { menuId: 'asc' },
       });
       expect(prisma.bpCode.findUnique).toHaveBeenCalledWith(
@@ -296,9 +320,18 @@ describe('AdminLoginInfoService', () => {
       ['그룹 메뉴 수정', (s) => (s.groupMenus[0] = row(1, 1))],
       ['그룹 메뉴 지움', (s) => (s.groupMenus[1] = row(2, 0, true))],
       ['그룹 메뉴 행이 빠짐', (s) => s.groupMenus.pop()],
-      ['메뉴 수정', (s) => (s.menus[2] = row(3, 1))],
-      ['메뉴 추가', (s) => s.menus.push(row(4))],
-      ['메뉴 지움', (s) => (s.menus[0] = row(1, 0, true))],
+      ['메뉴 수정', (s) => (s.menus[2] = menu(3, 1))],
+      ['메뉴 추가', (s) => s.menus.push(menu(4))],
+      ['메뉴 지움', (s) => (s.menus[0] = menu(1, 0, true))],
+      // 플랫폼 메뉴 옮기기(PlatformMenusService.move)는 updatedAt 을 원래 값으로 둔다.
+      [
+        '메뉴 상위 옮김(updatedAt 그대로)',
+        (s) => (s.menus[2] = menu(3, 0, false, { parentMenuId: 1, depth: 2 })),
+      ],
+      [
+        '메뉴 순서 바뀜(updatedAt 그대로)',
+        (s) => (s.menus[1] = menu(2, 0, false, { sortOrder: 9 })),
+      ],
       ['소속 BP', (s) => (s.bp.updatedAt = at(1))],
     ];
     it.each(changes)('%s 가 바뀌면 값이 바뀐다', async (_, change) => {
@@ -311,9 +344,9 @@ describe('AdminLoginInfoService', () => {
     // 최근 시각 · 개수만 보면 놓친다 — 늦게 커밋된 수정은 더 이른 updatedAt 을 가질 수 있다(점포 버전과 같은 이유).
     it('최근 시각 · 개수가 같아도 다른 행이 바뀌면 값이 바뀐다', async () => {
       const s1 = state();
-      s1.menus = [row(1, 5), row(2, 0), row(3, 0)];
+      s1.menus = [menu(1, 5), menu(2, 0), menu(3, 0)];
       const s2 = state();
-      s2.menus = [row(1, 5), row(2, 1), row(3, 0)];
+      s2.menus = [menu(1, 5), menu(2, 1), menu(3, 0)];
       expect(await versionOf(s1)).not.toBe(await versionOf(s2));
     });
 

@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-03
+* **Update**: [Admin authentication](/api/admin-auth.md) — api #232 적대적 리뷰 반영: 로그인 정보 버전이 메뉴 위치(상위 · 순서 · 단계)도 담는다. 플랫폼 메뉴 옮기기는 수정 화면의 동시 수정 검사 때문에 `updatedAt` 을 원래 값으로 둬, 옮긴 메뉴 트리가 버전에 잡히지 않았다.
+
 ## 2026-11-02
 * **Update**: [Admin authentication](/api/admin-auth.md) — 로그인 정보 버전 `GET /auth/admin/me/login-info-version`(front 요청): 관리자 웹이 점포 목록 버전과 같이 묻고 바뀌었으면 login-info 를 다시 받는다. 재료는 내 계정 · 소속 BP 의 `updatedAt`, 권한 그룹 · 그 그룹 메뉴 권한(지운 행 포함) · 메뉴 전체(지운 행 포함)의 행마다 `updatedAt` · `isDeleted`(점포 버전과 같은 SHA-256 22자). 로그인 직후에도 버전을 먼저, 그다음 login-info 를 받는다. 계정은 사용 중 · 미삭제로 읽고 아니면 403 `ACCOUNT_UNAVAILABLE_MESSAGE`, 강제 비밀번호 변경 중 403, 요청 제한 없음. `login-info` · `GET /auth/admin/me` 도 미사용 · 탈퇴 계정에 같은 403(삭제는 그대로 401 · 404). 소속 BP 의 미사용 · 탈퇴는 로그인처럼 막지 않고 버전에만 담는다. 공통코드(`SERVICE` 포함) 변경은 담지 않는다. 이 네 경로의 「사용할 수 없는 계정」 403 에 관리자 웹은 이전 화면이 아니라 로그아웃한다(403 표). `me/stores` 는 그대로 비ACTIVE 계정에 200 `[]`.
 * **Update**: [Contracts API](/api/contracts-api.md) — api #230 리뷰 반영: 근로계약서 발송 알림톡의 보내기 직전 계약 재조회가 실패해도 던지지 않는다(저장은 이미 끝남 — 로그만). 동시 재발송은 대개 둘 다 나가고 두 탭 재발송은 `expectedSentAt`(409)이 막는다고 사실대로 고쳤다. 알림함 템플릿 `PUSH_CONTRACT_SENT` 를 끄면 알림톡도 끊긴다는 운영자 안내를 더했다.

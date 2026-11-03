@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, the store list version (`stores-version`, `me/stores`) the header store picker refreshes by, and the login info version (`me/login-info-version`) the screen re-reads login-info by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-11-02T08:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T01:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -45,7 +45,7 @@ sources:
   - id: admin-login-info-service
     resource: ../../src/auth/admin-login-info.service.ts
     title: Login info — account, menu tree with CRUD, managed stores, codes; its version (account · role group · group menus · menus · BP rows)
-    last_modified: 2026-11-02T08:10:00Z
+    last_modified: 2026-11-03T01:00:00Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check, target BP (X-Bp-Code-Id → @TargetBp())'
@@ -665,7 +665,7 @@ base64url, 22 chars), for the same reason per row rather than `max` and a count:
 | account | own `admin_accounts.updated_at` | name · e-mail · role group · 관리 점포 범위 (a status other than `ACTIVE` is a 403, not a new version) |
 | group | own `role_groups` row, `updated_at` · `is_deleted` | the group itself |
 | groupMenus | every `role_group_menus` row of the group, deleted included, `menu_id` order | 조회 · 등록 · 수정 · 삭제 per menu |
-| menus | every `menus` row, deleted included, `menu_id` order | name · URL · order · status · added · deleted |
+| menus | every `menus` row, deleted included, `menu_id` order, with `parent_menu_id` · `sort_order` · `depth` | name · URL · status · added · deleted, and moves — 플랫폼 메뉴 관리's move keeps `updated_at` (so an open edit form does not 409), so the position is hashed itself |
 | bp | own `bp_codes.updated_at` | the BP's status |
 
 Not in it: 공통코드 `SERVICE` turned off (its menus drop out of `login-info`) and

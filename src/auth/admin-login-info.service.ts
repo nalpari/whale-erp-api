@@ -45,7 +45,7 @@ export class AdminLoginInfoService {
   /**
    * 로그인 정보 버전(`GET /auth/admin/me/login-info-version`) — 이전 값과 다르면 관리자 웹이 login-info 를 다시 받는다.
    * 재료는 내 계정 · 소속 BP 의 `updatedAt`, 권한 그룹 · 그 그룹 메뉴 권한(지운 행 포함) · 메뉴 전체(지운 행 포함)의
-   * 행마다 `updatedAt` · `isDeleted`. 최근 시각 · 개수로 줄이지 않는 이유는 점포 목록 버전과 같다 — `@updatedAt` 은
+   * 행마다 `updatedAt` · `isDeleted`, 메뉴는 위치(상위 · 순서 · 단계)도. 최근 시각 · 개수로 줄이지 않는 이유는 점포 목록 버전과 같다 — `@updatedAt` 은
    * 커밋이 아니라 쿼리를 만들 때 시각이라, 늦게 커밋된 수정이 먼저 커밋된 것보다 이른 시각을 가질 수 있다.
    *
    * 공통코드(`SERVICE` 사용중지로 빠지는 메뉴 포함)는 담지 않는다 — 늦어도 다음 로그인 때, 다른 이유로 버전이 바뀌면
@@ -69,7 +69,7 @@ export class AdminLoginInfoService {
         orderBy: { menuId: 'asc' },
       }),
       this.prisma.menu.findMany({
-        select: MENU_ROW_SELECT,
+        select: { ...MENU_ROW_SELECT, ...MENU_POSITION_SELECT },
         orderBy: { menuId: 'asc' },
       }),
       this.prisma.bpCode.findUnique({
@@ -82,7 +82,7 @@ export class AdminLoginInfoService {
         `account:${account.updatedAt.getTime()}`,
         `group:${group ? `${group.updatedAt.getTime()}.${group.isDeleted ? 1 : 0}` : '-'}`,
         `groupMenus:${rowsKey(groupMenus)}`,
-        `menus:${rowsKey(menus)}`,
+        `menus:${rowsKey(menus)}|positions:${menus.map((m) => `${m.parentMenuId ?? '-'}.${m.sortOrder}.${m.depth}`).join(',')}`,
         `bp:${bp?.updatedAt.getTime() ?? '-'}`,
       ].join('|'),
     );
@@ -203,6 +203,16 @@ const MENU_ROW_SELECT = {
   menuId: true,
   updatedAt: true,
   isDeleted: true,
+} as const;
+
+/**
+ * 메뉴 위치(상위 · 순서 · 단계)는 따로 담는다 — 플랫폼 메뉴 옮기기(`PlatformMenusService.move`)는 수정 화면의 동시 수정
+ * 검사 때문에 updatedAt 을 원래 값으로 두므로, updatedAt 만 보면 옮긴 메뉴 트리를 놓친다.
+ */
+const MENU_POSITION_SELECT = {
+  parentMenuId: true,
+  sortOrder: true,
+  depth: true,
 } as const;
 
 /** 행마다 `menuId.updatedAt(ms).isDeleted` 를 잇는다 — 한 행만 바뀌어도 값이 달라진다. */
