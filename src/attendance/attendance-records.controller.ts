@@ -44,6 +44,8 @@ import {
 import {
   DailyAttendanceQueryDto,
   DailyAttendanceResponseDto,
+  OpenCheckInsQueryDto,
+  OpenCheckInsResponseDto,
   PeriodAttendanceQueryDto,
   PeriodAttendanceResponseDto,
 } from './dto/attendance-records.dto';
@@ -111,6 +113,27 @@ export class AttendanceRecordsController {
       query.staffMemberId ?? null,
       bp,
     );
+  }
+
+  /**
+   * 점포의 열린 출근(퇴근하지 않은 출근, WHALEERP-644) — 폐점 전에 묻는다. 보정할 수 있는 3개월 안의 것, 출근 시각순. 본사에게
+   * 가려지는 직원은 줄을 빼고 수만 `hiddenCount` 로(ATT-30)
+   */
+  @Get('open-check-ins')
+  @MenuPermission('read')
+  @ApiOkResponse({ type: OpenCheckInsResponseDto })
+  @ApiBadRequestResponse({
+    description: `쿼리 형식 오류 · ${BP_MISSING_DESCRIPTION}`,
+  })
+  @ApiNotFoundResponse({
+    description: `점포가 없거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
+  openCheckIns(
+    @Query() query: OpenCheckInsQueryDto,
+    @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
+  ): Promise<OpenCheckInsResponseDto> {
+    return this.records.openCheckIns(user.id, query.storeId, bp);
   }
 
   /** 대신 등록 선택지 — 그날 대신 등록할 수 있는 직원(위치정보 동의 없음 · 일시 중지, 체결 완료 계약, ATT-20 · 26) */
