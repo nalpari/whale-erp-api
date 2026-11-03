@@ -21,8 +21,9 @@ import { STORAGE } from '../src/storage/storage.module';
 describe('급여명세서 보존 기간 파기 (e2e, DB)', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  const now = new Date();
-  const today = kstToday(now);
+  // 스위트 기준일의 한국 정오 — 돌리는 동안 한국 자정을 넘어도 기준일이 바뀌지 않게(api #112 리뷰)
+  const today = kstToday();
+  const now = new Date(kstDayStart(today).getTime() + 12 * 3600_000);
   /** 이 순간부터 만든 것은 남는다(생성일 + 3년 당일) */
   const cutoff = kstDayStart(addMonths(today, -36));
   const expiredRetired = addDays(addMonths(today, -36), -1);
