@@ -79,6 +79,7 @@ type Scope = {
 /**
  * 관리자 웹 「출·퇴근 현황 조회」(/attendance-records, MN000025, WHALEERP-217 · 219). 점포는 상단 범위 · 필터의 점포 조건이고
  * 업무 범위 밖 점포는 늘 빠진다. 본사 계정에게 동의 없는 가맹 직원은 줄도 상태별 건수도 뺀다(v218, 2026-10-27 — 예전에는 숫자에는 셌다)(ATT-30).
+ * 다만 점포의 열린 출근(`openCheckIns`)은 줄만 빼고 수는 `hiddenCount` 로 센다 — 폐점 전 확인이 0건으로 보이지 않게(2026-11-03 재영).
  */
 @Injectable()
 export class AttendanceRecordsService {
