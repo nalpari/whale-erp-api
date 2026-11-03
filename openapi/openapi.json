@@ -15505,6 +15505,63 @@
         ]
       }
     },
+    "/attendance-records/open-check-ins": {
+      "get": {
+        "operationId": "AttendanceRecordsController_openCheckIns",
+        "parameters": [
+          {
+            "name": "storeId",
+            "required": true,
+            "in": "query",
+            "description": "점포",
+            "schema": {
+              "minimum": 1,
+              "maximum": 2147483647,
+              "type": "number"
+            }
+          },
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpenCheckInsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "쿼리 형식 오류 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
+          "403": {
+            "description": "출·퇴근 현황 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "점포가 없거나 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "점포의 열린 출근(퇴근하지 않은 출근, WHALEERP-644) — 폐점 전에 묻는다. 보정할 수 있는 3개월 안의 것, 출근 시각순. 본사에게\n가려지는 직원은 줄을 빼고 수만 `hiddenCount` 로(ATT-30)",
+        "tags": [
+          "AttendanceRecords"
+        ]
+      }
+    },
     "/attendance-records/proxy-staff": {
       "get": {
         "operationId": "AttendanceRecordsController_proxyStaff",
@@ -32908,6 +32965,68 @@
           "to",
           "items",
           "counts"
+        ]
+      },
+      "OpenCheckInItemDto": {
+        "type": "object",
+        "properties": {
+          "attendanceRecordId": {
+            "type": "number",
+            "description": "출근 기록"
+          },
+          "staffMemberId": {
+            "type": "number",
+            "description": "직원 레코드 — 퇴직한 직원의 것도 나온다"
+          },
+          "name": {
+            "type": "string",
+            "description": "직원 이름"
+          },
+          "recordedAt": {
+            "format": "date-time",
+            "type": "string",
+            "description": "출근 시각"
+          },
+          "isCheckOutExpired": {
+            "type": "boolean",
+            "description": "출근한 다음 날이 지나 직원 앱으로는 퇴근할 수 없다 — 관리자 보정으로 닫는다. false 면 아직 근무 중일 수 있다"
+          }
+        },
+        "required": [
+          "attendanceRecordId",
+          "staffMemberId",
+          "name",
+          "recordedAt",
+          "isCheckOutExpired"
+        ]
+      },
+      "OpenCheckInsResponseDto": {
+        "type": "object",
+        "properties": {
+          "storeId": {
+            "type": "number"
+          },
+          "count": {
+            "type": "number",
+            "description": "items 의 수 — 가려진 것은 빠진다. 폐점 전 확인은 `count + hiddenCount` 로 한다"
+          },
+          "hiddenCount": {
+            "type": "number",
+            "description": "본사 역할에게 가려지는 직원(`hidesPersonalData` — 동의 없는 가맹 직원, 폐점한 가맹 점포면 동의했어도)의 열린 출근 수. 줄은 주지\n않고 수만(2026-11-03 재영). 그 밖에는 0"
+          },
+          "items": {
+            "description": "출근 시각이 이른 것부터",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OpenCheckInItemDto"
+            }
+          }
+        },
+        "required": [
+          "storeId",
+          "count",
+          "hiddenCount",
+          "items"
         ]
       },
       "ProxyStaffItemDto": {

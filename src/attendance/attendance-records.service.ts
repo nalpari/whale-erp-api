@@ -39,13 +39,16 @@ import type {
   DailyAttendanceResponseDto,
   MyAttendanceDayDto,
   MyAttendanceRecordsResponseDto,
+  OpenCheckInsResponseDto,
   PeriodAttendanceResponseDto,
 } from './dto/attendance-records.dto';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
 import { ATTENDANCE_BP_NOT_CHOSEN } from './attendance-target-bp';
+import { editableStart } from './attendance-rules';
 
 const STAFF_NOT_FOUND = '직원을 찾을 수 없습니다.';
+const STORE_NOT_FOUND = '점포를 찾을 수 없습니다.';
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** 직원 앱 기간별의 최대 일수 — 한 번에 1년(HIST-2, WHALEERP-221) */
 export const MAX_MY_PERIOD_DAYS = 366;
@@ -162,6 +165,61 @@ export class AttendanceRecordsService {
       ...(days === 7 && from.getUTCDay() === 1
         ? { weekStaff: await this.weekStaff(rows, from, to) }
         : {}),
+    };
+  }
+
+  /**
+   * 점포 하나의 열린 출근(퇴근하지 않은 출근, WHALEERP-644) — 폐점을 맡은 쪽이 폐점 전에 묻는다. 퇴직 처리(`assertNoOpenCheckIn`)와
+   * 같게 보정할 수 있는 기간(3개월) 안의 것만 — 그보다 오래된 것은 아무도 닫을 수 없다. 퇴직한 직원 레코드의 것도 넣는다(그 점포에
+   * 남은 기록이다). 본사에게 가려지는 직원(`hidesPersonalData`)은 줄을 빼고 수만 `hiddenCount` 로 센다 — 일별 조회는 수에서도
+   * 빼지만(v218), 여기서 수까지 빼면 본사 계정이 0건으로 보고 폐점한다(2026-11-03 재영). 업무 범위 밖 점포는 404.
+   */
+  async openCheckIns(
+    adminAccountId: number,
+    storeId: number,
+    bp?: TargetBpContext,
+    now: Date = new Date(),
+  ): Promise<OpenCheckInsResponseDto> {
+    const scope = await this.scopeOf(
+      adminAccountId,
+      { storeIds: [storeId] },
+      bp,
+    );
+    if (!scope.storeIds.includes(storeId))
+      throw new NotFoundException(STORE_NOT_FOUND);
+    const rows = await this.prisma.attendanceRecord.findMany({
+      where: {
+        storeId,
+        kind: 'CHECK_IN',
+        attendanceRecordsAsCheckIn: { none: {} },
+        recordedAt: { gte: editableStart() },
+      },
+      orderBy: [{ recordedAt: 'asc' }, { attendanceRecordId: 'asc' }],
+      select: {
+        attendanceRecordId: true,
+        recordedAt: true,
+        staffMember: {
+          select: { staffMemberId: true, name: true, ...HQ_SHARING_SELECT },
+        },
+      },
+    });
+    // 퇴근은 출근한 다음 날까지 받는다(직원 앱 퇴근과 같다)
+    const lastOpenDay = addDays(kstToday(now), -1);
+    const shown = rows.filter(
+      (r) => !scope.hides(storeId, hqSharingConsentedOf(r.staffMember)),
+    );
+    const items = shown.map((r) => ({
+      attendanceRecordId: r.attendanceRecordId,
+      staffMemberId: r.staffMember.staffMemberId,
+      name: r.staffMember.name,
+      recordedAt: r.recordedAt,
+      isCheckOutExpired: kstToday(r.recordedAt) < lastOpenDay,
+    }));
+    return {
+      storeId,
+      count: items.length,
+      hiddenCount: rows.length - shown.length,
+      items,
     };
   }
 

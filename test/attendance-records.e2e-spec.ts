@@ -12,7 +12,7 @@ import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 
 // 관리자 웹 출·퇴근 현황 조회를 실제 DB 로 확인한다(WHALEERP-217 · 219) — 메뉴 권한 · 업무 범위 밖 점포 빠짐, 하루 · 기간 조회, 짝 퇴근,
-// 상태 판정, 본사 계정에게 동의 없는 가맹 직원은 줄도 상태별 건수도 빠지는 것(ATT-30).
+// 상태 판정, 본사 계정에게 동의 없는 가맹 직원은 줄도 상태별 건수도 빠지는 것(ATT-30), 점포의 열린 출근(WHALEERP-644).
 describe('출·퇴근 현황 조회 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -362,6 +362,96 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
     ]);
   });
 
+  it('점포의 열린 출근 — 보정할 수 있는 3개월 안의 퇴근 없는 출근만 출근 시각순, 가려진 직원은 줄 없이 수만(hiddenCount) · 범위 밖 404(WHALEERP-644)', async () => {
+    type Open = {
+      storeId: number;
+      count: number;
+      hiddenCount: number;
+      items: {
+        staffMemberId: number;
+        name: string;
+        recordedAt: string;
+        isCheckOutExpired: boolean;
+      }[];
+    };
+    const franchise = (
+      await get(
+        `/attendance-records/open-check-ins?storeId=${franchiseStoreId}`,
+        200,
+      )
+    ).body as Open;
+    // 어제 출근 둘 중 가려진 하나는 줄을 빼고 수만 센다. 어제 출근은 오늘까지 앱으로 퇴근할 수 있다
+    expect(franchise).toEqual({
+      storeId: franchiseStoreId,
+      count: 1,
+      hiddenCount: 1,
+      items: [
+        expect.objectContaining({
+          staffMemberId: sharedStaffId,
+          name: '다가맹동의',
+          recordedAt: at(yesterday, 11).toISOString(),
+          isCheckOutExpired: false,
+        }),
+      ],
+    });
+    // 퇴근까지 있는 짝은 열린 출근이 아니다. 사흘 전 것은 앱 퇴근 기한이 지났고, 3개월보다 오래된 것은 보지 않는다. 퇴직한
+    // 직원 레코드의 것도 그 점포에 남은 열린 출근이다
+    const retiredId = await staff(directStoreId, '라퇴직', false);
+    await prisma.staffMember.update({
+      where: { staffMemberId: retiredId },
+      data: { employmentStatus: 'RETIRED', retiredDate: addDays(today, -1) },
+    });
+    const retiredOpen = await punch(
+      retiredId,
+      directStoreId,
+      'CHECK_IN',
+      at(addDays(today, -2), 9),
+    );
+    const stale = await punch(
+      directStaffId,
+      directStoreId,
+      'CHECK_IN',
+      at(addDays(today, -3), 9),
+    );
+    const ancient = await punch(
+      directStaffId,
+      directStoreId,
+      'CHECK_IN',
+      at(addDays(today, -120), 9),
+    );
+    try {
+      const direct = (
+        await get(
+          `/attendance-records/open-check-ins?storeId=${directStoreId}`,
+          200,
+        )
+      ).body as Open;
+      expect(direct.count).toBe(2);
+      expect(direct.hiddenCount).toBe(0);
+      expect(direct.items).toEqual([
+        expect.objectContaining({
+          staffMemberId: directStaffId,
+          recordedAt: at(addDays(today, -3), 9).toISOString(),
+          isCheckOutExpired: true,
+        }),
+        expect.objectContaining({
+          staffMemberId: retiredId,
+          recordedAt: at(addDays(today, -2), 9).toISOString(),
+          isCheckOutExpired: true,
+        }),
+      ]);
+    } finally {
+      await prisma.attendanceRecord.deleteMany({
+        where: { attendanceRecordId: { in: [stale, ancient, retiredOpen] } },
+      });
+    }
+    await get(
+      `/attendance-records/open-check-ins?storeId=${otherStoreId}`,
+      404,
+    );
+    await get('/attendance-records/open-check-ins?storeId=abc', 400);
+  });
+
   it('기간 — 가려지는 직원 · 다른 점포 직원을 고르면 404, 92일을 넘으면 400', async () => {
     await get(
       `/attendance-records?storeIds=${franchiseStoreId}&from=${ymd(yesterday)}&to=${ymd(today)}&staffMemberId=${hiddenStaffId}`,
@@ -446,6 +536,7 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       ['get', `/attendance-records?from=${ymd(yesterday)}&to=${ymd(today)}`],
       ['get', history],
       ['get', `/attendance-records/proxy-staff?date=${ymd(yesterday)}`],
+      ['get', `/attendance-records/open-check-ins?storeId=${directStoreId}`],
       [
         'post',
         '/attendance-records/proxy',

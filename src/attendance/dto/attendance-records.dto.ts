@@ -251,3 +251,40 @@ export class MyAttendanceRecordsResponseDto {
   /** 기간에 걸친 주마다, 월요일순 */
   weeks: MyAttendanceWeekDto[];
 }
+
+export class OpenCheckInsQueryDto {
+  /** 점포 */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_ID)
+  storeId: number;
+}
+
+/** 퇴근하지 않은 출근 한 건 */
+export class OpenCheckInItemDto {
+  /** 출근 기록 */
+  attendanceRecordId: number;
+  /** 직원 레코드 — 퇴직한 직원의 것도 나온다 */
+  staffMemberId: number;
+  /** 직원 이름 */
+  name: string;
+  /** 출근 시각 */
+  recordedAt: Date;
+  /** 출근한 다음 날이 지나 직원 앱으로는 퇴근할 수 없다 — 관리자 보정으로 닫는다. false 면 아직 근무 중일 수 있다 */
+  isCheckOutExpired: boolean;
+}
+
+/** 점포의 열린 출근(WHALEERP-644) — 폐점 전 확인용 */
+export class OpenCheckInsResponseDto {
+  storeId: number;
+  /** items 의 수 — 가려진 것은 빠진다. 폐점 전 확인은 `count + hiddenCount` 로 한다 */
+  count: number;
+  /**
+   * 본사 역할에게 가려지는 직원(`hidesPersonalData` — 동의 없는 가맹 직원, 폐점한 가맹 점포면 동의했어도)의 열린 출근 수. 줄은 주지
+   * 않고 수만(2026-11-03 재영). 그 밖에는 0
+   */
+  hiddenCount: number;
+  /** 출근 시각이 이른 것부터 */
+  items: OpenCheckInItemDto[];
+}
