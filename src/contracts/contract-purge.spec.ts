@@ -108,6 +108,10 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
     expect(storage.delete).toHaveBeenCalledWith('contracts/20/b.pdf', {
       thumbnail: false,
     });
+    // 잠근 계약의 파일만 고른다
+    expect(tx.contractDocument.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { contractId: { in: [10, 11, 20] } } }),
+    );
     const ids = { in: [10, 11, 20] };
     expect(tx.workScheduleHistory.deleteMany).toHaveBeenCalledWith({
       where: { workScheduleId: { in: [7] } },
@@ -121,7 +125,7 @@ describe('ContractPurgeService.purgeRetiredContracts', () => {
     });
     expect(tx.staffMemberRetirementLog.updateMany).toHaveBeenCalledWith({
       where: { contractId: ids },
-      data: { contractId: null },
+      data: { contractId: null, previousContractEndDate: null },
     });
     expect(tx.contract.updateMany).toHaveBeenCalledWith({
       where: { previousContractId: ids },

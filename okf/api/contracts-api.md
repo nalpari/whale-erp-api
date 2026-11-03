@@ -1215,11 +1215,15 @@ only — a 종이 계약 has no body.
 - **Locks**: staff rows `FOR NO KEY UPDATE` (same as 퇴직 취소 · contract writes), then the contract rows
   `FOR UPDATE`, then payslips are read again. The rows that point at the contracts (work schedules,
   retirement logs, other contracts' `previous_contract_id`) are locked too, all before any file is deleted,
-  so nothing after the files waits on someone else's transaction — a payslip committed before the lock drops that record
+  so nothing after the files waits on someone else's transaction except the notification rows (short writes
+  such as 읽음 only). The four columns that point at a contract are indexed
+  (`20261103061553_team3_contract_reference_indexes`), so neither the RESTRICT checks nor these locks scan whole
+  tables — a payslip committed before the lock drops that record
   instead of failing the batch with 23503 (logged as `SKIPPED_PAYSLIP_AFTER_LOCK staff=N`).
 - **Files first**: every `contract_documents.storage_key` of a record is deleted from storage
   (`{ thumbnail: false }`) before any row. A record whose delete fails (or that has files while no storage
-  is configured) waits for the next day and the next record goes on (`contract purge FILES_DEFERRED
+  is configured) waits for the next day and the next record goes on — only the locked contracts' files are
+  picked, and records without files are deleted even after the time cap (`contract purge FILES_DEFERRED
   staff=…`) — one key that always fails does not block the rest. Once 25 seconds have passed since the run
   started (`FILE_DELETE_BUDGET_MS`), the remaining records wait too, so a slow or stuck S3 (25-second
   deadline per delete) still leaves time to delete the rows and commit inside the 60 seconds. A rollback after files are gone
@@ -1230,7 +1234,8 @@ only — a 종이 계약 has no body.
   locking them `FOR UPDATE`); every `related_type = 'CONTRACT'` notification — 관리자 운영 알림 and 직원 앱
   알림 such as 근로계약서 발송 — with recipients and deliveries; then
   `contract_documents` · `contract_status_histories` · `contract_parties` · `contract_work_days` · `contracts`.
-- **Unlinked, kept**: `staff_member_retirement_logs.contract_id` → NULL; any contract whose
+- **Unlinked, kept**: `staff_member_retirement_logs.contract_id` → NULL, together with its
+  `previous_contract_end_date` (the CHECK `…_end_date_needs_contract` refuses a date without a contract); any contract whose
   `previous_contract_id` points at a deleted one → NULL (also inside the record, since RESTRICT checks each
   row at once). **Untouched**: 알림톡 발송 기록 (`alimtalk_send_logs.related_id`, no foreign key) and mail logs.
 - The log line `contract-purge RAN processed=N` counts deleted contracts. 신고 정보 · 계정 변경 이력 go in

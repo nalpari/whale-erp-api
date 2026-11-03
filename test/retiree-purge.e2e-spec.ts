@@ -218,6 +218,8 @@ describe('퇴직자 보존 기간 파기 (e2e, DB)', () => {
           action: 'RETIRE',
           retiredDate: expiredRetired,
           contractId: renewal,
+          // 종료일이 있으면 연결만 비울 수 없다(CHECK end_date_needs_contract) — 함께 비우는지 본다
+          previousContractEndDate: expiredRetired,
           processedBy: 1,
         },
       });
@@ -318,7 +320,7 @@ describe('퇴직자 보존 기간 파기 (e2e, DB)', () => {
       await prisma.staffMemberRetirementLog.findUniqueOrThrow({
         where: { staffMemberRetirementLogId },
       }),
-    ).toMatchObject({ contractId: null });
+    ).toMatchObject({ contractId: null, previousContractEndDate: null });
     expect(
       await prisma.contract.findUniqueOrThrow({
         where: { contractId: edgeContract },

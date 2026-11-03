@@ -15,7 +15,8 @@ export const CONTRACT_PURGE_BATCH_SIZE = 100;
 
 /**
  * 파일 삭제를 시작하는 시간 상한 — 함수 시작부터 잰다. 넘으면 남은 레코드는 다음 날. 한 레코드의 삭제가 저장소 기한(25초)까지
- * 걸려도 이 상한과 합쳐 runExclusive 의 60초 안에서 행을 지우고 커밋한다 — 파일 뒤의 문장은 이미 잠근 행만 건드린다.
+ * 걸려도 이 상한과 합쳐 runExclusive 의 60초 안에서 행을 지우고 커밋한다 — 파일 뒤의 문장은 알림 행 말고는 이미 잠근 행만
+ * 건드린다(알림은 읽음 표시 같은 짧은 쓰기만 겹친다).
  */
 export const FILE_DELETE_BUDGET_MS = 25_000;
 
@@ -109,9 +110,12 @@ export class ContractPurgeService {
       SELECT 1 FROM contracts WHERE previous_contract_id = ANY(${candidates}::int[]) FOR UPDATE
     `;
 
-    const done = await this.deleteFiles(tx, purgeable, started);
+    const deferred = await this.deleteFiles(tx, candidates, purgeable, started);
     const ids = locked
-      .filter((c) => done.includes(c.staffMemberId))
+      .filter(
+        (c) =>
+          purgeable.includes(c.staffMemberId) && !deferred.has(c.staffMemberId),
+      )
       .map((c) => c.id);
     if (ids.length === 0) return 0;
     await deleteWorkSchedules(
@@ -127,9 +131,10 @@ export class ContractPurgeService {
     });
     await tx.notificationRecipient.deleteMany({ where: { notification } });
     await tx.notification.deleteMany({ where: notification });
+    // 처리 시점 계약 종료일도 비운다 — CHECK(staff_member_retirement_logs_end_date_needs_contract)가 종료일만 남기를 막는다
     await tx.staffMemberRetirementLog.updateMany({
       where: { contractId: { in: ids } },
-      data: { contractId: null },
+      data: { contractId: null, previousContractEndDate: null },
     });
     // 같은 레코드의 재계약끼리도 — RESTRICT 는 행마다 바로 보므로 함께 지우는 앞 계약도 먼저 비운다
     await tx.contract.updateMany({
@@ -146,57 +151,59 @@ export class ContractPurgeService {
   }
 
   /**
-   * 레코드 순서대로 계약서 파일을 지우고, 다 지운 레코드를 돌려준다. 지우다 실패한 레코드는 다음 날로 미루고 다음 레코드로
+   * 레코드 순서대로 계약서 파일을 지우고, 다음 날로 미룬 레코드를 돌려준다. 지우다 실패한 레코드는 미루고 다음 레코드로
    * 넘어간다 — 늘 실패하는 키(형식 · 권한) 하나가 뒤 레코드를 모두 막지 않게. 저장소가 멈춰 레코드마다 기한을 기다리는 것은
-   * 시간 상한이 끊는다.
+   * 시간 상한이 끊는다 — 넘은 뒤 파일이 있는 레코드는 모두 미루고, 파일이 없는 레코드는 그대로 지운다.
    */
   private async deleteFiles(
     tx: Prisma.TransactionClient,
+    contractIds: number[],
     staffMemberIds: number[],
     started: number,
-  ): Promise<number[]> {
+  ): Promise<Set<number>> {
+    // 잠근 계약의 파일만 — 잠근 뒤 생긴 계약이 있어도 그 파일은 지우지 않는다(행은 남으니)
     const documents = await tx.contractDocument.findMany({
-      where: { contract: { staffMemberId: { in: staffMemberIds } } },
+      where: { contractId: { in: contractIds } },
       select: {
         storageKey: true,
         contract: { select: { staffMemberId: true } },
       },
     });
-    const done: number[] = [];
+    const deferred = new Set<number>();
+    const defer = (staffMemberId: number, reason: string) => {
+      deferred.add(staffMemberId);
+      this.logger.error(
+        `contract purge FILES_DEFERRED staff=${staffMemberId}: ${reason}`,
+      );
+    };
     for (const staffMemberId of staffMemberIds) {
-      // 실패하지 않고 느리기만 해도 60초를 넘겨 롤백되면(파일만 지워짐) 다음 날도 같은 자리에서 넘긴다 — 기한을 두고 남은 것을 미룬다
-      if (Date.now() - started > FILE_DELETE_BUDGET_MS) {
-        this.logger.error(
-          `contract purge FILES_DEFERRED staff=${staffMemberId}: 파일 삭제가 ${FILE_DELETE_BUDGET_MS}ms 를 넘었다`,
-        );
-        break;
-      }
       const keys = documents
         .filter((d) => d.contract.staffMemberId === staffMemberId)
         .map((d) => d.storageKey);
-      if (keys.length > 0) {
-        if (!this.storage) {
-          this.logger.error(
-            `contract purge FILES_DEFERRED staff=${staffMemberId}: 저장소 설정이 없다`,
-          );
-          continue;
-        }
-        const storage = this.storage;
-        try {
-          // 계약서 파일은 썸네일이 없다(날인본 정리와 같다)
-          await Promise.all(
-            keys.map((key) => storage.delete(key, { thumbnail: false })),
-          );
-        } catch (e) {
-          this.logger.error(
-            `contract purge FILES_DEFERRED staff=${staffMemberId}: ${String(e)}`,
-          );
-          continue;
-        }
+      if (keys.length === 0) continue;
+      // 실패하지 않고 느리기만 해도 60초를 넘겨 롤백되면(파일만 지워짐) 다음 날도 같은 자리에서 넘긴다 — 기한을 두고 남은 것을 미룬다
+      if (Date.now() - started > FILE_DELETE_BUDGET_MS) {
+        defer(
+          staffMemberId,
+          `파일 삭제가 ${FILE_DELETE_BUDGET_MS}ms 를 넘었다`,
+        );
+        continue;
       }
-      done.push(staffMemberId);
+      const storage = this.storage;
+      if (!storage) {
+        defer(staffMemberId, '저장소 설정이 없다');
+        continue;
+      }
+      try {
+        // 계약서 파일은 썸네일이 없다(날인본 정리와 같다)
+        await Promise.all(
+          keys.map((key) => storage.delete(key, { thumbnail: false })),
+        );
+      } catch (e) {
+        defer(staffMemberId, String(e));
+      }
     }
-    return done;
+    return deferred;
   }
 }
 
