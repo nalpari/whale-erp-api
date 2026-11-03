@@ -45,7 +45,7 @@ import type {
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
 import { ATTENDANCE_BP_NOT_CHOSEN } from './attendance-target-bp';
-import { editableStart } from './attendance-rules';
+import { checkOutExpired, openCheckInsOf } from './open-check-ins';
 
 const STAFF_NOT_FOUND = '직원을 찾을 수 없습니다.';
 const STORE_NOT_FOUND = '점포를 찾을 수 없습니다.';
@@ -188,24 +188,7 @@ export class AttendanceRecordsService {
     );
     if (!scope.storeIds.includes(storeId))
       throw new NotFoundException(STORE_NOT_FOUND);
-    const rows = await this.prisma.attendanceRecord.findMany({
-      where: {
-        storeId,
-        kind: 'CHECK_IN',
-        attendanceRecordsAsCheckIn: { none: {} },
-        recordedAt: { gte: editableStart() },
-      },
-      orderBy: [{ recordedAt: 'asc' }, { attendanceRecordId: 'asc' }],
-      select: {
-        attendanceRecordId: true,
-        recordedAt: true,
-        staffMember: {
-          select: { staffMemberId: true, name: true, ...HQ_SHARING_SELECT },
-        },
-      },
-    });
-    // 퇴근은 출근한 다음 날까지 받는다(직원 앱 퇴근과 같다)
-    const lastOpenDay = addDays(kstToday(now), -1);
+    const rows = await openCheckInsOf(this.prisma, storeId);
     const shown = rows.filter(
       (r) => !scope.hides(storeId, hqSharingConsentedOf(r.staffMember)),
     );
@@ -214,7 +197,7 @@ export class AttendanceRecordsService {
       staffMemberId: r.staffMember.staffMemberId,
       name: r.staffMember.name,
       recordedAt: r.recordedAt,
-      isCheckOutExpired: kstToday(r.recordedAt) < lastOpenDay,
+      isCheckOutExpired: checkOutExpired(r.recordedAt, now),
     }));
     return {
       storeId,
