@@ -315,7 +315,9 @@ function requestForLog(
         senderkey: `***${at.senderkey.slice(-4)}`,
         templatecode: at.templatecode,
         message: shape,
-        ...(at.title === undefined ? {} : { title: MASK }),
+        ...(at.title === undefined
+          ? {}
+          : { title: at.title === '' ? '' : MASK }),
         ...(at.button
           ? {
               button: at.button.map((b) => ({
@@ -331,6 +333,7 @@ function requestForLog(
         messageLength: at.message.length,
       },
     },
+    // 발신번호는 비즈뿌리오에 등록한 회사 번호(BIZPPURIO_SMS_FROM)라 개인정보가 아니어서 그대로 둔다
     ...(message.from === undefined ? {} : { from: message.from }),
     ...(message.resend ? { resend: { first: message.resend.first } } : {}),
     ...(message.recontent
