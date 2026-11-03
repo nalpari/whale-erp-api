@@ -422,7 +422,7 @@ describe('AlimtalkService', () => {
         variables: { name: '홍길동', 링크: link },
       });
 
-      // 앞의 https:// 를 떼고 보냈더니 보낸 가입 초대가 비즈뿌리오 결과 7101(파라미터 형식 오류)로 거절됐다 — 전체 주소 그대로
+      // 앞의 https:// 를 뗀 가입 초대가 비즈뿌리오 결과 7101(파라미터 형식 오류)로 거절됐다 — 전체 주소 그대로
       expect(sent().content.at.button).toEqual([
         { name: '가입하기', type: 'WL', url_mobile: link, url_pc: link },
       ]);
