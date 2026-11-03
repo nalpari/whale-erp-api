@@ -4,12 +4,12 @@ title: Attendance
 description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(출퇴근 탭 진입 · 버튼 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T02:27:50Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-03T04:21:38Z }
 sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
     title: 관리자 웹 일별 출퇴근 GET /attendance-records/daily(WHALEERP-217)
-    last_modified: 2026-10-30T02:31:31Z
+    last_modified: 2026-11-03T04:21:38Z
   - id: day-status
     resource: ../../src/attendance/attendance-day-status.ts
     title: 일별 출퇴근 상태 판정(API 전용 enum AttendanceDayStatus)
@@ -126,6 +126,11 @@ sources:
   출퇴근 기록이 있는 직원이다 — 퇴직한 직원도 그날 기록이 있으면 나온다. 점포 · 이름순.
 - `GET /attendance-records?from=&to=&staffMemberId=` — 기간(92일 이하, 관리자 보정 범위 최근 3개월). 근무스케줄이나 기록이 있는 직원 ·
   날만(휴무 줄 없음), 날짜 내림차순. 직원을 주면 그 직원만이고, 점포 조건 안의 직원이 아니거나 본사에게 가려지는 직원이면 404.
+- `GET /attendance-records/open-check-ins?storeId=`(WHALEERP-644) — 점포 하나의 열린 출근(퇴근하지 않은 출근). 폐점을 맡은 쪽이 폐점 전에
+  묻는 용도이고 폐점을 막지는 않는다. 퇴직 처리(`assertNoOpenCheckIn`)와 같게 보정할 수 있는 3개월 안의 것만, 퇴직한 직원 레코드의 것도
+  넣는다. `{ storeId, count, hiddenCount, items: [{ attendanceRecordId, staffMemberId, name, recordedAt, isCheckOutExpired }] }` — 출근 시각순,
+  `isCheckOutExpired` 는 출근한 다음 날이 지나 앱으로 퇴근할 수 없는 것(관리자 보정). 본사에게 가려지는 직원(`hidesPersonalData` — 폐점한 가맹 점포면 동의한 직원도)은 줄을 빼고 수만 `hiddenCount` 로 센다 — 일별 조회는 수에서도 빼지만(v218), 여기서 수까지 빼면 본사 계정이 0건으로 보고 폐점한다(2026-11-03 재영). 폐점 전 확인은 `count + hiddenCount`.
+  업무 범위 밖 점포는 404.
 - 줄: 날 · 직원(이름 · 번호) · 점포 · 고용 형태 · 재직 · 예정 · 출근과 짝 퇴근(자정을 넘긴 퇴근도 출근한 날) · 확인 필요 사유 · 등록 방식 ·
   보정됨(`isCorrected`, 보정 이력 있음) · 상태. 필터 7개(STAFF-31)는 화면이 받은 줄을 거른다.
 - 상태 `AttendanceDayStatus`(API 전용 enum, STAFF-31 의 여섯)는 기록에서 만든다.[^day-status] 판정 기준은 정책에 없어 가장 단순하게
