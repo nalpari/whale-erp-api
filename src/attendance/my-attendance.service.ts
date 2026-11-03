@@ -71,7 +71,7 @@ const rejection = (
 export class MyAttendanceService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** 출퇴근 화면 — 고른 근무지 · 동의 상태 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄 */
+  /** 출퇴근 화면 — 고른 근무지 · 동의 상태 · 출근을 막는 까닭(폐점 · 계약) · 열린 출근 · 오늘 근무스케줄 */
   async get(
     accountId: number,
     staffMemberId: number,
@@ -79,10 +79,11 @@ export class MyAttendanceService {
     const db: Db = this.prisma;
     const member = await membershipOf(db, accountId, staffMemberId);
     const today = kstToday();
-    const [store, locationConsent, checkInBlock, openCheckIn, schedules] =
+    const [store, locationConsent, closed, block, openCheckIn, schedules] =
       await Promise.all([
         storeOf(db, member.storeId),
         consentOf(db, accountId),
+        isStoreClosed(db, member.storeId),
         checkInBlockOf(db, member, today),
         openCheckInOf(db, accountId),
         db.workSchedule.findMany({
@@ -98,6 +99,10 @@ export class MyAttendanceService {
           select: { startAt: true, endAt: true, breakMinutes: true },
         }),
       ]);
+    // 폐점이면 계약보다 먼저 폐점을 싣는다 — 출근(211)이 폐점부터 막는 것과 같은 순서(WHALEERP-643)
+    const checkInBlock: CheckInBlockDto | null = closed
+      ? { reason: 'STORE_CLOSED', contractId: null }
+      : block;
     return {
       staffMemberId,
       store,

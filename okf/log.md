@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-03
+* **Update**: [Attendance](/api/attendance.md) — 직원 앱 출근에서 폐점한 근무지를 422 `STORE_CLOSED` 로 막는다(WHALEERP-643). 화면 `checkInBlock` 도 계약보다 먼저 `STORE_CLOSED` 를 싣는다. 퇴근은 그대로 받는다(폐점 전에 연 출근을 닫아야 한다).
 * **Update**: main 병합(api ponyta, main #233 까지): okf/log 충돌은 양쪽 기록을 살렸다.
 * **Update**: [Admin authentication](/api/admin-auth.md) — api #232 적대적 리뷰 반영: 로그인 정보 버전이 메뉴 위치(상위 · 순서 · 단계)도 담는다. 플랫폼 메뉴 옮기기는 수정 화면의 동시 수정 검사 때문에 `updatedAt` 을 원래 값으로 둬, 옮긴 메뉴 트리가 버전에 잡히지 않았다.
 

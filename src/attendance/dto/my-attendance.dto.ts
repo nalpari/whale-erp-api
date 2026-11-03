@@ -97,11 +97,13 @@ export class AttendanceStoreDto {
   isLocationApplied: boolean;
 }
 
-/** 출근을 막는 까닭(ATT-12). 오늘(근무일)이 체결 완료 근로계약 기간 밖이다 */
+/** 출근을 막는 까닭 — 근무지가 폐점했거나(WHALEERP-643) 오늘(근무일)이 체결 완료 근로계약 기간 밖이다(ATT-12) */
 export class CheckInBlockDto {
-  @ApiProperty({ enum: ['CONTRACT_PENDING_SIGNATURE', 'NO_CONTRACT'] })
-  reason: 'CONTRACT_PENDING_SIGNATURE' | 'NO_CONTRACT';
-  /** 서명 대기 계약 — 「계약서 보기」로 연다. NO_CONTRACT 면 null */
+  @ApiProperty({
+    enum: ['STORE_CLOSED', 'CONTRACT_PENDING_SIGNATURE', 'NO_CONTRACT'],
+  })
+  reason: 'STORE_CLOSED' | 'CONTRACT_PENDING_SIGNATURE' | 'NO_CONTRACT';
+  /** 서명 대기 계약 — 「계약서 보기」로 연다. 그 밖에는 null */
   contractId: number | null;
 }
 

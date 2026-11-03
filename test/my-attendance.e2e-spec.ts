@@ -552,13 +552,21 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
     }
   });
 
-  it('폐점한 근무지는 체결 완료 계약이 남아 있어도 출근 422 STORE_CLOSED — 폐점 전에 연 출근의 퇴근은 받는다(WHALEERP-643)', async () => {
+  it('폐점한 근무지는 체결 완료 계약이 남아 있어도 화면에 STORE_CLOSED · 출근 422 STORE_CLOSED — 폐점 전에 연 출근의 퇴근은 받는다(WHALEERP-643)', async () => {
     const token = await tokenOf(accountId);
     await prisma.store.update({
       where: { storeId: plainStoreId },
       data: { storeStatusCode: 'CLOSED', closedDate: today },
     });
     try {
+      const view = await request(app.getHttpServer())
+        .get(`/me/attendance?staffMemberId=${plainStaffId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect((view.body as { checkInBlock: unknown }).checkInBlock).toEqual({
+        reason: 'STORE_CLOSED',
+        contractId: null,
+      });
       const res = await post('check-in', token, {
         staffMemberId: plainStaffId,
       }).expect(422);

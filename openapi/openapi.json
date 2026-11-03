@@ -15184,7 +15184,7 @@
             "description": "ALREADY_CHECKED_IN — 어느 소속에든 열린 출근이 있음(openCheckIn 을 함께)"
           },
           "422": {
-            "description": "CONTRACT_PENDING_SIGNATURE — 서명 대기 계약(contractId) / NO_CONTRACT — 오늘이 체결 완료 근로계약 기간 밖이거나 퇴직일이 지남 (ATT-12)"
+            "description": "STORE_CLOSED — 폐점한 근무지 / CONTRACT_PENDING_SIGNATURE — 서명 대기 계약(contractId) / NO_CONTRACT — 오늘이 체결 완료 근로계약 기간 밖이거나 퇴직일이 지남 (ATT-12)"
           }
         },
         "security": [
@@ -32058,6 +32058,7 @@
         "properties": {
           "reason": {
             "enum": [
+              "STORE_CLOSED",
               "CONTRACT_PENDING_SIGNATURE",
               "NO_CONTRACT"
             ],
@@ -32066,7 +32067,7 @@
           "contractId": {
             "type": "number",
             "nullable": true,
-            "description": "서명 대기 계약 — 「계약서 보기」로 연다. NO_CONTRACT 면 null"
+            "description": "서명 대기 계약 — 「계약서 보기」로 연다. 그 밖에는 null"
           }
         },
         "required": [

@@ -136,6 +136,16 @@ describe('MyAttendanceService', () => {
       ]);
     });
 
+    it('폐점한 근무지면 출근을 막는 까닭은 계약보다 먼저 STORE_CLOSED (WHALEERP-643)', async () => {
+      db.store.findFirst.mockResolvedValue({ storeId: 7 });
+      db.contract.findFirst.mockResolvedValue(null);
+      const res = await service.get(12, 30);
+      expect(res.checkInBlock).toEqual({
+        reason: 'STORE_CLOSED',
+        contractId: null,
+      });
+    });
+
     it('내 소속이 아니면 404 — 소속 규칙은 직원 앱과 같다(체결 완료 · 가입 완료 · 재직)', async () => {
       db.staffMember.findFirst.mockResolvedValue(null);
       await expect(service.get(12, 30)).rejects.toBeInstanceOf(
