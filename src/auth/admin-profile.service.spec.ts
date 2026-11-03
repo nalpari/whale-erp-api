@@ -1,8 +1,13 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { sameMillisecond } from '../common/updated-at';
 import { PrismaService } from '../prisma/prisma.service';
+import { ACCOUNT_UNAVAILABLE_MESSAGE } from './access-messages';
 import { AdminProfileService } from './admin-profile.service';
 
 describe('AdminProfileService', () => {
@@ -27,6 +32,7 @@ describe('AdminProfileService', () => {
     phone: '01012345678',
     email: 'seojun@whale.test',
     roleTypeCode: 'BM',
+    accountStatusCode: 'ACTIVE',
     createdAt: new Date('2026-01-01T00:00:00Z'),
     lastLoginAt: new Date('2026-10-20T00:00:00Z'),
     updatedAt: new Date(UPDATED_AT),
@@ -91,6 +97,17 @@ describe('AdminProfileService', () => {
     it('지운 계정 · 없는 계정은 404', async () => {
       prismaAdminAccountFindFirst.mockResolvedValue(null);
       await expect(service.get(7)).rejects.toThrow(NotFoundException);
+    });
+
+    it('사용중지 · 탈퇴한 계정이면 403', async () => {
+      for (const accountStatusCode of ['INACTIVE', 'WITHDRAWN']) {
+        prismaAdminAccountFindFirst.mockResolvedValue(
+          account({ accountStatusCode }),
+        );
+        await expect(service.get(7)).rejects.toThrow(
+          new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE),
+        );
+      }
     });
   });
 
