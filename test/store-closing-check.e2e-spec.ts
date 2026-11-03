@@ -122,6 +122,8 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
       where: { staffMemberId: retired },
       data: { employmentStatus: 'RETIRED', retiredDate: addDays(today, -10) },
     });
+    // 퇴직한 레코드의 열린 출근 — retireStore 가 막지 않으므로 폐점 확인도 세지 않는다
+    await punch(retired, at(yesterday, 7));
     // 명세서 — 작성 중 · 검토 중만 센다
     for (const [month, status] of [
       ['07', 'DRAFTING'],

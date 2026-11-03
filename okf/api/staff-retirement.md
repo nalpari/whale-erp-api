@@ -390,9 +390,10 @@ as `retireStore`'s return value (1팀 shows both in the closing messages).[^stor
 
 It returns:
 
-- `openCheckIns: { count, hiddenCount, first }` — open check-ins of the store by the same rule as the admin
-  open-check-in route (WHALEERP-644, shared `openCheckInsOf`: within the 3-month correction window, retired records
-  included). Staff a 본사 역할 would not see (`hidesPersonalData` judged for 본사 역할 — on a non-직영 store, unless the staff
+- `openCheckIns: { count, hiddenCount, first }` — open check-ins of the store's `EMPLOYED` records, by the same rule as
+  the admin open-check-in route (WHALEERP-644, shared `openCheckInsOf`: within the 3-month correction window) but without
+  retired records — exactly what `retireStore` blocks on (`assertNoOpenCheckIn` per employed record); a retired record's
+  open check-in does not block the closing. Staff a 본사 역할 would not see (`hidesPersonalData` judged for 본사 역할 — on a non-직영 store, unless the staff
   consented and the store is not closed) are counted in `hiddenCount` only and never picked as `first` — always, whoever
   calls, since the caller is not an input (2026-11-03 재영). Blocking must look at `count + hiddenCount`: `retireStore`
   answers 409 `OPEN_CHECK_IN` for any open check-in of an `EMPLOYED` record and rolls the closing back, so the
