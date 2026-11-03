@@ -16,7 +16,6 @@ import { BIZPPURIO_CONFIG, type BizppurioConfig } from './bizppurio.config';
 import {
   alimtalkButtonOf,
   alimtalkButtonProblem,
-  BUTTON_LINK_SCHEME,
   isButtonLinkUrl,
 } from './alimtalk-buttons';
 import { failureHeadOf } from './failure-reason';
@@ -123,27 +122,41 @@ export class AlimtalkService {
     // 이력에는 가린 본문만 넘긴다 — record 가 보낸 원문에 손댈 수 없게.
     const attempt = { input, phone, kakaoTemplateCode, maskedBody };
     const referenceKey = randomUUID().replace(/-/g, '').slice(0, 20);
+    const request: BizppurioMessage = {
+      account: this.config.account,
+      type: 'at',
+      refkey: referenceKey,
+      to: phone,
+      content: {
+        at: {
+          senderkey: this.config.senderKey,
+          templatecode: kakaoTemplateCode,
+          message: body,
+          ...(button.length ? { button } : {}),
+        },
+      },
+      // 문자에는 버튼이 없어 버튼 링크를 본문 끝에 줄을 바꿔 붙인다. 그러지 않으면
+      // 「아래 링크로 …」 만 남고 링크가 없는 문자가 간다. 발신번호가 없으면 대체하지 않는다.
+      ...(this.config.smsFrom === null
+        ? {}
+        : smsFallback(this.config.smsFrom, [body, ...links].join('\n'))),
+    };
+    // 비즈뿌리오 · 카카오가 파라미터를 거절할 때(7101 등) 무엇을 보냈는지 보려고 요청 모양을 남긴다. 접수 뒤에야 결과가 오므로
+    // 보내기 전에 남긴다. 변수 값은 모두 가린 본문(이름 · 초대 코드가 들어간다) — 빈 값은 빈칸 그대로 두어 비었는지 보이게 한다.
+    // 링크는 스킴 · 호스트와 글자 수만 남긴다.
+    const shape = renderTemplate(
+      template,
+      input.variables,
+      Object.keys(input.variables).filter(
+        (name) => input.variables[name] !== '',
+      ),
+    ).maskedBody;
+    this.logger.log(
+      `alimtalk REQUEST template=${templateCode} referenceKey=${referenceKey} params=${JSON.stringify(requestForLog(request, shape, links))}`,
+    );
     let messageKey: string | undefined;
     try {
-      const response = await this.client.sendMessage({
-        account: this.config.account,
-        type: 'at',
-        refkey: referenceKey,
-        to: phone,
-        content: {
-          at: {
-            senderkey: this.config.senderKey,
-            templatecode: kakaoTemplateCode,
-            message: body,
-            ...(button.length ? { button } : {}),
-          },
-        },
-        // 문자에는 버튼이 없어 버튼 링크를 본문 끝에 줄을 바꿔 붙인다. 그러지 않으면
-        // 「아래 링크로 …」 만 남고 링크가 없는 문자가 간다. 발신번호가 없으면 대체하지 않는다.
-        ...(this.config.smsFrom === null
-          ? {}
-          : smsFallback(this.config.smsFrom, [body, ...links].join('\n'))),
-      });
+      const response = await this.client.sendMessage(request);
       messageKey = response.messagekey;
     } catch (e) {
       // 네트워크 실패는 code 가 없어, 원인은 메시지로만 남는다. 로그 한 줄에는 메시지를
@@ -217,8 +230,8 @@ export class AlimtalkService {
 
 /**
  * 버튼 링크 값을 웹링크(WL) 버튼 하나로. PC 카카오톡에도 보이게 모바일 · PC 링크를 같은 값으로 싣는다(직원 근무 앱은
- * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 등록한 버튼 링크가 `https://#{변수}` 라 앞의 `https://` 는 떼고
- * 싣는다 — 대체 문자 본문 끝 링크는 전체 주소 그대로다. 버튼 설정이 맞지 않는 템플릿(alimtalkButtonProblem)과 https 주소가
+ * 모바일 웹이라 PC 브라우저에서도 열린다, 재영 2026-10-30). 링크는 `https://` 를 포함한 전체 주소 그대로 싣는다 — 앞을 떼고
+ * 보냈더니 카카오가 7101(파라미터 형식 오류)로 거절했다(2026-11-02 김민식). 대체 문자 본문 끝 링크도 같은 주소다. 버튼 설정이 맞지 않는 템플릿(alimtalkButtonProblem)과 https 주소가
  * 아닌 링크는 보내기 전에 던진다 — 오류 메시지에 링크(토큰)는 담지 않는다. 링크가 없으면(선택 변수를 비움) 버튼도 없다 —
  * 버튼을 등록한 템플릿이면 알림톡은 거절되고 대체 문자로 간다.
  */
@@ -242,8 +255,7 @@ function buttonsOf(
     throw new Error(
       `알림톡 템플릿 ${templateCode} 의 버튼 링크는 https 주소여야 합니다`,
     );
-  const url = link.replace(BUTTON_LINK_SCHEME, '');
-  return [{ name: button.name, type: 'WL', url_mobile: url, url_pc: url }];
+  return [{ name: button.name, type: 'WL', url_mobile: link, url_pc: link }];
 }
 
 /**
@@ -272,6 +284,74 @@ function eucKrBytes(text: string): number {
   let bytes = 0;
   for (const c of text) bytes += c.charCodeAt(0) < 0x80 ? 1 : 2;
   return bytes;
+}
+
+/**
+ * 로그용 요청 사본. 키 · 구조 · 버튼 이름 · 링크의 스킴 · 호스트는 보낸 그대로 두고, 번호 · senderkey · 본문의 변수 값 · 링크의
+ * 경로 뒤를 가린다. 본문은 `shape`(변수 값을 모두 가린 본문)로 바꾸고 원래 글자 수(UTF-16 단위)를, 대체 문자는 비즈뿌리오가 세는
+ * EUC-KR 바이트 수(SMS 90 · LMS 2000 한도)를 함께 싣는다. 나머지는 펼쳐 그대로 싣는다 — `BizppurioMessage` 에 변수 값이 들어가는
+ * 칸(알림톡 `title` 등)을 더하면 여기서도 가린다.
+ */
+function requestForLog(
+  message: BizppurioMessage,
+  shape: string,
+  links: readonly string[],
+): unknown {
+  const { at } = message.content;
+  const fallback = [shape, ...links.map(maskLink)].join('\n');
+  const { sms, lms } = message.recontent ?? {};
+  const messageBytes = eucKrBytes((sms ?? lms)?.message ?? '');
+  return {
+    ...message,
+    to: maskPhone(message.to),
+    content: {
+      at: {
+        ...at,
+        senderkey: `***${at.senderkey.slice(-4)}`,
+        message: shape,
+        messageLength: at.message.length,
+        ...(at.button
+          ? {
+              button: at.button.map((b) => ({
+                ...b,
+                url_mobile: maskLink(b.url_mobile),
+                ...(b.url_pc === undefined
+                  ? {}
+                  : { url_pc: maskLink(b.url_pc) }),
+              })),
+            }
+          : {}),
+      },
+    },
+    ...(message.recontent
+      ? {
+          recontent: {
+            ...(sms ? { sms: { message: fallback, messageBytes } } : {}),
+            ...(lms
+              ? { lms: { ...lms, message: fallback, messageBytes } }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/**
+ * 링크는 스킴(있으면) · 호스트와 그 뒤 첫 구분자(`/` `?` `#`)만 그대로 두고 나머지(경로 · 쿼리 · fragment)는 가린 채 전체 글자 수를
+ * 붙인다 — 토큰은 fragment 에도 경로에도 올 수 있다. 호스트 앞 사용자 정보(`user:pw@`)도 가린다.
+ * `https://staff.whale.test/invite#token=abc` → `https://staff.whale.test/***(41자)`
+ */
+function maskLink(link: string): string {
+  const [, scheme, host, rest] =
+    /^((?:[a-z][a-z0-9+.-]*:\/\/)?)([^/?#]*)(.*)$/is.exec(
+      link,
+    ) as RegExpExecArray;
+  const shownHost = host.includes('@')
+    ? `***@${host.slice(host.lastIndexOf('@') + 1)}`
+    : host;
+  // 구분자 하나뿐이면(`https://host/`) 가릴 것이 없으니 그대로 둔다
+  const shownRest = rest.length > 1 ? `${rest[0]}***` : rest;
+  return `${scheme}${shownHost}${shownRest}(${link.length}자)`;
 }
 
 /** integer 컬럼에 들어가는 id — 1..2147483647 */

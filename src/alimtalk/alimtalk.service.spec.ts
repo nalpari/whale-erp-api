@@ -414,7 +414,7 @@ describe('AlimtalkService', () => {
     });
     const link = 'https://staff.whale.test/invite#token=secret-token';
 
-    it('버튼 링크 값을 등록한 이름의 웹링크 버튼으로 싣는다 — 모바일 · PC 같은 링크, 앞의 https:// 는 뗀다', async () => {
+    it('버튼 링크 값을 등록한 이름의 웹링크 버튼으로 싣는다 — 모바일 · PC 같은 링크, https:// 를 포함한 전체 주소', async () => {
       findUnique.mockResolvedValue(withLink());
 
       await service.send({
@@ -422,12 +422,11 @@ describe('AlimtalkService', () => {
         variables: { name: '홍길동', 링크: link },
       });
 
-      // 카카오 등록 버튼 링크가 `https://#{가입링크}` 라 스킴은 등록본에 있다 — 나머지(경로 · fragment 토큰)는 그대로
-      const url = 'staff.whale.test/invite#token=secret-token';
+      // 앞의 https:// 를 떼고 보냈더니 카카오가 7101(파라미터 형식 오류)로 거절했다 — 전체 주소 그대로
       expect(sent().content.at.button).toEqual([
-        { name: '가입하기', type: 'WL', url_mobile: url, url_pc: url },
+        { name: '가입하기', type: 'WL', url_mobile: link, url_pc: link },
       ]);
-      // 대체 문자에는 https:// 를 포함한 전체 주소가 본문 끝에 붙는다
+      // 대체 문자에도 같은 전체 주소가 본문 끝에 붙는다
       expect(
         sent().recontent?.lms?.message ?? sent().recontent?.sms?.message,
       ).toBe(
@@ -455,8 +454,8 @@ ${link}`,
         {
           name: ALIMTALK_BUTTONS.TALK_STAFF_AFFILIATION_REQUEST.name,
           type: 'WL',
-          url_mobile: 'staff.whale.test/affiliations',
-          url_pc: 'staff.whale.test/affiliations',
+          url_mobile: 'https://staff.whale.test/affiliations',
+          url_pc: 'https://staff.whale.test/affiliations',
         },
       ]);
       expect(
@@ -572,6 +571,159 @@ ${link}`,
         ).rejects.toThrow('버튼 링크 변수는 링크 하나여야 합니다');
       }
       expect(client.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('보내기 전에 요청 파라미터를 로그한다 — 구조는 그대로, 토큰 · 변수 값 · 번호 · senderkey 는 가린다', async () => {
+      findUnique.mockResolvedValue(withLink());
+
+      await service.send({
+        ...invite,
+        variables: { name: '홍길동', 링크: link },
+      });
+
+      const line = (logLog.mock.calls as [string][])
+        .map(([l]) => l)
+        .find((l) => l.startsWith('alimtalk REQUEST'));
+      expect(line).toBeDefined();
+      const params: unknown = JSON.parse(
+        (line as string).slice((line as string).indexOf('params=') + 7),
+      );
+      expect(params).toEqual({
+        account: 'whale',
+        type: 'at',
+        refkey: expect.any(String) as string,
+        to: '010****5678',
+        content: {
+          at: {
+            senderkey: '***-key',
+            templatecode: 'KAKAO_SCHEDULE_01',
+            message: `${MASK}님, 아래 버튼을 눌러 가입해 주세요.`,
+            messageLength: '홍길동님, 아래 버튼을 눌러 가입해 주세요.'.length,
+            button: [
+              {
+                name: '가입하기',
+                type: 'WL',
+                // 스킴이 붙었는지 보이게 앞부분은 그대로, 경로 · 토큰은 가리고 글자 수만
+                url_mobile: 'https://staff.whale.test/***(50자)',
+                url_pc: 'https://staff.whale.test/***(50자)',
+              },
+            ],
+          },
+        },
+        from: '0269280028',
+        resend: { first: 'lms' },
+        recontent: {
+          lms: {
+            subject: '[WHALE ERP]',
+            message: `${MASK}님, 아래 버튼을 눌러 가입해 주세요.
+https://staff.whale.test/***(50자)`,
+            // 실제 대체 문자(링크 원문 포함)의 EUC-KR 바이트 — 90 을 넘어 LMS 다
+            messageBytes: 92,
+          },
+        },
+      });
+      expect(line).not.toContain('홍길동');
+      expect(line).not.toContain('sender-key');
+    });
+
+    it('요청 파라미터 로그 — 빈 값은 가리지 않고 빈칸으로 둔다(비었는지 보이게)', async () => {
+      await service.send({ ...input, variables: { name: '홍길동', date: '' } });
+
+      const [first] = logLog.mock.calls[0] as [string];
+      expect(first).toContain(`"message":"${MASK}님,  근무가 변경되었습니다."`);
+      expect(first).not.toContain('홍길동');
+    });
+
+    it('요청 파라미터 로그 — 끝 / 하나뿐인 링크는 가린 표시 없이 그대로', async () => {
+      findUnique.mockResolvedValue(withLink());
+
+      await service.send({
+        ...invite,
+        variables: { name: '홍길동', 링크: 'https://staff.whale.test/' },
+      });
+
+      const [first] = logLog.mock.calls[0] as [string];
+      expect(first).toContain('"url_mobile":"https://staff.whale.test/(25자)"');
+    });
+
+    it('요청 파라미터 로그 — 짧은 대체 문자는 SMS 로, 실제 바이트 수와 함께', async () => {
+      await service.send(input);
+
+      const [first] = logLog.mock.calls[0] as [string];
+      const params = JSON.parse(first.slice(first.indexOf('params=') + 7)) as {
+        recontent: unknown;
+      };
+      expect(params.recontent).toEqual({
+        sms: {
+          message: `${MASK}님, ${MASK} 근무가 변경되었습니다.`,
+          messageBytes: 37,
+        },
+      });
+    });
+
+    it('요청 파라미터 로그 — 발신번호가 없으면 대체 문자 칸이 없다', async () => {
+      config.smsFrom = null;
+
+      await service.send(input);
+
+      const [first] = logLog.mock.calls[0] as [string];
+      const params = JSON.parse(
+        first.slice(first.indexOf('params=') + 7),
+      ) as Record<string, unknown>;
+      expect(params).not.toHaveProperty('from');
+      expect(params).not.toHaveProperty('resend');
+      expect(params).not.toHaveProperty('recontent');
+    });
+
+    it('요청 파라미터 로그의 링크는 호스트 바로 뒤 구분자를 그대로 둔다', async () => {
+      findUnique.mockResolvedValue(withLink());
+
+      await service.send({
+        ...invite,
+        variables: {
+          name: '홍길동',
+          링크: 'https://staff.whale.test#token=secret-token',
+        },
+      });
+
+      const [first] = logLog.mock.calls[0] as [string];
+      expect(first).toContain(
+        '"url_mobile":"https://staff.whale.test#***(43자)"',
+      );
+      expect(first).not.toContain('secret-token');
+    });
+
+    it('요청 파라미터 로그의 링크는 호스트 앞 사용자 정보도 가린다', async () => {
+      findUnique.mockResolvedValue(withLink());
+
+      await service.send({
+        ...invite,
+        variables: {
+          name: '홍길동',
+          링크: 'https://user:secret-pw@staff.whale.test/invite',
+        },
+      });
+
+      const [first] = logLog.mock.calls[0] as [string];
+      expect(first).toContain(
+        '"url_mobile":"https://***@staff.whale.test/***(46자)"',
+      );
+      expect(first).not.toContain('secret-pw');
+    });
+
+    it('요청 파라미터 로그는 비즈뿌리오가 거절해도 남는다', async () => {
+      findUnique.mockResolvedValue(withLink());
+      client.sendMessage.mockRejectedValue(new BizppurioError('bad', 2000));
+
+      await expect(
+        service.send({ ...invite, variables: { name: '홍길동', 링크: link } }),
+      ).rejects.toThrow('bad');
+
+      const [first] = logLog.mock.calls[0] as [string];
+      expect(first).toMatch(
+        /^alimtalk REQUEST template=TALK_STAFF_INVITATION /,
+      );
+      expect(first).not.toContain('secret-token');
     });
 
     it('버튼 링크(토큰)는 이력 · 로그에 남지 않는다', async () => {
@@ -707,13 +859,17 @@ ${link}`,
       variables: { name: '홍길동', date: 'secret-date' },
     });
 
-    expect(logLog).toHaveBeenCalledTimes(1);
-    const [line] = logLog.mock.calls[0] as [string];
-    expect(line).toContain('TALK_SCHEDULE');
-    expect(line).toContain('mk-1');
-    expect(line).toContain('010****5678');
-    expect(line).not.toContain('01012345678');
-    expect(line).not.toContain('secret-date');
+    // 보내기 전 요청 파라미터 한 줄 + 접수 한 줄
+    expect(logLog).toHaveBeenCalledTimes(2);
+    const lines = (logLog.mock.calls as [string][]).map(([l]) => l);
+    const accepted = lines.find((l) => l.startsWith('alimtalk ACCEPTED'));
+    expect(accepted).toContain('TALK_SCHEDULE');
+    expect(accepted).toContain('mk-1');
+    expect(accepted).toContain('010****5678');
+    for (const line of lines) {
+      expect(line).not.toContain('01012345678');
+      expect(line).not.toContain('secret-date');
+    }
   });
 
   it('비즈뿌리오 오류는 코드를 남기고 그대로 던진다', async () => {
