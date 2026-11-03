@@ -5,8 +5,8 @@ import { TOKEN_PATH } from '../alimtalk/failure-reason';
 /** 가입 초대 알림톡 템플릿(근무지 · 초대코드 · 링크=초대 링크). 카카오 템플릿 TALK_STAFF_INVITATION(2026-10-30 등록) */
 export const INVITATION_TEMPLATE = 'TALK_STAFF_INVITATION';
 /**
- * 소속 추가 확인 요청 알림톡 · 메일(사업자 · 근무지 · 고용형태 · 링크=직원 앱 요청 화면, WHALEERP-130 · 2026-10-26 재영). 카카오
- * 템플릿 TALK_STAFF_AFFILIATION_REQUEST(2026-11-03 등록). 메일은 계정의 이메일로 — 알림톡과 따로 가고 실패해도 저장을 되돌리지 않는다.
+ * 소속 추가 확인 요청 알림톡 · 메일(사업자 · 근무지 · 고용형태, 메일만 링크=직원 앱 요청 화면, WHALEERP-130 · 2026-10-26 재영). 카카오
+ * 템플릿 TALK_STAFF_AFFILIATION_REQUEST(2026-11-03 등록, 버튼 없음). 메일은 계정의 이메일로 — 알림톡과 따로 가고 실패해도 저장을 되돌리지 않는다.
  */
 export const AFFILIATION_TEMPLATE = 'TALK_STAFF_AFFILIATION_REQUEST';
 export const AFFILIATION_MAIL_TEMPLATE = 'EMAIL_STAFF_AFFILIATION_REQUEST';
