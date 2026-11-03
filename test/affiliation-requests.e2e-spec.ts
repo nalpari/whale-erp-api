@@ -192,12 +192,22 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       candidateAccountId: r.accountId,
       accountId: null,
     });
-    // 알림톡은 DB 템플릿으로 렌더해 나간다 — 카카오 템플릿 등록 전이라 대체 문자(본문 + 링크)도 붙는다
+    // 알림톡은 DB 템플릿으로 렌더해 카카오 등록 코드(2026-11-03 등록)로 나간다. 등록본에 버튼이 없어 버튼 · 링크 없이 가고,
+    // 대체 문자도 본문만 간다
     expect(bizppurio.sendMessage).toHaveBeenCalledTimes(1);
     const [message] = bizppurio.sendMessage.mock.calls[0] as [
-      { content: { at: { templatecode: string; message: string } } },
+      {
+        content: { at: { templatecode: string; message: string } };
+        recontent?: { sms?: { message: string }; lms?: { message: string } };
+      },
     ];
-    expect(message.content.at.templatecode).toBe('WHALE_AFFILIATION_01');
+    expect(message.content.at).not.toHaveProperty('button');
+    expect(
+      message.recontent?.lms?.message ?? message.recontent?.sms?.message,
+    ).toBe(message.content.at.message);
+    expect(message.content.at.templatecode).toBe(
+      'TALK_STAFF_AFFILIATION_REQUEST',
+    );
     expect(message.content.at.message).toContain(
       '소속 추가 테스트 BP 소속 추가 점포에서 소속 추가를 요청했습니다.',
     );
