@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T06:49:11Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T06:50:06Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: store-closing-check
     resource: ../../src/staff-members/store-closing-check.ts
     title: storeClosingCheck — 폐점 확인(WHALEERP-647 · 650, 읽기만)
-    last_modified: 2026-11-04T06:24:38Z
+    last_modified: 2026-11-04T06:50:06Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
@@ -425,10 +425,10 @@ passing the same `client` (PrismaService or the transaction) so all three see th
 caller's; whether to block the closing is the caller's decision too.
 
 Right before saving, call it once for all the stores, before any of them is set CLOSED (a closed 가맹 store hides consented
-staff too, so `first` would go empty while `count + hiddenCount` stays) and before `retireStore` (after it the pending
+staff too, so `first` would go empty while `count + hiddenCount` stays) and before `retireStores` (after it the pending
 contracts are already ENDed and the contract counts read 0). The check alone does not close anything safely: it reads without
-locks, and `retireStore` is what sees the rows again after locking. The staff and contract fields of `stores[n]` have the same
-names and meaning as that store's `retireStore` return value, and `total` as their sum.[^store-closing-check]
+locks, and `retireStores` is what sees the rows again after locking. The staff and contract fields of `stores[n]` have the same
+names and meaning as `byStore[storeId]` of the `retireStores` return value, and `total` as its `total`.[^store-closing-check]
 
 Duplicate ids count once and an empty array returns an empty list and zeros without a query. Each table is asked once with
 `IN`, so the query count does not grow with the stores. A store that does not exist or is deleted is 404 with its id in the
