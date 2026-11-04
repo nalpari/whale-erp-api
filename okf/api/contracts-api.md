@@ -85,7 +85,7 @@ sources:
   - id: contract-purge
     resource: ../../src/contracts/contract-purge.ts
     title: 퇴직자 근로계약 파기 contract-purge (WHALEERP-645)
-    last_modified: 2026-11-03T05:30:00Z
+    last_modified: 2026-11-03T07:54:27Z
 ---
 
 # What it is
@@ -1216,8 +1216,11 @@ only — a 종이 계약 has no body.
 - **급여명세서 blocks a record** (2026-11-03 김민식): `payslips.contract_id` is NOT NULL · RESTRICT and
   payslips are another area (생성일 + 3년, RET-02), so a record with any contract a payslip points at is
   skipped whole, every day, until the payslips are gone. Such records are left out of the pick (they
-  never fill the 100) and counted in the log `contract purge SKIPPED_PAYSLIP staff=N`. The payslip purge is
-  a separate follow-up under WHALEERP-323 — until it exists, a 퇴직자 who ever got a payslip keeps the contracts.
+  never fill the 100) and counted in the log `contract purge SKIPPED_PAYSLIP staff=N`. The payslip purge
+  (`payslip-purge`, 04:50, WHALEERP-649) deletes payslips 3 years after creation; once a record's last payslip is purged (and its 퇴직일 + 3
+  years has passed), the record becomes a target from this batch's run that same morning — the per-run limits and the
+  file conditions above can still push it later. The last payslip usually comes after the 퇴직일, so such a record
+  goes days to about a month after 퇴직일 + 3 years.
 - **Pick without locks, then lock once in id order** (api #238 리뷰): `pickTargets` reads candidates oldest
   퇴직일 first, 500 at a time (`CONTRACT_PURGE_SCAN_SIZE`, keyset on `(retired_date, staff_member_id)`), without a
   lock, until 100 are chosen, reading at most 10 pages (`CONTRACT_PURGE_MAX_SCAN_PAGES`, 5000 records) so the
