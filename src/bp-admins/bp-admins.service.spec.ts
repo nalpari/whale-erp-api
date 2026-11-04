@@ -656,14 +656,12 @@ describe('BpAdminsService', () => {
       expect(prisma.adminAccount.create).not.toHaveBeenCalled();
     });
 
-    it('BP 가 탈퇴여도 409 — 사용 중이 아닌 BP 는 모두 막는다', async () => {
+    it('BP 가 탈퇴면 409 — 탈퇴 BP 의 관리자는 등록 · 수정을 모두 막는다', async () => {
       whileLocked(bpRow, () => [
         { ...liveBp, account_status_code: 'WITHDRAWN' },
       ]);
       await expect(service.create(2, bp, input())).rejects.toThrow(
-        new ConflictException(
-          'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.',
-        ),
+        new ConflictException('탈퇴한 BP 의 관리자 계정은 고칠 수 없습니다.'),
       );
       expect(prisma.adminAccount.create).not.toHaveBeenCalled();
     });

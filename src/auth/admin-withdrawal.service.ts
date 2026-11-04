@@ -30,8 +30,11 @@ const IN_PROGRESS_CONTRACT =
   '진행 중인 근로계약이 있어 탈퇴할 수 없습니다. 근로계약을 모두 종료한 뒤 다시 시도해 주세요.';
 const BP_MASTER = 'BM';
 const WITHDRAWN = 'WITHDRAWN';
+const INACTIVE = 'INACTIVE';
+const ACTIVE = 'ACTIVE';
 const CLOSED = 'CLOSED';
 const WITHDRAWN_LABEL = '탈퇴';
+const INACTIVE_LABEL = '미사용';
 const WITHDRAW_MAIL_TEMPLATE = 'EMAIL_WITHDRAW_DONE';
 
 /** 공통코드 WITHDRAW_REASON. 직접입력(WD_INPUT)만 상세를 받는다. */
@@ -64,9 +67,10 @@ const kstDateText = (now: Date): string =>
 type Db = PrismaService | Prisma.TransactionClient;
 
 /**
- * 회원 탈퇴(마이페이지 S-JHQQNR). BP 마스터 본인만 받는다 — 탈퇴하면 같은 BP 의 하위 관리자(BP 관리자 ·
- * 가맹마스터 · 가맹관리자)도 함께 탈퇴하고 점포는 모두 강제 폐점된다(1팀 규칙, admin_accounts.statusChangedAt
- * 주석 참고). getEligibility 는 그 전에 보여줄 영향 범위만 세고, execute 가 실제로 탈퇴한다.
+ * 회원 탈퇴(마이페이지 S-JHQQNR). BP 마스터 본인만 받는다 — BP 마스터는 탈퇴, 같은 BP 의 하위 관리자(BP 관리자 ·
+ * 가맹마스터 · 가맹관리자)는 「미사용」이 되고 점포는 모두 강제 폐점된다(1팀 규칙, admin_accounts.statusChangedAt
+ * 주석 참고). 하위 관리자는 스스로 탈퇴한 것이 아니라 상태는 미사용이지만, 개인정보(이름 · 휴대폰 · 이메일)는 BP 마스터와
+ * 같이 지운다 — BP 가 탈퇴하지 않은 하위 관리자의 미사용과는 이 점이 다르다(2026-11-04 사용자 지정, 전엔 하위 관리자도 탈퇴). getEligibility 는 그 전에 보여줄 영향 범위만 세고, execute 가 실제로 탈퇴한다.
  *
  * contracts(3팀)는 1팀 stores 와 Prisma 관계로 잇지 않는다(schema.prisma 머리말 — storeId 는 정수 칸만 있다).
  * 그래서 이 BP 의 점포 id 를 먼저 받아 그 id 로 진행 중 계약을 센다(admin-scope.service.ts 의
@@ -166,13 +170,16 @@ export class AdminWithdrawalService {
         }),
       ]);
 
-      const withdrawnPersonal = {
-        accountStatusCode: WITHDRAWN,
-        statusChangedAt: now,
+      const erasedPersonal = {
         name: null,
         phone: null,
         email: null,
         updatedBy: adminAccountId,
+      };
+      const withdrawnPersonal = {
+        ...erasedPersonal,
+        accountStatusCode: WITHDRAWN,
+        statusChangedAt: now,
       };
       const subAdminIds = subAdmins.map((admin) => admin.adminAccountId);
       await tx.adminAccount.update({
@@ -183,12 +190,21 @@ export class AdminWithdrawalService {
           withdrawReasonDetail: reasonDetail ?? null,
         },
       });
-      // 사유는 본인 행에만 적는다 — 하위 관리자는 스스로 탈퇴한 것이 아니다.
+      // 사유는 본인 행에만 적는다 — 하위 관리자는 스스로 탈퇴한 것이 아니라 상태도 탈퇴가 아니라 미사용이다.
       // 읽은 id 로만 바꾼다 — 이력을 남긴 행과 바꾼 행이 늘 같다(그 사이 늘어난 계정을 이력 없이 바꾸지 않는다).
+      // 개인정보는 모두 지우고, 상태는 사용이던 계정만 미사용으로 바꾼다(이미 미사용이면 바뀐 시각을 남겨 둔다).
+      const activeSubIds = subAdmins
+        .filter((admin) => admin.accountStatusCode === ACTIVE)
+        .map((admin) => admin.adminAccountId);
       if (subAdminIds.length)
         await tx.adminAccount.updateMany({
           where: { adminAccountId: { in: subAdminIds } },
-          data: withdrawnPersonal,
+          data: erasedPersonal,
+        });
+      if (activeSubIds.length)
+        await tx.adminAccount.updateMany({
+          where: { adminAccountId: { in: activeSubIds } },
+          data: { accountStatusCode: INACTIVE, statusChangedAt: now },
         });
       // 남은 접근 토큰으로 마이페이지에서 지운 개인정보를 다시 적지 못하게 본인 · 하위 관리자의 접속을 모두 끝낸다.
       await tx.adminSession.updateMany({
@@ -233,15 +249,22 @@ export class AdminWithdrawalService {
         });
       }
 
+      // 계정 상태 이력 — BP 마스터는 탈퇴, 상태가 바뀐 하위 관리자(사용 → 미사용)만 미사용. 이미 미사용이던 계정은 상태가 그대로라 남기지 않는다.
       await tx.adminChangeHistory.createMany({
         data: [
-          { adminAccountId, accountStatusCode: account.accountStatusCode },
-          ...subAdmins,
+          {
+            adminAccountId,
+            accountStatusCode: account.accountStatusCode,
+            after: WITHDRAWN_LABEL,
+          },
+          ...subAdmins
+            .filter((admin) => admin.accountStatusCode === ACTIVE)
+            .map((admin) => ({ ...admin, after: INACTIVE_LABEL })),
         ].map((target) => ({
           adminAccountId: target.adminAccountId,
           field: '계정 상태',
           beforeValue: accountStatusLabel(target.accountStatusCode),
-          afterValue: WITHDRAWN_LABEL,
+          afterValue: target.after,
           changedBy: adminAccountId,
           changedAt: now,
         })),
@@ -289,7 +312,7 @@ export class AdminWithdrawalService {
   }
 }
 
-/** 함께 탈퇴할 하위 관리자 — 같은 BP 의 본인 아닌, 지우지도 탈퇴하지도 않은 계정. */
+/** 함께 미사용으로 바꾸고 개인정보를 지울 하위 관리자 — 같은 BP 의 본인 아닌, 지우지도 탈퇴하지도 않은 계정. */
 function subAdminWhere(
   bpCodeId: number,
   adminAccountId: number,

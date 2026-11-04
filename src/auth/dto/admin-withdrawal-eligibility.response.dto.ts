@@ -6,7 +6,7 @@ export class WithdrawEligibilityResponseDto {
   @ApiProperty()
   bpName: string;
 
-  /** 함께 탈퇴될 하위 관리자 수(BP 관리자 · 가맹마스터 · 가맹관리자) — 요청한 BP 마스터 자신은 빼고 센다. */
+  /** 함께 미사용(개인정보 지움)될 하위 관리자 수(BP 관리자 · 가맹마스터 · 가맹관리자) — 요청한 BP 마스터 자신은 빼고 센다. */
   @ApiProperty()
   adminCount: number;
 

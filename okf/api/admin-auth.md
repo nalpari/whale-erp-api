@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, the store list version (`stores-version`, `me/stores`) the header store picker refreshes by, and the login info version (`me/login-info-version`) the screen re-reads login-info by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T01:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T01:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -685,7 +685,8 @@ the screen, and stays hidden until something else changes.
 **A BP that is 미사용 or 탈퇴 is not refused here, only reported.** Login does not
 check the BP's status either — setting a BP 미사용 takes every live admin account
 of the BP (BM · BA · FM · FA) down in the same transaction (`BpMastersService.changeStatus`;
-re-activation raises only the master), and 탈퇴 withdraws the master and every sub-admin,
+re-activation raises only the master), and 탈퇴 withdraws the master and sets every live sub-admin
+미사용 with name · phone · email erased (2026-11-04 user decision — before, sub-admins were 탈퇴 too),
 so those accounts are already refused as accounts — and a
 version that moves on the BP row lets the web re-read and see it. If BP status is
 ever enforced, it is enforced at login first, and this route follows.
