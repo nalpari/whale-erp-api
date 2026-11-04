@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T08:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T09:30:00Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -164,8 +164,9 @@ close there; its conditional updates are no-ops for them.
 
 **Accepted risk (2026-11-03 노영주):** while 1팀 holds the store `FOR UPDATE`, inserting a new staff record
 (foreign key) is blocked; if 1팀 changes to `FOR NO KEY UPDATE`, a record created between the query and the lock may not
-be retired. The gap is short, so it is accepted. **1팀 did change to `FOR NO KEY UPDATE` on 2026-11-04, so the gap
-is open** — see [store management](/api/stores.md) 「Closing a store」.
+be retired. The gap is short, so it is accepted. **1팀 changed to `FOR NO KEY UPDATE` on 2026-11-04 (1팀 note:
+under `FOR UPDATE` the insert was only delayed until the closing committed, not refused, so the gap existed before as
+well)** — see [store management](/api/stores.md) 「Closing a store」.
 
 **Return value** (same names and meaning as the 폐점 확인 service, WHALEERP-647; 1팀 uses it for the result
 message and the store change history):
@@ -213,7 +214,7 @@ The code is not changed.
 
 **1팀이 정할 것** (decisions for 1팀, not for 3팀 or 재영; 노영주 2026-11-03):
 
-1. How the store row is locked. `lockStore` was `FOR UPDATE` (the closing no longer uses it — 1팀 답 below), which collides with the foreign-key inserts
+1. How the store row is locked. `lockStore` is `FOR UPDATE` (delete still uses it; the closing no longer does — 1팀 답 below), which collides with the foreign-key inserts
    (`FOR KEY SHARE`) of attendance (staff app, admin register, correction), work schedules and TO-DOs: between a
    check-in/out that took the account first and `retireStore` (waiting for the account `FOR UPDATE`) `40P01` can
    happen. 1팀's document (D4) does not cover these foreign-key locks. `FOR NO KEY UPDATE` breaks that loop.

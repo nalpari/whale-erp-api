@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T08:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T09:30:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -247,14 +247,17 @@ are.[^store-closings-service][^store-closing-response]
   ``Code: `40P01` ``) is logged as a warning and retried once from the start; the rolled-back attempt
   left nothing. A second deadlock is a **409** 「다른 처리와 겹쳐 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤
   다시 시도해 주세요.」 rather than a bare 500. Several stores are always locked in ascending id.
-- **The price of `FOR NO KEY UPDATE`: new rows can still arrive during the closing.** A `FOR UPDATE` on the
-  store blocked every insert that references it (foreign key `FOR KEY SHARE`); `FOR NO KEY UPDATE` lets them
-  through. So a staff record or contract created while the closing runs — after `retireStores` has read the
-  store's staff — commits into a store that is now closed, with no retirement date. This is the gap 3팀
-  recorded as an accepted risk ([staff retirement](/api/staff-retirement.md), 2026-11-03 노영주); 1팀
-  accepted it with the lock change (2026-11-04) because the window is one transaction long, while the
-  deadlock it removes hits every check-out on a closing day. Such a record is found the way any other is:
-  the store shows it, and 퇴직 처리 closes it by hand.
+- **Neither lock keeps new rows out of a closing store.** `FOR UPDATE` only made a foreign-key insert
+  (`FOR KEY SHARE`) wait until the closing committed — then the store row was still there and the insert
+  succeeded. So a staff record or contract whose transaction checked the store before the closing committed
+  can land in the closed store either way, with no retirement date (or a pending contract left open);
+  `ContractsService.checkStoreOpen` reads the status without a lock. `FOR NO KEY UPDATE` lets such an insert
+  through earlier, so one committed before `retireStores` locks the staff is retired with the rest. 3팀
+  recorded the gap as an accepted risk ([staff retirement](/api/staff-retirement.md), 2026-11-03 노영주); it
+  is one transaction long, while the deadlock the lock change removes can hit any check-out that overlaps
+  the closing — common on a closing day. The real fix is on the inserting side: take `FOR SHARE` on the
+  store and re-check its status, as contract resend does (`contract-reopen.ts`). Until then such a record is
+  found the way any other is: the store shows it, and 퇴직 처리 closes it by hand.
 
 **점포 폐점 (`PUT /stores/:id` with `storeStatus: CLOSED`).** The same transaction first saves the other
 fields with the `updatedAt` check — that `UPDATE` is what locks the row first — leaving the status as it
@@ -487,8 +490,7 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
 - **삭제 vs a new contract is only half closed.** The store side counts the
   in-progress contracts again inside its transaction, after locking the `stores` row
   `FOR UPDATE`. (폐점 no longer counts them: it ends pending contracts itself, and `retireStores`
-  works on what it finds after its own locks — which leaves a wider gap on the closing side, see
-  「Closing a store」.) The contract side (`ContractsService.checkStoreOpen`) still reads the
+  works on what it finds after its own locks — the same gap, see 「Closing a store」.) The contract side (`ContractsService.checkStoreOpen`) still reads the
   store's status without a lock, so a contract created in the gap between that read
   and its insert can land on a store that has just closed. Closing it needs the
   contract create / 이어 쓰기 transaction to take `FOR SHARE` on the same row and

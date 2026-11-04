@@ -11,7 +11,8 @@ import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import type { OptionalMailService } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
-// 진행 중 계약은 점포 폐점 · 삭제를 막는 기준과 같다 — 탈퇴는 점포를 모두 폐점하므로 같은 목록을 쓴다.
+// 진행 중 계약은 점포 삭제를 막는 기준과 같다. 점포 폐점은 2026-11-04 부터 이 목록으로 막지 않는다(대기 계약을 폐점이
+// 종료한다) — 탈퇴를 폐점 서비스(StoreClosingsService)에 연결할 때 이 기준을 다시 정한다.
 import {
   IN_PROGRESS_CONTRACT_STATUSES,
   retainEndDate,
