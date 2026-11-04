@@ -1,7 +1,11 @@
 // mock 의 호출 인자를 깊이 들여다보는 검사라 any 를 그대로 읽는다.
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { NotFoundException } from '@nestjs/common';
-import { GUARDS_METADATA, ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
+import {
+  GUARDS_METADATA,
+  HTTP_CODE_METADATA,
+  ROUTE_ARGS_METADATA,
+} from '@nestjs/common/constants';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { signedInUserTracker } from '../auth/throttle';
 import {
@@ -168,6 +172,21 @@ describe('StoresController', () => {
         ),
       ).toBe(true);
     });
+  });
+
+  it('수정은 서비스 결과(폐점이면 처리한 수)를 그대로 돌려준다 — 본문이 있으니 204 가 아니다', async () => {
+    const result = { closing: null };
+    management.update.mockResolvedValue(result);
+    await expect(controller.update(USER, BP, '11', {} as never)).resolves.toBe(
+      result,
+    );
+    expect(
+      Reflect.getMetadata(
+        HTTP_CODE_METADATA,
+        Object.getOwnPropertyDescriptor(StoresController.prototype, 'update')!
+          .value as object,
+      ),
+    ).toBeUndefined();
   });
 
   it('경로 id 는 숫자로 바꿔 넘긴다', async () => {

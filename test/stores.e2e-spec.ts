@@ -25,7 +25,7 @@ describe('점포 정보 관리 (e2e)', () => {
     histories: jest.fn().mockResolvedValue({ items: [], total: 0 }),
     transitionCheck: jest.fn().mockResolvedValue({}),
     create: jest.fn().mockResolvedValue({ storeId: 50, storeCode: 'ST000050' }),
-    update: jest.fn().mockResolvedValue(undefined),
+    update: jest.fn().mockResolvedValue({ closing: null }),
     remove: jest.fn().mockResolvedValue(undefined),
     verifyBusiness: jest.fn().mockResolvedValue({ result: 'VERIFIED' }),
     putImage: jest.fn(),
@@ -194,8 +194,10 @@ describe('점포 정보 관리 (e2e)', () => {
     await send('post', '/stores', 'admin').send({ name: '서초점' }).expect(400);
   });
 
-  it('수정은 204', async () => {
-    await send('put', '/stores/11', 'admin').send(validUpdate).expect(204);
+  it('수정은 200 이고 서비스 결과(폐점이면 처리한 수)를 본문으로 준다', async () => {
+    await send('put', '/stores/11', 'admin')
+      .send(validUpdate)
+      .expect(200, { closing: null });
     expect(management.update).toHaveBeenCalledWith(
       expect.anything(),
       OWN_BP,

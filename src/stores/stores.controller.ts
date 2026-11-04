@@ -68,6 +68,7 @@ import {
   StoreImageResponseDto,
   StoreListResponseDto,
   StoreTransitionCheckResponseDto,
+  UpdateStoreResponseDto,
 } from './dto/store.response.dto';
 import { StoreExcelSource } from './store-excel.source';
 import {
@@ -258,17 +259,19 @@ export class StoresController {
     return this.management.create(user.id, bp, body);
   }
 
-  /** 수정 · 상태 전환. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409. */
+  /**
+   * 수정 · 상태 전환. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409.
+   * 폐점이면 같은 트랜잭션에서 소속 직원 퇴직(퇴직일 오늘) · 대기 계약 종료 · 초대 만료를 하고, 처리한 수를 closing 으로 준다.
+   */
   @Put(':id')
   @MenuPermission('update')
-  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBadRequestResponse({
     description: `입력 형식 · 위도 · 경도 중 하나만 있음 · 바꿀 수 없는 상태 전환 · 운영으로 바꿀 때 운영 조건(인증 · 좌표) 미충족 · 운영 중인 점포의 좌표 삭제 · 국세청 정보와 다름 · 재인증 번호 불일치 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
     description:
-      '동시 수정 · 폐점한 점포 · 소속 BP 미사용 · 진행 중인 근로계약(폐점) · 사업자등록번호 중복',
+      '동시 수정 · 폐점한 점포 · 소속 BP 미사용 · 사업자등록번호 중복 · 퇴근하지 않은 출근(폐점, code OPEN_CHECK_IN · storeId — 출퇴근 현황에서 보정 뒤 다시)',
   })
   @ApiServiceUnavailableResponse({
     description: '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함',
@@ -282,8 +285,8 @@ export class StoresController {
     @TargetBp() bp: TargetBpContext,
     @Param('id') rawId: string,
     @Body() body: UpdateStoreDto,
-  ): Promise<void> {
-    await this.management.update(user.id, bp, idOf(rawId), body);
+  ): Promise<UpdateStoreResponseDto> {
+    return this.management.update(user.id, bp, idOf(rawId), body);
   }
 
   /** 삭제(논리 삭제). 미운영이면서 진행 중인 근로계약이 없을 때만. */

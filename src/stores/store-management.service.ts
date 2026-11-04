@@ -54,6 +54,7 @@ import type {
   StoreImageResponseDto,
   StoreListResponseDto,
   StoreTransitionCheckResponseDto,
+  UpdateStoreResponseDto,
 } from './dto/store.response.dto';
 import {
   type BusinessIdentity,
@@ -76,6 +77,11 @@ import {
 } from './store-format';
 import { dateOnly } from '../common/date-only';
 import { SIGNED_ONCE } from '../contracts/signed-contract';
+import {
+  retryOnDeadlock,
+  STORE_CLOSING_TRANSACTION_TIMEOUT_MS,
+  StoreClosingsService,
+} from '../store-closings/store-closings.service';
 
 type Tx = Prisma.TransactionClient;
 type History = {
@@ -222,6 +228,8 @@ export class StoreManagementService implements OnModuleInit {
     private readonly verifier: OptionalStoreBusinessVerifier,
     /** 첨부파일 저장소. 설정이 없으면 null — 이미지 올리기만 503 이고 조회의 주소는 null 이다. */
     @Inject(STORAGE) private readonly storage: OptionalStorage,
+    /** 폐점 확인 · 저장 — 회원 탈퇴 · BP 탈퇴와 같은 서비스 */
+    private readonly closings: StoreClosingsService,
   ) {}
 
   /** 관리자별 국세청 호출 시각(ms). NTS_CALLS_PER_HOUR 에 쓴다. 프로세스 메모리라 인스턴스마다 따로 센다. */
@@ -606,13 +614,18 @@ export class StoreManagementService implements OnModuleInit {
   /**
    * 수정. 화면 전체를 받는다 — 빠진 선택 칸은 지운다. 상태 전환도 여기서 한다. 상세에서 받은 updatedAt 과
    * 같을 때만 고치고(그 사이 고쳤으면 409), 바뀐 항목마다 이력을 남긴다.
+   *
+   * 폐점이면 같은 트랜잭션에서 칸을 먼저 저장(동시 수정 확인 — 이 UPDATE 가 점포 행을 잠근다)한 뒤 폐점 서비스가 상태 ·
+   * 폐점일 · 점포상태 이력과 3팀 일괄 퇴직(직원 퇴직일 · 대기 계약 종료 · 초대 만료)을 한다. 진행 중인 근로계약은 막지 않는다 —
+   * 대기 계약은 폐점이 닫고 체결 완료는 그대로 둔다. 퇴근하지 않은 출근이 있으면 409 `OPEN_CHECK_IN` 으로 전부 되돌린다.
+   * 처리한 수는 `closing` 으로 돌려준다(폐점이 아니면 null).
    */
   async update(
     callerId: number,
     bp: TargetBpContext,
     storeId: number,
     dto: UpdateStoreDto,
-  ): Promise<void> {
+  ): Promise<UpdateStoreResponseDto> {
     assertCoordinatePair(dto);
     const caller = await this.loadCaller(callerId, bp);
     const store = await this.findStore(this.prisma, caller, storeId);
@@ -675,85 +688,113 @@ export class StoreManagementService implements OnModuleInit {
         );
     }
     const isClosing = dto.storeStatus === 'CLOSED';
-    if (isClosing) await this.assertNoContracts(storeId, '폐점할');
 
     const by = caller.adminAccountId;
-    await this.prisma.$transaction(async (tx) => {
-      if (identity && !savedNumber)
-        await this.lockNumber(tx, identity, storeId, store.bpCodeId);
-      // 앞의 확인과 이 폐점 사이에 근로계약이 생길 수 있다 — 점포 행을 잠그고 다시 센다(계약 쪽은 아직 잠그지
-      // 않아 틈이 남는다 — assertNoContracts).
-      if (isClosing) {
-        await lockStore(tx, storeId);
-        await this.assertNoContracts(storeId, '폐점할', tx);
-      }
-
-      const { count } = await tx.store.updateMany({
-        where: {
-          storeId,
-          isDeleted: false,
-          storeStatusCode: from,
-          updatedAt: sameMillisecond(dto.updatedAt),
+    const save = () =>
+      this.prisma.$transaction(
+        async (tx) => {
+          const closing = await this.saveUpdate(
+            tx,
+            store,
+            dto,
+            identity,
+            by,
+            isClosing,
+          );
+          return { closing };
         },
-        data: {
-          ...storeFields(dto),
-          storeStatusCode: dto.storeStatus,
-          ...(isClosing && { closedDate: kstToday() }),
-          updatedBy: by,
-        },
-      });
-      if (count === 0) throw new ConflictException(CHANGED_MEANWHILE);
+        isClosing
+          ? { timeout: STORE_CLOSING_TRANSACTION_TIMEOUT_MS }
+          : undefined,
+      );
+    return isClosing ? retryOnDeadlock(save) : save();
+  }
 
-      const nextProfile = profileFields(dto, identity, profile);
-      const profileChanges = profileHistory(profile, nextProfile);
-      if (profileChanges.length || (identity && profile))
-        await tx.storeBusinessProfile.upsert({
-          where: { storeId },
-          create: { storeId, ...nextProfile, createdBy: by },
-          update: { ...nextProfile, updatedBy: by },
-        });
+  /** update 의 트랜잭션 몸통. 폐점이면 폐점 서비스의 결과를, 아니면 null 을 돌려준다. */
+  private async saveUpdate(
+    tx: Tx,
+    store: StoreDetailRow,
+    dto: UpdateStoreDto,
+    identity: BusinessIdentity | null,
+    by: number,
+    isClosing: boolean,
+  ): Promise<UpdateStoreResponseDto['closing']> {
+    const storeId = store.storeId;
+    const from = store.storeStatusCode;
+    const profile = store.businessProfile;
+    const savedNumber = profile?.bizRegistrationNumber ?? null;
+    if (identity && !savedNumber)
+      await this.lockNumber(tx, identity, storeId, store.bpCodeId);
 
-      const beforeFloors = floorsText(store.floors);
-      const floors = filledFloors(dto.floors);
-      const afterFloors = floorsText(floors);
-      if (beforeFloors !== afterFloors) {
-        await tx.storeFloor.updateMany({
-          where: { storeId, isDeleted: false },
-          data: { isDeleted: true, updatedBy: by },
-        });
-        if (floors.length)
-          await tx.storeFloor.createMany({
-            data: floors.map((f) => ({ storeId, ...f, createdBy: by })),
-          });
-      }
-
-      await record(tx, storeId, by, [
-        change('점포명', store.name, dto.name),
-        change('점포 연락처', store.phone, dto.phone ?? null),
-        change(
-          '주소',
-          addressOf(store.zipCode, store.address, store.addressDetail),
-          addressOf(
-            dto.zipCode ?? null,
-            dto.address ?? null,
-            dto.addressDetail ?? null,
-          ),
-        ),
-        change(
-          '위도 · 경도',
-          coordinatesOf(store.latitude, store.longitude),
-          coordinatesOf(dto.latitude ?? null, dto.longitude ?? null),
-        ),
-        change(
-          '위치 적용 여부',
-          usedLabel(store.isLocationApplied),
-          usedLabel(dto.isLocationApplied),
-        ),
-        change('점포상태', statusLabel(from), statusLabel(dto.storeStatus)),
-        change('층별 정보', beforeFloors, afterFloors),
-        ...profileChanges,
-      ]);
+    // 폐점이면 상태 · 폐점일은 폐점 서비스가 쓴다 — 여기서는 다른 칸만 저장하고 상태는 그대로 둔다.
+    const { count } = await tx.store.updateMany({
+      where: {
+        storeId,
+        isDeleted: false,
+        storeStatusCode: from,
+        updatedAt: sameMillisecond(dto.updatedAt),
+      },
+      data: {
+        ...storeFields(dto),
+        ...(!isClosing && { storeStatusCode: dto.storeStatus }),
+        updatedBy: by,
+      },
     });
+    if (count === 0) throw new ConflictException(CHANGED_MEANWHILE);
+
+    const nextProfile = profileFields(dto, identity, profile);
+    const profileChanges = profileHistory(profile, nextProfile);
+    if (profileChanges.length || (identity && profile))
+      await tx.storeBusinessProfile.upsert({
+        where: { storeId },
+        create: { storeId, ...nextProfile, createdBy: by },
+        update: { ...nextProfile, updatedBy: by },
+      });
+
+    const beforeFloors = floorsText(store.floors);
+    const floors = filledFloors(dto.floors);
+    const afterFloors = floorsText(floors);
+    if (beforeFloors !== afterFloors) {
+      await tx.storeFloor.updateMany({
+        where: { storeId, isDeleted: false },
+        data: { isDeleted: true, updatedBy: by },
+      });
+      if (floors.length)
+        await tx.storeFloor.createMany({
+          data: floors.map((f) => ({ storeId, ...f, createdBy: by })),
+        });
+    }
+
+    await record(tx, storeId, by, [
+      change('점포명', store.name, dto.name),
+      change('점포 연락처', store.phone, dto.phone ?? null),
+      change(
+        '주소',
+        addressOf(store.zipCode, store.address, store.addressDetail),
+        addressOf(
+          dto.zipCode ?? null,
+          dto.address ?? null,
+          dto.addressDetail ?? null,
+        ),
+      ),
+      change(
+        '위도 · 경도',
+        coordinatesOf(store.latitude, store.longitude),
+        coordinatesOf(dto.latitude ?? null, dto.longitude ?? null),
+      ),
+      change(
+        '위치 적용 여부',
+        usedLabel(store.isLocationApplied),
+        usedLabel(dto.isLocationApplied),
+      ),
+      // 폐점의 점포상태 이력은 폐점 서비스가 남긴다
+      isClosing
+        ? null
+        : change('점포상태', statusLabel(from), statusLabel(dto.storeStatus)),
+      change('층별 정보', beforeFloors, afterFloors),
+      ...profileChanges,
+    ]);
+    return isClosing ? this.closings.close(tx, [storeId], by) : null;
   }
 
   /** 삭제(논리 삭제). 미운영이면서 진행 중인 근로계약이 없어야 한다. 폐점한 점포는 지우지 않고 남긴다. */
@@ -1016,15 +1057,20 @@ export class StoreManagementService implements OnModuleInit {
     return store;
   }
 
+  /**
+   * 운영 · 폐점 · 삭제 가능 여부. 폐점은 퇴근하지 않은 출근이 있을 때만 막는다(폐점 확인 — 대기 계약은 폐점이 닫는다). 삭제는
+   * 지금처럼 진행 중인 근로계약이 없어야 한다. 이미 폐점한 점포는 폐점 확인을 하지 않는다(closing null).
+   */
   private async transitionsOf(
     store: StoreDetailRow,
   ): Promise<StoreTransitionCheckResponseDto> {
     const inProgressContractCount = await this.countContracts(store.storeId);
+    const isClosed = store.storeStatusCode === 'CLOSED';
+    const closing = isClosed
+      ? null
+      : await this.closings.check(this.prisma, [store.storeId]);
     const isBpActive = store.bpCode.accountStatusCode === 'ACTIVE';
-    const canClose =
-      isBpActive &&
-      store.storeStatusCode !== 'CLOSED' &&
-      inProgressContractCount === 0;
+    const canClose = isBpActive && !isClosed && !closing!.isBlocked;
     return {
       missingForOperation: missingForOperation({
         bizRegistrationNumber:
@@ -1035,8 +1081,12 @@ export class StoreManagementService implements OnModuleInit {
       }),
       inProgressContractCount,
       canClose,
-      canDelete: canClose && store.storeStatusCode === 'NOT_OPERATING',
+      canDelete:
+        isBpActive &&
+        store.storeStatusCode === 'NOT_OPERATING' &&
+        inProgressContractCount === 0,
       isSubscriptionChecked: false,
+      closing,
     };
   }
 

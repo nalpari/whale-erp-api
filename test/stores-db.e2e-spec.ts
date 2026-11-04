@@ -216,6 +216,15 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       const byStore = { storeId: { in: stores.map((s) => s.storeId) } };
       const byAdmin = { adminAccountId: { in: adminIds } };
       // 계약 테스트가 중간에 깨져 남긴 계약 · 직원도 지운다 — 남으면 점포 삭제가 외래키에 막힌다.
+      // 폐점 테스트는 출근 · 퇴직 이력 · 계약 상태 이력도 남긴다.
+      const byStaff = {
+        staffMember: { storeId: { in: stores.map((s) => s.storeId) } },
+      };
+      await prisma.attendanceRecord.deleteMany({ where: byStore });
+      await prisma.staffMemberRetirementLog.deleteMany({ where: byStaff });
+      await prisma.contractStatusHistory.deleteMany({
+        where: { contract: byStore },
+      });
       await prisma.contract.deleteMany({ where: byStore });
       await prisma.staffMember.deleteMany({ where: byStore });
       await prisma.storeImageFile.deleteMany({ where: byStore });
@@ -257,7 +266,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     const before = await detail(storeId);
     await call('put', `/stores/${storeId}`)
       .send({ ...formOf(before), phone: '050720331334' })
-      .expect(204);
+      .expect(200);
     expect((await detail(storeId)).phone).toBe('050720331334');
 
     const after = await detail(storeId);
@@ -278,7 +287,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       const before = await detail(storeId);
       await call('put', `/stores/${storeId}`)
         .send({ ...formOf(before), business: { ceoPhone } })
-        .expect(204);
+        .expect(200);
       expect((await detail(storeId)).business.ceoPhone).toBe(ceoPhone);
     }
   });
@@ -289,7 +298,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     const before = await detail(storeId);
     await call('put', `/stores/${storeId}`)
       .send({ ...formOf(before), name: '낙관적 잠금 1' })
-      .expect(204);
+      .expect(200);
 
     const floorsBefore = await prisma.storeFloor.count({ where: { storeId } });
     const historiesBefore = await prisma.storeChangeHistory.count({
@@ -329,7 +338,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
         ...formOf(await detail(a.storeId)),
         businessVerification: identity,
       })
-      .expect(204);
+      .expect(200);
 
     await call('post', '/stores')
       .send({
@@ -344,7 +353,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
 
     await call('put', `/stores/${a.storeId}`)
       .send({ ...formOf(await detail(a.storeId)), storeStatus: 'CLOSED' })
-      .expect(204);
+      .expect(200);
     const b = await call('post', '/stores')
       .send({
         storeTypeCode: 'DIRECT',
@@ -380,7 +389,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
           openDate: '2020-03-02',
         },
       })
-      .expect(204);
+      .expect(200);
     const operating = await detail(storeId);
     expect(operating).toMatchObject({
       storeStatusCode: 'OPERATING',
@@ -396,15 +405,15 @@ describe('점포 정보 관리 (e2e, DB)', () => {
         latitude: 37.491234,
         longitude: 127.012345,
       })
-      .expect(204);
+      .expect(200);
     const kstToday = new Date(Date.now() + 9 * 3_600_000)
       .toISOString()
       .slice(0, 10);
     expect((await detail(storeId)).closedDate).toBe(kstToday);
   });
 
-  // 폐점 · 삭제 규칙이 보는 근로계약 건수를 실제 행으로 확인한다. 계약 · 직원은 afterAll 이 점포와 함께 지운다.
-  it('진행 중인 근로계약이 있는 점포는 폐점 · 삭제가 409 이고 상태는 그대로다', async () => {
+  // 폐점 · 삭제 규칙을 실제 행으로 확인한다. 계약 · 직원 · 출근은 afterAll 이 점포와 함께 지운다.
+  it('진행 중인 근로계약이 있어도 폐점은 된다 — 대기 계약을 닫고 직원 퇴직일을 오늘로 정하고 처리한 수를 준다. 삭제는 409', async () => {
     const { storeId } = await create('계약 있는 점포');
     const staff = await prisma.staffMember.create({
       data: {
@@ -413,23 +422,167 @@ describe('점포 정보 관리 (e2e, DB)', () => {
         phone: `010${randomInt(10_000_000, 99_999_999)}`,
         jobTitle: '홀',
         employmentType: 'PART_TIME',
-        joinStatus: 'DRAFT',
+        joinStatus: 'INVITED',
       },
     });
-    await prisma.contract.create({
+    const contract = await prisma.contract.create({
       data: {
         staffMemberId: staff.staffMemberId,
         storeId,
-        status: 'DRAFT',
+        status: 'PENDING_SEND',
         contractMethod: 'ELECTRONIC',
         createdBy: adminIds[0],
       },
     });
     await call('delete', `/stores/${storeId}`).expect(409);
-    await call('put', `/stores/${storeId}`)
-      .send({ ...formOf(await detail(storeId)), storeStatus: 'CLOSED' })
+
+    const before = await detail(storeId);
+    expect(before.transitions).toMatchObject({
+      inProgressContractCount: 1,
+      canClose: true,
+      canDelete: false,
+      closing: {
+        isBlocked: false,
+        stores: [
+          {
+            storeId,
+            storeName: '계약 있는 점포',
+            retiringStaff: 1,
+            pendingSendContracts: 1,
+          },
+        ],
+        total: { retiringStaff: 1, pendingSendContracts: 1 },
+      },
+    });
+
+    const res = await call('put', `/stores/${storeId}`)
+      .send({ ...formOf(before), storeStatus: 'CLOSED' })
+      .expect(200);
+    expect(res.body).toEqual({
+      closing: {
+        stores: [
+          {
+            storeId,
+            storeName: '계약 있는 점포',
+            storeCode: before.storeCode,
+            retiringStaff: 1,
+            pulledForwardStaff: 0,
+            draftContracts: 0,
+            pendingSendContracts: 1,
+            pendingSignatureContracts: 0,
+            expiredInvitations: 0,
+          },
+        ],
+        total: {
+          retiringStaff: 1,
+          pulledForwardStaff: 0,
+          draftContracts: 0,
+          pendingSendContracts: 1,
+          pendingSignatureContracts: 0,
+          expiredInvitations: 0,
+        },
+      },
+    });
+
+    const kstToday = new Date(Date.now() + 9 * 3_600_000)
+      .toISOString()
+      .slice(0, 10);
+    const after = await detail(storeId);
+    expect(after.storeStatusCode).toBe('CLOSED');
+    expect(after.closedDate).toBe(kstToday);
+    expect(after.transitions).toMatchObject({ canClose: false, closing: null });
+    expect(
+      (
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId: contract.contractId },
+        })
+      ).status,
+    ).toBe('ENDED');
+    const retired = await prisma.staffMember.findUniqueOrThrow({
+      where: { staffMemberId: staff.staffMemberId },
+    });
+    expect(retired.retiredDate?.toISOString().slice(0, 10)).toBe(kstToday);
+    // 점포상태 이력은 한 줄만 — 수정과 폐점 서비스가 겹쳐 쓰지 않는다
+    const statusRows = await prisma.storeChangeHistory.findMany({
+      where: { storeId, field: '점포상태' },
+    });
+    expect(statusRows).toEqual([
+      expect.objectContaining({ beforeValue: '미운영', afterValue: '폐점' }),
+    ]);
+  });
+
+  it('퇴근하지 않은 출근이 있으면 폐점할 수 없다고 알리고, 저장은 409 OPEN_CHECK_IN 으로 전부 되돌린다', async () => {
+    const { storeId } = await create('열린 출근 점포');
+    const staff = await prisma.staffMember.create({
+      data: {
+        storeId,
+        name: '박출근',
+        phone: `010${randomInt(10_000_000, 99_999_999)}`,
+        jobTitle: '홀',
+        employmentType: 'PART_TIME',
+        joinStatus: 'INVITED',
+      },
+    });
+    const contract = await prisma.contract.create({
+      data: {
+        staffMemberId: staff.staffMemberId,
+        storeId,
+        status: 'PENDING_SIGNATURE',
+        contractMethod: 'ELECTRONIC',
+        createdBy: adminIds[0],
+      },
+    });
+    // 이틀 전 출근 — 앱으로는 퇴근할 수 없어 보정으로 닫아야 한다
+    const recordedAt = new Date(Date.now() - 2 * 86_400_000);
+    await prisma.attendanceRecord.create({
+      data: {
+        staffMemberId: staff.staffMemberId,
+        storeId,
+        kind: 'CHECK_IN',
+        recordedAt,
+        receivedAt: recordedAt,
+      },
+    });
+
+    const before = await detail(storeId);
+    expect(before.transitions).toMatchObject({
+      canClose: false,
+      closing: {
+        isBlocked: true,
+        total: { openCheckIns: { count: 1, hiddenCount: 0 } },
+      },
+    });
+    expect(before.transitions.closing?.total.openCheckIns.first).toMatchObject({
+      staffMemberId: staff.staffMemberId,
+      name: '박출근',
+      isCheckOutExpired: true,
+    });
+
+    const res = await call('put', `/stores/${storeId}`)
+      .send({ ...formOf(before), name: '바뀐 이름', storeStatus: 'CLOSED' })
       .expect(409);
-    expect((await detail(storeId)).storeStatusCode).toBe('NOT_OPERATING');
+    expect(res.body).toMatchObject({ code: 'OPEN_CHECK_IN', storeId });
+
+    const after = await detail(storeId);
+    expect(after).toMatchObject({
+      name: '열린 출근 점포',
+      storeStatusCode: 'NOT_OPERATING',
+      closedDate: null,
+    });
+    expect(
+      (
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId: contract.contractId },
+        })
+      ).status,
+    ).toBe('PENDING_SIGNATURE');
+    expect(
+      (
+        await prisma.staffMember.findUniqueOrThrow({
+          where: { staffMemberId: staff.staffMemberId },
+        })
+      ).retiredDate,
+    ).toBeNull();
   });
 
   // 재직 직원 수(WHALEERP-138)를 실제 행으로 — 관계 필터(contracts some)가 레코드를 한 번만 세는지까지. 계약 · 직원은

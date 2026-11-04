@@ -25,6 +25,10 @@ import {
   StoreManagementService,
 } from './store-management.service';
 import { SIGNED_ONCE } from '../contracts/signed-contract';
+import {
+  STORE_CLOSING_TRANSACTION_TIMEOUT_MS,
+  StoreClosingsService,
+} from '../store-closings/store-closings.service';
 
 /** 호출한 관리자 계정 id. 서비스가 이 id 로 계정(권한 유형 · 소속 BP · 점포 범위)을 직접 읽는다. */
 const BM = 7;
@@ -117,6 +121,47 @@ function updateDto(overrides: Partial<UpdateStoreDto> = {}): UpdateStoreDto {
   };
 }
 
+/** fn 이 처음 불린 순서. 불리지 않았으면 Infinity. */
+// 여기 넘기는 mock 들은 Record<string, any> 에서 꺼낸 값이라 any 로 받는다.
+const firstCall = (fn: any): number =>
+  (fn as jest.Mock).mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY;
+
+const closingCounts = (blocked = false) => ({
+  openCheckIns: { count: 0, hiddenCount: blocked ? 1 : 0, first: null },
+  retiringStaff: 0,
+  draftContracts: 0,
+  pendingSendContracts: 0,
+  pendingSignatureContracts: 0,
+  unconfirmedPayslips: 0,
+  isBlocked: blocked,
+});
+const closingCheck = (blocked = false) => ({
+  stores: [
+    {
+      storeId: 11,
+      storeName: '강남점',
+      storeCode: 'ST000011',
+      ...closingCounts(blocked),
+    },
+  ],
+  total: closingCounts(blocked),
+  isBlocked: blocked,
+});
+const RETIREMENT = {
+  retiringStaff: 2,
+  pulledForwardStaff: 0,
+  draftContracts: 1,
+  pendingSendContracts: 0,
+  pendingSignatureContracts: 0,
+  expiredInvitations: 0,
+};
+const CLOSING_RESULT = {
+  stores: [
+    { storeId: 11, storeName: '강남점', storeCode: 'ST000011', ...RETIREMENT },
+  ],
+  total: RETIREMENT,
+};
+
 describe('StoreManagementService', () => {
   let service: StoreManagementService;
   let verifier: { verify: jest.Mock } | null;
@@ -127,6 +172,8 @@ describe('StoreManagementService', () => {
     thumbnailUrl: jest.Mock;
   } | null;
   let prisma: Record<string, any>;
+  /** 폐점 서비스 — 확인 · 저장은 그 서비스 spec 이 본다. 여기서는 부르는 자리 · 인자 · 결과 전달만 본다. */
+  let closings: { check: jest.Mock; close: jest.Mock };
   /** 트랜잭션 안에서만 쓰는 잠금 · 다시 세기. 밖의 prisma 와 갈라 「안에서 다시 봤다」를 확인한다. */
   let tx: Record<string, any>;
 
@@ -137,12 +184,17 @@ describe('StoreManagementService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: STORE_BUSINESS_VERIFIER, useValue: verifier },
         { provide: STORAGE, useValue: storage },
+        { provide: StoreClosingsService, useValue: closings },
       ],
     }).compile();
     service = module.get(StoreManagementService);
   }
 
   beforeEach(async () => {
+    closings = {
+      check: jest.fn().mockResolvedValue(closingCheck()),
+      close: jest.fn().mockResolvedValue(CLOSING_RESULT),
+    };
     verifier = { verify: jest.fn().mockResolvedValue(true) };
     storage = {
       put: jest.fn().mockResolvedValue(undefined),
@@ -642,8 +694,10 @@ describe('StoreManagementService', () => {
           canClose: true,
           canDelete: true,
           isSubscriptionChecked: false,
+          closing: closingCheck(),
         },
       });
+      expect(closings.check).toHaveBeenCalledWith(prisma, [11]);
       expect(prisma.contract.count.mock.calls[0][0]).toEqual({
         where: {
           storeId: 11,
@@ -1220,34 +1274,83 @@ describe('StoreManagementService', () => {
       ]);
     });
 
-    it('진행 중인 근로계약이 있으면 폐점하지 못한다 — 409', async () => {
+    it('진행 중인 근로계약이 있어도 폐점한다 — 대기 계약은 폐점 서비스가 닫는다', async () => {
       prisma.contract.count.mockResolvedValue(2);
-      await expect(
-        service.update(BM, OWN_BP, 11, updateDto({ storeStatus: 'CLOSED' })),
-      ).rejects.toThrow(/2건/);
-      expect(prisma.store.updateMany).not.toHaveBeenCalled();
-    });
-
-    it('폐점은 점포 행을 잠근 뒤 트랜잭션 안에서 계약을 다시 센다 — 그사이 생긴 계약이 있으면 409', async () => {
-      // 앞의 확인은 0건, 잠근 뒤에는 그사이 만든 1건이 보인다.
-      tx.contract.count.mockResolvedValue(1);
-      await expect(
-        service.update(BM, OWN_BP, 11, updateDto({ storeStatus: 'CLOSED' })),
-      ).rejects.toThrow(/1건/);
-      expect(tx.$queryRaw.mock.calls[0][0].join('')).toContain('FOR UPDATE');
-      expect(prisma.store.updateMany).not.toHaveBeenCalled();
-    });
-
-    it('폐점하면 폐점일을 오늘(한국 날짜)로 넣는다', async () => {
+      tx.contract.count.mockResolvedValue(2);
       await service.update(
         BM,
         OWN_BP,
         11,
         updateDto({ storeStatus: 'CLOSED' }),
       );
-      expect(
-        prisma.store.updateMany.mock.calls[0][0].data.closedDate,
-      ).toBeInstanceOf(Date);
+      expect(closings.close).toHaveBeenCalledWith(tx, [11], BM);
+    });
+
+    it('폐점은 같은 트랜잭션에서 칸을 먼저 저장(동시 수정 확인)한 뒤 폐점 서비스를 부르고 결과를 돌려준다', async () => {
+      const result = await service.update(
+        BM,
+        OWN_BP,
+        11,
+        updateDto({ storeStatus: 'CLOSED', name: '새 이름' }),
+      );
+      expect(result).toEqual({ closing: CLOSING_RESULT });
+      expect(firstCall(prisma.store.updateMany)).toBeLessThan(
+        firstCall(closings.close),
+      );
+      // 상태 · 폐점일 · 점포상태 이력은 폐점 서비스가 쓴다 — 여기서 쓰면 겹친다
+      const args = prisma.store.updateMany.mock.calls[0][0];
+      expect(args.where.storeStatusCode).toBe('NOT_OPERATING');
+      expect(args.data.storeStatusCode).toBeUndefined();
+      expect(args.data.closedDate).toBeUndefined();
+      expect(args.data.name).toBe('새 이름');
+      expect(historyRows().map((h) => h.field)).toEqual(['점포명']);
+    });
+
+    it('폐점 트랜잭션은 제한 시간을 늘린다', async () => {
+      await service.update(
+        BM,
+        OWN_BP,
+        11,
+        updateDto({ storeStatus: 'CLOSED' }),
+      );
+      expect(prisma.$transaction.mock.calls[0][1]).toEqual({
+        timeout: STORE_CLOSING_TRANSACTION_TIMEOUT_MS,
+      });
+    });
+
+    it('폐점 서비스가 실패하면(열린 출근 409) 그대로 던진다', async () => {
+      const error = new ConflictException({ code: 'OPEN_CHECK_IN' });
+      closings.close.mockRejectedValue(error);
+      await expect(
+        service.update(BM, OWN_BP, 11, updateDto({ storeStatus: 'CLOSED' })),
+      ).rejects.toBe(error);
+    });
+
+    it('폐점 중 교착(40P01)이면 한 번 다시 한다', async () => {
+      closings.close
+        .mockRejectedValueOnce(
+          new Prisma.PrismaClientKnownRequestError('deadlock', {
+            code: 'P2034',
+            clientVersion: 'test',
+          }),
+        )
+        .mockResolvedValueOnce(CLOSING_RESULT);
+      await expect(
+        service.update(BM, OWN_BP, 11, updateDto({ storeStatus: 'CLOSED' })),
+      ).resolves.toEqual({ closing: CLOSING_RESULT });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    });
+
+    it('폐점이 아니면 폐점 서비스를 부르지 않고 closing 은 null', async () => {
+      const result = await service.update(
+        BM,
+        OWN_BP,
+        11,
+        updateDto({ name: '새 이름' }),
+      );
+      expect(result).toEqual({ closing: null });
+      expect(closings.close).not.toHaveBeenCalled();
+      expect(prisma.$transaction.mock.calls[0][1]).toBeUndefined();
     });
 
     it('그 사이 다른 사람이 고쳤으면 409', async () => {
@@ -1541,7 +1644,7 @@ describe('StoreManagementService', () => {
       await verifyTimes(BM, 10);
       await expect(
         service.update(BM, OWN_BP, 11, updateDto()),
-      ).resolves.toBeUndefined();
+      ).resolves.toEqual({ closing: null });
     });
 
     // 화면은 「인증하기」로 한 번 묻고 저장 때 서버가 다시 묻는다. 같은 관리자가 10분 안에 일치를 받은 같은
@@ -2304,37 +2407,38 @@ describe('StoreManagementService', () => {
       expect(historyRows().map((h) => h.field)).toEqual(['상호명', '업태']);
     });
 
-    it('폐점일은 한국 날짜다 — UTC 로는 전날 밤이어도', async () => {
-      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
-      jest.setSystemTime(new Date('2026-10-14T15:30:00Z'));
-      try {
-        await service.update(
-          BM,
-          OWN_BP,
-          11,
-          updateDto({ storeStatus: 'CLOSED' }),
-        );
-      } finally {
-        jest.useRealTimers();
-      }
-      const { closedDate } = prisma.store.updateMany.mock.calls[0][0].data;
-      expect(closedDate.toISOString().slice(0, 10)).toBe('2026-10-15');
-    });
-
     it.each([
-      ['미운영 · 계약 없음', 'NOT_OPERATING', 0, true, true],
-      ['미운영 · 계약 있음', 'NOT_OPERATING', 1, false, false],
-      ['운영 · 계약 없음', 'OPERATING', 0, true, false],
-      ['폐점', 'CLOSED', 0, false, false],
+      ['미운영 · 계약 없음', 'NOT_OPERATING', 0, false, true, true],
+      [
+        '미운영 · 계약 있음 — 폐점은 되고 삭제는 안 됨',
+        'NOT_OPERATING',
+        1,
+        false,
+        true,
+        false,
+      ],
+      ['운영 · 계약 없음', 'OPERATING', 0, false, true, false],
+      ['운영 · 퇴근하지 않은 출근 있음', 'OPERATING', 0, true, false, false],
+      ['폐점', 'CLOSED', 0, false, false, false],
     ])(
       '상세의 전환 가능 여부 — %s',
-      async (_, storeStatusCode, contracts, canClose, canDelete) => {
+      async (_, storeStatusCode, contracts, blocked, canClose, canDelete) => {
         prisma.store.findFirst.mockResolvedValue(storeRow({ storeStatusCode }));
         prisma.contract.count.mockResolvedValue(contracts);
+        closings.check.mockResolvedValue(closingCheck(blocked));
         const { transitions } = await service.detail(BM, OWN_BP, 11);
         expect(transitions).toMatchObject({ canClose, canDelete });
       },
     );
+
+    it('폐점한 점포는 폐점 확인을 하지 않고 closing 은 null', async () => {
+      prisma.store.findFirst.mockResolvedValue(
+        storeRow({ storeStatusCode: 'CLOSED' }),
+      );
+      const { transitions } = await service.detail(BM, OWN_BP, 11);
+      expect(transitions.closing).toBeNull();
+      expect(closings.check).not.toHaveBeenCalled();
+    });
 
     it('이력은 오늘(한국 날짜) 이후까지 보존하는 것만 본다', async () => {
       jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
@@ -2436,11 +2540,6 @@ describe('StoreManagementService', () => {
       floors: [],
       business: {},
     };
-    /** fn 이 처음 불린 순서. 불리지 않았으면 Infinity. */
-    // 여기 넘기는 mock 들은 Record<string, any> 에서 꺼낸 값이라 any 로 받는다.
-    const firstCall = (fn: any): number =>
-      (fn as jest.Mock).mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY;
-
     // tx 의 쓰기를 prisma 와 다른 mock 으로 갈라, 쓰기가 트랜잭션 밖(this.prisma)으로 새면 잡는다.
     function splitWrites() {
       const fresh = () => ({
@@ -2558,15 +2657,8 @@ describe('StoreManagementService', () => {
       expect(lockedAt).toBeLessThan(firstCall(prisma.store.findFirst));
     });
 
-    it.each([
-      [
-        '폐점',
-        (s: StoreManagementService) =>
-          s.update(BM, OWN_BP, 11, updateDto({ storeStatus: 'CLOSED' })),
-      ],
-      ['삭제', (s: StoreManagementService) => s.remove(BM, OWN_BP, 11)],
-    ])('%s는 점포 행을 잠근 뒤에 근로계약을 다시 센다', async (_, act) => {
-      await act(service);
+    it('삭제는 점포 행을 잠근 뒤에 근로계약을 다시 센다', async () => {
+      await service.remove(BM, OWN_BP, 11);
       expect(firstCall(tx.$queryRaw)).toBeLessThan(
         firstCall(tx.contract.count),
       );
