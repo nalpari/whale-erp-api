@@ -28,11 +28,12 @@ describe('RetirementService', () => {
       updateMany: jest.Mock;
     };
     contractStatusHistory: { findFirst: jest.Mock; createMany: jest.Mock };
-    invitation: { updateMany: jest.Mock };
+    invitation: { updateMany: jest.Mock; updateManyAndReturn: jest.Mock };
     staffMemberRetirementLog: { create: jest.Mock; createMany: jest.Mock };
     contract: {
       findMany: jest.Mock;
       count: jest.Mock;
+      groupBy: jest.Mock;
       updateManyAndReturn: jest.Mock;
     };
     workSchedule: { count: jest.Mock };
@@ -63,7 +64,10 @@ describe('RetirementService', () => {
         findFirst: jest.fn().mockResolvedValue(null),
         createMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
-      invitation: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      invitation: {
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        updateManyAndReturn: jest.fn().mockResolvedValue([]),
+      },
       staffMemberRetirementLog: {
         create: jest.fn().mockResolvedValue({}),
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -72,6 +76,17 @@ describe('RetirementService', () => {
       contract: {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(1),
+        // 가입 전 레코드 중 임시저장이 아닌 계약이 있는 직원 — 기본은 모두 있다(재직으로 센다)
+        groupBy: jest
+          .fn()
+          .mockImplementation(
+            ({ where }: { where: { staffMemberId: { in: number[] } } }) =>
+              Promise.resolve(
+                where.staffMemberId.in.map((staffMemberId) => ({
+                  staffMemberId,
+                })),
+              ),
+          ),
         updateManyAndReturn: jest.fn().mockResolvedValue([]),
       },
       workSchedule: { count: jest.fn().mockResolvedValue(0) },
@@ -356,6 +371,7 @@ describe('RetirementService', () => {
       prisma.staffMember.findMany.mockResolvedValue(
         Object.entries(byId).map(([id, o]) => ({
           staffMemberId: Number(id),
+          storeId: 10,
           joinStatus: 'JOINED',
           retiredDate: null,
           ...o,
@@ -398,7 +414,9 @@ describe('RetirementService', () => {
       const [, ...values] = prisma.$queryRaw.mock.calls[1] as unknown[];
       expect(JSON.stringify(values)).toContain('[80,90]');
       // 점포 id 는 첫 쿼리의 값이다
-      expect((prisma.$queryRaw.mock.calls[0] as unknown[])[1]).toBe(10);
+      expect(
+        (prisma.$queryRaw.mock.calls[0] as { values: number[] }[])[1].values,
+      ).toEqual([10]);
     });
 
     it('계정이 있는 직원이 없으면 계정 행은 잠그지 않는다', async () => {
@@ -411,14 +429,10 @@ describe('RetirementService', () => {
 
     it('열린 출근이 있으면 409 OPEN_CHECK_IN 이고 아무것도 바뀌지 않는다', async () => {
       members({ 2: { retiredDate: date('2026-10-20') }, 3: {} });
-      prisma.attendanceRecord.findFirst.mockImplementation(
-        ({ where }: { where: { staffMemberId: number } }) =>
-          Promise.resolve(
-            where.staffMemberId === 3
-              ? { recordedAt: new Date('2026-10-07T01:00:00Z') }
-              : null,
-          ),
-      );
+      prisma.attendanceRecord.findFirst.mockResolvedValue({
+        recordedAt: new Date('2026-10-07T01:00:00Z'),
+        storeId: 10,
+      });
 
       const error = await run().catch((e: unknown) => e);
 
@@ -427,11 +441,15 @@ describe('RetirementService', () => {
         statusCode: 409,
         code: 'OPEN_CHECK_IN',
       });
+      // retireStore 도 retireStores 를 거치므로 409 본문에 storeId 가 있다
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        storeId: 10,
+      });
       expect(prisma.staffMember.update).not.toHaveBeenCalled();
       expect(prisma.staffMemberRetirementLog.create).not.toHaveBeenCalled();
       expect(prisma.staffMemberRetirementLog.createMany).not.toHaveBeenCalled();
       expect(prisma.contract.updateManyAndReturn).not.toHaveBeenCalled();
-      expect(prisma.invitation.updateMany).not.toHaveBeenCalled();
+      expect(prisma.invitation.updateManyAndReturn).not.toHaveBeenCalled();
     });
 
     it('퇴직일이 없으면 폐점일로 저장하고 RETIRE 로그를 남긴다 — 확정은 하지 않는다', async () => {
@@ -520,15 +538,16 @@ describe('RetirementService', () => {
 
     it('임시저장만 있는 가입 전 레코드도 퇴직일을 폐점일로 정한다 — 임시저장이 닫혀 재직으로 세지므로 다음 날 배치가 확정한다', async () => {
       members({ 2: { joinStatus: 'DRAFT' }, 3: {} });
-      prisma.contract.count.mockImplementation(
-        ({ where }: { where: { staffMemberId: number } }) =>
-          Promise.resolve(where.staffMemberId === 2 ? 0 : 1),
-      );
+      // 2번(가입 전)은 임시저장 아닌 계약이 없다
+      prisma.contract.groupBy.mockResolvedValue([]);
       prisma.contract.updateManyAndReturn.mockImplementation(
         ({ where }: { where: { status: string } }) =>
           Promise.resolve(
             where.status === 'DRAFT'
-              ? [{ contractId: 7 }, { contractId: 8 }]
+              ? [
+                  { contractId: 7, storeId: 10 },
+                  { contractId: 8, storeId: 10 },
+                ]
               : [],
           ),
       );
@@ -553,11 +572,20 @@ describe('RetirementService', () => {
 
     it('대기 계약 4종을 그 점포(store_id) 기준으로 종료로 닫고 ADMIN 이력을 남긴다 — 서명 대기와 수정 요청은 한 수로 센다', async () => {
       members({ 2: {} });
-      const byStatus: Record<string, { contractId: number }[]> = {
-        DRAFT: [{ contractId: 1 }],
-        PENDING_SEND: [{ contractId: 2 }, { contractId: 3 }],
-        PENDING_SIGNATURE: [{ contractId: 4 }],
-        CORRECTION_REQUESTED: [{ contractId: 5 }, { contractId: 6 }],
+      const byStatus: Record<
+        string,
+        { contractId: number; storeId: number }[]
+      > = {
+        DRAFT: [{ contractId: 1, storeId: 10 }],
+        PENDING_SEND: [
+          { contractId: 2, storeId: 10 },
+          { contractId: 3, storeId: 10 },
+        ],
+        PENDING_SIGNATURE: [{ contractId: 4, storeId: 10 }],
+        CORRECTION_REQUESTED: [
+          { contractId: 5, storeId: 10 },
+          { contractId: 6, storeId: 10 },
+        ],
       };
       prisma.contract.updateManyAndReturn.mockImplementation(
         ({ where }: { where: { status: string } }) =>
@@ -585,7 +613,10 @@ describe('RetirementService', () => {
           'PENDING_SEND',
           'PENDING_SIGNATURE',
           'CORRECTION_REQUESTED',
-        ].map((status) => [{ storeId: 10, status }, { status: 'ENDED' }]),
+        ].map((status) => [
+          { storeId: { in: [10] }, status },
+          { status: 'ENDED' },
+        ]),
       );
       expect(prisma.contractStatusHistory.createMany).toHaveBeenCalledTimes(4);
       expect(prisma.contractStatusHistory.createMany).toHaveBeenCalledWith({
@@ -608,7 +639,25 @@ describe('RetirementService', () => {
 
     it('그 점포 직원 레코드에 나간 SENT 초대를 종류 구분 없이 모두 만료로 바꾼다', async () => {
       members({ 2: {} });
-      prisma.invitation.updateMany.mockResolvedValue({ count: 3 });
+      prisma.invitation.updateManyAndReturn.mockResolvedValue([
+        { staffMemberId: 2 },
+        { staffMemberId: 2 },
+        { staffMemberId: 9 },
+      ]);
+      // 퇴직 레코드(9)도 그 점포 직원 레코드다
+      prisma.staffMember.findMany
+        .mockResolvedValueOnce([
+          {
+            staffMemberId: 2,
+            storeId: 10,
+            joinStatus: 'JOINED',
+            retiredDate: null,
+          },
+        ])
+        .mockResolvedValueOnce([
+          { staffMemberId: 2, storeId: 10 },
+          { staffMemberId: 9, storeId: 10 },
+        ]);
 
       await expect(run()).resolves.toEqual({
         ...zero,
@@ -616,9 +665,15 @@ describe('RetirementService', () => {
         expiredInvitations: 3,
       });
 
-      expect(prisma.invitation.updateMany).toHaveBeenCalledWith({
-        where: { status: 'SENT', staffMember: { storeId: 10 } },
+      // 점포 매핑 조회는 만료된 초대의 직원 레코드(중복 제거)만 읽는다
+      expect(prisma.staffMember.findMany).toHaveBeenLastCalledWith({
+        where: { staffMemberId: { in: [2, 9] } },
+        select: { staffMemberId: true, storeId: true },
+      });
+      expect(prisma.invitation.updateManyAndReturn).toHaveBeenCalledWith({
+        where: { status: 'SENT', staffMember: { storeId: { in: [10] } } },
         data: { status: 'EXPIRED' },
+        select: { staffMemberId: true },
       });
     });
 
@@ -639,6 +694,270 @@ describe('RetirementService', () => {
       prisma.staffMember.update.mockRejectedValue(new Error('boom'));
 
       await expect(run()).rejects.toThrow('boom');
+    });
+  });
+
+  describe('점포 여러 개 폐점 일괄 퇴직 retireStores (WHALEERP-651)', () => {
+    const closed = date('2026-10-08');
+    const run = (ids: number[]) =>
+      service.retireStores(prisma as never, ids, closed, 1, now);
+    const zero = {
+      retiringStaff: 0,
+      pulledForwardStaff: 0,
+      draftContracts: 0,
+      pendingSendContracts: 0,
+      pendingSignatureContracts: 0,
+      expiredInvitations: 0,
+    };
+    /** 직원: [id, store, account, 추가 값] */
+    const setup = (
+      list: [number, number, number | null, Record<string, unknown>?][],
+    ) => {
+      prisma.$queryRaw.mockResolvedValueOnce(
+        list.map(([staff_member_id, , account_id]) => ({
+          staff_member_id,
+          account_id,
+        })),
+      );
+      prisma.staffMember.findMany.mockResolvedValue(
+        list.map(([staffMemberId, storeId, , o]) => ({
+          staffMemberId,
+          storeId,
+          joinStatus: 'JOINED',
+          retiredDate: null,
+          ...o,
+        })),
+      );
+    };
+    const queries = () =>
+      (prisma.$queryRaw.mock.calls as [string[]][]).map(([strings]) =>
+        strings.join('?'),
+      );
+    const totalQueries = () =>
+      prisma.$queryRaw.mock.calls.length +
+      prisma.attendanceRecord.findFirst.mock.calls.length +
+      prisma.contract.updateManyAndReturn.mock.calls.length +
+      prisma.invitation.updateManyAndReturn.mock.calls.length +
+      prisma.staffMember.findMany.mock.calls.length +
+      prisma.contract.groupBy.mock.calls.length;
+
+    it('빈 배열이면 쿼리 없이 byStore {} · total 전부 0', async () => {
+      await expect(run([])).resolves.toEqual({ byStore: {}, total: zero });
+      expect(totalQueries()).toBe(0);
+    });
+
+    it('직원이 없는 점포도 0 칸으로 돌려주고, 중복 id 는 한 번으로 본다', async () => {
+      const r = await run([5, 3, 5]);
+      expect(r).toEqual({ byStore: { 3: zero, 5: zero }, total: zero });
+      expect(
+        (prisma.$queryRaw.mock.calls[0] as { values: number[] }[])[1].values,
+      ).toEqual([3, 5]);
+    });
+
+    it('점포별 · 합계로 센다 — 퇴직일 당김, 계약, 초대', async () => {
+      setup([
+        [2, 10, null],
+        [3, 20, null, { retiredDate: date('2026-10-20') }],
+        [4, 20, null, { retiredDate: date('2026-10-01') }],
+      ]);
+      prisma.contract.updateManyAndReturn.mockImplementation(
+        ({ where }: { where: { status: string } }) =>
+          Promise.resolve(
+            where.status === 'DRAFT'
+              ? [
+                  { contractId: 1, storeId: 10 },
+                  { contractId: 2, storeId: 20 },
+                ]
+              : where.status === 'CORRECTION_REQUESTED'
+                ? [{ contractId: 3, storeId: 20 }]
+                : where.status === 'PENDING_SIGNATURE'
+                  ? [{ contractId: 4, storeId: 20 }]
+                  : [],
+          ),
+      );
+      prisma.invitation.updateManyAndReturn.mockResolvedValue([
+        { staffMemberId: 2 },
+        { staffMemberId: 9 },
+        { staffMemberId: 4 },
+      ]);
+      prisma.staffMember.findMany
+        .mockResolvedValueOnce([
+          {
+            staffMemberId: 2,
+            storeId: 10,
+            joinStatus: 'JOINED',
+            retiredDate: null,
+          },
+          {
+            staffMemberId: 3,
+            storeId: 20,
+            joinStatus: 'JOINED',
+            retiredDate: date('2026-10-20'),
+          },
+          {
+            staffMemberId: 4,
+            storeId: 20,
+            joinStatus: 'JOINED',
+            retiredDate: date('2026-10-01'),
+          },
+        ])
+        .mockResolvedValueOnce([
+          { staffMemberId: 2, storeId: 10 },
+          { staffMemberId: 4, storeId: 20 },
+          { staffMemberId: 9, storeId: 20 },
+        ]);
+
+      const r = await run([10, 20]);
+
+      expect(r.byStore[10]).toEqual({
+        ...zero,
+        retiringStaff: 1,
+        draftContracts: 1,
+        expiredInvitations: 1,
+      });
+      expect(r.byStore[20]).toEqual({
+        ...zero,
+        retiringStaff: 2,
+        pulledForwardStaff: 1,
+        draftContracts: 1,
+        pendingSignatureContracts: 2,
+        expiredInvitations: 2,
+      });
+      expect(r.total).toEqual({
+        retiringStaff: 3,
+        pulledForwardStaff: 1,
+        draftContracts: 2,
+        pendingSendContracts: 0,
+        pendingSignatureContracts: 2,
+        expiredInvitations: 3,
+      });
+      expect(finalize).not.toHaveBeenCalled();
+    });
+
+    it('잠금은 점포 IN 한 번 · 계정 한 번 — 한 계정이 두 점포에 걸쳐도 계정 id 는 한 번만', async () => {
+      setup([
+        [2, 10, 90],
+        [3, 20, 90],
+        [4, 20, 80],
+      ]);
+
+      await run([10, 20]);
+
+      const q = queries();
+      expect(q).toHaveLength(2);
+      expect(q[0]).toContain('store_id IN (');
+      expect(q[0]).toContain('ORDER BY staff_member_id');
+      expect(q[0]).toContain('FOR NO KEY UPDATE');
+      expect(q[1]).toContain('ORDER BY account_id');
+      expect(q[1]).toContain('FOR UPDATE');
+      const [, ...values] = prisma.$queryRaw.mock.calls[1] as unknown[];
+      expect(JSON.stringify(values)).toContain('[80,90]');
+    });
+
+    it('열린 출근은 재직 레코드 전체를 한 번에 보고, 있으면 409 본문에 storeId 를 더한다 — 아무것도 바뀌지 않는다', async () => {
+      setup([
+        [2, 10, null],
+        [3, 20, null],
+      ]);
+      prisma.attendanceRecord.findFirst.mockResolvedValue({
+        recordedAt: new Date('2026-10-07T01:00:00Z'),
+        storeId: 20,
+      });
+
+      const error = await run([10, 20]).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        statusCode: 409,
+        code: 'OPEN_CHECK_IN',
+        storeId: 20,
+      });
+      expect(prisma.attendanceRecord.findFirst).toHaveBeenCalledTimes(1);
+      expect(
+        (
+          prisma.attendanceRecord.findFirst.mock.calls[0] as [
+            { where: Record<string, unknown> },
+          ]
+        )[0].where,
+      ).toMatchObject({
+        staffMemberId: { in: [2, 3] },
+        kind: 'CHECK_IN',
+        attendanceRecordsAsCheckIn: { none: {} },
+      });
+      expect(prisma.staffMember.update).not.toHaveBeenCalled();
+      expect(prisma.contract.updateManyAndReturn).not.toHaveBeenCalled();
+      expect(prisma.invitation.updateManyAndReturn).not.toHaveBeenCalled();
+    });
+
+    it('단건 퇴직의 409 본문에는 storeId 를 더하지 않는다', async () => {
+      prisma.attendanceRecord.findFirst.mockResolvedValue({
+        recordedAt: new Date('2026-10-07T00:30:00Z'),
+        storeId: 10,
+      });
+      const r = await service
+        .retire(1, 2, date('2026-10-31'), now)
+        .catch((e: ConflictException) => e);
+      expect((r as ConflictException).getResponse()).not.toHaveProperty(
+        'storeId',
+      );
+    });
+
+    it('쿼리 수가 점포 수에 비례하지 않는다 — 점포 1개와 3개가 같다 (직원별 schedule 제외)', async () => {
+      const count = async (stores: number[]) => {
+        jest.clearAllMocks();
+        setup(
+          stores.map(
+            (s, i) => [100 + i, s, 50 + i] as [number, number, number],
+          ),
+        );
+        await run(stores);
+        return {
+          lock: prisma.$queryRaw.mock.calls.length,
+          open: prisma.attendanceRecord.findFirst.mock.calls.length,
+          contracts: prisma.contract.updateManyAndReturn.mock.calls.length,
+          invitations: prisma.invitation.updateManyAndReturn.mock.calls.length,
+        };
+      };
+      const one = await count([10]);
+      const three = await count([10, 20, 30]);
+      expect(three).toEqual(one);
+      expect(one).toEqual({ lock: 2, open: 1, contracts: 4, invitations: 1 });
+    });
+
+    it('임시저장만 있는 가입 전 판정은 직원마다 count 하지 않고 groupBy 한 번', async () => {
+      setup([
+        [2, 10, null, { joinStatus: 'DRAFT' }],
+        [3, 20, null, { joinStatus: 'DRAFT' }],
+        [4, 20, null],
+      ]);
+      prisma.contract.groupBy.mockResolvedValue([{ staffMemberId: 3 }]);
+
+      const r = await run([10, 20]);
+
+      expect(prisma.contract.count).not.toHaveBeenCalled();
+      expect(prisma.contract.groupBy).toHaveBeenCalledTimes(1);
+      // 2번은 임시저장만 있는 가입 전 — 세지 않지만 퇴직일은 정한다
+      expect(r.byStore[10].retiringStaff).toBe(0);
+      expect(r.byStore[20].retiringStaff).toBe(2);
+      expect(prisma.staffMember.update).toHaveBeenCalledWith({
+        where: { staffMemberId: 2 },
+        data: { retiredDate: closed },
+      });
+    });
+
+    it('retireStore 는 retireStores([id]) 의 그 점포 칸과 같다', async () => {
+      setup([[2, 10, null, { retiredDate: date('2026-10-20') }]]);
+      const viaMany = (await run([10])).byStore[10];
+      jest.clearAllMocks();
+      setup([[2, 10, null, { retiredDate: date('2026-10-20') }]]);
+      const single = await service.retireStore(
+        prisma as never,
+        10,
+        closed,
+        1,
+        now,
+      );
+      expect(single).toEqual(viaMany);
     });
   });
 
