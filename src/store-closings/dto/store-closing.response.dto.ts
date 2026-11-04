@@ -1,41 +1,30 @@
 import type { StoreClosingRetirementResult } from '../../staff-members/retirement.service';
-import type {
-  StoreClosingCounts,
-  StoreClosingOpenCheckIn,
-} from '../../staff-members/store-closing-check';
+import type { StoreClosingCounts } from '../../staff-members/store-closing-check';
 
 // 3팀 결과 타입을 implements 하고(필수 칸 추가 · 이름 변경 · 좁힘), 파일 끝의 키 집합 단언으로 선택 칸 추가까지 잡는다 — 서비스가
 // 3팀 결과를 펼쳐 담으므로, 여기서 빠진 칸은 응답에는 나가는데 Swagger · 생성 타입에는 없게 된다. 칸을 넓히면 서비스의 대입에서 깨진다.
+// 예외 하나: 열린 출근의 첫 건(openCheckIns.first — 직원 이름 · 시각)은 일부러 내보내지 않는다(아래 StoreClosingOpenCheckInsDto).
 
-/** 폐점을 막는 퇴근하지 않은 출근 가운데 이름을 내보내는 첫 건 */
-export class StoreClosingOpenCheckInDto implements StoreClosingOpenCheckIn {
-  /** 그 출근의 점포 */
-  storeId: number;
-  attendanceRecordId: number;
-  staffMemberId: number;
-  /** 직원 이름 */
-  name: string;
-  /** 출근 시각 */
-  recordedAt: Date;
-  /** 출근한 다음 날이 지나 직원 앱으로는 퇴근할 수 없다 — 출퇴근 현황에서 관리자 보정으로 닫는다 */
-  isCheckOutExpired: boolean;
-}
-
-/** 퇴근하지 않은 출근(재직 직원, 보정할 수 있는 3개월 안) */
+/**
+ * 퇴근하지 않은 출근(재직 직원, 보정할 수 있는 3개월 안) — 수만 내보낸다. 3팀 결과에는 첫 건(직원 이름 · 출근 시각)이 있지만,
+ * 이 응답은 점포 메뉴 조회 권한만으로 보이고 화면도 건수만 안내하므로 직원 개인정보를 싣지 않는다(2026-11-04). 어느 출근인지는
+ * 출퇴근 현황에서 찾고, 저장 때의 409 OPEN_CHECK_IN 문구가 가장 이른 출근 시각을 알려 준다.
+ */
 export class StoreClosingOpenCheckInsDto {
-  /** 이름을 내보내는 열린 출근 수 */
+  /** 본사 역할에게도 이름이 보이는 직원의 열린 출근 수 */
   count: number;
-  /** 본사 역할에게 가려지는 직원(본사 제공 동의를 하지 않은 가맹 직원 등)의 열린 출근 수 — 이름 없이 수만 */
+  /** 본사 역할에게 가려지는 직원(본사 제공 동의를 하지 않은 가맹 직원 등)의 열린 출근 수 */
   hiddenCount: number;
-  /** 이름을 내보내는 것 가운데 출근 시각이 가장 이른 것. 없으면 null */
-  first: StoreClosingOpenCheckInDto | null;
 }
 
 /**
  * 폐점 확인 수 — 점포별 · 합계에 같이 쓴다. 폐점하면 그 점포 직원에게 발송한 초대도 모두 만료된다(수는 확인에 없고 결과의
  * expiredInvitations 로 나온다).
  */
-export class StoreClosingCountsDto implements StoreClosingCounts {
+export class StoreClosingCountsDto implements Omit<
+  StoreClosingCounts,
+  'openCheckIns'
+> {
   openCheckIns: StoreClosingOpenCheckInsDto;
   /**
    * 폐점하면 퇴직될 직원 수 — 퇴직일이 없거나 폐점일보다 뒤면 폐점일(한국 날짜 오늘)로 정하고, 이미 그 이전이면 그대로 둔다.
@@ -112,13 +101,11 @@ export class StoreClosingResultResponseDto {
 // 3팀 결과에 있는데 DTO 에 없는 키가 있으면 never 가 아니어서 컴파일이 깨진다(선택 칸 포함 — implements 는 선택 칸 추가를 못 잡는다).
 type NoMissingKeys<T extends never> = T;
 export type StoreClosingDtoKeyChecks = [
-  NoMissingKeys<
-    Exclude<keyof StoreClosingOpenCheckIn, keyof StoreClosingOpenCheckInDto>
-  >,
+  // first 는 일부러 뺀다 — 그 밖에 3팀이 더한 칸은 여기서 걸린다
   NoMissingKeys<
     Exclude<
       keyof StoreClosingCounts['openCheckIns'],
-      keyof StoreClosingOpenCheckInsDto
+      keyof StoreClosingOpenCheckInsDto | 'first'
     >
   >,
   NoMissingKeys<Exclude<keyof StoreClosingCounts, keyof StoreClosingCountsDto>>,

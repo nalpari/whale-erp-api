@@ -47,7 +47,8 @@ export class StoreClosingsService {
   constructor(private readonly retirement: RetirementService) {}
 
   /**
-   * 폐점 확인 — 읽기 전용, 잠그지 않는다. 막힘은 퇴근하지 않은 출근(이름을 내보내는 것 + 가려지는 것)이 있을 때다.
+   * 폐점 확인 — 읽기 전용, 잠그지 않는다. 막힘은 퇴근하지 않은 출근(이름이 보이는 것 + 가려지는 것)이 있을 때다. 열린 출근은
+   * 수만 내보내고 3팀 결과의 첫 건(직원 이름 · 시각)은 버린다.
    * 대기 계약 · 퇴직될 직원 · 확정하지 않은 급여명세서는 막지 않고 알리기만 한다(폐점이 닫거나, 폐점 뒤에도 처리할 수 있다).
    * 없거나 지운 점포가 섞이면 404(3팀 확인이 던진다).
    */
@@ -228,10 +229,15 @@ function contractBroken(what: string, storeId: number) {
   return new InternalServerErrorException(message);
 }
 
-function withBlocked(counts: StoreClosingCounts): StoreClosingCountsDto {
+/** 3팀 수에 막힘을 붙인다. 열린 출근은 수만 남기고 첫 건(직원 이름 · 시각)은 버린다 — StoreClosingOpenCheckInsDto */
+function withBlocked({
+  openCheckIns: { count, hiddenCount },
+  ...rest
+}: StoreClosingCounts): StoreClosingCountsDto {
   return {
-    ...counts,
-    isBlocked: counts.openCheckIns.count + counts.openCheckIns.hiddenCount > 0,
+    ...rest,
+    openCheckIns: { count, hiddenCount },
+    isBlocked: count + hiddenCount > 0,
   };
 }
 

@@ -28105,68 +28105,21 @@
         ],
         "description": "운영으로 바꾸는 데 모자란 것. 비어 있으면 운영할 수 있다. 한글은 GET /enums/StoreOperationRequirement."
       },
-      "StoreClosingOpenCheckInDto": {
-        "type": "object",
-        "properties": {
-          "storeId": {
-            "type": "number",
-            "description": "그 출근의 점포"
-          },
-          "attendanceRecordId": {
-            "type": "number"
-          },
-          "staffMemberId": {
-            "type": "number"
-          },
-          "name": {
-            "type": "string",
-            "description": "직원 이름"
-          },
-          "recordedAt": {
-            "format": "date-time",
-            "type": "string",
-            "description": "출근 시각"
-          },
-          "isCheckOutExpired": {
-            "type": "boolean",
-            "description": "출근한 다음 날이 지나 직원 앱으로는 퇴근할 수 없다 — 출퇴근 현황에서 관리자 보정으로 닫는다"
-          }
-        },
-        "required": [
-          "storeId",
-          "attendanceRecordId",
-          "staffMemberId",
-          "name",
-          "recordedAt",
-          "isCheckOutExpired"
-        ]
-      },
       "StoreClosingOpenCheckInsDto": {
         "type": "object",
         "properties": {
           "count": {
             "type": "number",
-            "description": "이름을 내보내는 열린 출근 수"
+            "description": "본사 역할에게도 이름이 보이는 직원의 열린 출근 수"
           },
           "hiddenCount": {
             "type": "number",
-            "description": "본사 역할에게 가려지는 직원(본사 제공 동의를 하지 않은 가맹 직원 등)의 열린 출근 수 — 이름 없이 수만"
-          },
-          "first": {
-            "nullable": true,
-            "description": "이름을 내보내는 것 가운데 출근 시각이 가장 이른 것. 없으면 null",
-            "type": "object",
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/StoreClosingOpenCheckInDto"
-              }
-            ]
+            "description": "본사 역할에게 가려지는 직원(본사 제공 동의를 하지 않은 가맹 직원 등)의 열린 출근 수"
           }
         },
         "required": [
           "count",
-          "hiddenCount",
-          "first"
+          "hiddenCount"
         ]
       },
       "StoreClosingStoreCheckDto": {

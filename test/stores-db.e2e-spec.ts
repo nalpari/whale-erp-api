@@ -561,11 +561,12 @@ describe('점포 정보 관리 (e2e, DB)', () => {
         total: { openCheckIns: { count: 1, hiddenCount: 0 } },
       },
     });
-    expect(before.transitions.closing?.total.openCheckIns.first).toMatchObject({
-      staffMemberId: staff.staffMemberId,
-      name: '박출근',
-      isCheckOutExpired: true,
+    // 열린 출근은 수만 — 직원 이름은 점포 조회 권한만으로 나가지 않는다
+    expect(before.transitions.closing?.total.openCheckIns).toEqual({
+      count: 1,
+      hiddenCount: 0,
     });
+    expect(JSON.stringify(before.transitions.closing)).not.toContain('박출근');
 
     // 같은 트랜잭션에서 폐점 서비스보다 먼저 쓰는 것(점포명 · 층 · 이력)까지 되돌아가는지 본다
     const historiesBefore = await prisma.storeChangeHistory.count({

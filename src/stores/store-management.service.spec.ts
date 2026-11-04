@@ -127,7 +127,7 @@ const firstCall = (fn: any): number =>
   (fn as jest.Mock).mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY;
 
 const closingCounts = (blocked = false) => ({
-  openCheckIns: { count: 0, hiddenCount: blocked ? 1 : 0, first: null },
+  openCheckIns: { count: 0, hiddenCount: blocked ? 1 : 0 },
   retiringStaff: 0,
   draftContracts: 0,
   pendingSendContracts: 0,

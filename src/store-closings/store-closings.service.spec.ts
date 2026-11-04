@@ -120,6 +120,26 @@ describe('StoreClosingsService', () => {
       expect(result.isBlocked).toBe(false);
     });
 
+    it('열린 출근은 수만 내보낸다 — 3팀 결과의 첫 건(직원 이름 · 시각)은 점포 조회 권한만으로 보이므로 뺀다', async () => {
+      checkMock.mockResolvedValue({
+        stores: [
+          { storeId: 11, ...counts(1, 0) },
+          { storeId: 12, ...counts() },
+        ],
+        total: counts(1, 0),
+      });
+
+      const result = await service.check(client as any, [11, 12], NOW);
+
+      expect(result.stores[0].openCheckIns).toEqual({
+        count: 1,
+        hiddenCount: 0,
+      });
+      expect(result.total.openCheckIns).toEqual({ count: 1, hiddenCount: 0 });
+      expect(JSON.stringify(result)).not.toContain('홍길동');
+      expect(result.isBlocked).toBe(true);
+    });
+
     it('가려지는 직원의 열린 출근만 있어도 막힌다 — count + hiddenCount', async () => {
       checkMock.mockResolvedValue({
         stores: [
