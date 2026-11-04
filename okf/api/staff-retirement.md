@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T08:35:47Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T06:24:38Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -12,8 +12,8 @@ sources:
     last_modified: 2026-11-03T07:08:00Z
   - id: store-closing-check
     resource: ../../src/staff-members/store-closing-check.ts
-    title: storeClosingCheck — 폐점 확인(WHALEERP-647, 읽기만)
-    last_modified: 2026-11-03T08:35:47Z
+    title: storeClosingCheck — 폐점 확인(WHALEERP-647 · 650, 읽기만)
+    last_modified: 2026-11-04T06:24:38Z
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
@@ -380,15 +380,26 @@ The permission (WHALEERP-586) is tested at both levels:
 
 # Checking before closing
 
-WHALEERP-647, 운영 정책 CTR-31. `storeClosingCheck(client, storeId, closedDate, now?)` (the inputs the work item names) is
-the read-only pre-closing check — a plain function, no route. 1팀 calls it from the store edit screen (`transitionCheck`),
-the closing confirmation popup and right before saving the closing inside its own transaction, passing the same `client`
-(PrismaService or the transaction) so all three see the same rows. Scope and permission are the caller's; whether to block
-the closing is the caller's decision too. Right before saving, call it before `retireStore` — after it the pending
-contracts are already ENDed and the contract counts read 0. The staff and contract fields have the same names and meaning
-as `retireStore`'s return value (1팀 shows both in the closing messages).[^store-closing-check]
+WHALEERP-647 · 650, 운영 정책 CTR-31. `storeClosingCheck(client, storeIds, closedDate, now?)` is the read-only pre-closing
+check — a plain function, no route. It takes several stores because BP withdrawal closes all of a BP's open stores in one
+transaction (1팀 request, 2026-11-04); a single store closing passes `[storeId]`. 1팀 means to call it from the store edit
+screen (`transitionCheck`), the closing confirmation popup and right before saving the closing inside its own transaction,
+passing the same `client` (PrismaService or the transaction) so all three see the same rows. Scope and permission are the
+caller's; whether to block the closing is the caller's decision too.
 
-It returns:
+Right before saving, call it once for all the stores, before any of them is set CLOSED (a closed 가맹 store hides consented
+staff too, so `first` would go empty while `count + hiddenCount` stays) and before `retireStore` (after it the pending
+contracts are already ENDed and the contract counts read 0). The check alone does not close anything safely: it reads without
+locks, and `retireStore` is what sees the rows again after locking. The staff and contract fields of `stores[n]` have the same
+names and meaning as that store's `retireStore` return value, and `total` as their sum.[^store-closing-check]
+
+Duplicate ids count once and an empty array returns an empty list and zeros without a query. Each table is asked once with
+`IN`, so the query count does not grow with the stores. A store that does not exist or is deleted is 404 with its id in the
+message — returning a partial count could let a closing through that should be blocked.
+
+It returns `{ stores, total }`: `stores` is one entry per store in ascending id (`storeId` plus the fields below), `total` is the same
+fields summed. `total.openCheckIns.first` is the earliest of the check-ins whose name may be shown, across the stores, and
+`first` carries `storeId`. 1팀 decides on `total.openCheckIns.count + total.openCheckIns.hiddenCount`. The fields:
 
 - `openCheckIns: { count, hiddenCount, first }` — open check-ins of the store's `EMPLOYED` records, by the same rule as
   the admin open-check-in route (WHALEERP-644, shared `openCheckInsOf`: within the 3-month correction window) but without
@@ -410,8 +421,6 @@ It reads without locks; whatever changes between the check and the save, `retire
 (an open check-in is the 409, contracts and staff are ended and counted from the locked rows). The e2e checks the counts
 against a real `retireStore` run (rolled back).
 
-A missing store throws Prisma's `PrismaClientKnownRequestError` (P2025) as is — the caller already resolved it.
-
 # Dates
 
 "Today" is the Korean date (`kstToday`); date-only columns come back from Prisma
@@ -424,4 +433,4 @@ schedule's `start_at` is a timestamp, so "from the next day" is compared against
 [^retirement-scheduler]: Midnight KST batch (staff-retire)
 [^admin-scope]: Which stores an 관리자 manages
 [^kst-date]: KST "today" and date-only helpers
-[^store-closing-check]: storeClosingCheck — 폐점 확인(WHALEERP-647, 읽기만)
+[^store-closing-check]: storeClosingCheck — 폐점 확인(WHALEERP-647 · 650, 읽기만)

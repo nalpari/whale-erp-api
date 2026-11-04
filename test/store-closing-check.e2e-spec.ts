@@ -1,6 +1,7 @@
 import { randomInt } from 'node:crypto';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import type { Prisma } from '@prisma/client';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
@@ -9,8 +10,8 @@ import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 import { RetirementService } from '../src/staff-members/retirement.service';
 import { storeClosingCheck } from '../src/staff-members/store-closing-check';
 
-// 폐점 확인(WHALEERP-647)을 실제 DB 로 확인한다 — 관계 조건(가입 전 임시저장만 있는 레코드 빼기, 퇴직될 직원의 계약)과
-// 본사 역할에게 가려지는 직원은 첫 건 없이 수만 세는 것, 트랜잭션 안에서 부르는 것.
+// 폐점 확인(WHALEERP-647 · 650)을 실제 DB 로 확인한다 — 관계 조건(가입 전 임시저장만 있는 레코드 빼기, 점포의 대기 계약)과
+// 본사 역할에게 가려지는 직원은 첫 건 없이 수만 세는 것, 트랜잭션 안에서 부르는 것, 여러 점포의 합계, retireStore 실제 결과와의 일치.
 describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
@@ -100,7 +101,7 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     hiddenId = await staff('나미동의', 'JOINED', false, ['SIGNED']);
     await punch(hiddenId, at(yesterday, 9));
     await punch(sharedId, at(yesterday, 11));
-    // 가입 전 — 임시저장만(퇴직 대상 아님, 그 임시저장도 남는다), 서명 대기가 있음(퇴직 대상, 계약 종료)
+    // 가입 전 — 임시저장만(퇴직될 직원으로 세지 않지만 그 임시저장은 닫힌다), 서명 대기가 있음(퇴직 대상, 계약 종료)
     await staff('다임시저장만', 'INVITED', false, ['DRAFT']);
     await staff('라서명대기', 'INVITED', false, ['DRAFT', 'PENDING_SIGNATURE']);
     // 가입했고 임시저장만 — 가입했으니 퇴직 대상이고 그 임시저장도 닫힌다. 가입 전 · 계약 없음 — 퇴직 대상 아님
@@ -114,9 +115,9 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
       ['PENDING_SEND'],
       otherStoreId,
     );
-    await punch(other, at(yesterday, 8), otherStoreId);
+    await punch(other, at(yesterday, 10), otherStoreId);
     await payslip(other, 'DRAFTING', '07', otherStoreId);
-    // 이미 퇴직 — 세지 않는다
+    // 이미 퇴직 — 퇴직될 직원으로 세지 않는다(그 대기 계약은 점포 기준이라 닫힌다)
     const retired = await staff('마퇴직', 'JOINED', false, ['PENDING_SEND']);
     await prisma.staffMember.update({
       where: { staffMemberId: retired },
@@ -240,6 +241,10 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     });
   }
 
+  /** 이 점포 하나로 부른 결과 */
+  const one = async (client: Prisma.TransactionClient = prisma) =>
+    (await storeClosingCheck(client, [storeId], today)).stores[0];
+
   afterAll(async () => {
     if (!prisma) return;
     const records = { staffMemberId: { in: staffIds } };
@@ -262,12 +267,14 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
   });
 
   it('본사 역할에게 가려지는 직원(미동의 가맹)의 열린 출근은 첫 건으로 고르지 않고 수만 센다 · 종료될 계약 · 퇴직될 직원 · 미확정 명세서', async () => {
-    const res = await storeClosingCheck(prisma, storeId, today);
+    const res = await one();
     expect(res).toEqual({
+      storeId,
       openCheckIns: {
         count: 1,
         hiddenCount: 1,
         first: {
+          storeId,
           attendanceRecordId: expect.any(Number) as number,
           staffMemberId: sharedId,
           name: '가동의',
@@ -288,9 +295,7 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
   });
 
   it('트랜잭션 안에서 불러도 같다 — 가림은 부르는 관리자와 상관없이 본사 역할 기준', async () => {
-    const res = await prisma.$transaction((tx) =>
-      storeClosingCheck(tx, storeId, today),
-    );
+    const res = await prisma.$transaction((tx) => one(tx));
     expect(res.openCheckIns).toEqual({
       count: 1,
       hiddenCount: 1,
@@ -312,7 +317,7 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
       },
     });
     try {
-      const open = await storeClosingCheck(prisma, storeId, today);
+      const open = await one();
       expect(open.openCheckIns.first).toEqual(
         expect.objectContaining({
           attendanceRecordId: stale.attendanceRecordId,
@@ -323,7 +328,7 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
         where: { storeId },
         data: { storeStatusCode: 'CLOSED', closedDate: today },
       });
-      const closed = await storeClosingCheck(prisma, storeId, today);
+      const closed = await one();
       expect(closed.openCheckIns).toEqual({
         count: 0,
         hiddenCount: 3,
@@ -344,7 +349,7 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     const rollback = new Error('되돌림');
     await expect(
       prisma.$transaction(async (tx) => {
-        const check = await storeClosingCheck(tx, storeId, today);
+        const check = await one(tx);
         // retireStore 는 재직 레코드의 열린 출근이 있으면 409 로 막는다 — 확인이 알린 열린 출근을 닫은 셈 치고 지운다
         expect(check.openCheckIns.count + check.openCheckIns.hiddenCount).toBe(
           2,
@@ -364,9 +369,106 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     ).rejects.toBe(rollback);
   });
 
-  it('없는 점포는 그대로 던진다', async () => {
+  it('두 점포의 합계가 retireStore 를 점포마다 돌린 결과의 합과 같다 — 되돌린다(WHALEERP-650)', async () => {
+    const rollback = new Error('되돌림');
     await expect(
-      storeClosingCheck(prisma, 2_147_483_000, today),
-    ).rejects.toThrow();
+      prisma.$transaction(async (tx) => {
+        const ids = [storeId, otherStoreId];
+        const { total } = await storeClosingCheck(tx, ids, today);
+        await tx.attendanceRecord.deleteMany({
+          where: { storeId: { in: ids } },
+        });
+        const retirement = app.get(RetirementService);
+        const a = await retirement.retireStore(tx, storeId, today, bmId);
+        const b = await retirement.retireStore(tx, otherStoreId, today, bmId);
+        expect({
+          retiringStaff: a.retiringStaff + b.retiringStaff,
+          draftContracts: a.draftContracts + b.draftContracts,
+          pendingSendContracts: a.pendingSendContracts + b.pendingSendContracts,
+          pendingSignatureContracts:
+            a.pendingSignatureContracts + b.pendingSignatureContracts,
+        }).toEqual({
+          retiringStaff: total.retiringStaff,
+          draftContracts: total.draftContracts,
+          pendingSendContracts: total.pendingSendContracts,
+          pendingSignatureContracts: total.pendingSignatureContracts,
+        });
+        throw rollback;
+      }),
+    ).rejects.toBe(rollback);
+  });
+
+  it('지운 점포는 없는 점포처럼 404 — 0 으로 통과시키지 않는다', async () => {
+    await prisma.store.update({
+      where: { storeId: otherStoreId },
+      data: { isDeleted: true },
+    });
+    try {
+      await expect(
+        storeClosingCheck(prisma, [storeId, otherStoreId], today),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    } finally {
+      await prisma.store.update({
+        where: { storeId: otherStoreId },
+        data: { isDeleted: false },
+      });
+    }
+  });
+
+  it('여러 점포를 한 번에 — 점포별 결과와 합계, 합계의 첫 건은 이름을 내보내는 것 가운데 가장 이른 것(WHALEERP-650)', async () => {
+    const { stores, total } = await storeClosingCheck(
+      prisma,
+      [otherStoreId, storeId, otherStoreId],
+      today,
+    );
+    expect(stores.map((s) => s.storeId)).toEqual(
+      [storeId, otherStoreId].sort((a, b) => a - b),
+    );
+    const other = stores.find((s) => s.storeId === otherStoreId)!;
+    expect(other).toEqual({
+      storeId: otherStoreId,
+      openCheckIns: {
+        count: 1,
+        hiddenCount: 0,
+        first: expect.objectContaining({
+          storeId: otherStoreId,
+          name: '아다른점포',
+        }) as object,
+      },
+      retiringStaff: 1,
+      draftContracts: 0,
+      pendingSendContracts: 1,
+      pendingSignatureContracts: 0,
+      unconfirmedPayslips: 1,
+    });
+    // 이 점포(11시 1건 + 09시 가림 1건) + 다른 점포(10시 1건). 전체로 가장 이른 09시는 가려진 직원이라 건너뛰고 10시를 고른다
+    expect(total).toEqual({
+      openCheckIns: {
+        count: 2,
+        hiddenCount: 1,
+        first: expect.objectContaining({
+          storeId: otherStoreId,
+          recordedAt: at(yesterday, 10),
+        }) as object,
+      },
+      retiringStaff: 5,
+      draftContracts: 4,
+      pendingSendContracts: 3,
+      pendingSignatureContracts: 1,
+      unconfirmedPayslips: 3,
+    });
+  });
+
+  it('빈 배열이면 빈 목록과 0', async () => {
+    const res = await storeClosingCheck(prisma, [], today);
+    expect(res.stores).toEqual([]);
+    expect(res.total.retiringStaff).toBe(0);
+    expect(res.total.openCheckIns.first).toBeNull();
+  });
+
+  it('없는 점포가 섞이면 던진다', async () => {
+    await expect(
+      storeClosingCheck(prisma, [storeId, 2_147_483_000], today),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
