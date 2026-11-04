@@ -4,12 +4,12 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T06:24:38Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T06:49:11Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
-    title: RetirementService (preview · retire · changeDate · cancel · retireDue · retireStore)
-    last_modified: 2026-11-03T07:08:00Z
+    title: RetirementService (preview · retire · changeDate · cancel · retireDue · retireStore · retireStores)
+    last_modified: 2026-11-04T06:27:00Z
   - id: store-closing-check
     resource: ../../src/staff-members/store-closing-check.ts
     title: storeClosingCheck — 폐점 확인(WHALEERP-647 · 650, 읽기만)
@@ -220,6 +220,43 @@ The code is not changed.
 4. Closing several stores at once (e.g. BP withdrawal): calling `retireStore` once per store stacks the store, staff
    and account locks store by store, so the order gets mixed (deadlock is possible when an account spans several
    stores' staff). How to call it — e.g. in ascending store id — is 1팀's call.
+   **1팀 답 (2026-11-04, WHALEERP-651): 회원 탈퇴는 점포 행을 모두 id 오름차순으로 잠근 뒤 `retireStores` 를 한 번 부른다. 점포 하나 폐점도 `[storeId]` 로 부른다(`retireStore` 는 같은 동작의 감싼 함수로 남김).** The transaction `timeout` is still raised by 1팀 (item 3).
+
+# Closing several stores at once — `retireStores` (WHALEERP-651)
+
+운영 정책 CTR-31 follow-up of 648 (1팀 요건 「BP 탈퇴 시 소유 점포 자동 폐점」). `RetirementService.retireStores(tx, storeIds, closedDate,
+adminAccountId, now?)` closes every store's pending work in one transaction, called after 1팀 has locked **all** the store rows in
+ascending `store_id` and run the closing check. Method only — no route, DTO or migration.[^retirement-service]
+
+```ts
+interface StoresClosingRetirementResult {
+  byStore: Record<number, StoreClosingRetirementResult>; // one entry per store id passed (zeros if no staff)
+  total: StoreClosingRetirementResult;                   // sum of byStore
+}
+```
+
+- `storeIds` is de-duplicated; an empty array runs no query and returns `byStore: {}` with an all-zero `total`. `closedDate` is
+  normalised with `kstToday` as in `retireStore`.
+- `retireStore(tx, storeId, …)` is kept as a thin wrapper: it calls `retireStores(tx, [storeId], …)` and returns `byStore[storeId]`,
+  so its return value and processing are the same; the 409 `OPEN_CHECK_IN` body gains `storeId`, and the open check-in it picks is now the earliest in the whole store (it used to be the earliest of the lowest-id staff record that had one).
+- **Same rules as `retireStore`, with `IN` instead of one query per store.** Lock: every store's `EMPLOYED` staff rows in one
+  `store_id IN (…)` query ordered by `staff_member_id`, `FOR NO KEY UPDATE`; then the de-duplicated account rows in one query ordered by
+  `account_id`, `FOR UPDATE` — an account with records in several stores is locked once, in one global order.
+- Open check-ins: after the locks, one query over all locked records, the same criteria as `assertNoOpenCheckIn` (a shared
+  `openCheckInWhere`: 3-month correction window, CHECK_IN without its check-out, 「근무 중」 wording up to the next day). The earliest open
+  check-in raises 409 `OPEN_CHECK_IN` with the usual body plus **`storeId`** (its store); the whole transaction rolls back. The single
+  retire's 409 body is unchanged (no `storeId`).
+- Retiring staff / dates / counts: the same rules; the 「draft-only 가입 전」 test is one `contract.groupBy` for all pre-join records
+  (not a `count` per staff). `schedule` (save the date, log, spanning contracts) still runs per staff. Each result lands in the
+  record's own `storeId` entry.
+- Pending contracts: `endPendingContracts` with `{ storeId: { in: ids } }`, once per status, counting by the returned `storeId`
+  (waiting for signature + correction requested are summed); history actor `ADMIN`. `SENT` invitations: one `updateManyAndReturn`
+  over `staffMember.storeId IN (…)`, counted per store by mapping the returned `staffMemberId` to the store's records (retired ones
+  included, one lookup by store ids).
+- No `finalize` (`retireDue` does it the next day), exceptions are not swallowed (whole rollback), no staff notification.
+- Tests: unit (several stores, duplicate ids, empty array, an account across two stores locked once, 409 `storeId`, per-store and total
+  counts, query count not growing with the store count, `retireStore` equal to `retireStores([id])`) and e2e (two stores with one shared
+  account locked in id order then `retireDue`, an open check-in in only one store rolls both back).
 
 # An open check-in blocks retirement
 
@@ -428,7 +465,7 @@ as UTC midnight, and every helper in `kst-date.ts` works in that shape. A
 schedule's `start_at` is a timestamp, so "from the next day" is compared against
 `kstDayStart(retired_date + 1)` — 15:00 UTC of the retirement date.[^kst-date]
 
-[^retirement-service]: RetirementService (preview · retire · changeDate · cancel · retireDue · retireStore)
+[^retirement-service]: RetirementService (preview · retire · changeDate · cancel · retireDue · retireStore · retireStores)
 [^retirement-controller]: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
 [^retirement-scheduler]: Midnight KST batch (staff-retire)
 [^admin-scope]: Which stores an 관리자 manages
