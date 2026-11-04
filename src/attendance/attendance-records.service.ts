@@ -188,7 +188,7 @@ export class AttendanceRecordsService {
     );
     if (!scope.storeIds.includes(storeId))
       throw new NotFoundException(STORE_NOT_FOUND);
-    const rows = await openCheckInsOf(this.prisma, storeId);
+    const rows = await openCheckInsOf(this.prisma, [storeId]);
     const shown = rows.filter(
       (r) => !scope.hides(storeId, hqSharingConsentedOf(r.staffMember)),
     );

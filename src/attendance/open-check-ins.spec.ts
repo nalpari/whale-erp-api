@@ -1,15 +1,15 @@
 import { editableStart } from './attendance-rules';
 import { checkOutExpired, openCheckInsOf } from './open-check-ins';
 
-describe('점포의 열린 출근 (WHALEERP-644 · 647 공용)', () => {
+describe('점포의 열린 출근 (WHALEERP-644 · 647 · 650 공용)', () => {
   it('짝 퇴근 없는 출근, 보정할 수 있는 3개월 안, 출근 시각순 — 직원 상태는 거르지 않는다', async () => {
     const findMany = jest.fn().mockResolvedValue([]);
-    await openCheckInsOf({ attendanceRecord: { findMany } } as never, 7);
+    await openCheckInsOf({ attendanceRecord: { findMany } } as never, [7, 8]);
     const arg = (
       findMany.mock.calls[0] as [{ where: unknown; orderBy: unknown }]
     )[0];
     expect(arg.where).toEqual({
-      storeId: 7,
+      storeId: { in: [7, 8] },
       kind: 'CHECK_IN',
       attendanceRecordsAsCheckIn: { none: {} },
       recordedAt: { gte: editableStart() },
