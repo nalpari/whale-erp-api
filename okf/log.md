@@ -1,5 +1,10 @@
 # Directory Update Log
 
+## 2026-11-04
+* **Update**: [Admin auth](/api/admin-auth.md) — api #243 적대적 리뷰 반영: 탈퇴 중 하위 관리자를 사용으로 저장하면 그 계정이 탈퇴 BP 아래 사용으로 남던 경합을 막았다 — 탈퇴가 `bp_codes` 행을 본인 행보다 먼저 `FOR UPDATE` 로 잠가 등록 · 수정(`lockBp` FOR SHARE)과 줄을 세운다(탈퇴 시점 기준 모두 미사용, 2026-11-04 사용자 지정). 상위 BP 가 탈퇴했으면 계정 상태와 상관없이 로그인 · 가입 직후 로그인은 미사용과 같은 403, 갱신은 세션을 끊고 401(사용자 지정). 응답 `bp` 에는 BP 상태를 싣지 않는다(api skitty).
+* **Update**: [Admin auth](/api/admin-auth.md) — 데이터 마이그레이션 `20261104093700_team1_withdrawn_bp_sub_admins_inactive`: 이미 탈퇴한 BP 의 하위 관리자(BM 제외, 지우지 않은 탈퇴 계정)를 미사용으로 바꾸고 개인정보를 지우며 계정 상태 이력 「탈퇴 → 미사용」(처리자 없음)을 남긴다. 공용 개발 DB 기준 6계정(롤백 시험으로 확인)(api skitty).
+* **Update**: [Admin auth](/api/admin-auth.md) · [BP admins](/api/bp-admins.md) — 회원 탈퇴(S-JHQQNR) 때 하위 관리자(BP 관리자 · 가맹 마스터 · 가맹 관리자)는 탈퇴가 아니라 **미사용**으로 바꾸고, 개인정보(이름 · 휴대폰 · 이메일)는 BP 마스터처럼 지운다 — BP 가 탈퇴하지 않은 미사용과 다른 점은 개인정보를 지운다는 것(2026-11-04 사용자 지정). 이미 미사용이던 하위 관리자는 상태 · 바뀐 시각을 그대로 두고 개인정보만 지운다. 계정 상태 이력은 상태가 바뀐 계정만(BP 마스터 → 탈퇴, 사용 하위 관리자 → 미사용). 탈퇴 BP 의 관리자는 BP 관리자 등록 · 수정이 409 「탈퇴한 BP 의 관리자 계정은 고칠 수 없습니다.」(다시 살리거나 개인정보를 다시 적지 못하게). 접속 끊기는 그대로(본인 · 하위 관리자 모두)(api skitty).
+
 ## 2026-11-03
 * **Update**: [Payslips](/api/payslips.md) · [Contracts API](/api/contracts-api.md) · [Employment Contract Batch](/api/employment-contract-batch.md) — 급여명세서 보존 기간 파기 `payslip-purge`(WHALEERP-649, RET-02 · RET-07): 매일 한국 04:50, 생성일 + 3년이 지난 명세서를 항목 · 검토 사유 · 발송 기록 · 처리 이력 · 알림과 함께 5000건씩 지운다. 05:00 계약 파기가 건너뛰던 명세서 있는 퇴직자 레코드는 그날부터 지울 대상이 된다.
 * **Update**: [Staff retirement](/api/staff-retirement.md) · [Attendance](/api/attendance.md) — 폐점 확인 `storeClosingCheck(client, storeId, closedDate)`(WHALEERP-647, 운영 정책 CTR-31, 읽기만 · 경로 없음): 1팀 폐점이 수정 화면 · 확인 팝업 · 저장 직전 트랜잭션에서 `retireStore`(648)보다 먼저 부른다. 열린 출근(644와 같은 `openCheckInsOf`, 본사 역할에게 가려지는 직원은 부르는 관리자와 상관없이 첫 건 없이 `hiddenCount` — `retireStore` 가 열린 출근에 409 를 내므로 미리 알리는 자리), `retireStore` 와 같은 이름 · 뜻의 `retiringStaff` · `draftContracts` · `pendingSendContracts` · `pendingSignatureContracts`(점포의 대기 계약), 미확정 명세서 `unconfirmedPayslips`.

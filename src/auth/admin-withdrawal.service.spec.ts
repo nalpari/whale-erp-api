@@ -407,7 +407,7 @@ describe('AdminWithdrawalService.execute', () => {
     expectNoMutation();
   });
 
-  it('본인·하위 관리자를 전부 WITHDRAWN 처리하고 점포를 폐점하고 이력과 메일을 남긴다', async () => {
+  it('본인은 WITHDRAWN, 하위 관리자는 개인정보를 지우고 INACTIVE 로 바꾸고 점포를 폐점하고 이력과 메일을 남긴다', async () => {
     prisma.adminAccount.findMany.mockResolvedValue([
       { adminAccountId: 2, accountStatusCode: 'ACTIVE' },
       { adminAccountId: 3, accountStatusCode: 'INACTIVE' },
@@ -421,7 +421,14 @@ describe('AdminWithdrawalService.execute', () => {
 
     await service.execute(1, dto);
 
-    expect(prisma.$queryRaw).toHaveBeenCalled(); // 본인 행 잠금
+    // BP 행 → 본인 행 순서로 잠근다 — 하위 관리자 등록 · 수정(lockBp FOR SHARE)이 탈퇴 뒤로 줄을 선다.
+    const calls = prisma.$queryRaw.mock.calls as [string[], ...unknown[]][];
+    const locks = calls.map((call) => call[0].join('?'));
+    expect(locks[0]).toContain('FROM bp_codes');
+    expect(locks[0]).toContain('FOR UPDATE');
+    expect(calls[0][1]).toBe(7);
+    expect(locks[1]).toContain('FROM admin_accounts');
+    expect(locks[1]).toContain('FOR UPDATE');
     expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
       where: { adminAccountId: 1, isDeleted: false },
       select: {
@@ -455,18 +462,21 @@ describe('AdminWithdrawalService.execute', () => {
       where: subAdminWhere,
       select: { adminAccountId: true, accountStatusCode: true },
     });
-    // 읽은 id 로만 바꾼다 — 이력을 남긴 행과 같은 행.
+    // 읽은 id 로만 바꾼다 — 이력을 남긴 행과 같은 행. 하위 관리자는 탈퇴가 아니라 미사용 — 개인정보는 모두 지우고,
+    // 상태는 사용이던 계정(2)만 미사용으로 바꾼다(3 은 이미 미사용, 2026-11-04 사용자 지정).
     expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith({
       where: { adminAccountId: { in: [2, 3] } },
-      data: {
-        accountStatusCode: 'WITHDRAWN',
-        statusChangedAt: now,
-        name: null,
-        phone: null,
-        email: null,
-        updatedBy: 1,
-      },
+      data: { name: null, phone: null, email: null, updatedBy: 1 },
     });
+    expect(prisma.adminAccount.updateMany).toHaveBeenCalledWith({
+      where: { adminAccountId: { in: [2] } },
+      data: { accountStatusCode: 'INACTIVE', statusChangedAt: now },
+    });
+    expect(prisma.adminAccount.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ accountStatusCode: 'WITHDRAWN' }),
+      }),
+    );
     // 남은 접근 토큰으로 지운 개인정보를 다시 적지 못하게 본인 · 하위 관리자의 접속을 끝낸다.
     expect(prisma.adminSession.updateMany).toHaveBeenCalledWith({
       where: { adminAccountId: { in: [1, 2, 3] }, revokedAt: null },
@@ -516,14 +526,13 @@ describe('AdminWithdrawalService.execute', () => {
       })),
     });
     expect(prisma.adminChangeHistory.createMany).toHaveBeenCalledWith({
+      // 상태가 바뀐 계정만 — BP 마스터는 탈퇴, 사용이던 하위 관리자는 미사용. 이미 미사용(3)은 남기지 않는다
       data: [
-        { adminAccountId: 1, beforeValue: '사용' },
-        { adminAccountId: 2, beforeValue: '사용' },
-        { adminAccountId: 3, beforeValue: '미사용' },
+        { adminAccountId: 1, beforeValue: '사용', afterValue: '탈퇴' },
+        { adminAccountId: 2, beforeValue: '사용', afterValue: '미사용' },
       ].map((row) => ({
         ...row,
         field: '계정 상태',
-        afterValue: '탈퇴',
         changedBy: 1,
         changedAt: now,
       })),

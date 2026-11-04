@@ -92,6 +92,7 @@ const LOGIN_ID_TAKEN = '사용할 수 없는 아이디라 계정을 만들지 �
 const EMAIL_TAKEN = '사용 중이거나 미사용인 다른 관리자 계정의 이메일입니다.';
 const CHANGED_MEANWHILE = '다른 사용자가 이 계정을 먼저 바꿨습니다.';
 const BP_INACTIVE = 'BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.';
+const BP_WITHDRAWN = '탈퇴한 BP 의 관리자 계정은 고칠 수 없습니다.';
 const BP_BUSY =
   '다른 작업이 끝나기를 기다리다 시간이 지났습니다. 잠시 뒤 다시 저장해 주세요.';
 const BY_FM_DEACTIVATION = ' (가맹 마스터 미사용)';
@@ -363,7 +364,7 @@ export class BpAdminsService {
       bp.bpCodeId,
       adminAccountId,
     );
-    const [stores, bpStoreCount, franchiseMaster] = await Promise.all([
+    const [stores, bpStoreCount, franchiseMaster, bpRow] = await Promise.all([
       this.prisma.store.findMany({
         where: { storeId: { in: target.storeIds } },
         select: {
@@ -383,7 +384,14 @@ export class BpAdminsService {
             where: { adminAccountId: target.franchiseMasterId },
             select: { adminAccountId: true, loginId: true, name: true },
           }),
+      this.prisma.bpCode.findFirst({
+        where: { bpCodeId: bp.bpCodeId },
+        select: { accountStatusCode: true },
+      }),
     ]);
+    // 탈퇴한 BP 의 관리자는 등록 · 수정이 모두 409 다(lockBp) — 화면이 누를 수 없는 버튼을 띄우지 않게 동작을 모두 끈다
+    const actions = actionsOf(caller, target);
+    const bpWithdrawn = bpRow?.accountStatusCode === 'WITHDRAWN';
     return {
       ...summaryOf({ ...row, storeCount: target.storeIds.length }),
       phone: row.phone,
@@ -402,7 +410,15 @@ export class BpAdminsService {
         loginId: franchiseMaster.loginId,
         name: franchiseMaster.name,
       },
-      actions: actionsOf(caller, target),
+      actions: bpWithdrawn
+        ? {
+            isSelf: actions.isSelf,
+            canUpdate: false,
+            canResetPassword: false,
+            canChangeScope: false,
+            canChangeRoleGroup: false,
+          }
+        : actions,
     };
   }
 
@@ -1105,6 +1121,9 @@ export class BpAdminsService {
     >`SELECT account_status_code, is_deleted FROM bp_codes WHERE bp_code_id = ${bpCodeId} FOR SHARE`;
     if (!row || row.is_deleted)
       throw new NotFoundException(BP_NOT_FOUND_MESSAGE);
+    // 탈퇴한 BP 의 하위 관리자는 미사용 · 개인정보 지움으로 남는다(회원 탈퇴) — 다시 적거나 살리지 못하게 등록 · 수정을 모두 막는다
+    if (row.account_status_code === 'WITHDRAWN')
+      throw new ConflictException(BP_WITHDRAWN);
     if (keepsActive && row.account_status_code !== 'ACTIVE')
       throw new ConflictException(BP_INACTIVE);
   }

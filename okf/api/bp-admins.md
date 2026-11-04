@@ -4,7 +4,7 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T03:51:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T01:00:00Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
@@ -128,8 +128,9 @@ inserted — the composite key would refuse a second row.
 
 **Register and edit lock the BP first.** Both transactions open with
 `SELECT account_status_code, is_deleted FROM bp_codes … FOR SHARE` on the tab's BP and
-re-read it: deleted is 404 (`BP 를 찾을 수 없습니다.`, the guard's wording), and a BP that is
-not 사용 — 미사용 or 탈퇴 alike — is 409 `BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.` for a
+re-read it: deleted is 404 (`BP 를 찾을 수 없습니다.`, the guard's wording), a 탈퇴 BP is 409
+`탈퇴한 BP 의 관리자 계정은 고칠 수 없습니다.` for any register or edit (its sub-admins stay 미사용 with personal
+info erased by 회원 탈퇴 — 2026-11-04; the detail answers every `actions` flag false for them so the web shows no edit or reset), and a BP that is 미사용 is 409 `BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.` for a
 register and for any edit that saves 사용 — re-activating included. Editing a 미사용 account of a 미사용 BP, staying 미사용,
 still works. Restoring 사용 is the BP 마스터's job (WHALEERP-414), so the platform can no
 longer pick a 미사용 BP in the header and add a 사용 account there. The lock exists because
