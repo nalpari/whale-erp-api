@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T07:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T08:30:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -13,10 +13,14 @@ sources:
   - id: store-closings-service
     resource: ../../src/store-closings/store-closings.service.ts
     title: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
-    last_modified: 2026-11-04T07:00:00Z
+    last_modified: 2026-11-04T08:30:00Z
   - id: store-closing-response
     resource: ../../src/store-closings/dto/store-closing.response.dto.ts
     title: 폐점 확인 · 결과 응답(점포별 점포명 · 점포코드 + 합계)
+    last_modified: 2026-11-04T08:30:00Z
+  - id: store-closings-module
+    resource: ../../src/store-closings/store-closings.module.ts
+    title: StoreClosingsModule — 회원 탈퇴 · BP 탈퇴가 import 할 진입점(StaffMembersModule 의 RetirementService 를 쓴다)
     last_modified: 2026-11-04T07:00:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
@@ -195,7 +199,8 @@ status change and other edits commit together.[^store-format]
 - **삭제 needs no contract in progress**: `DRAFT`, `PENDING_SEND`,
   `PENDING_SIGNATURE`, `CORRECTION_REQUESTED` (3팀 수정 요청, 2026-10-16) or `SIGNED` at that store. 구독 · 정산 are outside the first
   phase and reported as unchecked (`isSubscriptionChecked: false`).
-- **폐점 is blocked only by an open check-in** (2026-11-04, see 「Closing a store」 below). Until then it
+- **Of the closing checks, only an open check-in blocks 폐점** (2026-11-04, see 「Closing a store」 below; an
+  inactive BP or an already closed store is still a 409, as for any edit). Until then it
   also needed no contract in progress; now the pending contracts are ended by the closing itself and a
   `SIGNED` one stays. 폐점 sets `closed_date` to today in Korea and takes no reason; admin mappings stay.
 - **삭제** is 미운영 only and a flag (`is_deleted`). A 폐점 store is kept, read-only.
@@ -221,9 +226,12 @@ are.[^store-closings-service][^store-closing-response]
 - **`check(client, storeIds)`** — read only, no lock. Per store and in total: open check-ins
   (`count` that can be named, `hiddenCount` of staff hidden from 본사 roles, the earliest nameable one as
   `first`), staff that will retire, pending contracts that will end by status, unconfirmed payslips.
-  `isBlocked` is `count + hiddenCount > 0`; everything else is only reported. An unknown or deleted id is a 404.
+  `isBlocked` is `count + hiddenCount > 0`; everything else is only reported. An unknown or deleted id is a 404
+  naming the ids. A store missing from the name lookup is a 500, not an empty name — it cannot happen after
+  that 404, so it means a broken contract.
 - **`close(tx, storeIds, adminAccountId)`** — inside the caller's transaction: lock every store row in
-  ascending id `FOR NO KEY UPDATE` (404 if one is gone, 409 「이미 폐점한 점포입니다.」 if one is closed),
+  ascending id `FOR NO KEY UPDATE` (404 if one is gone, 409 「이미 폐점한 점포입니다.」 if one is closed — both
+  name the store ids, for the multi-store callers),
   then `retireStores` (it locks staff then accounts, re-checks open check-ins and refuses with 409
   `OPEN_CHECK_IN` + `storeId`, sets retirement dates, ends pending contracts, expires invitations), then
   `CLOSED` · `closed_date` (Korean today) and one 점포상태 history row per store. A 3팀 exception is not
@@ -232,9 +240,13 @@ are.[^store-closings-service][^store-closing-response]
   `FOR NO KEY UPDATE` instead of the `FOR UPDATE` of `lockStore`, so attendance, work-schedule and TO-DO
   inserts (foreign-key `FOR KEY SHARE`) do not deadlock against a closing. The caller runs the transaction
   with `STORE_CLOSING_TRANSACTION_TIMEOUT_MS` (30 s; Prisma's 5 s is too short for a store with many
-  staff) and wraps it in `retryOnDeadlock`: a `40P01` (`P2034`, or `P2010` carrying the SQLSTATE) is
-  retried once from the start — the path that still takes staff before store (contract resend) can
-  deadlock, and the rolled-back attempt left nothing. Several stores are always locked in ascending id.
+  staff) and wraps it in `retryOnDeadlock`. Paths that lock in the opposite order still exist and can
+  deadlock with a closing — contract resend (staff, then store `FOR SHARE`), and adding a workplace or
+  accepting an affiliation request (account, then staff). A deadlock (`P2034` — adapter-pg maps both
+  `40P01` and `40001` to it, and under READ COMMITTED it is a deadlock — or `P2010` whose message carries
+  ``Code: `40P01` ``) is logged as a warning and retried once from the start; the rolled-back attempt
+  left nothing. A second deadlock is a **409** 「다른 처리와 겹쳐 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤
+  다시 시도해 주세요.」 rather than a bare 500. Several stores are always locked in ascending id.
 - **The price of `FOR NO KEY UPDATE`: new rows can still arrive during the closing.** A `FOR UPDATE` on the
   store blocked every insert that references it (foreign key `FOR KEY SHARE`); `FOR NO KEY UPDATE` lets them
   through. So a staff record or contract created while the closing runs — after `retireStores` has read the
