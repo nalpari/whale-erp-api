@@ -49,6 +49,23 @@ export interface StoreClosingRetirementResult {
   expiredInvitations: number;
 }
 
+/** `retireStores` 의 반환값 — 넘긴 점포마다의 결과와 합계. */
+export interface StoresClosingRetirementResult {
+  /** 넘긴 점포 id 마다 (직원이 없어도 0 칸으로) */
+  byStore: Record<number, StoreClosingRetirementResult>;
+  /** 점포별 결과의 합계 */
+  total: StoreClosingRetirementResult;
+}
+
+const emptyResult = (): StoreClosingRetirementResult => ({
+  retiringStaff: 0,
+  pulledForwardStaff: 0,
+  draftContracts: 0,
+  pendingSendContracts: 0,
+  pendingSignatureContracts: 0,
+  expiredInvitations: 0,
+});
+
 /** 퇴직을 확정하는 쪽. 배치면 SYSTEM, 지난 날짜로 바로 처리하면 그 관리자다. */
 type Finalizer =
   { actor: 'SYSTEM' } | { actor: 'ADMIN'; adminAccountId: number };
@@ -258,7 +275,7 @@ export class RetirementService {
    *
    * 잠금 순서는 점포(1팀이 먼저) → 직원 → 계정이다. 그 점포의 재직(EMPLOYED) 직원 행을 `staff_member_id` 오름차순으로
    * `FOR NO KEY UPDATE`, 그 직원들의 계정 행(중복 제거)을 `account_id` 오름차순으로 `FOR UPDATE` — `lockStaff` 의 직원 → 계정
-   * 순서를 따른다. 잠근 뒤 직원마다 열린 출근(`assertNoOpenCheckIn`, 퇴직 처리와 같은 기준)을 다시 보고 하나라도 있으면
+   * 순서를 따른다. 잠근 뒤 재직 레코드 전체의 열린 출근을 한 번의 쿼리로(`assertNoOpenCheckIn`, 퇴직 처리와 같은 기준) 보고 하나라도 있으면 가장 이른 것으로
    * 409 `OPEN_CHECK_IN` 으로 트랜잭션째 되돌린다.
    *
    * 폐점 순간 이 메소드가 하는 것:
@@ -288,12 +305,49 @@ export class RetirementService {
     adminAccountId: number,
     now: Date = new Date(),
   ): Promise<StoreClosingRetirementResult> {
+    const { byStore } = await this.retireStores(
+      tx,
+      [storeId],
+      closedDate,
+      adminAccountId,
+      now,
+    );
+    return byStore[storeId];
+  }
+
+  /**
+   * 점포 여러 개를 한 번에 폐점 퇴직 처리한다 (WHALEERP-651, 회원 탈퇴 시 소유 점포 자동 폐점). `retireStore` 와 같은 규칙을
+   * 점포 수만큼 쿼리가 늘지 않게 `IN` 으로 한 번씩 처리한다. 1팀이 같은 트랜잭션에서 점포 행을 **모두 id 오름차순으로 잠근 뒤**,
+   * 폐점 확인 다음에 부른다 (1팀 답 2026-11-04). 점포 하나도 `[storeId]` 로 부른다.
+   *
+   * - 잠금: 모든 점포의 재직(EMPLOYED) 직원 행을 `store_id IN (...)` 한 번에 `staff_member_id` 오름차순 `FOR NO KEY UPDATE`,
+   *   그 계정 행(중복 제거 — 한 계정이 여러 점포에 레코드가 있어도 한 번)을 `account_id` 오름차순 `FOR UPDATE` 한 번.
+   * - 열린 출근: 잠근 뒤 재직 레코드 전체를 한 번의 쿼리로 본다(`assertNoOpenCheckIn` 과 같은 기준). 있으면 409 `OPEN_CHECK_IN`
+   *   (본문에 `storeId` — 가장 이른 열린 출근의 점포)으로 트랜잭션째 되돌린다.
+   * - 퇴직일 · 퇴직될 직원 수 · 초대 만료 · 대기 계약 종료는 `retireStore` 와 같은 규칙. 점포별 수는 레코드의 `storeId` 칸에 더한다.
+   * - 퇴직 확정은 하지 않는다(다음 날 `retireDue`). 예외는 삼키지 않는다. 직원 알림 없음.
+   *
+   * @param storeIds 중복은 한 번으로 본다. 빈 배열이면 쿼리 없이 0 을 돌려준다.
+   */
+  async retireStores(
+    tx: Tx,
+    storeIds: number[],
+    closedDate: Date,
+    adminAccountId: number,
+    now: Date = new Date(),
+  ): Promise<StoresClosingRetirementResult> {
+    const ids = [...new Set(storeIds)].sort((x, y) => x - y);
+    const byStore: Record<number, StoreClosingRetirementResult> = {};
+    for (const id of ids) byStore[id] = emptyResult();
+    const total = emptyResult();
+    const result = { byStore, total };
+    if (ids.length === 0) return result;
     const closed = kstToday(closedDate);
 
     // 점포(1팀) → 직원 → 계정 순으로 잠근다. FOR NO KEY UPDATE 는 잠근 뒤의 행 값으로 조건을 다시 본다.
     const locked = await tx.$queryRaw<
       { staff_member_id: number; account_id: number | null }[]
-    >`SELECT staff_member_id, account_id FROM staff_members WHERE store_id = ${storeId} AND employment_status = 'EMPLOYED' ORDER BY staff_member_id FOR NO KEY UPDATE`;
+    >`SELECT staff_member_id, account_id FROM staff_members WHERE store_id IN (${Prisma.join(ids)}) AND employment_status = 'EMPLOYED' ORDER BY staff_member_id FOR NO KEY UPDATE`;
     const accountIds = [
       ...new Set(
         locked.flatMap(({ account_id }) =>
@@ -304,26 +358,49 @@ export class RetirementService {
     if (accountIds.length > 0)
       await tx.$queryRaw`SELECT 1 FROM accounts WHERE account_id IN (${Prisma.join(accountIds)}) ORDER BY account_id FOR UPDATE`;
 
-    for (const { staff_member_id } of locked)
-      await assertNoOpenCheckIn(tx, staff_member_id);
+    const lockedIds = locked.map((l) => l.staff_member_id);
+    if (lockedIds.length > 0)
+      await assertNoOpenCheckIn(tx, { in: lockedIds }, true);
 
     // 조회와 잠금 사이에 생긴 재직 레코드는 퇴직되지 않을 수 있다 — 1팀이 점포를 FOR UPDATE 로 잡는 동안은 새 직원 레코드 insert(외래키)가
     // 막히지만, FOR NO KEY UPDATE 로 바꾸면 틈이 생긴다. 짧은 틈이라 받아들인 위험(2026-11-03 노영주).
     // 임시저장만 있던 가입 전 레코드도 퇴직일은 정한다 — 아래에서 그 임시저장이 닫혀 재직으로 세지므로(CTR-29) 퇴직일을 정해 둬야
     // 다음 날 배치가 확정한다.
-    const members = await tx.staffMember.findMany({
-      where: { staffMemberId: { in: locked.map((l) => l.staff_member_id) } },
-      select: { staffMemberId: true, joinStatus: true, retiredDate: true },
-      orderBy: { staffMemberId: 'asc' },
-    });
-    let retiringStaff = 0;
-    let pulledForwardStaff = 0;
-    for (const { staffMemberId, joinStatus, retiredDate } of members) {
-      // 퇴직될 직원으로 세는 기준(폐점 확인 647 과 같다)은 계약을 닫기 전에 판정한다 — 이 루프는 계약을 닫기 전이다
-      const counted = !(await this.isDraftOnlyPreJoin(tx, staffMemberId, {
-        joinStatus,
-      }));
-      if (counted) retiringStaff += 1;
+    const members =
+      lockedIds.length === 0
+        ? []
+        : await tx.staffMember.findMany({
+            where: { staffMemberId: { in: lockedIds } },
+            select: {
+              staffMemberId: true,
+              storeId: true,
+              joinStatus: true,
+              retiredDate: true,
+            },
+            orderBy: { staffMemberId: 'asc' },
+          });
+    // 퇴직될 직원으로 세는 기준(폐점 확인 647 과 같다)은 계약을 닫기 전에 판정한다 — 가입 전 레코드의 임시저장 아닌 계약을 한 번에 본다
+    const preJoinIds = members
+      .filter((m) => m.joinStatus !== 'JOINED')
+      .map((m) => m.staffMemberId);
+    const withSentContract = new Set(
+      preJoinIds.length === 0
+        ? []
+        : (
+            await tx.contract.groupBy({
+              by: ['staffMemberId'],
+              where: {
+                staffMemberId: { in: preJoinIds },
+                status: { not: 'DRAFT' },
+              },
+            })
+          ).map((g) => g.staffMemberId),
+    );
+    for (const { staffMemberId, storeId, joinStatus, retiredDate } of members) {
+      const mine = byStore[storeId];
+      const draftOnlyPreJoin =
+        joinStatus !== 'JOINED' && !withSentContract.has(staffMemberId);
+      if (!draftOnlyPreJoin) mine.retiringStaff += 1;
       if (retiredDate !== null && retiredDate <= closed) continue;
       if (retiredDate !== null) {
         await tx.staffMemberRetirementLog.create({
@@ -335,42 +412,66 @@ export class RetirementService {
             processedAt: now,
           },
         });
-        pulledForwardStaff += 1;
+        mine.pulledForwardStaff += 1;
       }
       await this.schedule(tx, adminAccountId, staffMemberId, closed, now);
     }
 
-    const ended = await this.endPendingContracts(tx, { storeId }, 'ADMIN');
-    const { count: expiredInvitations } = await tx.invitation.updateMany({
-      where: { status: 'SENT', staffMember: { storeId } },
+    for (const { status, storeId } of await this.endPendingContracts(
+      tx,
+      { storeId: { in: ids } },
+      'ADMIN',
+    )) {
+      if (storeId === null || !byStore[storeId]) continue;
+      const mine = byStore[storeId];
+      if (status === 'DRAFT') mine.draftContracts += 1;
+      else if (status === 'PENDING_SEND') mine.pendingSendContracts += 1;
+      else mine.pendingSignatureContracts += 1;
+    }
+
+    const expired = await tx.invitation.updateManyAndReturn({
+      where: { status: 'SENT', staffMember: { storeId: { in: ids } } },
       data: { status: 'EXPIRED' },
+      select: { staffMemberId: true },
     });
-    return {
-      retiringStaff,
-      pulledForwardStaff,
-      draftContracts: ended.DRAFT ?? 0,
-      pendingSendContracts: ended.PENDING_SEND ?? 0,
-      pendingSignatureContracts:
-        (ended.PENDING_SIGNATURE ?? 0) + (ended.CORRECTION_REQUESTED ?? 0),
-      expiredInvitations,
-    };
+    if (expired.length > 0) {
+      const records = await tx.staffMember.findMany({
+        where: {
+          staffMemberId: {
+            in: [...new Set(expired.map((e) => e.staffMemberId))],
+          },
+        },
+        select: { staffMemberId: true, storeId: true },
+      });
+      const storeOf = new Map(records.map((r) => [r.staffMemberId, r.storeId]));
+      for (const { staffMemberId } of expired) {
+        const storeId = storeOf.get(staffMemberId);
+        if (storeId !== undefined && byStore[storeId])
+          byStore[storeId].expiredInvitations += 1;
+      }
+    }
+
+    for (const mine of Object.values(byStore))
+      for (const key of Object.keys(total) as (keyof typeof total)[])
+        total[key] += mine[key];
+    return result;
   }
 
-  /** 대기 계약 4종을 종료로 닫고 상태 이력을 남긴다. 상태별로 닫은 수를 돌려준다. */
+  /** 대기 계약 4종을 종료로 닫고 상태 이력을 남긴다. 닫은 계약마다 (이전 상태, 점포)를 돌려준다. */
   private async endPendingContracts(
     tx: Tx,
     where: Prisma.ContractWhereInput,
     actor: StatusChangeActor,
-  ): Promise<Partial<Record<ContractStatus, number>>> {
-    const counts: Partial<Record<ContractStatus, number>> = {};
+  ): Promise<{ status: ContractStatus; storeId: number | null }[]> {
+    const closed: { status: ContractStatus; storeId: number | null }[] = [];
     for (const status of PENDING_CONTRACT_STATUSES) {
       const ended = await tx.contract.updateManyAndReturn({
         where: { ...where, status },
         data: { status: 'ENDED' },
-        select: { contractId: true },
+        select: { contractId: true, storeId: true },
       });
       if (ended.length === 0) continue;
-      counts[status] = ended.length;
+      closed.push(...ended.map(({ storeId }) => ({ status, storeId })));
       await tx.contractStatusHistory.createMany({
         data: ended.map(({ contractId }) => ({
           contractId,
@@ -380,7 +481,7 @@ export class RetirementService {
         })),
       });
     }
-    return counts;
+    return closed;
   }
 
   /** 지난 날짜면 배치를 기다리지 않고 지금 처리한 관리자로 확정한다. 오늘은 지난 날짜가 아니다. */
@@ -670,6 +771,18 @@ export class RetirementService {
   }
 }
 
+/** 열린 출근의 기준 — 보정할 수 있는 3개월 안, 짝 퇴근이 없는 출근. 단건 · 일괄 퇴직 처리가 같이 쓴다. */
+function openCheckInWhere(
+  staffMemberId: number | { in: number[] },
+): Prisma.AttendanceRecordWhereInput {
+  return {
+    staffMemberId,
+    kind: 'CHECK_IN',
+    attendanceRecordsAsCheckIn: { none: {} },
+    recordedAt: { gte: editableStart() },
+  };
+}
+
 /**
  * 그 점포(직원 레코드)에 퇴근하지 않은 출근이 있으면 퇴직 처리(퇴직일 저장)를 막는다 — 퇴직한 소속에 아무도 닫을 수 없는 열린 출근이
  * 남지 않게, 먼저 보정으로 닫게 한다(2026-10-27 재영). 보정할 수 있는 기간(3개월)보다 오래 열린 출근은 닫을 수 없어 막지 않는다.
@@ -677,17 +790,13 @@ export class RetirementService {
  */
 async function assertNoOpenCheckIn(
   tx: Pick<Tx, 'attendanceRecord'>,
-  staffMemberId: number,
+  staffMemberId: number | { in: number[] },
+  withStoreId = false,
 ): Promise<void> {
   const open = await tx.attendanceRecord.findFirst({
-    where: {
-      staffMemberId,
-      kind: 'CHECK_IN',
-      attendanceRecordsAsCheckIn: { none: {} },
-      recordedAt: { gte: editableStart() },
-    },
-    orderBy: { recordedAt: 'asc' },
-    select: { recordedAt: true },
+    where: openCheckInWhere(staffMemberId),
+    orderBy: [{ recordedAt: 'asc' }, { attendanceRecordId: 'asc' }],
+    select: { recordedAt: true, storeId: true },
   });
   if (!open) return;
   const day = kstToday(open.recordedAt);
@@ -701,5 +810,7 @@ async function assertNoOpenCheckIn(
     message: working
       ? `${at} 출근이 아직 퇴근 전입니다. 퇴근이 등록된 뒤 다시 처리해 주세요.`
       : `${at} 퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 먼저 보정으로 닫아 주세요.`,
+    // 점포 폐점(retireStore · retireStores)은 어느 점포인지 storeId 를 더한다 — 단건 퇴직 retire · changeDate 의 본문은 그대로
+    ...(withStoreId && { storeId: open.storeId }),
   });
 }

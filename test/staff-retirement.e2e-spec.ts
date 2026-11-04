@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -1252,6 +1253,204 @@ describe('퇴직 처리 (e2e, DB)', () => {
         pendingSignatureContracts: 0,
         expiredInvitations: 0,
       });
+    });
+  });
+
+  describe('점포 여러 개 폐점 순간의 퇴직 retireStores (WHALEERP-651)', () => {
+    const newClosingStore = async () => {
+      const n = randomInt(100_000, 999_999);
+      const { storeId: id } = await prisma.store.create({
+        data: {
+          storeCode: `ST${n}`,
+          bpCodeId,
+          storeTypeCode: 'DIRECT',
+          name: '다점포 폐점 테스트 점포',
+          storeStatusCode: 'OPERATING',
+        },
+      });
+      closingStoreIds.push(id);
+      return id;
+    };
+    /** 회원 탈퇴 api 와 같이 — 점포 행을 모두 id 오름차순으로 FOR UPDATE 로 잡은 뒤 한 번 부른다. */
+    const closingTx = (ids: number[], closedDate: Date) =>
+      prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT 1 FROM stores WHERE store_id IN (${Prisma.join(ids)}) ORDER BY store_id FOR UPDATE`;
+        return retirement.retireStores(tx, ids, closedDate, adminId);
+      });
+    const zero = {
+      retiringStaff: 0,
+      pulledForwardStaff: 0,
+      draftContracts: 0,
+      pendingSendContracts: 0,
+      pendingSignatureContracts: 0,
+      expiredInvitations: 0,
+    };
+    const inviteOf = (staffMemberId: number) =>
+      prisma.invitation.create({
+        data: {
+          staffMemberId,
+          invitationType: 'REINVITE',
+          invitationToken: `tok-${randomInt(10_000_000, 99_999_999)}-${randomInt(10_000_000, 99_999_999)}`,
+          channel: 'ALIMTALK',
+          sentAt: new Date(),
+          expiresAt: addDays(today, 30),
+          status: 'SENT',
+        },
+      });
+
+    it('두 점포(한 계정이 양쪽에 레코드) — 점포별 · 합계 결과, 다른 점포는 그대로, 이어서 retireDue 가 확정한다', async () => {
+      const a = await newClosingStore();
+      const b = await newClosingStore();
+      const empty = await newClosingStore();
+      const inA = await createStaff('JOINED', null, a);
+      const inB = await createStaff('JOINED', null, b);
+      // 한 계정이 두 점포에 레코드가 있다
+      const { accountId } = await prisma.staffMember.findUniqueOrThrow({
+        where: { staffMemberId: inA },
+        select: { accountId: true },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId: inB },
+        data: { accountId },
+      });
+      const laterB = await createStaff('JOINED', null, b);
+      await prisma.staffMember.update({
+        where: { staffMemberId: laterB },
+        data: { retiredDate: day(7) },
+      });
+      const other = await createStaff('JOINED', null, storeId);
+      const draftA = await contractOf(inA, 'DRAFT', day(1), null, a);
+      const sendB = await contractOf(inB, 'PENDING_SEND', day(1), null, b);
+      const signB = await contractOf(
+        laterB,
+        'PENDING_SIGNATURE',
+        day(1),
+        null,
+        b,
+      );
+      const otherDraft = await contractOf(other, 'DRAFT', day(1), null);
+      const invA = await inviteOf(inA);
+      const invB = await inviteOf(laterB);
+      const invOther = await inviteOf(other);
+
+      // 넘기는 순서가 뒤섞여도 중복이 있어도 된다
+      const result = await closingTx([b, a, empty, a], day(0));
+
+      expect(result.byStore).toEqual({
+        [a]: {
+          ...zero,
+          retiringStaff: 1,
+          draftContracts: 1,
+          expiredInvitations: 1,
+        },
+        [b]: {
+          ...zero,
+          retiringStaff: 2,
+          pulledForwardStaff: 1,
+          pendingSendContracts: 1,
+          pendingSignatureContracts: 1,
+          expiredInvitations: 1,
+        },
+        [empty]: zero,
+      });
+      expect(result.total).toEqual({
+        retiringStaff: 3,
+        pulledForwardStaff: 1,
+        draftContracts: 1,
+        pendingSendContracts: 1,
+        pendingSignatureContracts: 1,
+        expiredInvitations: 2,
+      });
+      expect(await staffOf(inA)).toMatchObject({
+        employmentStatus: 'EMPLOYED',
+        retiredDate: day(0),
+      });
+      expect(
+        (await logsOf(laterB)).map((l) => [l.action, l.retiredDate]),
+      ).toEqual([
+        ['CANCEL', day(7)],
+        ['RETIRE', day(0)],
+      ]);
+      expect(
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId: draftA.contractId },
+        }),
+      ).toMatchObject({ status: 'ENDED' });
+      expect(
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId: sendB.contractId },
+        }),
+      ).toMatchObject({ status: 'ENDED' });
+      expect(
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId: signB.contractId },
+        }),
+      ).toMatchObject({ status: 'ENDED' });
+      expect(
+        await prisma.contract.findUniqueOrThrow({
+          where: { contractId: otherDraft.contractId },
+        }),
+      ).toMatchObject({ status: 'DRAFT' });
+      const statusOf = async (invitationId: number) =>
+        (await prisma.invitation.findUniqueOrThrow({ where: { invitationId } }))
+          .status;
+      expect(await statusOf(invA.invitationId)).toBe('EXPIRED');
+      expect(await statusOf(invB.invitationId)).toBe('EXPIRED');
+      expect(await statusOf(invOther.invitationId)).toBe('SENT');
+      expect(await staffOf(other)).toMatchObject({ retiredDate: null });
+
+      // 다음 날 배치가 확정한다
+      await prisma.$transaction((tx) => retirement.retireDue(tx, day(1)));
+      for (const id of [inA, inB, laterB])
+        expect(await staffOf(id)).toMatchObject({
+          employmentStatus: 'RETIRED',
+        });
+      expect(await staffOf(other)).toMatchObject({
+        employmentStatus: 'EMPLOYED',
+      });
+    });
+
+    it('열린 출근이 한 점포에만 있어도 409(storeId) 이고 두 점포 모두 롤백된다', async () => {
+      const a = await newClosingStore();
+      const b = await newClosingStore();
+      const inA = await createStaff('JOINED', null, a);
+      const working = await createStaff('JOINED', null, b);
+      const pending = await contractOf(inA, 'PENDING_SEND', day(1), null, a);
+      const inv = await inviteOf(inA);
+      await prisma.attendanceRecord.create({
+        data: {
+          staffMemberId: working,
+          storeId: b,
+          kind: 'CHECK_IN',
+          recordedAt: new Date(Date.now() - 60 * 60_000),
+          receivedAt: new Date(),
+        },
+      });
+
+      const err = await closingTx([a, b], day(0)).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).getResponse()).toMatchObject({
+        statusCode: 409,
+        code: 'OPEN_CHECK_IN',
+        storeId: b,
+      });
+      expect(await staffOf(inA)).toMatchObject({ retiredDate: null });
+      expect(await staffOf(working)).toMatchObject({ retiredDate: null });
+      expect(
+        (
+          await prisma.contract.findUniqueOrThrow({
+            where: { contractId: pending.contractId },
+          })
+        ).status,
+      ).toBe('PENDING_SEND');
+      expect(
+        (
+          await prisma.invitation.findUniqueOrThrow({
+            where: { invitationId: inv.invitationId },
+          })
+        ).status,
+      ).toBe('SENT');
     });
   });
 
