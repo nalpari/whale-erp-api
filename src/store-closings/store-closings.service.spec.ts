@@ -1,10 +1,16 @@
 // mock 의 호출 인자를 깊이 들여다보는 검사라 any 를 그대로 읽는다.
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
 import { RetirementService } from '../staff-members/retirement.service';
 import { storeClosingCheck } from '../staff-members/store-closing-check';
+import { retainEndDate } from '../stores/store-format';
 import {
   StoreClosingsService,
   retryOnDeadlock,
@@ -130,6 +136,19 @@ describe('StoreClosingsService', () => {
       expect(result.isBlocked).toBe(true);
     });
 
+    it('점포명을 찾지 못하면 빈 이름으로 숨기지 않고 500', async () => {
+      checkMock.mockResolvedValue({
+        stores: [
+          { storeId: 11, ...counts() },
+          { storeId: 99, ...counts() },
+        ],
+        total: counts(),
+      });
+      await expect(
+        service.check(client as any, [11, 99], NOW),
+      ).rejects.toBeInstanceOf(InternalServerErrorException);
+    });
+
     it('빈 목록이면 아무것도 묻지 않는다', async () => {
       checkMock.mockResolvedValue({ stores: [], total: counts() });
       const result = await service.check(client as any, [], NOW);
@@ -202,13 +221,16 @@ describe('StoreClosingsService', () => {
       });
       const rows = client.storeChangeHistory.createMany.mock.calls[0][0].data;
       expect(rows).toEqual([
-        expect.objectContaining({
+        {
           storeId: 11,
           field: '점포상태',
           beforeValue: '운영',
           afterValue: '폐점',
           changedBy: 7,
-        }),
+          changedAt: NOW,
+          // 이력 조회는 보존 기한이 오늘(한국) 이후인 것만 보인다 — 틀리면 폐점 이력이 화면에서 사라진다
+          retainEndDate: retainEndDate(NOW),
+        },
         expect.objectContaining({
           storeId: 12,
           beforeValue: '미운영',
@@ -248,19 +270,24 @@ describe('StoreClosingsService', () => {
       expect(client.storeChangeHistory.createMany).not.toHaveBeenCalled();
     });
 
-    it('잠근 뒤 보니 없거나 지운 점포가 섞이면 404', async () => {
+    it('잠근 뒤 보니 지운 점포가 섞이면 404 — 문구에 그 점포 id', async () => {
       locked([
         { storeId: 11, name: '강남점', storeCode: 'ST000011' },
         { storeId: 12, name: '역삼점', storeCode: 'ST000012', isDeleted: true },
       ]);
       await expect(
         service.close(client as any, [11, 12], 7, NOW),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      ).rejects.toThrow(new NotFoundException('점포를 찾을 수 없습니다. (12)'));
+      expect(retire.retireStores).not.toHaveBeenCalled();
+    });
 
+    it('잠근 뒤 보니 행이 없는 점포가 섞이면 404 — 문구에 그 점포 id', async () => {
       locked([{ storeId: 11, name: '강남점', storeCode: 'ST000011' }]);
       await expect(
-        service.close(client as any, [11, 12], 7, NOW),
-      ).rejects.toBeInstanceOf(NotFoundException);
+        service.close(client as any, [11, 12, 13], 7, NOW),
+      ).rejects.toThrow(
+        new NotFoundException('점포를 찾을 수 없습니다. (12, 13)'),
+      );
       expect(retire.retireStores).not.toHaveBeenCalled();
     });
 
@@ -276,8 +303,18 @@ describe('StoreClosingsService', () => {
       ]);
       await expect(
         service.close(client as any, [11, 12], 7, NOW),
-      ).rejects.toThrow(new ConflictException('이미 폐점한 점포입니다.'));
+      ).rejects.toThrow(new ConflictException('이미 폐점한 점포입니다. (12)'));
       expect(retire.retireStores).not.toHaveBeenCalled();
+    });
+
+    it('3팀 결과에 점포가 빠지면 「처리 0건」으로 숨기지 않고 500', async () => {
+      retire.retireStores.mockResolvedValue({
+        byStore: { 11: retirement(2) },
+        total: retirement(2),
+      });
+      await expect(
+        service.close(client as any, [11, 12], 7, NOW),
+      ).rejects.toBeInstanceOf(InternalServerErrorException);
     });
 
     it('빈 목록이면 아무것도 잠그거나 쓰지 않는다', async () => {
@@ -295,36 +332,67 @@ describe('retryOnDeadlock', () => {
       code: 'P2034',
       clientVersion: 'test',
     });
+  let warn: jest.SpyInstance;
 
-  it('교착이면 한 번 다시 한다', async () => {
+  beforeEach(() => {
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => warn.mockRestore());
+
+  it('교착이면 경고를 남기고 한 번 다시 한다', async () => {
     const run = jest
       .fn()
       .mockRejectedValueOnce(deadlock())
       .mockResolvedValueOnce('ok');
-    await expect(retryOnDeadlock(run)).resolves.toBe('ok');
+    await expect(retryOnDeadlock(run, '점포 11')).resolves.toBe('ok');
     expect(run).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('점포 11');
   });
 
-  it('원시 쿼리의 40P01 도 교착으로 본다', async () => {
+  it('원시 쿼리(P2010)의 40P01 도 교착으로 본다', async () => {
     const raw = new Prisma.PrismaClientKnownRequestError(
       'Raw query failed. Code: `40P01`. Message: `deadlock detected`',
       { code: 'P2010', clientVersion: 'test' },
     );
     const run = jest.fn().mockRejectedValueOnce(raw).mockResolvedValue('ok');
-    await expect(retryOnDeadlock(run)).resolves.toBe('ok');
+    await expect(retryOnDeadlock(run, '점포 11')).resolves.toBe('ok');
   });
 
-  it('두 번째도 교착이면 그 오류를 던진다', async () => {
-    const error = deadlock();
-    const run = jest.fn().mockRejectedValue(error);
-    await expect(retryOnDeadlock(run)).rejects.toBe(error);
+  it('P2010 이라도 다른 SQLSTATE 면 다시 하지 않는다', async () => {
+    const raw = new Prisma.PrismaClientKnownRequestError(
+      'Raw query failed. Code: `23505`. Message: `duplicate key`',
+      { code: 'P2010', clientVersion: 'test' },
+    );
+    const run = jest.fn().mockRejectedValue(raw);
+    await expect(retryOnDeadlock(run, '점포 11')).rejects.toBe(raw);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it('두 번째도 교착이면 500 이 아니라 409 「바뀐 것 없음 · 다시 시도」', async () => {
+    const run = jest.fn().mockRejectedValue(deadlock());
+    await expect(retryOnDeadlock(run, '점포 11')).rejects.toThrow(
+      new ConflictException(
+        '다른 처리와 겹쳐 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.',
+      ),
+    );
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('다시 한 쪽이 교착이 아닌 오류면 그 오류를 그대로 던진다', async () => {
+    const error = new ConflictException({ code: 'OPEN_CHECK_IN' });
+    const run = jest
+      .fn()
+      .mockRejectedValueOnce(deadlock())
+      .mockRejectedValueOnce(error);
+    await expect(retryOnDeadlock(run, '점포 11')).rejects.toBe(error);
   });
 
   it('교착이 아닌 오류는 다시 하지 않는다', async () => {
     const error = new ConflictException('x');
     const run = jest.fn().mockRejectedValue(error);
-    await expect(retryOnDeadlock(run)).rejects.toBe(error);
+    await expect(retryOnDeadlock(run, '점포 11')).rejects.toBe(error);
     expect(run).toHaveBeenCalledTimes(1);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

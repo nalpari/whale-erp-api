@@ -1,6 +1,8 @@
 import {
   ConflictException,
   Injectable,
+  InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -20,8 +22,14 @@ import type {
 type Tx = Prisma.TransactionClient;
 
 const CLOSED = 'CLOSED';
-const NOT_FOUND = '점포를 찾을 수 없습니다';
+/** 문구 끝에 점포 id 를 괄호로 붙인다 — 3팀 확인의 404 와 같은 모양. 여러 점포를 닫는 탈퇴에서 어느 점포인지 알게 한다 */
+const NOT_FOUND = '점포를 찾을 수 없습니다.';
 const ALREADY_CLOSED = '이미 폐점한 점포입니다.';
+/** 교착이 두 번 나면 — 모두 되돌아갔으므로 다시 하면 된다는 것을 알린다(500 이 아니라 409) */
+const BUSY =
+  '다른 처리와 겹쳐 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.';
+
+const logger = new Logger('StoreClosings');
 
 /**
  * 폐점 트랜잭션의 제한 시간. 직원이 많은 점포(또는 회원 탈퇴의 여러 점포)는 3팀 일괄 퇴직이 Prisma 기본 5초를 넘긴다
@@ -49,7 +57,7 @@ export class StoreClosingsService {
     now: Date = new Date(),
   ): Promise<StoreClosingCheckResponseDto> {
     const ids = sortedUnique(storeIds);
-    // 차례로 묻는다 — 3팀 확인이 먼저 없거나 지운 점포를 404 로 거른다(e2e 의 PGlite 는 연결을 하나만 받는다).
+    // 차례로 묻는다 — 3팀 확인이 먼저 없거나 지운 점포를 404 로 거르므로, 뒤의 이름 조회는 모든 id 를 찾는다.
     const result = await storeClosingCheck(client, ids, kstToday(now), now);
     const names = ids.length
       ? await client.store.findMany({
@@ -60,12 +68,17 @@ export class StoreClosingsService {
     const nameOf = new Map(names.map((s) => [s.storeId, s]));
     const total = withBlocked(result.total);
     return {
-      stores: result.stores.map(({ storeId, ...counts }) => ({
-        storeId,
-        storeName: nameOf.get(storeId)?.name ?? '',
-        storeCode: nameOf.get(storeId)?.storeCode ?? '',
-        ...withBlocked(counts),
-      })),
+      stores: result.stores.map(({ storeId, ...counts }) => {
+        // 3팀 확인이 404 로 거른 뒤라 늘 있다 — 없으면 빈 이름으로 숨기지 않고 계약이 깨진 것을 드러낸다.
+        const store = nameOf.get(storeId);
+        if (!store) throw contractBroken('점포명', storeId);
+        return {
+          storeId,
+          storeName: store.name,
+          storeCode: store.storeCode,
+          ...withBlocked(counts),
+        };
+      }),
       total,
       isBlocked: total.isBlocked,
     };
@@ -102,9 +115,15 @@ export class StoreClosingsService {
       }[]
     >`SELECT store_id AS "storeId", name, store_code AS "storeCode", store_status_code AS "storeStatusCode", is_deleted AS "isDeleted" FROM stores WHERE store_id IN (${Prisma.join(ids)}) ORDER BY store_id FOR NO KEY UPDATE`;
     const live = locked.filter((s) => !s.isDeleted);
-    if (live.length !== ids.length) throw new NotFoundException(NOT_FOUND);
-    if (live.some((s) => s.storeStatusCode === CLOSED))
-      throw new ConflictException(ALREADY_CLOSED);
+    const liveIds = new Set(live.map((s) => s.storeId));
+    const missing = ids.filter((id) => !liveIds.has(id));
+    if (missing.length)
+      throw new NotFoundException(`${NOT_FOUND} (${missing.join(', ')})`);
+    const closed = live.filter((s) => s.storeStatusCode === CLOSED);
+    if (closed.length)
+      throw new ConflictException(
+        `${ALREADY_CLOSED} (${closed.map((s) => s.storeId).join(', ')})`,
+      );
 
     const closedDate = kstToday(now);
     const { byStore, total } = await this.retirement.retireStores(
@@ -137,36 +156,69 @@ export class StoreClosingsService {
     });
 
     return {
-      stores: live.map((s) => ({
-        storeId: s.storeId,
-        storeName: s.name,
-        storeCode: s.storeCode,
-        ...(byStore[s.storeId] ?? emptyRetirement()),
-      })),
+      stores: live.map((s) => {
+        // 3팀이 넘긴 id 마다 0 칸이라도 채운다 — 없으면 「처리 0건」으로 숨기지 않는다(그 결과를 사용자에게 안내한다).
+        const done = byStore[s.storeId];
+        if (!done) throw contractBroken('처리 결과', s.storeId);
+        return {
+          storeId: s.storeId,
+          storeName: s.name,
+          storeCode: s.storeCode,
+          ...done,
+        };
+      }),
       total,
     };
   }
 }
 
 /**
- * 교착(40P01)이면 한 번 다시 한다 — 폐점의 점포 → 직원 → 계정 순서와 계약 재발송(직원 → 점포) 등 반대 순서 경로가 엇갈리면
- * PostgreSQL 이 한쪽을 되돌린다(okf/api/staff-retirement.md 「1팀이 정할 것」 2). 되돌린 쪽은 아무것도 남기지 않았으므로 처음부터
- * 다시 해도 된다. 두 번째도 교착이면 그 오류를 던진다.
+ * 교착이면 한 번 다시 한다 — 폐점은 점포 → 직원 → 계정 순으로 잠그는데, 반대 순서로 잠그는 경로가 남아 있다: 계약 재발송(직원 →
+ * 점포 `FOR SHARE`), 근무지 추가 · 소속 추가 확인 수락(계정 → 직원). 엇갈리면 PostgreSQL 이 한쪽을 되돌린다(okf/api/staff-retirement.md
+ * 「1팀이 정할 것」 2). 되돌린 쪽은 아무것도 남기지 않았으므로 처음부터 다시 해도 된다. 첫 교착은 경고로 남기고(얼마나 부딪히는지 보려고),
+ * 두 번째도 교착이면 409 로 「바뀐 것 없음 · 다시 시도」를 알린다 — 그대로 두면 설명 없는 500 이다. 교착이 아닌 오류는 그대로 던진다.
+ *
+ * @param label 경고에 남길 대상(예: 점포 id)
  */
-export async function retryOnDeadlock<T>(run: () => Promise<T>): Promise<T> {
+export async function retryOnDeadlock<T>(
+  run: () => Promise<T>,
+  label: string,
+): Promise<T> {
   try {
     return await run();
   } catch (error) {
     if (!isDeadlock(error)) throw error;
-    return run();
+    logger.warn(`폐점 교착 — 한 번 다시 한다 (${label}): ${error.message}`);
+  }
+  try {
+    return await run();
+  } catch (error) {
+    if (!isDeadlock(error)) throw error;
+    logger.warn(`폐점 교착 — 다시 해도 겹쳐 409 (${label}): ${error.message}`);
+    throw new ConflictException(BUSY);
   }
 }
 
-function isDeadlock(error: unknown): boolean {
+/**
+ * 교착 · 쓰기 충돌인가. 일반 쿼리는 P2034 — adapter-pg 가 SQLSTATE 40P01(교착)과 40001(직렬화 실패)을 TransactionWriteConflict
+ * 로 바꾼다. READ COMMITTED 라 실제로는 교착이다. 원시 쿼리(점포 · 직원 · 계정 잠금)는 P2010 이고 메시지에
+ * 「Raw query failed. Code: `40P01`」로 실린다. meta 는 Error 객체를 담아 직렬화하다 다른 오류가 날 수 있어 보지 않는다.
+ */
+function isDeadlock(
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError {
   if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
-  // 일반 쿼리는 P2034(adapter-pg 가 40P01 을 TransactionWriteConflict 로 바꾼다), 원시 쿼리는 P2010 의 메시지에
-  // 「Raw query failed. Code: `40P01`」로 실린다. meta 는 Error 객체를 담아 직렬화하다 다른 오류가 날 수 있어 보지 않는다.
-  return error.code === 'P2034' || error.message.includes('40P01');
+  return (
+    error.code === 'P2034' ||
+    (error.code === 'P2010' && error.message.includes('Code: `40P01`'))
+  );
+}
+
+/** 3팀 함수가 약속을 어겼다 — 그럴듯한 빈 값 대신 500 으로 드러낸다 */
+function contractBroken(what: string, storeId: number) {
+  return new InternalServerErrorException(
+    `폐점 ${what}에 점포 ${storeId} 가 없습니다.`,
+  );
 }
 
 function withBlocked(counts: StoreClosingCounts): StoreClosingCountsDto {

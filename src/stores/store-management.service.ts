@@ -707,7 +707,7 @@ export class StoreManagementService implements OnModuleInit {
           ? { timeout: STORE_CLOSING_TRANSACTION_TIMEOUT_MS }
           : undefined,
       );
-    return isClosing ? retryOnDeadlock(save) : save();
+    return isClosing ? retryOnDeadlock(save, `점포 ${storeId}`) : save();
   }
 
   /** update 의 트랜잭션 몸통. 폐점이면 폐점 서비스의 결과를, 아니면 null 을 돌려준다. */
@@ -1058,8 +1058,9 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   /**
-   * 운영 · 폐점 · 삭제 가능 여부. 폐점은 퇴근하지 않은 출근이 있을 때만 막는다(폐점 확인 — 대기 계약은 폐점이 닫는다). 삭제는
-   * 지금처럼 진행 중인 근로계약이 없어야 한다. 이미 폐점한 점포는 폐점 확인을 하지 않는다(closing null).
+   * 운영 · 폐점 · 삭제 가능 여부. 폐점은 소속 BP 사용 중 · 폐점 아님 · 퇴근하지 않은 출근 없음(폐점 확인)일 때 — 진행 중인 근로계약은
+   * 막지 않는다(대기 계약은 폐점이 종료하고 체결 완료는 남는다). 삭제는 소속 BP 사용 중 · 미운영 · 진행 중인 근로계약 없음일 때.
+   * 이미 폐점한 점포는 폐점 확인을 하지 않는다(closing null).
    */
   private async transitionsOf(
     store: StoreDetailRow,
@@ -1070,7 +1071,7 @@ export class StoreManagementService implements OnModuleInit {
       ? null
       : await this.closings.check(this.prisma, [store.storeId]);
     const isBpActive = store.bpCode.accountStatusCode === 'ACTIVE';
-    const canClose = isBpActive && !isClosed && !closing!.isBlocked;
+    const canClose = isBpActive && closing !== null && !closing.isBlocked;
     return {
       missingForOperation: missingForOperation({
         bizRegistrationNumber:

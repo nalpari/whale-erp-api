@@ -98,7 +98,7 @@ export class StoreTransitionCheckResponseDto {
     isArray: true,
   })
   missingForOperation: OperationRequirement[];
-  /** 진행 중인 근로계약 수 — 거부 · 만료 · 종료되지 않은 계약. 0 이어야 삭제된다(폐점은 막지 않는다 — 대기 계약은 폐점이 닫는다). */
+  /** 진행 중인 근로계약 수 — 거부 · 만료 · 종료되지 않은 계약. 0 이어야 삭제된다(폐점은 막지 않는다 — 대기 계약은 폐점이 종료하고 체결 완료는 남는다). */
   inProgressContractCount: number;
   /** 폐점할 수 있는가 — 소속 BP 사용 중 · 폐점 아님 · 퇴근하지 않은 출근 없음(closing.isBlocked false) */
   canClose: boolean;

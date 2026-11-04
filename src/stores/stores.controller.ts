@@ -261,7 +261,8 @@ export class StoresController {
 
   /**
    * 수정 · 상태 전환. 상세에서 받은 updatedAt 을 함께 보낸다 — 그 사이 다른 사람이 고쳤으면 409.
-   * 폐점이면 같은 트랜잭션에서 소속 직원 퇴직(퇴직일 오늘) · 대기 계약 종료 · 초대 만료를 하고, 처리한 수를 closing 으로 준다.
+   * 폐점이면 같은 트랜잭션에서 소속 직원의 퇴직일을 폐점일로 정하고(이미 더 이르면 그대로) 대기 계약 종료 · 초대 만료를 하고,
+   * 처리한 수를 closing 으로 준다.
    */
   @Put(':id')
   @MenuPermission('update')
@@ -271,7 +272,7 @@ export class StoresController {
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
     description:
-      '동시 수정 · 폐점한 점포 · 소속 BP 미사용 · 사업자등록번호 중복 · 퇴근하지 않은 출근(폐점, code OPEN_CHECK_IN · storeId — 출퇴근 현황에서 보정 뒤 다시)',
+      '동시 수정 · 폐점한 점포 · 소속 BP 미사용 · 사업자등록번호 중복 · 퇴근하지 않은 출근(폐점, code OPEN_CHECK_IN · storeId — 퇴근 등록 또는 출퇴근 현황 보정 뒤 다시) · 다른 처리와 겹침(폐점, 교착이 다시 해도 나면 — 바뀐 것 없음, 다시 시도)',
   })
   @ApiServiceUnavailableResponse({
     description: '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함',
