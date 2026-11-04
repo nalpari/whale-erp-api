@@ -511,6 +511,15 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     ]);
   });
 
+  // 폐점 교착 판정(retryOnDeadlock)은 원시 쿼리 오류를 메시지의 「Code: `SQLSTATE`」로 알아본다 — Prisma 를 올리다 형식이
+  // 바뀌면 단위 테스트(손으로 쓴 메시지)는 계속 통과하므로, 실제 클라이언트가 내는 형식을 다른 SQLSTATE(0 으로 나눔)로 고정한다.
+  it('원시 쿼리 오류는 P2010 이고 메시지에 「Code: `SQLSTATE`」가 실린다', async () => {
+    await expect(prisma.$queryRaw`SELECT 1/0`).rejects.toMatchObject({
+      code: 'P2010',
+      message: expect.stringContaining('Code: `22012`') as string,
+    });
+  });
+
   it('퇴근하지 않은 출근이 있으면 폐점할 수 없다고 알리고, 저장은 409 OPEN_CHECK_IN 으로 전부 되돌린다', async () => {
     const { storeId } = await create('열린 출근 점포');
     const staff = await prisma.staffMember.create({

@@ -144,9 +144,15 @@ describe('StoreClosingsService', () => {
         ],
         total: counts(),
       });
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => {});
       await expect(
         service.check(client as any, [11, 99], NOW),
       ).rejects.toBeInstanceOf(InternalServerErrorException);
+      // HttpException 은 Nest 가 로그로 남기지 않는다 — 서버에서 원인을 찾게 직접 남긴다
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('점포 99'));
+      error.mockRestore();
     });
 
     it('빈 목록이면 아무것도 묻지 않는다', async () => {
@@ -312,9 +318,14 @@ describe('StoreClosingsService', () => {
         byStore: { 11: retirement(2) },
         total: retirement(2),
       });
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => {});
       await expect(
         service.close(client as any, [11, 12], 7, NOW),
       ).rejects.toBeInstanceOf(InternalServerErrorException);
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('점포 12'));
+      error.mockRestore();
     });
 
     it('빈 목록이면 아무것도 잠그거나 쓰지 않는다', async () => {
@@ -377,6 +388,22 @@ describe('retryOnDeadlock', () => {
       ),
     );
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it('두 번째 교착이 원시 쿼리(P2010)여도 409 이고, 경고는 두 번 모두 대상을 남긴다', async () => {
+    const raw = new Prisma.PrismaClientKnownRequestError(
+      'Raw query failed. Code: `40P01`. Message: `deadlock detected`',
+      { code: 'P2010', clientVersion: 'test' },
+    );
+    const run = jest
+      .fn()
+      .mockRejectedValueOnce(deadlock())
+      .mockRejectedValueOnce(raw);
+    await expect(retryOnDeadlock(run, '점포 11')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[1][0]).toContain('점포 11');
   });
 
   it('다시 한 쪽이 교착이 아닌 오류면 그 오류를 그대로 던진다', async () => {
