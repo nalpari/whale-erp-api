@@ -4,8 +4,8 @@ import type {
   StoreClosingOpenCheckIn,
 } from '../../staff-members/store-closing-check';
 
-// 3팀 결과 타입을 implements 한다 — 3팀이 칸을 더하거나 바꾸면 여기서 컴파일이 깨져, 응답에는 나가는데 Swagger · 생성 타입에서
-// 빠지는 칸이 생기지 않는다.
+// 3팀 결과 타입을 implements 하고(필수 칸 추가 · 이름 변경 · 좁힘), 파일 끝의 키 집합 단언으로 선택 칸 추가까지 잡는다 — 서비스가
+// 3팀 결과를 펼쳐 담으므로, 여기서 빠진 칸은 응답에는 나가는데 Swagger · 생성 타입에는 없게 된다. 칸을 넓히면 서비스의 대입에서 깨진다.
 
 /** 폐점을 막는 퇴근하지 않은 출근 가운데 이름을 내보내는 첫 건 */
 export class StoreClosingOpenCheckInDto implements StoreClosingOpenCheckIn {
@@ -62,7 +62,7 @@ export class StoreClosingStoreCheckDto extends StoreClosingCountsDto {
   storeCode: string;
 }
 
-/** 폐점 확인 — 점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 쓴다 */
+/** 폐점 확인 — 점포 폐점이 쓰고, 회원 탈퇴 · BP 탈퇴가 같이 쓸 예정이다 */
 export class StoreClosingCheckResponseDto {
   /** 점포별 결과 — 점포 id 오름차순 */
   stores: StoreClosingStoreCheckDto[];
@@ -101,10 +101,28 @@ export class StoreClosingStoreResultDto extends StoreClosingRetirementDto {
   storeCode: string;
 }
 
-/** 폐점 결과 — 점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 쓴다 */
+/** 폐점 결과 — 점포 폐점이 쓰고, 회원 탈퇴 · BP 탈퇴가 같이 쓸 예정이다 */
 export class StoreClosingResultResponseDto {
   /** 점포별 결과 — 점포 id 오름차순 */
   stores: StoreClosingStoreResultDto[];
   /** 같은 칸의 합계 */
   total: StoreClosingRetirementDto;
 }
+
+// 3팀 결과에 있는데 DTO 에 없는 키가 있으면 never 가 아니어서 컴파일이 깨진다(선택 칸 포함 — implements 는 선택 칸 추가를 못 잡는다).
+type NoMissingKeys<T extends never> = T;
+export type StoreClosingDtoKeyChecks = [
+  NoMissingKeys<
+    Exclude<keyof StoreClosingOpenCheckIn, keyof StoreClosingOpenCheckInDto>
+  >,
+  NoMissingKeys<
+    Exclude<
+      keyof StoreClosingCounts['openCheckIns'],
+      keyof StoreClosingOpenCheckInsDto
+    >
+  >,
+  NoMissingKeys<Exclude<keyof StoreClosingCounts, keyof StoreClosingCountsDto>>,
+  NoMissingKeys<
+    Exclude<keyof StoreClosingRetirementResult, keyof StoreClosingRetirementDto>
+  >,
+];
