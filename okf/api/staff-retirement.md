@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T06:50:06Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T07:00:00Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -221,6 +221,11 @@ The code is not changed.
    and account locks store by store, so the order gets mixed (deadlock is possible when an account spans several
    stores' staff). How to call it — e.g. in ascending store id — is 1팀's call.
    **1팀 답 (2026-11-04, WHALEERP-651): 회원 탈퇴는 점포 행을 모두 id 오름차순으로 잠근 뒤 `retireStores` 를 한 번 부른다. 점포 하나 폐점도 `[storeId]` 로 부른다(`retireStore` 는 같은 동작의 감싼 함수로 남김).** The transaction `timeout` is still raised by 1팀 (item 3).
+
+   **1팀 답 (2026-11-04, 1–3 — 1팀 폐점 서비스 `StoreClosingsService`, [store management](/api/stores.md) 「Closing a store」):**
+   1. 폐점은 점포 행을 `lockStore`(`FOR UPDATE`)가 아니라 `FOR NO KEY UPDATE` 로 잠근다(여러 점포는 id 오름차순).
+   2. 교착(`40P01`)이면 폐점 트랜잭션 전체를 한 번 다시 한다(`retryOnDeadlock`). 두 번째도 교착이면 그대로 실패한다.
+   3. 폐점 트랜잭션 `timeout` 은 30초(`STORE_CLOSING_TRANSACTION_TIMEOUT_MS`), `closedDate` 는 1팀이 늘 한국 날짜 오늘로 넘긴다.
 
 # Closing several stores at once — `retireStores` (WHALEERP-651)
 

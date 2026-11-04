@@ -4,16 +4,24 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T07:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile · excelScopeKey)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-04T07:00:00Z
+  - id: store-closings-service
+    resource: ../../src/store-closings/store-closings.service.ts
+    title: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
+    last_modified: 2026-11-04T07:00:00Z
+  - id: store-closing-response
+    resource: ../../src/store-closings/dto/store-closing.response.dto.ts
+    title: 폐점 확인 · 결과 응답(점포별 점포명 · 점포코드 + 합계)
+    last_modified: 2026-11-04T07:00:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-10-30T06:00:00Z
+    last_modified: 2026-11-04T07:00:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
@@ -40,12 +48,12 @@ sources:
     last_modified: 2026-10-29T05:17:36Z
   - id: store-response
     resource: ../../src/stores/dto/store.response.dto.ts
-    title: 목록 · 상세 · 이력 · 이미지 · 인증 결과 응답
-    last_modified: 2026-10-22T08:45:00Z
+    title: 목록 · 상세 · 이력 · 이미지 · 인증 결과 · 수정 결과 응답
+    last_modified: 2026-11-04T07:00:00Z
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
-    title: StoresModule — StorageModule, NtsModule verifier provider
-    last_modified: 2026-10-29T02:30:00Z
+    title: StoresModule — StorageModule, NtsModule verifier provider, StoreClosingsModule
+    last_modified: 2026-11-04T07:00:00Z
   - id: api-enums
     resource: ../../src/enums/api-enums.ts
     title: API 전용 enum — StoreOperationRequirement · StoreBusinessVerificationResult
@@ -53,11 +61,11 @@ sources:
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
-    last_modified: 2026-10-27T05:08:14Z
+    last_modified: 2026-11-04T07:00:00Z
   - id: stores-e2e
     resource: ../../test/stores.e2e-spec.ts
     title: DB 없는 e2e — 쿼리 · 본문 변환, 가드 연동, 뺀 bpCodeId 쿼리의 400
-    last_modified: 2026-10-22T06:15:21Z
+    last_modified: 2026-11-04T07:00:00Z
   - id: store-excel-source
     resource: ../../src/stores/store-excel.source.ts
     title: StoreExcelSource — 공통 엑셀에 주는 건수 · 파일(/stores)
@@ -184,10 +192,12 @@ status change and other edits commit together.[^store-format]
   `transitions` and in `transition-check` as the API enum `StoreOperationRequirement`
   (Korean in `GET /enums`); the `PUT` that falls short is a 400 naming the same items
   in Korean — an inactive BP is a 409 before that.
-- **폐점 and 삭제 need no contract in progress**: `DRAFT`, `PENDING_SEND`,
+- **삭제 needs no contract in progress**: `DRAFT`, `PENDING_SEND`,
   `PENDING_SIGNATURE`, `CORRECTION_REQUESTED` (3팀 수정 요청, 2026-10-16) or `SIGNED` at that store. 구독 · 정산 are outside the first
-  phase and reported as unchecked (`isSubscriptionChecked: false`). 폐점 sets
-  `closed_date` to today in Korea and takes no reason; admin mappings stay.
+  phase and reported as unchecked (`isSubscriptionChecked: false`).
+- **폐점 is blocked only by an open check-in** (2026-11-04, see 「Closing a store」 below). Until then it
+  also needed no contract in progress; now the pending contracts are ended by the closing itself and a
+  `SIGNED` one stays. 폐점 sets `closed_date` to today in Korea and takes no reason; admin mappings stay.
 - **삭제** is 미운영 only and a flag (`is_deleted`). A 폐점 store is kept, read-only.
 - **A 소속 BP that is not `ACTIVE`** leaves the store readable and nothing else:
   register, edit, status change, delete and the image routes are 409, and the
@@ -195,9 +205,52 @@ status change and other edits commit together.[^store-format]
   (`POST /stores/business-verifications`) does not look at the BP — it only answers.
 
 The detail carries `transitions` (what 운영 still needs, the in-progress contract
-count, `canClose`, `canDelete`) so the screen can enable its buttons, and
+count, `canClose`, `canDelete`, and `closing` — the closing check) so the screen can enable its buttons, and
 `GET /stores/:id/transition-check` answers the same when the edit screen picks 폐점.
 The save checks again; the screen's answer is advice.
+
+# Closing a store
+
+One service closes stores for three callers — 점포 폐점 here, and later 회원 탈퇴 and BP 탈퇴, which close
+every not-yet-closed store of a BP at once (`StoreClosingsService`, module `StoreClosingsModule`, no route
+of its own). It wraps 3팀's multi-store `storeClosingCheck` and `RetirementService.retireStores`
+([staff retirement](/api/staff-retirement.md)) and takes only store ids: scope, permission and BP status are
+the caller's. Both results carry `storeName` · `storeCode` per store, so a caller sends them on as they
+are.[^store-closings-service][^store-closing-response]
+
+- **`check(client, storeIds)`** — read only, no lock. Per store and in total: open check-ins
+  (`count` that can be named, `hiddenCount` of staff hidden from 본사 roles, the earliest nameable one as
+  `first`), staff that will retire, pending contracts that will end by status, unconfirmed payslips.
+  `isBlocked` is `count + hiddenCount > 0`; everything else is only reported. An unknown or deleted id is a 404.
+- **`close(tx, storeIds, adminAccountId)`** — inside the caller's transaction: lock every store row in
+  ascending id `FOR NO KEY UPDATE` (404 if one is gone, 409 「이미 폐점한 점포입니다.」 if one is closed),
+  then `retireStores` (it locks staff then accounts, re-checks open check-ins and refuses with 409
+  `OPEN_CHECK_IN` + `storeId`, sets retirement dates, ends pending contracts, expires invitations), then
+  `CLOSED` · `closed_date` (Korean today) and one 점포상태 history row per store. A 3팀 exception is not
+  caught — the whole transaction rolls back.
+- **Locks and time — the 「1팀이 정할 것」 items of the retirement doc, answered 2026-11-04.**
+  `FOR NO KEY UPDATE` instead of the `FOR UPDATE` of `lockStore`, so attendance, work-schedule and TO-DO
+  inserts (foreign-key `FOR KEY SHARE`) do not deadlock against a closing. The caller runs the transaction
+  with `STORE_CLOSING_TRANSACTION_TIMEOUT_MS` (30 s; Prisma's 5 s is too short for a store with many
+  staff) and wraps it in `retryOnDeadlock`: a `40P01` (`P2034`, or `P2010` carrying the SQLSTATE) is
+  retried once from the start — the path that still takes staff before store (contract resend) can
+  deadlock, and the rolled-back attempt left nothing. Several stores are always locked in ascending id.
+- **The price of `FOR NO KEY UPDATE`: new rows can still arrive during the closing.** A `FOR UPDATE` on the
+  store blocked every insert that references it (foreign key `FOR KEY SHARE`); `FOR NO KEY UPDATE` lets them
+  through. So a staff record or contract created while the closing runs — after `retireStores` has read the
+  store's staff — commits into a store that is now closed, with no retirement date. This is the gap 3팀
+  recorded as an accepted risk ([staff retirement](/api/staff-retirement.md), 2026-11-03 노영주); 1팀
+  accepted it with the lock change (2026-11-04) because the window is one transaction long, while the
+  deadlock it removes hits every check-out on a closing day. Such a record is found the way any other is:
+  the store shows it, and 퇴직 처리 closes it by hand.
+
+**점포 폐점 (`PUT /stores/:id` with `storeStatus: CLOSED`).** The same transaction first saves the other
+fields with the `updatedAt` check — that `UPDATE` is what locks the row first — leaving the status as it
+was, then calls `close`, which writes the status, the date and the 점포상태 history (the edit itself does
+not, so there is one row). The `PUT` now answers **200** with `{ closing }`: the closing's per-store and
+total counts, or `null` when the save was not a closing (it was 204 with no body before 2026-11-04).
+`canClose` is 「BP 사용 중 · 폐점 아님 · `closing.isBlocked` false」; `closing` is `null` on a closed
+store. 회원 탈퇴 and BP 탈퇴 are not wired to it yet.
 
 # 재직 직원 수
 
@@ -419,9 +472,11 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
   A NUL in it is a 400 — PostgreSQL refuses NUL in text, which would otherwise be a
   500.
 - Contracts have no deletion flag; the in-progress count is by status alone.
-- **폐점 · 삭제 vs a new contract is only half closed.** The store side counts the
+- **삭제 vs a new contract is only half closed.** The store side counts the
   in-progress contracts again inside its transaction, after locking the `stores` row
-  `FOR UPDATE`. The contract side (`ContractsService.checkStoreOpen`) still reads the
+  `FOR UPDATE`. (폐점 no longer counts them: it ends pending contracts itself, and `retireStores`
+  works on what it finds after its own locks — which leaves a wider gap on the closing side, see
+  「Closing a store」.) The contract side (`ContractsService.checkStoreOpen`) still reads the
   store's status without a lock, so a contract created in the gap between that read
   and its insert can land on a store that has just closed. Closing it needs the
   contract create / 이어 쓰기 transaction to take `FOR SHARE` on the same row and
@@ -452,6 +507,8 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
 [^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile · excelScopeKey)
 [^store-excel]: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
 [^stores-controller]: /stores routes and the menu permission per action (`/stores`, MN000002 today)
+[^store-closings-service]: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
+[^store-closing-response]: 폐점 확인 · 결과 응답(점포별 점포명 · 점포코드 + 합계)
 [^store-format]: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
 [^store-business-verifier]: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot
 [^nts-store-business-verifier]: NtsStoreBusinessVerifier — 점포 값을 국세청 클라이언트 모양으로
