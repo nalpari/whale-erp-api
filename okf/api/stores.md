@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T11:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -13,11 +13,11 @@ sources:
   - id: store-closings-service
     resource: ../../src/store-closings/store-closings.service.ts
     title: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
-    last_modified: 2026-11-04T08:30:00Z
+    last_modified: 2026-11-04T11:00:00Z
   - id: store-closing-response
     resource: ../../src/store-closings/dto/store-closing.response.dto.ts
     title: 폐점 확인 · 결과 응답(점포별 점포명 · 점포코드 + 합계)
-    last_modified: 2026-11-04T08:30:00Z
+    last_modified: 2026-11-04T11:00:00Z
   - id: store-closings-module
     resource: ../../src/store-closings/store-closings.module.ts
     title: StoreClosingsModule — 회원 탈퇴 · BP 탈퇴가 import 할 진입점(StaffMembersModule 의 RetirementService 를 쓴다)
@@ -224,8 +224,12 @@ the caller's. Both results carry `storeName` · `storeCode` per store, so a call
 are.[^store-closings-service][^store-closing-response]
 
 - **`check(client, storeIds)`** — read only, no lock. Per store and in total: open check-ins
-  (`count` that can be named, `hiddenCount` of staff hidden from 본사 roles, the earliest nameable one as
-  `first`), staff that will retire, pending contracts that will end by status, unconfirmed payslips.
+  (`count` of staff 본사 roles can see, `hiddenCount` of those hidden from them), staff that will retire,
+  pending contracts that will end by status, unconfirmed payslips. **Open check-ins are counts only** —
+  3팀's result also carries the earliest one with the staff name and time (`first`), which this service drops
+  (2026-11-04): the response is visible with the store menu's read permission alone and the screen only shows
+  the count. Which check-in it is, the 출퇴근 현황 screen shows; the save's 409 `OPEN_CHECK_IN` message gives the
+  earliest time.
   `isBlocked` is `count + hiddenCount > 0`; everything else is only reported. An unknown or deleted id is a 404
   naming the ids. A store missing from the name lookup is a 500, not an empty name — it cannot happen after
   that 404, so it means a broken contract.

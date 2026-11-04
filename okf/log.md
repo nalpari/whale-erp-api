@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-04
+* **Update**: [Store management](/api/stores.md) — 폐점 확인의 열린 출근은 수(`count` · `hiddenCount`)만 내보낸다. 3팀 결과의 첫 건(`first` — 직원 이름 · 출근 시각)은 1팀 폐점 서비스가 버린다: 점포 메뉴 조회 권한만으로 보이는 응답이고 화면은 건수만 안내한다(2026-11-04 사용자). 3팀 `storeClosingCheck` 는 그대로(api #246).
 * **Update**: [Store management](/api/stores.md) · [BP masters](/api/bp-masters.md) — 출처 갱신만: 폐점 주석을 고친 `store-format.ts` · `admin-withdrawal.service.ts`(진행 중 계약은 이제 점포 삭제 기준이고 폐점은 이 목록으로 막지 않는다, 회원 탈퇴 기준은 폐점 서비스 연결 때 다시 정함)의 `last_modified` 를 맞췄다. 본문 변경 없음(api #246 코드 리뷰).
 * **Update**: [Store management](/api/stores.md) · [Staff retirement](/api/staff-retirement.md) — 폐점 서비스 2차 리뷰 반영: 「`FOR NO KEY UPDATE` 로 바꾸며 틈이 열렸다」는 서술을 바로잡았다 — `FOR UPDATE` 도 외래키 insert 를 폐점 커밋까지 기다리게만 해 틈은 전부터 있었고, 지금은 직원 잠금 전에 커밋된 레코드가 퇴직에 들어간다. 근본 해결은 넣는 쪽의 점포 `FOR SHARE` 재확인. 3팀 계약 위반 500 은 오류 로그를 남긴다. 응답 DTO 가 3팀 결과의 선택 칸 추가까지 컴파일에서 잡는다. P2010 메시지 형식을 실제 클라이언트로 고정하는 e2e(api scizor).
 * **Update**: [Store management](/api/stores.md) · [Staff retirement](/api/staff-retirement.md) — 폐점 서비스 리뷰 반영: 교착이 다시 해도 나면 500 이 아니라 409 「다른 처리와 겹쳐 폐점하지 못했습니다…」, 첫 교착은 경고 로그. 교착 판정은 P2034 와 메시지에 `40P01` 이 실린 P2010 만. 404 · 409(없음 · 이미 폐점) 문구에 점포 id. 점포명 · 3팀 처리 결과가 빠지면 빈 값 대신 500. 응답 DTO 가 3팀 결과 타입을 implements. `retiringStaff` 설명 정정(이미 더 이른 퇴직일은 그대로, 임시저장만 있는 가입 전은 세지 않음). 남은 교착 경로(재발송, 근무지 추가 · 소속 추가 수락)와 3팀 문서 본문의 `FOR UPDATE` 서술을 고쳤다(api scizor).
