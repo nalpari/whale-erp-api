@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T06:50:06Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-04T09:30:00Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -130,7 +130,7 @@ in the past: they still work today.
 WHALEERP-646 `retireAllForStoreClosing(tx, storeIds, …)` of PR #237). `RetirementService.retireStore(tx, storeId, closedDate, adminAccountId, now?)`
 is a method only — no route, no DTO, no migration; `StaffMembersModule` already exports the service.
 1팀's 폐점 api (`PUT /stores/:id`) calls it **inside the transaction that has locked the store row
-(`FOR UPDATE`) and sets it CLOSED**, so one failure rolls the closing back. Exceptions are not swallowed
+and sets it CLOSED** (`FOR NO KEY UPDATE` since 2026-11-04, through `retireStores` — see 「1팀 답」 below), so one failure rolls the closing back. Exceptions are not swallowed
 and no notification goes to the staff. `closedDate` is normalised to the KST date (`kstToday`).[^retirement-service]
 
 **Lock order: store (1팀, first) → staff → account.** Inside the method: the store's `EMPLOYED` staff rows
@@ -164,7 +164,9 @@ close there; its conditional updates are no-ops for them.
 
 **Accepted risk (2026-11-03 노영주):** while 1팀 holds the store `FOR UPDATE`, inserting a new staff record
 (foreign key) is blocked; if 1팀 changes to `FOR NO KEY UPDATE`, a record created between the query and the lock may not
-be retired. The gap is short, so it is accepted.
+be retired. The gap is short, so it is accepted. **1팀 changed to `FOR NO KEY UPDATE` on 2026-11-04 (1팀 note:
+under `FOR UPDATE` the insert was only delayed until the closing committed, not refused, so the gap existed before as
+well)** — see [store management](/api/stores.md) 「Closing a store」.
 
 **Return value** (same names and meaning as the 폐점 확인 service, WHALEERP-647; 1팀 uses it for the result
 message and the store change history):
@@ -202,13 +204,17 @@ deadlock (`40P01`):
   `contracts.service.ts:1387`) and copying last week's work schedules (staff rows `FOR NO KEY UPDATE` at
   `work-schedules.service.ts:801`, then `this.insert` at `:859` → `tx.workSchedule.create` at `:973`).
 
+Since 2026-11-04 (1팀 답 1) the closing locks the store `FOR NO KEY UPDATE`, which the foreign-key `FOR KEY SHARE`
+does not wait for — the store-foreign-key items above no longer deadlock with it. Contract resend (store `FOR SHARE`)
+and the account → staff paths remain; the closing retries once on them (1팀 답 2).
+
 The employee-side contract rejection (`my-contracts.service.ts:318`, `lockMine` staff `FOR SHARE`) was
 listed too, but no store lock was found in `rejectContract` (`contract-status.ts:543`); it is unconfirmed.
 The code is not changed.
 
 **1팀이 정할 것** (decisions for 1팀, not for 3팀 or 재영; 노영주 2026-11-03):
 
-1. How the store row is locked. `lockStore` is now `FOR UPDATE`, which collides with the foreign-key inserts
+1. How the store row is locked. `lockStore` is `FOR UPDATE` (delete still uses it; the closing no longer does — 1팀 답 below), which collides with the foreign-key inserts
    (`FOR KEY SHARE`) of attendance (staff app, admin register, correction), work schedules and TO-DOs: between a
    check-in/out that took the account first and `retireStore` (waiting for the account `FOR UPDATE`) `40P01` can
    happen. 1팀's document (D4) does not cover these foreign-key locks. `FOR NO KEY UPDATE` breaks that loop.
@@ -221,6 +227,11 @@ The code is not changed.
    and account locks store by store, so the order gets mixed (deadlock is possible when an account spans several
    stores' staff). How to call it — e.g. in ascending store id — is 1팀's call.
    **1팀 답 (2026-11-04, WHALEERP-651): 회원 탈퇴는 점포 행을 모두 id 오름차순으로 잠근 뒤 `retireStores` 를 한 번 부른다. 점포 하나 폐점도 `[storeId]` 로 부른다(`retireStore` 는 같은 동작의 감싼 함수로 남김).** The transaction `timeout` is still raised by 1팀 (item 3).
+
+   **1팀 답 (2026-11-04, 1–3 — 1팀 폐점 서비스 `StoreClosingsService`, [store management](/api/stores.md) 「Closing a store」):**
+   1. 폐점은 점포 행을 `lockStore`(`FOR UPDATE`)가 아니라 `FOR NO KEY UPDATE` 로 잠근다(여러 점포는 id 오름차순).
+   2. 교착(`40P01`)이면 폐점 트랜잭션 전체를 한 번 다시 한다(`retryOnDeadlock`, 첫 교착은 경고 로그). 두 번째도 교착이면 409 「다른 처리와 겹쳐 폐점하지 못했습니다…」로 알린다.
+   3. 폐점 트랜잭션 `timeout` 은 30초(`STORE_CLOSING_TRANSACTION_TIMEOUT_MS`), `closedDate` 는 1팀이 늘 한국 날짜 오늘로 넘긴다.
 
 # Closing several stores at once — `retireStores` (WHALEERP-651)
 

@@ -1,6 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { StoreImageFileType } from '@prisma/client';
 import {
+  StoreClosingCheckResponseDto,
+  StoreClosingResultResponseDto,
+} from '../../store-closings/dto/store-closing.response.dto';
+import {
   BUSINESS_VERIFICATION_RESULTS,
   type BusinessVerificationResult,
   FLOOR_TYPES,
@@ -94,14 +98,24 @@ export class StoreTransitionCheckResponseDto {
     isArray: true,
   })
   missingForOperation: OperationRequirement[];
-  /** 진행 중인 근로계약 수 — 거부 · 만료 · 종료되지 않은 계약. 0 이어야 폐점 · 삭제된다. */
+  /** 진행 중인 근로계약 수 — 거부 · 만료 · 종료되지 않은 계약. 0 이어야 삭제된다(폐점은 막지 않는다 — 대기 계약은 폐점이 종료하고 체결 완료는 남는다). */
   inProgressContractCount: number;
-  /** 폐점할 수 있는가 */
+  /** 폐점할 수 있는가 — 소속 BP 사용 중 · 폐점 아님 · 퇴근하지 않은 출근 없음(closing.isBlocked false) */
   canClose: boolean;
-  /** 삭제할 수 있는가 — 미운영이면서 폐점 조건을 채울 때 */
+  /** 삭제할 수 있는가 — 소속 BP 사용 중 · 미운영 · 진행 중인 근로계약 없음 */
   canDelete: boolean;
   /** 구독 · 정산 조건은 1차 범위 밖이라 보지 않는다 — 화면은 「1차 범위 밖」으로 보인다 */
   isSubscriptionChecked: boolean;
+  /**
+   * 폐점 확인 — 막힘(퇴근하지 않은 출근)과 폐점하면 처리될 것(퇴직될 직원 · 종료될 대기 계약 · 확정하지 않은 급여명세서).
+   * 점포 하나라 stores 는 한 건이고 total 과 같다. 이미 폐점한 점포는 null.
+   */
+  closing: StoreClosingCheckResponseDto | null;
+}
+
+/** 수정 결과 — 폐점으로 저장했으면 폐점하면서 처리한 수를, 아니면 null */
+export class UpdateStoreResponseDto {
+  closing: StoreClosingResultResponseDto | null;
 }
 
 export class StoreDetailResponseDto {

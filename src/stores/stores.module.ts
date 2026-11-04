@@ -4,6 +4,7 @@ import { ExcelExportsModule } from '../excel-exports/excel-exports.module';
 import { NtsBusinessClient } from '../nts/nts-business.client';
 import { NtsModule } from '../nts/nts.module';
 import { StorageModule } from '../storage/storage.module';
+import { StoreClosingsModule } from '../store-closings/store-closings.module';
 import { storeBusinessVerifierFor } from './nts-store-business-verifier';
 import { STORE_BUSINESS_VERIFIER } from './store-business-verifier';
 import { StoreExcelSource } from './store-excel.source';
@@ -11,7 +12,13 @@ import { StoreManagementService } from './store-management.service';
 import { StoresController } from './stores.controller';
 
 @Module({
-  imports: [AdminScopeModule, StorageModule, NtsModule, ExcelExportsModule],
+  imports: [
+    AdminScopeModule,
+    StorageModule,
+    NtsModule,
+    ExcelExportsModule,
+    StoreClosingsModule,
+  ],
   controllers: [StoresController],
   providers: [
     StoreManagementService,
