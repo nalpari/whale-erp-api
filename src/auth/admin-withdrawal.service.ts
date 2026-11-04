@@ -118,8 +118,8 @@ export class AdminWithdrawalService {
   }
 
   /**
-   * 탈퇴 실행. 확인(존재 · 역할 · 비밀번호 · 사유 · 진행 중 계약)을 모두 마친 뒤에만 쓴다. 본인 · 하위 관리자는
-   * 상태만 탈퇴로 바꾸고 개인정보(이름 · 휴대폰 · 이메일)를 지운다 — isDeleted · loginId 는 그대로 둔다
+   * 탈퇴 실행. 확인(존재 · 역할 · 비밀번호 · 사유 · 진행 중 계약)을 모두 마친 뒤에만 쓴다. 본인은 탈퇴, 하위 관리자는
+   * 미사용으로 상태를 바꾸고 둘 다 개인정보(이름 · 휴대폰 · 이메일)를 지운다 — isDeleted · loginId 는 그대로 둔다
    * (schema.prisma admin_accounts.isDeleted 주석). BP 는 상태와 대표자 연락처만 바꾸고 상호 · 사업자정보는
    * 남긴다. 메일은 커밋 뒤 지우기 전에 읽어 둔 이메일로 보내고, 실패해도 탈퇴를 되돌리지 않는다.
    */
@@ -129,6 +129,15 @@ export class AdminWithdrawalService {
   ): Promise<void> {
     const now = new Date();
     const mailTarget = await this.prisma.$transaction(async (tx) => {
+      // BP 행을 먼저 잠근다 — 하위 관리자 등록 · 수정(bp-admins lockBp 의 FOR SHARE)과 줄을 세워, 탈퇴 중에
+      // 사용으로 저장한 계정도 탈퇴 시점 기준으로 모두 미사용이 되게 한다(그 저장은 탈퇴 뒤 409). 순서는 다른
+      // 곳처럼 bp_codes → admin_accounts 다. 계정의 bp_code_id 는 바뀌지 않으므로 잠그기 전에 읽어도 된다.
+      const owner = await tx.adminAccount.findFirst({
+        where: { adminAccountId, isDeleted: false },
+        select: { bpCodeId: true },
+      });
+      if (!owner) throw new NotFoundException(NOT_FOUND);
+      await tx.$queryRaw`SELECT 1 FROM bp_codes WHERE bp_code_id = ${owner.bpCodeId} FOR UPDATE`;
       // 로그인 · 비밀번호 변경과 같은 행 잠금 — 같은 계정의 탈퇴가 겹쳐 들어와도 한 번만 처리된다.
       await tx.$queryRaw`SELECT 1 FROM admin_accounts WHERE admin_account_id = ${adminAccountId} FOR UPDATE`;
       const account = await tx.adminAccount.findFirst({

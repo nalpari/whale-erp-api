@@ -421,7 +421,14 @@ describe('AdminWithdrawalService.execute', () => {
 
     await service.execute(1, dto);
 
-    expect(prisma.$queryRaw).toHaveBeenCalled(); // 본인 행 잠금
+    // BP 행 → 본인 행 순서로 잠근다 — 하위 관리자 등록 · 수정(lockBp FOR SHARE)이 탈퇴 뒤로 줄을 선다.
+    const calls = prisma.$queryRaw.mock.calls as [string[], ...unknown[]][];
+    const locks = calls.map((call) => call[0].join('?'));
+    expect(locks[0]).toContain('FROM bp_codes');
+    expect(locks[0]).toContain('FOR UPDATE');
+    expect(calls[0][1]).toBe(7);
+    expect(locks[1]).toContain('FROM admin_accounts');
+    expect(locks[1]).toContain('FOR UPDATE');
     expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
       where: { adminAccountId: 1, isDeleted: false },
       select: {

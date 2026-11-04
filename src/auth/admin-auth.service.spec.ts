@@ -67,7 +67,7 @@ describe('AdminAuthService', () => {
     lockExpiresAt: null,
     isPasswordChangeRequired: false,
     updatedAt: EDITED_AT,
-    bpCode: BP,
+    bpCode: { ...BP, accountStatusCode: 'ACTIVE' },
     ...over,
   });
   const temp = (over: Record<string, unknown> = {}) => ({
@@ -300,6 +300,23 @@ describe('AdminAuthService', () => {
       await expect(login('wrong')).rejects.toThrow(UnauthorizedException);
     });
 
+    // 탈퇴 BP 의 하위 관리자는 탈퇴 때 미사용이 되지만, 사용이 남아 있어도 들어오지 못한다(2026-11-04).
+    it('상위 BP 가 탈퇴했으면 사용 계정도 비밀번호가 맞을 때 이용 제한 403', async () => {
+      prisma.adminAccount.findUnique.mockResolvedValue(
+        account({
+          roleTypeCode: 'BA',
+          bpCode: { ...BP, accountStatusCode: 'WITHDRAWN' },
+        }),
+      );
+      await expect(login()).rejects.toThrow(
+        new ForbiddenException(
+          '사용이 제한된 계정입니다. 관리자에게 문의해 주세요.',
+        ),
+      );
+      expect(logged()[0]).toMatchObject({ failureReason: 'INACTIVE' });
+      expect(sessions.issue).not.toHaveBeenCalled();
+    });
+
     it('검증하는 사이 비밀번호가 바뀌었으면 401, 세지 않는다', async () => {
       prisma.adminAccount.findUniqueOrThrow.mockResolvedValue(
         account({ passwordHash: 'scrypt$changed' }),
@@ -392,6 +409,7 @@ describe('AdminAuthService', () => {
       prisma.adminAccount.findUnique.mockResolvedValue({
         loginId: 'bpmaster1',
         isPasswordChangeRequired: false,
+        bpCode: { accountStatusCode: 'ACTIVE' },
       });
     });
 
@@ -408,6 +426,7 @@ describe('AdminAuthService', () => {
       prisma.adminAccount.findUnique.mockResolvedValue({
         loginId: 'bpmaster1',
         isPasswordChangeRequired: true,
+        bpCode: { accountStatusCode: 'ACTIVE' },
       });
       prisma.temporaryPassword.findFirst.mockResolvedValue(used);
 
@@ -437,8 +456,23 @@ describe('AdminAuthService', () => {
       prisma.adminAccount.findUnique.mockResolvedValue({
         loginId: 'bpmaster1',
         isPasswordChangeRequired: true,
+        bpCode: { accountStatusCode: 'ACTIVE' },
       });
       prisma.temporaryPassword.findFirst.mockResolvedValue(null);
+
+      await expect(service.refresh('21.refresh')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(sessions.revoke).toHaveBeenCalledWith(21);
+      expect(sessions.extend).not.toHaveBeenCalled();
+    });
+
+    it('상위 BP 가 탈퇴했으면 세션을 끝내고 401', async () => {
+      prisma.adminAccount.findUnique.mockResolvedValue({
+        loginId: 'bpadmin1',
+        isPasswordChangeRequired: false,
+        bpCode: { accountStatusCode: 'WITHDRAWN' },
+      });
 
       await expect(service.refresh('21.refresh')).rejects.toThrow(
         UnauthorizedException,
@@ -501,6 +535,14 @@ describe('AdminAuthService', () => {
         account({ isDeleted: true }),
       );
       await expect(redeem()).rejects.toThrow(UnauthorizedException);
+      expect(sessions.issue).not.toHaveBeenCalled();
+    });
+
+    it('상위 BP 가 탈퇴했으면 403', async () => {
+      prisma.adminAccount.findUnique.mockResolvedValue(
+        account({ bpCode: { ...BP, accountStatusCode: 'WITHDRAWN' } }),
+      );
+      await expect(redeem()).rejects.toThrow(ForbiddenException);
       expect(sessions.issue).not.toHaveBeenCalled();
     });
 

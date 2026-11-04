@@ -53,12 +53,35 @@ const ACCOUNT_SELECT = {
   isPasswordChangeRequired: true,
   updatedAt: true,
   bpCode: {
-    select: { bpCodeId: true, bpCode: true, tradeName: true, isPlatform: true },
+    select: {
+      bpCodeId: true,
+      bpCode: true,
+      tradeName: true,
+      isPlatform: true,
+      accountStatusCode: true,
+    },
   },
 } satisfies Prisma.AdminAccountSelect;
 type FoundAccount = Prisma.AdminAccountGetPayload<{
   select: typeof ACCOUNT_SELECT;
 }>;
+
+/**
+ * 로그인할 수 있는 상태인가 — 계정이 사용이고 상위 BP 가 탈퇴하지 않았다. 탈퇴 BP 의 하위 관리자는 탈퇴 때
+ * 미사용이 되지만, 그 사이 경합 등으로 사용이 남아 있어도 로그인하지 못하게 BP 상태를 함께 본다(2026-11-04).
+ */
+function canSignIn(account: FoundAccount): boolean {
+  return (
+    account.accountStatusCode === 'ACTIVE' &&
+    account.bpCode.accountStatusCode !== 'WITHDRAWN'
+  );
+}
+
+/** 응답의 bp — BP 상태는 로그인 판정에만 쓰고 내보내지 않는다. */
+function publicBp(bp: FoundAccount['bpCode']) {
+  const { bpCodeId, bpCode, tradeName, isPlatform } = bp;
+  return { bpCodeId, bpCode, tradeName, isPlatform };
+}
 
 type Verified =
   { kind: 'own' } | { kind: 'temporary'; temporaryPasswordId: number };
@@ -150,8 +173,8 @@ export class AdminAuthService {
         ? this.locked()
         : new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
-    // 미사용은 비밀번호까지 맞을 때만 알린다(front auth.md).
-    if (account.accountStatusCode !== 'ACTIVE') {
+    // 미사용(상위 BP 탈퇴 포함)은 비밀번호까지 맞을 때만 알린다(front auth.md).
+    if (!canSignIn(account)) {
       await log('INACTIVE');
       throw new ForbiddenException(INACTIVE_MESSAGE);
     }
@@ -187,7 +210,7 @@ export class AdminAuthService {
         loginId: account.loginId,
         name: account.name,
         roleTypeCode: account.roleTypeCode,
-        bp: account.bpCode,
+        bp: publicBp(account.bpCode),
         isPasswordChangeRequired: outcome.isPasswordChangeRequired,
       },
     };
@@ -202,10 +225,19 @@ export class AdminAuthService {
       await this.sessions.find(refreshToken);
     const account = await this.prisma.adminAccount.findUnique({
       where: { adminAccountId },
-      select: { loginId: true, isPasswordChangeRequired: true },
+      select: {
+        loginId: true,
+        isPasswordChangeRequired: true,
+        bpCode: { select: { accountStatusCode: true } },
+      },
     });
     if (!account)
       throw new UnauthorizedException('만료되었거나 종료된 접속입니다.');
+    // 상위 BP 가 탈퇴했으면 남은 접속도 늘리지 않고 끝낸다 — 탈퇴가 접속을 모두 끝내지만 한 번 더 막는다.
+    if (account.bpCode.accountStatusCode === 'WITHDRAWN') {
+      await this.sessions.revoke(sessionId);
+      throw new UnauthorizedException('만료되었거나 종료된 접속입니다.');
+    }
     let cap: Date | null = null;
     if (account.isPasswordChangeRequired) {
       const used = await this.prisma.temporaryPassword.findFirst({
@@ -276,8 +308,7 @@ export class AdminAuthService {
       account.accountStatusCode === 'WITHDRAWN'
     )
       throw new UnauthorizedException(INVALID_SIGNUP_TOKEN_MESSAGE);
-    if (account.accountStatusCode !== 'ACTIVE')
-      throw new ForbiddenException(INACTIVE_MESSAGE);
+    if (!canSignIn(account)) throw new ForbiddenException(INACTIVE_MESSAGE);
 
     const session = await this.sessions.issue(
       { adminAccountId: account.adminAccountId, deviceInformation },
@@ -299,7 +330,7 @@ export class AdminAuthService {
         loginId: account.loginId,
         name: account.name,
         roleTypeCode: account.roleTypeCode,
-        bp: account.bpCode,
+        bp: publicBp(account.bpCode),
         isPasswordChangeRequired: account.isPasswordChangeRequired,
       },
     };
@@ -325,7 +356,7 @@ export class AdminAuthService {
       });
       if (current.isDeleted || current.accountStatusCode === 'WITHDRAWN')
         return { kind: 'gone' };
-      if (current.accountStatusCode !== 'ACTIVE') return { kind: 'inactive' };
+      if (!canSignIn(current)) return { kind: 'inactive' };
       if (isLocked(this.stateOf(current), now)) return { kind: 'locked' };
 
       let expiresAtCap: Date | null = null;
