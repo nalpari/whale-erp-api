@@ -130,7 +130,7 @@ inserted — the composite key would refuse a second row.
 `SELECT account_status_code, is_deleted FROM bp_codes … FOR SHARE` on the tab's BP and
 re-read it: deleted is 404 (`BP 를 찾을 수 없습니다.`, the guard's wording), a 탈퇴 BP is 409
 `탈퇴한 BP 의 관리자 계정은 고칠 수 없습니다.` for any register or edit (its sub-admins stay 미사용 with personal
-info erased by 회원 탈퇴 — 2026-11-04), and a BP that is 미사용 is 409 `BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.` for a
+info erased by 회원 탈퇴 — 2026-11-04; the detail answers every `actions` flag false for them so the web shows no edit or reset), and a BP that is 미사용 is 409 `BP 가 사용 중이 아니라 사용 계정을 둘 수 없습니다.` for a
 register and for any edit that saves 사용 — re-activating included. Editing a 미사용 account of a 미사용 BP, staying 미사용,
 still works. Restoring 사용 is the BP 마스터's job (WHALEERP-414), so the platform can no
 longer pick a 미사용 BP in the header and add a 사용 account there. The lock exists because

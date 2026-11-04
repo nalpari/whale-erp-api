@@ -2342,7 +2342,7 @@ model AdminAccount {
   withdrawReasonDetail     String?   @map("withdraw_reason_detail")
   /// 계정 상태 코드 — 공통코드 `ACCOUNT_STATUS`(사용·미사용·탈퇴). BP 마스터 계정은 `bp_codes.account_status_code` 와 같은 트랜잭션에서 함께 바뀐다
   accountStatusCode        String    @map("account_status_code")
-  /// 계정상태변경일시 — 탈퇴 일시도 여기에 남는다. BP 가 탈퇴하면 하위 계정(BP 관리자·가맹 마스터·가맹 관리자)도 같은 순간 탈퇴하고 개인정보를 지운다 — 아이디만 보존
+  /// 계정상태변경일시 — 탈퇴 일시도 여기에 남는다. BP 가 탈퇴하면 BP 마스터는 탈퇴, 하위 계정(BP 관리자·가맹 마스터·가맹 관리자)은 같은 순간 미사용이 되고 개인정보(이름·휴대폰·이메일)를 지운다 — 아이디만 보존. 이미 미사용이던 하위 계정은 이 일시를 그대로 둔다(2026-11-04)
   statusChangedAt          DateTime? @map("status_changed_at") @db.Timestamptz(6)
   /// 삭제 여부 — 오등록 삭제용, 논리 삭제. 회원 탈퇴는 바꾸지 않음(상태만 탈퇴)
   isDeleted                Boolean   @default(false) @map("is_deleted")

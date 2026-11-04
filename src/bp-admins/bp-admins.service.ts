@@ -364,7 +364,7 @@ export class BpAdminsService {
       bp.bpCodeId,
       adminAccountId,
     );
-    const [stores, bpStoreCount, franchiseMaster] = await Promise.all([
+    const [stores, bpStoreCount, franchiseMaster, bpRow] = await Promise.all([
       this.prisma.store.findMany({
         where: { storeId: { in: target.storeIds } },
         select: {
@@ -384,7 +384,14 @@ export class BpAdminsService {
             where: { adminAccountId: target.franchiseMasterId },
             select: { adminAccountId: true, loginId: true, name: true },
           }),
+      this.prisma.bpCode.findFirst({
+        where: { bpCodeId: bp.bpCodeId },
+        select: { accountStatusCode: true },
+      }),
     ]);
+    // 탈퇴한 BP 의 관리자는 등록 · 수정이 모두 409 다(lockBp) — 화면이 누를 수 없는 버튼을 띄우지 않게 동작을 모두 끈다
+    const actions = actionsOf(caller, target);
+    const bpWithdrawn = bpRow?.accountStatusCode === 'WITHDRAWN';
     return {
       ...summaryOf({ ...row, storeCount: target.storeIds.length }),
       phone: row.phone,
@@ -403,7 +410,15 @@ export class BpAdminsService {
         loginId: franchiseMaster.loginId,
         name: franchiseMaster.name,
       },
-      actions: actionsOf(caller, target),
+      actions: bpWithdrawn
+        ? {
+            isSelf: actions.isSelf,
+            canUpdate: false,
+            canResetPassword: false,
+            canChangeScope: false,
+            canChangeRoleGroup: false,
+          }
+        : actions,
     };
   }
 

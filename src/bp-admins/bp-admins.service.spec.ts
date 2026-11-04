@@ -515,6 +515,21 @@ describe('BpAdminsService', () => {
       await expect(service.detail(2, bp, 1)).rejects.toThrow(NotFoundException);
     });
 
+    it('탈퇴한 BP 의 관리자는 동작을 모두 끈다 — 수정 · 초기화를 띄우지 않는다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValueOnce({
+        accountStatusCode: 'WITHDRAWN',
+      });
+      const res = await service.detail(1, bp, 2);
+      expect(res.actions).toEqual(
+        partial({
+          canUpdate: false,
+          canResetPassword: false,
+          canChangeScope: false,
+          canChangeRoleGroup: false,
+        }),
+      );
+    });
+
     it('보는 사람의 범위 밖 매핑 점포를 표시한다', async () => {
       const res = await service.detail(2, bp, 40);
       expect(res.stores.map((s) => [s.storeId, s.isOutOfScope])).toEqual([
@@ -849,6 +864,24 @@ describe('BpAdminsService', () => {
         input(2, { name: '새이름', accountStatus: 'INACTIVE' }),
       );
       expect(prisma.adminAccount.updateMany).toHaveBeenCalled();
+    });
+
+    it('탈퇴 BP 의 미사용 계정은 미사용 그대로도 고칠 수 없다 — 지운 개인정보를 다시 적지 못하게', async () => {
+      patchAccount(2, { accountStatusCode: 'INACTIVE' });
+      whileLocked(bpRow, () => [
+        { ...liveBp, account_status_code: 'WITHDRAWN' },
+      ]);
+      await expect(
+        service.update(
+          1,
+          bp,
+          2,
+          input(2, { name: '새이름', accountStatus: 'INACTIVE' }),
+        ),
+      ).rejects.toThrow(
+        new ConflictException('탈퇴한 BP 의 관리자 계정은 고칠 수 없습니다.'),
+      );
+      expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
     });
 
     it('미사용 BP 의 사용 계정을 미사용으로 저장하는 것은 된다 — BP 상태를 묻지 않는다', async () => {
