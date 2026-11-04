@@ -1274,9 +1274,7 @@ describe('StoreManagementService', () => {
       ]);
     });
 
-    it('진행 중인 근로계약이 있어도 폐점한다 — 대기 계약은 폐점 서비스가 닫는다', async () => {
-      prisma.contract.count.mockResolvedValue(2);
-      tx.contract.count.mockResolvedValue(2);
+    it('진행 중인 근로계약이 있어도 폐점한다 — 폐점은 계약을 세지 않고, 대기 계약은 폐점 서비스가 닫는다', async () => {
       await service.update(
         BM,
         OWN_BP,
@@ -1284,6 +1282,8 @@ describe('StoreManagementService', () => {
         updateDto({ storeStatus: 'CLOSED' }),
       );
       expect(closings.close).toHaveBeenCalledWith(tx, [11], BM);
+      expect(prisma.contract.count).not.toHaveBeenCalled();
+      expect(tx.contract.count).not.toHaveBeenCalled();
     });
 
     it('폐점은 같은 트랜잭션에서 칸을 먼저 저장(동시 수정 확인)한 뒤 폐점 서비스를 부르고 결과를 돌려준다', async () => {
@@ -1339,6 +1339,45 @@ describe('StoreManagementService', () => {
         service.update(BM, OWN_BP, 11, updateDto({ storeStatus: 'CLOSED' })),
       ).resolves.toEqual({ closing: CLOSING_RESULT });
       expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    });
+
+    it('교착으로 다시 할 때 칸 저장(동시 수정 확인)부터 다시 하고, 국세청 확인은 트랜잭션 밖에서 한 번만 한다', async () => {
+      closings.close
+        .mockRejectedValueOnce(
+          new Prisma.PrismaClientKnownRequestError('deadlock', {
+            code: 'P2034',
+            clientVersion: 'test',
+          }),
+        )
+        .mockResolvedValueOnce(CLOSING_RESULT);
+      await service.update(
+        BM,
+        OWN_BP,
+        11,
+        updateDto({
+          storeStatus: 'CLOSED',
+          businessVerification: {
+            bizRegistrationNumber: '1234567890',
+            ceoName: '김대표',
+            openDate: '2020-03-02',
+          },
+        }),
+      );
+      expect(prisma.store.updateMany).toHaveBeenCalledTimes(2);
+      expect(closings.close).toHaveBeenCalledTimes(2);
+      expect(verifier!.verify).toHaveBeenCalledTimes(1);
+    });
+
+    it('폐점이 아닌 수정은 교착이어도 다시 하지 않는다', async () => {
+      const deadlock = new Prisma.PrismaClientKnownRequestError('deadlock', {
+        code: 'P2034',
+        clientVersion: 'test',
+      });
+      prisma.store.updateMany.mockRejectedValueOnce(deadlock);
+      await expect(
+        service.update(BM, OWN_BP, 11, updateDto({ name: '새 이름' })),
+      ).rejects.toBe(deadlock);
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
     it('폐점이 아니면 폐점 서비스를 부르지 않고 closing 은 null', async () => {
@@ -2419,6 +2458,15 @@ describe('StoreManagementService', () => {
       ],
       ['운영 · 계약 없음', 'OPERATING', 0, false, true, false],
       ['운영 · 퇴근하지 않은 출근 있음', 'OPERATING', 0, true, false, false],
+      // 열린 출근은 폐점만 막고 삭제는 막지 않는다 — 삭제는 진행 중인 근로계약만 본다
+      [
+        '미운영 · 퇴근하지 않은 출근 있음 — 폐점은 안 되고 삭제는 됨',
+        'NOT_OPERATING',
+        0,
+        true,
+        false,
+        true,
+      ],
       ['폐점', 'CLOSED', 0, false, false, false],
     ])(
       '상세의 전환 가능 여부 — %s',
@@ -2430,6 +2478,16 @@ describe('StoreManagementService', () => {
         expect(transitions).toMatchObject({ canClose, canDelete });
       },
     );
+
+    it('transition-check 도 폐점 확인을 실어 준다', async () => {
+      closings.check.mockResolvedValue(closingCheck(true));
+      const result = await service.transitionCheck(BM, OWN_BP, 11);
+      expect(closings.check).toHaveBeenCalledWith(prisma, [11]);
+      expect(result).toMatchObject({
+        canClose: false,
+        closing: closingCheck(true),
+      });
+    });
 
     it('폐점한 점포는 폐점 확인을 하지 않고 closing 은 null', async () => {
       prisma.store.findFirst.mockResolvedValue(
@@ -2589,6 +2647,24 @@ describe('StoreManagementService', () => {
       expect(tx.storeFloor.createMany).toHaveBeenCalled();
       expect(tx.storeBusinessProfile.upsert).toHaveBeenCalled();
       expect(tx.storeChangeHistory.createMany).toHaveBeenCalled();
+      expectNoWriteOutsideTransaction();
+    });
+
+    it('폐점의 쓰기도 모두 트랜잭션 안이다 — 칸 · 이력은 tx, 폐점 서비스에도 tx 를 넘긴다', async () => {
+      splitWrites();
+      await service.update(
+        BM,
+        OWN_BP,
+        11,
+        updateDto({
+          name: '새 이름',
+          storeStatus: 'CLOSED',
+          floors: [{ floorTypeCode: 'GROUND', floorNumber: 1 }],
+        }),
+      );
+      expect(tx.store.updateMany).toHaveBeenCalled();
+      expect(tx.storeChangeHistory.createMany).toHaveBeenCalled();
+      expect(closings.close).toHaveBeenCalledWith(tx, [11], BM);
       expectNoWriteOutsideTransaction();
     });
 

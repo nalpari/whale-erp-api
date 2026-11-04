@@ -558,8 +558,17 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       isCheckOutExpired: true,
     });
 
+    // 같은 트랜잭션에서 폐점 서비스보다 먼저 쓰는 것(점포명 · 층 · 이력)까지 되돌아가는지 본다
+    const historiesBefore = await prisma.storeChangeHistory.count({
+      where: { storeId },
+    });
     const res = await call('put', `/stores/${storeId}`)
-      .send({ ...formOf(before), name: '바뀐 이름', storeStatus: 'CLOSED' })
+      .send({
+        ...formOf(before),
+        name: '바뀐 이름',
+        floors: [{ floorTypeCode: 'GROUND', floorNumber: 2 }],
+        storeStatus: 'CLOSED',
+      })
       .expect(409);
     expect(res.body).toMatchObject({ code: 'OPEN_CHECK_IN', storeId });
 
@@ -568,7 +577,21 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       name: '열린 출근 점포',
       storeStatusCode: 'NOT_OPERATING',
       closedDate: null,
+      floors: before.floors,
     });
+    expect(await prisma.storeChangeHistory.count({ where: { storeId } })).toBe(
+      historiesBefore,
+    );
+    expect(
+      await prisma.staffMemberRetirementLog.count({
+        where: { staffMemberId: staff.staffMemberId },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.contractStatusHistory.count({
+        where: { contractId: contract.contractId },
+      }),
+    ).toBe(0);
     expect(
       (
         await prisma.contract.findUniqueOrThrow({
