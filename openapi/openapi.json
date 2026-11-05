@@ -26032,7 +26032,7 @@
           },
           "phone": {
             "type": "string",
-            "description": "숫자만 10~11자리 (예: 01090145563)",
+            "description": "숫자만 10~11자리 (예: 01012345678)",
             "pattern": "^[0-9]{10,11}$"
           },
           "birthDate": {
@@ -26696,7 +26696,7 @@
           },
           "phone": {
             "type": "string",
-            "description": "숫자만 10~11자리 (예: 01090145563)",
+            "description": "숫자만 10~11자리 (예: 01012345678)",
             "pattern": "^[0-9]{10,11}$"
           },
           "birthDate": {
