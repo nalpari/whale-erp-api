@@ -1,4 +1,16 @@
 {
+  "REQ": {
+    "name": "요구사항정의서",
+    "history": [
+      { "version": "1.0", "date": "2026-11-05", "change": "최초 작성", "author": "인터플러그" }
+    ]
+  },
+  "MENU": {
+    "name": "메뉴구조도",
+    "history": [
+      { "version": "1.0", "date": "2026-11-05", "change": "최초 작성", "author": "인터플러그" }
+    ]
+  },
   "API": {
     "name": "API 명세",
     "history": [
