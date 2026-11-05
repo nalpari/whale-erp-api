@@ -71,8 +71,13 @@ def table_sheet(wb, title, headers, rows, widths, top_rows=()):
 
 
 def save_xlsx(wb, doc_name, file_name):
-    """모든 시트에 머리글(문서명) · 바닥글(쪽 번호)을 붙여 out/ 에 저장한다."""
+    """모든 시트에 머리글(문서명) · 바닥글(쪽 번호)을 붙여 out/ 에 저장한다.
+    산출물은 수식을 쓰지 않으므로, = 로 시작해 수식으로 잡힌 값은 글자로 되돌린다(원문이 계산되지 않게)."""
     for ws in wb.worksheets:
+        for row in ws.iter_rows():
+            for c in row:
+                if c.data_type == "f":
+                    c.data_type = "s"
         ws.oddHeader.center.text = doc_name
         ws.oddHeader.center.font = FONT
         ws.oddFooter.center.text = "&P / &N"
