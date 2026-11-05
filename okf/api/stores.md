@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-05T02:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-05T06:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -216,7 +216,7 @@ The save checks again; the screen's answer is advice.
 
 # Closing a store
 
-One service closes stores for three callers — 점포 폐점 here, and later 회원 탈퇴 and BP 탈퇴, which close
+One service closes stores for three callers — 점포 폐점 here, 회원 탈퇴 ([admin auth](/api/admin-auth.md), 2026-11-05) and later BP 탈퇴, which close
 every not-yet-closed store of a BP at once (`StoreClosingsService`, module `StoreClosingsModule`, no route
 of its own). It wraps 3팀's multi-store `storeClosingCheck` and `RetirementService.retireStores`
 ([staff retirement](/api/staff-retirement.md)) and takes only store ids: scope, permission and BP status are
@@ -274,7 +274,7 @@ was, then calls `close`, which writes the status, the date and the 점포상태 
 not, so there is one row). The `PUT` now answers **200** with `{ closing }`: the closing's per-store and
 total counts, or `null` when the save was not a closing (it was 204 with no body before 2026-11-04).
 `canClose` is 「BP 사용 중 · 폐점 아님 · `closing.isBlocked` false」; `closing` is `null` on a closed
-store. 회원 탈퇴 and BP 탈퇴 are not wired to it yet.
+store. 회원 탈퇴 is wired to it the same way (2026-11-05, [admin auth](/api/admin-auth.md)); BP 탈퇴 is not yet.
 
 # 재직 직원 수
 

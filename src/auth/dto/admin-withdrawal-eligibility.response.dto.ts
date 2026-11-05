@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { StoreClosingCheckResponseDto } from '../../store-closings/dto/store-closing.response.dto';
 
 /** 회원 탈퇴(마이페이지) 전 보여줄 조건 — BP 마스터만 받는다. */
 export class WithdrawEligibilityResponseDto {
@@ -14,7 +15,9 @@ export class WithdrawEligibilityResponseDto {
   @ApiProperty()
   storeCount: number;
 
-  /** 진행 중인 근로계약(임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료)이 있으면 true — 있으면 탈퇴를 막는다. */
-  @ApiProperty()
-  hasInProgressContract: boolean;
+  /**
+   * 함께 폐점할 점포(폐점 안 한 점포 전부)의 폐점 확인 — 점포 관리 폐점과 같은 값이다. 점포별 값은 stores[], 합계는 total.
+   * isBlocked(퇴근 기록 없는 출근이 있음)면 탈퇴를 막는다 — 막는 조건은 이것 하나뿐이다.
+   */
+  closing: StoreClosingCheckResponseDto;
 }

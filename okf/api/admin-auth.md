@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, the store list version (`stores-version`, `me/stores`) the header store picker refreshes by, and the login info version (`me/login-info-version`) the screen re-reads login-info by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T03:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-05T06:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -700,6 +700,22 @@ BP status. Withdrawal itself locks the `bp_codes` row (`FOR UPDATE`) before the
 master's row, so a sub-admin register or edit (`lockBp`, `FOR SHARE`) racing it
 either commits first and is then turned 미사용 by the withdrawal, or waits and
 gets 409 — no sub-admin of a 탈퇴 BP stays 사용.
+
+**Withdrawal closes the BP's stores through the same service as 점포 폐점 (2026-11-05).**
+Only the stores not yet closed and not deleted are passed, all of them at once. `GET
+me/withdraw-eligibility` answers `{ bpName, adminCount, storeCount, closing }`: `closing` is
+`StoreClosingsService.check`'s result ([stores](/api/stores.md) 「Closing a store」) — `stores[]` holds
+every such store with its `storeId` · `storeName` · `storeCode` and counts whether blocked or not,
+so 관리자 웹 can pick a store and show its closing check the way 점포 관리 does; `total` and `isBlocked`
+sum them. The only thing that blocks is a check-in without a check-out (`closing.isBlocked`).
+`hasInProgressContract` is gone, and so is the 400 for in-progress contracts — a 체결 완료
+contract had made a BP unable to withdraw for good; pending contracts are ended by the closing.
+`POST me/withdraw` stays 204: inside one transaction (30 s, `STORE_CLOSING_TRANSACTION_TIMEOUT_MS`)
+it locks the BP row, then the master's row, does the withdrawal, re-reads the open stores and calls
+`close` last — nothing before it locks `staff_members` or `accounts`, keeping 3팀's store → staff →
+account order. `retryOnDeadlock` reopens the whole transaction once on a deadlock. The closing's
+errors pass through unchanged and undo the whole withdrawal: 409 `OPEN_CHECK_IN` with `storeId`,
+409 already closed, 409 busy after a second deadlock, 404. Mail is sent after commit, as before.
 
 Sessions are not revoked when an account is set 미사용 (BP status change, admin
 status change) yet — `admin_sessions.revoked_at`, a later piece of work — which is
