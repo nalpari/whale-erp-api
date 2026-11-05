@@ -98,7 +98,7 @@ export class CreateContractDto {
   @MaxLength(50)
   name: string;
 
-  /** 숫자만 10~11자리 (예: 01090145563) */
+  /** 숫자만 10~11자리 (예: 01012345678) */
   @Matches(/^[0-9]{10,11}$/, {
     message: '휴대전화번호는 숫자 10~11자리입니다.',
   })
