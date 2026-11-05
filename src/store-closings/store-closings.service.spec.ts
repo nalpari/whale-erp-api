@@ -285,8 +285,8 @@ describe('StoreClosingsService', () => {
       expect(result.total).toEqual(retirement(3));
     });
 
-    it('3팀 퇴직이 실패하면(열린 출근 409) 그대로 던지고 점포는 바꾸지 않는다', async () => {
-      const error = new ConflictException({ code: 'OPEN_CHECK_IN' });
+    it('3팀 퇴직이 실패하면(다른 오류) 그대로 던지고 점포는 바꾸지 않는다', async () => {
+      const error = new ConflictException('x');
       retire.retireStores.mockRejectedValue(error);
 
       await expect(service.close(client as any, [11, 12], 7, NOW)).rejects.toBe(
@@ -294,6 +294,36 @@ describe('StoreClosingsService', () => {
       );
       expect(client.store.updateMany).not.toHaveBeenCalled();
       expect(client.storeChangeHistory.createMany).not.toHaveBeenCalled();
+    });
+
+    it('열린 출근 409 는 code · storeId 를 그대로 두고 문구에서 출근 시각을 뺀다 — 본사에게 가려지는 직원의 출근 시각이 새지 않게', async () => {
+      retire.retireStores.mockRejectedValue(
+        new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          code: 'OPEN_CHECK_IN',
+          message:
+            '11/04 09:12 출근이 아직 퇴근 전입니다. 퇴근이 등록된 뒤 다시 처리해 주세요.',
+          storeId: 12,
+        }),
+      );
+
+      const error: unknown = await service
+        .close(client as any, [11, 12], 7, NOW)
+        .catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(ConflictException);
+      const body = (error as ConflictException).getResponse();
+      expect(body).toEqual({
+        statusCode: 409,
+        error: 'Conflict',
+        code: 'OPEN_CHECK_IN',
+        message:
+          '퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 퇴근 등록 · 보정한 뒤 다시 처리해 주세요.',
+        storeId: 12,
+      });
+      expect(JSON.stringify(body)).not.toContain('09:12');
+      expect(client.store.updateMany).not.toHaveBeenCalled();
     });
 
     it('잠근 뒤 보니 지운 점포가 섞이면 404 — 문구에 그 점포 id', async () => {
