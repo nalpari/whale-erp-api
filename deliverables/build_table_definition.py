@@ -14,7 +14,7 @@ import re
 from openpyxl.drawing.image import Image as XlImage
 from PIL import Image, ImageDraw, ImageFont
 
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Font
 
 from common import FONT, HERE, open_xlsx, save_xlsx, table_sheet
 
@@ -60,7 +60,7 @@ def map_name(arg):
 def parse(path):
     lines = open(path, encoding="utf-8").read().splitlines()
     model_names = {m.group(1) for l in lines if (m := re.match(r"model (\w+) \{", l))}
-    enums, models, doc, cur = {}, [], [], None
+    enums, enum_list, models, doc, cur = {}, [], [], [], None
     for line in lines:
         s = line.strip()
         if cur is None:
@@ -68,13 +68,17 @@ def parse(path):
                 doc.append(s[3:].strip())
             elif m := re.match(r"(model|enum) (\w+) \{", s):
                 cur = {"kind": m.group(1), "name": m.group(2), "table": m.group(2), "doc": " ".join(doc),
-                       "fields": [], "fks": [], "indexes": [], "pk": []}
+                       "fields": [], "fks": [], "indexes": [], "pk": [], "values": []}
                 doc = []
             elif s and not s.startswith("//"):
                 doc = []
             continue
         if s == "}":
-            (models.append(cur) if cur["kind"] == "model" else enums.__setitem__(cur["name"], cur["table"]))
+            if cur["kind"] == "model":
+                models.append(cur)
+            else:
+                enums[cur["name"]] = cur["table"]
+                enum_list.append(cur)
             cur, doc = None, []
             continue
         if s.startswith("///"):
@@ -83,6 +87,8 @@ def parse(path):
         if not s or s.startswith("//"):
             continue
         if cur["kind"] == "enum" and not s.startswith("@@map"):
+            cur["values"].append((s.split()[0], " ".join(doc)))
+            doc = []
             continue
         if s.startswith("@@"):
             kind = s[2:s.index("(")]
@@ -116,7 +122,7 @@ def parse(path):
             if re.search(r"@unique\b", f["rest"]):
                 mdl["indexes"].append({"name": map_name(attr_arg(f["rest"], "@unique")), "fields": [f["name"]],
                                        "unique": True})
-    return models, enums
+    return models, enums, enum_list
 
 
 def col_type(f, enums):
@@ -234,13 +240,11 @@ def sheet_title(table, used):
     return t
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--version", required=True)
-    args = ap.parse_args()
-    models, enums = parse(SCHEMA)
+def write(version):
+    """엑셀을 쓰고 (경로, 테이블 수, 컬럼 수) 를 돌려준다."""
+    models, enums, enum_list = parse(SCHEMA)
     by_name = {m["name"]: m for m in models}
-    wb, doc_name, doc_no = open_xlsx("TBL", args.version)
+    wb, doc_name, doc_no = open_xlsx("TBL", version)
 
     ws = wb.create_sheet("ERD")
     ws.append(["Prisma 관계(@relation)만 선으로 잇는다. SQL 에만 있는 외래키는 선이 없다."])
@@ -261,15 +265,35 @@ def main():
         c.hyperlink = f"#'{titles[m['name']]}'!A1"
         c.font = Font(name=FONT, size=10, color="0563C1", underline="single")
 
+    els, ehead = table_sheet(wb, "enum 목록", ["enum", "Prisma 이름", "설명", "값"],
+                             [[e["table"], e["name"], e["doc"],
+                               "\n".join(v + (f" — {d}" if d else "") for v, d in e["values"])] for e in enum_list],
+                             [34, 30, 50, 40])
+    enum_row = {e["name"]: ehead + 1 + i for i, e in enumerate(enum_list)}
+    for row in els.iter_rows(min_row=ehead + 1):
+        row[3].alignment = Alignment(wrap_text=True, vertical="top")
+
     for m in models:
-        ws, _ = table_sheet(wb, titles[m["name"]],
+        ws, head = table_sheet(wb, titles[m["name"]],
                             ["컬럼", "타입", "NULL", "기본값", "PK/FK/UNIQUE", "인덱스", "설명"],
                             rows_of(m, by_name, enums), [28, 16, 7, 16, 30, 44, 60],
                             top_rows=[("테이블명", m["table"]), ("설명", m["doc"])])
         ws.cell(1, 4, "테이블 목록으로").hyperlink = "#'테이블 목록'!A1"
+        for i, f in enumerate(m["fields"]):
+            if f["type"] in enum_row:  # 컬럼 타입이 enum 이면 enum 목록의 그 줄로
+                c = ws.cell(head + 1 + i, 2)
+                c.hyperlink = f"#'enum 목록'!A{enum_row[f['type']]}"
+                c.font = Font(name=FONT, size=10, color="0563C1", underline="single")
 
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
-    print(f"{path}\n테이블 {len(models)} · 컬럼 {sum(len(m['fields']) for m in models)}")
+    return path, len(models), sum(len(m["fields"]) for m in models)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--version", required=True)
+    path, tables, columns = write(ap.parse_args().version)
+    print(f"{path}\n테이블 {tables} · 컬럼 {columns}")
 
 
 if __name__ == "__main__":
