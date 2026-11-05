@@ -228,8 +228,8 @@ are.[^store-closings-service][^store-closing-response]
   pending contracts that will end by status, unconfirmed payslips. **Open check-ins are counts only** —
   3팀's result also carries the earliest one with the staff name and time (`first`), which this service drops
   (2026-11-04): the response is visible with the store menu's read permission alone and the screen only shows
-  the count. A check-in of staff 본사 roles can see is found in 출퇴근 현황; a hidden staff member's is not
-  shown there either. The save's 409 `OPEN_CHECK_IN` keeps `code`
+  the count. Which check-in it is, 출퇴근 현황 shows — except that a staff member hidden from 본사 roles
+  (BM · BA) has no row there either, only a `hiddenCount`. The save's 409 `OPEN_CHECK_IN` keeps `code`
   and `storeId` but **not 3팀's time-bearing message**: 3팀 picks the earliest open check-in of the whole store,
   which can belong to a staff member hidden from 본사 roles, so `close` rewrites the message to
   「퇴근 기록이 없는 출근이 있어 폐점할 수 없습니다.」 — the same name front's closing popup uses for the block,
