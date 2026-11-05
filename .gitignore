@@ -67,3 +67,8 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 /.claude/settings.local.json
 /.claude/helpers/
 /.claude/skills/graft/
+
+# 납품 산출물: 결과 파일과 venv 는 커밋하지 않는다
+/deliverables/.venv/
+/deliverables/out/
+__pycache__/
