@@ -1,10 +1,14 @@
 // 메뉴 테이블 스냅숏(sources/menus.json)을 쓴다. 일회용 로컬 Postgres 에 prisma/migrations 를 모두 적용한 뒤 돌린다.
-//   node sources/export_menus.cjs sources/menus.json   (pg 패키지 · DATABASE_URL 은 계획 문서 「실행」 참고)
+//   node sources/export_menus.cjs sources/menus.json   (저장소 루트에서. DATABASE_URL 은 로컬 주소만 받는다)
 // 읽기(SELECT)만 한다.
 const { Client } = require('pg');
 const fs = require('fs');
+const url = process.env.DATABASE_URL;
+if (!url) throw new Error('DATABASE_URL 이 없습니다 — 일회용 로컬 Postgres 주소를 주세요.');
+// 셸에 남은 공용 · 개발 DB 주소로 붙지 않게, 로컬 주소만 받는다.
+if (!['localhost', '127.0.0.1'].includes(new URL(url).hostname)) throw new Error(`로컬 DB 가 아닙니다: ${new URL(url).hostname}`);
 (async () => {
-  const c = new Client({ connectionString: process.env.DATABASE_URL });
+  const c = new Client({ connectionString: url });
   await c.connect();
   const q = async (s) => (await c.query(s)).rows;
   const out = {

@@ -3,7 +3,7 @@
     .venv/bin/python build_menu_structure.py --version 1.0
 
 스냅숏은 일회용 로컬 Postgres 에 prisma/migrations 를 모두 적용한 뒤 menus 를 읽은 것이다(계획 문서의 「실행」).
-스냅숏 행 수와 문서 줄 수가 다르면 멈춘다.
+스냅숏 행 수와 문서 줄 수가 다르거나, 스냅숏의 마지막 마이그레이션이 저장소의 마지막 것과 다르면(낡음) 멈춘다.
 """
 import argparse
 import json
@@ -12,6 +12,7 @@ import os
 from common import HERE, open_xlsx, save_xlsx, table_sheet
 
 SNAPSHOT = os.path.join(HERE, "sources", "menus.json")
+MIGRATIONS = os.path.join(HERE, "..", "prisma", "migrations")
 HEADERS = ["서비스", "깊이", "메뉴 이름", "URL", "정렬 순서", "사용 여부", "삭제 여부", "권한 단위(메뉴 코드)", "상위 메뉴"]
 WIDTHS = [22, 6, 36, 34, 9, 9, 9, 18, 24]
 STATUS = {"ACTIVE": "사용", "INACTIVE": "사용중지"}
@@ -55,6 +56,10 @@ def tree_rows(snap):
 def write(version):
     """엑셀을 쓰고 (경로, 메뉴 수, 서비스별 수) 를 돌려준다."""
     snap = json.load(open(SNAPSHOT, encoding="utf-8"))
+    latest = max(d for d in os.listdir(MIGRATIONS) if os.path.isdir(os.path.join(MIGRATIONS, d)))
+    if snap["lastMigration"] != latest:
+        raise SystemExit(f"메뉴 스냅숏이 낡았습니다: 스냅숏 {snap['lastMigration']} · 저장소 {latest}. "
+                         "계획 문서 「실행」대로 menus.json 을 다시 만들어 주세요.")
     rows, label = tree_rows(snap)
     if not (len(rows) == len(snap["menus"]) == snap["menuCount"]):
         raise SystemExit(f"메뉴 테이블 {snap['menuCount']} · 스냅숏 {len(snap['menus'])} · 문서 {len(rows)} 이 다릅니다.")
