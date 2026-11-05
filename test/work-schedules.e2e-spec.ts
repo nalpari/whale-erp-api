@@ -1376,6 +1376,8 @@ describe('근무스케줄 (e2e, DB)', () => {
   });
 
   describe('근무스케줄 변경 메일 (WHALEERP-639)', () => {
+    // 날짜는 다른 시험이 쓰지 않는 100일 뒤부터다. 「지난 주 복사」는 오늘 +60~66 의 월요일 주를 기준으로 오늘 +53~86 에
+    // 같은 직원(directId)의 근무를 넣어, 요일에 따라 day(60) · day(62) 와 겹쳐 409 가 났다(2026-11-05, 목요일에 재현).
     /** 그 근무스케줄 알림들의 EMAIL 발송 이력 */
     const mailDeliveriesOf = (workScheduleId: number) =>
       prisma.notificationDelivery.findMany({
@@ -1403,10 +1405,10 @@ describe('근무스케줄 (e2e, DB)', () => {
       const to = await emailOf(directId);
       // 앞 시험의 저장도 이 직원에게 메일을 보냈다 — 이 시험 것만 센다
       const since = new Date();
-      const created = await post(directId, day(60), '09:00', '13:00');
+      const created = await post(directId, day(100), '09:00', '13:00');
       const id = (created.body as { workScheduleId: number }).workScheduleId;
       await asAdmin('patch', `/work-schedules/${id}`, {
-        workDate: day(60),
+        workDate: day(100),
         startTime: '10:00',
         endTime: '14:00',
         breakMinutes: 0,
@@ -1495,7 +1497,7 @@ describe('근무스케줄 (e2e, DB)', () => {
       sendMail.mockRejectedValueOnce(
         Object.assign(new Error('smtp down'), { code: 'ECONNECTION' }),
       );
-      const created = await post(directId, day(62), '09:00', '13:00');
+      const created = await post(directId, day(102), '09:00', '13:00');
       expect(created.status).toBe(201);
       const id = (created.body as { workScheduleId: number }).workScheduleId;
       expect(await mailDeliveriesOf(id)).toEqual([
