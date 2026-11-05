@@ -23,6 +23,9 @@ VERBS = {"Get", "Post", "Put", "Patch", "Delete", "All", "Options", "Head"}
 AUTH = {"Public", "UserTypes", "MenuPermission", "UseGuards", "AllowPasswordChangePending"}
 NOT_RULE = re.compile(r"@(Api\w*|Type|Transform|Expose|Exclude)\b")
 UNKNOWN = "코드에서 판정 불가"
+# 납품 문서에 싣지 않는 내부 표지: 일감 번호 · PR 번호 · 코드 리뷰 · 소스 파일명 · Manyfast ID (2026-11-05 재영 (가)안)
+INTERNAL = re.compile(r"WHALEERP-\d+|\b(?:api|front|staff)\s*#\d*|코드 리뷰|[\w./-]+\.ts\b|\b[SFR]-[A-Z]")
+REMOVED = set()  # 뺀 문장(생성 출력에 수를 보인다)
 CONSTRAINTS = ("minLength", "maxLength", "minimum", "maximum", "pattern", "format", "minItems", "maxItems")
 
 
@@ -177,14 +180,18 @@ def scan_routes(src):
         for cls, _, cdecos, s, e, t in classes(path):
             if not any(n == "Controller" for n, _ in cdecos):
                 continue
+            consts = dict(re.findall(r"^const ([A-Z][A-Z0-9_]*) = (.+?);$", t, re.M))
             cauth = [raw for n, raw in cdecos if n in AUTH]
             for name, decos, params, ret, _ in members(t, s, e):
                 verbs = [n for n, _ in decos if n in VERBS]
                 if not verbs:
                     continue
                 q = re.search(r"@Query\(\)\s*\w+\s*:\s*(\w+)", params)
-                routes.append({"op": f"{cls}_{name}", "module": os.path.relpath(path, src).split(os.sep)[0],
-                               "verb": verbs[0].upper(), "auth": cauth + [raw for n, raw in decos if n in AUTH],
+                auth = [re.sub(r"\b[A-Z][A-Z0-9_]*\b", lambda m: consts.get(m.group(), m.group()), raw)
+                        for raw in cauth + [raw for n, raw in decos if n in AUTH]]  # 파일 상수(PLATFORM 등)는 값으로
+                rel = os.path.relpath(path, src).split(os.sep)
+                routes.append({"op": f"{cls}_{name}", "module": rel[0] if len(rel) > 1 else rel[0].split(".")[0],
+                               "verb": verbs[0].upper(), "auth": auth,
                                "public": any(n == "Public" for n, _ in cdecos + decos),
                                "void": re.fullmatch(r"(Promise<)?void>?", ret) is not None,
                                "query_dto": q.group(1) if q else None})
@@ -195,8 +202,6 @@ def scan_dtos(src):
     """클래스 이름 → {extends: 원문, props: {속성: [검증 데코레이터 원문]}}. 이름이 겹치면 앞의 것."""
     out = {}
     for path in ts_files(src, ".ts"):
-        if "@" not in open(path, encoding="utf-8").read():
-            continue
         for cls, ext, _, s, e, t in classes(path):
             props = {}
             for name, decos, _, _, _ in members(t, s, e):
@@ -237,8 +242,31 @@ def unwrap(s):
 
 
 def paragraphs(text):
-    """하드랩된 JSDoc 을 단락마다 한 줄로 잇는다. 빈 줄로 나뉜 단락 구분만 남는다."""
-    return "\n\n".join(" ".join(b.split()) for b in re.split(r"\n\s*\n", text or "") if b.strip())
+    """하드랩된 JSDoc 을 단락마다 한 줄로 잇는다. 빈 줄로 나뉜 단락 구분만 남는다.
+    내부 표지(INTERNAL)가 든 문장은 빼고, 빼서 빈 단락은 지운다."""
+    out = []
+    for b in re.split(r"\n\s*\n", text or ""):
+        kept = []
+        for sentence in re.split(r"(?<=[.!?])\s+", " ".join(b.split())):
+            if INTERNAL.search(sentence):
+                REMOVED.add(sentence)
+            elif sentence:
+                kept.append(sentence)
+        if kept:
+            out.append(" ".join(kept))
+    return "\n\n".join(out)
+
+
+def rule_text(src, s):
+    """소스 검증 데코레이터가 있으면 그것, 없으면 openapi 제약. enum 허용값은 늘 함께 적는다."""
+    c = constraints(s)
+    if not src:
+        return "\n".join(c)
+    return "\n".join(src + [x for x in c if x.startswith(("enum ", "items: enum "))])
+
+
+def required(openapi_required, src):
+    return "N" if not openapi_required or any(r.startswith("@IsOptional(") for r in src or []) else "Y"
 
 
 def leaf(schemas, s):
@@ -305,8 +333,8 @@ def fields(schemas, s, dtos, prefix="", seen=()):
     for name, p in obj.get("properties", {}).items():
         rules = source_rules(dtos, cls, name) if cls else None
         lp = leaf(schemas, p)
-        rows.append([prefix + name, type_of(p), "Y" if name in req else "N",
-                     "\n".join(rules if rules is not None else constraints(lp)), paragraphs(lp.get("description"))])
+        rows.append([prefix + name, type_of(p), required(name in req, rules),
+                     rule_text(rules, lp), paragraphs(lp.get("description"))])
         rows += fields(schemas, p, dtos, prefix + name + ("[]." if type_of(p).endswith("[]") else "."), seen)
     return rows
 
@@ -330,9 +358,9 @@ def api_blocks(doc, routes, dtos):
         for p in op.get("parameters", []):
             rules = source_rules(dtos, r["query_dto"], p["name"]) if p["in"] == "query" else None
             ps = leaf(schemas, p.get("schema", {}))
-            desc = "\n\n".join(dict.fromkeys(paragraphs(d) for d in (p.get("description"), ps.get("description")) if d))
-            rows.append([p["in"], p["name"], type_of(p.get("schema", {})), "Y" if p.get("required") else "N",
-                         "\n".join(rules if rules is not None else constraints(ps)), desc])
+            desc = "\n\n".join(dict.fromkeys(x for x in (paragraphs(p.get("description")), paragraphs(ps.get("description"))) if x))
+            rows.append([p["in"], p["name"], type_of(p.get("schema", {})), required(p.get("required"), rules),
+                         rule_text(rules, ps), desc])
         for ctype, c in op.get("requestBody", {}).get("content", {}).items():
             label = "본문" + ("" if ctype == "application/json" else f" ({ctype})")
             sub = fields(schemas, c.get("schema", {}), dtos)
@@ -454,14 +482,14 @@ def write(version):
             c.alignment = Alignment(wrap_text=True, vertical="top")
 
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
-    return path, len(blocks), len(modules), sum(1 for b in blocks if b[5])
+    return path, len(blocks), len(modules), sum(1 for b in blocks if b[5]), len(REMOVED)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", required=True)
-    path, apis, modules, unknown = write(ap.parse_args().version)
-    print(f"{path}\nAPI {apis} · 영역 {modules} · 「{UNKNOWN}」 {unknown}")
+    path, apis, modules, unknown, removed = write(ap.parse_args().version)
+    print(f"{path}\nAPI {apis} · 영역 {modules} · 「{UNKNOWN}」 {unknown} · 뺀 내부 메모 문장 {removed}")
 
 
 if __name__ == "__main__":
