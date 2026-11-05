@@ -23,14 +23,20 @@ VERBS = {"Get", "Post", "Put", "Patch", "Delete", "All", "Options", "Head"}
 AUTH = {"Public", "UserTypes", "MenuPermission", "UseGuards", "AllowPasswordChangePending"}
 NOT_RULE = re.compile(r"@(Api\w*|Type|Transform|Expose|Exclude)\b")
 UNKNOWN = "코드에서 판정 불가"
-# 납품 문서에 싣지 않는 내부 표지: 일감 번호 · PR 번호 · 코드 리뷰 · 소스 파일명 · Manyfast ID (2026-11-05 재영 (가)안),
-# @SkipThrottle 설명, 「(이름 YYYY-MM-DD)」 · 「(YYYY-MM-DD 이름)」 결정 기록(같은 날 추가). 정책 번호(ATT-20 등)는 표지가 아니다.
-_NAME = r"(?!(?:결정|확인|이후|이전|사용자|노무사|지정|기준|부터|까지)(?![가-힣]))[가-힣]{2,3}"
-_DATE = r"\d{4}-\d{2}-\d{2}"
-INTERNAL = re.compile(r"WHALEERP-\d+|\b(?:api|front|staff)\s*#\d*|코드 리뷰|[\w./-]+\.ts\b|\b[SFR]-[A-Z]|@SkipThrottle"
-                      rf"|(?:(?<=\()|(?<=, )|(?<=· )){_NAME}(?: 결정| 확인)? {_DATE}(?=[),·]| ·)"
-                      rf"|{_DATE} {_NAME}(?=\)|,| ·)")
-REMOVED = set()  # 뺀 문장(생성 출력에 수를 보인다)
+# 납품 문서에 싣지 않는 내부 표지가 든 문장은 뺀다(2026-11-05 재영): 일감 번호 · PR 번호(저장소 이름 없는 #숫자 포함) ·
+# 코드 리뷰 · 소스 파일명 · Manyfast ID · @SkipThrottle. 표지 없이 뺄 문장은 exclude_sentences.txt 에 둔다.
+INTERNAL = re.compile(r"WHALEERP-\d+|\b(?:api|front|staff)\s*#\d*|(?<![\w/&])#\d+|코드 리뷰|[\w./-]+\.ts\b|\b[SFR]-[A-Z]"
+                      r"|@SkipThrottle")
+EXCLUDE = os.path.join(HERE, "exclude_sentences.txt")
+EXCLUDED = {line.strip() for line in open(EXCLUDE, encoding="utf-8") if line.strip() and not line.startswith("#")}
+REMOVED, FOUND, CLEANED = set(), set(), {}  # 뺀 문장 · 찾은 제외 목록 문장 · 결정 기록을 지운 문장(전 → 후)
+# 괄호 안의 결정 기록 조각: 날짜와 이름 · 결정 낱말(「재영 2026-10-30」 「2026-10-22 결정」 「사용자 결정」).
+# 정책 번호 · 운영 정책 버전이 든 조각은 남긴다.
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_POLICY = re.compile(r"운영 정책|[A-Z]{2,5}-\d+|\bv\d+")
+_WORDS = re.compile(r"^(?:[가-힣]{2,4}(?: · | |$))+$")
+_DECIDE = re.compile(r"(?:결정|확인|지정|승인)$")
+EMAIL = re.compile(r"([\w.*+-]+)@(?!example\.com\b)[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}")
 CONSTRAINTS = ("minLength", "maxLength", "minimum", "maximum", "pattern", "format", "minItems", "maxItems")
 
 
@@ -246,17 +252,43 @@ def unwrap(s):
     return s
 
 
+def strip_decisions(sentence):
+    """괄호 안의 결정 기록 조각만 지운다. 괄호가 비면 괄호째 지운다."""
+    def paren(m):
+        parts = m.group(2).split(", ")
+        if not any(_DATE.search(p) for p in parts):
+            return m.group(0)
+
+        def decision(p):
+            if _POLICY.search(p):
+                return False
+            rest = _DATE.sub("", p).strip()
+            return bool(_DATE.search(p) and rest and _WORDS.match(rest)) or bool(_DECIDE.search(p) and _WORDS.match(p))
+        if not any(decision(p) for p in parts):
+            return m.group(0)
+        kept = [p for p in parts if not decision(p) and _DATE.sub("", p).strip()]
+        return f"{m.group(1)}({', '.join(kept)})" if kept else ""
+    out = re.sub(r"(\s*)\(([^()]*)\)", paren, sentence)
+    out = re.sub(r"\s+([.,)])", r"\1", out) if out != sentence else out
+    if out != sentence:
+        CLEANED[sentence] = out
+    return out
+
+
 def paragraphs(text):
     """하드랩된 JSDoc 을 단락마다 한 줄로 잇는다. 빈 줄로 나뉜 단락 구분만 남는다.
-    내부 표지(INTERNAL)가 든 문장은 빼고, 빼서 빈 단락은 지운다."""
+    내부 표지(INTERNAL)가 든 문장 · 제외 목록의 문장은 빼고, 빼서 빈 단락은 지운다. 괄호 속 결정 기록은 지운다."""
     out = []
     for b in re.split(r"\n\s*\n", text or ""):
         kept = []
         for sentence in re.split(r"(?<=[.!?])\s+", " ".join(b.split())):
-            if INTERNAL.search(sentence):
+            if sentence in EXCLUDED:
+                FOUND.add(sentence)
+                REMOVED.add(sentence)
+            elif INTERNAL.search(sentence):
                 REMOVED.add(sentence)
             elif sentence:
-                kept.append(sentence)
+                kept.append(strip_decisions(sentence))
         if kept:
             out.append(" ".join(kept))
     return "\n\n".join(out)
@@ -486,6 +518,14 @@ def write(version):
         for c in (row[3], row[4]):
             c.alignment = Alignment(wrap_text=True, vertical="top")
 
+    lost = sorted(EXCLUDED - FOUND)
+    if lost:
+        raise SystemExit(f"exclude_sentences.txt 의 문장을 원문에서 찾지 못했습니다(원문이 바뀌었는지 확인): {lost}")
+    for w in wb.worksheets:  # 예시 이메일은 문서에서만 example.com 으로(1팀 소스는 고치지 않는다, 2026-11-05 재영)
+        for row in w.iter_rows():
+            for c in row:
+                if isinstance(c.value, str) and "@" in c.value:
+                    c.value = EMAIL.sub(r"\1@example.com", c.value)
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
     return path, len(blocks), len(modules), sum(1 for b in blocks if b[5]), len(REMOVED)
 

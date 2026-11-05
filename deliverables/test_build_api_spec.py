@@ -113,6 +113,7 @@ def checked_rule_text(src, schema):
 
 B.rule_text = checked_rule_text
 path, apis, _, _, removed = B.write("1.0")
+cleaned = len(B.CLEANED)
 ws = load_workbook(path)["API 목록"]
 head = next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value == "영역")
 rows = sum(1 for r in range(head + 1, ws.max_row + 1) if ws.cell(r, 2).value)
@@ -140,6 +141,12 @@ cells = "\0".join(" ".join(str(c.value).split()) for w in wb.worksheets for r in
 missing = sorted(d for d in wanted if d not in cells)
 assert not missing, f"엑셀에 없는 설명 {len(missing)}건: {missing[:5]}"
 assert not enum_blank, f"enum 값이 빠진 칸 {len(enum_blank)}"
+emails = {m.group() for m in re.finditer(r"[\w.*+-]+@[\w.-]+\.[A-Za-z]{2,}", cells)}
+assert emails and all(e.endswith("@example.com") for e in emails), f"example.com 이 아닌 이메일: {emails}"
+assert "(재영 2026-10-30)" not in cells and "본인이 연결된 권한도 고친다." in cells  # 결정 기록만 지운다
+assert "운영 정책 TAX-07 · TAX-08)" in cells and "운영 정책 ACC-23 · JOI-10)" in cells  # 정책 번호는 남는다
+assert not re.search(r"[가-힣.]\(\s*\)|\s\(\s*\)|, \)", cells), "빈 괄호 · 「, )」가 남음"  # 데코레이터의 () 는 제외
+assert "드물다고 보고 지금은 그대로 둔다" not in cells  # exclude_sentences.txt
 leaks = sorted({m.group() for m in B.INTERNAL.finditer(cells)})
 assert not leaks, f"내부 표지가 남음: {leaks[:10]}"
 optional_y = [r for w in wb.worksheets[3:] for r in w.iter_rows(values_only=True)
@@ -147,4 +154,4 @@ optional_y = [r for w in wb.worksheets[3:] for r in w.iter_rows(values_only=True
 assert not optional_y, f"@IsOptional 인데 필수 Y {len(optional_y)}줄"
 for d in ("계정 잠금이 풀리는 시각", "상세코드. 저장 · 전송 값", "급여명세서 검토 사유 — 출퇴근 누락"):  # 2026-11-05 대조에서 빠졌던 것
     assert d in cells, d
-print(f"ok — 라우트 {counted} = 문서 {rows} · 설명 {len(wanted)}건 모두 있음 · enum 빈칸 0 · 필수 오표기 0 · 뺀 문장 {removed}")
+print(f"ok — 라우트 {counted} = 문서 {rows} · 설명 {len(wanted)}건 모두 있음 · enum 빈칸 0 · 필수 오표기 0 · 뺀 문장 {removed} · 결정 기록 지운 문장 {cleaned} · 이메일 example.com 뿐")
