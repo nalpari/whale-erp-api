@@ -20,20 +20,25 @@
   - 테이블 목록: 테이블명 · 설명 · 컬럼 수. 테이블명에서 그 시트로 링크
   - 테이블 시트: 컬럼 · 타입 · NULL · 기본값 · PK/FK/UNIQUE · 인덱스 · 설명
   - 설명은 `///` 주석을 그대로 옮긴다. 없으면 비운다. 1팀 테이블도 원문 그대로다.
+  - 기본값은 Prisma 표기가 아니라 마이그레이션 SQL 의 DEFAULT 값으로 적는다: `now()` → `CURRENT_TIMESTAMP`, `[]` → `'{}'`, 문자열 → `'값'`(jsonb 면 `'{}'::jsonb`), 열거형 → `'값'`, `dbgenerated("…")` → 안의 SQL, `autoincrement()` → `IDENTITY` (#249 리뷰 후속, 2026-11-05)
   - 담당 팀 칸은 두지 않는다. 앞으로 만들 엑셀 산출물에도 두지 않는다(2026-11-05 재영).
-  - ERD 는 Pillow 로 그린다(엑셀에 이미지를 넣는 데 어차피 필요). graphviz 같은 시스템 의존성은 들이지 않는다. 전체 테이블을 한 장에 그리고 Prisma 관계만 선으로 잇는다.
+  - ERD 는 Pillow 로 그린다(엑셀에 이미지를 넣는 데 어차피 필요). graphviz 같은 시스템 의존성은 들이지 않는다. 전체 테이블을 한 장에 그리고 Prisma 관계만 선으로 잇는다. 한글 글꼴을 못 찾으면 기본 글꼴로 넘어가지 않고 멈춘다(#249 리뷰 후속).
   - CHECK · SQL 에만 있는 외래키 · 부분 고유 인덱스처럼 SQL 에만 있는 제약은 schema.prisma 에 없어 담지 않는다. 테이블 목록 시트에 그 사실을 한 줄로 적는다.
   - 엑셀 시트 이름은 31자까지라 그보다 긴 테이블명은 잘라 쓴다.
 
 ## 실행
 
+Python 은 3.12 로 고정한다(`deliverables/.python-version`). 3.15 에는 Pillow 11.3.0 휠이 없다(#249 리뷰 후속).
+
 ```bash
 cd deliverables
-uv venv .venv && uv pip install -p .venv/bin/python -r requirements.txt
+uv venv -p 3.12 .venv && uv pip install -p .venv/bin/python -r requirements.txt
 .venv/bin/python build_templates.py                       # 템플릿을 다시 만들 때만
 .venv/bin/python build_table_definition.py --version 1.0  # → out/WHALE-TBL-1.0_테이블정의서.xlsx
 .venv/bin/python test_build_table_definition.py           # 파서 자체 검사
 ```
+
+API 명세는 `2026-11-05-deliverables-api-spec.md`.
 
 ## 하지 않는 것
 

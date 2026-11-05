@@ -22,6 +22,10 @@ model Account {
   /// 금액
   amount    Decimal? @db.Decimal(10, 2)
   tags      Int[]    @default([]) @map("tag_ids")
+  meta      Json     @default("{}")
+  name      String   @default("x")
+  on        Boolean  @default(true)
+  sex       Gender   @default(MALE)
   pins      Pin[]
 
   @@unique([email], map: "accounts_email_key")
@@ -49,13 +53,14 @@ acc, pin = by["Account"], by["Pin"]
 assert enums == {"Gender": "gender"}
 assert (acc["table"], acc["doc"]) == ("accounts", "계정")
 rows = {r[0]: r for r in B.rows_of(acc, by, enums)}
-assert list(rows) == ["account_id", "email", "gender", "amount", "tag_ids"]  # 관계 필드 pins 는 컬럼이 아니다
+assert list(rows) == ["account_id", "email", "gender", "amount", "tag_ids", "meta", "name", "on", "sex"]  # 관계 필드 pins 는 컬럼이 아니다
 assert rows["account_id"][1:7] == ["integer", "N", "IDENTITY", "PK", "", "계정 ID"]
 assert rows["email"][4:6] == ["UNIQUE", "accounts_email_key"] and rows["email"][6] == ""  # 주석 없으면 비운다
 assert rows["gender"][1:3] == ["gender", "Y"]
-assert rows["amount"][1] == "numeric(10,2)" and rows["tag_ids"][1:4] == ["integer[]", "N", "[]"]
+assert rows["amount"][1] == "numeric(10,2)" and rows["tag_ids"][1:4] == ["integer[]", "N", "'{}'"]
+assert [rows[c][3] for c in ("meta", "name", "on", "sex")] == ["'{}'::jsonb", "'x'", "true", "'MALE'"]
 rows = {r[0]: r for r in B.rows_of(pin, by, enums)}
 assert rows["account_id"][4] == "PK, FK(accounts.account_id)"
 assert rows["code"][4:6] == ["PK", "pins_code_at_idx (code, at)"]
-assert rows["at"][1] == "timestamptz(6)" and rows["at"][3] == "now()"
+assert rows["at"][1] == "timestamptz(6)" and rows["at"][3] == "now()"  # dbgenerated 는 안의 SQL 그대로
 print("ok")

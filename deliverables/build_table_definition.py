@@ -130,7 +130,8 @@ def col_type(f, enums):
     return t + ("[]" if f["array"] else "")
 
 
-def default(f):
+def default(f, enums):
+    """Prisma 표기를 마이그레이션 SQL 의 DEFAULT 값으로 바꾼다."""
     arg = attr_arg(f["rest"], "@default")
     if arg is None:
         return ""
@@ -138,7 +139,15 @@ def default(f):
         return "IDENTITY"  # SQL 은 GENERATED ALWAYS AS IDENTITY (schema.prisma 머리 주석)
     if arg.startswith("dbgenerated("):
         return attr_arg(arg, "dbgenerated").strip('"')
-    return arg
+    if arg == "now()":
+        return "CURRENT_TIMESTAMP"
+    if arg == "[]":
+        return "'{}'"
+    if arg.startswith('"'):
+        return f"'{arg[1:-1]}'" + ("::jsonb" if f["type"] == "Json" else "")
+    if f["type"] in enums:
+        return f"'{arg}'"
+    return arg  # true · false · 숫자
 
 
 def rows_of(mdl, by_name, enums):
@@ -162,7 +171,7 @@ def rows_of(mdl, by_name, enums):
                 if len(ix["fields"]) > 1:
                     label += " (" + ", ".join(field_col[x] for x in ix["fields"]) + ")"
                 idx.append(label)
-        rows.append([f["column"], col_type(f, enums), "Y" if f["optional"] else "N", default(f),
+        rows.append([f["column"], col_type(f, enums), "Y" if f["optional"] else "N", default(f, enums),
                      ", ".join(keys), "\n".join(idx), f["doc"]])
     return rows
 
@@ -172,7 +181,7 @@ def font(size):
               "/System/Library/Fonts/AppleSDGothicNeo.ttc", "/usr/share/fonts/truetype/nanum/NanumGothic.ttf"):
         if os.path.exists(p):
             return ImageFont.truetype(p, size)
-    return ImageFont.load_default(size)
+    raise SystemExit("ERD 에 쓸 한글 글꼴(맑은 고딕 · Apple SD 고딕 Neo · 나눔고딕)을 찾지 못했습니다. 글꼴을 설치해 주세요.")
 
 
 def erd(models, by_name, enums):
