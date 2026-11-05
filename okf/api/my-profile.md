@@ -82,7 +82,7 @@ sources:
   - id: retiree-purge
     resource: ../../src/staff-members/retiree-purge.ts
     title: 신고 정보 · 계정 변경 이력 보존 기간 파기(WHALEERP-645)
-    last_modified: 2026-11-03T05:30:00Z
+    last_modified: 2026-11-05T00:55:00Z
 ---
 
 # What it is
@@ -504,7 +504,7 @@ masked values only.
 # Retention: 신고 정보 and 계정 변경 이력 (WHALEERP-645)
 
 Two daily jobs in `RetireePurgeScheduler`, each inside `runExclusive`, use the same date as
-[퇴직자 근로계약 파기](/api/contracts-api.md) (`retiredBefore` — 퇴직일 + 3년 당일까지 남고 다음 날, 한국 날짜).[^retiree-purge]
+[퇴직자 근로계약 파기](/api/contracts-api.md) (`retiredBefore` — 퇴직일 + 3년 당일까지 남고 다음 날, 한국 날짜. 윤년 2월 29일 실행은 3년 전 2월 28일 퇴직도 대상 — WHALEERP-652).[^retiree-purge]
 
 - **`tax-profile-purge` (05:10, TAX-08)**: for 퇴직 확정 (`RETIRED`) records past the date, deletes
   `staff_tax_profile_histories` then `staff_tax_profiles`. Payslips do not hold it back. 퇴직 예정 · 재직

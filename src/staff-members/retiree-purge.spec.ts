@@ -43,6 +43,10 @@ describe('retiredBefore', () => {
     expect(retiredBefore(new Date('2028-02-29T03:00:00Z'))).toEqual(
       new Date('2025-03-01T00:00:00.000Z'),
     );
+    // 한국 2월 29일 0시 30분(UTC 로는 2월 28일)도 같다 — 한국 날짜로 센 뒤 보정한다
+    expect(retiredBefore(new Date('2028-02-28T15:30:00Z'))).toEqual(
+      new Date('2025-03-01T00:00:00.000Z'),
+    );
     // 2025-03-01 퇴직은 2028-03-01 당일까지 남는다 — 3월 1일 기준은 그대로
     expect(retiredBefore(new Date('2028-03-01T03:00:00Z'))).toEqual(
       new Date('2025-03-01T00:00:00.000Z'),
