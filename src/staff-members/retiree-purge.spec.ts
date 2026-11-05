@@ -34,6 +34,20 @@ describe('retiredBefore', () => {
       new Date('2024-03-01T00:00:00.000Z'),
     );
   });
+
+  it('윤년 2월 29일에는 3년 전 2월 28일 퇴직도 대상이다 — 하루 늦게 지우지 않는다', () => {
+    // 2025-02-28 퇴직은 + 3년 = 2028-02-28 이라 그다음 날(2028-02-29)에 지운다
+    expect(retiredBefore(new Date('2028-02-28T03:00:00Z'))).toEqual(
+      new Date('2025-02-28T00:00:00.000Z'),
+    );
+    expect(retiredBefore(new Date('2028-02-29T03:00:00Z'))).toEqual(
+      new Date('2025-03-01T00:00:00.000Z'),
+    );
+    // 2025-03-01 퇴직은 2028-03-01 당일까지 남는다 — 3월 1일 기준은 그대로
+    expect(retiredBefore(new Date('2028-03-01T03:00:00Z'))).toEqual(
+      new Date('2025-03-01T00:00:00.000Z'),
+    );
+  });
 });
 
 const sqlOf = (call: unknown[]) => (call[0] as TemplateStringsArray).join('?');

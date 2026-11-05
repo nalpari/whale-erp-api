@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T08:51:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-05T00:50:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -1208,7 +1208,8 @@ only — a 종이 계약 has no body.
 
 - **Who**: staff records that are 퇴직 확정 (`employment_status = 'RETIRED'`) with `retired_date` more than
   3 years ago in 한국 날짜 — the record stays through 퇴직일 + 3년 and goes the next day (`retiredBefore`;
-  2월 29일 퇴직은 3년 뒤 2월 28일까지). 퇴직 예정 (still `EMPLOYED` with a date) and 재직 records keep their
+  2월 29일 퇴직은 3년 뒤 2월 28일까지; 윤년 2월 29일 실행은 3년 전 2월 28일 퇴직도 지운다 — 3년 전 같은 날이 없어
+  기준을 3월 1일로 한다, WHALEERP-652). 퇴직 예정 (still `EMPLOYED` with a date) and 재직 records keep their
   contracts. A withdrawn account changes nothing (RET-07). The staff record itself stays.
 - **Unit is the staff record**: all of its contracts go together, so a 재계약 chain is never half cut.
   At most 100 records are deleted per run (`CONTRACT_PURGE_BATCH_SIZE`, smaller than the other purges' 5000

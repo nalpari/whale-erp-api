@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { BATCH_JOB } from '../batch/batch-job-names';
 import { BatchLockService } from '../batch/batch-lock.service';
-import { addMonths, kstToday } from './kst-date';
+import { addDays, addMonths, kstToday } from './kst-date';
 
 /** 보존 기간 — 퇴직일로부터 3년(운영 정책 RET-01 · RET-04 · TAX-08, 2026-11-03 노무사 · 법무 검토 확정) */
 const RETENTION_MONTHS = 36;
@@ -14,9 +14,15 @@ export const PURGE_BATCH_SIZE = 5000;
 /**
  * 퇴직일이 이 날짜 앞이면 보존 기간이 끝났다(WHALEERP-645). 퇴직일 + 3년 당일까지 남고 그다음 날 지워진다 — 한국 날짜로
  * 센다(근무스케줄 파기와 같은 꼴). 퇴직일(@db.Date)과 견주는 날짜라 SQL 에서는 `::date` 로 바꿔 쓴다.
+ * 윤년 2월 29일에는 3년 전 같은 날이 없어 addMonths 가 2월 28일로 당긴다 — 그러면 2월 28일 퇴직(+ 3년 = 어제)이 하루 늦게
+ * 지워지므로 그다음 날(3월 1일)을 기준으로 한다(WHALEERP-652, api #238 리뷰). 다른 날은 그대로다.
  */
 export function retiredBefore(now: Date = new Date()): Date {
-  return addMonths(kstToday(now), -RETENTION_MONTHS);
+  const today = kstToday(now);
+  const before = addMonths(today, -RETENTION_MONTHS);
+  return before.getUTCDate() === today.getUTCDate()
+    ? before
+    : addDays(before, 1);
 }
 
 /**
