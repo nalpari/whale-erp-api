@@ -2,7 +2,7 @@
  "readAt": "2026-11-05",
  "projectId": "9fd8001a-fa1b-4476-aaff-d11c90d8e747",
  "title": "Whale Erp",
- "method": "Manyfast MCP read_project 를 항목 하나씩(field + itemIds, pageSize 4000 · 16000, nextCursor 끝까지) 읽기만 함. 항목 수는 같은 날 read_project 전체 읽기 첫 응답의 totalCounts(요구사항 6 · 기능 17 · 명세 44)",
+ "method": "Manyfast MCP read_project 를 항목 하나씩(field + itemIds, nextCursor 끝까지) 읽기만 함. 항목 수는 read_project_meta 의 stats",
  "totalCounts": {
   "requirements": 6,
   "features": 17,
@@ -12,6 +12,10 @@
   "requirements": 6,
   "features": 17,
   "specs": 44
+ },
+ "devices": {
+  "YCBYPQ": "웹",
+  "HHGMET": "직원 근무 앱"
  },
  "requirements": [
   {
