@@ -21,6 +21,11 @@ reqs, feats, specs, _ = B.build(snap)
 assert reqs == [["직원", "설명", "[완료] a\nb", "", "할 일", "높음", "", "R-1"]]
 assert feats[0][:7] == ["[2차] 초대", "직원", "WHALEERP-12 참고", "", "", "2차", ""] and feats[0][-2:] == ["WHALEERP-12", "F-1"]
 assert feats[0][8 + 7] == "규칙" and specs[0][1] == "[2차] 초대" and specs[0][6] == "완료"
+rest, tables = B.split_tables("앞 글\n\n<table><tbody><tr><th><p>구분</p></th><th><p>기준</p></th></tr>"
+                               "<tr><td><p>가</p><p>나</p></td><td><p>다</p></td></tr></tbody></table>\n\n"
+                               "| 구분 | 기준 |\n| --- | --- |\n| 라 | 마 |\n뒤 글")
+assert tables == [[["구분", "기준"], ["가\n나", "다"]], [["구분", "기준"], ["라", "마"]]], tables
+assert rest == "앞 글\n\n(정책 표 1줄은 「정책 표」 시트)\n\n(정책 표 1줄은 「정책 표」 시트)\n뒤 글", rest
 assert B.safe("hong@gmail.com · 01098765432 · 010-9876-5432") == "hong@example.com · 01012345678 · 010-1234-5678"
 
 path, r, f, s = B.write("1.0")
@@ -39,7 +44,8 @@ SKIP = {"parentId", "applicability", "progress", "importance", "devices", "roles
 def bodies(x, key=None):
     if isinstance(x, str):
         if key not in SKIP and x.strip():
-            yield x
+            rest, tables = B.split_tables(x)  # 정책 표는 칸으로 풀어 「정책 표」 시트에 싣는다
+            yield from [rest] + [c for t in tables for row in t for c in row]
     elif isinstance(x, dict):
         for k, v in x.items():
             yield from bodies(v, k)
@@ -53,6 +59,13 @@ wanted = {" ".join(B.safe(t).split()) for k in ("requirements", "features", "spe
           for t in bodies(it["data"])}
 missing = [t for t in wanted if t not in cells]
 assert not missing, f"셀에 없는 본문 {len(missing)}건: {[m[:60] for m in missing[:3]]}"
+tags = re.findall(r"</?(?:table|tbody|tr|td|th|p|col|colgroup)\b[^>]*>", cells)
+assert not tags, f"HTML 태그가 남음: {tags[:3]}"
+policy = wb["정책 표"]
+phead = next(i for i in range(1, policy.max_row + 1) if policy.cell(i, 1).value == "요구사항")
+policy_rows = sum(1 for row in policy.iter_rows(min_row=phead + 1, values_only=True) if row[0])
+want_rows = sum(len(t) - 1 for it in snapshot["requirements"] for t in B.split_tables(it["data"]["description"])[1])
+assert policy_rows == want_rows, (policy_rows, want_rows)
 emails = set(re.findall(r"[\w.*+-]+@[\w.-]+\.[A-Za-z]{2,}", cells))
 assert all(e.endswith("@example.com") for e in emails), emails
-print(f"ok — 요구사항 {r} · 기능 {f} · 명세 {s} = Manyfast 항목 수 · 본문 {len(wanted)}건 잘림 없음")
+print(f"ok — 요구사항 {r} · 기능 {f} · 명세 {s} = Manyfast 항목 수 · 본문 {len(wanted)}건 잘림 없음 · 정책 표 {policy_rows}줄 · HTML 태그 0")

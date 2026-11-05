@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 import re
+from html.parser import HTMLParser
 
 from openpyxl.styles import Alignment, Font
 
@@ -31,6 +32,61 @@ def safe(text):
         return text
     text = EMAIL.sub(r"\1@example.com", text)
     return PHONE.sub(lambda m: "010-1234-5678" if "-" in m.group() else "01012345678", text)
+
+
+class _Table(HTMLParser):
+    """Manyfast 의 HTML 표(<table><tr><th|td><p>…)를 줄 · 칸 목록으로 푼다. 칸 안의 <p> 는 줄바꿈으로 잇는다."""
+
+    def __init__(self):
+        super().__init__()
+        self.rows, self.cell, self.buf = [], None, ""
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "tr":
+            self.rows.append([])
+        elif tag in ("td", "th"):
+            self.cell, self.buf = [], ""
+        elif tag == "p":
+            self.buf = ""
+
+    def handle_endtag(self, tag):
+        if tag == "p" and self.cell is not None:
+            self.cell.append(self.buf.strip())
+            self.buf = ""
+        elif tag in ("td", "th"):
+            self.rows[-1].append("\n".join(x for x in self.cell + [self.buf.strip()] if x))
+            self.cell = None
+
+    def handle_data(self, data):
+        self.buf += data
+
+
+def split_tables(text):
+    """설명에서 정책 표(HTML <table> · 마크다운 | 줄)를 떼어 (남은 글, [표의 줄 목록]) 을 돌려준다. 표의 첫 줄은 머리다."""
+    tables = []
+
+    def html(m):
+        t = _Table()
+        t.feed(m.group(0))
+        tables.append(t.rows)
+        return "\0"
+    text = re.sub(r"<table\b.*?</table>", html, text or "", flags=re.S)
+    out, block = [], []
+    for line in text.split("\n") + [""]:
+        if line.lstrip().startswith("|"):
+            block.append(line)
+            continue
+        if block:
+            rows = [[c.strip() for c in b.strip().strip("|").split("|")] for b in block]
+            tables.append([r for r in rows if not all(re.fullmatch(r":?-{3,}:?", c) for c in r)])
+            out.append("\0")
+            block = []
+        out.append(line)
+    rest = "\n".join(out[:-1])
+    note = lambda n: f"(정책 표 {n}줄은 「정책 표」 시트)"
+    for t in tables:
+        rest = rest.replace("\0", note(len(t) - 1), 1)
+    return rest.strip(), tables
 
 
 def texts(x):
@@ -82,7 +138,7 @@ def build(snap):
         return [phase(d), PROGRESS.get(d.get("progress"), d.get("progress") or ""),
                 IMPORTANCE.get(d.get("importance"), d.get("importance") or "")]
 
-    req_rows = [[r["data"].get("name", ""), r["data"].get("description", ""),
+    req_rows = [[r["data"].get("name", ""), split_tables(r["data"].get("description", ""))[0],
                  "\n".join(("[완료] " if a.get("isDone") else "") + a.get("description", "")
                            for a in r["data"].get("acceptanceCriteria") or [])]
                 + common(r) + [plane(r["data"]), r["id"]] for r in reqs]
@@ -138,6 +194,20 @@ def write(version):
                 c = ws.cell(head + 1 + i, 2)
                 c.hyperlink = f"#'{title}'!A{row}"
                 c.font = link
+    policy, head_row = [], None
+    for r in snap["requirements"]:
+        for t in split_tables(r["data"].get("description", ""))[1]:
+            head_row = head_row or t[0]
+            policy += [[r["data"].get("name", "")] + row for row in t[1:]]
+    if policy:
+        ws, head = table_sheet(wb, "정책 표", ["요구사항"] + (head_row or []), [[safe(v) for v in r] for r in policy],
+                               [26, 18, 22, 80], top_rows=[("원본", "요구사항 설명 안의 정책 표(Manyfast 원문의 표를 칸으로 풀었다)")])
+        for i, r in enumerate(policy):
+            c = ws.cell(head + 1 + i, 1)
+            c.hyperlink = f"#'요구사항'!A{rows_at[next(x['id'] for x in snap['requirements'] if x['data'].get('name') == r[0])][1]}"
+            c.font = link
+            for c in ws[head + 1 + i]:
+                c.alignment = wrap
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
     return path, len(req_rows), len(feat_rows), len(spec_rows)
 
