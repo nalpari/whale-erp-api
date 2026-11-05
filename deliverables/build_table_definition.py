@@ -2,8 +2,8 @@
 
     .venv/bin/python build_table_definition.py --version 1.0
 
-설명 칸은 /// 주석을 그대로 옮기고, 없으면 비운다. 담당 팀은 schema.prisma 의 구획 표시 줄로 가른다.
-SQL 에만 있는 제약(CHECK · 1팀 외래키 · 부분 고유 인덱스)은 schema.prisma 에 없어 담지 않는다.
+설명 칸은 /// 주석을 그대로 옮기고, 없으면 비운다.
+SQL 에만 있는 제약(CHECK · SQL 에만 있는 외래키 · 부분 고유 인덱스)은 schema.prisma 에 없어 담지 않는다.
 """
 import argparse
 import io
@@ -19,8 +19,6 @@ from openpyxl.styles import Font
 from common import FONT, HERE, open_xlsx, save_xlsx, table_sheet
 
 SCHEMA = os.path.join(HERE, "..", "prisma", "schema.prisma")
-SECTIONS = {"// 3팀 1차 물리 모델": "3팀", "// 1팀 1차 물리 모델": "1팀"}
-UNKNOWN = "미확인"
 SCALAR = {"String": "text", "Int": "integer", "BigInt": "bigint", "Boolean": "boolean", "Float": "double precision",
           "Decimal": "numeric", "DateTime": "timestamp(3)", "Json": "jsonb", "Bytes": "bytea"}
 DB_TYPE = {"Timestamptz": "timestamptz", "Date": "date", "Time": "time", "Decimal": "numeric", "VarChar": "varchar",
@@ -62,18 +60,15 @@ def map_name(arg):
 def parse(path):
     lines = open(path, encoding="utf-8").read().splitlines()
     model_names = {m.group(1) for l in lines if (m := re.match(r"model (\w+) \{", l))}
-    enums, models, team, doc, cur = {}, [], UNKNOWN, [], None
+    enums, models, doc, cur = {}, [], [], None
     for line in lines:
         s = line.strip()
-        for mark, t in SECTIONS.items():
-            if s.startswith(mark):
-                team = t
         if cur is None:
             if s.startswith("///"):
                 doc.append(s[3:].strip())
             elif m := re.match(r"(model|enum) (\w+) \{", s):
                 cur = {"kind": m.group(1), "name": m.group(2), "table": m.group(2), "doc": " ".join(doc),
-                       "team": team, "fields": [], "fks": [], "indexes": [], "pk": []}
+                       "fields": [], "fks": [], "indexes": [], "pk": []}
                 doc = []
             elif s and not s.startswith("//"):
                 doc = []
@@ -168,7 +163,7 @@ def rows_of(mdl, by_name, enums):
                     label += " (" + ", ".join(field_col[x] for x in ix["fields"]) + ")"
                 idx.append(label)
         rows.append([f["column"], col_type(f, enums), "Y" if f["optional"] else "N", default(f),
-                     ", ".join(keys), "\n".join(idx), f["doc"], mdl["team"]])
+                     ", ".join(keys), "\n".join(idx), f["doc"]])
     return rows
 
 
@@ -239,25 +234,18 @@ def main():
     wb, doc_name, doc_no = open_xlsx("TBL", args.version)
 
     ws = wb.create_sheet("ERD")
-    ws.append(["Prisma 관계(@relation)만 선으로 잇는다. 3팀 → 1팀 외래키는 SQL 에만 있어 선이 없다."])
-    row = 3
-    for team in ("3팀", "1팀", UNKNOWN):
-        group = [m for m in models if m["team"] == team]
-        if not group:
-            continue
-        ws.cell(row, 1, f"{team} ({len(group)}개 테이블)").style = "머리행"
-        buf, (w, h) = erd(group, by_name, enums)
-        pic = XlImage(buf)
-        pic.width, pic.height = w // 2, h // 2  # 원본 해상도는 그대로, 확대하면 선명하다
-        ws.add_image(pic, f"A{row + 1}")
-        row += 2 + math.ceil(h / 2 / 20)
+    ws.append(["Prisma 관계(@relation)만 선으로 잇는다. SQL 에만 있는 외래키는 선이 없다."])
+    buf, (w, h) = erd(models, by_name, enums)
+    pic = XlImage(buf)
+    pic.width, pic.height = w // 2, h // 2  # 원본 해상도는 그대로, 확대하면 선명하다
+    ws.add_image(pic, "A3")
 
     used = {s.title for s in wb.worksheets} | {"테이블 목록"}
     titles = {m["name"]: sheet_title(m["table"], used) for m in models}
-    lst, head = table_sheet(wb, "테이블 목록", ["테이블명", "설명", "담당 팀", "컬럼 수"],
-                            [[m["table"], m["doc"], m["team"], len(m["fields"])] for m in models], [36, 50, 10, 10],
+    lst, head = table_sheet(wb, "테이블 목록", ["테이블명", "설명", "컬럼 수"],
+                            [[m["table"], m["doc"], len(m["fields"])] for m in models], [36, 50, 10],
                             top_rows=[("원본", "whale-erp-api prisma/schema.prisma"),
-                                      ("참고", "CHECK · 1팀 외래키 · 부분 고유 인덱스 등 SQL 에만 있는 제약은 담지 않는다 "
+                                      ("참고", "CHECK · SQL 에만 있는 외래키 · 부분 고유 인덱스 등 SQL 에만 있는 제약은 담지 않는다 "
                                              "(prisma/migrations 의 SQL 이 원문).")])
     for i, m in enumerate(models):
         c = lst.cell(head + 1 + i, 1)
@@ -266,14 +254,13 @@ def main():
 
     for m in models:
         ws, _ = table_sheet(wb, titles[m["name"]],
-                            ["컬럼", "타입", "NULL", "기본값", "PK/FK/UNIQUE", "인덱스", "설명", "담당 팀"],
-                            rows_of(m, by_name, enums), [28, 16, 7, 16, 30, 44, 60, 9],
-                            top_rows=[("테이블명", m["table"]), ("설명", m["doc"]), ("담당 팀", m["team"])])
+                            ["컬럼", "타입", "NULL", "기본값", "PK/FK/UNIQUE", "인덱스", "설명"],
+                            rows_of(m, by_name, enums), [28, 16, 7, 16, 30, 44, 60],
+                            top_rows=[("테이블명", m["table"]), ("설명", m["doc"])])
         ws.cell(1, 4, "테이블 목록으로").hyperlink = "#'테이블 목록'!A1"
 
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
-    teams = {t: sum(m["team"] == t for m in models) for t in ("3팀", "1팀", UNKNOWN)}
-    print(f"{path}\n테이블 {len(models)} · {teams} · 컬럼 {sum(len(m['fields']) for m in models)}")
+    print(f"{path}\n테이블 {len(models)} · 컬럼 {sum(len(m['fields']) for m in models)}")
 
 
 if __name__ == "__main__":

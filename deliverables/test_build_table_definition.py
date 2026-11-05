@@ -5,7 +5,6 @@ import tempfile
 import build_table_definition as B
 
 SCHEMA = '''
-// 3팀 1차 물리 모델 — 시험
 /// 남 · 여
 enum Gender {
   MALE
@@ -29,7 +28,6 @@ model Account {
   @@map("accounts")
 }
 
-// 1팀 1차 물리 모델 — 시험
 model Pin {
   accountId Int      @map("account_id")
   code      String
@@ -49,7 +47,7 @@ os.unlink(f.name)
 by = {m["name"]: m for m in models}
 acc, pin = by["Account"], by["Pin"]
 assert enums == {"Gender": "gender"}
-assert (acc["table"], acc["doc"], acc["team"], pin["team"]) == ("accounts", "계정", "3팀", "1팀")
+assert (acc["table"], acc["doc"]) == ("accounts", "계정")
 rows = {r[0]: r for r in B.rows_of(acc, by, enums)}
 assert list(rows) == ["account_id", "email", "gender", "amount", "tag_ids"]  # 관계 필드 pins 는 컬럼이 아니다
 assert rows["account_id"][1:7] == ["integer", "N", "IDENTITY", "PK", "", "계정 ID"]
