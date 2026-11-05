@@ -580,7 +580,15 @@ describe('점포 정보 관리 (e2e, DB)', () => {
         storeStatus: 'CLOSED',
       })
       .expect(409);
-    expect(res.body).toMatchObject({ code: 'OPEN_CHECK_IN', storeId });
+    // 문구에 출근 시각이 없다 — 3팀 문구(「MM/DD HH:mm 출근이 …」)를 폐점 서비스가 바꾼다
+    expect(res.body).toEqual({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'OPEN_CHECK_IN',
+      storeId,
+      message:
+        '퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 퇴근 등록 · 보정한 뒤 다시 처리해 주세요.',
+    });
 
     const after = await detail(storeId);
     expect(after).toMatchObject({

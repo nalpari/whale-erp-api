@@ -25,6 +25,12 @@ const CLOSED = 'CLOSED';
 /** 문구 끝에 점포 id 를 괄호로 붙인다 — 3팀 확인의 404 와 같은 모양. 여러 점포를 닫는 탈퇴에서 어느 점포인지 알게 한다 */
 const NOT_FOUND = '점포를 찾을 수 없습니다.';
 const ALREADY_CLOSED = '이미 폐점한 점포입니다.';
+/**
+ * 폐점의 열린 출근 409 문구 — 3팀 문구는 가장 이른 열린 출근의 날짜 · 시각을 싣는데, 점포 전체에서 고르므로 본사에게 가려지는
+ * 직원(hiddenCount)의 출근일 수 있다. 확인이 건수만 내보내듯 저장의 409 도 시각을 빼고 안내만 한다(2026-11-04, front 요청).
+ */
+const OPEN_CHECK_IN_MESSAGE =
+  '퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 퇴근 등록 · 보정한 뒤 다시 처리해 주세요.';
 /** 교착이 두 번 나면 — 모두 되돌아갔으므로 다시 하면 된다는 것을 알린다(500 이 아니라 409) */
 const BUSY =
   '다른 처리와 겹쳐 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.';
@@ -92,7 +98,7 @@ export class StoreClosingsService {
    *    잠금(`FOR KEY SHARE`)과 부딪쳐 교착할 수 있다(okf/api/staff-retirement.md 「1팀이 정할 것」 1). 지웠거나 없으면 404,
    *    이미 폐점이면 409.
    * 2. 3팀 `retireStores` — 잠근 뒤 열린 출근을 다시 보고(있으면 409 `OPEN_CHECK_IN` + storeId), 직원 퇴직일 · 대기 계약 종료 ·
-   *    초대 만료를 한다. 예외는 그대로 던져 트랜잭션째 되돌린다.
+   *    초대 만료를 한다. 예외는 그대로 던져 트랜잭션째 되돌린다 — 열린 출근 409 만 code · storeId 를 두고 문구에서 출근 시각을 뺀다.
    * 3. 점포를 폐점 · 폐점일(한국 날짜 오늘)로 바꾸고 점포마다 점포상태 이력을 남긴다.
    *
    * 저장 때는 `check` 를 다시 부르지 않는다 — 막힘(열린 출근)은 `retireStores` 가 직원을 잠근 뒤 다시 보고 409 로 되돌린다.
@@ -129,13 +135,11 @@ export class StoreClosingsService {
       );
 
     const closedDate = kstToday(now);
-    const { byStore, total } = await this.retirement.retireStores(
-      tx,
-      ids,
-      closedDate,
-      adminAccountId,
-      now,
-    );
+    const { byStore, total } = await this.retirement
+      .retireStores(tx, ids, closedDate, adminAccountId, now)
+      .catch((error: unknown) => {
+        throw withoutCheckInTime(error);
+      });
 
     await tx.store.updateMany({
       where: { storeId: { in: ids } },
@@ -217,6 +221,20 @@ function isDeadlock(
     error.code === 'P2034' ||
     (error.code === 'P2010' && error.message.includes('Code: `40P01`'))
   );
+}
+
+/**
+ * 3팀의 열린 출근 409 에서 문구만 바꾼다(code · storeId · 상태는 그대로). 다른 오류는 그대로 돌려준다.
+ */
+function withoutCheckInTime(error: unknown): unknown {
+  if (!(error instanceof ConflictException)) return error;
+  const body = error.getResponse();
+  if (
+    typeof body !== 'object' ||
+    (body as { code?: unknown }).code !== 'OPEN_CHECK_IN'
+  )
+    return error;
+  return new ConflictException({ ...body, message: OPEN_CHECK_IN_MESSAGE });
 }
 
 /**

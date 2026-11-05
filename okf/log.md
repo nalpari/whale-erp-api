@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-04
+* **Update**: [Store management](/api/stores.md) — 폐점 저장의 409 `OPEN_CHECK_IN` 문구에서 출근 시각을 뺀다: 3팀 문구는 점포 전체에서 가장 이른 열린 출근의 날짜 · 시각을 싣는데, 본사에게 가려지는 직원의 출근일 수 있다. 1팀 폐점 서비스가 `code` · `storeId` 는 두고 문구만 「퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 퇴근 등록 · 보정한 뒤 다시 처리해 주세요.」로 바꾼다(front 요청). 3팀 단건 퇴직 문구는 그대로(api #246).
 * **Update**: [Store management](/api/stores.md) — 폐점 확인의 열린 출근은 수(`count` · `hiddenCount`)만 내보낸다. 3팀 결과의 첫 건(`first` — 직원 이름 · 출근 시각)은 1팀 폐점 서비스가 버린다: 점포 메뉴 조회 권한만으로 보이는 응답이고 화면은 건수만 안내한다(2026-11-04 사용자). 3팀 `storeClosingCheck` 는 그대로(api #246).
 * **Update**: [Store management](/api/stores.md) · [BP masters](/api/bp-masters.md) — 출처 갱신만: 폐점 주석을 고친 `store-format.ts` · `admin-withdrawal.service.ts`(진행 중 계약은 이제 점포 삭제 기준이고 폐점은 이 목록으로 막지 않는다, 회원 탈퇴 기준은 폐점 서비스 연결 때 다시 정함)의 `last_modified` 를 맞췄다. 본문 변경 없음(api #246 코드 리뷰).
 * **Update**: [Store management](/api/stores.md) · [Staff retirement](/api/staff-retirement.md) — 폐점 서비스 2차 리뷰 반영: 「`FOR NO KEY UPDATE` 로 바꾸며 틈이 열렸다」는 서술을 바로잡았다 — `FOR UPDATE` 도 외래키 insert 를 폐점 커밋까지 기다리게만 해 틈은 전부터 있었고, 지금은 직원 잠금 전에 커밋된 레코드가 퇴직에 들어간다. 근본 해결은 넣는 쪽의 점포 `FOR SHARE` 재확인. 3팀 계약 위반 500 은 오류 로그를 남긴다. 응답 DTO 가 3팀 결과의 선택 칸 추가까지 컴파일에서 잡는다. P2010 메시지 형식을 실제 클라이언트로 고정하는 e2e(api scizor).
