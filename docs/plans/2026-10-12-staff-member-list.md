@@ -1965,3 +1965,11 @@ docker stop petra-pg
 ```
 
 푸시 · PR 은 이 계획 밖이다 — 사용자에게 묻고 한다. PR 본문과 Plane 329 댓글에는 설계 문서 「마무리」의 세 가지(재발송 가능 여부 제외, BM · BA × 가맹 전부 가림과 필터 시 제외, 갱신 예정 일수 미정)를 적는다.
+
+## 탭 BP 로 옮기기 (2026-11-05 재영)
+
+작업 위치: 워크트리 `~/.whale-erp-worktrees/whale-erp-api/acropolis`, 브랜치 `grimer`(origin/main 기준). 근로계약(WHALEERP-618) · 급여명세서 · 출퇴근(WHALEERP-637)과 같은 방식이다.
+
+- 직원 정보 관리 경로(목록 · 상세 · 요약 5종 · 근무스케줄 표 · TO-DO 영역 · 퇴직 처리 4종 · 생년월일 정정 · 재설정 링크)가 `@TargetBp()` 로 대상 BP 를 받아 `AdminScopeService` 에 넘긴다. 플랫폼 계정은 고른 고객 BP 의 점포 전부를 다루고, BP · 가맹 계정은 그대로다.
+- 플랫폼 계정이 X-Bp-Code-Id 없이 부르면: 목록(`GET /staff-members`)은 `targetStores` 로 400 「직원 정보를 볼 BP 를 골라 주세요.」, 직원 단위 경로(`/staff-members/:id/…`)는 지금처럼 404 다(근로계약 상세와 같다 — 400 을 만들려고 따로 확인하지 않는다).
+- 일괄 저장(bulk-exports)은 이번에 옮기지 않는다.
