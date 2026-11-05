@@ -2,7 +2,7 @@ export class EmailFindResponseDto {
   /**
    * 맞는 계정의 로그인 이메일을 가린 것. 휴대전화번호는 고유하지 않아 여럿일 수 있고(탈퇴 계정은 뺀다),
    * 가입 순서대로다. @ 앞은 처음 2글자와 마지막 1글자만 보이고(3글자 이하면 첫 글자만), 도메인은 그대로다.
-   * 예: st*****m@gmail.com
+   * 예: st*****m@example.com
    */
   emails: string[];
 }
