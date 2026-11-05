@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-05
+* **Update**: [Store management](/api/stores.md) — 폐점 저장의 409 `OPEN_CHECK_IN` 문구를 「퇴근 기록이 없는 출근이 있어 폐점할 수 없습니다.」로 바꾼다(front PR #222 요청). front 폐점 팝업의 막힘 이름(「퇴근 기록이 없는 출근」)과 맞추고, 본사 역할(BM · BA)에게 가려진 직원의 출근은 출퇴근 현황에 줄로 보이지 않아(수만 보인다) 따를 수 없는 「보정하라」 안내를 뺐다. `code` · `storeId` 는 그대로, 3팀 단건 퇴직 문구도 그대로. `PUT /stores/:id` 의 Swagger 409 설명(openapi.json)에서도 「보정 뒤 다시」를 뺐다.
+
 ## 2026-11-04
 * **Update**: [Store management](/api/stores.md) — 폐점 저장의 409 `OPEN_CHECK_IN` 문구에서 출근 시각을 뺀다: 3팀 문구는 점포 전체에서 가장 이른 열린 출근의 날짜 · 시각을 싣는데, 본사에게 가려지는 직원의 출근일 수 있다. 1팀 폐점 서비스가 `code` · `storeId` 는 두고 문구만 「퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 퇴근 등록 · 보정한 뒤 다시 처리해 주세요.」로 바꾼다(front 요청). 3팀 단건 퇴직 문구는 그대로(api #246).
 * **Update**: [Store management](/api/stores.md) — 폐점 확인의 열린 출근은 수(`count` · `hiddenCount`)만 내보낸다. 3팀 결과의 첫 건(`first` — 직원 이름 · 출근 시각)은 1팀 폐점 서비스가 버린다: 점포 메뉴 조회 권한만으로 보이는 응답이고 화면은 건수만 안내한다(2026-11-04 사용자). 3팀 `storeClosingCheck` 는 그대로(api #246).

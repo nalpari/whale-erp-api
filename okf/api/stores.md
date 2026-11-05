@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T12:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-05T02:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -13,11 +13,11 @@ sources:
   - id: store-closings-service
     resource: ../../src/store-closings/store-closings.service.ts
     title: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
-    last_modified: 2026-11-04T12:00:00Z
+    last_modified: 2026-11-05T02:00:00Z
   - id: store-closing-response
     resource: ../../src/store-closings/dto/store-closing.response.dto.ts
     title: 폐점 확인 · 결과 응답(점포별 점포명 · 점포코드 + 합계)
-    last_modified: 2026-11-04T12:00:00Z
+    last_modified: 2026-11-05T02:00:00Z
   - id: store-closings-module
     resource: ../../src/store-closings/store-closings.module.ts
     title: StoreClosingsModule — 회원 탈퇴 · BP 탈퇴가 import 할 진입점(StaffMembersModule 의 RetirementService 를 쓴다)
@@ -25,7 +25,7 @@ sources:
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-11-04T07:00:00Z
+    last_modified: 2026-11-05T02:00:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
@@ -65,7 +65,7 @@ sources:
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
-    last_modified: 2026-11-04T12:00:00Z
+    last_modified: 2026-11-05T02:00:00Z
   - id: stores-e2e
     resource: ../../test/stores.e2e-spec.ts
     title: DB 없는 e2e — 쿼리 · 본문 변환, 가드 연동, 뺀 bpCodeId 쿼리의 400
@@ -228,11 +228,13 @@ are.[^store-closings-service][^store-closing-response]
   pending contracts that will end by status, unconfirmed payslips. **Open check-ins are counts only** —
   3팀's result also carries the earliest one with the staff name and time (`first`), which this service drops
   (2026-11-04): the response is visible with the store menu's read permission alone and the screen only shows
-  the count. Which check-in it is, the 출퇴근 현황 screen shows. The save's 409 `OPEN_CHECK_IN` keeps `code`
+  the count. Which check-in it is, 출퇴근 현황 shows — except that a staff member hidden from 본사 roles
+  (BM · BA) has no row there either, only a `hiddenCount`. The save's 409 `OPEN_CHECK_IN` keeps `code`
   and `storeId` but **not 3팀's time-bearing message**: 3팀 picks the earliest open check-in of the whole store,
   which can belong to a staff member hidden from 본사 roles, so `close` rewrites the message to
-  「퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 퇴근 등록 · 보정한 뒤 다시 처리해 주세요.」 (front request, 2026-11-04;
-  3팀's single-staff retire keeps its message).
+  「퇴근 기록이 없는 출근이 있어 폐점할 수 없습니다.」 — the same name front's closing popup uses for the block,
+  and no "correct it in 출퇴근 현황" instruction, since a hidden staff member's check-in is not shown there either
+  (front requests, 2026-11-04 and 2026-11-05 — front PR #222; 3팀's single-staff retire keeps its message).
   `isBlocked` is `count + hiddenCount > 0`; everything else is only reported. An unknown or deleted id is a 404
   naming the ids. A store missing from the name lookup is a 500, not an empty name — it cannot happen after
   that 404, so it means a broken contract.
