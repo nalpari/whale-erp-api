@@ -654,6 +654,33 @@ describe('TodosService', () => {
   });
 
   describe('update (수정)', () => {
+    it('탭 BP 를 받으면 수정 범위와 수정 뒤 다시 읽는 상세 모두 그 BP 로 본다', async () => {
+      db.todo.findFirst
+        .mockResolvedValueOnce({ todoId: 7, assignmentGroupId: null })
+        .mockResolvedValue({
+          ...itemRow({ title: '바꿈' }),
+          assignmentGroupId: null,
+          createdBy: ADMIN,
+          createdAt: NOW,
+          updatedAt: NOW,
+          todoAssignees: [],
+          todoStatusHistories: [],
+        });
+      db.todo.findMany.mockResolvedValueOnce([
+        { todoId: 7, status: 'PENDING' },
+      ]);
+
+      await expect(
+        service.update(ADMIN, 7, { title: '바꿈' }, BP, NOW),
+      ).resolves.toMatchObject({ todoId: 7, title: '바꿈' });
+      // 수정 뒤 상세를 bp 없이 다시 읽으면 플랫폼 계정은 플랫폼 BP 기준이 되어 404 다(api #253 리뷰)
+      expect(
+        scope.getManageableStores.mock.calls.length,
+      ).toBeGreaterThanOrEqual(2);
+      for (const call of scope.getManageableStores.mock.calls)
+        expect(call).toEqual([ADMIN, BP]);
+    });
+
     it('그룹이면 그룹 전체를 고치고, 긴급이 바뀐 행마다 이력을 남긴다', async () => {
       db.todo.findFirst
         .mockResolvedValueOnce({ todoId: 7, assignmentGroupId: 5 })

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-05
+* **Update**: [TO-DO](/api/todos.md) — 탭 BP 리뷰 반영(api #253): 플랫폼 계정이 고객 BP 의 TO-DO 를 고치면 저장 뒤 상세를 그 BP 로 다시 읽는다. bp 없이 다시 읽어 응답만 404 가 나던 것을 고쳤다.
 * **Update**: [Staff members](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) · [Authentication](/api/auth.md) · [Work schedules](/api/work-schedules.md) · [TO-DO](/api/todos.md) — 직원 정보 · 근무스케줄 · TO-DO 관리자 경로가 탭 BP 를 받는다(근로계약 WHALEERP-618 · 급여명세서 · 출퇴근 WHALEERP-637 과 같은 방식, 2026-11-05 재영). 컨트롤러가 `@TargetBp()` 로 대상 BP 를 받아 서비스의 `getManageableStores` · `canManageStaffMember` · `canManageStaffAccount` 와 `targetStores` 로 넘긴다. 플랫폼 계정은 고른 고객 BP 의 점포 전부, BP · 가맹 계정은 그대로다. 플랫폼 계정이 헤더 없이 부르면 목록류(직원 목록 · `/work-schedules` 전부 · `/todos` 전부)는 400(모듈마다 문구 상수 `staff-target-bp.ts` · `work-schedule-target-bp.ts` · `todo-target-bp.ts`), 직원 단위 경로(`/staff-members/:id/…` — 상세 · 요약 · 근무스케줄 표 · TO-DO 영역 · 퇴직 · 생년월일 정정 · 재설정 링크)는 404 로 둔다. 일괄 저장은 옮기지 않았다. Swagger 400 · 403 · 404 설명에 BP 판정을 더했다(openapi.json 다시 생성). 단위(범위 호출에 bp) · e2e(플랫폼 + 헤더 · 헤더 없음 · BP 계정). 마이그레이션 없음.
 * **Update**: [Store management](/api/stores.md) — 폐점 저장의 409 `OPEN_CHECK_IN` 문구를 「퇴근 기록이 없는 출근이 있어 폐점할 수 없습니다.」로 바꾼다(front PR #222 요청). front 폐점 팝업의 막힘 이름(「퇴근 기록이 없는 출근」)과 맞추고, 본사 역할(BM · BA)에게 가려진 직원의 출근은 출퇴근 현황에 줄로 보이지 않아(수만 보인다) 따를 수 없는 「보정하라」 안내를 뺐다. `code` · `storeId` 는 그대로, 3팀 단건 퇴직 문구도 그대로. `PUT /stores/:id` 의 Swagger 409 설명(openapi.json)에서도 「보정 뒤 다시」를 뺐다.
 

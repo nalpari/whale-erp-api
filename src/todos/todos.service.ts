@@ -525,7 +525,7 @@ export class TodosService {
       }
       await tx.todo.updateMany({ where: targets, data });
     });
-    return this.findOne(adminAccountId, todoId);
+    return this.findOne(adminAccountId, todoId, bp);
   }
 
   /** 관리자가 상태를 바꾼다(T-1). 그룹이면 그 행만이다. 이력은 changed_by. */

@@ -499,6 +499,13 @@ describe('TO-DO (e2e, DB)', () => {
     expect((await as(pmId, 'get', `/todos/${todoId}`, bpCodeId)).status).toBe(
       200,
     );
+    // 고객 BP 의 TO-DO 를 고치면 응답도 그 BP 로 다시 읽어 200 · 고친 값이다(api #253 리뷰)
+    const patched = await as(pmId, 'patch', `/todos/${todoId}`, bpCodeId, {
+      title: '플랫폼 수정',
+    });
+    expect([patched.status, (patched.body as { title: string }).title]).toEqual(
+      [200, '플랫폼 수정'],
+    );
     const staffTodos = `/staff-members/${direct1.staffMemberId}/todos`;
     expect((await as(pmId, 'get', staffTodos, bpCodeId)).status).toBe(200);
 
