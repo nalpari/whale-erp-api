@@ -1,0 +1,58 @@
+"""요구사항정의서 자체 검사 — .venv/bin/python test_build_requirements.py
+
+1) 작은 스냅숏으로 순서 · 칸을 확인하고, 2) 실제 스냅숏의 항목 수와 시트 줄 수가 같은지,
+3) 스냅숏 원문 문자열이 잘리지 않고 셀에 통째로 있는지 본다.
+"""
+import re
+
+from openpyxl import load_workbook
+
+import build_requirements as B
+
+snap = {"requirements": [{"id": "R-1", "data": {"name": "직원", "description": "설명", "importance": "high",
+                                                "progress": "todo", "features": ["F-1"],
+                                                "acceptanceCriteria": [{"description": "a", "isDone": True},
+                                                                       {"description": "b", "isDone": False}]}}],
+        "features": [{"id": "F-1", "data": {"parentId": "R-1", "name": "[2차] 초대", "description": "WHALEERP-12 참고",
+                                            "specs": ["S-1"], "slots": {"rules": {"applicability": "active",
+                                                                                   "value": "규칙"}}}}],
+        "specs": [{"id": "S-1", "data": {"parentId": "F-1", "name": "발송", "progress": "done"}}]}
+reqs, feats, specs, _ = B.build(snap)
+assert reqs == [["직원", "설명", "[완료] a\nb", "", "할 일", "높음", "", "R-1"]]
+assert feats[0][:7] == ["[2차] 초대", "직원", "WHALEERP-12 참고", "", "", "2차", ""] and feats[0][-2:] == ["WHALEERP-12", "F-1"]
+assert feats[0][8 + 7] == "규칙" and specs[0][1] == "[2차] 초대" and specs[0][6] == "완료"
+assert B.safe("hong@gmail.com · 01098765432 · 010-9876-5432") == "hong@example.com · 01012345678 · 010-1234-5678"
+
+path, r, f, s = B.write("1.0")
+snapshot = B.json.load(open(B.SNAPSHOT, encoding="utf-8"))
+wb = load_workbook(path)
+for title, key, n in (("요구사항", "requirements", r), ("기능", "features", f), ("명세", "specs", s)):
+    ws = wb[title]
+    head = next(i for i in range(1, ws.max_row + 1) if ws.cell(i, 1).value == "이름")
+    lines = sum(1 for i in range(head + 1, ws.max_row + 1) if ws.cell(i, ws.max_column).value)
+    assert len(snapshot[key]) == snapshot["totalCounts"][key] == n == lines, (title, len(snapshot[key]), lines)
+
+# 잘린 본문이 없다: 스냅숏의 모든 본문 문자열(코드값 칸 제외)이 공백 정규화 뒤 어느 셀엔가 통째로 있다
+SKIP = {"parentId", "applicability", "progress", "importance", "devices", "roles", "specs", "features"}
+
+
+def bodies(x, key=None):
+    if isinstance(x, str):
+        if key not in SKIP and x.strip():
+            yield x
+    elif isinstance(x, dict):
+        for k, v in x.items():
+            yield from bodies(v, k)
+    elif isinstance(x, list):
+        for v in x:
+            yield from bodies(v, key)
+
+
+cells = "\0".join(" ".join(str(c.value).split()) for w in wb.worksheets for row in w.iter_rows() for c in row if c.value)
+wanted = {" ".join(B.safe(t).split()) for k in ("requirements", "features", "specs") for it in snapshot[k]
+          for t in bodies(it["data"])}
+missing = [t for t in wanted if t not in cells]
+assert not missing, f"셀에 없는 본문 {len(missing)}건: {[m[:60] for m in missing[:3]]}"
+emails = set(re.findall(r"[\w.*+-]+@[\w.-]+\.[A-Za-z]{2,}", cells))
+assert all(e.endswith("@example.com") for e in emails), emails
+print(f"ok — 요구사항 {r} · 기능 {f} · 명세 {s} = Manyfast 항목 수 · 본문 {len(wanted)}건 잘림 없음")
