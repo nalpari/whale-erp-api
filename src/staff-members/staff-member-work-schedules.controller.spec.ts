@@ -13,6 +13,8 @@ describe('StaffMemberWorkSchedulesController', () => {
   let controller: StaffMemberWorkSchedulesController;
   let service: { list: jest.Mock };
   const admin = { type: 'admin' as const, id: 9, loginId: 'admin', sid: 1 };
+  // 가드가 정한 탭 BP — 플랫폼 계정이 고른 고객 BP(BP · 가맹 계정이면 소속 BP)
+  const bp = { bpCodeId: 3, isPlatformCaller: true };
 
   beforeEach(async () => {
     service = {
@@ -51,14 +53,14 @@ describe('StaffMemberWorkSchedulesController', () => {
 
   it('관리자 ID · 직원 ID · 쿼리를 넘긴다', async () => {
     const query = { period: 'ALL' as const, page: 2, pageSize: 50 };
-    await controller.list(admin, '30', query);
-    expect(service.list).toHaveBeenCalledWith(9, 30, query);
+    await controller.list(admin, '30', query, bp);
+    expect(service.list).toHaveBeenCalledWith(9, 30, query, bp);
   });
 
   it.each(['abc', '0', '2147483648'])(
     'ID 형식 오류(%s)는 DB 에 묻기 전에 404',
     async (raw) => {
-      await expect(controller.list(admin, raw, {})).rejects.toThrow(
+      await expect(controller.list(admin, raw, {}, bp)).rejects.toThrow(
         NotFoundException,
       );
       expect(service.list).not.toHaveBeenCalled();

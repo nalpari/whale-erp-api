@@ -1565,18 +1565,51 @@ describe('직원 목록 (e2e, DB)', () => {
     // 묶여 고객 BP 점포가 들지 않으므로 조회 권한이 있어도 고객 BP 직원을 보지 못한다. 범위가 정해지면 이 테스트가
     // 바뀐다. 플랫폼 BP 점포의 직원은 다른 e2e 가 만들 수 있어(account-status-policy) 목록 전체가 비었는지는 보지
     // 않고, 이 파일의 고객 BP 점포로만 묻는다.
-    it('플랫폼 마스터(PM)는 조회 권한이 있어도 고객 BP 직원을 보지 못한다 — 목록에 없고 상세는 404', async () => {
-      const customerStoreIds = [
-        directStoreId,
-        franchiseStoreId,
-        consentStoreId,
-        mixedStoreId,
-        otherBpStoreId,
-      ];
-      const list = await get(`?storeIds=${customerStoreIds.join(',')}`, pmId);
-      expect([list.status, list.body]).toEqual([200, { items: [], total: 0 }]);
+    // 탭 BP(X-Bp-Code-Id) — 플랫폼 계정은 고른 고객 BP 의 점포 전부를 다룬다. 헤더가 없으면 목록은 400, 직원 단위는 404
+    // (근로계약 상세와 같다). BP · 가맹 계정은 그대로다.
+    it('플랫폼 마스터(PM) — 고른 BP 의 직원만 보고, 헤더가 없으면 목록 400 · 상세 404', async () => {
+      const asPm = async (path: string, bp?: number) => {
+        const req = request(app.getHttpServer())
+          .get(`/staff-members${path}`)
+          .set('Authorization', `Bearer ${await tokenOf(pmId)}`);
+        if (bp !== undefined) req.set('X-Bp-Code-Id', String(bp));
+        const res = await req;
+        return {
+          status: res.status,
+          body: res.body as StaffMemberListResponseDto & { message?: string },
+        };
+      };
+      const mine = await asPm('?pageSize=200', bpCodeId);
+      expect(mine.status).toBe(200);
+      expect(idsOf(mine.body)).toEqual(
+        expect.arrayContaining([ids.joined, ids.consented]),
+      );
+      expect(idsOf(mine.body)).not.toContain(ids.otherBp);
+      const other = await asPm('?pageSize=200', otherBpId);
+      expect(idsOf(other.body)).toContain(ids.otherBp);
+      expect(idsOf(other.body)).not.toContain(ids.joined);
+      expect((await asPm(`/${ids.joined}`, bpCodeId)).status).toBe(200);
+      expect((await asPm(`/${ids.joined}`, otherBpId)).status).toBe(404);
+
+      const missing = await asPm('?pageSize=200');
+      expect([missing.status, missing.body.message]).toEqual([
+        400,
+        '직원 정보를 볼 BP 를 골라 주세요.',
+      ]);
       for (const id of [ids.joined, ids.consented, ids.otherBp])
         expect([id, (await getOne(id, pmId)).status]).toEqual([id, 404]);
+    });
+
+    it('BP 계정은 그대로 — 자기 BP 헤더는 헤더 없을 때와 같고, 남의 BP 헤더는 403', async () => {
+      const withHeader = async (bp: number) =>
+        request(app.getHttpServer())
+          .get('/staff-members?pageSize=200')
+          .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
+          .set('X-Bp-Code-Id', String(bp));
+      const own = await withHeader(bpCodeId);
+      expect(own.status).toBe(200);
+      expect(own.body).toEqual((await get('?pageSize=200')).body);
+      expect((await withHeader(otherBpId)).status).toBe(403);
     });
 
     // 거부는 컨트롤러의 @MenuPermission 이 함께 붙이는 UserTypes('admin') 를 보고 전역 JwtAuthGuard 가 낸다(목록

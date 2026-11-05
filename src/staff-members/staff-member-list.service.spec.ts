@@ -901,7 +901,8 @@ describe('StaffMemberListService', () => {
       const now = new Date('2026-10-26T03:00:00Z');
       const correctable = async (over: object) => {
         prisma.staffMember.findFirst.mockResolvedValue(row(over));
-        return (await service.findOne(9, 30, now))!.birthDateCorrectable;
+        return (await service.findOne(9, 30, undefined, now))!
+          .birthDateCorrectable;
       };
       const joined = { email: 'a@test.invalid', status: 'JOINED' };
 

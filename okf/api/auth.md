@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T08:31:48Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-05T08:00:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -113,7 +113,7 @@ sources:
   - id: password-reset-link-admin-controller
     resource: ../../src/auth/password-reset-link-admin.controller.ts
     title: POST /staff-members/:id/password-reset-links (admin, 직원 정보 관리 수정 권한)
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: password-reset-link-sender
     resource: ../../src/auth/password-reset-link-sender.ts
     title: Reset-link sender slot and its contract
@@ -654,6 +654,11 @@ request a PIN, and closing the link would let them undo the 관리자's action.
 Setting a new password either way closes everything left.
 
 The admin route takes a 관리자 웹 token ([Admin authentication](/api/admin-auth.md)).
+
+The BP is the tab's BP (2026-11-05 재영): `POST /staff-members/:id/password-reset-links` takes `@TargetBp()` and passes it
+to `canManageStaffAccount(id, staffMemberId, bp)`. A 플랫폼 계정 sends links to the 직원 of the customer BP picked in
+`X-Bp-Code-Id`; without the header the 직원 is out of scope — 404, like the other 직원-level routes. BP · 가맹 accounts are
+unchanged, another BP's header is the guard's 403 (e2e `password-reset-link`).
 
 # E-mail find
 

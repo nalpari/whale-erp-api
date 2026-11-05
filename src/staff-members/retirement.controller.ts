@@ -22,12 +22,21 @@ import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { CurrentUser } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
-import { MenuPermission } from '../auth/menu-permission.guard';
+import {
+  MenuPermission,
+  TargetBp,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
+import {
+  BP_FORBIDDEN_DESCRIPTION,
+  BP_NOT_FOUND_DESCRIPTION,
+} from '../contracts/contracts-swagger';
 import { RetirementDateDto } from './dto/retirement-date.dto';
 import { RetirementPreviewResponseDto } from './dto/retirement-preview.response.dto';
 import { parseDateOnly } from './kst-date';
 import { RetirementService } from './retirement.service';
 import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
+import { STAFF_BP_MISSING_404_DESCRIPTION } from './staff-target-bp';
 
 const MAX_ID = 2_147_483_647;
 
@@ -37,14 +46,16 @@ const MAX_ID = 2_147_483_647;
  *
  * 네 경로 모두 직원 정보 관리 수정 권한이 있어야 한다(WHALEERP-586). 미리 보기도 처리 · 변경 확인창에서만 쓰므로
  * 같은 권한이다. 권한은 가드가 먼저 보고(403), 범위는 그 뒤 핸들러가 본다(404) — 권한 없는 관리자에게 403 을
- * 주는 것은 직원이 있는지와 상관없어 아무것도 드러내지 않는다.
+ * 주는 것은 직원이 있는지와 상관없어 아무것도 드러내지 않는다. 범위의 BP 는 가드가 정한 탭 BP 다(`@TargetBp()`) — 플랫폼
+ * 계정이 헤더 없이 부르면 플랫폼 BP 라 직원이 없어 404 다(근로계약 상세와 같다).
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
-  description:
-    '직원 정보 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  description: `직원 정보 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
 })
-@ApiNotFoundResponse({ description: '없는 직원이거나 관리 범위 밖' })
+@ApiNotFoundResponse({
+  description: `없는 직원이거나 관리 범위 밖 · ${STAFF_BP_MISSING_404_DESCRIPTION} · ${BP_NOT_FOUND_DESCRIPTION}`,
+})
 @ApiBadRequestResponse({
   description: '퇴직일 형식 오류 · 3개월보다 오래됨 · 입사일보다 앞섬',
 })
@@ -66,8 +77,9 @@ export class RetirementController {
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
     @Query() query: RetirementDateDto,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<RetirementPreviewResponseDto> {
-    const id = await this.staffInScope(user, rawId);
+    const id = await this.staffInScope(user, rawId, bp);
     return this.retirement.preview(id, this.dateOf(query));
   }
 
@@ -81,8 +93,9 @@ export class RetirementController {
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
     @Body() body: RetirementDateDto,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<void> {
-    const id = await this.staffInScope(user, rawId);
+    const id = await this.staffInScope(user, rawId, bp);
     await this.retirement.retire(user.id, id, this.dateOf(body));
   }
 
@@ -93,8 +106,9 @@ export class RetirementController {
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
     @Body() body: RetirementDateDto,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<void> {
-    const id = await this.staffInScope(user, rawId);
+    const id = await this.staffInScope(user, rawId, bp);
     await this.retirement.changeDate(user.id, id, this.dateOf(body));
   }
 
@@ -104,8 +118,9 @@ export class RetirementController {
   async cancel(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<void> {
-    const id = await this.staffInScope(user, rawId);
+    const id = await this.staffInScope(user, rawId, bp);
     await this.retirement.cancel(user.id, id);
   }
 
@@ -113,11 +128,15 @@ export class RetirementController {
    * 경로의 ID 를 읽고 관리 범위를 확인한다. 정수 범위 밖이면 DB 에 묻기 전에 404 다 — 그대로 보내면
    * PostgreSQL 이 오류를 내 404 가 500 이 된다.
    */
-  private async staffInScope(user: AuthUser, rawId: string): Promise<number> {
+  private async staffInScope(
+    user: AuthUser,
+    rawId: string,
+    bp: TargetBpContext,
+  ): Promise<number> {
     const id = /^\d{1,10}$/.test(rawId) ? Number(rawId) : 0;
     if (id < 1 || id > MAX_ID)
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
-    if (!(await this.scope.canManageStaffMember(user.id, id)))
+    if (!(await this.scope.canManageStaffMember(user.id, id, bp)))
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
     return id;
   }

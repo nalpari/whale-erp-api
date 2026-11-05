@@ -182,3 +182,10 @@ staff #205 — 근무 탭의 근무지 카드 · 시트(앱 전역 현재 근무
 
 - 단위 시험 `src/work-schedules/*.spec.ts` — 시각 계산 · 판정 · 이력 모양.
 - e2e `test/work-schedules.e2e-spec.ts` — 일회용 DB(마이그레이션 전부 적용)에서 겹침 409 · 맞닿음 · 쪼갠 근무 · 자정 넘김 겹침, EXCLUDE 제약 이름, 30분 단위 · 24시간 · 휴게 400, 계약 종료일 · 가입 전 · 퇴직일 · 동의 없는 가맹 직원, 기본값, 수정 · 삭제 이력.
+
+## 탭 BP 로 옮기기 (2026-11-05 재영)
+
+작업 위치: 워크트리 `~/.whale-erp-worktrees/whale-erp-api/acropolis`, 브랜치 `grimer`. 급여명세서 · 출퇴근(WHALEERP-637)과 같은 방식이다.
+
+- `WorkSchedulesController` 10개 경로가 `@TargetBp()` 로 대상 BP 를 받아 서비스의 `scopeOf(id, bp)` → `targetStores` 로 넘긴다. 플랫폼 계정은 고른 고객 BP 의 점포 전부, BP · 가맹 계정은 그대로다.
+- 플랫폼 계정이 헤더 없이 부르면 범위를 보기 전에 400 「근무스케줄을 볼 BP 를 골라 주세요.」(모든 `/work-schedules` 경로가 `scopeOf` 를 거친다). 직원 상세의 근무스케줄 표(`/staff-members/:id/work-schedules`)는 직원 단위라 404 로 남는다.

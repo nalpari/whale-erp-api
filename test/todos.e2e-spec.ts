@@ -23,6 +23,10 @@ describe('TO-DO (e2e, DB)', () => {
   let franchiseStoreId: number;
   /** BP 마스터 — 전체 점포 */
   let bmId: number;
+  /** 플랫폼 마스터 — 탭 BP(X-Bp-Code-Id)로 고객 BP 를 고른다 */
+  let pmId: number;
+  /** 플랫폼 마스터가 고를 다른 고객 BP — 이 BP 를 고르면 테스트 BP 의 TO-DO 는 범위 밖이다 */
+  let otherBpCodeId: number;
   /** 가맹 점포: 동의함 · 동의 안 함 · 종이 계약 체결 완료지만 가입 전 */
   let consentedId: number;
   let unconsentedId: number;
@@ -83,6 +87,33 @@ describe('TO-DO (e2e, DB)', () => {
         joinPathCode: 'PLATFORM_REGISTERED',
         isAllStores: true,
         accountStatusCode: 'ACTIVE',
+      },
+    }));
+
+    ({ adminAccountId: pmId } = await prisma.adminAccount.create({
+      data: {
+        loginId: `todopm${n}`,
+        bpCodeId: (
+          await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } })
+        ).bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'PM',
+        roleGroupId: (
+          await prisma.roleGroup.findFirstOrThrow({
+            where: { roleCode: 'PM000001' },
+          })
+        ).roleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        isAllStores: true,
+        accountStatusCode: 'ACTIVE',
+      },
+    }));
+    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+      data: {
+        bpCode: `BP${(n + 1) % 1_000_000}`,
+        isPlatform: false,
+        accountStatusCode: 'ACTIVE',
+        tradeName: 'TO-DO 테스트 다른 BP',
       },
     }));
 
@@ -204,31 +235,36 @@ describe('TO-DO (e2e, DB)', () => {
     await prisma.account.deleteMany({
       where: { accountId: { in: accountIds } },
     });
-    if (bmId !== undefined) {
-      await prisma.adminSession.deleteMany({ where: { adminAccountId: bmId } });
-      await prisma.adminAccount.deleteMany({ where: { adminAccountId: bmId } });
-    }
+    const adminIds = [bmId, pmId].filter((id) => id !== undefined);
+    await prisma.adminSession.deleteMany({
+      where: { adminAccountId: { in: adminIds } },
+    });
+    await prisma.adminAccount.deleteMany({
+      where: { adminAccountId: { in: adminIds } },
+    });
     await prisma.store.deleteMany({
       where: { storeId: { in: [directStoreId, franchiseStoreId] } },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await prisma.bpCode.deleteMany({
+      where: {
+        bpCodeId: { in: [bpCodeId, otherBpCodeId].filter((id) => id) },
+      },
+    });
     await app.close();
   });
 
   // 관리자 토큰은 살아 있는 관리자 세션(admin_sessions)이 있어야 가드를 통과한다.
-  const adminToken = async () =>
+  const adminToken = async (sub = bmId) =>
     (
-      await app
-        .get(AdminSessionService)
-        .issue({ adminAccountId: bmId }, (sid) =>
-          app.get(JwtService).signAsync({
-            sub: bmId,
-            type: 'admin',
-            loginId: `admin${bmId}`,
-            typ: 'access',
-            sid,
-          }),
-        )
+      await app.get(AdminSessionService).issue({ adminAccountId: sub }, (sid) =>
+        app.get(JwtService).signAsync({
+          sub,
+          type: 'admin',
+          loginId: `admin${sub}`,
+          typ: 'access',
+          sid,
+        }),
+      )
     ).accessToken;
   const accountToken = async (accountId: number) => {
     const session = await app
@@ -417,6 +453,97 @@ describe('TO-DO (e2e, DB)', () => {
         (await asAdmin('get', `/todos?staffMemberId=${consentedId}`)).status,
       ).toBe(200);
     });
+  });
+
+  // 탭 BP(X-Bp-Code-Id) — 플랫폼 계정은 고른 고객 BP 의 TO-DO 를 다룬다. 헤더가 없으면 /todos 는 범위를 보기 전에 400,
+  // 직원 상세의 TO-DO 영역은 직원 단위라 404(근로계약 상세와 같다). BP · 가맹 계정은 그대로다.
+  it('플랫폼 마스터 — 고른 BP 의 TO-DO 만, 헤더가 없으면 /todos 400 · 직원 상세 TO-DO 404. BP 계정은 그대로', async () => {
+    const as = async (
+      sub: number,
+      method: 'get' | 'post' | 'patch' | 'delete',
+      path: string,
+      bp?: number,
+      body?: object,
+    ) => {
+      const req = request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${await adminToken(sub)}`);
+      if (bp !== undefined) req.set('X-Bp-Code-Id', String(bp));
+      return body === undefined ? req : req.send(body);
+    };
+    const body = todoBody({
+      storeId: directStoreId,
+      assigneeType: 'ALL',
+      executionMode: 'EACH',
+      title: '플랫폼 배정',
+    });
+    const created = await as(pmId, 'post', '/todos', bpCodeId, body);
+    expect(created.status).toBe(201);
+    const [todoId] = (created.body as { todoIds: number[] }).todoIds;
+    const titles = (res: { body: unknown }) =>
+      (res.body as { items: { title: string }[] }).items.map((i) => i.title);
+    const list = await as(pmId, 'get', '/todos?pageSize=100', bpCodeId);
+    expect(list.status).toBe(200);
+    expect(titles(list)).toContain('플랫폼 배정');
+    // 본사에게 가려지는 가맹 직원도 플랫폼 계정에게는 가리지 않는다(WHALEERP-618)
+    expect(
+      (
+        await as(
+          pmId,
+          'get',
+          '/todos/assignable-staff?storeId=' + franchiseStoreId,
+          bpCodeId,
+        )
+      ).status,
+    ).toBe(200);
+    expect((await as(pmId, 'get', `/todos/${todoId}`, bpCodeId)).status).toBe(
+      200,
+    );
+    // 고객 BP 의 TO-DO 를 고치면 응답도 그 BP 로 다시 읽어 200 · 고친 값이다(api #253 리뷰)
+    const patched = await as(pmId, 'patch', `/todos/${todoId}`, bpCodeId, {
+      title: '플랫폼 수정',
+    });
+    expect([patched.status, (patched.body as { title: string }).title]).toEqual(
+      [200, '플랫폼 수정'],
+    );
+    const staffTodos = `/staff-members/${direct1.staffMemberId}/todos`;
+    expect((await as(pmId, 'get', staffTodos, bpCodeId)).status).toBe(200);
+
+    // 다른 고객 BP 를 고르면 이 BP 의 TO-DO · 직원은 범위 밖
+    const other = await as(pmId, 'get', '/todos?pageSize=100', otherBpCodeId);
+    expect([other.status, titles(other)]).toEqual([200, []]);
+    expect(
+      (await as(pmId, 'get', `/todos/${todoId}`, otherBpCodeId)).status,
+    ).toBe(404);
+    expect((await as(pmId, 'get', staffTodos, otherBpCodeId)).status).toBe(404);
+
+    // 헤더 없음 — /todos 는 400, 직원 상세 TO-DO 는 404
+    for (const [method, path, payload] of [
+      ['get', '/todos'],
+      ['get', `/todos/${todoId}`],
+      ['post', '/todos', body],
+      ['patch', `/todos/${todoId}`, { title: '바꿈' }],
+      ['delete', `/todos/${todoId}`],
+    ] as const) {
+      const res = await as(pmId, method, path, undefined, payload);
+      expect([
+        path,
+        res.status,
+        (res.body as { message: string }).message,
+      ]).toEqual([path, 400, 'TO-DO 를 볼 BP 를 골라 주세요.']);
+    }
+    expect((await as(pmId, 'get', staffTodos)).status).toBe(404);
+
+    // BP 계정 — 자기 BP 헤더는 헤더 없을 때와 같고, 남의 BP 헤더는 가드의 403
+    const own = await as(bmId, 'get', '/todos?pageSize=100', bpCodeId);
+    expect(own.status).toBe(200);
+    expect(own.body).toEqual(
+      (await as(bmId, 'get', '/todos?pageSize=100')).body,
+    );
+    expect((await as(bmId, 'get', '/todos', otherBpCodeId)).status).toBe(403);
+    expect(
+      (await as(pmId, 'delete', `/todos/${todoId}`, bpCodeId)).status,
+    ).toBe(200);
   });
 
   it('한 명 수행 — 두 직원이 함께 완료하면 하나만 200, 늦은 쪽은 409 TODO_ALREADY_DONE', async () => {

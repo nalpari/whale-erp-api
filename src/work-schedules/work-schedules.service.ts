@@ -21,6 +21,9 @@ import {
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
+import { targetStores } from '../admin-scope/target-stores';
+import { WORK_SCHEDULE_BP_NOT_CHOSEN } from './work-schedule-target-bp';
 import { readStaffAppUrl } from '../auth/staff-app-url';
 import { isProduction } from '../config/profile';
 import {
@@ -338,6 +341,7 @@ export class WorkSchedulesService {
     storeId: number,
     fromYmd: string,
     toYmd: string,
+    bp?: TargetBpContext,
   ): Promise<WorkScheduleListResponseDto> {
     const from = toDate(fromYmd);
     const to = toDate(toYmd);
@@ -346,7 +350,7 @@ export class WorkSchedulesService {
       throw new BadRequestException(
         `기간은 시작 근무일부터 ${MAX_LIST_DAYS}일 이하입니다.`,
       );
-    const scope = await this.scopeOf(adminAccountId);
+    const scope = await this.scopeOf(adminAccountId, bp);
     if (scope.storeHides(storeId) === null)
       throw new NotFoundException(STORE_NOT_FOUND);
 
@@ -483,8 +487,9 @@ export class WorkSchedulesService {
   async histories(
     adminAccountId: number,
     query: ListWorkScheduleHistoriesQueryDto,
+    bp?: TargetBpContext,
   ): Promise<WorkScheduleHistoryListResponseDto> {
-    const scope = await this.scopeOf(adminAccountId);
+    const scope = await this.scopeOf(adminAccountId, bp);
     if (query.from && query.to && query.from > query.to)
       throw new BadRequestException('기간의 끝이 시작보다 앞입니다.');
     const hidesStore = scope.storeHides(query.storeId);
@@ -569,8 +574,9 @@ export class WorkSchedulesService {
     adminAccountId: number,
     storeId: number,
     workDate: string,
+    bp?: TargetBpContext,
   ): Promise<WorkScheduleStaffResponseDto> {
-    const scope = await this.scopeOf(adminAccountId);
+    const scope = await this.scopeOf(adminAccountId, bp);
     const hidesStore = scope.storeHides(storeId);
     if (hidesStore === null) throw new NotFoundException(STORE_NOT_FOUND);
     const rows = await this.prisma.staffMember.findMany({
@@ -598,11 +604,12 @@ export class WorkSchedulesService {
     adminAccountId: number,
     staffMemberId: number,
     workDate: string,
+    bp?: TargetBpContext,
   ): Promise<WorkScheduleDefaultsDto> {
     const date = toDate(workDate);
     const staff = await this.staffFor(
       this.prisma,
-      await this.scopeOf(adminAccountId),
+      await this.scopeOf(adminAccountId, bp),
       staffMemberId,
       date,
     );
@@ -629,9 +636,10 @@ export class WorkSchedulesService {
   async create(
     adminAccountId: number,
     dto: CreateWorkScheduleDto,
+    bp?: TargetBpContext,
   ): Promise<WorkScheduleDto> {
     const { date, span } = spanOf(dto);
-    const scope = await this.scopeOf(adminAccountId);
+    const scope = await this.scopeOf(adminAccountId, bp);
     const { dto: saved, mail } = await this.save(async (tx) => {
       const row = await this.insert(tx, scope, adminAccountId, {
         staffMemberId: dto.staffMemberId,
@@ -658,8 +666,9 @@ export class WorkSchedulesService {
   async bulkCreate(
     adminAccountId: number,
     dto: BulkCreateWorkSchedulesDto,
+    bp?: TargetBpContext,
   ): Promise<BulkCreateWorkSchedulesResponseDto> {
-    const scope = await this.scopeOf(adminAccountId);
+    const scope = await this.scopeOf(adminAccountId, bp);
     const created: ScheduleRow[] = [];
     const failed: BulkWorkScheduleFailureDto[] = [];
     for (const [index, line] of dto.rows.entries()) {
@@ -746,11 +755,12 @@ export class WorkSchedulesService {
     storeId: number,
     weekStartYmd: string,
     apply: boolean,
+    bp?: TargetBpContext,
   ): Promise<CopyLastWeekResponseDto> {
     const monday = toDate(weekStartYmd);
     if (monday.getUTCDay() !== 1)
       throw new BadRequestException('weekStart 는 월요일입니다.');
-    const scope = await this.scopeOf(adminAccountId);
+    const scope = await this.scopeOf(adminAccountId, bp);
     if (scope.storeHides(storeId) === null)
       throw new NotFoundException(STORE_NOT_FOUND);
     // 미리보기도 막는다 — 할 수 없는 복사를 보이지 않는다
@@ -997,9 +1007,10 @@ export class WorkSchedulesService {
     adminAccountId: number,
     workScheduleId: number,
     dto: UpdateWorkScheduleDto,
+    bp?: TargetBpContext,
   ): Promise<WorkScheduleDto> {
     const { date, span } = spanOf(dto);
-    const scope = await this.scopeOf(adminAccountId);
+    const scope = await this.scopeOf(adminAccountId, bp);
     const { dto: saved, mail } = await this.save(async (tx) => {
       // 옮겨 갈 주의 공유 잠금을 먼저(insert 와 같다) — 범위 · 존재는 lockSchedule 이 본다
       const home = await tx.workSchedule.findUnique({
@@ -1041,8 +1052,9 @@ export class WorkSchedulesService {
   async remove(
     adminAccountId: number,
     workScheduleId: number,
+    bp?: TargetBpContext,
   ): Promise<WorkScheduleDeleteResponseDto> {
-    const scope = await this.scopeOf(adminAccountId);
+    const scope = await this.scopeOf(adminAccountId, bp);
     const mail = await this.prisma.$transaction(async (tx) => {
       const before = await this.lockSchedule(tx, scope, workScheduleId);
       await tx.workSchedule.update({
@@ -1243,9 +1255,19 @@ export class WorkSchedulesService {
   /**
    * 관리하는 점포와 본사 제공 동의 가림. 사용 중인 관리자 계정이 아니면 403. 저장 트랜잭션 전에 읽어 넘긴다 — 트랜잭션
    * 안에서 this.prisma 로 읽으면 연결을 하나 더 잡고, 연결이 모자라면 트랜잭션이 자기 연결을 기다리다 시간이 다 된다.
+   * BP 는 탭 BP 다(`targetStores`) — 플랫폼 계정이 헤더 없이 부르면 범위를 보기 전에 400.
    */
-  private async scopeOf(adminAccountId: number): Promise<Scope> {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+  private async scopeOf(
+    adminAccountId: number,
+    bp?: TargetBpContext,
+  ): Promise<Scope> {
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      WORK_SCHEDULE_BP_NOT_CHOSEN,
+    );
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
 

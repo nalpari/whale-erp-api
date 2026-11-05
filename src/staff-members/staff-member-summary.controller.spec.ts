@@ -18,6 +18,8 @@ describe('StaffMemberSummaryController', () => {
     todos: jest.Mock;
   };
   const admin = { type: 'admin' as const, id: 9, loginId: 'admin', sid: 1 };
+  // 가드가 정한 탭 BP — 플랫폼 계정이 고른 고객 BP(BP · 가맹 계정이면 소속 BP)
+  const bp = { bpCodeId: 3, isPlatformCaller: true };
 
   beforeEach(async () => {
     summary = {
@@ -53,24 +55,29 @@ describe('StaffMemberSummaryController', () => {
   });
 
   it('영역마다 따로 부른다 — 관리자 ID 와 직원 ID 를 넘긴다', async () => {
-    await controller.contract(admin, '30');
-    await controller.workSchedules(admin, '30', { weekStart: '2026-10-21' });
-    await controller.payslips(admin, '30');
-    await controller.todos(admin, '30');
-    expect(summary.contract).toHaveBeenCalledWith(9, 30);
-    expect(summary.workSchedules).toHaveBeenCalledWith(9, 30, '2026-10-21');
-    expect(summary.payslips).toHaveBeenCalledWith(9, 30);
-    expect(summary.todos).toHaveBeenCalledWith(9, 30);
+    await controller.contract(admin, '30', bp);
+    await controller.workSchedules(
+      admin,
+      '30',
+      { weekStart: '2026-10-21' },
+      bp,
+    );
+    await controller.payslips(admin, '30', bp);
+    await controller.todos(admin, '30', bp);
+    expect(summary.contract).toHaveBeenCalledWith(9, 30, bp);
+    expect(summary.workSchedules).toHaveBeenCalledWith(9, 30, '2026-10-21', bp);
+    expect(summary.payslips).toHaveBeenCalledWith(9, 30, bp);
+    expect(summary.todos).toHaveBeenCalledWith(9, 30, bp);
   });
 
   it.each(['abc', '0', '2147483648'])(
     'ID 형식 오류(%s)는 DB 에 묻기 전에 404',
     async (raw) => {
       for (const call of [
-        () => controller.contract(admin, raw),
-        () => controller.workSchedules(admin, raw, {}),
-        () => controller.payslips(admin, raw),
-        () => controller.todos(admin, raw),
+        () => controller.contract(admin, raw, bp),
+        () => controller.workSchedules(admin, raw, {}, bp),
+        () => controller.payslips(admin, raw, bp),
+        () => controller.todos(admin, raw, bp),
       ])
         await expect(call()).rejects.toThrow(NotFoundException);
       for (const m of Object.values(summary)) expect(m).not.toHaveBeenCalled();

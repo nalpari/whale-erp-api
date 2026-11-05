@@ -16,6 +16,8 @@ describe('StaffBirthDateController', () => {
   let birthDates: { correct: jest.Mock };
   let scope: { canManageStaffMember: jest.Mock };
   const admin: AuthUser = { id: 9, type: 'admin', loginId: 'admin9', sid: 1 };
+  // 가드가 정한 탭 BP — 플랫폼 계정이 고른 고객 BP(BP · 가맹 계정이면 소속 BP)
+  const bp = { bpCodeId: 3, isPlatformCaller: true };
   const body = { birthDate: '1991-06-18' };
 
   beforeEach(async () => {
@@ -54,9 +56,9 @@ describe('StaffBirthDateController', () => {
   });
 
   it('관리자 ID · 직원 ID · 생년월일을 서비스에 넘긴다', async () => {
-    await controller.correct(admin, '42', body);
+    await controller.correct(admin, '42', body, bp);
 
-    expect(scope.canManageStaffMember).toHaveBeenCalledWith(9, 42);
+    expect(scope.canManageStaffMember).toHaveBeenCalledWith(9, 42, bp);
     expect(birthDates.correct).toHaveBeenCalledWith(9, 42, '1991-06-18');
   });
 
@@ -64,7 +66,7 @@ describe('StaffBirthDateController', () => {
     'ID 가 1..2147483647 밖(%p)이면 범위를 묻기 전에 404',
     async (rawId) => {
       await expect(
-        controller.correct(admin, rawId, body),
+        controller.correct(admin, rawId, body, bp),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(scope.canManageStaffMember).not.toHaveBeenCalled();
     },
@@ -73,7 +75,7 @@ describe('StaffBirthDateController', () => {
   it('관리 범위 밖 · 본사 제공 동의로 가린 직원은 없는 직원과 같은 404 이고 서비스를 부르지 않는다', async () => {
     scope.canManageStaffMember.mockResolvedValue(false);
 
-    await expect(controller.correct(admin, '42', body)).rejects.toThrow(
+    await expect(controller.correct(admin, '42', body, bp)).rejects.toThrow(
       '직원을 찾을 수 없습니다.',
     );
     expect(birthDates.correct).not.toHaveBeenCalled();

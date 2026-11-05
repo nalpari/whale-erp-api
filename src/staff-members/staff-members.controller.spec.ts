@@ -13,6 +13,8 @@ describe('StaffMembersController', () => {
   let controller: StaffMembersController;
   let list: { list: jest.Mock; findOne: jest.Mock };
   const admin = { type: 'admin' as const, id: 9, loginId: 'admin', sid: 1 };
+  // 가드가 정한 탭 BP — 플랫폼 계정이 고른 고객 BP(BP · 가맹 계정이면 소속 BP)
+  const bp = { bpCodeId: 3, isPlatformCaller: true };
 
   beforeEach(async () => {
     list = { list: jest.fn(), findOne: jest.fn() };
@@ -58,16 +60,16 @@ describe('StaffMembersController', () => {
 
   it('관리자 ID 와 쿼리를 넘겨 결과를 그대로 낸다', async () => {
     list.list.mockResolvedValue({ items: [], total: 0 });
-    await expect(controller.findAll(admin, { page: 2 })).resolves.toEqual({
+    await expect(controller.findAll(admin, { page: 2 }, bp)).resolves.toEqual({
       items: [],
       total: 0,
     });
-    expect(list.list).toHaveBeenCalledWith(9, { page: 2 });
+    expect(list.list).toHaveBeenCalledWith(9, { page: 2 }, bp);
   });
 
   it('사용 중인 관리자가 아니면 403', async () => {
     list.list.mockResolvedValue(null);
-    await expect(controller.findAll(admin, {})).rejects.toBeInstanceOf(
+    await expect(controller.findAll(admin, {}, bp)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
   });
@@ -76,13 +78,13 @@ describe('StaffMembersController', () => {
     it('관리자 ID 와 직원 ID 를 넘겨 한 줄을 그대로 낸다', async () => {
       const item = { staffMemberId: 30, isMasked: false };
       list.findOne.mockResolvedValue(item);
-      await expect(controller.findOne(admin, '30')).resolves.toBe(item);
-      expect(list.findOne).toHaveBeenCalledWith(9, 30);
+      await expect(controller.findOne(admin, '30', bp)).resolves.toBe(item);
+      expect(list.findOne).toHaveBeenCalledWith(9, 30, bp);
     });
 
     it('없거나 관리 범위 밖이거나 가려지는 직원은 404', async () => {
       list.findOne.mockResolvedValue(null);
-      await expect(controller.findOne(admin, '30')).rejects.toBeInstanceOf(
+      await expect(controller.findOne(admin, '30', bp)).rejects.toBeInstanceOf(
         NotFoundException,
       );
     });
@@ -90,7 +92,7 @@ describe('StaffMembersController', () => {
     it.each(['abc', '0', '-1', '1.5', '2147483648', '99999999999', ''])(
       'ID 형식 오류 %p 는 DB 에 묻기 전에 404',
       async (raw) => {
-        await expect(controller.findOne(admin, raw)).rejects.toBeInstanceOf(
+        await expect(controller.findOne(admin, raw, bp)).rejects.toBeInstanceOf(
           NotFoundException,
         );
         expect(list.findOne).not.toHaveBeenCalled();

@@ -45,6 +45,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
   let franchiseStoreId: number;
   let otherStoreId: number;
   let bmId: number; // BP 마스터(고정 그룹, 모든 메뉴 조회), 전체 점포
+  let pmId: number; // 플랫폼 마스터 — 탭 BP 로 고객 BP 를 고른다
   let staffAndTodoId: number; // 직원 정보 관리 · TO-DO 조회만 있는 BP 관리자
   let noStaffReadId: number; // 직원 정보 관리 조회가 없는 BP 관리자(TO-DO 조회는 있다)
   let staffOnlyId: number; // 직원 정보 관리 조회만 — TO-DO 칸(목록 · 요약) 모두 403 이어야 한다
@@ -136,6 +137,24 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     await prisma.adminAccount.update({
       where: { adminAccountId: bmId },
       data: { roleTypeCode: 'BM' },
+    });
+    // 플랫폼 마스터 — 플랫폼 BP 소속 PM. 상단에서 고른 BP(X-Bp-Code-Id)의 점포 전부를 다룬다
+    pmId = await admin(
+      `sumpm${n}`,
+      (
+        await prisma.roleGroup.findFirstOrThrow({
+          where: { roleCode: 'PM000001' },
+        })
+      ).roleGroupId,
+    );
+    await prisma.adminAccount.update({
+      where: { adminAccountId: pmId },
+      data: {
+        roleTypeCode: 'PM',
+        bpCodeId: (
+          await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } })
+        ).bpCodeId,
+      },
     });
     const fixedFm = await prisma.roleGroup.findFirstOrThrow({
       where: { roleCode: 'FM000001' },
@@ -1045,5 +1064,44 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         });
       }
     });
+  });
+  // 탭 BP(X-Bp-Code-Id) — 플랫폼 계정은 고른 고객 BP 의 직원 요약을 본다. 헤더가 없으면 직원 단위라 404(근로계약 상세와 같다).
+  it('플랫폼 마스터 — 고른 BP 의 직원만 다섯 영역 200, 다른 BP · 헤더 없음은 404. BP 계정은 그대로', async () => {
+    const asPm = async (path: string, bp?: number) => {
+      const req = request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${await tokenOf(pmId)}`);
+      if (bp !== undefined) req.set('X-Bp-Code-Id', String(bp));
+      return (await req).status;
+    };
+    for (const area of AREAS) {
+      const path = `/staff-members/${jianId}/summary/${area}`;
+      expect([area, await asPm(path, bpCodeId)]).toEqual([area, 200]);
+      expect([area, await asPm(path, otherBpId)]).toEqual([area, 404]);
+      expect([area, await asPm(path)]).toEqual([area, 404]);
+      expect([
+        area,
+        await asPm(
+          `/staff-members/${otherBpStaffId}/summary/${area}`,
+          otherBpId,
+        ),
+      ]).toEqual([area, 200]);
+      // BP 계정 — 자기 BP 헤더는 헤더 없을 때와 같고, 남의 BP 헤더는 가드의 403
+      const own = await request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
+        .set('X-Bp-Code-Id', String(bpCodeId));
+      expect([area, own.status]).toEqual([area, 200]);
+      expect(own.body).toEqual((await get(path)).body);
+      const other = await request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${await tokenOf(bmId)}`)
+        .set('X-Bp-Code-Id', String(otherBpId));
+      expect([area, other.status]).toEqual([area, 403]);
+    }
+    // 본사 역할에게 가려지는 가맹 직원도 플랫폼 계정에게는 가리지 않는다(WHALEERP-618)
+    expect(
+      await asPm(`/staff-members/${maskedId}/summary/contracts`, bpCodeId),
+    ).toBe(200);
   });
 });

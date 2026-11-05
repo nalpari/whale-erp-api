@@ -22,6 +22,8 @@ const date = (ymd: string) => new Date(`${ymd}T00:00:00Z`);
 // 2026-10-21(수) 한국 시각 오전 — UTC 로는 전날 밤이라 한국 날짜로 정하는지 함께 본다
 const NOW = new Date('2026-10-20T23:30:00Z');
 const KEY = randomBytes(32);
+// 가드가 정한 탭 BP — 범위 판정(canManageStaffMember · canManageStaffAccount)에 그대로 넘긴다
+const BP = { bpCodeId: 3, isPlatformCaller: true };
 
 describe('StaffMemberSummaryService', () => {
   let service: StaffMemberSummaryService;
@@ -92,15 +94,15 @@ describe('StaffMemberSummaryService', () => {
 
   describe('영역 권한 · 범위 — 다섯 영역 공통', () => {
     const areas = [
-      ['contract', '/contracts', () => service.contract(9, 30, NOW)],
+      ['contract', '/contracts', () => service.contract(9, 30, BP, NOW)],
       [
         'workSchedules',
         '/work-schedules',
-        () => service.workSchedules(9, 30, undefined, NOW),
+        () => service.workSchedules(9, 30, undefined, BP, NOW),
       ],
-      ['payslips', '/payslips', () => service.payslips(9, 30)],
-      ['todos', '/todos', () => service.todos(9, 30)],
-      ['sendLogs', '/contracts', () => service.sendLogs(9, 30)],
+      ['payslips', '/payslips', () => service.payslips(9, 30, BP)],
+      ['todos', '/todos', () => service.todos(9, 30, BP)],
+      ['sendLogs', '/contracts', () => service.sendLogs(9, 30, BP)],
     ] as const;
 
     it.each(areas)(
@@ -133,7 +135,7 @@ describe('StaffMemberSummaryService', () => {
       async (_, __, call) => {
         scope.canManageStaffMember.mockResolvedValue(false);
         await expect(call()).rejects.toThrow(NotFoundException);
-        expect(scope.canManageStaffMember).toHaveBeenCalledWith(9, 30);
+        expect(scope.canManageStaffMember).toHaveBeenCalledWith(9, 30, BP);
         for (const m of [
           prisma.contract.findFirst,
           prisma.contract.findMany,
@@ -191,7 +193,7 @@ describe('StaffMemberSummaryService', () => {
     });
 
     it('계약이 없으면 null', async () => {
-      await expect(service.contract(9, 30, NOW)).resolves.toEqual({
+      await expect(service.contract(9, 30, undefined, NOW)).resolves.toEqual({
         contract: null,
         canViewPayrollAccount: true,
         payrollAccount: null,
@@ -214,7 +216,7 @@ describe('StaffMemberSummaryService', () => {
       it('신고 정보가 있으면 은행 이름 · 계좌번호 전체(가리지 않음) — 계약이 없어도', async () => {
         prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
         prisma.codeItem.findFirst.mockResolvedValue({ label: 'KB국민은행' });
-        await expect(service.contract(9, 30, NOW)).resolves.toEqual({
+        await expect(service.contract(9, 30, undefined, NOW)).resolves.toEqual({
           contract: null,
           canViewPayrollAccount: true,
           payrollAccount: {
@@ -244,7 +246,7 @@ describe('StaffMemberSummaryService', () => {
         });
         prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
         prisma.codeItem.findFirst.mockResolvedValue({ label: 'KB국민은행' });
-        const res = await service.contract(9, 30, NOW);
+        const res = await service.contract(9, 30, undefined, NOW);
         expect(res.contract?.contractId).toBe(70);
         expect(res.payrollAccount).toEqual({
           bankName: 'KB국민은행',
@@ -262,7 +264,7 @@ describe('StaffMemberSummaryService', () => {
           endDate: null,
           sentAt: null,
         });
-        const res = await service.contract(9, 30, NOW);
+        const res = await service.contract(9, 30, undefined, NOW);
         expect(res.payrollAccount).toBeNull();
         expect(prisma.codeItem.findFirst).not.toHaveBeenCalled();
       });
@@ -271,7 +273,7 @@ describe('StaffMemberSummaryService', () => {
         prisma.staffTaxProfile.findUnique.mockResolvedValue(
           profile({ bankCode: 'B999' }),
         );
-        const res = await service.contract(9, 30, NOW);
+        const res = await service.contract(9, 30, undefined, NOW);
         expect(res.payrollAccount).toEqual({
           bankName: 'B999',
           accountNumber: '12345678901234',
@@ -287,7 +289,9 @@ describe('StaffMemberSummaryService', () => {
             payrollAccountNumberEncrypted: sealed('99998888777766', 31),
           }),
         );
-        const err = await service.contract(9, 30, NOW).catch((e: unknown) => e);
+        const err = await service
+          .contract(9, 30, undefined, NOW)
+          .catch((e: unknown) => e);
         expect(err).toBeInstanceOf(InternalServerErrorException);
         expect(
           JSON.stringify([(err as Error).message, errors.mock.calls]),
@@ -304,16 +308,16 @@ describe('StaffMemberSummaryService', () => {
           ],
         }).compile();
         const svc = keyless.get(StaffMemberSummaryService);
-        await expect(svc.contract(9, 30, NOW)).resolves.toEqual({
+        await expect(svc.contract(9, 30, undefined, NOW)).resolves.toEqual({
           contract: null,
           canViewPayrollAccount: true,
           payrollAccount: null,
         });
         prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
         jest.spyOn(Logger.prototype, 'error').mockImplementation();
-        await expect(svc.contract(9, 30, NOW)).rejects.toBeInstanceOf(
-          ServiceUnavailableException,
-        );
+        await expect(
+          svc.contract(9, 30, undefined, NOW),
+        ).rejects.toBeInstanceOf(ServiceUnavailableException);
       });
 
       describe('canViewPayrollAccount — 본사 역할은 가맹 직원의 급여 계좌를 못 본다(동의와 상관없이)', () => {
@@ -330,8 +334,8 @@ describe('StaffMemberSummaryService', () => {
           }).compile();
           const svc = keyless.get(StaffMemberSummaryService);
           const [withKey, withoutKey] = await Promise.all([
-            service.contract(9, 30, NOW),
-            svc.contract(9, 30, NOW),
+            service.contract(9, 30, BP, NOW),
+            svc.contract(9, 30, BP, NOW),
           ]);
           for (const res of [withKey, withoutKey])
             expect(res).toEqual({
@@ -339,7 +343,7 @@ describe('StaffMemberSummaryService', () => {
               canViewPayrollAccount: false,
               payrollAccount: null,
             });
-          expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 30);
+          expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 30, BP);
           expect(prisma.staffTaxProfile.findUnique).not.toHaveBeenCalled();
           expect(prisma.codeItem.findFirst).not.toHaveBeenCalled();
         });
@@ -347,7 +351,7 @@ describe('StaffMemberSummaryService', () => {
         it('볼 수 없어도 계약 칸은 그대로 온다', async () => {
           scope.canManageStaffAccount.mockResolvedValue(false);
           prisma.contract.findFirst.mockResolvedValue(contract());
-          const res = await service.contract(9, 30, NOW);
+          const res = await service.contract(9, 30, undefined, NOW);
           expect(res.contract?.contractId).toBe(70);
           expect(res.canViewPayrollAccount).toBe(false);
           expect(res.payrollAccount).toBeNull();
@@ -357,7 +361,7 @@ describe('StaffMemberSummaryService', () => {
           scope.canManageStaffAccount.mockResolvedValue(true);
           prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
           prisma.codeItem.findFirst.mockResolvedValue({ label: 'KB국민은행' });
-          const res = await service.contract(9, 30, NOW);
+          const res = await service.contract(9, 30, undefined, NOW);
           expect(res.canViewPayrollAccount).toBe(true);
           expect(res.payrollAccount).toEqual({
             bankName: 'KB국민은행',
@@ -366,23 +370,23 @@ describe('StaffMemberSummaryService', () => {
         });
 
         it('볼 수 있어도 신고 정보가 없으면 true · null', async () => {
-          const res = await service.contract(9, 30, NOW);
+          const res = await service.contract(9, 30, undefined, NOW);
           expect(res.canViewPayrollAccount).toBe(true);
           expect(res.payrollAccount).toBeNull();
         });
 
         it('기존 권한 · 범위 확인(403/404)이 먼저다 — 막히면 판정을 부르지 않는다', async () => {
           scope.canManageStaffMember.mockResolvedValue(false);
-          await expect(service.contract(9, 30, NOW)).rejects.toBeInstanceOf(
-            NotFoundException,
-          );
+          await expect(
+            service.contract(9, 30, undefined, NOW),
+          ).rejects.toBeInstanceOf(NotFoundException);
           expect(scope.canManageStaffAccount).not.toHaveBeenCalled();
         });
       });
     });
 
     it('가장 최근 계약 — 직원 목록 · 상세와 같은 정렬(created_at NULL 뒤, ID)', async () => {
-      await service.contract(9, 30, NOW);
+      await service.contract(9, 30, undefined, NOW);
       expect(firstArg(prisma.contract.findFirst)).toMatchObject({
         where: { staffMemberId: 30 },
         orderBy: [
@@ -394,7 +398,7 @@ describe('StaffMemberSummaryService', () => {
 
     it('유형 · 기간 · 상태 · 최근 발송일 · 갱신 예정일(종료일 30일 전)', async () => {
       prisma.contract.findFirst.mockResolvedValue(contract());
-      await expect(service.contract(9, 30, NOW)).resolves.toEqual({
+      await expect(service.contract(9, 30, undefined, NOW)).resolves.toEqual({
         canViewPayrollAccount: true,
         payrollAccount: null,
         contract: {
@@ -419,7 +423,7 @@ describe('StaffMemberSummaryService', () => {
       ],
     ])('갱신 예정일 없음 — %s', async (_, over) => {
       prisma.contract.findFirst.mockResolvedValue(contract(over));
-      const { contract: c } = await service.contract(9, 30, NOW);
+      const { contract: c } = await service.contract(9, 30, undefined, NOW);
       expect(c?.renewalDate).toBeNull();
     });
 
@@ -427,7 +431,7 @@ describe('StaffMemberSummaryService', () => {
       prisma.contract.findFirst.mockResolvedValue(
         contract({ endDate: date('2026-10-21') }),
       );
-      const { contract: c } = await service.contract(9, 30, NOW);
+      const { contract: c } = await service.contract(9, 30, undefined, NOW);
       expect(c?.renewalDate).toBe('2026-09-21');
     });
 
@@ -442,7 +446,7 @@ describe('StaffMemberSummaryService', () => {
           sentAt: null,
         }),
       );
-      const { contract: c } = await service.contract(9, 30, NOW);
+      const { contract: c } = await service.contract(9, 30, undefined, NOW);
       expect(c).toMatchObject({
         startDate: null,
         endDate: null,
@@ -511,7 +515,7 @@ describe('StaffMemberSummaryService', () => {
     });
 
     it('주를 주지 않으면 한국 날짜로 이번 주(월~일)다', async () => {
-      const res = await service.workSchedules(9, 30, undefined, NOW);
+      const res = await service.workSchedules(9, 30, undefined, undefined, NOW);
       expect(res).toMatchObject({
         weekStart: '2026-10-19',
         weekEnd: '2026-10-25',
@@ -533,9 +537,21 @@ describe('StaffMemberSummaryService', () => {
     });
 
     it('주 중 아무 날짜나 주면 그 주의 월요일로 맞춘다 — 일요일은 앞 주', async () => {
-      const res = await service.workSchedules(9, 30, '2026-10-25', NOW);
+      const res = await service.workSchedules(
+        9,
+        30,
+        '2026-10-25',
+        undefined,
+        NOW,
+      );
       expect(res.weekStart).toBe('2026-10-19');
-      const mon = await service.workSchedules(9, 30, '2026-10-26', NOW);
+      const mon = await service.workSchedules(
+        9,
+        30,
+        '2026-10-26',
+        undefined,
+        NOW,
+      );
       expect(mon.weekStart).toBe('2026-10-26');
     });
 
@@ -549,7 +565,7 @@ describe('StaffMemberSummaryService', () => {
       prisma.store.findMany.mockResolvedValue([
         { storeId: 5, name: '모리커피 서초점' },
       ]);
-      const res = await service.workSchedules(9, 30, undefined, NOW);
+      const res = await service.workSchedules(9, 30, undefined, undefined, NOW);
       expect(res.items).toEqual([
         {
           workScheduleId: 1,
@@ -859,6 +875,7 @@ describe('StaffMemberSummaryService', () => {
         9,
         30,
         undefined,
+        undefined,
         new Date('2026-10-25T15:30:00Z'),
       );
       expect(res.weekStart).toBe('2026-10-26');
@@ -866,7 +883,7 @@ describe('StaffMemberSummaryService', () => {
 
     it('weekStart 가 있는 날짜가 아니면 400 — 이번 주로 바꿔 답하지 않는다', async () => {
       await expect(
-        service.workSchedules(9, 30, '2026-02-30', NOW),
+        service.workSchedules(9, 30, '2026-02-30', undefined, NOW),
       ).rejects.toThrow(BadRequestException);
       expect(prisma.workSchedule.findMany).not.toHaveBeenCalled();
     });
@@ -882,12 +899,12 @@ describe('StaffMemberSummaryService', () => {
         },
       ]);
       await expect(
-        service.workSchedules(9, 30, undefined, NOW),
+        service.workSchedules(9, 30, undefined, undefined, NOW),
       ).rejects.toThrow(InternalServerErrorException);
     });
 
     it('근무스케줄이 없으면 점포를 묻지 않는다', async () => {
-      await service.workSchedules(9, 30, undefined, NOW);
+      await service.workSchedules(9, 30, undefined, undefined, NOW);
       expect(prisma.store.findMany).not.toHaveBeenCalled();
     });
 

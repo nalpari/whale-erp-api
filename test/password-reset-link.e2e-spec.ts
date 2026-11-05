@@ -74,6 +74,11 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
   let readOnlyAdminId: number;
   let readOnlyRoleGroupId: number;
   let readOnlyAdminToken: string;
+  /** 플랫폼 마스터 — 탭 BP(X-Bp-Code-Id)로 고객 BP 를 고른다 */
+  let pmId: number;
+  let pmToken: string;
+  /** 플랫폼 마스터가 고를 다른 고객 BP — 이 BP 를 고르면 테스트 BP 직원은 범위 밖이다 */
+  let otherBpCodeId: number;
   const accountIds: number[] = [];
   const staffIds: number[] = [];
 
@@ -141,6 +146,32 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
         accountStatusCode: 'ACTIVE',
       },
     }));
+    ({ adminAccountId: pmId } = await prisma.adminAccount.create({
+      data: {
+        loginId: `linkpm${n}`,
+        bpCodeId: (
+          await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } })
+        ).bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'PM',
+        roleGroupId: (
+          await prisma.roleGroup.findFirstOrThrow({
+            where: { roleCode: 'PM000001' },
+          })
+        ).roleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        isAllStores: true,
+        accountStatusCode: 'ACTIVE',
+      },
+    }));
+    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+      data: {
+        bpCode: `BP${(n + 1) % 1_000_000}`,
+        isPlatform: false,
+        accountStatusCode: 'ACTIVE',
+        tradeName: '링크 테스트 다른 BP',
+      },
+    }));
     ({ adminAccountId: otherAdminId } = await prisma.adminAccount.create({
       data: {
         loginId: `lnko${n}`,
@@ -205,6 +236,7 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     adminToken = await sign(adminId);
     otherAdminToken = await sign(otherAdminId);
     readOnlyAdminToken = await sign(readOnlyAdminId);
+    pmToken = await sign(pmId);
   });
 
   afterAll(async () => {
@@ -220,17 +252,17 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     await prisma.account.deleteMany({ where: byAccount });
     await prisma.adminStoreMapping.deleteMany({
       where: {
-        adminAccountId: { in: [adminId, otherAdminId, readOnlyAdminId] },
+        adminAccountId: { in: [adminId, otherAdminId, readOnlyAdminId, pmId] },
       },
     });
     await prisma.adminSession.deleteMany({
       where: {
-        adminAccountId: { in: [adminId, otherAdminId, readOnlyAdminId] },
+        adminAccountId: { in: [adminId, otherAdminId, readOnlyAdminId, pmId] },
       },
     });
     await prisma.adminAccount.deleteMany({
       where: {
-        adminAccountId: { in: [adminId, otherAdminId, readOnlyAdminId] },
+        adminAccountId: { in: [adminId, otherAdminId, readOnlyAdminId, pmId] },
       },
     });
     await prisma.roleGroupMenu.deleteMany({
@@ -242,7 +274,11 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: { storeId: { in: [storeId, otherStoreId] } },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await prisma.bpCode.deleteMany({
+      where: {
+        bpCodeId: { in: [bpCodeId, otherBpCodeId].filter((id) => id) },
+      },
+    });
     await app.close();
   });
 
@@ -545,6 +581,27 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
       await issue(staffMemberId, otherAdminToken).expect(404);
       await issue(2_147_483_647).expect(404);
       await issue('99999999999').expect(404);
+    });
+
+    // 탭 BP(X-Bp-Code-Id) — 플랫폼 계정은 고른 고객 BP 의 직원에게 보낸다. 헤더가 없으면 직원 단위라 404(근로계약 상세와 같다).
+    it('플랫폼 마스터 — 고른 BP 의 직원만 201, 다른 BP · 헤더 없음은 404. BP 계정은 그대로', async () => {
+      const { staffMemberId } = await createStaff();
+      const sent = links.sent.length;
+      await issue(staffMemberId, pmToken)
+        .set('X-Bp-Code-Id', String(otherBpCodeId))
+        .expect(404);
+      await issue(staffMemberId, pmToken).expect(404);
+      expect(links.sent).toHaveLength(sent);
+      await issue(staffMemberId, pmToken)
+        .set('X-Bp-Code-Id', String(bpCodeId))
+        .expect(201);
+      const other = await createStaff();
+      await issue(other.staffMemberId)
+        .set('X-Bp-Code-Id', String(otherBpCodeId))
+        .expect(403);
+      await issue(other.staffMemberId)
+        .set('X-Bp-Code-Id', String(bpCodeId))
+        .expect(201);
     });
 
     it('가입 전 · 퇴직 · 탈퇴는 409', async () => {

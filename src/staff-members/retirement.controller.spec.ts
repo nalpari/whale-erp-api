@@ -21,6 +21,8 @@ describe('RetirementController', () => {
   };
   let scope: { canManageStaffMember: jest.Mock };
   const admin: AuthUser = { id: 9, type: 'admin', loginId: 'admin9', sid: 1 };
+  // 가드가 정한 탭 BP — 플랫폼 계정이 고른 고객 BP(BP · 가맹 계정이면 소속 BP)
+  const bp = { bpCodeId: 3, isPlatformCaller: true };
   const body = { retiredDate: '2026-10-31' };
 
   beforeEach(async () => {
@@ -80,9 +82,9 @@ describe('RetirementController', () => {
   });
 
   it('처리한 관리자와 읽은 ID · 날짜를 서비스에 넘긴다', async () => {
-    await controller.retire(admin, '42', body);
+    await controller.retire(admin, '42', body, bp);
 
-    expect(scope.canManageStaffMember).toHaveBeenCalledWith(9, 42);
+    expect(scope.canManageStaffMember).toHaveBeenCalledWith(9, 42, bp);
     expect(retirement.retire).toHaveBeenCalledWith(
       9,
       42,
@@ -94,14 +96,14 @@ describe('RetirementController', () => {
     'ID 가 1..2147483647 밖(%p)이면 범위를 묻기 전에 404',
     async (rawId) => {
       await expect(
-        controller.retire(admin, rawId, body),
+        controller.retire(admin, rawId, body, bp),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(scope.canManageStaffMember).not.toHaveBeenCalled();
     },
   );
 
   it('경계값 2147483647 은 받는다', async () => {
-    await controller.cancel(admin, '2147483647');
+    await controller.cancel(admin, '2147483647', bp);
 
     expect(retirement.cancel).toHaveBeenCalledWith(9, 2147483647);
   });
@@ -110,10 +112,10 @@ describe('RetirementController', () => {
     scope.canManageStaffMember.mockResolvedValue(false);
 
     for (const run of [
-      () => controller.retire(admin, '42', body),
-      () => controller.changeDate(admin, '42', body),
-      () => controller.cancel(admin, '42'),
-      () => controller.preview(admin, '42', body),
+      () => controller.retire(admin, '42', body, bp),
+      () => controller.changeDate(admin, '42', body, bp),
+      () => controller.cancel(admin, '42', bp),
+      () => controller.preview(admin, '42', body, bp),
     ])
       await expect(run()).rejects.toThrow('직원을 찾을 수 없습니다.');
     expect(retirement.retire).not.toHaveBeenCalled();

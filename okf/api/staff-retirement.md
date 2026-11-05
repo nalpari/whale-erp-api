@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-04T09:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-05T08:00:00Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: retirement-controller
     resource: ../../src/staff-members/retirement.controller.ts
     title: /staff-members/:id/retirement (직원 정보 관리 수정 권한)
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: retirement-scheduler
     resource: ../../src/staff-members/retirement.scheduler.ts
     title: Midnight KST batch (staff-retire)
@@ -387,8 +387,13 @@ the same 직원 상세 does **not** follow consent — it is an account action, 
 per store (`canManageStaffAccount`, 2026-10-14 재영).
 
 Platform 관리자 (PM · PA) belong to the platform BP and so manage no customer
-store under this rule — until this route passes the tab BP (`@TargetBp()`) to
-`AdminScopeService`, which then gives them all of that BP's stores (2026-10-26).
+store under this rule alone; `AdminScopeService` gives them all of a BP's stores when the
+route passes the tab BP (`@TargetBp()`, 2026-10-26).
+
+The BP is the tab's BP (2026-11-05 재영): the four routes take `@TargetBp()` and hand it to
+`canManageStaffMember(id, staffMemberId, bp)`. A 플랫폼 계정 handles the 직원 of the customer BP it picked in
+`X-Bp-Code-Id`; without the header its target is the platform BP, so the 직원 is out of scope — the same 404 as 근로계약
+상세, not a 400. BP · 가맹 accounts are unchanged (e2e `staff-retirement`).
 
 # One record, not the person
 

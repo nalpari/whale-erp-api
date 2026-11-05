@@ -4,12 +4,12 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-10-30T00:40:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-05T08:00:00Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
     title: TodosService — 등록 · 목록 · 상세 · 수정 · 상태 변경 · 삭제 · 내 TO-DO
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: todo-rules
     resource: ../../src/todos/todo-rules.ts
     title: 재직 직원 기준 · 정렬 · 묶음 상태 · 수행 예정 일시 계산
@@ -17,7 +17,7 @@ sources:
   - id: todos-controllers
     resource: ../../src/todos/todos.controller.ts
     title: /todos · /staff-members/:id/todos · /me/todos
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: due-soon
     resource: ../../src/todos/todo-due-soon.service.ts
     title: 수행 임박 알림 배치(todo-due-soon)
@@ -29,7 +29,7 @@ sources:
   - id: plan
     resource: ../../docs/plans/2026-10-19-todos.md
     title: TO-DO API 계획 (T-1 ~ T-4, 2026-10-19 재영)
-    last_modified: 2026-10-19T02:50:00Z
+    last_modified: 2026-11-05T08:00:00Z
 ---
 
 # What it is
@@ -132,6 +132,16 @@ null.
 outside `ACTIVE_STAFF` (no 체결 완료 contract at its store, not joined, or retired)
 contributes nothing (운영 정책 CTR-29); anything else, including
 `PATCH /me/todos/:todoId/status` on such a record's TO-DO, is 404.
+
+## The BP is the tab's BP (2026-11-05 재영)
+
+Every `/todos` route and `GET /staff-members/:id/todos` take `@TargetBp()` and pass it on —
+`scopeOf(id, bp)` resolves the stores through `targetStores`, the 직원 checks through
+`canManageStaffMember(id, staffMemberId, bp)`. A 플랫폼 계정 works on every store of the customer BP it picked
+in the header; BP · 가맹 accounts are unchanged (`scopeAdmin` ignores `bp`, another BP's header is the guard's 403).
+Without the header a 플랫폼 계정's target is its own platform BP, which has no stores: every `/todos` route is 400
+「TO-DO 를 볼 BP 를 골라 주세요.」(`TODO_BP_NOT_CHOSEN`) before the scope is read, while the 직원 상세 TO-DO 영역 stays the
+직원-level 404 (`canManageStaffMember` runs first), like 근로계약 상세. e2e `todos` pins all three.
 
 # Lists are sorted in memory
 
