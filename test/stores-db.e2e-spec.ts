@@ -586,8 +586,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       error: 'Conflict',
       code: 'OPEN_CHECK_IN',
       storeId,
-      message:
-        '퇴근하지 않은 출근이 있습니다. 출 · 퇴근 현황에서 퇴근 등록 · 보정한 뒤 다시 처리해 주세요.',
+      message: '퇴근 기록이 없는 출근이 있어 폐점할 수 없습니다.',
     });
 
     const after = await detail(storeId);
