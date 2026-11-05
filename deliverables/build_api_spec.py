@@ -23,8 +23,13 @@ VERBS = {"Get", "Post", "Put", "Patch", "Delete", "All", "Options", "Head"}
 AUTH = {"Public", "UserTypes", "MenuPermission", "UseGuards", "AllowPasswordChangePending"}
 NOT_RULE = re.compile(r"@(Api\w*|Type|Transform|Expose|Exclude)\b")
 UNKNOWN = "코드에서 판정 불가"
-# 납품 문서에 싣지 않는 내부 표지: 일감 번호 · PR 번호 · 코드 리뷰 · 소스 파일명 · Manyfast ID (2026-11-05 재영 (가)안)
-INTERNAL = re.compile(r"WHALEERP-\d+|\b(?:api|front|staff)\s*#\d*|코드 리뷰|[\w./-]+\.ts\b|\b[SFR]-[A-Z]")
+# 납품 문서에 싣지 않는 내부 표지: 일감 번호 · PR 번호 · 코드 리뷰 · 소스 파일명 · Manyfast ID (2026-11-05 재영 (가)안),
+# @SkipThrottle 설명, 「(이름 YYYY-MM-DD)」 · 「(YYYY-MM-DD 이름)」 결정 기록(같은 날 추가). 정책 번호(ATT-20 등)는 표지가 아니다.
+_NAME = r"(?!(?:결정|확인|이후|이전|사용자|노무사|지정|기준|부터|까지)(?![가-힣]))[가-힣]{2,3}"
+_DATE = r"\d{4}-\d{2}-\d{2}"
+INTERNAL = re.compile(r"WHALEERP-\d+|\b(?:api|front|staff)\s*#\d*|코드 리뷰|[\w./-]+\.ts\b|\b[SFR]-[A-Z]|@SkipThrottle"
+                      rf"|(?:(?<=\()|(?<=, )|(?<=· )){_NAME}(?: 결정| 확인)? {_DATE}(?=[),·]| ·)"
+                      rf"|{_DATE} {_NAME}(?=\)|,| ·)")
 REMOVED = set()  # 뺀 문장(생성 출력에 수를 보인다)
 CONSTRAINTS = ("minLength", "maxLength", "minimum", "maximum", "pattern", "format", "minItems", "maxItems")
 
