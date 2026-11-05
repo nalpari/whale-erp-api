@@ -20,6 +20,8 @@ describe('PasswordResetLinkAdminController', () => {
   let links: { issue: jest.Mock };
   let scope: { canManageStaffAccount: jest.Mock };
   const admin: AuthUser = { id: 9, type: 'admin', loginId: 'admin', sid: 1 };
+  // 가드가 정한 탭 BP — 플랫폼 계정이 고른 고객 BP(BP · 가맹 계정이면 소속 BP)
+  const bp = { bpCodeId: 3, isPlatformCaller: true };
   const issued = {
     issuedAt: new Date('2026-10-13T03:00:00Z'),
     expiresAt: new Date('2026-10-14T03:00:00Z'),
@@ -73,16 +75,16 @@ describe('PasswordResetLinkAdminController', () => {
   });
 
   it('보낸 관리자와 읽은 ID 로 범위를 확인하고 발급 결과를 그대로 돌려준다', async () => {
-    await expect(controller.issue(admin, '42')).resolves.toEqual(issued);
+    await expect(controller.issue(admin, '42', bp)).resolves.toEqual(issued);
 
-    expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 42);
+    expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 42, bp);
     expect(links.issue).toHaveBeenCalledWith(9, 42);
   });
 
   it.each(['abc', '0', '-1', '1.5', '2147483648', '99999999999'])(
     'ID 가 1..2147483647 밖(%p)이면 범위를 묻기 전에 404',
     async (rawId) => {
-      await expect(controller.issue(admin, rawId)).rejects.toBeInstanceOf(
+      await expect(controller.issue(admin, rawId, bp)).rejects.toBeInstanceOf(
         NotFoundException,
       );
       expect(scope.canManageStaffAccount).not.toHaveBeenCalled();
@@ -91,7 +93,7 @@ describe('PasswordResetLinkAdminController', () => {
   );
 
   it('경계값 2147483647 은 받는다', async () => {
-    await controller.issue(admin, '2147483647');
+    await controller.issue(admin, '2147483647', bp);
 
     expect(links.issue).toHaveBeenCalledWith(9, 2147483647);
   });
@@ -99,7 +101,7 @@ describe('PasswordResetLinkAdminController', () => {
   it('관리 범위 밖이면 없는 직원과 같은 404 이고 링크를 보내지 않는다', async () => {
     scope.canManageStaffAccount.mockResolvedValue(false);
 
-    await expect(controller.issue(admin, '42')).rejects.toThrow(
+    await expect(controller.issue(admin, '42', bp)).rejects.toThrow(
       '직원을 찾을 수 없습니다.',
     );
     expect(links.issue).not.toHaveBeenCalled();

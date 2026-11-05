@@ -23,7 +23,16 @@ import {
 import { CurrentUser } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
-import { MenuPermission } from '../auth/menu-permission.guard';
+import {
+  MenuPermission,
+  TargetBp,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
+import {
+  BP_FORBIDDEN_DESCRIPTION,
+  BP_MISSING_DESCRIPTION,
+  BP_NOT_FOUND_DESCRIPTION,
+} from '../contracts/contracts-swagger';
 import { parseRouteId } from '../common/route-id';
 import {
   BulkCreateWorkSchedulesDto,
@@ -62,13 +71,16 @@ const NOT_SCHEDULABLE =
 
 /**
  * 관리자 웹 「근무스케줄 관리」(#198). 메뉴는 `/work-schedules`. 업무 범위(관리하는 점포) 밖은 없는 것과 같다(404).
- * 권한은 가드가 먼저 보고(403), 범위는 그 뒤 서비스가 본다(404).
+ * 권한은 가드가 먼저 보고(403), 범위는 그 뒤 서비스가 본다(404). 다루는 근무스케줄의 BP 는 가드가 X-Bp-Code-Id 로 정한다
+ * (`@TargetBp()`) — BP · 가맹 계정은 소속 BP, 플랫폼 계정은 헤더로 고른 고객 BP 의 점포 전부다(헤더가 없으면 서비스가 400,
+ * 급여명세서와 같다). 모든 경로가 자기 400 · 404 를 적어 BP 설명을 함께 다시 적는다 — 메서드의 설명이 클래스의 것을 덮는다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
-  description:
-    '근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  description: `근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
 })
+@ApiBadRequestResponse({ description: BP_MISSING_DESCRIPTION })
+@ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
 @Controller('work-schedules')
 export class WorkSchedulesController {
   constructor(private readonly schedules: WorkSchedulesService) {}
@@ -81,14 +93,23 @@ export class WorkSchedulesController {
   @MenuPermission('read')
   @ApiOkResponse({ type: WorkScheduleListResponseDto })
   @ApiBadRequestResponse({
-    description: '쿼리 형식 오류 · 기간이 42일 넘음 · 끝이 시작보다 앞',
+    description: `쿼리 형식 오류 · 기간이 42일 넘음 · 끝이 시작보다 앞 · ${BP_MISSING_DESCRIPTION}`,
   })
-  @ApiNotFoundResponse({ description: '근무지 점포가 없거나 업무 범위 밖' })
+  @ApiNotFoundResponse({
+    description: `근무지 점포가 없거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   list(
     @Query() query: ListWorkSchedulesQueryDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<WorkScheduleListResponseDto> {
-    return this.schedules.list(user.id, query.storeId, query.from, query.to);
+    return this.schedules.list(
+      user.id,
+      query.storeId,
+      query.from,
+      query.to,
+      bp,
+    );
   }
 
   /**
@@ -99,33 +120,39 @@ export class WorkSchedulesController {
   @MenuPermission('read')
   @ApiOkResponse({ type: WorkScheduleHistoryListResponseDto })
   @ApiBadRequestResponse({
-    description: '쿼리 형식 오류(날짜 · 페이지 · 페이지당 건수 20 · 50 · 100)',
+    description: `쿼리 형식 오류(날짜 · 페이지 · 페이지당 건수 20 · 50 · 100) · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
-    description:
-      '근무지 점포가 없거나 업무 범위 밖 · 직원 필터가 그 점포 직원이 아니거나 본사에게 가려진 직원',
+    description: `근무지 점포가 없거나 업무 범위 밖 · 직원 필터가 그 점포 직원이 아니거나 본사에게 가려진 직원 · ${BP_NOT_FOUND_DESCRIPTION}`,
   })
   histories(
     @Query() query: ListWorkScheduleHistoriesQueryDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<WorkScheduleHistoryListResponseDto> {
-    return this.schedules.histories(user.id, query);
+    return this.schedules.histories(user.id, query, bp);
   }
 
   /** 등록의 직원 선택지 — 가입을 마쳤고 그 근무일에 체결 완료 계약이 있고 퇴직일 전인 직원, 이름순(STAFF-29 · CTR-24) */
   @Get('assignable-staff')
   @MenuPermission('create')
   @ApiOkResponse({ type: WorkScheduleStaffResponseDto })
-  @ApiBadRequestResponse({ description: '쿼리 형식 오류' })
-  @ApiNotFoundResponse({ description: '근무지 점포가 없거나 업무 범위 밖' })
+  @ApiBadRequestResponse({
+    description: `쿼리 형식 오류 · ${BP_MISSING_DESCRIPTION}`,
+  })
+  @ApiNotFoundResponse({
+    description: `근무지 점포가 없거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   assignableStaff(
     @Query() query: WorkScheduleStaffQueryDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<WorkScheduleStaffResponseDto> {
     return this.schedules.assignableStaff(
       user.id,
       query.storeId,
       query.workDate,
+      bp,
     );
   }
 
@@ -133,16 +160,22 @@ export class WorkSchedulesController {
   @Get('defaults')
   @MenuPermission(['create', 'update'])
   @ApiOkResponse({ type: WorkScheduleDefaultsDto })
-  @ApiBadRequestResponse({ description: NOT_SCHEDULABLE })
-  @ApiNotFoundResponse({ description: '직원이 없거나 업무 범위 밖' })
+  @ApiBadRequestResponse({
+    description: `${NOT_SCHEDULABLE} · ${BP_MISSING_DESCRIPTION}`,
+  })
+  @ApiNotFoundResponse({
+    description: `직원이 없거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   defaults(
     @Query() query: WorkScheduleDefaultsQueryDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<WorkScheduleDefaultsDto> {
     return this.schedules.defaults(
       user.id,
       query.staffMemberId,
       query.workDate,
+      bp,
     );
   }
 
@@ -150,16 +183,21 @@ export class WorkSchedulesController {
   @Post()
   @MenuPermission('create')
   @ApiCreatedResponse({ type: WorkScheduleDto })
-  @ApiBadRequestResponse({ description: NOT_SCHEDULABLE })
-  @ApiNotFoundResponse({ description: '직원이 없거나 업무 범위 밖' })
+  @ApiBadRequestResponse({
+    description: `${NOT_SCHEDULABLE} · ${BP_MISSING_DESCRIPTION}`,
+  })
+  @ApiNotFoundResponse({
+    description: `직원이 없거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   @ApiConflictResponse({
     description: 'WORK_SCHEDULE_OVERLAP(같은 직원 근무스케줄과 겹침)',
   })
   create(
     @Body() body: CreateWorkScheduleDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<WorkScheduleDto> {
-    return this.schedules.create(user.id, body);
+    return this.schedules.create(user.id, body, bp);
   }
 
   /**
@@ -170,14 +208,14 @@ export class WorkSchedulesController {
   @MenuPermission('create')
   @ApiCreatedResponse({ type: BulkCreateWorkSchedulesResponseDto })
   @ApiBadRequestResponse({
-    description:
-      '요청 형식 오류(근무일 · 줄 수 1~100 · 줄의 시각 형식) — 이때는 아무 줄도 저장하지 않는다',
+    description: `요청 형식 오류(근무일 · 줄 수 1~100 · 줄의 시각 형식) — 이때는 아무 줄도 저장하지 않는다 · ${BP_MISSING_DESCRIPTION}`,
   })
   bulkCreate(
     @Body() body: BulkCreateWorkSchedulesDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<BulkCreateWorkSchedulesResponseDto> {
-    return this.schedules.bulkCreate(user.id, body);
+    return this.schedules.bulkCreate(user.id, body, bp);
   }
 
   /** 지난 주 복사 미리보기(#204) — 쓰지 않는다. 넣을 주가 비어 있지 않으면 409 */
@@ -185,10 +223,11 @@ export class WorkSchedulesController {
   @MenuPermission('create')
   @ApiOkResponse({ type: CopyLastWeekResponseDto })
   @ApiBadRequestResponse({
-    description:
-      '쿼리 형식 오류 · weekStart 가 월요일이 아님 · WORK_SCHEDULE_STORE_CLOSED(폐점 점포)',
+    description: `쿼리 형식 오류 · weekStart 가 월요일이 아님 · WORK_SCHEDULE_STORE_CLOSED(폐점 점포) · ${BP_MISSING_DESCRIPTION}`,
   })
-  @ApiNotFoundResponse({ description: '근무지 점포가 없거나 업무 범위 밖' })
+  @ApiNotFoundResponse({
+    description: `근무지 점포가 없거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   @ApiConflictResponse({
     description:
       'WORK_SCHEDULE_WEEK_NOT_EMPTY(그 주에 근무스케줄이 있음) · WORK_SCHEDULE_COPY_HIDDEN_STAFF(본사 계정인데 원본 주에 본사에게 가려진 직원이 있음 — 가맹 점포 관리자가 복사)',
@@ -196,12 +235,14 @@ export class WorkSchedulesController {
   copyPreview(
     @Query() query: CopyLastWeekQueryDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<CopyLastWeekResponseDto> {
     return this.schedules.copyLastWeek(
       user.id,
       query.storeId,
       query.weekStart,
       false,
+      bp,
     );
   }
 
@@ -213,10 +254,11 @@ export class WorkSchedulesController {
   @MenuPermission('create')
   @ApiCreatedResponse({ type: CopyLastWeekResponseDto })
   @ApiBadRequestResponse({
-    description:
-      '요청 형식 오류 · weekStart 가 월요일이 아님 · WORK_SCHEDULE_STORE_CLOSED(폐점 점포)',
+    description: `요청 형식 오류 · weekStart 가 월요일이 아님 · WORK_SCHEDULE_STORE_CLOSED(폐점 점포) · ${BP_MISSING_DESCRIPTION}`,
   })
-  @ApiNotFoundResponse({ description: '근무지 점포가 없거나 업무 범위 밖' })
+  @ApiNotFoundResponse({
+    description: `근무지 점포가 없거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   @ApiConflictResponse({
     description:
       'WORK_SCHEDULE_WEEK_NOT_EMPTY(그 주에 근무스케줄이 있음) · WORK_SCHEDULE_COPY_HIDDEN_STAFF(본사 계정인데 원본 주에 본사에게 가려진 직원이 있음 — 가맹 점포 관리자가 복사)',
@@ -224,12 +266,14 @@ export class WorkSchedulesController {
   copyLastWeek(
     @Body() body: CopyLastWeekDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<CopyLastWeekResponseDto> {
     return this.schedules.copyLastWeek(
       user.id,
       body.storeId,
       body.weekStart,
       true,
+      bp,
     );
   }
 
@@ -237,8 +281,12 @@ export class WorkSchedulesController {
   @Patch(':workScheduleId')
   @MenuPermission('update')
   @ApiOkResponse({ type: WorkScheduleDto })
-  @ApiBadRequestResponse({ description: NOT_SCHEDULABLE })
-  @ApiNotFoundResponse({ description: '없는 근무스케줄 · 지움 · 업무 범위 밖' })
+  @ApiBadRequestResponse({
+    description: `${NOT_SCHEDULABLE} · ${BP_MISSING_DESCRIPTION}`,
+  })
+  @ApiNotFoundResponse({
+    description: `없는 근무스케줄 · 지움 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   @ApiConflictResponse({
     description: 'WORK_SCHEDULE_OVERLAP(같은 직원 근무스케줄과 겹침)',
   })
@@ -246,19 +294,23 @@ export class WorkSchedulesController {
     @Param('workScheduleId', WorkScheduleIdPipe) workScheduleId: number,
     @Body() body: UpdateWorkScheduleDto,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<WorkScheduleDto> {
-    return this.schedules.update(user.id, workScheduleId, body);
+    return this.schedules.update(user.id, workScheduleId, body, bp);
   }
 
   /** 삭제. 시점 제한 없이 */
   @Delete(':workScheduleId')
   @MenuPermission('delete')
   @ApiOkResponse({ type: WorkScheduleDeleteResponseDto })
-  @ApiNotFoundResponse({ description: '없는 근무스케줄 · 지움 · 업무 범위 밖' })
+  @ApiNotFoundResponse({
+    description: `없는 근무스케줄 · 지움 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
+  })
   remove(
     @Param('workScheduleId', WorkScheduleIdPipe) workScheduleId: number,
     @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<WorkScheduleDeleteResponseDto> {
-    return this.schedules.remove(user.id, workScheduleId);
+    return this.schedules.remove(user.id, workScheduleId, bp);
   }
 }

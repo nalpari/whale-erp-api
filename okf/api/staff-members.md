@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-02T04:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-05T08:00:00Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
@@ -33,7 +33,7 @@ sources:
   - id: staff-members-controller
     resource: ../../src/staff-members/staff-members.controller.ts
     title: GET /staff-members · GET /staff-members/:id (직원 정보 관리 조회 권한)
-    last_modified: 2026-10-21T01:46:17Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
@@ -41,11 +41,11 @@ sources:
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
-    last_modified: 2026-10-29T06:04:07Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: summary-service
     resource: ../../src/staff-members/staff-member-summary.service.ts
     title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
-    last_modified: 2026-10-29T08:20:16Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
@@ -61,11 +61,11 @@ sources:
   - id: work-schedule-list-controller
     resource: ../../src/staff-members/staff-member-work-schedules.controller.ts
     title: GET /staff-members/:id/work-schedules (WHALEERP-185)
-    last_modified: 2026-10-22T04:49:53Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: work-schedule-list-service
     resource: ../../src/staff-members/staff-member-work-schedules.service.ts
     title: StaffMemberWorkSchedulesService · periodRange — 근무스케줄 관리 권한 → 범위 → 기간 · 페이지 · 합계
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: work-schedule-list-dto
     resource: ../../src/staff-members/dto/staff-member-work-schedule-list.query.dto.ts
     title: 근무스케줄 표 쿼리 — period · page · pageSize(20 · 50 · 100)
@@ -89,7 +89,7 @@ sources:
   - id: birth-date-controller
     resource: ../../src/staff-members/staff-birth-date.controller.ts
     title: PUT /staff-members/:id/birth-date (직원 정보 관리 수정 권한, WHALEERP-602)
-    last_modified: 2026-10-26T02:32:04Z
+    last_modified: 2026-11-05T08:00:00Z
   - id: birth-date-correctable
     resource: ../../src/staff-members/birth-date-correctable.ts
     title: isBirthDateCorrectable — 정정 서비스와 상세 birthDateCorrectable 이 함께 쓰는 판정
@@ -447,6 +447,23 @@ BP 마스터 · BP 관리자에게 가맹 점포 직원은 본사 제공 동의(
 
 연결 보류는 인증 번호 끝 4자리와 불일치 사유만 낸다. 보류 계정에서는 번호만 `select` 한다 — 실명 · 다른 소속은
 가입자의 정보다.
+
+# BP 는 탭의 BP 다 (2026-11-05 재영)
+
+직원 정보 관리 경로(목록 · 상세 · 요약 5종 · 근무스케줄 표 · TO-DO 영역 · 퇴직 처리 4종 · 생년월일 정정 · 재설정 링크)는
+`@TargetBp()` 로 가드가 정한 대상 BP(`X-Bp-Code-Id`)를 받아 `AdminScopeService` 에 넘긴다 — 근로계약(WHALEERP-618) ·
+급여명세서 · 출퇴근(WHALEERP-637)과 같다. 플랫폼 계정(PM · PA)은 고른 고객 BP 의 점포 전부를 다루고 가리지 않는다. BP · 가맹
+계정은 `scopeAdmin` 이 `bp` 를 보지 않아 그대로이고, 남의 BP 헤더는 가드의 403 이다.
+
+플랫폼 계정이 헤더 **없이** 부르면 대상이 자기 플랫폼 BP 라 점포가 없다. 그래서:
+- **목록**(`GET /staff-members`)은 `targetStores` 로 범위를 보기 전에 400 「직원 정보를 볼 BP 를 골라 주세요.」
+  (`STAFF_BP_NOT_CHOSEN`, `src/staff-members/staff-target-bp.ts`). 예전에는 200 빈 목록이었다.
+- **직원 단위**(`/staff-members/:id/…`)는 404 로 둔다 — 근로계약 상세와 같다. 400 을 만들려고 따로 묻지 않는다(재영).
+  Swagger 404 설명에 `STAFF_BP_MISSING_404_DESCRIPTION` 을 덧붙였다.
+- 일괄 저장(bulk-exports)은 옮기지 않았다 — 아직 소속 BP 기준이다.
+
+e2e(staff-members · staff-member-summary · staff-member-work-schedules · staff-birth-date)가 세 경우를 고정한다: 플랫폼 + 헤더 →
+그 BP 직원, 다른 BP 헤더 → 404, 헤더 없음 → 목록 400 · 직원 단위 404, BP 계정은 자기 BP 헤더가 헤더 없을 때와 같고 남의 BP 는 403.
 
 # 범위 밖 점포는 오류가 아니다
 

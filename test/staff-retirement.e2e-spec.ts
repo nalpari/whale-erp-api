@@ -55,6 +55,10 @@ describe('퇴직 처리 (e2e, DB)', () => {
   let revokedAdminId: number;
   /** revokedAdminId 의 권한 그룹 — 테스트가 이 그룹의 수정 권한을 끈다 */
   let revokedRoleGroupId: number;
+  /** 플랫폼 마스터 — 탭 BP(X-Bp-Code-Id)로 고객 BP 를 고른다 */
+  let pmId: number;
+  /** 플랫폼 마스터가 고를 다른 고객 BP — 이 BP 를 고르면 테스트 BP 직원은 범위 밖이다 */
+  let otherBpCodeId: number;
   const testRoleGroupIds: number[] = [];
   const staffIds: number[] = [];
   /** 폐점 테스트가 만든 점포 — 다른 테스트의 직원이 섞이지 않게 따로 둔다 */
@@ -107,6 +111,32 @@ describe('퇴직 처리 (e2e, DB)', () => {
         joinPathCode: 'PLATFORM_REGISTERED',
         isAllStores: true,
         accountStatusCode: 'ACTIVE',
+      },
+    }));
+    ({ adminAccountId: pmId } = await prisma.adminAccount.create({
+      data: {
+        loginId: `retirepm${n}`,
+        bpCodeId: (
+          await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } })
+        ).bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'PM',
+        roleGroupId: (
+          await prisma.roleGroup.findFirstOrThrow({
+            where: { roleCode: 'PM000001' },
+          })
+        ).roleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        isAllStores: true,
+        accountStatusCode: 'ACTIVE',
+      },
+    }));
+    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+      data: {
+        bpCode: `BP${(n + 1) % 1_000_000}`,
+        isPlatform: false,
+        accountStatusCode: 'ACTIVE',
+        tradeName: '퇴직 테스트 다른 BP',
       },
     }));
     ({ adminAccountId: allStoresBaId } = await prisma.adminAccount.create({
@@ -254,6 +284,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
       mappedAdminId,
       readOnlyAdminId,
       revokedAdminId,
+      pmId,
     ].filter((id): id is number => id !== undefined);
     await prisma.adminSession.deleteMany({
       where: { adminAccountId: { in: adminIds } },
@@ -277,7 +308,11 @@ describe('퇴직 처리 (e2e, DB)', () => {
         },
       },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await prisma.bpCode.deleteMany({
+      where: {
+        bpCodeId: { in: [bpCodeId, otherBpCodeId].filter((id) => id) },
+      },
+    });
     await app.close();
   });
 
@@ -1523,6 +1558,49 @@ describe('퇴직 처리 (e2e, DB)', () => {
         .set('Authorization', `Bearer ${token}`);
       return body === undefined ? req : req.send(body);
     };
+
+    // 탭 BP(X-Bp-Code-Id) — 플랫폼 계정은 고른 고객 BP 의 직원을 다룬다. 헤더가 없으면 직원 단위라 404(근로계약 상세와 같다).
+    it('플랫폼 마스터 — 고른 BP 의 직원은 미리 보기 · 처리 · 변경 · 취소, 다른 BP · 헤더 없음은 404. BP 계정은 그대로', async () => {
+      const staffId = await createStaff();
+      const path = `/staff-members/${staffId}/retirement`;
+      const preview = `/staff-members/${staffId}/retirement-preview?retiredDate=${iso(day(10))}`;
+      const asPm = async (
+        method: 'get' | 'post' | 'put' | 'delete',
+        target: string,
+        bp?: number,
+        body?: object,
+      ) => {
+        const req = request(app.getHttpServer())
+          [method](target)
+          .set('Authorization', `Bearer ${await tokenOf(pmId)}`);
+        if (bp !== undefined) req.set('X-Bp-Code-Id', String(bp));
+        return (await (body === undefined ? req : req.send(body))).status;
+      };
+      const date = { retiredDate: iso(day(10)) };
+      for (const bp of [otherBpCodeId, undefined]) {
+        expect(await asPm('get', preview, bp)).toBe(404);
+        expect(await asPm('post', path, bp, date)).toBe(404);
+        expect(await asPm('put', path, bp, date)).toBe(404);
+        expect(await asPm('delete', path, bp)).toBe(404);
+      }
+      expect((await staffOf(staffId)).retiredDate).toBeNull();
+      expect(await asPm('get', preview, bpCodeId)).toBe(200);
+      expect(await asPm('post', path, bpCodeId, date)).toBe(204);
+      expect(
+        await asPm('put', path, bpCodeId, { retiredDate: iso(day(20)) }),
+      ).toBe(204);
+      expect(await asPm('delete', path, bpCodeId)).toBe(204);
+
+      const asBm = async (bp: number) =>
+        (
+          await request(app.getHttpServer())
+            .get(preview)
+            .set('Authorization', `Bearer ${await tokenOf(adminId)}`)
+            .set('X-Bp-Code-Id', String(bp))
+        ).status;
+      expect(await asBm(bpCodeId)).toBe(200);
+      expect(await asBm(otherBpCodeId)).toBe(403);
+    });
 
     it('퇴직 처리 · 퇴직일 변경 · 취소는 204 이다', async () => {
       const staffId = await createStaff();

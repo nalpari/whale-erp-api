@@ -14,7 +14,12 @@ import {
   hiddenStoreStaffWhere,
 } from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
-import { requireAreaRead } from '../auth/menu-permission.guard';
+import {
+  requireAreaRead,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
+import { targetStores } from '../admin-scope/target-stores';
+import { TODO_BP_NOT_CHOSEN } from './todo-target-bp';
 import { adminNames } from '../common/admin-names';
 import {
   HQ_SHARING_SELECT,
@@ -161,11 +166,12 @@ export class TodosService {
   async create(
     adminAccountId: number,
     dto: CreateTodoDto,
+    bp?: TargetBpContext,
     now: Date = new Date(),
   ): Promise<CreatedTodoResponseDto> {
     const executionMode = checkAssignment(dto);
     checkDueDate(dto.dueDate, now);
-    const scope = await this.scopeOf(adminAccountId);
+    const scope = await this.scopeOf(adminAccountId, bp);
     const hidesStore = scope.storeHides(dto.storeId);
     if (hidesStore === null) throw new NotFoundException(STORE_NOT_FOUND);
 
@@ -248,8 +254,9 @@ export class TodosService {
   async assignableStaff(
     adminAccountId: number,
     storeId: number,
+    bp?: TargetBpContext,
   ): Promise<AssignableStaffResponseDto> {
-    const scope = await this.scopeOf(adminAccountId);
+    const scope = await this.scopeOf(adminAccountId, bp);
     const hidesStore = scope.storeHides(storeId);
     if (hidesStore === null) throw new NotFoundException(STORE_NOT_FOUND);
     const rows = await this.prisma.staffMember.findMany({
@@ -273,14 +280,16 @@ export class TodosService {
   async list(
     adminAccountId: number,
     query: ListTodosQueryDto,
+    bp?: TargetBpContext,
   ): Promise<TodoListResponseDto> {
-    const { storeIds, storeOf, hide } = await this.scopeOf(adminAccountId);
+    const { storeIds, storeOf, hide } = await this.scopeOf(adminAccountId, bp);
     // 직원 필터 — 그 직원을 다룰 수 없으면(범위 밖 · 가려지는 직원) 직원 상세와 같은 404(운영 정책 ATT-30)
     if (
       query.staffMemberId &&
       !(await this.scope.canManageStaffMember(
         adminAccountId,
         query.staffMemberId,
+        bp,
       ))
     )
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
@@ -345,8 +354,9 @@ export class TodosService {
   async findOne(
     adminAccountId: number,
     todoId: number,
+    bp?: TargetBpContext,
   ): Promise<TodoDetailDto> {
-    const { where, hide } = await this.scopeOf(adminAccountId);
+    const { where, hide } = await this.scopeOf(adminAccountId, bp);
     const todo = await this.prisma.todo.findFirst({
       where: { todoId, ...where },
       select: {
@@ -467,10 +477,11 @@ export class TodosService {
     adminAccountId: number,
     todoId: number,
     dto: UpdateTodoDto,
+    bp?: TargetBpContext,
     now: Date = new Date(),
   ): Promise<TodoDetailDto> {
     const todo = await this.prisma.todo.findFirst({
-      where: { todoId, ...(await this.scopeOf(adminAccountId)).where },
+      where: { todoId, ...(await this.scopeOf(adminAccountId, bp)).where },
       select: { todoId: true, assignmentGroupId: true },
     });
     if (!todo) throw new NotFoundException(TODO_NOT_FOUND);
@@ -522,9 +533,10 @@ export class TodosService {
     adminAccountId: number,
     todoId: number,
     status: TodoStatus,
+    bp?: TargetBpContext,
     now: Date = new Date(),
   ): Promise<TodoItemDto> {
-    const { where, hide } = await this.scopeOf(adminAccountId);
+    const { where, hide } = await this.scopeOf(adminAccountId, bp);
     const todo = await this.prisma.todo.findFirst({
       where: { todoId, ...where },
       select: STATUS_SELECT,
@@ -547,9 +559,10 @@ export class TodosService {
   async remove(
     adminAccountId: number,
     todoId: number,
+    bp?: TargetBpContext,
   ): Promise<{ deleted: number; remaining: number }> {
     const todo = await this.prisma.todo.findFirst({
-      where: { todoId, ...(await this.scopeOf(adminAccountId)).where },
+      where: { todoId, ...(await this.scopeOf(adminAccountId, bp)).where },
       select: { todoId: true, assignmentGroupId: true },
     });
     if (!todo) throw new NotFoundException(TODO_NOT_FOUND);
@@ -577,6 +590,7 @@ export class TodosService {
     adminAccountId: number,
     staffMemberId: number,
     query: TodoPageQueryDto,
+    bp?: TargetBpContext,
   ): Promise<TodoItemListResponseDto> {
     await requireAreaRead(
       this.prisma,
@@ -585,10 +599,16 @@ export class TodosService {
       '/todos',
       TodosService.name,
     );
-    if (!(await this.scope.canManageStaffMember(adminAccountId, staffMemberId)))
+    if (
+      !(await this.scope.canManageStaffMember(
+        adminAccountId,
+        staffMemberId,
+        bp,
+      ))
+    )
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
     // 그 직원은 보이지만, 한 명 수행의 수행자가 가려지는 다른 직원일 수 있다
-    const { hide } = await this.scopeOf(adminAccountId);
+    const { hide } = await this.scopeOf(adminAccountId, bp);
     return this.items(
       { todoAssignees: { some: { staffMemberId } } },
       query,
@@ -774,10 +794,16 @@ export class TodosService {
    * 관리자의 업무 범위. `where` 는 지우지 않았고 범위 안 점포의 TO-DO 다 — 범위를 먼저 정하고 그 안에서 찾는다(없는 ID 와
    * 범위 밖이 같은 404). `hide` 는 직원 이름을 가릴지, `storeHides` 는 그 점포가 범위 안이면 동의하지 않은 직원을 가리는지
    * (밖이면 null), `hiddenWhere` 는 가려지는 점포에서 보이는 직원(동의한 직원, 폐점한 가맹 점포면 아무도)이다. 사용 중인
-   * 관리자 계정이 아니면 403.
+   * 관리자 계정이 아니면 403. BP 는 탭 BP 다(`targetStores`) — 플랫폼 계정이 헤더 없이 부르면 범위를 보기 전에 400.
    */
-  private async scopeOf(adminAccountId: number) {
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+  private async scopeOf(adminAccountId: number, bp?: TargetBpContext) {
+    const manageable = await targetStores(
+      this.scope,
+      this.prisma,
+      adminAccountId,
+      bp,
+      TODO_BP_NOT_CHOSEN,
+    );
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const storeOf = new Map(manageable.stores.map((s) => [s.storeId, s]));
     const storeIds = [...storeOf.keys()];

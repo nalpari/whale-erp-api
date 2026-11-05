@@ -20,7 +20,10 @@ import { isMobilePhone } from '../alimtalk/alimtalk.service';
 import {
   adminHasMenuAction,
   reportMissingMenu,
+  type TargetBpContext,
 } from '../auth/menu-permission.guard';
+import { targetStores } from '../admin-scope/target-stores';
+import { STAFF_BP_NOT_CHOSEN } from './staff-target-bp';
 import {
   CONTRACT_WORK_DAYS_SELECT,
   workDaysOf,
@@ -170,9 +173,16 @@ export class StaffMemberListService {
   async list(
     adminAccountId: number,
     query: StaffMemberListQueryDto,
+    bp?: TargetBpContext,
   ): Promise<StaffMemberListResponseDto | null> {
     const [manageable, showsWorkDays] = await Promise.all([
-      this.scope.getManageableStores(adminAccountId),
+      targetStores(
+        this.scope,
+        this.prisma,
+        adminAccountId,
+        bp,
+        STAFF_BP_NOT_CHOSEN,
+      ),
       this.canReadContracts(adminAccountId),
     ]);
     if (!manageable) return null;
@@ -259,10 +269,11 @@ export class StaffMemberListService {
   async findOne(
     adminAccountId: number,
     staffMemberId: number,
+    bp?: TargetBpContext,
     now: Date = new Date(),
   ): Promise<StaffMemberDetailResponseDto | null> {
     const [manageable, showsWorkDays] = await Promise.all([
-      this.scope.getManageableStores(adminAccountId),
+      this.scope.getManageableStores(adminAccountId, bp),
       this.canReadContracts(adminAccountId),
     ]);
     if (!manageable) return null;

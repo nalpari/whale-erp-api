@@ -15,7 +15,15 @@ import {
 import { CurrentUser } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
-import { MenuPermission } from '../auth/menu-permission.guard';
+import {
+  MenuPermission,
+  TargetBp,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
+import {
+  BP_FORBIDDEN_DESCRIPTION,
+  BP_NOT_FOUND_DESCRIPTION,
+} from '../contracts/contracts-swagger';
 import { parseRouteId } from '../common/route-id';
 import {
   StaffMemberContractSummaryResponseDto,
@@ -27,6 +35,7 @@ import {
 import { StaffMemberWeekQueryDto } from './dto/staff-member-week.query.dto';
 import { StaffMemberSummaryService } from './staff-member-summary.service';
 import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
+import { STAFF_BP_MISSING_404_DESCRIPTION } from './staff-target-bp';
 
 const idOf = (raw: string): number => {
   const id = parseRouteId(raw);
@@ -37,15 +46,15 @@ const idOf = (raw: string): number => {
 /**
  * 직원 상세 요약(WHALEERP-183). 영역마다 경로가 따로라 한 영역이 실패해도 나머지는 그대로 온다. 직원 정보 관리 조회
  * 권한에 더해 그 영역 메뉴(근로계약 · 근무스케줄 · 급여명세서 · TO-DO)의 조회 권한이 있어야 하고, 없으면 그 영역만
- * 「조회 권한이 없습니다.」 403 이다. 출퇴근 현황은 기록을 쌓는 곳이 아직 없어 영역이 없다.
+ * 「조회 권한이 없습니다.」 403 이다. 출퇴근 현황은 기록을 쌓는 곳이 아직 없어 영역이 없다. 범위의 BP 는 가드가 정한 탭 BP 다
+ * (`@TargetBp()`) — 플랫폼 계정이 헤더 없이 부르면 직원 단위라 404 다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
-  description:
-    '직원 정보 관리 · 그 영역 메뉴의 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  description: `직원 정보 관리 · 그 영역 메뉴의 조회 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
 })
 @ApiNotFoundResponse({
-  description: '없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류',
+  description: `없는 직원 · 관리 범위 밖 · 가려지는 직원 · ID 형식 오류 · ${STAFF_BP_MISSING_404_DESCRIPTION} · ${BP_NOT_FOUND_DESCRIPTION}`,
 })
 @MenuPermission('read')
 @Controller('staff-members')
@@ -60,8 +69,9 @@ export class StaffMemberSummaryController {
   async contract(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<StaffMemberContractSummaryResponseDto> {
-    return this.summary.contract(user.id, idOf(rawId));
+    return this.summary.contract(user.id, idOf(rawId), bp);
   }
 
   /** 근무스케줄 영역 — 한 주(월~일)의 근무스케줄과 주간 근무시간. 근무스케줄 관리 조회 권한 */
@@ -71,8 +81,14 @@ export class StaffMemberSummaryController {
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
     @Query() query: StaffMemberWeekQueryDto,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<StaffMemberWeekScheduleResponseDto> {
-    return this.summary.workSchedules(user.id, idOf(rawId), query.weekStart);
+    return this.summary.workSchedules(
+      user.id,
+      idOf(rawId),
+      query.weekStart,
+      bp,
+    );
   }
 
   /** 급여명세서 영역 — 최근 명세서 3건 · 미발송 건수. 급여명세서 관리 조회 권한 */
@@ -80,8 +96,9 @@ export class StaffMemberSummaryController {
   async payslips(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<StaffMemberPayslipSummaryResponseDto> {
-    return this.summary.payslips(user.id, idOf(rawId));
+    return this.summary.payslips(user.id, idOf(rawId), bp);
   }
 
   /**
@@ -92,8 +109,9 @@ export class StaffMemberSummaryController {
   async sendLogs(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<StaffMemberSendLogResponseDto> {
-    return this.summary.sendLogs(user.id, idOf(rawId));
+    return this.summary.sendLogs(user.id, idOf(rawId), bp);
   }
 
   /** TO-DO 영역 — 전체 · 완료 · 미완료 건수와 최근 처리 이력. TO-DO 관리 조회 권한 */
@@ -101,7 +119,8 @@ export class StaffMemberSummaryController {
   async todos(
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<StaffMemberTodoSummaryResponseDto> {
-    return this.summary.todos(user.id, idOf(rawId));
+    return this.summary.todos(user.id, idOf(rawId), bp);
   }
 }

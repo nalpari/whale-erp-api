@@ -9,7 +9,10 @@ import {
 } from '@nestjs/common';
 import { Prisma, StatusChangeActor } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
-import { requireAreaRead } from '../auth/menu-permission.guard';
+import {
+  requireAreaRead,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
 import { bankNameOf } from '../common/bank-name';
 import { dateOnly } from '../common/date-only';
 import {
@@ -98,9 +101,10 @@ export class StaffMemberSummaryService {
   async contract(
     adminAccountId: number,
     staffMemberId: number,
+    bp?: TargetBpContext,
     now: Date = new Date(),
   ): Promise<StaffMemberContractSummaryResponseDto> {
-    await this.check(adminAccountId, staffMemberId, '/contracts');
+    await this.check(adminAccountId, staffMemberId, '/contracts', bp);
     const c = await this.prisma.contract.findFirst({
       where: { staffMemberId, ...NOT_IDLE_RENEWAL },
       // created_at 은 nullable 이다. DESC 의 기본은 NULL 먼저라 오래된 계약이 「최근」이 될 수 있다.
@@ -122,6 +126,7 @@ export class StaffMemberSummaryService {
     const canViewPayrollAccount = await this.scope.canManageStaffAccount(
       adminAccountId,
       staffMemberId,
+      bp,
     );
     const payrollAccount = canViewPayrollAccount
       ? await this.payrollAccount(staffMemberId)
@@ -196,9 +201,10 @@ export class StaffMemberSummaryService {
     adminAccountId: number,
     staffMemberId: number,
     weekStart: string | undefined,
+    bp?: TargetBpContext,
     now: Date = new Date(),
   ): Promise<StaffMemberWeekScheduleResponseDto> {
-    await this.check(adminAccountId, staffMemberId, '/work-schedules');
+    await this.check(adminAccountId, staffMemberId, '/work-schedules', bp);
     // 컨트롤러의 검증이 막지만, 서비스를 직접 부른 잘못된 값을 이번 주로 바꿔 답하지 않는다
     const day =
       weekStart === undefined ? kstToday(now) : parseDateOnly(weekStart);
@@ -270,8 +276,9 @@ export class StaffMemberSummaryService {
   async payslips(
     adminAccountId: number,
     staffMemberId: number,
+    bp?: TargetBpContext,
   ): Promise<StaffMemberPayslipSummaryResponseDto> {
-    await this.check(adminAccountId, staffMemberId, '/payslips');
+    await this.check(adminAccountId, staffMemberId, '/payslips', bp);
     const [recent, unsentCount] = await Promise.all([
       this.prisma.payslip.findMany({
         where: { staffMemberId },
@@ -295,8 +302,9 @@ export class StaffMemberSummaryService {
   async todos(
     adminAccountId: number,
     staffMemberId: number,
+    bp?: TargetBpContext,
   ): Promise<StaffMemberTodoSummaryResponseDto> {
-    await this.check(adminAccountId, staffMemberId, '/todos');
+    await this.check(adminAccountId, staffMemberId, '/todos', bp);
     const assigned = {
       isDeleted: false,
       todoAssignees: { some: { staffMemberId } },
@@ -354,8 +362,9 @@ export class StaffMemberSummaryService {
   async sendLogs(
     adminAccountId: number,
     staffMemberId: number,
+    bp?: TargetBpContext,
   ): Promise<StaffMemberSendLogResponseDto> {
-    await this.check(adminAccountId, staffMemberId, '/contracts');
+    await this.check(adminAccountId, staffMemberId, '/contracts', bp);
     const contracts = await this.prisma.contract.findMany({
       where: { staffMemberId },
       select: { contractId: true },
@@ -386,6 +395,7 @@ export class StaffMemberSummaryService {
     adminAccountId: number,
     staffMemberId: number,
     menuUrl: string,
+    bp?: TargetBpContext,
   ): Promise<void> {
     await requireAreaRead(
       this.prisma,
@@ -394,7 +404,13 @@ export class StaffMemberSummaryService {
       menuUrl,
       StaffMemberSummaryService.name,
     );
-    if (!(await this.scope.canManageStaffMember(adminAccountId, staffMemberId)))
+    if (
+      !(await this.scope.canManageStaffMember(
+        adminAccountId,
+        staffMemberId,
+        bp,
+      ))
+    )
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
   }
 }

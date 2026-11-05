@@ -23,6 +23,8 @@ describe('직원 생년월일 정정 (e2e, DB)', () => {
   let adminId: number;
   /** 다른 BP 의 관리자 — 이 BP 직원은 범위 밖이다 */
   let outsiderAdminId: number;
+  /** 플랫폼 마스터 — 탭 BP(X-Bp-Code-Id)로 고객 BP 를 고른다 */
+  let pmId: number;
   const staffIds: number[] = [];
   const accountIds: number[] = [];
   const contractIds: number[] = [];
@@ -88,6 +90,25 @@ describe('직원 생년월일 정정 (e2e, DB)', () => {
     };
     adminId = await makeAdmin(bpCodeId, 'bdate');
     outsiderAdminId = await makeAdmin(otherBpCodeId, 'bdateout');
+    ({ adminAccountId: pmId } = await prisma.adminAccount.create({
+      data: {
+        loginId: `bdatepm${n}`,
+        bpCodeId: (
+          await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } })
+        ).bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'PM',
+        roleGroupId: (
+          await prisma.roleGroup.findFirstOrThrow({
+            where: { roleCode: 'PM000001' },
+          })
+        ).roleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        isAllStores: true,
+        accountStatusCode: 'ACTIVE',
+      },
+    }));
+    adminIds.push(pmId);
 
     const staffMenu = await prisma.menu.findFirstOrThrow({
       where: { menuCode: 'MN000005' },
@@ -333,6 +354,27 @@ describe('직원 생년월일 정정 (e2e, DB)', () => {
     expect(
       await prisma.accountChangeHistory.count({ where: { accountId } }),
     ).toBe(0);
+  });
+
+  // 탭 BP(X-Bp-Code-Id) — 플랫폼 계정은 고른 고객 BP 의 직원을 정정한다. 헤더가 없으면 직원 단위라 404(근로계약 상세와 같다).
+  it('플랫폼 마스터 — 고른 BP 의 직원만 204, 다른 BP · 헤더 없음은 404. BP 계정은 그대로', async () => {
+    const accountId = await createAccount('1990-05-17');
+    const staffId = await createStaff(accountId);
+    const as = async (sub: number, birthDate: string, bp?: number) => {
+      const req = request(app.getHttpServer())
+        .put(`/staff-members/${staffId}/birth-date`)
+        .set('Authorization', `Bearer ${await tokenOf(sub)}`);
+      if (bp !== undefined) req.set('X-Bp-Code-Id', String(bp));
+      return (await req.send({ birthDate })).status;
+    };
+    expect(await as(pmId, '1991-06-18', otherBpCodeId)).toBe(404);
+    expect(await as(pmId, '1991-06-18')).toBe(404);
+    expect(await birthOf(accountId)).toBe('1990-05-17');
+    expect(await as(pmId, '1991-06-18', bpCodeId)).toBe(204);
+    expect(await birthOf(accountId)).toBe('1991-06-18');
+    expect(await as(adminId, '1992-07-19', bpCodeId)).toBe(204);
+    expect(await as(adminId, '1993-08-20', otherBpCodeId)).toBe(403);
+    expect(await birthOf(accountId)).toBe('1992-07-19');
   });
 
   it('퇴직한 레코드는 409 BIRTH_DATE_RETIRED, 퇴직 예정(재직)은 204', async () => {

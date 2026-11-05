@@ -128,7 +128,7 @@ describe('StaffMemberWorkSchedulesService', () => {
 
   it('근무스케줄 관리(/work-schedules) 조회 권한이 없으면 「조회 권한이 없습니다.」 403 — 범위보다 먼저 본다', async () => {
     prisma.roleGroupMenu.count.mockResolvedValue(0);
-    await expect(service.list(9, 30, {}, NOW)).rejects.toThrow(
+    await expect(service.list(9, 30, {}, undefined, NOW)).rejects.toThrow(
       new ForbiddenException(READ_DENIED_MESSAGE),
     );
     expect(firstArg(prisma.roleGroupMenu.count).where).toMatchObject({
@@ -140,15 +140,17 @@ describe('StaffMemberWorkSchedulesService', () => {
 
   it('없는 직원 · 범위 밖 · 가려지는 직원은 404 이고 근무스케줄을 읽지 않는다', async () => {
     scope.canManageStaffMember.mockResolvedValue(false);
-    await expect(service.list(9, 30, {}, NOW)).rejects.toThrow(
+    // 가드가 정한 탭 BP 를 범위 판정에 그대로 넘긴다
+    const bp = { bpCodeId: 3, isPlatformCaller: true };
+    await expect(service.list(9, 30, {}, bp, NOW)).rejects.toThrow(
       new NotFoundException(STAFF_NOT_FOUND_MESSAGE),
     );
-    expect(scope.canManageStaffMember).toHaveBeenCalledWith(9, 30);
+    expect(scope.canManageStaffMember).toHaveBeenCalledWith(9, 30, bp);
     expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 
   it('기본은 이번 주 · 1쪽 · 20건 — 집계는 페이지와 같은 조건(이 직원 · 지우지 않은 것 · 기간), LIMIT 없이', async () => {
-    await service.list(9, 30, {}, NOW);
+    await service.list(9, 30, {}, undefined, NOW);
     const sql = rawSql();
     expect(sql.values).toEqual([
       30,
@@ -171,7 +173,7 @@ describe('StaffMemberWorkSchedulesService', () => {
   });
 
   it('근무시간 합계는 요약의 workMinutes 와 같은 식 — 종료 − 시작(분) − 휴게, 0건이면 0', async () => {
-    await expect(service.list(9, 30, {}, NOW)).resolves.toEqual({
+    await expect(service.list(9, 30, {}, undefined, NOW)).resolves.toEqual({
       items: [],
       total: 0,
       totalWorkMinutes: 0,
@@ -184,19 +186,25 @@ describe('StaffMemberWorkSchedulesService', () => {
   it('근무시간 합계는 기간 전체다 — 페이지에 든 행만이 아니다', async () => {
     aggregate = { total: 23, minutes: 2760 };
     await expect(
-      service.list(9, 30, { period: 'ALL', page: 9 }, NOW),
+      service.list(9, 30, { period: 'ALL', page: 9 }, undefined, NOW),
     ).resolves.toEqual({ items: [], total: 23, totalWorkMinutes: 2760 });
   });
 
   it('정렬은 근무일(한국 날짜) 내림차순 → 시작 시각 오름차순 → ID', async () => {
-    await service.list(9, 30, {}, NOW);
+    await service.list(9, 30, {}, undefined, NOW);
     expect(rawSql().text.replace(/\s+/g, ' ')).toContain(
       "ORDER BY (start_at AT TIME ZONE 'Asia/Seoul')::date DESC, start_at ASC, work_schedule_id ASC",
     );
   });
 
   it('ALL 은 날짜 조건 없이 — page · pageSize 로 LIMIT · OFFSET', async () => {
-    await service.list(9, 30, { period: 'ALL', page: 3, pageSize: 50 }, NOW);
+    await service.list(
+      9,
+      30,
+      { period: 'ALL', page: 3, pageSize: 50 },
+      undefined,
+      NOW,
+    );
     const sql = rawSql();
     expect(sql.values).toEqual([30, 50, 100]);
     expect(sql.text).not.toMatch(/start_at >=/);
@@ -204,7 +212,7 @@ describe('StaffMemberWorkSchedulesService', () => {
   });
 
   it('LAST_4_WEEKS 는 시작만 있고 상한이 없다', async () => {
-    await service.list(9, 30, { period: 'LAST_4_WEEKS' }, NOW);
+    await service.list(9, 30, { period: 'LAST_4_WEEKS' }, undefined, NOW);
     expect(aggSql().values).toEqual([30, kst0('2026-09-23')]);
     const sql = rawSql();
     expect(sql.values).toEqual([30, kst0('2026-09-23'), 20, 0]);
@@ -231,7 +239,7 @@ describe('StaffMemberWorkSchedulesService', () => {
       { storeId: 5, name: '강남점' },
       { storeId: 6, name: '역삼점' },
     ]);
-    await expect(service.list(9, 30, {}, NOW)).resolves.toEqual({
+    await expect(service.list(9, 30, {}, undefined, NOW)).resolves.toEqual({
       items: [
         {
           workScheduleId: 7,
@@ -258,7 +266,9 @@ describe('StaffMemberWorkSchedulesService', () => {
 
   it('비면 점포를 묻지 않고 { items: [], total }', async () => {
     aggregate = { total: 4, minutes: 960 };
-    await expect(service.list(9, 30, { page: 99 }, NOW)).resolves.toEqual({
+    await expect(
+      service.list(9, 30, { page: 99 }, undefined, NOW),
+    ).resolves.toEqual({
       items: [],
       total: 4,
       totalWorkMinutes: 960,
@@ -278,7 +288,7 @@ describe('StaffMemberWorkSchedulesService', () => {
         endAt: new Date('2026-10-19T08:00:00Z'),
       },
     ];
-    await expect(service.list(9, 30, {}, NOW)).rejects.toThrow(
+    await expect(service.list(9, 30, {}, undefined, NOW)).rejects.toThrow(
       new InternalServerErrorException(
         '근무스케줄 7 의 점포 5 를 찾을 수 없습니다.',
       ),

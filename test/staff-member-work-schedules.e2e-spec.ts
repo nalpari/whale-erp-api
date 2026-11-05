@@ -34,6 +34,7 @@ describe('직원 상세 근무스케줄 표 (e2e, DB)', () => {
   let franchiseStoreId: number;
   let otherStoreId: number;
   let bmId: number; // BP 마스터(고정 그룹, 모든 메뉴 조회), 전체 점포
+  let pmId: number; // 플랫폼 마스터 — 탭 BP 로 고객 BP 를 고른다
   let staffOnlyId: number; // 직원 정보 관리 조회만 — 근무스케줄 관리 조회 없음
   let noStaffReadId: number; // 근무스케줄 관리 조회만 — 직원 정보 관리 조회 없음
   const roleGroupIds: number[] = [];
@@ -145,6 +146,24 @@ describe('직원 상세 근무스케줄 표 (e2e, DB)', () => {
     await prisma.adminAccount.update({
       where: { adminAccountId: bmId },
       data: { roleTypeCode: 'BM' },
+    });
+    // 플랫폼 마스터 — 플랫폼 BP 소속 PM. 상단에서 고른 BP(X-Bp-Code-Id)의 점포 전부를 다룬다
+    pmId = await admin(
+      `wspm${n}`,
+      (
+        await prisma.roleGroup.findFirstOrThrow({
+          where: { roleCode: 'PM000001' },
+        })
+      ).roleGroupId,
+    );
+    await prisma.adminAccount.update({
+      where: { adminAccountId: pmId },
+      data: {
+        roleTypeCode: 'PM',
+        bpCodeId: (
+          await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } })
+        ).bpCodeId,
+      },
     });
     const menuId = async (menuCode: string) =>
       (await prisma.menu.findFirstOrThrow({ where: { menuCode } })).menuId;
@@ -433,5 +452,36 @@ describe('직원 상세 근무스케줄 표 (e2e, DB)', () => {
         (res.body as { message: string }).message,
       ]).toEqual([id, 404, STAFF_NOT_FOUND_MESSAGE]);
     }
+  });
+  // 탭 BP(X-Bp-Code-Id) — 플랫폼 계정은 고른 고객 BP 의 직원 근무스케줄을 본다. 헤더가 없으면 직원 단위라 404.
+  it('플랫폼 마스터 — 고른 BP 의 직원만 200, 다른 BP · 헤더 없음은 404. BP 계정은 그대로', async () => {
+    const as = async (sub: number, path: string, bp?: number) => {
+      const req = request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${await tokenOf(sub)}`);
+      if (bp !== undefined) req.set('X-Bp-Code-Id', String(bp));
+      return req;
+    };
+    const path = `/staff-members/${jianId}/work-schedules?period=ALL`;
+    const pm = await as(pmId, path, bpCodeId);
+    expect(pm.status).toBe(200);
+    expect(pm.body).toEqual((await get(path)).body);
+    expect((await as(pmId, path, otherBpId)).status).toBe(404);
+    const missing = await as(pmId, path);
+    expect([
+      missing.status,
+      (missing.body as { message: string }).message,
+    ]).toEqual([404, STAFF_NOT_FOUND_MESSAGE]);
+    expect(
+      (
+        await as(
+          pmId,
+          `/staff-members/${otherBpStaffId}/work-schedules`,
+          otherBpId,
+        )
+      ).status,
+    ).toBe(200);
+    expect((await as(bmId, path, bpCodeId)).status).toBe(200);
+    expect((await as(bmId, path, otherBpId)).status).toBe(403);
   });
 });

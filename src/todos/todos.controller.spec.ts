@@ -25,6 +25,8 @@ describe('TO-DO 컨트롤러', () => {
   let admin: TodosController;
   let mine: MyTodosController;
   const adminUser = { type: 'admin' as const, id: 9, loginId: 'bm', sid: 1 };
+  // 가드가 정한 탭 BP — 플랫폼 계정이 고른 고객 BP(BP · 가맹 계정이면 소속 BP)
+  const bp = { bpCodeId: 3, isPlatformCaller: true };
   const account = { type: 'account' as const, id: 3, email: 'a@b.c', sid: 1 };
 
   beforeEach(async () => {
@@ -88,10 +90,10 @@ describe('TO-DO 컨트롤러', () => {
   });
 
   it('토큰의 사용자 ID 로 서비스를 부른다', async () => {
-    await admin.list({ page: 1, pageSize: 20 }, adminUser);
-    expect(todos.list).toHaveBeenCalledWith(9, { page: 1, pageSize: 20 });
-    await admin.changeStatus(7, { status: 'DONE' }, adminUser);
-    expect(todos.changeStatus).toHaveBeenCalledWith(9, 7, 'DONE');
+    await admin.list({ page: 1, pageSize: 20 }, adminUser, bp);
+    expect(todos.list).toHaveBeenCalledWith(9, { page: 1, pageSize: 20 }, bp);
+    await admin.changeStatus(7, { status: 'DONE' }, adminUser, bp);
+    expect(todos.changeStatus).toHaveBeenCalledWith(9, 7, 'DONE', bp);
     await mine.list({ page: 1, pageSize: 20 }, account);
     expect(todos.listMine).toHaveBeenCalledWith(3, { page: 1, pageSize: 20 });
     await mine.changeStatus(7, { status: 'DONE' }, account);

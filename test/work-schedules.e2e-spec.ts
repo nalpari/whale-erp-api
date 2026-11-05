@@ -30,6 +30,10 @@ describe('근무스케줄 (e2e, DB)', () => {
   /** 매핑 관리자가 관리하지 않는 점포(#206) — 그 describe 가 만든다 */
   let otherStoreId: number | undefined;
   let bmId: number;
+  /** 플랫폼 마스터 — 탭 BP(X-Bp-Code-Id)로 고객 BP 를 고른다 */
+  let pmId: number;
+  /** 플랫폼 마스터가 고를 다른 고객 BP — 이 BP 를 고르면 테스트 BP 의 점포 · 직원은 범위 밖이다 */
+  let otherBpCodeId: number;
   /** 직영 · 가입 완료 · 기간의 정함이 없는 계약, 수요일 09:00-18:00 휴게 12:00-13:00 */
   let directId: number;
   /** 직영 · 같은 사람의 다른 레코드처럼 쓰는 둘째 직원 */
@@ -107,6 +111,33 @@ describe('근무스케줄 (e2e, DB)', () => {
         joinPathCode: 'PLATFORM_REGISTERED',
         isAllStores: true,
         accountStatusCode: 'ACTIVE',
+      },
+    }));
+
+    ({ adminAccountId: pmId } = await prisma.adminAccount.create({
+      data: {
+        loginId: `schedpm${n}`,
+        bpCodeId: (
+          await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } })
+        ).bpCodeId,
+        passwordHash: '!',
+        roleTypeCode: 'PM',
+        roleGroupId: (
+          await prisma.roleGroup.findFirstOrThrow({
+            where: { roleCode: 'PM000001' },
+          })
+        ).roleGroupId,
+        joinPathCode: 'PLATFORM_REGISTERED',
+        isAllStores: true,
+        accountStatusCode: 'ACTIVE',
+      },
+    }));
+    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+      data: {
+        bpCode: `BP${(n + 1) % 1_000_000}`,
+        isPlatform: false,
+        accountStatusCode: 'ACTIVE',
+        tradeName: '근무스케줄 테스트 다른 BP',
       },
     }));
 
@@ -272,10 +303,13 @@ describe('근무스케줄 (e2e, DB)', () => {
     await prisma.account.deleteMany({
       where: { accountId: { in: accountIds } },
     });
-    if (bmId !== undefined) {
-      await prisma.adminSession.deleteMany({ where: { adminAccountId: bmId } });
-      await prisma.adminAccount.deleteMany({ where: { adminAccountId: bmId } });
-    }
+    const adminIds = [bmId, pmId].filter((id) => id !== undefined);
+    await prisma.adminSession.deleteMany({
+      where: { adminAccountId: { in: adminIds } },
+    });
+    await prisma.adminAccount.deleteMany({
+      where: { adminAccountId: { in: adminIds } },
+    });
     await prisma.store.deleteMany({
       where: {
         storeId: {
@@ -288,7 +322,11 @@ describe('근무스케줄 (e2e, DB)', () => {
         },
       },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await prisma.bpCode.deleteMany({
+      where: {
+        bpCodeId: { in: [bpCodeId, otherBpCodeId].filter((id) => id) },
+      },
+    });
     await app.close();
   });
 
@@ -531,6 +569,123 @@ describe('근무스케줄 (e2e, DB)', () => {
     ]);
     expect(histories[1].beforeValue).toMatchObject({ breakMinutes: 0 });
     expect(histories[2].afterValue).toBeNull();
+  });
+
+  // 탭 BP(X-Bp-Code-Id) — 플랫폼 계정은 고른 고객 BP 의 근무스케줄을 다룬다. 헤더가 없으면 /work-schedules 모든 경로가
+  // 범위를 보기 전에 400 이다. BP · 가맹 계정은 그대로다.
+  it('플랫폼 마스터 — 고른 BP 의 근무스케줄만, 헤더가 없으면 400. BP 계정은 그대로', async () => {
+    const as = async (
+      sub: number,
+      method: 'get' | 'post' | 'patch' | 'delete',
+      path: string,
+      bp?: number,
+      body?: object,
+    ) => {
+      const req = request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${await adminToken(sub)}`);
+      if (bp !== undefined) req.set('X-Bp-Code-Id', String(bp));
+      return body === undefined ? req : req.send(body);
+    };
+    const body = {
+      staffMemberId: directId,
+      workDate: day(70),
+      startTime: '09:00',
+      endTime: '10:00',
+      breakMinutes: 0,
+    };
+    const created = await as(pmId, 'post', '/work-schedules', bpCodeId, body);
+    expect(created.status).toBe(201);
+    const id = (created.body as { workScheduleId: number }).workScheduleId;
+    const listPath = `/work-schedules?storeId=${directStoreId}&from=${day(70)}&to=${day(70)}`;
+    const list = await as(pmId, 'get', listPath, bpCodeId);
+    expect(list.status).toBe(200);
+    expect(JSON.stringify(list.body)).toContain(`"workScheduleId":${id}`);
+    for (const path of [
+      `/work-schedules/histories?storeId=${directStoreId}`,
+      `/work-schedules/assignable-staff?storeId=${directStoreId}&workDate=${day(70)}`,
+      `/work-schedules/defaults?staffMemberId=${directId}&workDate=${day(70)}`,
+    ])
+      expect([path, (await as(pmId, 'get', path, bpCodeId)).status]).toEqual([
+        path,
+        200,
+      ]);
+
+    // 다른 고객 BP 를 고르면 이 BP 의 점포 · 근무스케줄은 범위 밖(404)
+    expect((await as(pmId, 'get', listPath, otherBpCodeId)).status).toBe(404);
+    expect(
+      (await as(pmId, 'delete', `/work-schedules/${id}`, otherBpCodeId)).status,
+    ).toBe(404);
+
+    // 헤더 없음 — 열 경로 모두 범위를 보기 전에 400
+    const weekStart = day(
+      7 - ((new Date(`${day(0)}T00:00:00Z`).getUTCDay() + 6) % 7),
+    );
+    for (const [method, path, payload] of [
+      ['get', listPath],
+      ['get', `/work-schedules/histories?storeId=${directStoreId}`],
+      [
+        'get',
+        `/work-schedules/assignable-staff?storeId=${directStoreId}&workDate=${day(70)}`,
+      ],
+      [
+        'get',
+        `/work-schedules/defaults?staffMemberId=${directId}&workDate=${day(70)}`,
+      ],
+      ['post', '/work-schedules', body],
+      [
+        'post',
+        '/work-schedules/bulk',
+        {
+          workDate: day(71),
+          rows: [
+            {
+              staffMemberId: directId,
+              startTime: '09:00',
+              endTime: '10:00',
+              breakMinutes: 0,
+            },
+          ],
+        },
+      ],
+      [
+        'get',
+        `/work-schedules/copy-last-week?storeId=${directStoreId}&weekStart=${weekStart}`,
+      ],
+      [
+        'post',
+        '/work-schedules/copy-last-week',
+        { storeId: directStoreId, weekStart },
+      ],
+      [
+        'patch',
+        `/work-schedules/${id}`,
+        {
+          workDate: day(70),
+          startTime: '09:30',
+          endTime: '10:00',
+          breakMinutes: 0,
+        },
+      ],
+      ['delete', `/work-schedules/${id}`],
+    ] as const) {
+      const res = await as(pmId, method, path, undefined, payload);
+      expect([
+        method,
+        path,
+        res.status,
+        (res.body as { message: unknown }).message,
+      ]).toEqual([method, path, 400, '근무스케줄을 볼 BP 를 골라 주세요.']);
+    }
+
+    // BP 계정 — 자기 BP 헤더는 헤더 없을 때와 같고, 남의 BP 헤더는 가드의 403
+    const own = await as(bmId, 'get', listPath, bpCodeId);
+    expect(own.status).toBe(200);
+    expect(own.body).toEqual((await as(bmId, 'get', listPath)).body);
+    expect((await as(bmId, 'get', listPath, otherBpCodeId)).status).toBe(403);
+    expect(
+      (await as(pmId, 'delete', `/work-schedules/${id}`, bpCodeId)).status,
+    ).toBe(200);
   });
 
   it('없는 · 범위 밖 근무스케줄과 이상한 ID 는 404', async () => {

@@ -20,21 +20,29 @@ import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { CurrentUser } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
-import { MenuPermission } from '../auth/menu-permission.guard';
+import {
+  MenuPermission,
+  TargetBp,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
+import {
+  BP_FORBIDDEN_DESCRIPTION,
+  BP_NOT_FOUND_DESCRIPTION,
+} from '../contracts/contracts-swagger';
 import { parseRouteId } from '../common/route-id';
 import { BirthDateCorrectionDto } from './dto/birth-date-correction.dto';
 import { StaffBirthDateService } from './staff-birth-date.service';
 import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
+import { STAFF_BP_MISSING_404_DESCRIPTION } from './staff-target-bp';
 
 /**
  * 직원 생년월일 정정 (WHALEERP-602). 관리자 웹만 쓴다. 관리 범위 밖 · 본사 제공 동의로 가려진 직원은 없는 직원과
  * 같은 404 다 — 403 을 주면 다른 BP 에 그 ID 의 직원이 있다는 것이 드러난다. 권한은 가드가 먼저 보고(403),
- * 범위는 그 뒤 핸들러가 본다(404).
+ * 범위는 그 뒤 핸들러가 본다(404). 범위의 BP 는 가드가 정한 탭 BP 다(`@TargetBp()`) — 플랫폼 계정이 헤더 없이 부르면 404 다.
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({
-  description:
-    '직원 정보 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님',
+  description: `직원 정보 관리 수정 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
 })
 @MenuPermission('update')
 @Controller('staff-members')
@@ -55,7 +63,7 @@ export class StaffBirthDateController {
   })
   @ApiNoContentResponse({ description: '정정함' })
   @ApiNotFoundResponse({
-    description: '없는 직원이거나 관리 범위 밖 · 본사 제공 동의로 가려진 직원',
+    description: `없는 직원이거나 관리 범위 밖 · 본사 제공 동의로 가려진 직원 · ${STAFF_BP_MISSING_404_DESCRIPTION} · ${BP_NOT_FOUND_DESCRIPTION}`,
   })
   @ApiBadRequestResponse({
     description:
@@ -69,15 +77,23 @@ export class StaffBirthDateController {
     @CurrentUser() user: AuthUser,
     @Param('id') rawId: string,
     @Body() body: BirthDateCorrectionDto,
+    @TargetBp() bp: TargetBpContext,
   ): Promise<void> {
-    const id = await this.staffInScope(user, rawId);
+    const id = await this.staffInScope(user, rawId, bp);
     await this.birthDates.correct(user.id, id, body.birthDate);
   }
 
   /** 정수 범위 밖이면 DB 에 묻기 전에 404 다 — 그대로 보내면 PostgreSQL 이 오류를 내 404 가 500 이 된다. */
-  private async staffInScope(user: AuthUser, rawId: string): Promise<number> {
+  private async staffInScope(
+    user: AuthUser,
+    rawId: string,
+    bp: TargetBpContext,
+  ): Promise<number> {
     const id = parseRouteId(rawId);
-    if (id === null || !(await this.scope.canManageStaffMember(user.id, id)))
+    if (
+      id === null ||
+      !(await this.scope.canManageStaffMember(user.id, id, bp))
+    )
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
     return id;
   }

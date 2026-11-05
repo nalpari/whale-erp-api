@@ -17,6 +17,8 @@ import {
 } from '../admin-scope/hq-sharing';
 
 const ADMIN = 9;
+// 가드가 정한 탭 BP(BP · 가맹 계정이면 소속 BP) — 범위 판정에 그대로 넘긴다
+const BP = { bpCodeId: 3, isPlatformCaller: false };
 const NOW = new Date('2026-10-19T03:00:00Z'); // 한국 12:00
 const d = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 
@@ -127,7 +129,9 @@ describe('TodosService', () => {
       ]);
       created(101, 100);
 
-      await expect(service.create(ADMIN, base, NOW)).resolves.toEqual({
+      await expect(
+        service.create(ADMIN, base, undefined, NOW),
+      ).resolves.toEqual({
         todoIds: [100, 101],
         assignmentGroupId: 100,
       });
@@ -175,7 +179,12 @@ describe('TodosService', () => {
       created(100);
 
       await expect(
-        service.create(ADMIN, { ...base, staffMemberIds: [11] }, NOW),
+        service.create(
+          ADMIN,
+          { ...base, staffMemberIds: [11] },
+          undefined,
+          NOW,
+        ),
       ).resolves.toEqual({ todoIds: [100], assignmentGroupId: null });
       expect(db.todo.updateMany).not.toHaveBeenCalled();
     });
@@ -194,10 +203,12 @@ describe('TodosService', () => {
         staffMemberIds: undefined,
       };
 
-      await expect(service.create(ADMIN, dto, NOW)).resolves.toEqual({
-        todoIds: [100, 101, 102],
-        assignmentGroupId: 100,
-      });
+      await expect(service.create(ADMIN, dto, undefined, NOW)).resolves.toEqual(
+        {
+          todoIds: [100, 101, 102],
+          assignmentGroupId: 100,
+        },
+      );
       expect(firstArg(db.staffMember.findMany).where).toEqual({
         storeId: 3,
         ...ACTIVE_STAFF,
@@ -218,10 +229,12 @@ describe('TodosService', () => {
         staffMemberIds: undefined,
       };
 
-      await expect(service.create(ADMIN, dto, NOW)).resolves.toEqual({
-        todoIds: [100],
-        assignmentGroupId: null,
-      });
+      await expect(service.create(ADMIN, dto, undefined, NOW)).resolves.toEqual(
+        {
+          todoIds: [100],
+          assignmentGroupId: null,
+        },
+      );
       expect(firstArg(db.todo.createManyAndReturn).data).toHaveLength(1);
       expect(db.todoAssignee.createMany).toHaveBeenCalledWith({
         data: [
@@ -234,7 +247,7 @@ describe('TodosService', () => {
     it('퇴직했거나 그 근무지에 체결 완료 근로계약이 없거나 다른 근무지 직원이면 배정할 수 없다(400)', async () => {
       db.staffMember.findMany.mockResolvedValue([{ staffMemberId: 11 }]);
 
-      await expect(service.create(ADMIN, base, NOW)).rejects.toThrow(
+      await expect(service.create(ADMIN, base, undefined, NOW)).rejects.toThrow(
         BadRequestException,
       );
       expect(db.todo.createManyAndReturn).not.toHaveBeenCalled();
@@ -244,7 +257,7 @@ describe('TodosService', () => {
       // 11 은 가입 완료, 12 는 종이 계약 체결 완료 · 가입 전 → 조회 조건(joinStatus JOINED)에서 빠진다
       db.staffMember.findMany.mockResolvedValue([{ staffMemberId: 11 }]);
 
-      await expect(service.create(ADMIN, base, NOW)).rejects.toThrow(
+      await expect(service.create(ADMIN, base, undefined, NOW)).rejects.toThrow(
         BadRequestException,
       );
       expect(firstArg(db.staffMember.findMany).where).toMatchObject(
@@ -260,7 +273,7 @@ describe('TodosService', () => {
         executionMode: 'EACH' as const,
         staffMemberIds: undefined,
       };
-      await expect(service.create(ADMIN, dto, NOW)).rejects.toThrow(
+      await expect(service.create(ADMIN, dto, undefined, NOW)).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -279,16 +292,16 @@ describe('TodosService', () => {
       ['한국 날짜로 어제', { dueDate: '2026-10-18' }],
     ])('%s 이면 400', async (_, patch) => {
       await expect(
-        service.create(ADMIN, { ...base, ...patch }, NOW),
+        service.create(ADMIN, { ...base, ...patch }, undefined, NOW),
       ).rejects.toThrow(BadRequestException);
       expect(db.todo.createManyAndReturn).not.toHaveBeenCalled();
     });
 
     it('업무 범위 밖 근무지는 404', async () => {
       await expect(
-        service.create(ADMIN, { ...base, storeId: 99 }, NOW),
+        service.create(ADMIN, { ...base, storeId: 99 }, BP, NOW),
       ).rejects.toThrow(NotFoundException);
-      expect(scope.getManageableStores).toHaveBeenCalledWith(ADMIN);
+      expect(scope.getManageableStores).toHaveBeenCalledWith(ADMIN, BP);
       expect(db.staffMember.findMany).not.toHaveBeenCalled();
     });
 
@@ -301,7 +314,7 @@ describe('TodosService', () => {
         { todoId: 100 },
         { todoId: 101 },
       ]);
-      await service.create(ADMIN, base, NOW);
+      await service.create(ADMIN, base, undefined, NOW);
 
       const [sql, ...values] = db.$queryRaw.mock.calls[0] as [
         TemplateStringsArray,
@@ -319,7 +332,7 @@ describe('TodosService', () => {
       it('개인 배정은 동의한 직원만 — 동의하지 않은 직원이 섞이면 400', async () => {
         db.staffMember.findMany.mockResolvedValue([{ staffMemberId: 11 }]);
         await expect(
-          service.create(ADMIN, { ...base, storeId: 4 }, NOW),
+          service.create(ADMIN, { ...base, storeId: 4 }, undefined, NOW),
         ).rejects.toThrow(BadRequestException);
         expect(firstArg(db.staffMember.findMany).where).toEqual({
           storeId: 4,
@@ -341,6 +354,7 @@ describe('TodosService', () => {
             executionMode: 'EACH',
             staffMemberIds: undefined,
           },
+          undefined,
           NOW,
         );
         expect(firstArg(db.staffMember.findMany).where).toEqual({
@@ -358,7 +372,7 @@ describe('TodosService', () => {
           { todoId: 100 },
           { todoId: 101 },
         ]);
-        await service.create(ADMIN, base, NOW);
+        await service.create(ADMIN, base, undefined, NOW);
         expect(firstArg(db.staffMember.findMany).where).not.toHaveProperty(
           'account',
         );
@@ -377,7 +391,7 @@ describe('TodosService', () => {
         },
       ]);
 
-      await expect(service.assignableStaff(ADMIN, 3)).resolves.toEqual({
+      await expect(service.assignableStaff(ADMIN, 3, BP)).resolves.toEqual({
         items: [
           {
             staffMemberId: 12,
@@ -387,7 +401,7 @@ describe('TodosService', () => {
           },
         ],
       });
-      expect(scope.getManageableStores).toHaveBeenCalledWith(ADMIN);
+      expect(scope.getManageableStores).toHaveBeenCalledWith(ADMIN, BP);
       expect(db.staffMember.findMany).toHaveBeenCalledWith({
         where: {
           storeId: 3,
@@ -604,7 +618,7 @@ describe('TodosService', () => {
         NotFoundException,
       );
       await expect(
-        service.update(ADMIN, 7, { title: 'x' }, NOW),
+        service.update(ADMIN, 7, { title: 'x' }, undefined, NOW),
       ).rejects.toThrow(NotFoundException);
       await expect(service.changeStatus(ADMIN, 7, 'DONE')).rejects.toThrow(
         NotFoundException,
@@ -658,7 +672,13 @@ describe('TodosService', () => {
       ]);
 
       await expect(
-        service.update(ADMIN, 7, { isUrgent: true, dueTime: null }, NOW),
+        service.update(
+          ADMIN,
+          7,
+          { isUrgent: true, dueTime: null },
+          undefined,
+          NOW,
+        ),
       ).resolves.toMatchObject({
         todoId: 7,
         isUrgent: true,
@@ -701,7 +721,7 @@ describe('TodosService', () => {
         assignmentGroupId: null,
       });
       await expect(
-        service.update(ADMIN, 7, { dueDate: '2026-10-18' }, NOW),
+        service.update(ADMIN, 7, { dueDate: '2026-10-18' }, undefined, NOW),
       ).rejects.toThrow(BadRequestException);
       expect(db.todo.updateMany).not.toHaveBeenCalled();
     });
@@ -827,7 +847,7 @@ describe('TodosService', () => {
       );
 
       await expect(
-        service.changeStatus(ADMIN, 7, 'IN_PROGRESS', NOW),
+        service.changeStatus(ADMIN, 7, 'IN_PROGRESS', undefined, NOW),
       ).resolves.toMatchObject({
         todoId: 7,
         status: 'IN_PROGRESS',
@@ -1072,7 +1092,7 @@ describe('TodosService', () => {
     it('관리자가 완료한 한 명 수행은 수행자가 없고 배정 완료도 바꾸지 않는다', async () => {
       db.todo.findFirst.mockResolvedValue(status());
       db.todo.findUnique.mockResolvedValue(itemRow());
-      await service.changeStatus(ADMIN, 7, 'DONE', NOW);
+      await service.changeStatus(ADMIN, 7, 'DONE', undefined, NOW);
       expect(db.todo.updateMany).toHaveBeenCalledWith({
         where: { todoId: 7, isDeleted: false, status: 'IN_PROGRESS' },
         data: {
@@ -1147,11 +1167,18 @@ describe('TodosService', () => {
         staffMemberIds: [11],
         dueDate: '2026-10-20',
       };
-      await expect(service.create(ADMIN, dto, late)).resolves.toMatchObject({
+      await expect(
+        service.create(ADMIN, dto, undefined, late),
+      ).resolves.toMatchObject({
         todoIds: [100],
       });
       await expect(
-        service.create(ADMIN, { ...dto, dueDate: '2026-10-19' }, late),
+        service.create(
+          ADMIN,
+          { ...dto, dueDate: '2026-10-19' },
+          undefined,
+          late,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -1170,7 +1197,13 @@ describe('TodosService', () => {
       db.todo.findMany.mockResolvedValueOnce([]); // 긴급이 바뀐 행 없음
 
       await expect(
-        service.update(ADMIN, 7, { isUrgent: true, title: '새 제목' }, NOW),
+        service.update(
+          ADMIN,
+          7,
+          { isUrgent: true, title: '새 제목' },
+          undefined,
+          NOW,
+        ),
       ).resolves.toMatchObject({ todoId: 7, groupTodos: [] });
       expect(db.todo.updateMany).toHaveBeenCalledWith({
         where: { isDeleted: false, todoId: 7 },
@@ -1187,7 +1220,7 @@ describe('TodosService', () => {
           assignmentGroupId: null,
         });
         await expect(
-          service.update(ADMIN, 7, { [field]: null }, NOW),
+          service.update(ADMIN, 7, { [field]: null }, undefined, NOW),
         ).rejects.toThrow(BadRequestException);
         expect(db.todo.updateMany).not.toHaveBeenCalled();
       },
@@ -1284,9 +1317,9 @@ describe('TodosService', () => {
       it('목록의 직원 필터 — 그 직원을 다룰 수 없으면(가려지는 직원 포함) 직원 상세와 같은 404', async () => {
         scope.canManageStaffMember.mockResolvedValue(false);
         await expect(
-          service.list(ADMIN, { page: 1, pageSize: 20, staffMemberId: 21 }),
+          service.list(ADMIN, { page: 1, pageSize: 20, staffMemberId: 21 }, BP),
         ).rejects.toThrow(NotFoundException);
-        expect(scope.canManageStaffMember).toHaveBeenCalledWith(ADMIN, 21);
+        expect(scope.canManageStaffMember).toHaveBeenCalledWith(ADMIN, 21, BP);
         expect(db.todo.findMany).not.toHaveBeenCalled();
       });
 
@@ -1367,7 +1400,7 @@ describe('TodosService', () => {
           }),
         );
         await expect(
-          service.changeStatus(ADMIN, 7, 'IN_PROGRESS', NOW),
+          service.changeStatus(ADMIN, 7, 'IN_PROGRESS', undefined, NOW),
         ).resolves.toMatchObject({ performer: MASKED });
       });
 
@@ -1422,8 +1455,14 @@ describe('TodosService', () => {
     });
 
     it('직원 상세의 TO-DO 조건 — 그 직원에 배정 · 지우지 않은 것', async () => {
-      await service.listForStaffMember(ADMIN, 11, { page: 1, pageSize: 20 });
-      expect(scope.canManageStaffMember).toHaveBeenCalledWith(ADMIN, 11);
+      await service.listForStaffMember(
+        ADMIN,
+        11,
+        { page: 1, pageSize: 20 },
+        BP,
+      );
+      expect(scope.canManageStaffMember).toHaveBeenCalledWith(ADMIN, 11, BP);
+      expect(scope.getManageableStores).toHaveBeenCalledWith(ADMIN, BP);
       expect(firstArg(db.todo.findMany).where).toEqual({
         todoAssignees: { some: { staffMemberId: 11 } },
         isDeleted: false,

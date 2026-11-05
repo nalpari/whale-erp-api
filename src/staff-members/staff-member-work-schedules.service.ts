@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
-import { requireAreaRead } from '../auth/menu-permission.guard';
+import {
+  requireAreaRead,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
 import { dateOnly } from '../common/date-only';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstTimeOf, workDateOf } from '../work-schedules/work-schedule-rules';
@@ -88,6 +91,7 @@ export class StaffMemberWorkSchedulesService {
     adminAccountId: number,
     staffMemberId: number,
     query: StaffMemberWorkScheduleListQueryDto,
+    bp?: TargetBpContext,
     now: Date = new Date(),
   ): Promise<StaffMemberWorkScheduleListResponseDto> {
     await requireAreaRead(
@@ -97,7 +101,13 @@ export class StaffMemberWorkSchedulesService {
       '/work-schedules',
       StaffMemberWorkSchedulesService.name,
     );
-    if (!(await this.scope.canManageStaffMember(adminAccountId, staffMemberId)))
+    if (
+      !(await this.scope.canManageStaffMember(
+        adminAccountId,
+        staffMemberId,
+        bp,
+      ))
+    )
       throw new NotFoundException(STAFF_NOT_FOUND_MESSAGE);
 
     const range = periodRange(query.period ?? 'THIS_WEEK', now);
