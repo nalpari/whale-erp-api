@@ -66,7 +66,7 @@ assert [rows[c][3] for c in ("meta", "name", "on", "sex")] == ["'{}'::jsonb", "'
 rows = {r[0]: r for r in B.rows_of(pin, by, enums)}
 assert rows["account_id"][4] == "PK, FK(accounts.account_id)"
 assert rows["code"][4:6] == ["PK", "pins_code_at_idx (code, at)"]
-assert rows["at"][1] == "timestamptz(6)" and rows["at"][3] == "now()"  # dbgenerated 는 안의 SQL 그대로
+assert rows["at"][1] == "timestamptz(6)" and rows["at"][3] == "CURRENT_TIMESTAMP"  # dbgenerated("now()") 도 CURRENT_TIMESTAMP
 
 # 실제 schema.prisma: /// 블록(테이블 · 컬럼 · enum · enum 값)이 하나도 빠지지 않고 어느 셀엔가 통째로 있다
 path, _, _ = B.write("1.0")

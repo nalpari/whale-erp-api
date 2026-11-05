@@ -144,8 +144,10 @@ def default(f, enums):
     if arg == "autoincrement()":
         return "IDENTITY"  # SQL 은 GENERATED ALWAYS AS IDENTITY (schema.prisma 머리 주석)
     if arg.startswith("dbgenerated("):
-        return attr_arg(arg, "dbgenerated").strip('"')
-    if arg == "now()":
+        arg = attr_arg(arg, "dbgenerated").strip('"')
+        if arg != "now()":
+            return arg
+    if arg == "now()":  # SQL 의 now() 와 같은 값(마이그레이션 SQL 표기에 맞춘다)
         return "CURRENT_TIMESTAMP"
     if arg == "[]":
         return "'{}'"

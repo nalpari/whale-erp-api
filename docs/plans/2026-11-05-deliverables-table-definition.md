@@ -21,7 +21,7 @@
   - 테이블 목록: 테이블명 · 설명 · 컬럼 수. 테이블명에서 그 시트로 링크
   - 테이블 시트: 컬럼 · 타입 · NULL · 기본값 · PK/FK/UNIQUE · 인덱스 · 설명
   - 설명은 `///` 주석을 그대로 옮긴다. 없으면 비운다. 1팀 테이블도 원문 그대로다.
-  - 기본값은 Prisma 표기가 아니라 마이그레이션 SQL 의 DEFAULT 값으로 적는다: `now()` → `CURRENT_TIMESTAMP`, `[]` → `'{}'`, 문자열 → `'값'`(jsonb 면 `'{}'::jsonb`), 열거형 → `'값'`, `dbgenerated("…")` → 안의 SQL, `autoincrement()` → `IDENTITY` (#249 리뷰 후속, 2026-11-05)
+  - 기본값은 Prisma 표기가 아니라 마이그레이션 SQL 의 DEFAULT 값으로 적는다: `now()` → `CURRENT_TIMESTAMP`, `[]` → `'{}'`, 문자열 → `'값'`(jsonb 면 `'{}'::jsonb`), 열거형 → `'값'`, `dbgenerated("…")` → 안의 SQL(`now()` 면 `CURRENT_TIMESTAMP`), `autoincrement()` → `IDENTITY` (#249 리뷰 후속, 2026-11-05)
   - 담당 팀 칸은 두지 않는다. 앞으로 만들 엑셀 산출물에도 두지 않는다(2026-11-05 재영).
   - ERD 는 Pillow 로 그린다(엑셀에 이미지를 넣는 데 어차피 필요). graphviz 같은 시스템 의존성은 들이지 않는다. 전체 테이블을 한 장에 그리고 Prisma 관계만 선으로 잇는다. 한글 글꼴을 못 찾으면 기본 글꼴로 넘어가지 않고 멈춘다(#249 리뷰 후속).
   - CHECK · SQL 에만 있는 외래키 · 부분 고유 인덱스처럼 SQL 에만 있는 제약은 schema.prisma 에 없어 담지 않는다. 테이블 목록 시트에 그 사실을 한 줄로 적는다.
