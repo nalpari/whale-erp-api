@@ -105,4 +105,27 @@ ws = load_workbook(path)["API 목록"]
 head = next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value == "영역")
 rows = sum(1 for r in range(head + 1, ws.max_row + 1) if ws.cell(r, 2).value)
 assert counted == apis == rows, (counted, apis, rows)
-print(f"ok — 라우트 {counted} = 문서 {rows}")
+
+# openapi 의 설명(summary · description, info 제외)이 하나도 잘리거나 빠지지 않고 어느 셀엔가 통째로 있다
+doc = B.json.load(open(B.OPENAPI, encoding="utf-8"))
+
+
+def descriptions(x, key=None):
+    if isinstance(x, dict):
+        for k, v in x.items():
+            if k in ("summary", "description") and isinstance(v, str) and key != "properties":
+                yield v
+            yield from descriptions(v, k)
+    elif isinstance(x, list):
+        for v in x:
+            yield from descriptions(v)
+
+
+wanted = {" ".join(d.split()) for d in descriptions({k: v for k, v in doc.items() if k != "info"}) if d.strip()}
+wb = load_workbook(path)
+cells = "\0".join(" ".join(str(c.value).split()) for w in wb.worksheets for r in w.iter_rows() for c in r if c.value)
+missing = sorted(d for d in wanted if d not in cells)
+assert not missing, f"엑셀에 없는 설명 {len(missing)}건: {missing[:5]}"
+for d in ("계정 잠금이 풀리는 시각", "상세코드. 저장 · 전송 값", "급여명세서 검토 사유 — 출퇴근 누락"):  # 2026-11-05 대조에서 빠졌던 것
+    assert d in cells, d
+print(f"ok — 라우트 {counted} = 문서 {rows} · 설명 {len(wanted)}건 모두 있음")

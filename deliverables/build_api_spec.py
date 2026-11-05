@@ -236,10 +236,27 @@ def unwrap(s):
     return s
 
 
+def paragraphs(text):
+    """하드랩된 JSDoc 을 단락마다 한 줄로 잇는다. 빈 줄로 나뉜 단락 구분만 남는다."""
+    return "\n\n".join(" ".join(b.split()) for b in re.split(r"\n\s*\n", text or "") if b.strip())
+
+
+def leaf(schemas, s):
+    """객체가 아닌 스키마(enum 등)를 가리키는 $ref 면 그 스키마를 펼쳐 합친다. 설명은 둘 다 남긴다."""
+    s = unwrap(s)
+    t = schemas.get(ref_name(s), {}) if "$ref" in s else {}
+    if not t or "properties" in t:
+        return s
+    desc = [d for d in (s.get("description"), t.get("description")) if d]
+    return {**t, **{k: v for k, v in s.items() if k != "$ref"}, "description": "\n\n".join(dict.fromkeys(desc))}
+
+
 def type_of(s):
     s = unwrap(s)
     if "$ref" in s:
         return ref_name(s)
+    if isinstance(s.get("additionalProperties"), dict):
+        return "object<string, " + type_of(s["additionalProperties"]) + ">"
     if s.get("type") == "array":
         return type_of(s.get("items", {})) + "[]"
     if "allOf" in s:
@@ -266,8 +283,14 @@ def fields(schemas, s, dtos, prefix="", seen=()):
     if len(s.get("allOf", [])) > 1:  # 여러 스키마를 합친 본문(@ApiBody allOf)
         return [x for part in s["allOf"] for x in fields(schemas, part, dtos, prefix, seen)]
     item = s
-    while unwrap(item).get("type") == "array":
-        item = unwrap(item).get("items", {})
+    while unwrap(item).get("type") == "array" or isinstance(unwrap(item).get("additionalProperties"), dict):
+        u = unwrap(item)
+        if u.get("type") == "array":
+            item = u.get("items", {})
+        else:  # 키가 정해지지 않은 맵: 값의 필드를 {키} 아래에 펼친다
+            prefix, item = prefix + "{키}.", u["additionalProperties"]
+            while unwrap(item).get("type") == "array":
+                item, prefix = unwrap(item).get("items", {}), prefix[:-1] + "[]."
     item = unwrap(item)
     if "$ref" in item:
         cls = ref_name(item)
@@ -281,14 +304,15 @@ def fields(schemas, s, dtos, prefix="", seen=()):
     rows, req = [], set(obj.get("required", []))
     for name, p in obj.get("properties", {}).items():
         rules = source_rules(dtos, cls, name) if cls else None
+        lp = leaf(schemas, p)
         rows.append([prefix + name, type_of(p), "Y" if name in req else "N",
-                     "\n".join(rules if rules is not None else constraints(p)), unwrap(p).get("description", "")])
+                     "\n".join(rules if rules is not None else constraints(lp)), paragraphs(lp.get("description"))])
         rows += fields(schemas, p, dtos, prefix + name + ("[]." if type_of(p).endswith("[]") else "."), seen)
     return rows
 
 
 def describe(op):
-    return "\n\n".join(x for x in (op.get("summary", ""), op.get("description", "")) if x)
+    return "\n\n".join(paragraphs(x) for x in (op.get("summary", ""), op.get("description", "")) if x)
 
 
 def api_blocks(doc, routes, dtos):
@@ -305,19 +329,22 @@ def api_blocks(doc, routes, dtos):
         rows, unknown = [], False
         for p in op.get("parameters", []):
             rules = source_rules(dtos, r["query_dto"], p["name"]) if p["in"] == "query" else None
+            ps = leaf(schemas, p.get("schema", {}))
+            desc = "\n\n".join(dict.fromkeys(paragraphs(d) for d in (p.get("description"), ps.get("description")) if d))
             rows.append([p["in"], p["name"], type_of(p.get("schema", {})), "Y" if p.get("required") else "N",
-                         "\n".join(rules if rules is not None else constraints(p.get("schema", {}))),
-                         p.get("description", "")])
+                         "\n".join(rules if rules is not None else constraints(ps)), desc])
         for ctype, c in op.get("requestBody", {}).get("content", {}).items():
             label = "본문" + ("" if ctype == "application/json" else f" ({ctype})")
             sub = fields(schemas, c.get("schema", {}), dtos)
             rows += [[label] + x for x in sub] or [[label, "", type_of(c.get("schema", {})), "", "", ""]]
         for status, res in sorted(op.get("responses", {}).items()):
-            desc = res.get("description", "")
+            desc = paragraphs(res.get("description", ""))
+            content = res.get("content", {})
             if int(status) >= 400:
                 rows.append([f"오류 {status}", "", "", "", "", desc])
+                for c in content.values():  # 오류 본문의 필드(잠금 해제 시각 등)
+                    rows += [[f"오류 {status}"] + x for x in fields(schemas, c.get("schema", {}), dtos)]
                 continue
-            content = res.get("content", {})
             if not content:
                 body = "본문 없음" if r["void"] or status == "204" else UNKNOWN
                 unknown |= body == UNKNOWN
@@ -329,7 +356,9 @@ def api_blocks(doc, routes, dtos):
                     unknown = True
                     rows.append([label, UNKNOWN, "", "", "", desc])
                     continue
-                rows.append([label, "", type_of(s), "", "\n".join(constraints(s)), desc])
+                ls = leaf(schemas, s)
+                rows.append([label, "", type_of(s), "", "\n".join(constraints(ls)),
+                             "\n\n".join(dict.fromkeys(x for x in (desc, paragraphs(ls.get("description"))) if x))])
                 rows += [[label] + x for x in fields(schemas, s, dtos)]
         out.append((r, method, path, op, rows, unknown))
     return out
@@ -405,7 +434,7 @@ def write(version):
     titles = {m: sheet_title(m, used) for m in modules}
     lst, head = table_sheet(
         wb, "API 목록", ["영역", "메서드", "경로", "이름", "권한"],
-        [[b[0]["module"], b[1], b[2], describe(b[3]).split("\n")[0], auth_text(b[0])]
+        [[b[0]["module"], b[1], b[2], describe(b[3]).split("\n\n")[0], auth_text(b[0])]
          for m in modules for b in modules[m]],
         [18, 9, 52, 50, 46],
         top_rows=[("원본", "whale-erp-api openapi/openapi.json(pnpm openapi:export) · src 의 컨트롤러 · DTO"),
@@ -421,7 +450,8 @@ def write(version):
         c.hyperlink = f"#'{title}'!A{row}"
         c.font = link
     for row in lst.iter_rows(min_row=head + 1):
-        row[4].alignment = Alignment(wrap_text=True, vertical="top")
+        for c in (row[3], row[4]):
+            c.alignment = Alignment(wrap_text=True, vertical="top")
 
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
     return path, len(blocks), len(modules), sum(1 for b in blocks if b[5])
