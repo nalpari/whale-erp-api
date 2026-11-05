@@ -31,7 +31,7 @@ def open_xlsx(abbr, version):
         "{{문서 번호}}": f"WHALE-{abbr}-{version}",
         "{{버전}}": version,
         "{{작성일}}": history[-1]["date"],
-        "{{작성 팀}}": doc["team"],
+        "{{작성자}}": history[-1]["author"],
     }
     wb = load_workbook(TEMPLATE_XLSX)
     for row in wb["표지"].iter_rows():
