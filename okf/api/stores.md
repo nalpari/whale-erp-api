@@ -4,12 +4,12 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-05T02:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-06T03:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile · excelScopeKey)
-    last_modified: 2026-11-04T07:00:00Z
+    last_modified: 2026-11-06T02:00:00Z
   - id: store-closings-service
     resource: ../../src/store-closings/store-closings.service.ts
     title: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
@@ -25,11 +25,11 @@ sources:
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-11-05T02:00:00Z
+    last_modified: 2026-11-06T03:00:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
-    title: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
-    last_modified: 2026-10-29T02:30:00Z
+    title: 점포 목록 엑셀 — 화면 [표] 보기와 같은 열 · 서식(정책은 공통 엑셀)
+    last_modified: 2026-11-06T02:00:00Z
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
@@ -65,7 +65,7 @@ sources:
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
-    last_modified: 2026-11-05T02:00:00Z
+    last_modified: 2026-11-06T02:00:00Z
   - id: stores-e2e
     resource: ../../test/stores.e2e-spec.ts
     title: DB 없는 e2e — 쿼리 · 본문 변환, 가드 연동, 뺀 bpCodeId 쿼리의 400
@@ -330,12 +330,19 @@ matching store as one xlsx sheet, in the list's order, named
 `점포목록_YYYYMMDD.xlsx` (Korean date). It needs the **read** permission — the menu
 has no separate download action.[^store-excel]
 
-- Columns are the list's items followed by the 사업자정보: 점포코드 through
-  등록일시 (Korean time), then 사업자 인증 · 사업자등록번호 (3-2-5) · 상호명 · 대표자명 ·
-  대표자 연락처 · 개업일자 · 사업자주소 · 업태 · 종목. **Only 대표자 연락처 is masked**,
-  its middle group starred; the screen shows it whole and the file has no password
-  (front okf, S-BAYAJS). The image is not in the file. Cells are plain strings and
-  numbers, so a name starting with `=` stays text.
+- **The file holds only what the list's [표] view shows, in its column order** (2026-11-06, 사용자 지정 via
+  front — front `src/app/stores/store-table.tsx`): 순번 · 점포코드 · 점포명 · 점포유형 · 점포상태 ·
+  사업자등록번호 (3-2-5, 「미인증」 before verification) · 점포 연락처 (hyphenated, 「-」 when empty) ·
+  점포주소 (the list's `region`, 시 · 구 only — not the full address; 「-」 when empty) · 재직직원 · 등록일
+  (Korean date only). 순번 counts down like the table: the first line is the total, the last is 1, in the
+  list's order. Until then the file added the whole 사업자정보 (소속 BP, 사업자 인증, 상호명, 대표자명,
+  대표자 연락처, 개업일자, 사업자주소, 업태, 종목) after the list items, with 대표자 연락처 masked; those
+  columns are gone, so nothing in this file is masked any more. The image is not in the file. Cells are
+  plain strings and numbers, so a name starting with `=` stays text.
+- **Format** (shared with the BP master excel, `styleListSheet` in `src/excel-exports/excel-sheet-style.ts`):
+  every cell 9pt (the user's 「9px」, Excel sizes being in pt), the header row bold on gray `F2F2F2`
+  (「흰색, 배경 1, 5% 더 어둡게」) and centered both ways; body alignment untouched; row 1 frozen. A
+  예약 생성 file is built by the same function, so it has the same columns and format.
 - **The rest is the common [Excel exports](/api/excel-exports.md)** (2026-10-28): 10,000
   rows or more is 예약 생성 (202, a link to the registered e-mail, 24 hours, the requester
   only), the same admin's 점포 export is 409 while one is being made and once a minute
@@ -465,8 +472,8 @@ DTO would let a 12-digit number through validation and fail at the CHECK as a 50
 연락처 followed on 2026-10-27 (`StoreBusinessInputDto.ceoPhone`, 「대표자 연락처는 숫자 9~12자리입니다.」,
 CHECK `store_business_profiles_biz_ceo_phone_format` widened by
 `20261027131104_team1_phone_twelve_digits`) — every 1팀 연락처 now takes the same range. The 엑셀 cuts
-a 12-digit number after the first four digits (`0507-2033-1334`, masked `0507-****-1334`), the
-others as before.
+a 12-digit number after the first four digits (`0507-2033-1334`; the BP master excel masks its 연락처 the
+same way, `0507-****-1334`), the others as before.
 
 Every changed item becomes one `store_change_histories` row with the Korean label
 the demo shows (점포명, 점포 연락처, 주소, 위도 · 경도, 위치 적용 여부, 점포상태, 층별 정보,
@@ -528,7 +535,7 @@ and running out of it is a 503 「잠시 뒤 다시 등록」, not a 500.
   개인사업자 number identifies a person — keep that in mind for log retention.
 
 [^store-management-service]: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile · excelScopeKey)
-[^store-excel]: 점포 목록 엑셀 — 열 · 연락처 가림(정책은 공통 엑셀)
+[^store-excel]: 점포 목록 엑셀 — 화면 [표] 보기와 같은 열 · 서식(정책은 공통 엑셀)
 [^stores-controller]: /stores routes and the menu permission per action (`/stores`, MN000002 today)
 [^store-closings-service]: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
 [^store-closing-response]: 폐점 확인 · 결과 응답(점포별 점포명 · 점포코드 + 합계)

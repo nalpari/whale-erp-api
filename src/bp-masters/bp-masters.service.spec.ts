@@ -6,6 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import ExcelJS from 'exceljs';
 import { Prisma } from '@prisma/client';
 import { BusinessVerificationService } from '../admin-signup/business-verification.service';
 import { verifyPassword } from '../auth/password';
@@ -1145,6 +1146,42 @@ describe('BpMastersService', () => {
       expect(where).toEqual(partial({ accountStatusCode: { in: ['ACTIVE'] } }));
       expect(orderBy).toEqual([{ createdAt: 'desc' }, { bpCodeId: 'desc' }]);
       expect(take).toBeUndefined();
+    });
+
+    it('줄은 목록 한 줄과 같은 값이다 — 탈퇴 BP 의 개인정보는 「탈퇴로 삭제됨」, 연락처는 가린다', async () => {
+      prisma.bpCode.findMany.mockResolvedValue([
+        bp({ bizRegistrationNumber: '1234567890' }),
+        bp({
+          bpCodeId: 13,
+          bpCode: 'BP000013',
+          accountStatusCode: 'WITHDRAWN',
+        }),
+      ]);
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(
+        (await service.excelFile({})) as unknown as ArrayBuffer,
+      );
+      const sheet = workbook.worksheets[0];
+      const values = (n: number) =>
+        (sheet.getRow(n).values as unknown[]).slice(1);
+      expect(values(2)).toEqual([
+        'BP000012',
+        '한강상회',
+        'hangang01',
+        '김하늘',
+        '사용',
+        '010-****-5678',
+        'ceo@hangang.test',
+        '123-45-67890',
+        '플랫폼등록',
+        '2026-10-01 09:00',
+      ]);
+      expect(values(3).slice(3, 7)).toEqual([
+        '탈퇴로 삭제됨',
+        '탈퇴',
+        '탈퇴로 삭제됨',
+        '탈퇴로 삭제됨',
+      ]);
     });
 
     // 예약 생성은 요청 뒤 배치가 만든다 — 그 사이 막힌 계정이나 플랫폼 권한을 잃은 계정에는 파일을 만들어 보내지 않는다.

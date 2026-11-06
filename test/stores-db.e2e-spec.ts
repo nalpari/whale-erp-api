@@ -934,7 +934,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     }
   });
 
-  it('엑셀은 목록과 같은 조건으로 실제 행을 담는다', async () => {
+  it('엑셀은 목록과 같은 조건으로 실제 행을 담고, 열은 화면 [표] 보기와 같다', async () => {
     await create('엑셀 점포');
     await create('다른 점포');
     const res = await call(
@@ -950,11 +950,25 @@ describe('점포 정보 관리 (e2e, DB)', () => {
       .expect(200);
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(res.body as ArrayBuffer);
-    const names: unknown[] = [];
-    workbook.worksheets[0].eachRow((row, i) => {
-      if (i > 1) names.push(row.getCell(2).value);
+    const sheet = workbook.worksheets[0];
+    expect((sheet.getRow(1).values as unknown[]).slice(1)).toEqual([
+      '순번',
+      '점포코드',
+      '점포명',
+      '점포유형',
+      '점포상태',
+      '사업자등록번호',
+      '점포 연락처',
+      '점포주소',
+      '재직직원',
+      '등록일',
+    ]);
+    const lines: unknown[][] = [];
+    sheet.eachRow((row, i) => {
+      if (i > 1) lines.push([row.getCell(1).value, row.getCell(3).value]);
     });
-    expect(names).toEqual(['엑셀 점포']);
+    // 순번은 전체 건수부터 거꾸로 — 한 건이면 1
+    expect(lines).toEqual([[1, '엑셀 점포']]);
   });
 
   // ── 아래는 연결 두 개가 필요하다. 실제 PostgreSQL 일회용 DB 에서 E2E_REAL_POSTGRES=1 로 돌린다. ──

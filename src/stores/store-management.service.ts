@@ -352,35 +352,18 @@ export class StoreManagementService implements OnModuleInit {
         storeTypeCode: true,
         storeStatusCode: true,
         phone: true,
-        zipCode: true,
         address: true,
-        addressDetail: true,
         createdAt: true,
-        bpCode: { select: { tradeName: true } },
-        businessProfile: {
-          select: {
-            bizRegistrationNumber: true,
-            bizTradeName: true,
-            bizCeoName: true,
-            bizCeoPhone: true,
-            bizOpenDate: true,
-            bizZipCode: true,
-            bizAddress: true,
-            bizAddressDetail: true,
-            bizCategory: true,
-            bizItem: true,
-          },
-        },
+        businessProfile: { select: { bizRegistrationNumber: true } },
       },
       orderBy: [{ createdAt: 'desc' }, { storeId: 'desc' }],
     });
     const staff = await this.staffCounts(rows.map((r) => r.storeId));
     return buildStoreWorkbook(
-      rows.map(({ bpCode, businessProfile, storeId, ...r }) => ({
+      rows.map(({ businessProfile, storeId, ...r }) => ({
         ...r,
-        bpTradeName: bpCode.tradeName,
+        bizRegistrationNumber: businessProfile?.bizRegistrationNumber ?? null,
         staffCount: staff.get(storeId) ?? 0,
-        business: businessProfile,
       })),
     );
   }
