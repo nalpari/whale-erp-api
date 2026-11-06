@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-06T02:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-06T03:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -25,7 +25,7 @@ sources:
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-11-05T02:00:00Z
+    last_modified: 2026-11-06T03:00:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 화면 [표] 보기와 같은 열 · 서식(정책은 공통 엑셀)

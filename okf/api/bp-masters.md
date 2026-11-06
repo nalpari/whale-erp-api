@@ -4,7 +4,7 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-06T02:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-06T03:00:00Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-06T03:00:00Z
   - id: bp-master-excel
     resource: ../../src/bp-masters/bp-master-excel.ts
     title: BP 목록 엑셀 — 목록 표와 같은 열 · 서식, 연락처만 가림
