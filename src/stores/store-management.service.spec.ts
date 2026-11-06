@@ -9,6 +9,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import ExcelJS from 'exceljs';
 import {
   ACCESS_DENIED_MESSAGE,
   ACCOUNT_UNAVAILABLE_MESSAGE,
@@ -1915,6 +1916,43 @@ describe('StoreManagementService', () => {
       expect(args.skip).toBeUndefined();
       expect(args.take).toBeUndefined();
       expect(args.select.businessProfile).toBeTruthy();
+    });
+
+    it('줄은 화면 [표] 보기의 값이다 — 사업자등록번호 · 시 · 구 주소 · 재직직원', async () => {
+      prisma.store.findMany.mockResolvedValue([
+        {
+          storeId: 11,
+          storeCode: 'ST000011',
+          name: '서초점',
+          storeTypeCode: 'DIRECT',
+          storeStatusCode: 'OPERATING',
+          phone: null,
+          address: '서울특별시 서초구 서초대로 1',
+          createdAt: new Date('2026-10-01T15:30:00Z'),
+          businessProfile: { bizRegistrationNumber: '1234567890' },
+        },
+      ]);
+      prisma.staffMember.groupBy.mockResolvedValue([
+        { storeId: 11, _count: { _all: 3 } },
+      ]);
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(
+        (await service.excelFile(BM, OWN_BP, {})) as unknown as ArrayBuffer,
+      );
+      expect(
+        (workbook.worksheets[0].getRow(2).values as unknown[]).slice(1),
+      ).toEqual([
+        1,
+        'ST000011',
+        '서초점',
+        '직영점포',
+        '운영',
+        '123-45-67890',
+        '-',
+        '서울특별시 서초구',
+        3,
+        '2026-10-02',
+      ]);
     });
 
     // 예약 생성 파일은 24시간 받을 수 있다 — 받을 때 지금 범위가 만든 때와 같은지 이 지문으로 견준다.
