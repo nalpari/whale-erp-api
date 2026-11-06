@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-06
+* **Update**: [Store management](/api/stores.md) · [BP masters](/api/bp-masters.md) · [Excel exports](/api/excel-exports.md) — 점포 · BP 마스터 목록 엑셀을 화면 표와 같은 열 · 순서로만 만든다(사용자 지정, front 요청). 점포는 [표] 보기의 10열(순번 · 점포코드 · 점포명 · 점포유형 · 점포상태 · 사업자등록번호 · 점포 연락처 · 점포주소(시 · 구) · 재직직원 · 등록일), BP 마스터는 표의 10열(BP 코드 · 상호명 · 아이디 · 이름 · 계정상태 · 연락처 · 이메일 · 사업자등록번호 · 가입경로 · 등록). 뒤에 붙던 사업자정보 열은 뺐다 — 가림은 BP 마스터 연락처만 남는다. 서식은 공통 `styleListSheet`: 모든 셀 9pt, 머리글 회색(F2F2F2) · 굵게 · 가운데, 1행 고정. 예약 생성 파일도 같은 함수라 같다. 조건 · 정렬 · 1만 건 · 파일 이름 · 응답 계약은 그대로.
+
 ## 2026-11-05
 * **Update**: [TO-DO](/api/todos.md) — 탭 BP 리뷰 반영(api #253): 플랫폼 계정이 고객 BP 의 TO-DO 를 고치면 저장 뒤 상세를 그 BP 로 다시 읽는다. bp 없이 다시 읽어 응답만 404 가 나던 것을 고쳤다.
 * **Update**: [Staff members](/api/staff-members.md) · [Staff retirement](/api/staff-retirement.md) · [Authentication](/api/auth.md) · [Work schedules](/api/work-schedules.md) · [TO-DO](/api/todos.md) — 직원 정보 · 근무스케줄 · TO-DO 관리자 경로가 탭 BP 를 받는다(근로계약 WHALEERP-618 · 급여명세서 · 출퇴근 WHALEERP-637 과 같은 방식, 2026-11-05 재영). 컨트롤러가 `@TargetBp()` 로 대상 BP 를 받아 서비스의 `getManageableStores` · `canManageStaffMember` · `canManageStaffAccount` 와 `targetStores` 로 넘긴다. 플랫폼 계정은 고른 고객 BP 의 점포 전부, BP · 가맹 계정은 그대로다. 플랫폼 계정이 헤더 없이 부르면 목록류(직원 목록 · `/work-schedules` 전부 · `/todos` 전부)는 400(모듈마다 문구 상수 `staff-target-bp.ts` · `work-schedule-target-bp.ts` · `todo-target-bp.ts`), 직원 단위 경로(`/staff-members/:id/…` — 상세 · 요약 · 근무스케줄 표 · TO-DO 영역 · 퇴직 · 생년월일 정정 · 재설정 링크)는 404 로 둔다. 일괄 저장은 옮기지 않았다. Swagger 400 · 403 · 404 설명에 BP 판정을 더했다(openapi.json 다시 생성). 단위(범위 호출에 bp) · e2e(플랫폼 + 헤더 · 헤더 없음 · BP 계정). 마이그레이션 없음.
