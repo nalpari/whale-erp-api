@@ -748,24 +748,11 @@ export class BpMastersService {
       select: bpSelect,
       orderBy: ORDER_BY,
     });
+    // 화면 표의 칸만 담는다 — summaryOf 가 목록 한 줄과 같은 값(탈퇴 BP 개인정보는 null)을 만든다.
     return buildBpMasterWorkbook(
       rows.flatMap((row) => {
         const master = row.adminAccounts[0];
-        if (!master) return [];
-        return [
-          {
-            ...summaryOf(row, master),
-            bizCeoName: row.bizCeoName,
-            ...ceoContactOf(row),
-            bizOpenDate: dateOnly(row.bizOpenDate),
-            bizZipCode: row.bizZipCode,
-            bizAddress: row.bizAddress,
-            bizAddressDetail: row.bizAddressDetail,
-            bizCategory: row.bizCategory,
-            bizItem: row.bizItem,
-            bizVerifiedAt: row.bizVerifiedAt,
-          },
-        ];
+        return master ? [summaryOf(row, master)] : [];
       }),
     );
   }
