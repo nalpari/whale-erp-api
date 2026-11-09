@@ -31,8 +31,8 @@ CREATE TYPE "employment_type" AS ENUM ('FULL_TIME', 'PART_TIME');  -- 정직원 
 COMMENT ON TYPE "employment_type" IS '정직원 · 파트타이머';
 CREATE TYPE "employment_status" AS ENUM ('EMPLOYED', 'RETIRED');  -- 재직 · 퇴직
 COMMENT ON TYPE "employment_status" IS '재직 · 퇴직';
-CREATE TYPE "staff_member_join_status" AS ENUM ('DRAFT', 'INVITED', 'JOINED');  -- 초안 · 초대 발송 · 가입 완료
-COMMENT ON TYPE "staff_member_join_status" IS '초안 · 초대 발송 · 가입 완료';
+CREATE TYPE "staff_member_join_status" AS ENUM ('DRAFT', 'INVITED', 'JOINED');  -- 초안 · 가입 대기 · 가입 완료
+COMMENT ON TYPE "staff_member_join_status" IS '초안 · 가입 대기 · 가입 완료';
 CREATE TYPE "invitation_type" AS ENUM ('SIGNUP', 'REINVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM');  -- 가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인
 COMMENT ON TYPE "invitation_type" IS '가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인';
 CREATE TYPE "invitation_channel" AS ENUM ('SMS', 'ALIMTALK', 'PUSH');  -- SMS · 알림톡 · 앱 푸시
@@ -1322,7 +1322,7 @@ COMMENT ON COLUMN "staff_members"."employment_type" IS '고용 형태 — 정직
 COMMENT ON COLUMN "staff_members"."job_title" IS '직무 — 초안 필수 (2026-10-06)';
 COMMENT ON COLUMN "staff_members"."hired_date" IS '입사일';
 COMMENT ON COLUMN "staff_members"."employment_status" IS '재직 상태 — 재직·퇴직';
-COMMENT ON COLUMN "staff_members"."join_status" IS '가입 상태 — 초안·초대 발송·가입 완료';
+COMMENT ON COLUMN "staff_members"."join_status" IS '가입 상태 — 초안·가입 대기·가입 완료';
 COMMENT ON COLUMN "staff_members"."retired_date" IS '퇴직일';
 COMMENT ON COLUMN "staff_members"."previous_staff_member_id" IS '이전 재직 레코드 — 재입사 레코드만 — 같은 점포에서 퇴직한 같은 사람의 직전 레코드 (물리에서 추가)';
 COMMENT ON COLUMN "staff_members"."created_at" IS '등록 일시 (물리에서 추가)';

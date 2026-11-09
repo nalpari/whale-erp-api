@@ -257,7 +257,7 @@ describe('ContractDeliveryService', () => {
   });
 
   describe('prepare', () => {
-    it('가입 초대 — 서명 기한 30일 · 초대(토큰은 해시로만) · 직원 초대 발송, 이 저장의 이력 줄을 기억한다', async () => {
+    it('가입 초대 — 서명 기한 30일 · 초대(토큰은 해시로만) · 직원 가입 대기(INVITED), 이 저장의 이력 줄을 기억한다', async () => {
       const pending = (await service().prepare(
         t(),
         input(),
@@ -413,7 +413,7 @@ describe('ContractDeliveryService', () => {
           expiresAt: DEADLINE,
           status: 'SENT',
         });
-        // 후보 계정은 저장의 판별이 남긴 값 그대로 — 초대 발송으로만 둔다
+        // 후보 계정은 저장의 판별이 남긴 값 그대로 — 가입 대기(INVITED)로만 둔다
         expect(
           (tx.staffMember.update.mock.calls as unknown[][])[0][0],
         ).toMatchObject({

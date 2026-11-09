@@ -56,7 +56,7 @@ const INVITE_RESENDABLE: readonly ContractStatus[] = [
 
 /**
  * 가입 · 인증 칸에서 다시 보낼 수 있는 가입 상태. 재발송 간격 제한은 없다(2026-10-12 재영). 가입 완료는 가입 초대가 아니라
- * 앱 알림이라 근로계약 상세에서 다시 보내고(WHALEERP-611), 연결 보류는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은
+ * 앱 알림이라 근로계약 상세에서 다시 보내고(WHALEERP-611), 정보 확인 필요는 「연결 확인」에서, 만 19세 미만 · 직원이 거절한 건은
  * 다시 보내지 않는다. 받을 길(가입 초대 · 소속 추가 확인 요청)은 재발송 api 가 다시 판별한다(WHALEERP-130). 직원이 한 번이라도
  * 거절했으면(가입 상태 거절) 뒤에 나간 새 요청이 만료돼도 이 칸에서는 다시 보내지 않는다 — 근로계약 상세에서 관리자가 보고
  * 보낸다(상세 canResend 는 참일 수 있다, api #164 리뷰 참고 1).
@@ -513,7 +513,7 @@ export class StaffMemberListService {
       const joinState = joinStateOf(r.joinStatus, r.invitations);
       // 재발송 버튼 — 발송 대기 · 서명 대기(INVITE_RESENDABLE — 거부 · 만료는 근로계약 상세에서, WHALEERP-153) 위에 가입 · 인증 칸 정책(askable —
       // 가입 전 · 휴대폰 번호 · 가린 줄 아님)을 더한다. 보이는 초대를 수락했으면 다시 보내지 않는다 — 받은 링크로 다시 들어온다
-      // (2026-10-12 yjnoh). 앞 초대만 수락했고 뒤에 재초대가 나갔으면(연결 보류 → 번호 수정 후 재초대) 그 재초대가 보이는 초대라
+      // (2026-10-12 yjnoh). 앞 초대만 수락했고 뒤에 재초대가 나갔으면(정보 확인 필요 → 번호 수정 후 재초대) 그 재초대가 보이는 초대라
       // 다시 보낼 수 있다. 초대 행이 없는 옛 소속 확인 계약(서명 대기)도 참이다 — contract.canResend 로 싣는다(api #164 리뷰)
       const canResend =
         askable(r, joinState, contract?.draftAction) &&

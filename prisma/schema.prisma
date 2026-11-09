@@ -124,7 +124,7 @@ enum EmploymentStatus {
   @@map("employment_status")
 }
 
-/// 초안 · 초대 발송 · 가입 완료
+/// 초안 · 가입 대기 · 가입 완료
 enum StaffMemberJoinStatus {
   DRAFT
   INVITED
@@ -789,7 +789,7 @@ model StaffMember {
   hiredDate                       DateTime?                  @map("hired_date") @db.Date
   /// 재직 상태 — 재직·퇴직
   employmentStatus                EmploymentStatus           @default(EMPLOYED) @map("employment_status")
-  /// 가입 상태 — 초안·초대 발송·가입 완료
+  /// 가입 상태 — 초안·가입 대기·가입 완료
   joinStatus                      StaffMemberJoinStatus      @default(DRAFT) @map("join_status")
   /// 퇴직일
   retiredDate                     DateTime?                  @map("retired_date") @db.Date
