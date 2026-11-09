@@ -65,10 +65,10 @@ UPDATE "notification_templates" AS r
    AND r."title" IS NOT DISTINCT FROM r."default_title" AND r."body" = r."default_body"
    AND r."variables" = r."default_variables";
 
--- 되돌리기 원본: 5건 모두.
+-- 되돌리기 원본: 5건 모두. updated_at 은 올리지 않는다 — 수정 화면의 낙관적 잠금(읽은 updatedAt)이 그 값이라, 운영자가 고친
+-- 템플릿을 열어 둔 채 배포되면 지금 값은 그대로인데 저장이 409 가 된다. 지금 값을 바꾼 행은 위 UPDATE 가 이미 올렸다.
 UPDATE "notification_templates" AS r
-   SET "default_title" = w."title_to", "default_body" = replace(r."default_body", w."body_from", w."body_to"),
-       "updated_at" = now()
+   SET "default_title" = w."title_to", "default_body" = replace(r."default_body", w."body_from", w."body_to")
   FROM "_contract_template_wording" AS w
  WHERE r."template_code" = w."template_code";
 
@@ -113,8 +113,7 @@ UPDATE "notification_templates"
 UPDATE "notification_templates"
    SET "default_variables" = (
          SELECT jsonb_agg(CASE WHEN e->>'name' = '날인기한' THEN jsonb_set(e, '{label}', '"서명 기한"') ELSE e END ORDER BY i)
-           FROM jsonb_array_elements("default_variables") WITH ORDINALITY AS t(e, i)),
-       "updated_at" = now()
+           FROM jsonb_array_elements("default_variables") WITH ORDINALITY AS t(e, i))
  WHERE "template_code" IN ('PUSH_CONTRACT_SENT', 'TALK_STAFF_CONTRACT_SENT');
 
 DO $$

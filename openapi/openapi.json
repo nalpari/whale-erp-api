@@ -9184,7 +9184,7 @@
             "description": "없는 계약 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(서명 요청 전 · 직원 서명 대기 · 서명 거절 · 계약 기간 만료가 아님, 또는 본문 expectedStatus · expectedSentAt 이 지금 계약과 다름 — 그사이 서명을 거절했거나 서명 기한이 지나 만료되었거나 다른 탭에서 먼저 보냄) · REOPEN_BLOCKED(서명 거절 · 계약 기간 만료를 되살릴 수 없음 — 퇴직 · 퇴직일 있음, 폐점 · 삭제 점포, 같은 점포 · 번호의 다른 진행 중 계약, 계약 기간이 끝남, 기간이 겹치거나 더 늦게 시작한 다른 서명 완료, 같은 직전 계약의 다른 재계약. message 에 까닭) · WORK_TIME_OVERLAP(서명 거절 · 계약 기간 만료를 되살리면 다른 점포 근무 시간과 겹침) · SEND_PHONE_NOT_MOBILE(휴대폰 번호가 아님) · 코드 없음 「이 점포에 이미 재직 중인 직원입니다.」(가입 전 레코드인데 그 번호의 계정이 이 점포에 재직 중) · 다른 요청이 먼저 고침"
+            "description": "CONTRACT_STATUS_CONFLICT(서명 요청 전 · 직원 서명 대기 · 서명 거절 · 계약 기간 만료가 아님, 또는 본문 expectedStatus · expectedSentAt 이 지금 계약과 다름 — 그사이 서명을 거절했거나 서명 기한이 지나 만료되었거나 다른 탭에서 먼저 보냄) · REOPEN_BLOCKED(서명 거절 · 계약 기간 만료를 되살릴 수 없음 — 퇴직 · 퇴직일 있음, 폐점 · 삭제 점포, 같은 점포 · 번호의 다른 진행 중 계약, 계약 종료일이 지남, 기간이 겹치거나 더 늦게 시작한 다른 서명 완료, 같은 직전 계약의 다른 재계약. message 에 까닭) · WORK_TIME_OVERLAP(서명 거절 · 계약 기간 만료를 되살리면 다른 점포 근무 시간과 겹침) · SEND_PHONE_NOT_MOBILE(휴대폰 번호가 아님) · 코드 없음 「이 점포에 이미 재직 중인 직원입니다.」(가입 전 레코드인데 그 번호의 계정이 이 점포에 재직 중) · 다른 요청이 먼저 고침"
           },
           "502": {
             "description": "가입 초대 · 소속 추가 확인 요청 알림톡일 때만 — SEND_FAILED(나가지 않음 — 거절 · 토큰 단계 · 요청 전 오류, 되돌렸고 다시 보낼 수 있음, 본문 contractId · status) · SEND_UNCONFIRMED(접수 여부 모름 또는 되돌리기 실패 — 상세를 다시 읽을 것). 소속 추가 확인 요청 메일 실패는 오류가 아니다"
@@ -9317,7 +9317,7 @@
             "description": "내 계약이 아님 — 없는 id · 남의 계약 · 작성 중 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남) · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨)"
+            "description": "CONTRACT_STATUS_CONFLICT(직원 서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남) · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨)"
           },
           "429": {
             "description": "경로마다 계정당 10분에 20번(서명 · 서명 거절 · 수정 요청을 따로 센다)"
@@ -9371,7 +9371,7 @@
             "description": "내 계약이 아님 — 없는 id · 남의 계약 · 작성 중 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)"
+            "description": "CONTRACT_STATUS_CONFLICT(직원 서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)"
           },
           "429": {
             "description": "경로마다 계정당 10분에 20번(서명 · 서명 거절 · 수정 요청을 따로 센다)"
@@ -9435,7 +9435,7 @@
             "description": "내 계약이 아님 — 없는 id · 남의 계약 · 작성 중 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)"
+            "description": "CONTRACT_STATUS_CONFLICT(직원 서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)"
           },
           "429": {
             "description": "경로마다 계정당 10분에 20번(서명 · 서명 거절 · 수정 요청을 따로 센다)"
@@ -15212,7 +15212,7 @@
             "description": "ALREADY_CHECKED_IN — 어느 소속에든 열린 출근이 있음(openCheckIn 을 함께)"
           },
           "422": {
-            "description": "STORE_CLOSED — 폐점한 근무지 / CONTRACT_PENDING_SIGNATURE — 서명 대기 계약(contractId) / NO_CONTRACT — 오늘이 서명 완료 근로계약 기간 밖이거나 퇴직일이 지남 (ATT-12)"
+            "description": "STORE_CLOSED — 폐점한 근무지 / CONTRACT_PENDING_SIGNATURE — 직원 서명 대기 계약(contractId) / NO_CONTRACT — 오늘이 서명 완료 근로계약 기간 밖이거나 퇴직일이 지남 (ATT-12)"
           }
         },
         "security": [

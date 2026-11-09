@@ -47,7 +47,7 @@ type SignatureFiles = Partial<
 const NOT_MINE =
   '내 계약이 아님 — 없는 id · 남의 계약 · 작성 중 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문';
 const STATE_CONFLICT =
-  'CONTRACT_STATUS_CONFLICT(서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)';
+  'CONTRACT_STATUS_CONFLICT(직원 서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남)';
 
 // 직원 앱의 근로계약 서명 · 서명 거절 · 수정 요청(WHALEERP-145). 계약을 보여 주는 조회는 WHALEERP-610.
 // 같은 계약을 여러 번 눌러도 두 번째는 409(지금 상태)라 앱은 status 로 결과를 안다.

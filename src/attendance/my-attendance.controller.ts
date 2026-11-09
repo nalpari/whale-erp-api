@@ -90,7 +90,7 @@ export class MyAttendanceController {
   })
   @ApiUnprocessableEntityResponse({
     description:
-      'STORE_CLOSED — 폐점한 근무지 / CONTRACT_PENDING_SIGNATURE — 서명 대기 계약(contractId) / NO_CONTRACT — 오늘이 서명 완료 근로계약 기간 밖이거나 퇴직일이 지남 (ATT-12)',
+      'STORE_CLOSED — 폐점한 근무지 / CONTRACT_PENDING_SIGNATURE — 직원 서명 대기 계약(contractId) / NO_CONTRACT — 오늘이 서명 완료 근로계약 기간 밖이거나 퇴직일이 지남 (ATT-12)',
   })
   checkIn(
     @Body() dto: CheckInDto,
