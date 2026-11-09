@@ -103,7 +103,7 @@ export class StaffMemberListQueryDto {
   employmentType?: EmploymentType[];
 
   /**
-   * 쉼표로 구분한 가입·인증 상태(StaffJoinState). 고른 상태 중 하나라도 맞으면 나온다 — 화면의 묶음(초대 발송 =
+   * 쉼표로 구분한 가입·인증 상태(StaffJoinState). 고른 상태 중 하나라도 맞으면 나온다 — 화면의 묶음(가입 대기 =
    * INVITED,EXPIRED,REJECTED)을 그대로 보낸다. 없으면 전체. 빈 값 · 모르는 값이 하나라도 있으면 400 이다.
    * 화면에서 하나도 고르지 않았으면 이 api 를 부르지 않고 0건으로 그린다.
    */

@@ -6,19 +6,19 @@ import {
 } from '@prisma/client';
 
 /**
- * 직원 목록의 「가입·인증」 상태. DB 칸이 아니라 직원 레코드 · 초대 · 연결 보류에서 만든다(API 전용 enum).
- * 이 순서는 화면 선택지 순서다(우선순위와 다르다). 우선순위는 joinStateOf 가 정한다 — 가입 완료 > 연결 보류 >
- * 발송 중 초대(소속 추가 · 복귀 · 초대 발송) > 만 19세 미만 > 수락(초대 발송) > 거절 > 만료, 초대가 없으면 초안.
+ * 직원 목록의 「가입·인증」 상태. DB 칸이 아니라 직원 레코드 · 초대 · 정보 확인 필요(연결 보류)에서 만든다(API 전용 enum).
+ * 이 순서는 화면 선택지 순서다(우선순위와 다르다). 우선순위는 joinStateOf 가 정한다 — 가입 완료 > 정보 확인 필요 >
+ * 발송 중 초대(소속 승인 대기 · 복귀 확인 · 가입 대기) > 만 19세 미만 > 수락(가입 대기) > 거절 > 만료, 초대가 없으면 초안.
  * 표시(joinStateOf)와 필터(joinStateWhere)가 같은 규칙을 따르도록
  * 두 함수를 이 파일에 함께 둔다 — 한쪽만 고치면 필터한 결과에 다른 상태가 섞여 나온다.
  */
 export const STAFF_JOIN_STATE_LABELS = {
   JOINED: '가입 완료',
-  LINK_HOLD: '연결 보류',
+  LINK_HOLD: '정보 확인 필요',
   UNDER_AGE: '가입 불가(만 19세 미만)',
-  AFFILIATION_PENDING: '소속 추가 확인',
+  AFFILIATION_PENDING: '소속 승인 대기',
   RETURN_PENDING: '복귀 확인',
-  INVITED: '초대 발송',
+  INVITED: '가입 대기',
   EXPIRED: '초대 만료',
   REJECTED: '거절',
   DRAFT: '초안',
@@ -81,8 +81,8 @@ export function joinStateOf(
   if (invitations.some((i) => i.status === 'REJECTED_UNDER_AGE'))
     return 'UNDER_AGE';
   // 발송 중인 초대가 없다. 「마지막 초대」는 필터(관계 조건)로 표현되지 않으므로 순서가 아니라 있고 없음으로
-  // 가른다 — 수락 > 거절 > 만료. 수락했는데 가입 완료도 보류도 아닌 것은 재초대를 기다리는 중간 상태라 초대
-  // 발송으로 둔다.
+  // 가른다 — 수락 > 거절 > 만료. 수락했는데 가입 완료도 보류도 아닌 것은 재초대를 기다리는 중간 상태라 가입
+  // 대기로 둔다.
   if (invitations.some((i) => i.status === 'ACCEPTED')) return 'INVITED';
   if (invitations.some((i) => i.status === 'REJECTED')) return 'REJECTED';
   return 'EXPIRED';

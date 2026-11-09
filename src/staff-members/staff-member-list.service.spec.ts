@@ -575,7 +575,7 @@ describe('StaffMemberListService', () => {
       },
     );
 
-    it('앞 초대를 수락했어도 뒤에 나간 재초대(연결 보류 → 번호 수정 후 재초대)가 보이는 초대면 다시 보낼 수 있다 — 보이는 초대를 수락했으면 거짓', async () => {
+    it('앞 초대를 수락했어도 뒤에 나간 재초대(정보 확인 필요 → 번호 수정 후 재초대)가 보이는 초대면 다시 보낼 수 있다 — 보이는 초대를 수락했으면 거짓', async () => {
       const chain = (last: string) =>
         row({
           joinStatus: 'INVITED',

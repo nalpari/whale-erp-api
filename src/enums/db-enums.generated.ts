@@ -270,7 +270,7 @@ export const DB_ENUMS: EnumSource = {
   ],
   StaffMemberJoinStatus: [
     ['DRAFT', '초안'],
-    ['INVITED', '초대 발송'],
+    ['INVITED', '가입 대기'],
     ['JOINED', '가입 완료'],
   ],
   StaffTaxProfileField: [

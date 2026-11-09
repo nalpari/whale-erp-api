@@ -303,7 +303,7 @@ ENUMS = {
     ("location_access_logs", "action"): ("location_access_action", ["COLLECT", "USE", "PROVIDE"], "수집 · 이용 · 제공"),
     ("staff_members", "employment_type"): _EMPLOY,
     ("staff_members", "employment_status"): ("employment_status", ["EMPLOYED", "RETIRED"], "재직 · 퇴직"),
-    ("staff_members", "join_status"): ("staff_member_join_status", ["DRAFT", "INVITED", "JOINED"], "초안 · 초대 발송 · 가입 완료"),
+    ("staff_members", "join_status"): ("staff_member_join_status", ["DRAFT", "INVITED", "JOINED"], "초안 · 가입 대기 · 가입 완료"),
     ("invitations", "invitation_type"): ("invitation_type", ["SIGNUP", "REINVITE", "AFFILIATION_CONFIRM", "RETURN_CONFIRM"],
                                          "가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인"),
     # 소속 추가 확인 · 복귀 확인은 기존 계정의 앱 푸시로 간다 — 채널 칸이 NOT NULL 이라 값이 있어야 한다 (2026-10-08)

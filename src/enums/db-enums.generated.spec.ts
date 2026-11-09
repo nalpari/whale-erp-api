@@ -35,4 +35,12 @@ describe('db-enums.generated', () => {
     );
     expect(generated).toEqual(prismaEnums());
   });
+
+  it('직원 가입 상태 한글 — 가입 대기 (WHALEERP-660)', () => {
+    expect(DB_ENUMS.StaffMemberJoinStatus).toEqual([
+      ['DRAFT', '초안'],
+      ['INVITED', '가입 대기'],
+      ['JOINED', '가입 완료'],
+    ]);
+  });
 });

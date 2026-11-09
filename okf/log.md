@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-09
+* **Update**: [Staff members](/api/staff-members.md) · [Staff signup](/api/staff-signup.md) · [Contracts API](/api/contracts-api.md) — 직원 가입 상태 화면 이름 변경(WHALEERP-660, 2026-11-09 재영): 초대 발송 → 가입 대기(`INVITED`), 소속 추가 확인 → 소속 승인 대기(`AFFILIATION_PENDING`), 연결 보류 → 정보 확인 필요(`LINK_HOLD`). `STAFF_JOIN_STATE_LABELS` · `staff_member_join_status` 타입 설명(`20261109161807_team3_staff_join_status_labels`, 타입 · 칸 `COMMENT`) · `db-enums.generated.ts` · Swagger 설명만 바뀐다. 초대 유형 이름(가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인) · 「소속 추가 확인 요청」 · enum 값은 그대로.
 * **Update**: [Testing conventions](/conventions/testing.md) — e2e 앱을 init 직후 `127.0.0.1` 의 임의 포트에 미리 listen 한다(`test/e2e-listen-loopback.ts`). supertest 가 요청마다 연 포트를 다른 로컬 프로그램이 잡고 있어 응답을 대신 받거나, 동시 요청이 `ECONNREFUSED` 로 깨지던 것을 막는다. 시험 파일은 고치지 않았다.
 
 ## 2026-11-06

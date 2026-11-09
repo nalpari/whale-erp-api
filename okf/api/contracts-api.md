@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T08:51:00Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-09T07:33:00Z }
 sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
@@ -666,7 +666,7 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
 - **On save · 재발송 · 근로자 정보 수정** the contract stays **발송 대기** (`deliveredStatusOf`). `prepare` expires earlier
   `SENT` invitations, writes one `AFFILIATION_CONFIRM` / `RETURN_CONFIRM` invitation (channel `ALIMTALK`, 30 days, no code,
   no token — the request hangs on the record's `candidate_account_id`, which the save's 판별 already wrote and `prepare`
-  leaves alone) and marks the record 초대 발송. `sent_at` is set; **`sign_deadline_at` stays null** — the 30-day 날인 기한
+  leaves alone) and sets the record's `join_status` to `INVITED` (the list's 가입 상태 shows 소속 승인 대기 · 복귀 확인). `sent_at` is set; **`sign_deadline_at` stays null** — the 30-day 날인 기한
   starts at acceptance (재영). 발송 대기 is never expired by the daily batch (it only expires 서명 대기); the invitation
   expires after 30 days and the contract stays 발송 대기, so 재발송 continues it.
 - **After commit** `dispatch` sends alimtalk `TALK_STAFF_AFFILIATION_REQUEST` (사업자 · 근무지 · 고용형태; no button and
@@ -780,7 +780,7 @@ resent — a new contract instead.
     small enough that a plain hash would fall to brute force once a row leaks, and nobody — the admin
     included — needs to read the code back. Invitations sent before the column have no code.
 
-  The record goes 초안 → 초대 발송 (`join_status = INVITED`).
+  The record goes 초안 → 가입 대기 (`join_status = INVITED`).
 - The link is `STAFF_APP_URL`'s origin + `/invite#token=…` (`inviteLinkOf` — the token in the
   fragment never reaches a server log, like the reset link); opening it skips the code. The code is
   in the 알림톡 **body**. Both are masked in the send log (`maskedVariables: ['초대코드', '링크']`).
