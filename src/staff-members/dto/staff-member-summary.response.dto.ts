@@ -17,7 +17,7 @@ import {
 /** 가장 최근 근로계약의 요약. 직원 목록 · 상세의 contract 와 같은 계약이다 */
 export class StaffMemberContractSummaryDto {
   contractId: number;
-  /** 계약 유형. 임시저장이면 비어 있을 수 있다 */
+  /** 계약 유형. 작성 중이면 비어 있을 수 있다 */
   @ApiProperty({
     enum: EmploymentType,
     enumName: 'EmploymentType',
@@ -43,7 +43,7 @@ export class StaffMemberContractSummaryDto {
   /** 최근 발송 일시 — 발송 · 재발송 때 바뀐다. 보낸 적이 없으면 null */
   lastSentAt: Date | null;
   /**
-   * 갱신 예정일(YYYY-MM-DD) — 체결 완료이고 종료일이 오늘 이후일 때 종료일 30일 전. 종료일이 30일 안이면 이미 지난
+   * 갱신 예정일(YYYY-MM-DD) — 서명 완료이고 종료일이 오늘 이후일 때 종료일 30일 전. 종료일이 30일 안이면 이미 지난
    * 날짜일 수 있다. 아니면 null
    */
   renewalDate: string | null;

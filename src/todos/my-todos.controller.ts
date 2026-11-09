@@ -16,7 +16,7 @@ import { TodoIdPipe } from './todo-id.pipe';
 import { TodosService } from './todos.service';
 
 /**
- * 직원 근무 앱의 내 TO-DO — 근무 탭과 홈 카드가 같이 쓴다. 내 재직 직원 레코드(그 점포에 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전, 운영 정책 CTR-29)에 배정된 것만
+ * 직원 근무 앱의 내 TO-DO — 근무 탭과 홈 카드가 같이 쓴다. 내 재직 직원 레코드(그 점포에 서명 완료 근로계약이 있고 가입 완료 · 퇴직 전, 운영 정책 CTR-29)에 배정된 것만
  * 보이고, 그 밖의 TO-DO 는 없는 것과 같다(404).
  */
 @ApiBearerAuth()
@@ -41,7 +41,7 @@ export class MyTodosController {
   @ApiOkResponse({ type: TodoItemDto })
   @ApiNotFoundResponse({
     description:
-      '내게 배정되지 않았거나 지운 TO-DO · 내 직원 레코드가 대상 조건(체결 완료 계약 · 가입 · 퇴직) 밖',
+      '내게 배정되지 않았거나 지운 TO-DO · 내 직원 레코드가 대상 조건(서명 완료 계약 · 가입 · 퇴직) 밖',
   })
   @ApiConflictResponse({
     description:

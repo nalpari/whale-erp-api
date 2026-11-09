@@ -66,7 +66,7 @@ export class MyContractDocumentsService {
         statusCode: HttpStatus.CONFLICT,
         error: 'Conflict',
         code: 'CONTRACT_STATUS_CONFLICT',
-        message: '처리 완료본은 체결이 끝난 근로계약에서만 받을 수 있습니다.',
+        message: '처리 완료본은 서명이 완료된 근로계약에서만 받을 수 있습니다.',
         status,
       });
     const storage = requireStorage(this.storage);

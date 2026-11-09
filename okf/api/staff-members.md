@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-09T07:19:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -37,7 +37,7 @@ sources:
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
-    last_modified: 2026-11-09T07:19:00Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -49,7 +49,7 @@ sources:
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
-    last_modified: 2026-10-29T06:50:00Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE
@@ -89,7 +89,7 @@ sources:
   - id: birth-date-controller
     resource: ../../src/staff-members/staff-birth-date.controller.ts
     title: PUT /staff-members/:id/birth-date (직원 정보 관리 수정 권한, WHALEERP-602)
-    last_modified: 2026-11-05T08:00:00Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: birth-date-correctable
     resource: ../../src/staff-members/birth-date-correctable.ts
     title: isBirthDateCorrectable — 정정 서비스와 상세 birthDateCorrectable 이 함께 쓰는 판정

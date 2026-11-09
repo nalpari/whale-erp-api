@@ -1095,7 +1095,9 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       it('근무지를 바꾸면 400 — 다른 근무지는 새 근로계약서로 쓴다', async () => {
         await expect(
           service.update(9, 7, dto({ isTemporarySave: false, storeId: 12 })),
-        ).rejects.toThrow('수정 요청 근로계약서는 근무지를 바꿀 수 없습니다');
+        ).rejects.toThrow(
+          '직원 수정 요청 근로계약서는 근무지를 바꿀 수 없습니다',
+        );
         expect(tx.contract.updateMany).not.toHaveBeenCalled();
       });
 
@@ -1119,7 +1121,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         await expect(
           service.update(9, 7, dto({ isTemporarySave: false })),
         ).rejects.toThrow(
-          '임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다.',
+          '작성 중 · 직원 수정 요청 근로계약서만 고칠 수 있습니다.',
         );
       },
     );

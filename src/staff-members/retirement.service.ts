@@ -703,7 +703,7 @@ export class RetirementService {
   ): Promise<void> {
     if (await this.isDraftOnlyPreJoin(client, staffMemberId, staff))
       throw new ConflictException(
-        '임시저장 근로계약만 있는 직원은 퇴직 처리 대신 임시저장을 지워 주세요.',
+        '작성 중 근로계약만 있는 직원은 퇴직 처리 대신 작성 중 근로계약을 지워 주세요.',
       );
     if (staff.employmentStatus === 'RETIRED')
       throw new ConflictException('이미 퇴직한 직원입니다.');

@@ -216,7 +216,7 @@ enum PayMethod {
   @@map("pay_method")
 }
 
-/// 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료
+/// 작성 중 · 서명 요청 전 · 직원 서명 대기 · 직원 수정 요청 · 서명 완료 · 서명 거절 · 계약 기간 만료 · 계약 종료
 enum ContractStatus {
   DRAFT
   PENDING_SEND
@@ -240,7 +240,7 @@ enum ContractDraftAction {
   @@map("contract_draft_action")
 }
 
-/// 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지
+/// 발송 원본 · 서명 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지
 enum ContractDocumentKind {
   SENT_ORIGINAL
   SIGNED_COPY
@@ -1022,7 +1022,7 @@ model Contract {
   probationMonths            Int?                       @map("probation_months")
   /// 수습 임금 감액률 — %, 0~10. 수습 중 시급 = 시급 × (1 − 감액률) — 최저임금의 90% 이상 (노무사 확인 2026-10-14)
   probationWageReductionRate Int?                       @map("probation_wage_reduction_rate")
-  /// 계약 상태 — 임시저장·발송 대기·서명 대기·체결 완료·거부·만료·종료
+  /// 계약 상태 — 작성 중·서명 요청 전·직원 서명 대기·직원 수정 요청·서명 완료·서명 거절·계약 기간 만료·계약 종료
   status                     ContractStatus?            @default(PENDING_SEND)
   /// 초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송
   draftAction                ContractDraftAction?       @map("draft_action")
@@ -1136,7 +1136,7 @@ model ContractDocument {
   contractDocumentId Int                  @id @default(autoincrement()) @map("contract_document_id")
   /// 근로계약
   contractId         Int                  @map("contract_id")
-  /// 파일 구분 — 발송 원본·날인 완료본·종이 계약 근로계약서·임금계약서
+  /// 파일 구분 — 발송 원본·서명 완료본·종이 계약 근로계약서·임금계약서·서명 이미지
   kind               ContractDocumentKind
   /// 저장 위치
   storageKey         String               @map("storage_key")

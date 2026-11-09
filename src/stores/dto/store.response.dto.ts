@@ -35,7 +35,7 @@ export class StoreSummaryResponseDto {
   phone: string | null;
   /** 지역 — 기본주소의 앞 두 마디. @example 서울특별시 서초구 */
   region: string | null;
-  /** 재직 직원 수 — 이 점포가 근무지이고 퇴직하지 않았으며 지금 체결 완료 근로계약이 있는 직원 레코드. 체결 완료 계약이 없는 레코드(초안 · 발송 대기 · 서명 대기 · 수정 요청 · 거부 · 만료 · 종료뿐)는 세지 않는다. 퇴직 예정은 퇴직일까지 센다 */
+  /** 재직 직원 수 — 이 점포가 근무지이고 퇴직하지 않았으며 지금 서명 완료 근로계약이 있는 직원 레코드. 서명 완료 계약이 없는 레코드(초안 · 서명 요청 전 · 서명 대기 · 수정 요청 · 서명 거절 · 계약 기간 만료 · 종료뿐)는 세지 않는다. 퇴직 예정은 퇴직일까지 센다 */
   staffCount: number;
   /** 대표 이미지 썸네일 주소(5분 동안 유효). 이미지가 없거나 저장소를 쓸 수 없으면 null — 화면은 점포 아이콘. */
   imageUrl: string | null;
@@ -98,7 +98,7 @@ export class StoreTransitionCheckResponseDto {
     isArray: true,
   })
   missingForOperation: OperationRequirement[];
-  /** 진행 중인 근로계약 수 — 거부 · 만료 · 종료되지 않은 계약. 0 이어야 삭제된다(폐점은 막지 않는다 — 대기 계약은 폐점이 종료하고 체결 완료는 남는다). */
+  /** 진행 중인 근로계약 수 — 서명 거절 · 계약 기간 만료 · 종료되지 않은 계약. 0 이어야 삭제된다(폐점은 막지 않는다 — 대기 계약은 폐점이 종료하고 서명 완료는 남는다). */
   inProgressContractCount: number;
   /** 폐점할 수 있는가 — 소속 BP 사용 중 · 폐점 아님 · 퇴근하지 않은 출근 없음(closing.isBlocked false) */
   canClose: boolean;

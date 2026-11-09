@@ -67,7 +67,7 @@ export class WorkScheduleIdPipe implements PipeTransform<string, number> {
 }
 
 const NOT_SCHEDULABLE =
-  '입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 체결 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원) · WORK_SCHEDULE_STORE_CLOSED(폐점 점포 — 등록만, 수정은 받는다)';
+  '입력 오류 · 24시간짜리 · 휴게가 근무시간 이상 · WORK_SCHEDULE_NO_CONTRACT(근무일에 서명 완료 계약 없음) · WORK_SCHEDULE_AFTER_RETIREMENT(퇴직일 뒤) · WORK_SCHEDULE_NOT_JOINED(가입 전) · WORK_SCHEDULE_HIDDEN(본사에게 가려지는 가맹 직원) · WORK_SCHEDULE_STORE_CLOSED(폐점 점포 — 등록만, 수정은 받는다)';
 
 /**
  * 관리자 웹 「근무스케줄 관리」(#198). 메뉴는 `/work-schedules`. 업무 범위(관리하는 점포) 밖은 없는 것과 같다(404).
@@ -133,7 +133,7 @@ export class WorkSchedulesController {
     return this.schedules.histories(user.id, query, bp);
   }
 
-  /** 등록의 직원 선택지 — 가입을 마쳤고 그 근무일에 체결 완료 계약이 있고 퇴직일 전인 직원, 이름순(STAFF-29 · CTR-24) */
+  /** 등록의 직원 선택지 — 가입을 마쳤고 그 근무일에 서명 완료 계약이 있고 퇴직일 전인 직원, 이름순(STAFF-29 · CTR-24) */
   @Get('assignable-staff')
   @MenuPermission('create')
   @ApiOkResponse({ type: WorkScheduleStaffResponseDto })

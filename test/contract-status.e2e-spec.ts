@@ -536,9 +536,9 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       const rejected = await notificationOf(
         `NTF_CONTRACT_REJECTED:${900_003 + n}`,
       );
-      expect(rejected?.title).toBe('근로계약서 서명 거부');
+      expect(rejected?.title).toBe('근로계약서 서명 거절');
       expect(rejected?.body).toMatch(
-        /^남도현 님이 근로계약서 서명을 거부했습니다\.\n\n- 근무지: .+\n\n필요하면/,
+        /^남도현 님이 근로계약서 서명을 거절했습니다\.\n\n- 근무지: .+\n\n필요하면/,
       );
       expect(rejected?.body).not.toContain('사유');
       const renewal = await notificationOf(
@@ -942,7 +942,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
         })
         .then((c) => c.staffMember);
       await expect(renew(phone, pending)).rejects.toThrow(
-        '체결 완료되었거나 체결 뒤 종료된 근로계약만 재계약할 수 있습니다.',
+        '서명 완료되었거나 서명 완료 뒤 종료된 근로계약만 재계약할 수 있습니다.',
       );
 
       const { contractId } = await signedContract();
@@ -1654,7 +1654,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       );
       await expect(
         app.get(ContractSendService).send(adminId, contractId),
-      ).rejects.toThrow('체결 완료된 근로계약이 있습니다');
+      ).rejects.toThrow('서명 완료된 근로계약이 있습니다');
       expect((await stateOf(contractId)).status).toBe('REJECTED');
     });
 
@@ -1695,7 +1695,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       );
       await expect(
         app.get(ContractSendService).send(adminId, contractId),
-      ).rejects.toThrow('체결 완료된 근로계약이 있습니다');
+      ).rejects.toThrow('서명 완료된 근로계약이 있습니다');
     });
 
     it('기간이 끝나 배치가 닫은 체결 계약과 겹쳐도 되살리지 않는다 — 날인 뒤 처리와 같은 기준(api #158 재리뷰 참고 1)', async () => {
@@ -1803,7 +1803,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
       );
       await expect(
         app.get(ContractSendService).send(adminId, contractId),
-      ).rejects.toThrow('체결 완료된 근로계약이 있습니다');
+      ).rejects.toThrow('서명 완료된 근로계약이 있습니다');
     });
 
     it('계약 기간이 끝난 거부 계약은 되살리지 않는다(api #158 code-review)', async () => {

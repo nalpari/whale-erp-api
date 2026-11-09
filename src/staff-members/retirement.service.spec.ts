@@ -229,7 +229,7 @@ describe('RetirementService', () => {
       prisma.contract.count.mockResolvedValue(0);
       await expect(
         service.retire(1, 2, date('2026-10-31'), now),
-      ).rejects.toThrow('임시저장 근로계약만 있는 직원은');
+      ).rejects.toThrow('작성 중 근로계약만 있는 직원은');
       expect(prisma.staffMember.update).not.toHaveBeenCalled();
     });
 

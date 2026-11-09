@@ -26,9 +26,9 @@ const CorrectionReason = () =>
   });
 
 /**
- * 직원 날인(WHALEERP-145) — multipart 의 텍스트 칸. 서명 이미지는 파일 칸 `signature`(PNG).
+ * 직원 서명(WHALEERP-145) — multipart 의 텍스트 칸. 서명 이미지는 파일 칸 `signature`(PNG).
  * `sentAt` 은 직원이 본 계약의 발송 일시다(필수) — 그사이 관리자가 고쳐 다시 보냈으면 409 CONTRACT_RESENT.
- * 빠뜨리면 바뀐 계약서에 날인하게 되고, 시간대 표기가 없으면 서버 시간대로 읽혀 같은 발송도 409 가 되므로
+ * 빠뜨리면 바뀐 계약서에 서명하게 되고, 시간대 표기가 없으면 서버 시간대로 읽혀 같은 발송도 409 가 되므로
  * 둘 다 400 이다(2026-10-21 김민식). 앱은 계약 조회에서 받은 값을 그대로 보낸다.
  */
 export class SignMyContractDto {
@@ -71,6 +71,6 @@ export class MyContractActionResponseDto {
 }
 
 export class SignedMyContractResponseDto extends MyContractActionResponseDto {
-  @ApiProperty({ description: '날인 시각' })
+  @ApiProperty({ description: '서명 시각' })
   signedAt: Date;
 }

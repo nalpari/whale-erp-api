@@ -3,7 +3,7 @@ import { ApiExtraModels, ApiProperty, getSchemaPath } from '@nestjs/swagger';
 export class EnumValueDto {
   /** 저장·전송 값. 예: PENDING_SEND */
   value: string;
-  /** 화면에 보이는 한글. 예: 발송 대기 */
+  /** 화면에 보이는 한글. 예: 서명 요청 전 */
   label: string;
   /** 선택지 순서. 1부터. */
   order: number;
@@ -24,9 +24,9 @@ export class EnumCatalogResponseDto {
     },
     example: {
       ContractStatus: [
-        { value: 'PENDING_SEND', label: '발송 대기', order: 1 },
-        { value: 'PENDING_SIGNATURE', label: '서명 대기', order: 2 },
-        { value: 'SIGNED', label: '체결 완료', order: 3 },
+        { value: 'PENDING_SEND', label: '서명 요청 전', order: 1 },
+        { value: 'PENDING_SIGNATURE', label: '직원 서명 대기', order: 2 },
+        { value: 'SIGNED', label: '서명 완료', order: 3 },
       ],
     },
   })

@@ -66,7 +66,7 @@ export class AcceptAffiliationRequestDto {
   hqSharingConsentVersion?: string;
 }
 
-/** 수락 결과 — 앱이 그 소속의 날인 대기 근로계약서로 간다 */
+/** 수락 결과 — 앱이 그 소속의 서명 대기 근로계약서로 간다 */
 export class AcceptAffiliationResponseDto {
   /** 이 계정에 이어진 직원 레코드 */
   staffMemberId: number;
@@ -74,7 +74,7 @@ export class AcceptAffiliationResponseDto {
   /** 근무지(점포) 이름 */
   storeName: string;
 
-  /** 서명 대기로 넘어간 근로계약 — 날인 기한은 수락한 때부터 30일 */
+  /** 서명 대기로 넘어간 근로계약 — 서명 기한은 수락한 때부터 30일 */
   contractIds: number[];
 
   /**
