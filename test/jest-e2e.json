@@ -6,5 +6,6 @@
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },
-  "setupFiles": ["<rootDir>/e2e-env.ts"]
+  "setupFiles": ["<rootDir>/e2e-env.ts"],
+  "setupFilesAfterEnv": ["<rootDir>/e2e-listen-loopback.ts"]
 }
