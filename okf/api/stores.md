@@ -53,7 +53,7 @@ sources:
   - id: store-response
     resource: ../../src/stores/dto/store.response.dto.ts
     title: 목록 · 상세 · 이력 · 이미지 · 인증 결과 · 수정 결과 응답
-    last_modified: 2026-11-04T07:00:00Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: stores-module
     resource: ../../src/stores/stores.module.ts
     title: StoresModule — StorageModule, NtsModule verifier provider, StoreClosingsModule

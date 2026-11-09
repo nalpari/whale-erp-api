@@ -679,7 +679,7 @@ describe('WorkSchedulesService', () => {
           staffMemberId: 12,
           statusCode: 400,
           code: 'WORK_SCHEDULE_NO_CONTRACT',
-          message: '근무일에 체결 완료된 근로계약이 없는 직원입니다.',
+          message: '근무일에 서명 완료된 근로계약이 없는 직원입니다.',
         },
         {
           index: 3,

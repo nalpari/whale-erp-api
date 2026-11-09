@@ -29,12 +29,12 @@ export class StoreClosingCountsDto implements Omit<
   openCheckIns: StoreClosingOpenCheckInsDto;
   /**
    * 폐점하면 퇴직될 직원 수 — 퇴직일이 없거나 폐점일보다 뒤면 폐점일(한국 날짜 오늘)로 정하고, 이미 그 이전이면 그대로 둔다.
-   * 임시저장 계약만 있는 가입 전 레코드는 세지 않는다(그 임시저장은 draftContracts 로 드러난다)
+   * 작성 중 계약만 있는 가입 전 레코드는 세지 않는다(그 작성 중 계약은 draftContracts 로 드러난다)
    */
   retiringStaff: number;
-  /** 폐점하면 종료될 임시저장 계약 수 */
+  /** 폐점하면 종료될 작성 중 계약 수 */
   draftContracts: number;
-  /** 폐점하면 종료될 발송 대기 계약 수 */
+  /** 폐점하면 종료될 서명 요청 전 계약 수 */
   pendingSendContracts: number;
   /** 폐점하면 종료될 서명 대기 + 수정 요청 계약 수 */
   pendingSignatureContracts: number;
@@ -66,16 +66,16 @@ export class StoreClosingCheckResponseDto {
 export class StoreClosingRetirementDto implements StoreClosingRetirementResult {
   /**
    * 퇴직될 직원 수 — 확인의 retiringStaff 와 같은 기준(퇴직일이 없거나 폐점일보다 뒤면 폐점일로 정함, 이미 그 이전이면 그대로,
-   * 임시저장 계약만 있는 가입 전 레코드는 세지 않음)
+   * 작성 중 계약만 있는 가입 전 레코드는 세지 않음)
    */
   retiringStaff: number;
   /**
    * 퇴직일을 폐점일로 당긴 직원 수. 늘 retiringStaff 안에 드는 것은 아니다 — 세지 않는 가입 전 레코드의 당김도 들어간다
    */
   pulledForwardStaff: number;
-  /** 종료로 닫은 임시저장 계약 수 */
+  /** 종료로 닫은 작성 중 계약 수 */
   draftContracts: number;
-  /** 종료로 닫은 발송 대기 계약 수 */
+  /** 종료로 닫은 서명 요청 전 계약 수 */
   pendingSendContracts: number;
   /** 종료로 닫은 서명 대기 + 수정 요청 계약 수 */
   pendingSignatureContracts: number;

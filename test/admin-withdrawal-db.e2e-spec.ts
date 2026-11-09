@@ -185,7 +185,7 @@ describe('회원 탈퇴 (e2e, DB)', () => {
   const account = (adminAccountId: number) =>
     prisma.adminAccount.findUniqueOrThrow({ where: { adminAccountId } });
 
-  it('폐점 안 한 점포를 모두 닫고 체결 완료 계약이 있어도 탈퇴한다 — 개인정보 · 접속 · 대기 계약까지', async () => {
+  it('폐점 안 한 점포를 모두 닫고 서명 완료 계약이 있어도 탈퇴한다 — 개인정보 · 접속 · 대기 계약까지', async () => {
     const s = await seed();
 
     const res = await eligibility(s.token).expect(200);

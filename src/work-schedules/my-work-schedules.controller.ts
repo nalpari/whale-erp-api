@@ -32,7 +32,7 @@ export class MyWorkSchedulesController {
   @ApiBadRequestResponse({ description: 'staffMemberId · month 형식 오류' })
   @ApiNotFoundResponse({
     description:
-      '내 소속이 아님 — 없는 id, 남의 레코드, 퇴직했거나 체결 완료 근로계약이 없는 내 레코드. 모두 같은 본문',
+      '내 소속이 아님 — 없는 id, 남의 레코드, 퇴직했거나 서명 완료 근로계약이 없는 내 레코드. 모두 같은 본문',
   })
   list(
     @Query() query: MyWorkSchedulesQueryDto,

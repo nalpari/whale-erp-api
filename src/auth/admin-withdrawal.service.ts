@@ -71,7 +71,7 @@ type Db = PrismaService | Prisma.TransactionClient;
  *
  * 점포 폐점은 점포 관리 폐점(PUT /stores/:id)과 같은 StoreClosingsService 로 한다 — 다른 점은 그 BP 의 폐점 안 한 점포를
  * 한 번에 닫는 것뿐이다. 조회는 check, 실행은 close 이고 둘 다 폐점 안 한 · 지우지 않은 점포만 넘긴다(조회는 openStoreWhere, 실행은 같은 조건의 lockOpenStoreIds). 막는 것은 퇴근 기록 없는
- * 출근 하나뿐이다(진행 중 계약은 폐점이 종료하고, 체결 완료 계약은 막지 않는다 — 2026-11-05 사용자 결정).
+ * 출근 하나뿐이다(진행 중 계약은 폐점이 종료하고, 서명 완료 계약은 막지 않는다 — 2026-11-05 사용자 결정).
  */
 @Injectable()
 export class AdminWithdrawalService {

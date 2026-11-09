@@ -83,7 +83,7 @@ export async function reopenBlockOf(
       SIGNED_ONCE,
     )
   )
-    return '이 점포에 같은 직원의 체결 완료된 근로계약이 있습니다. 이어 일하면 새 계약(재계약)을 보내 주세요.';
+    return '이 점포에 같은 직원의 서명 완료된 근로계약이 있습니다. 이어 일하면 새 계약(재계약)을 보내 주세요.';
   if (
     c.previousContractId !== null &&
     (await db.contract.findFirst({

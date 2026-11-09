@@ -45,7 +45,7 @@ export class MyMembershipsController {
   constructor(private readonly memberships: MyMembershipsService) {}
 
   /**
-   * 내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은
+   * 내 소속 근무지 — TO-DO 와 같은 재직 직원 기준. 서명 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 퇴직 예정은
    * 퇴직일과 함께. `includeRetired=true` 면 퇴직한 레코드도 지금 소속 뒤에 퇴직일 최근 순으로 넣는다 — 퇴직일(retiredDate)이
    * 오늘보다 앞이면 퇴직, 오늘 · 뒤면 퇴직 예정이다(2026-10-28). 묶음은 재직 상태로 가르므로 퇴직 배치가 늦은 날에는 날짜와
    * 어긋날 수 있다.
@@ -67,7 +67,7 @@ export class MyMembershipsController {
   @ApiOkResponse({ type: MyTaxProfileResponseDto })
   @ApiNotFoundResponse({
     description:
-      '내 소속이 아님 — 없는 id · 범위 밖 id, 남의 레코드, 퇴직했거나 체결 완료 근로계약이 없는 내 레코드. 모두 같은 본문',
+      '내 소속이 아님 — 없는 id · 범위 밖 id, 남의 레코드, 퇴직했거나 서명 완료 근로계약이 없는 내 레코드. 모두 같은 본문',
   })
   @ApiServiceUnavailableResponse({
     description: '신고 정보가 있는데 서버에 암호화 키가 없음',

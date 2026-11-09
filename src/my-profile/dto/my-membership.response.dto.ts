@@ -27,7 +27,7 @@ export class MyMembershipDto {
 
 export class MyMembershipListResponseDto {
   /**
-   * 체결 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 입사일(없으면 뒤) · id 순. `includeRetired=true` 면 그 뒤에
+   * 서명 완료 근로계약이 있고 가입 완료 · 퇴직 전인 직원 레코드. 입사일(없으면 뒤) · id 순. `includeRetired=true` 면 그 뒤에
    * 퇴직한 레코드가 퇴직일 최근 순으로 붙는다
    */
   items: MyMembershipDto[];

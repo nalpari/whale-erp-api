@@ -9,7 +9,7 @@ sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
     title: RetirementService (preview · retire · changeDate · cancel · retireDue · retireStore · retireStores)
-    last_modified: 2026-11-04T06:27:00Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: store-closing-check
     resource: ../../src/staff-members/store-closing-check.ts
     title: storeClosingCheck — 폐점 확인(WHALEERP-647 · 650, 읽기만)

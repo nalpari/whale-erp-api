@@ -152,7 +152,12 @@ describe('MyContractDocumentsService', () => {
       const run = service().downloadUrl(77, 41, 5);
       await expect(run).rejects.toBeInstanceOf(ConflictException);
       await expect(run).rejects.toMatchObject({
-        response: { code: 'CONTRACT_STATUS_CONFLICT', status },
+        response: {
+          code: 'CONTRACT_STATUS_CONFLICT',
+          status,
+          message:
+            '처리 완료본은 서명이 완료된 근로계약에서만 받을 수 있습니다.',
+        },
       });
       expect(storage.downloadUrl).not.toHaveBeenCalled();
     },

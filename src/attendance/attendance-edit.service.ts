@@ -458,7 +458,7 @@ export class AttendanceEditService {
             HttpStatus.UNPROCESSABLE_ENTITY,
             'Unprocessable Entity',
             'NO_CONTRACT',
-            '그날은 체결 완료 근로계약 기간이 아니라 등록할 수 없습니다.',
+            '그날은 서명 완료 근로계약 기간이 아니라 등록할 수 없습니다.',
           ),
         );
       if (!dto.checkOutTime) {

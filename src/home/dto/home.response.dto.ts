@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 
-/** 재직 직원 — 퇴직 처리되지 않았고 임시저장 말고 다른 근로계약이 있는 직원 레코드(운영 정책 HOM-02 · CTR-29) */
+/** 재직 직원 — 퇴직 처리되지 않았고 작성 중 말고 다른 근로계약이 있는 직원 레코드(운영 정책 HOM-02 · CTR-29) */
 export class HomeStaffCardDto {
   /** 총수 — 본사 역할에게도 가림 없이 센다(점포별 숫자, 운영 정책 ATT-30) */
   total: number;
@@ -42,7 +42,7 @@ export class HomeInquiryCardDto {
 export class HomeCardsDto {
   /** 직원 정보 관리 조회 권한 */
   staff: HomeStaffCardDto | null;
-  /** 미체결 계약(발송 대기 + 서명 대기 + 수정 요청). 본사 역할에게 가려지는 점포는 동의한 직원의 계약만. 근로계약 관리 조회 권한 */
+  /** 서명 전 계약(서명 요청 전 + 서명 대기 + 수정 요청). 본사 역할에게 가려지는 점포는 동의한 직원의 계약만. 근로계약 관리 조회 권한 */
   unsignedContractCount: number | null;
   stores: HomeStoreCardDto;
   /** 출퇴근 현황 · 근무스케줄 관리 조회 권한 둘 다 */

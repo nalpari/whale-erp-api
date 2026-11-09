@@ -329,7 +329,7 @@ describe('AdminWithdrawalService.execute', () => {
     });
   });
 
-  it('진행 중 계약(체결 완료 포함)은 보지 않는다 — 계약 때문에 막지 않는다', async () => {
+  it('진행 중 계약(서명 완료 포함)은 보지 않는다 — 계약 때문에 막지 않는다', async () => {
     await expect(service.execute(1, dto)).resolves.toBeUndefined();
   });
 

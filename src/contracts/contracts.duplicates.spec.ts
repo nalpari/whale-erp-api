@@ -267,7 +267,7 @@ describe('ContractsService 계약 중복 검사', () => {
         .catch((e: unknown) => e);
       expect(error).toBeInstanceOf(ForbiddenException);
       expect(String((error as ForbiddenException).message)).toContain(
-        '체결 완료되었거나 진행 중인',
+        '서명 완료되었거나 진행 중인',
       );
       // 근로계약 관리 메뉴의 수정 권한을 묻는다 — 다른 메뉴 · 다른 권한 그룹이 아니다
       expect(db.roleGroupMenu.count).toHaveBeenCalledWith({

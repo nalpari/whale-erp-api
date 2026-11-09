@@ -474,7 +474,7 @@ describe('ContractSendService (재발송)', () => {
       expect((error as ConflictException).getResponse()).toMatchObject({
         code: 'REOPEN_BLOCKED',
         message: expect.stringContaining(
-          '체결 완료된 근로계약이 있습니다',
+          '서명 완료된 근로계약이 있습니다',
         ) as unknown,
       });
       const [, signedQuery] = tx.contract.findFirst.mock.calls as [

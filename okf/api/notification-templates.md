@@ -4,8 +4,12 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T08:51:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
 sources:
+  - id: contract-status-labels
+    resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
+    title: 근로계약 서명 완료 · 서명 거절 알림 제목 · 본문, 발송 템플릿 변수 표시 이름 「서명 기한」, 템플릿 이름 (WHALEERP-659)
+    last_modified: 2026-11-09T07:55:00Z
   - id: staff-affiliation-kakao-registered
     resource: ../../prisma/migrations/20261103175100_team3_staff_affiliation_kakao_registered/migration.sql
     title: 소속 추가 확인 요청 알림톡 카카오 템플릿 코드 · 본문을 카카오 등록본과 같게, 버튼 링크 변수 「링크」 뺌 (WHALEERP-130 후속)
@@ -97,6 +101,14 @@ sources:
   바꾸고(운영자가 고친 문구는 그대로), 되돌리기 원본은 늘 바꾼다. 코드 · 이름 · 채널 · 수신 설정 묶음 · 사용 여부 · 카카오 템플릿
   코드는 그대로이고 변경 이력은 남기지 않는다.
   예외로 `PUSH_PAYSLIP_RESENT` · `EMAIL_PAYSLIP_RESENT` 는 엑셀의 재발송 문구 대신 `PUSH_PAYSLIP_SENT` · `EMAIL_PAYSLIP_SENT` 의 새 문구를 따른다 — 다시 보내도 처음 발송과 같은 문구(NTF-20 유지, 2026-10-29 노영주).
+- **근로계약 서명 완료 · 서명 거절 문구**(WHALEERP-659, 2026-11-09 — 상태 표시 이름 변경 · 「날인」을 「서명」으로). `20261109165622_team3_contract_status_labels`
+  가 `NTF_CONTRACT_SIGNED` · `EMAIL_CONTRACT_SIGNED` 의 제목 「근로계약 체결 완료」 → 「근로계약 서명 완료」, 본문 「근로계약 체결이 완료되었습니다.」
+  → 「근로계약 서명이 완료되었습니다.」, `NTF_CONTRACT_REJECTED` · `EMAIL_CONTRACT_REJECTED` 의 「서명 거부」 → 「서명 거절」 · 「거부했습니다」 →
+  「거절했습니다」로, 직원에게 가는 소속 추가 확인 요청 메일 `EMAIL_STAFF_AFFILIATION_REQUEST` 본문의 「받아 날인할 수 있고」를
+  「받아 서명할 수 있고」로 바꾼다. 위 문구 정리와 같은 방식이다 — 지금 값은 셋 다 되돌리기 원본 그대로일 때만, 되돌리기 원본은 늘. 만료 알림
+  「근로계약서 서명 기한 만료」는 그대로다. `PUSH_CONTRACT_SENT` · `TALK_STAFF_CONTRACT_SENT` 는 변수 `날인기한` 의 표시 이름(label)만
+  「서명 기한」으로 — 변수 이름은 발송 코드가 넘기는 키라 그대로, 본문 · 카카오 등록 문구도 그대로다. 템플릿 이름은 되돌리기 원본이 없어
+  처음 넣은 이름일 때만 바꾼다: 근로계약 날인 → 근로계약 서명 완료, 근로계약 거부 → 근로계약 서명 거절, 근로계약 만료 → 근로계약 서명 기한 만료.
 - **가입 초대 알림톡 = 카카오 등록본**(WHALEERP-636, 2026-10-30 등록). 알림톡은 등록한 본문과 글자 · 줄바꿈까지 같아야 나간다.
   `20261030174743_team3_staff_invitation_kakao_registered` 가 `TALK_STAFF_INVITATION` 의 `body` · `default_body` 를 등록본(빈 줄 없는 다섯 줄 —
   「#{근무지}에서 근로계약서를 보내려고 합니다.」 … 「초대 코드와 링크는 30일 동안 쓸 수 있습니다.」)으로, `kakao_template_code` 를
