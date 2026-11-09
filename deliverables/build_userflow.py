@@ -45,7 +45,7 @@ DROPPED = []  # 뺀 카드 조각 (흐름 제목, 카드 제목, 조각)
 _ISSUE = r"(?<!운영 정책 )(?<![A-Za-z0-9_-])[A-Z]{2,}-\d+(?:[·~]\d+)*"
 ISSUE = re.compile(_ISSUE)
 _ISSUE_PAREN = re.compile(rf"\s*\((?:{_ISSUE})(?:\s*[·,]\s*(?:{_ISSUE}))*\)")
-_ISSUE_CHAIN = re.compile(rf"(?:{_ISSUE})(?:\s*·\s*(?:{_ISSUE}))*(?:\s*·\s*|\s+|$)")
+_ISSUE_CHAIN = re.compile(rf"(?:{_ISSUE})(?:\s*·\s*(?:{_ISSUE}|\d+(?![0-9A-Za-z가-힣])))*(?:\s*·\s*|\s+|$)")
 # 원문에 「운영 정책」 없이 적힌 운영 정책 번호. 납품본에는 「운영 정책 」을 붙인다(2026-11-09 재영).
 POLICY_CITES = re.compile(r"(?<!운영 정책 )(?<![A-Za-z0-9_-])(?:ACC-11|CTR-19|CTR-26)\b")
 COMMON_POLICY = re.compile(r"\s*\(공통정책 \d+\)")
@@ -119,8 +119,10 @@ def card_item(title, card_title, item):
     for piece in TEAM_MARK.sub("", item).split(" · "):
         if MEMO.search(piece):
             DROPPED.append((title, card_title, piece))
-        elif strip_issue(piece):
-            keep.append(strip_issue(piece))
+        else:
+            piece = strip_issue(piece)
+            if piece:
+                keep.append(piece)
     return " · ".join(keep)
 
 
@@ -149,6 +151,7 @@ def steps(wf):
         phase = next((p["label"] for p in wf.get("phases", []) if p["fromCol"] <= n["col"] <= p["toCol"]), "")
         tag = n.get("tag") if n.get("tag") and not INTERNAL.search(n["tag"]) and not TEAM.search(n["tag"]) else ""
         tag = strip_issue(tag)
+        tag = "" if re.fullmatch(r"[\d\s·]*", tag) else tag
         content = "\n".join(x for x in (n.get("label", ""), FIGURE_FIXES.get(n.get("sublabel", ""), n.get("sublabel", ""))) if x) + (f" ({tag})" if tag else "")
         nexts = "\n".join(f"→ {label.get(e['to'], e['to'])}" + (f" ({e['label']})" if e.get("label") else "")
                           for e in wf["edges"] if e["from"] == n["id"])

@@ -40,6 +40,15 @@ SENTENCE_FIXES = {
     "1팀 영역이라 ACC-02·ACC-03·ACC-21에는 \x011팀이 정한 값\x02과 3팀이 그 위에서 쓰는 것만 적었습니다. "
     "1팀은 2026년 9월 23일에 이 세 자리를 모두 확정했습니다.": "ACC-20까지와 ACC-22·ACC-23은 직원 계정에 관한 것입니다.\x02",
     " 안내에는 \x01가맹 점포 직원 자료는": " 회원 탈퇴 화면의 안내에는 \x01가맹 점포 직원 자료는",  # 앞 문장을 뺀 RET-09
+    # 문장 안의 쟁점 번호: 번호만 뺀다
+    "ATT-8에서": "법무 확인에서",
+    "ATT-8 법무 확인에": "법무 확인에",
+    "TAX-7 법무 검토에서": "법무 검토에서",
+    "(앱 HOME-1)": "",
+    # 머리말의 목업 언급 · 개발 지시
+    "기획 문서 · 목업 2026-10-19 기준": "기획 문서 2026-10-19 기준",
+    "기획 문서와 목업에 흩어져 있던": "기획 문서에 흩어져 있던",
+    " 개발·리뷰·QA에서 이 번호로 참조하십시오.": "",
     # 팀 표시만 뺀다
     "\x011팀이 정했다.\x02 사업자 회원가입과 그 화면은 1팀 영역이다. ": "",
     "3팀이 쓰는 것은 \x01가맹점은 가입하지 않고 본사가 만들어 준 계정으로 로그인한다\x02는 사실 하나뿐이다.":
@@ -58,6 +67,47 @@ SENTENCE_FIXES = {
     "1팀 점포 이미지(": "점포 이미지(",
     "1팀 권한 그룹(": "권한 그룹(",
 }
+# 실제 규칙 번호는 남기고 그 밖의 목업 쟁점 번호를 지운다(2026-11-09 재영). PAY-4 는 규칙 번호인지 애매해 남겨 두고 보고한다.
+RULE_IDS = set(re.findall(r'<div class="rule"><span class="id">([A-Z]+-\d+)</span>', open(SOURCE, encoding="utf-8").read()))
+KEEP_ISSUES = {"PAY-4"}
+_T = r"(?<![A-Za-z0-9_-])[A-Z]{2,}-\d+(?:·\d+)*"
+TOKEN = re.compile(_T)
+ISSUE_REMOVED = []
+
+
+def is_issue(token):
+    head, *more = token.split("·")
+    prefix = head.rsplit("-", 1)[0]
+    return token not in KEEP_ISSUES and not all(x in RULE_IDS for x in [head] + [f"{prefix}-{n}" for n in more])
+
+
+def strip_issues(text):
+    """쟁점 번호와 「쟁점」 글자를 지운다. 괄호 안에 번호뿐이면 괄호째, 다른 내용과 섞이면 번호 조각만."""
+    def counted(m):
+        ISSUE_REMOVED.extend(TOKEN.findall(m.group()))
+        return ""
+    labeled = rf"쟁점 {_T}(?: · {_T})*"
+    text = re.sub(rf"\s*\({labeled}\)", counted, text)
+    text = re.sub(rf", {labeled}", counted, text)
+    text = re.sub(rf"(?<=\(){labeled}(?:\. | — | · |, )", counted, text)
+
+    def paren(m):
+        parts = re.split(r"(, | · )", m.group(2))
+        pieces, seps = parts[0::2], [""] + parts[1::2]
+        keep = [(s, p) for s, p in zip(seps, pieces) if not (TOKEN.fullmatch(p) and is_issue(p))]
+        if len(keep) == len(pieces):
+            return m.group(0)
+        ISSUE_REMOVED.extend(p for s, p in zip(seps, pieces) if TOKEN.fullmatch(p) and is_issue(p))
+        if not keep:
+            return ""
+        return f"{m.group(1)}({keep[0][1]}{''.join(s + p for s, p in keep[1:])})"
+    return re.sub(r"(\s*)\(([^()]*)\)", paren, text)
+
+
+def issues_left(text):
+    return [t for t in TOKEN.findall(text) if is_issue(t)] + re.findall("쟁점", text)
+
+
 # 괄호 없이 문장 뒤에 붙은 결정 표시(「…정한다. 2026-09-29 재영」). 문장 안의 날짜 · 이름은 건드리지 않는다.
 STAMP = re.compile(r"(?<=[.)])\s+\d{4}-\d{2}-\d{2} 재영(?=\s|$)")
 B0, B1 = "\x01", "\x02"  # 굵게 시작 · 끝 표시
@@ -84,7 +134,7 @@ def clean(text):
             FIXED.add(a)
             text = text.replace(a, b)
     text = STAMP.sub(lambda m: REMOVED.append((m.group().strip(), "문장 뒤 결정 표시")) or "", text)
-    return safe(strip_records(text, REMOVED))
+    return safe(strip_issues(strip_records(text, REMOVED)))
 
 
 def runs(text):
@@ -129,8 +179,9 @@ def write_section(d, sec):
         if el is h2 or not isinstance(el.tag, str):
             continue
         if el.tag == "p":
-            if clean(marked(el)):  # 문단째 뺀 것은 빈 줄을 남기지 않는다
-                para(d, runs(clean(marked(el))))
+            body = clean(marked(el))
+            if body:  # 문단째 뺀 것은 빈 줄을 남기지 않는다
+                para(d, runs(body))
         elif has(el, "gh"):
             heading(d, plain(el), 2)
         elif has(el, "group"):
@@ -164,6 +215,8 @@ def write_section(d, sec):
 def write(version):
     """워드를 쓰고 (경로, 규칙 수, 장 수, 지운 조각 수) 를 돌려준다."""
     root = html.fromstring(open(SOURCE, encoding="utf-8").read())
+    REMOVED.clear()
+    ISSUE_REMOVED.clear()
     wrap = root.xpath('//div[@class="wrap"]')[0]
     d, doc_name, doc_no = open_docx("POL", version)
 
@@ -195,6 +248,9 @@ def write(version):
     leaks = sorted({m.group() for t in texts for rx in (INTERNAL, TEAM, TEAM_NAMES) for m in rx.finditer(t)})
     if leaks:
         raise SystemExit(f"내부 표지 · 팀 표시 · 팀원 실명이 남음: {leaks}")
+    left = sorted({x for t in texts for x in issues_left(t)})
+    if left:
+        raise SystemExit(f"쟁점 번호가 남음: {left}")
     path = save_docx(d, f"{doc_no}_{doc_name}.docx")
     return path, rules, len(sections), len(REMOVED)
 
@@ -203,7 +259,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--version", required=True)
     path, rules, chapters, removed = write(ap.parse_args().version)
-    print(f"{path}\n규칙 {rules} · 장 {chapters}(+ 머리말) · 지운 결정 기록 조각 {removed} · 문장 속 표지 바꿈 {len(FIXED)}")
+    print(f"{path}\n규칙 {rules} · 장 {chapters}(+ 머리말) · 지운 결정 기록 조각 {removed} · 문장 속 표지 바꿈 {len(FIXED)} · 지운 쟁점 번호 {len(ISSUE_REMOVED)}")
 
 
 if __name__ == "__main__":

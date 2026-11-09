@@ -38,6 +38,7 @@ assert S("HOME-4 · STAFF-12 · 늘 전체") == "늘 전체"
 assert S("CONFIG-3·AUTH-4 관리자 초기화") == "관리자 초기화"
 assert S("스무 건씩 (ATT-7)") == "스무 건씩"
 assert S("둔다(운영 정책 PAY-12)") == "둔다(운영 정책 PAY-12)"  # 인용한 운영 정책 번호는 남긴다
+assert S("SYSTEM-8 · 9") == "" and S("STAFF-2·3 · 7종 · 30일") == "7종 · 30일"
 assert S("ATT-3") == "" and S("TO-DO 기록") == "TO-DO 기록"
 assert S("확인 뒤, CTR-19)") == "확인 뒤, 운영 정책 CTR-19)"  # 운영 정책 번호는 「운영 정책 」을 붙인다
 assert S("운영 정책 CTR-26") == "운영 정책 CTR-26" and S("ACC-11") == "운영 정책 ACC-11"
