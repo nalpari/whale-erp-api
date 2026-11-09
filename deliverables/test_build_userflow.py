@@ -39,7 +39,10 @@ assert S("CONFIG-3·AUTH-4 관리자 초기화") == "관리자 초기화"
 assert S("스무 건씩 (ATT-7)") == "스무 건씩"
 assert S("둔다(운영 정책 PAY-12)") == "둔다(운영 정책 PAY-12)"  # 인용한 운영 정책 번호는 남긴다
 assert S("ATT-3") == "" and S("TO-DO 기록") == "TO-DO 기록"
-assert S("확인 뒤, CTR-19)") == "확인 뒤, CTR-19)"  # 판단 대기
+assert S("확인 뒤, CTR-19)") == "확인 뒤, 운영 정책 CTR-19)"  # 운영 정책 번호는 「운영 정책 」을 붙인다
+assert S("운영 정책 CTR-26") == "운영 정책 CTR-26" and S("ACC-11") == "운영 정책 ACC-11"
+assert B.clean("안내(공통정책 1, 2026-09-23 재영)") == "안내"
+assert B.issues_left("(ATT-2)") and B.issues_left("공통정책 3") and not B.issues_left("운영 정책 ATT-25")
 
 path, n, figures, total, removed = B.write("1.0")
 groups = B.flows()
@@ -71,6 +74,7 @@ for memo in ("두 팀 문서가 다르다", "협의 전 미정", "법무 검토 
 assert not TEAM_NAMES.search(cells)
 assert not [t for x in texts for t in B.issues_left(x)]
 assert B.ISSUE_REMOVED, "지운 쟁점 번호가 없음"
+assert "(운영 정책 ACC-11)" in cells and "운영 정책 CTR-19" in cells and "운영 정책 CTR-26" in cells and "공통정책" not in cells
 assert "관리자는 아이디로 로그인하고 임시 비밀번호를 메일로 받는다" in cells
 assert "직원 앱 약관 ③~⑥은 직원 근무 앱에서 받는다" in cells
 assert "workflow.json" not in cells and "docs/flow" not in cells and "초안 v0.7" not in cells

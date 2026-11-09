@@ -46,8 +46,9 @@ _ISSUE = r"(?<!운영 정책 )(?<![A-Za-z0-9_-])[A-Z]{2,}-\d+(?:[·~]\d+)*"
 ISSUE = re.compile(_ISSUE)
 _ISSUE_PAREN = re.compile(rf"\s*\((?:{_ISSUE})(?:\s*[·,]\s*(?:{_ISSUE}))*\)")
 _ISSUE_CHAIN = re.compile(rf"(?:{_ISSUE})(?:\s*·\s*(?:{_ISSUE}))*(?:\s*·\s*|\s+|$)")
-# 쟁점 번호인지 운영 정책 번호인지 원문만으로 가릴 수 없어 그대로 두는 것(기획 세션 판단 대기)
-UNSURE = {"ACC-11", "CTR-19", "CTR-26"}
+# 원문에 「운영 정책」 없이 적힌 운영 정책 번호. 납품본에는 「운영 정책 」을 붙인다(2026-11-09 재영).
+POLICY_CITES = re.compile(r"(?<!운영 정책 )(?<![A-Za-z0-9_-])(?:ACC-11|CTR-19|CTR-26)\b")
+COMMON_POLICY = re.compile(r"\s*\(공통정책 \d+\)")
 ISSUE_REMOVED = []
 
 
@@ -97,21 +98,19 @@ def flows():
 def strip_issue(text):
     """쟁점 번호를 지운다. 괄호 안에 번호뿐이면 괄호째, 앞머리 번호는 뒤의 구분자까지."""
     def gone(m):
-        tokens = ISSUE.findall(m.group())
-        if set(tokens) & UNSURE:
-            return m.group()
-        ISSUE_REMOVED.extend(tokens)
+        ISSUE_REMOVED.extend(ISSUE.findall(m.group()))
         return ""
+    text = POLICY_CITES.sub(lambda m: f"운영 정책 {m.group()}", text)
     return _ISSUE_CHAIN.sub(gone, _ISSUE_PAREN.sub(gone, text))
 
 
 def issues_left(text):
-    return [t for t in ISSUE.findall(text) if t not in UNSURE]
+    return ISSUE.findall(text) + re.findall(r"공통정책 \d+", text)
 
 
 def clean(text):
     text = " ".join((text or "").split())
-    return safe(strip_records(strip_issue(FIGURE_FIXES.get(text, text)), REMOVED))
+    return COMMON_POLICY.sub("", safe(strip_records(strip_issue(FIGURE_FIXES.get(text, text)), REMOVED)))
 
 
 def card_item(title, card_title, item):
