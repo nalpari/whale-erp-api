@@ -1,0 +1,198 @@
+{
+  "client": "admin",
+  "area": "시스템관리",
+  "screens": [
+    {
+      "id": "SCR-ADM-046",
+      "name": "플랫폼 관리자 관리",
+      "menuCode": "MN000213",
+      "route": "/platform-admins",
+      "demo": {
+        "file": "system/admins.html"
+      },
+      "images": [
+        "SCR-ADM-046.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "필터",
+          "element": "아이디·이름, 권한명, 계정상태",
+          "action": "조건으로 목록을 좁힌다. 계정상태 체크박스는 모두 체크된 상태로 시작한다.",
+          "policies": [
+            "LST-08"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "아이디·이름·계정상태·권한명·이메일·최근 로그인·등록",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "제목 줄",
+          "element": "등록",
+          "action": "등록 패널을 연다. 초기화 비밀번호를 등록한 이메일로 보낸다.",
+          "policies": []
+        },
+        {
+          "zone": "상세 패널",
+          "element": "비밀번호 초기화·삭제·수정·변경이력",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-047",
+      "name": "플랫폼 권한 관리",
+      "menuCode": "MN000214",
+      "route": "/platform-role-groups",
+      "demo": {
+        "file": "system/roles-master.html"
+      },
+      "images": [
+        "SCR-ADM-047.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "등록",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "권한 그룹 목록",
+          "element": "플랫폼 마스터 행",
+          "action": "모든 메뉴의 접근·관리 권한이 자동으로 주어지는 최상위 권한이다.",
+          "policies": []
+        },
+        {
+          "zone": "권한 그룹 목록",
+          "element": "플랫폼 관리자·BP 마스터·가맹마스터 행",
+          "action": "플랫폼 관리자는 추가 권한의 상한, BP 마스터는 BP 관리자 권한 그룹의 상한, 가맹마스터는 가맹관리자 권한 그룹의 상한이다.",
+          "policies": []
+        },
+        {
+          "zone": "권한 그룹 목록",
+          "element": "권한명",
+          "action": "오른쪽에 권한 그룹 상세를 표시한다.",
+          "policies": []
+        },
+        {
+          "zone": "권한 그룹 목록",
+          "element": "메뉴설정 칸의 설정",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-048",
+      "name": "플랫폼 메뉴 관리",
+      "menuCode": "MN000215",
+      "route": "/platform-menus",
+      "demo": {
+        "file": "system/menus-master.html"
+      },
+      "images": [
+        "SCR-ADM-048.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "탭",
+          "element": "Whale ERP·Whale ERP 플랫폼 관리·예약관리",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "메뉴 트리",
+          "element": "이동·메뉴명·메뉴 코드·메뉴단계·메뉴 URL·순서·사용여부",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "메뉴 트리",
+          "element": "메뉴명",
+          "action": "오른쪽 메뉴 수정에 상세 정보를 표시한다.",
+          "policies": []
+        },
+        {
+          "zone": "제목 줄",
+          "element": "등록",
+          "action": "메뉴를 선택하지 않고 등록하면 최상위(1단계) 메뉴로 등록한다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-049",
+      "name": "플랫폼 공통코드 관리",
+      "menuCode": "MN000216",
+      "route": "/code-groups",
+      "demo": {
+        "file": "system/codes.html"
+      },
+      "images": [
+        "SCR-ADM-049.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "필터",
+          "element": "그룹 코드·그룹명·관리주체",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "공통코드 그룹",
+          "element": "그룹 코드·그룹명·관리주체·BP 적용·사용여부",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "공통코드 그룹",
+          "element": "추가·저장",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "상세 코드",
+          "element": "이동·코드명·표시 순서·사용여부·추가·저장",
+          "action": "선택한 그룹의 상세 코드를 표시한다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-050",
+      "name": "플랫폼 휴일 관리",
+      "menuCode": "MN000217",
+      "route": "/public-holidays",
+      "demo": {
+        "file": "system/holidays.html"
+      },
+      "images": [
+        "SCR-ADM-050.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "탭",
+          "element": "캘린더·목록",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "캘린더 위",
+          "element": "최근 동기화",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "캘린더",
+          "element": "공식 휴일",
+          "action": "달력에 공식 휴일을 표시하고 선택한 달의 공식 휴일 수를 알린다.",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}

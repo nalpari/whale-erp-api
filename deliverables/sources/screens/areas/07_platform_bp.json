@@ -1,0 +1,193 @@
+{
+  "client": "admin",
+  "area": "BP 마스터 계정 관리",
+  "screens": [
+    {
+      "id": "SCR-ADM-042",
+      "name": "BP 마스터 계정 관리",
+      "menuCode": "MN000203",
+      "route": "/bp-masters",
+      "demo": {
+        "file": "bp/index.html"
+      },
+      "images": [
+        "SCR-ADM-042.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "필터",
+          "element": "검색어·계정상태·사업자정보 인증",
+          "action": "조건으로 목록을 좁힌다. 계정상태 체크박스는 모두 체크된 상태로 시작한다.",
+          "policies": [
+            "LST-08"
+          ]
+        },
+        {
+          "zone": "목록 상단",
+          "element": "엑셀 다운로드·표시 건수",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "목록",
+          "element": "BP 코드·상호명·아이디·이름·계정상태·이메일·사업자등록번호·가입경로·등록",
+          "action": "탈퇴한 계정의 이름과 이메일 칸은 「탈퇴로 삭제됨」으로 표시한다.",
+          "policies": []
+        },
+        {
+          "zone": "목록",
+          "element": "상호명",
+          "action": "상세 패널을 연다.",
+          "policies": []
+        },
+        {
+          "zone": "제목 줄",
+          "element": "등록",
+          "action": "등록 패널을 연다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-043",
+      "name": "BP 마스터 계정 등록",
+      "menuCode": "MN000203",
+      "route": "/bp-masters",
+      "routeNote": "목록 위 슬라이드 패널, 별도 주소 없음",
+      "demo": {
+        "file": "bp/new.html"
+      },
+      "images": [
+        "SCR-ADM-043.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "BP 마스터 기본정보",
+          "element": "아이디",
+          "action": "필수다. 등록한 뒤에는 바꿀 수 없다.",
+          "policies": []
+        },
+        {
+          "zone": "BP 마스터 기본정보",
+          "element": "이름·이메일",
+          "action": "필수다. 초기화 비밀번호를 등록한 이메일로 보낸다.",
+          "policies": []
+        },
+        {
+          "zone": "사업자정보",
+          "element": "인증하기",
+          "action": "국세청에 등록된 정보와 일치하는지 확인한다.",
+          "policies": []
+        },
+        {
+          "zone": "사업자정보",
+          "element": "상호명·대표자·업태·종목·사업자주소",
+          "action": "상호명은 필수다. 대표자 칸은 기본정보와 동일을 체크해 채울 수 있다.",
+          "policies": []
+        },
+        {
+          "zone": "화면 하단",
+          "element": "취소·등록",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-044",
+      "name": "BP 마스터 계정 상세",
+      "menuCode": "MN000203",
+      "route": "/bp-masters",
+      "routeNote": "목록 위 슬라이드 패널, 별도 주소 없음",
+      "demo": {
+        "file": "bp/detail.html"
+      },
+      "images": [
+        "SCR-ADM-044.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "머리",
+          "element": "상호명·BP코드·아이디·계정상태",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "기본정보",
+          "element": "BP상태변경",
+          "action": "계정상태를 바꾼다.",
+          "policies": []
+        },
+        {
+          "zone": "기본정보",
+          "element": "비밀번호 초기화·강제변경 표시",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "사업자정보",
+          "element": "인증 상태·상호명·사업자번호·대표자·개업일자·주소·업태·종목",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "화면 하단",
+          "element": "삭제",
+          "action": "BP 마스터 계정으로 로그인한 이력이 있으면 삭제할 수 없다.",
+          "policies": []
+        },
+        {
+          "zone": "화면 하단",
+          "element": "닫기·수정·변경이력",
+          "action": "수정은 BP 마스터 계정 수정을 연다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-045",
+      "name": "BP 마스터 계정 수정",
+      "menuCode": "MN000203",
+      "route": "/bp-masters",
+      "routeNote": "목록 위 슬라이드 패널, 별도 주소 없음",
+      "demo": {
+        "file": "bp/edit.html"
+      },
+      "images": [
+        "SCR-ADM-045.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "머리",
+          "element": "BP 코드·계정상태",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "BP 마스터 기본정보",
+          "element": "계정상태 안내",
+          "action": "계정상태는 상세화면의 BP상태변경에서 바꾼다.",
+          "policies": []
+        },
+        {
+          "zone": "BP 마스터 기본정보",
+          "element": "이름·이메일",
+          "action": "별표 칸은 필수다.",
+          "policies": []
+        },
+        {
+          "zone": "사업자정보",
+          "element": "인증 상태·재인증",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "사업자정보",
+          "element": "상호명·대표자·업태·종목·사업자주소",
+          "action": "상호명은 필수다.",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,474 @@
+{
+  "client": "staff",
+  "area": "급여·알림·내 정보",
+  "screens": [
+    {
+      "id": "SCR-APP-031",
+      "name": "급여",
+      "menu": "하단 탭 > 급여",
+      "route": "/pay",
+      "demo": {
+        "file": "pay/index.html",
+        "state": "list"
+      },
+      "images": [
+        "SCR-APP-031.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단 카드",
+          "element": "실지급액 합계",
+          "action": "이번 달에 받은 명세서 전체의 실지급액 합계를 근무지와 관계없이 보이고 건수와 점포를 함께 적는다.",
+          "policies": [
+            "PAY-08"
+          ]
+        },
+        {
+          "zone": "필터",
+          "element": "「전체 근무지」·「2026년」",
+          "action": "근무지와 연도로 명세서를 좁혀 본다.",
+          "policies": []
+        },
+        {
+          "zone": "목록",
+          "element": "명세서 줄",
+          "action": "그 계정의 모든 직원 레코드로 받은 명세서를 점포 이름과 함께 보인다. 발송한 명세서만 보인다. 누르면 상세로 간다.",
+          "policies": [
+            "PAY-08"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "조회 안내",
+          "action": "명세서는 이메일로도 보낸다. 퇴직해도 생성일부터 3년 동안 본다.",
+          "policies": [
+            "PAY-08",
+            "RET-02"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-032",
+      "name": "급여명세서",
+      "menu": "하단 탭 > 급여",
+      "route": "/pay/[payslipId]",
+      "demo": {
+        "file": "pay/index.html",
+        "state": "detail"
+      },
+      "images": [
+        "SCR-APP-032.jpg",
+        "SCR-APP-032-2.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "머리",
+          "element": "급여 기간·상태·근무지",
+          "action": "급여 기간, 「발송 완료」 상태, 근무지와 고용 형태를 보인다.",
+          "policies": [
+            "PAY-01"
+          ]
+        },
+        {
+          "zone": "지급",
+          "element": "지급 항목 표",
+          "action": "항목별 금액을 보인다. 연장수당은 한 줄 계산식으로 보이고 식대는 비과세로 가른다.",
+          "policies": [
+            "PAY-02",
+            "PAY-19"
+          ]
+        },
+        {
+          "zone": "공제",
+          "element": "공제 항목 표·「실지급액」",
+          "action": "공제 항목과 합계, 실지급액을 보인다. 3.3% 원천징수를 적용한 명세서는 소득세·지방소득세 줄을 뺀다.",
+          "policies": [
+            "PAY-03"
+          ]
+        },
+        {
+          "zone": "처리 이력",
+          "element": "발송 줄",
+          "action": "시각과 유형만 보인다. 가장 최근 발송 한 줄과 확정 취소 줄만 보인다.",
+          "policies": [
+            "PAY-19",
+            "PAY-20"
+          ]
+        },
+        {
+          "zone": "하단",
+          "element": "PDF 버튼",
+          "action": "발송된 명세서의 처리 완료본 PDF 파일을 받는다. 상세 화면에만 둔다.",
+          "policies": [
+            "PAY-18"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "입금 안내",
+          "action": "실제 급여 입금은 근무지에서 진행한다고 알린다.",
+          "policies": [
+            "PAY-09"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-033",
+      "name": "알림함",
+      "menu": "앱 상단 알림",
+      "route": "/notifications",
+      "demo": {
+        "file": "notify/index.html",
+        "state": "inbox"
+      },
+      "images": [
+        "SCR-APP-033.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "머리",
+          "element": "「미확인 n건」·「모두 읽음」",
+          "action": "읽지 않은 건수를 보이고 모두 읽음으로 바꾼다.",
+          "policies": [
+            "NTF-27"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "알림 줄",
+          "action": "근로계약서 발송·근무스케줄 변경·TO-DO 수행 임박·급여명세서 발송 알림을 보인다. 누르면 관련 화면으로 가며 읽음으로 바뀐다.",
+          "policies": [
+            "NTF-09",
+            "NTF-15"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "「알림톡으로도 보냈습니다」",
+          "action": "알림 줄에 발송 결과를 함께 적는다.",
+          "policies": [
+            "NTF-18",
+            "NTF-19"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "긴급 표시",
+          "action": "긴급 TO-DO 알림은 빨간 점으로 가른다.",
+          "policies": [
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "하단",
+          "element": "「더 보기」",
+          "action": "기간이 없는 목록이라 더 보기로 잇는다.",
+          "policies": [
+            "LST-03"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "보관 안내",
+          "action": "알림은 14일 동안 보관한다.",
+          "policies": [
+            "NTF-19"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-034",
+      "name": "알림 설정",
+      "menu": "앱 상단 알림",
+      "route": "/notifications/settings",
+      "demo": {
+        "file": "notify/index.html",
+        "state": "settings"
+      },
+      "images": [
+        "SCR-APP-034.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "목록",
+          "element": "수신 스위치 네 개",
+          "action": "수신 설정 묶음 넷(근로계약서·근무스케줄·TO-DO·급여명세서)을 각각 켜고 끈다. 끈 묶음도 알림함에는 남는다.",
+          "policies": [
+            "NTF-14"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "「근로계약서」·「근무스케줄 변경」",
+          "action": "끄면 그 묶음의 알림톡·메일 알림을 보내지 않는다.",
+          "policies": [
+            "NTF-14",
+            "NTF-18"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "「급여명세서」",
+          "action": "명세서 발송 메일은 이 설정과 상관없이 나간다.",
+          "policies": [
+            "NTF-14",
+            "NTF-18"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "알림톡 안내",
+          "action": "근로계약서처럼 꼭 확인해야 하는 알림은 알림톡으로도 보낸다고 적는다.",
+          "policies": [
+            "NTF-18"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-035",
+      "name": "내 정보",
+      "menu": "하단 탭 > 내 정보",
+      "route": "/me",
+      "demo": {
+        "file": "me/index.html",
+        "state": "view"
+      },
+      "images": [
+        "SCR-APP-035.jpg",
+        "SCR-APP-035-2.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "기본 정보",
+          "element": "이름·생년월일·입사일",
+          "action": "읽기 전용이다. 생년월일은 직원이 고치지 않고 잘못 넣었으면 관리자가 확인해 정정한다.",
+          "policies": [
+            "ACC-13",
+            "TAX-09"
+          ]
+        },
+        {
+          "zone": "소속 근무지",
+          "element": "소속 근무지 줄",
+          "action": "누르면 소속 근무지 화면으로 간다. 소속과 고용 형태는 근로계약에 따라 정해진다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "위치정보 동의",
+          "element": "상태·「약관 보기」·「일시 중지」·「동의 철회」",
+          "action": "동의 상태를 보이고 약관 보기, 일시 중지, 철회를 제공한다. 철회한 뒤에도 카드가 남아 다시 동의한다.",
+          "policies": [
+            "ATT-23",
+            "ATT-26",
+            "ATT-32"
+          ]
+        },
+        {
+          "zone": "사업자 제공 동의",
+          "element": "상태·「내용 보기」·「동의 철회」",
+          "action": "가맹 점포 직원의 본사 제공 동의를 보이고 철회한다. 철회하면 본사에는 점포별 숫자로만 보인다.",
+          "policies": [
+            "ATT-30",
+            "ATT-32"
+          ]
+        },
+        {
+          "zone": "연락처",
+          "element": "휴대전화번호·이메일·주소·「변경사항 저장」",
+          "action": "번호는 바꾸지 않는다. 이메일은 「변경」으로 인증해 바꾸고, 주소는 검색으로 고른다. 이미 보낸 근로계약서에는 반영하지 않는다.",
+          "policies": [
+            "ACC-13",
+            "ACC-20"
+          ]
+        },
+        {
+          "zone": "비밀번호·하단",
+          "element": "「변경」·「로그아웃」",
+          "action": "비밀번호 변경 화면으로 간다. 로그아웃은 확인 시트를 거친다.",
+          "policies": [
+            "ACC-13"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-036",
+      "name": "비밀번호 변경",
+      "menu": "하단 탭 > 내 정보",
+      "route": "/me/password",
+      "demo": {
+        "file": "me/index.html",
+        "state": "password"
+      },
+      "images": [
+        "SCR-APP-036.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "입력",
+          "element": "「현재 비밀번호」",
+          "action": "현재 비밀번호를 확인한다. 틀려도 로그인 잠금 횟수에는 세지 않고 계정마다 10분에 10번까지 받는다.",
+          "policies": [
+            "ACC-13"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "새 비밀번호·확인 칸",
+          "action": "새 비밀번호를 두 번 넣는다.",
+          "policies": [
+            "ACC-12"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "「비밀번호 조건」",
+          "action": "문자 종류를 3가지 이상 섞으면 8자, 2가지면 10자 이상으로 하고 20자까지 받는다. 이메일 아이디와 같거나 그 앞부분을 쓴 값은 받지 않는다.",
+          "policies": [
+            "ACC-12"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「변경하기」",
+          "action": "바꾸면 그 기기는 로그인이 이어지고 다른 기기는 다시 로그인하며, 열려 있던 재설정 핀·링크를 닫는다.",
+          "policies": [
+            "ACC-13"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「취소」",
+          "action": "내 정보로 돌아간다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-037",
+      "name": "이메일 변경",
+      "menu": "하단 탭 > 내 정보",
+      "route": "/me/email",
+      "demo": {
+        "file": "me/index.html",
+        "state": "email"
+      },
+      "images": [
+        "SCR-APP-037.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "안내 제목",
+          "action": "이메일을 바꾸면 로그인 아이디도 바뀐다고 알린다.",
+          "policies": [
+            "ACC-04",
+            "ACC-13"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「현재 아이디」",
+          "action": "지금 쓰는 이메일을 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "입력",
+          "element": "「새 이메일」",
+          "action": "다른 계정이 쓰는 주소는 받지 않는다.",
+          "policies": [
+            "ACC-13"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "수신 가능 안내",
+          "action": "비밀번호 재설정 핀도 이 이메일로 받으므로 메일을 받을 수 있는 주소인지 확인하라고 알린다.",
+          "policies": [
+            "ACC-08"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「인증번호 받기」",
+          "action": "새 이메일로 핀을 보내 일치를 확인한다. 바꿔도 접속은 이어지고 다음 로그인부터 새 이메일을 쓴다.",
+          "policies": [
+            "ACC-13"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「취소」",
+          "action": "내 정보로 돌아간다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-038",
+      "name": "소속 근무지",
+      "menu": "하단 탭 > 내 정보",
+      "route": "/me/memberships",
+      "demo": {
+        "file": "me/index.html",
+        "state": "sites"
+      },
+      "images": [
+        "SCR-APP-038.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "확인을 기다리는 요청",
+          "element": "요청 줄",
+          "action": "가입한 사람이 받은 초대를 맨 위에 받은 때 최신순으로 고정한다. 가입 초대 줄은 초대 수락 화면으로, 소속 추가 확인·복귀 확인 줄은 소속 추가 확인 화면으로 간다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "확인을 기다리는 요청",
+          "element": "가입 초대 수락 화면",
+          "action": "가입 초대 줄을 누르면 초대 수락 화면(/me/invitations/[invitationId])을 연다. 수락하면 완료 화면(/me/invitations/done)으로 간다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "확인을 기다리는 요청",
+          "element": "유형 칩·만료일",
+          "action": "초대 유형과 만료일을 보인다. 답하지 않으면 30일 뒤 요청만 만료된다.",
+          "policies": [
+            "JOI-01",
+            "JOI-03"
+          ]
+        },
+        {
+          "zone": "소속 근무지",
+          "element": "근무지 카드",
+          "action": "지금 소속과 퇴직한 소속을 보인다. 퇴직한 소속은 「퇴직」으로 표시한다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "소속 근무지",
+          "element": "「근로계약서」·「급여명세서」·「신고 정보」",
+          "action": "펼친 근무지의 각 화면으로 간다.",
+          "policies": []
+        },
+        {
+          "zone": "안내",
+          "element": "소속 안내",
+          "action": "소속 근무지와 고용 형태는 근로계약에 따라 정해지고, 변경은 근무지 관리자에게 문의한다.",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,182 @@
+{
+  "client": "admin",
+  "area": "알림 템플릿 관리(메뉴 밖)",
+  "screens": [
+    {
+      "id": "SCR-ADM-059",
+      "name": "알림 템플릿 관리",
+      "menu": "메뉴 밖 > 플랫폼 관리",
+      "route": "/platform/notification-templates",
+      "demo": {
+        "file": "notify/templates.html"
+      },
+      "images": [
+        "SCR-ADM-059.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "등록",
+          "action": "알림 템플릿 등록 화면으로 간다.",
+          "policies": [
+            "NTF-21"
+          ]
+        },
+        {
+          "zone": "탭",
+          "element": "운영 알림·앱 푸시·메일·알림톡",
+          "action": "발송 채널별로 템플릿을 나누어 보인다.",
+          "policies": [
+            "NTF-21"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "템플릿 이름·템플릿 코드·제목·최종수정",
+          "action": "템플릿 이름을 누르면 수정 화면으로 간다.",
+          "policies": [
+            "NTF-21"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "받는 사람",
+          "action": "사건에 따라 받는 사람이 갈린다.",
+          "policies": [
+            "NTF-04"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "사용 여부",
+          "action": "템플릿은 지우지 않고 사용 안 함으로 끈다.",
+          "policies": [
+            "NTF-21"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-060",
+      "name": "알림 템플릿 등록",
+      "menu": "메뉴 밖 > 플랫폼 관리",
+      "route": "/platform/notification-templates/new",
+      "demo": {
+        "file": "notify/templates-new.html"
+      },
+      "images": [
+        "SCR-ADM-060.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "템플릿",
+          "element": "발송 채널",
+          "action": "운영 알림·앱 푸시·메일·알림톡 중에서 고른다. 앱 푸시면 수신 설정 묶음을 하나 고른다.",
+          "policies": [
+            "NTF-21"
+          ]
+        },
+        {
+          "zone": "템플릿",
+          "element": "템플릿 이름·템플릿 코드",
+          "action": "필수다. 채널을 고르면 접두가 채워지고 나머지는 직접 넣는다.",
+          "policies": [
+            "NTF-21"
+          ]
+        },
+        {
+          "zone": "문구",
+          "element": "제목·본문",
+          "action": "운영 알림·앱 푸시·메일은 둘 다 필수이고 알림톡은 본문만 둔다. 앱 푸시는 제목 40자·본문 100자까지다.",
+          "policies": [
+            "NTF-22"
+          ]
+        },
+        {
+          "zone": "문구",
+          "element": "변수",
+          "action": "누르면 본문 커서 자리에 들어간다.",
+          "policies": []
+        },
+        {
+          "zone": "변수 목록",
+          "element": "줄 추가",
+          "action": "빈 표로 시작한다. 저장할 때 본문의 변수가 목록에 있는지와 필수 변수가 본문에 있는지 검사한다.",
+          "policies": [
+            "NTF-24"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "목록·저장",
+          "action": "저장 전에 확인을 받는다. 등록한 템플릿은 발송 코드를 연결해야 실제로 나간다.",
+          "policies": [
+            "NTF-24"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-061",
+      "name": "알림 템플릿 수정",
+      "menu": "메뉴 밖 > 플랫폼 관리",
+      "route": "/platform/notification-templates/[id]",
+      "demo": {
+        "file": "notify/templates-edit.html"
+      },
+      "images": [
+        "SCR-ADM-061.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "기본 문구로 되돌리기",
+          "action": "기본 템플릿의 제목·본문·변수 목록만 처음 문구로 바꾼다. 운영자가 등록한 템플릿에는 없다.",
+          "policies": [
+            "NTF-21"
+          ]
+        },
+        {
+          "zone": "템플릿",
+          "element": "템플릿 코드",
+          "action": "바꾸면 발송 코드도 함께 바꿔야 한다. 저장 확인창에 경고를 함께 보인다.",
+          "policies": [
+            "NTF-24"
+          ]
+        },
+        {
+          "zone": "템플릿",
+          "element": "사용 스위치",
+          "action": "사용 안 함이면 그 템플릿으로 보내지 않는다.",
+          "policies": [
+            "NTF-21",
+            "NTF-25"
+          ]
+        },
+        {
+          "zone": "문구",
+          "element": "제목·본문·변수",
+          "action": "고친 문구는 다음 발송부터 쓰이고 이미 만든 알림은 바뀌지 않는다.",
+          "policies": [
+            "NTF-21",
+            "NTF-22"
+          ]
+        },
+        {
+          "zone": "미리보기",
+          "element": "채널 모양 미리보기",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "변경이력",
+          "element": "일시·수정자·내용",
+          "action": "고칠 때마다 이력을 남긴다.",
+          "policies": [
+            "NTF-21"
+          ]
+        }
+      ]
+    }
+  ]
+}

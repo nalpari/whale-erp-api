@@ -1,0 +1,546 @@
+{
+  "client": "staff",
+  "area": "홈·근무·출퇴근",
+  "screens": [
+    {
+      "id": "SCR-APP-013",
+      "name": "홈",
+      "menu": "하단 탭 > 홈",
+      "route": "/home",
+      "demo": {
+        "file": "home/index.html",
+        "state": "today"
+      },
+      "images": [
+        "SCR-APP-013.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단",
+          "element": "근무지 선택기",
+          "action": "「근무지 고르기」 시트를 열어 앱 전체의 근무지를 바꾼다. 체결 완료 계약이 있는 점포만 고르고, 근무지가 하나뿐이면 고르지 않는다.",
+          "policies": [
+            "CTR-29"
+          ]
+        },
+        {
+          "zone": "상단",
+          "element": "종 아이콘",
+          "action": "직원 알림함으로 간다.",
+          "policies": [
+            "NTF-17"
+          ]
+        },
+        {
+          "zone": "오늘 근무",
+          "element": "시간·휴게·「출근하기」",
+          "action": "오늘 근무를 한국 표준시로 보이고, 버튼을 누르면 출퇴근 등록으로 간다.",
+          "policies": [
+            "LST-05"
+          ]
+        },
+        {
+          "zone": "이번 주 근무",
+          "element": "요일 칸",
+          "action": "월요일부터 일요일까지 근무를 보인다.",
+          "policies": [
+            "LST-05",
+            "LST-06"
+          ]
+        },
+        {
+          "zone": "TO-DO",
+          "element": "TO-DO 카드·「전체 보기」",
+          "action": "배정된 TO-DO를 보이고 전체 보기로 근무 탭의 TO-DO로 간다. 긴급 건은 맨 위에 둔다.",
+          "policies": [
+            "NTF-12",
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "근무 정보·하단",
+          "element": "근무 정보 줄·하단 탭",
+          "action": "근무스케줄·출퇴근 현황·급여명세서로 간다. 하단 탭은 홈·근무·출퇴근·급여·내 정보 다섯이다.",
+          "policies": [
+            "NTF-17"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-014",
+      "name": "날인 요청 팝업",
+      "menu": "하단 탭 > 홈",
+      "route": "/home",
+      "routeNote": "서명할 근로계약서가 있을 때 홈 위에 뜨는 팝업",
+      "demo": {
+        "file": "home/index.html",
+        "state": "sign-req"
+      },
+      "images": [
+        "SCR-APP-014.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "팝업",
+          "element": "날인 요청 팝업",
+          "action": "서명 대기 근로계약서가 있으면 홈 위에 띄운다. 앱 안 팝업이라 알림 수신 설정과 상관없다.",
+          "policies": [
+            "NTF-14"
+          ]
+        },
+        {
+          "zone": "팝업",
+          "element": "근무지·고용 형태·날인 기한",
+          "action": "날인할 계약의 근무지, 고용 형태, 남은 날인 기한을 보인다.",
+          "policies": [
+            "CTR-05"
+          ]
+        },
+        {
+          "zone": "팝업",
+          "element": "이동 버튼",
+          "action": "근로계약서 화면으로 간다.",
+          "policies": []
+        },
+        {
+          "zone": "팝업",
+          "element": "닫기 버튼",
+          "action": "팝업을 닫는다. 계약서 화면에서 다시 볼 수 있다.",
+          "policies": []
+        },
+        {
+          "zone": "배경",
+          "element": "「서명할 근로계약서」 카드",
+          "action": "체결 완료 계약 전에는 날인을 기다리는 근로계약서만 보인다.",
+          "policies": [
+            "CTR-29"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-015",
+      "name": "근무스케줄",
+      "menu": "하단 탭 > 근무",
+      "route": "/work",
+      "demo": {
+        "file": "work/index.html",
+        "state": "week"
+      },
+      "images": [
+        "SCR-APP-015.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단",
+          "element": "근무지 카드",
+          "action": "누르면 「근무지 고르기」 시트를 열어 앱 전체의 근무지를 바꾼다.",
+          "policies": [
+            "CTR-29"
+          ]
+        },
+        {
+          "zone": "탭",
+          "element": "「근무스케줄」·「TO-DO」",
+          "action": "근무 화면 안에서 두 탭을 오간다.",
+          "policies": []
+        },
+        {
+          "zone": "달력",
+          "element": "월 달력·「이전 달」·「다음 달」",
+          "action": "달 단위로 근무스케줄을 보인다. 자정을 넘는 근무는 시작한 날에 센다.",
+          "policies": [
+            "LST-03",
+            "PAY-11"
+          ]
+        },
+        {
+          "zone": "고른 날",
+          "element": "근무 시간 막대·예정 시간·휴게시간·실제 출근",
+          "action": "날짜를 누르면 그날 근무를 보인다. 점선은 예정, 채운 막대는 실제 근무다.",
+          "policies": []
+        },
+        {
+          "zone": "안내",
+          "element": "변경 문의 안내",
+          "action": "근무스케줄은 관리자가 고치고 저장하면 바로 반영된다. 변경은 근무지 관리자에게 문의한다.",
+          "policies": [
+            "PAY-14"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-016",
+      "name": "TO-DO",
+      "menu": "하단 탭 > 근무",
+      "route": "/work",
+      "routeNote": "같은 경로의 탭",
+      "demo": {
+        "file": "work/index.html",
+        "state": "todo"
+      },
+      "images": [
+        "SCR-APP-016.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단",
+          "element": "근무지 카드",
+          "action": "고른 근무지의 TO-DO를 보인다.",
+          "policies": [
+            "CTR-29"
+          ]
+        },
+        {
+          "zone": "요약",
+          "element": "대기·진행 중·완료 건수",
+          "action": "상태별 건수를 보인다.",
+          "policies": [
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "TO-DO 줄",
+          "action": "제목과 수행 예정 일시를 보인다. 수행 예정 시간은 없을 수 있다. 긴급을 맨 위에, 나머지는 수행 예정 일시 순으로, 완료는 맨 뒤에 둔다.",
+          "policies": [
+            "PAY-16",
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "체크칸",
+          "action": "담당 직원이 TO-DO를 완료로 표시한다.",
+          "policies": [
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "「긴급」·「공유」·상태 칩",
+          "action": "「긴급」은 강조 표시이고, 「공유」는 근무지 전체에 배정한 한 명 수행 건이다. 상태는 대기·진행 중·완료다.",
+          "policies": [
+            "PAY-16",
+            "PAY-17"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-017",
+      "name": "출퇴근 등록",
+      "menu": "하단 탭 > 출퇴근",
+      "route": "/check-in",
+      "demo": {
+        "file": "check-in/index.html",
+        "state": "ready"
+      },
+      "images": [
+        "SCR-APP-017.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "근무지 카드",
+          "action": "앱에서 고른 근무지로 등록한다. 이 화면에서 근무지를 바꾸지 않는다.",
+          "policies": [
+            "ATT-07"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "오늘 근무",
+          "action": "그날 근무 시간과 휴게를 보인다.",
+          "policies": [
+            "LST-05"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "현재 시각",
+          "action": "화면 표시. 기록 시각은 서버가 등록 요청을 받은 시각으로 정한다.",
+          "policies": [
+            "ATT-09"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「출근하기」",
+          "action": "휴대전화에서 반경 안·밖을 판정하고 확인 없이 바로 기록한다. 좌표는 서버로 보내지 않는다.",
+          "policies": [
+            "ATT-05",
+            "ATT-13"
+          ]
+        },
+        {
+          "zone": "상단",
+          "element": "시계 아이콘",
+          "action": "출퇴근 현황으로 간다.",
+          "policies": [
+            "ATT-17"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-018",
+      "name": "출퇴근 등록(근무 중)",
+      "menu": "하단 탭 > 출퇴근",
+      "route": "/check-in",
+      "demo": {
+        "file": "check-in/index.html",
+        "state": "working"
+      },
+      "images": [
+        "SCR-APP-018.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "「근무 중」 카드",
+          "action": "출근 시각을 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "본문",
+          "element": "근무 시간 막대",
+          "action": "점선은 예정, 채운 막대는 실제 근무다.",
+          "policies": []
+        },
+        {
+          "zone": "본문",
+          "element": "근무 시간·현재 시각",
+          "action": "지금까지의 근무 시간을 보인다.",
+          "policies": [
+            "ATT-34"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「퇴근하기」",
+          "action": "확인 시트에 출근 시각과 근무 시간을 보이고, 시트에서 확정해야 기록한다. 등록한 기록은 직원이 되돌리지 못한다.",
+          "policies": [
+            "ATT-13",
+            "ATT-15"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-019",
+      "name": "출퇴근 등록(반경 밖)",
+      "menu": "하단 탭 > 출퇴근",
+      "route": "/check-in",
+      "demo": {
+        "file": "check-in/index.html",
+        "state": "far"
+      },
+      "images": [
+        "SCR-APP-019.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "거리 표시",
+          "action": "근무지까지의 거리를 보인다. 근무지 반경은 100m다.",
+          "policies": [
+            "ATT-02"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "범위 밖 경고",
+          "action": "반경 밖에서 출근하면 확인 필요 기록으로 남는다고 알린다.",
+          "policies": [
+            "ATT-14"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "근무지·주소",
+          "action": "출근할 근무지를 보인다. 근무지를 자동으로 바꾸지 않는다.",
+          "policies": [
+            "ATT-07"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「출근하기」",
+          "action": "확인 시트에 범위 밖임을 알리고, 확정하면 사유 「반경 밖 출근」으로 확인 필요를 붙여 기록한다.",
+          "policies": [
+            "ATT-14",
+            "ATT-19"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-020",
+      "name": "위치정보 동의",
+      "menu": "하단 탭 > 출퇴근",
+      "route": "/check-in",
+      "routeNote": "첫 출근 등록 때 뜨는 팝업",
+      "demo": {
+        "file": "check-in/index.html",
+        "state": "consent"
+      },
+      "images": [
+        "SCR-APP-020.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "시트",
+          "element": "위치정보 동의 시트",
+          "action": "첫 출근 등록 때 서비스 약관과 따로 받는다. 가입 단계에서는 받지 않는다.",
+          "policies": [
+            "ATT-06"
+          ]
+        },
+        {
+          "zone": "시트",
+          "element": "저장 항목 안내",
+          "action": "출퇴근 시각이 남고, 반경 밖이면 확인 필요 표시와 사유만 남았다가 관리자 검토 뒤 지운다. 위치는 저장하지 않는다.",
+          "policies": [
+            "ATT-06",
+            "ATT-19"
+          ]
+        },
+        {
+          "zone": "시트",
+          "element": "동의 철회 안내",
+          "action": "내 정보에서 철회할 수 있다.",
+          "policies": [
+            "ATT-23"
+          ]
+        },
+        {
+          "zone": "시트",
+          "element": "「동의합니다」",
+          "action": "동의를 기록하고 앱으로 출퇴근을 등록할 수 있게 한다.",
+          "policies": [
+            "ATT-06",
+            "ATT-23"
+          ]
+        },
+        {
+          "zone": "시트",
+          "element": "「동의하지 않습니다」",
+          "action": "앱 등록을 막고 근무지 관리자에게 문의하라고 안내한다. 출퇴근 기록은 관리자의 대신 등록으로 남긴다.",
+          "policies": [
+            "ATT-06",
+            "ATT-20"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-021",
+      "name": "출퇴근 현황(이번 주)",
+      "menu": "하단 탭 > 출퇴근",
+      "route": "/attendance",
+      "demo": {
+        "file": "attendance/index.html",
+        "state": "week"
+      },
+      "images": [
+        "SCR-APP-021.jpg",
+        "SCR-APP-021-2.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "탭",
+          "element": "「이번 주」·「기간별」",
+          "action": "출퇴근 현황을 두 탭으로 나눠 본다.",
+          "policies": [
+            "ATT-17"
+          ]
+        },
+        {
+          "zone": "하루 카드",
+          "element": "날짜·근무지·근무 시간 막대",
+          "action": "월요일부터 일요일까지 날짜별로 보인다.",
+          "policies": [
+            "LST-06"
+          ]
+        },
+        {
+          "zone": "하루 카드",
+          "element": "출근·퇴근 시각",
+          "action": "기록을 보인다. 아직 오지 않은 날은 예정 시간을 보인다. 직원은 기록을 고치지 못한다.",
+          "policies": [
+            "ATT-10"
+          ]
+        },
+        {
+          "zone": "하루 카드",
+          "element": "상태 표시",
+          "action": "정상·지각·근무 중을 근무스케줄과 출퇴근 기록으로 판정해 보인다.",
+          "policies": [
+            "ATT-34"
+          ]
+        },
+        {
+          "zone": "하루 카드",
+          "element": "연필 표시",
+          "action": "관리자가 보정하거나 대신 등록한 기록에 붙는다. 누르면 상세 시트를 연다.",
+          "policies": [
+            "ATT-16",
+            "ATT-20"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-022",
+      "name": "출퇴근 현황(기간별)",
+      "menu": "하단 탭 > 출퇴근",
+      "route": "/attendance",
+      "routeNote": "같은 경로의 탭",
+      "demo": {
+        "file": "attendance/index.html",
+        "state": "period"
+      },
+      "images": [
+        "SCR-APP-022.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "조회",
+          "element": "시작일·종료일·「조회」",
+          "action": "기간을 직접 고른다. 들어올 때 기본값은 이번 달이고 한 번에 최대 1년까지 본다.",
+          "policies": [
+            "ATT-17"
+          ]
+        },
+        {
+          "zone": "합계",
+          "element": "총 근무 시간·지각·연장",
+          "action": "서버가 급여 계산과 같은 방식으로 셈해 내려 준 값을 보인다.",
+          "policies": [
+            "ATT-34"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "주별 줄",
+          "action": "기간을 주 단위로 끊어 보인다.",
+          "policies": [
+            "LST-03"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "보존 안내",
+          "action": "출퇴근 기록은 3년 보존한다.",
+          "policies": [
+            "ATT-17",
+            "RET-03"
+          ]
+        }
+      ]
+    }
+  ]
+}
