@@ -21,7 +21,7 @@
 COMMENT ON TYPE "contract_status" IS '작성 중 · 서명 요청 전 · 직원 서명 대기 · 직원 수정 요청 · 서명 완료 · 서명 거절 · 계약 기간 만료 · 계약 종료';
 COMMENT ON TYPE "contract_document_kind" IS '발송 원본 · 서명 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지';
 COMMENT ON COLUMN "contracts"."status" IS '계약 상태 — 작성 중·서명 요청 전·직원 서명 대기·직원 수정 요청·서명 완료·서명 거절·계약 기간 만료·계약 종료';
-COMMENT ON COLUMN "contract_documents"."kind" IS '파일 구분 — 발송 원본·서명 완료본·종이 계약 근로계약서·임금계약서·서명 이미지';
+COMMENT ON COLUMN "contract_documents"."kind" IS '파일 구분 — 발송 원본·서명 완료본·종이 계약 근로계약서·임금계약서·서명 이미지 — 서명 이미지는 날인 때 그린 필기 서명 PNG, 계약서와 같은 저장소·보존 기간 (WHALEERP-145)';
 
 -- 2) 제목 · 본문 ---------------------------------------------------------------------------------------------------------------
 

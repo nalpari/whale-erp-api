@@ -957,7 +957,7 @@ Since `20261109165622_team3_contract_status_labels` (WHALEERP-659) they are 작�
 (`docs/erd-physical/_model.py`), its generated copies in `docs/raw` and `schema.prisma`'s comments carry the same names, as do the
 `contracts.status` · `contract_documents.kind` column comments — a regenerated DDL would otherwise bring the old names back. `EXPIRED` is still a missed 서명 기한,
 not an ended contract period — its error text and the 만료 notice keep saying so (「서명 기한이 지나 만료된…」). The
-error texts here use the same names (`contract-status.spec` asserts the `NOW_STATUS` text),
+error texts here use the same names (`contract-status.spec` asserts one `NOW_STATUS` text, SIGNED's),
 and the 직원 앱 overrides three names on its own screens (서명 대기 · 수정 요청 · 거절).
 
 | from | to |
