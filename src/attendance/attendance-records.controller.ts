@@ -136,7 +136,7 @@ export class AttendanceRecordsController {
     return this.records.openCheckIns(user.id, query.storeId, bp);
   }
 
-  /** 대신 등록 선택지 — 그날 대신 등록할 수 있는 직원(위치정보 동의 없음 · 일시 중지, 체결 완료 계약, ATT-20 · 26) */
+  /** 대신 등록 선택지 — 그날 대신 등록할 수 있는 직원(위치정보 동의 없음 · 일시 중지, 서명 완료 계약, ATT-20 · 26) */
   @Get('proxy-staff')
   @MenuPermission('create')
   @ApiOkResponse({ type: ProxyStaffResponseDto })
@@ -165,7 +165,7 @@ export class AttendanceRecordsController {
   })
   @ApiUnprocessableEntityResponse({
     description:
-      'PROXY_NOT_ALLOWED — 위치정보 동의가 있는 직원 · 위치를 보지 않는 점포 / NO_CONTRACT — 그날 체결 완료 계약 없음 · 퇴직 뒤',
+      'PROXY_NOT_ALLOWED — 위치정보 동의가 있는 직원 · 위치를 보지 않는 점포 / NO_CONTRACT — 그날 서명 완료 계약 없음 · 퇴직 뒤',
   })
   proxy(
     @Body() dto: ProxyAttendanceDto,

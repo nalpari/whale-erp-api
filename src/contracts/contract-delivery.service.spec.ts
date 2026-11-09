@@ -1244,7 +1244,7 @@ describe('ContractDeliveryService', () => {
         contractId: 7,
         status: 'DRAFT',
       });
-      expect(body.message).toContain('임시저장으로 두었습니다');
+      expect(body.message).toContain('작성 중으로 두었습니다');
       expect(tx.invitation.delete).toHaveBeenCalledWith({
         where: { invitationId: 50 },
       });

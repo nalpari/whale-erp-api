@@ -15,7 +15,7 @@ import { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto
 import { ContractIdPipe } from './contract-id.pipe';
 import { MyContractDocumentsService } from './my-contract-documents.service';
 
-// 직원 앱의 근로계약 파일 내려받기(WHALEERP-146 · 149). 조회(610)와 같은 경로 · 같은 「내 계약」이고, 날인(145)의
+// 직원 앱의 근로계약 파일 내려받기(WHALEERP-146 · 149). 조회(610)와 같은 경로 · 같은 「내 계약」이고, 서명(145)의
 // 계정당 요청 제한은 걸지 않는다 — 조회 컨트롤러와 같은 이유.
 @ApiBearerAuth()
 @ApiUnauthorizedResponse({ description: '토큰 없음 · 접속 종료 · 탈퇴 계정' })
@@ -34,7 +34,7 @@ export class MyContractDocumentsController {
   })
   @ApiConflictResponse({
     description:
-      'CONTRACT_STATUS_CONFLICT — 처리 완료본(SIGNED_COPY)인데 체결된 계약이 아님(서명 대기 · 수정 요청 · 거부 · 만료, 체결 완료를 거치지 않은 종료). 본문 status 에 지금 상태',
+      'CONTRACT_STATUS_CONFLICT — 처리 완료본(SIGNED_COPY)인데 서명 완료된 계약이 아님(서명 대기 · 수정 요청 · 서명 거절 · 계약 기간 만료, 서명 완료를 거치지 않은 종료). 본문 status 에 지금 상태',
   })
   @ApiServiceUnavailableResponse({
     description: '첨부파일 저장소가 설정되지 않음',

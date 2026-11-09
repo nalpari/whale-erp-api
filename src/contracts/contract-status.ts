@@ -58,14 +58,14 @@ export const TRANSITIONS: Record<ContractStatus, readonly ContractStatus[]> = {
 
 /** 지금 상태라 바꿀 수 없을 때 알릴 문장. 다시 하는 방법(새로 고쳐 지금 상태 확인)을 함께 준다. */
 const NOW_STATUS: Record<ContractStatus, string> = {
-  DRAFT: '임시저장한 근로계약입니다',
+  DRAFT: '작성 중인 근로계약입니다',
   PENDING_SEND:
     '가입 초대 · 소속 추가 확인 요청을 보내고 직원의 가입 · 수락을 기다리는 근로계약입니다',
   PENDING_SIGNATURE: '서명을 기다리는 근로계약입니다',
   CORRECTION_REQUESTED: '직원이 수정을 요청한 근로계약입니다',
-  SIGNED: '이미 체결 완료된 근로계약입니다',
-  REJECTED: '이미 거부된 근로계약입니다',
-  EXPIRED: '날인 기한이 지나 만료된 근로계약입니다',
+  SIGNED: '이미 서명 완료된 근로계약입니다',
+  REJECTED: '이미 서명 거절된 근로계약입니다',
+  EXPIRED: '서명 기한이 지나 만료된 근로계약입니다',
   ENDED: '이미 종료된 근로계약입니다',
 };
 
@@ -513,7 +513,7 @@ export const signDeadlineConflict = () =>
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
     code: 'SIGN_DEADLINE_PASSED',
-    message: '날인 기한이 지났습니다. 관리자에게 재발송을 요청해 주세요.',
+    message: '서명 기한이 지났습니다. 관리자에게 재발송을 요청해 주세요.',
     status: 'PENDING_SIGNATURE',
   });
 

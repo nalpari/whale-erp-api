@@ -207,11 +207,11 @@ export class TodosService {
       });
       if (individual && staff.length !== requested.length)
         throw new BadRequestException(
-          '그 근무지에 체결 완료 근로계약이 있고 가입을 마친 재직 직원만 배정할 수 있습니다 — 퇴직했거나 계약이 체결되지 않았거나 가입 전이거나 다른 근무지 직원이 있습니다.',
+          '그 근무지에 서명 완료 근로계약이 있고 가입을 마친 재직 직원만 배정할 수 있습니다 — 퇴직했거나 계약이 체결되지 않았거나 가입 전이거나 다른 근무지 직원이 있습니다.',
         );
       if (staff.length === 0)
         throw new BadRequestException(
-          '근무지에 체결 완료 근로계약이 있고 가입을 마친 재직 직원이 없습니다.',
+          '근무지에 서명 완료 근로계약이 있고 가입을 마친 재직 직원이 없습니다.',
         );
 
       // 한 명 수행은 공유 1행에 대상 전원, 그 밖은 직원마다 1행

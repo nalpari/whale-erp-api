@@ -38,7 +38,7 @@ describe('enum 조회 (e2e)', () => {
     expect(body.version).toMatch(/^[0-9a-f]{16}$/);
     expect(body.enums.ContractStatus[0]).toEqual({
       value: 'DRAFT',
-      label: '임시저장',
+      label: '작성 중',
       order: 1,
     });
     expect(body.enums.ContractStatus).toBeDefined();

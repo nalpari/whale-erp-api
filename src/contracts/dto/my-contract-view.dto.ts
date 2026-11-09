@@ -37,25 +37,25 @@ export class MyContractListItemDto {
   /** YYYY-MM-DD. 비어 있으면 기간의 정함이 없는 계약 */
   @ApiProperty({ nullable: true, type: String, example: null })
   endDate: string | null;
-  /** 발송 일시 (ISO 8601) — 날인할 때 이 값을 그대로 보낸다(sentAt). 종이 계약이면 null */
+  /** 발송 일시 (ISO 8601) — 서명할 때 이 값을 그대로 보낸다(sentAt). 종이 계약이면 null */
   @ApiProperty({ nullable: true, type: String })
   sentAt: string | null;
-  /** 날인 기한 (ISO 8601) */
+  /** 서명 기한 (ISO 8601) */
   @ApiProperty({ nullable: true, type: String })
   signDeadlineAt: string | null;
   /**
-   * 지금 상태가 된 시각 (ISO 8601). 체결 완료면 날인 일자(종이 계약이면 관리자 등록일), 거부 · 만료 · 종료 · 수정
+   * 지금 상태가 된 시각 (ISO 8601). 서명 완료면 서명 일자(종이 계약이면 관리자 등록일), 서명 거절 · 계약 기간 만료 · 종료 · 수정
    * 요청이면 그 일자(상태 이력의 처리 시각). 서명 대기면 마지막 발송 시각(sentAt) — 서명 대기 그대로 다시 보내면
    * 이력이 쌓이지 않아 발송 일시를 쓴다
    */
   @ApiProperty({ nullable: true, type: String })
   processedAt: string | null;
-  /** 지금 날인할 수 있는가 — 서명 대기 · 날인 기한 안 · 재직 중. 날인 요청 팝업(WHALEERP-148)이 쓴다. 본인 대조는 상세에서 */
+  /** 지금 서명할 수 있는가 — 서명 대기 · 서명 기한 안 · 재직 중. 서명 요청 팝업(WHALEERP-148)이 쓴다. 본인 대조는 상세에서 */
   awaitingSignature: boolean;
 }
 
 export class MyContractListResponseDto {
-  /** 날인을 기다리는 계약(기한이 급한 순) 먼저, 그다음 최근 것부터 */
+  /** 서명을 기다리는 계약(기한이 급한 순) 먼저, 그다음 최근 것부터 */
   @ApiProperty({ type: [MyContractListItemDto] })
   items: MyContractListItemDto[];
   total: number;
@@ -75,7 +75,7 @@ export class MyContractWorkerDto {
   isForeigner: boolean;
   /** 직무 — 직원 레코드 값 */
   jobTitle: string;
-  /** 주소 — 날인할 때 계정 주소로 고정된다. 날인 전이면 비어 있다(본인인증 정보의 주소를 보인다) */
+  /** 주소 — 서명할 때 계정 주소로 고정된다. 서명 전이면 비어 있다(본인인증 정보의 주소를 보인다) */
   @ApiProperty({ nullable: true, type: String })
   zipCode: string | null;
   @ApiProperty({ nullable: true, type: String })
@@ -85,8 +85,8 @@ export class MyContractWorkerDto {
 }
 
 /**
- * 계약서의 사용자 칸 — 근무지 점포와 그 사업자 정보. 사업자 정보는 등록 전이면 비어 있다. 날인한 계약은 상호 · 대표자 ·
- * 사업자등록번호 · 사업장 주소 · 점포 연락처가 날인 때 고정한 값이다(처리 완료본과 같다, WHALEERP-131) — 상호가 없던 점포는 상호에
+ * 계약서의 사용자 칸 — 근무지 점포와 그 사업자 정보. 사업자 정보는 등록 전이면 비어 있다. 서명한 계약은 상호 · 대표자 ·
+ * 사업자등록번호 · 사업장 주소 · 점포 연락처가 서명 때 고정한 값이다(처리 완료본과 같다, WHALEERP-131) — 상호가 없던 점포는 상호에
  * 점포명이 들어 있다
  */
 export class MyContractEmployerDto {
@@ -134,7 +134,7 @@ export class MyContractAccountDto {
   addressDetail: string | null;
 }
 
-/** 계약에 붙은 파일 — 종이 계약 날인본 · 임금계약서, 전자계약의 보낸 원본 · 처리 완료본(WHALEERP-131). 직원 필기 서명은 싣지 않는다. 내려받기는 GET /me/contracts/:contractId/documents/:contractDocumentId/download-url */
+/** 계약에 붙은 파일 — 종이 계약 서명본 · 임금계약서, 전자계약의 보낸 원본 · 처리 완료본(WHALEERP-131). 직원 필기 서명은 싣지 않는다. 내려받기는 GET /me/contracts/:contractId/documents/:contractDocumentId/download-url */
 export class MyContractDocumentDto {
   contractDocumentId: number;
   @ApiProperty({ enum: ContractDocumentKind, enumName: 'ContractDocumentKind' })
@@ -160,7 +160,7 @@ export class MyContractDetailDto extends ContractTermsDto {
     nullable: true,
   })
   contractMethod: ContractMethod | null;
-  /** 발송 일시 (ISO 8601) — 날인할 때 그대로 보낸다(sentAt). 다르면 409 CONTRACT_RESENT */
+  /** 발송 일시 (ISO 8601) — 서명할 때 그대로 보낸다(sentAt). 다르면 409 CONTRACT_RESENT */
   @ApiProperty({ nullable: true, type: String })
   sentAt: string | null;
   @ApiProperty({ nullable: true, type: String })
@@ -170,9 +170,9 @@ export class MyContractDetailDto extends ContractTermsDto {
   processedAt: string | null;
   /** 목록과 같다 — 서명 대기 · 기한 안 · 재직 중 */
   awaitingSignature: boolean;
-  /** 지금 날인하면 받는가 — awaitingSignature 이고 본인 대조가 맞을 때. 날인 API 와 같은 판정이다 */
+  /** 지금 서명하면 받는가 — awaitingSignature 이고 본인 대조가 맞을 때. 서명 API 와 같은 판정이다 */
   signable: boolean;
-  /** 계약서 값과 계정 값이 다른 항목 — 날인 API 의 409 IDENTITY_MISMATCH 와 같다. 다르면 직원은 수정 요청을 낸다 */
+  /** 계약서 값과 계정 값이 다른 항목 — 서명 API 의 409 IDENTITY_MISMATCH 와 같다. 다르면 직원은 수정 요청을 낸다 */
   @ApiProperty({
     enum: IDENTITY_FIELDS,
     enumName: 'IdentityField',
