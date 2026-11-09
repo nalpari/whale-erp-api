@@ -90,7 +90,7 @@ with tempfile.TemporaryDirectory() as tmp:
 out, info = R.write("1.0", draft=True)
 doc = Document(out)
 assert not R.leaks(R.all_text(doc))
-assert any("초안" in p.text for p in doc.paragraphs[:5]) and "초안" in doc.sections[0].header.paragraphs[0].text and "_초안" in out
+assert any(p.text == "완료보고서 (초안)" for p in doc.paragraphs) and "초안" in doc.sections[0].header.paragraphs[0].text and "_초안" in out
 assert doc.core_properties.author == "인터플러그" and doc.core_properties.comments == ""
 tests = json.load(open(R.TEST.SNAPSHOT, encoding="utf-8"))
 assert info["fails"] == len(tests["failures"]) and info["skips"] == len(tests["skips"])
