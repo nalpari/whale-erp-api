@@ -46,5 +46,11 @@
     "history": [
       { "version": "1.0", "date": "2026-11-09", "change": "최초 작성", "author": "인터플러그" }
     ]
+  },
+  "RPT": {
+    "name": "완료보고서",
+    "history": [
+      { "version": "1.0", "date": "2026-11-09", "change": "최초 작성", "author": "인터플러그" }
+    ]
   }
 }
