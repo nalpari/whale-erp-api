@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { kstToday } from '../staff-members/kst-date';
@@ -37,6 +38,9 @@ const OPEN_CHECK_IN_MESSAGE =
 /** 교착이 두 번 나면 — 모두 되돌아갔으므로 다시 하면 된다는 것을 알린다(500 이 아니라 409) */
 const BUSY =
   '다른 처리와 겹쳐 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.';
+/** 트랜잭션이 제한 시간을 넘기면 — 모두 되돌아갔으므로 설명 없는 500 대신 503 으로 알린다 */
+const TIMED_OUT =
+  '처리 시간이 초과되어 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.';
 
 const logger = new Logger('StoreClosings');
 
@@ -47,7 +51,7 @@ const logger = new Logger('StoreClosings');
 export const STORE_CLOSING_TRANSACTION_TIMEOUT_MS = 30_000;
 
 /**
- * 점포 폐점(확인 · 저장) — 점포 폐점(`PUT /stores/:id`)이 쓰고, 회원 탈퇴 · BP 탈퇴가 같이 쓸 예정이다(아직 연결 전). 업무 범위 · 권한 · BP 상태 판단은
+ * 점포 폐점(확인 · 저장) — 점포 폐점(`PUT /stores/:id`)이 쓰고, 회원 탈퇴가 쓰고, BP 탈퇴가 같이 쓸 예정이다. 업무 범위 · 권한 · BP 상태 판단은
  * 부르는 쪽이 하고, 여기서는 받은 점포 id 만 다룬다. 결과에는 점포마다 점포명 · 점포코드를 붙여 부르는 쪽이 그대로 내보낼 수
  * 있게 한다. 3팀 `storeClosingCheck` · `RetirementService.retireStores`(여러 점포 버전)를 감싼다.
  */
@@ -199,13 +203,13 @@ export async function retryOnDeadlock<T>(
   try {
     return await run();
   } catch (error) {
-    if (!isDeadlock(error)) throw error;
+    if (!isDeadlock(error)) throw withoutRawTimeout(error, label);
     logger.warn(`폐점 교착 — 한 번 다시 한다 (${label}): ${error.message}`);
   }
   try {
     return await run();
   } catch (error) {
-    if (!isDeadlock(error)) throw error;
+    if (!isDeadlock(error)) throw withoutRawTimeout(error, label);
     logger.warn(`폐점 교착 — 다시 해도 겹쳐 409 (${label}): ${error.message}`);
     throw new ConflictException(BUSY);
   }
@@ -224,6 +228,17 @@ function isDeadlock(
     error.code === 'P2034' ||
     (error.code === 'P2010' && error.message.includes('Code: `40P01`'))
   );
+}
+
+/** 트랜잭션 시간 초과(P2028)를 오류 로그와 503 으로 바꾼다 — 다시 해도 같은 일이 되풀이되므로 재시도하지 않는다. 다른 오류는 그대로 돌려준다 */
+function withoutRawTimeout(error: unknown, label: string): unknown {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== 'P2028'
+  )
+    return error;
+  logger.error(`폐점 트랜잭션 시간 초과 (${label})`, error.stack);
+  return new ServiceUnavailableException(TIMED_OUT);
 }
 
 /**

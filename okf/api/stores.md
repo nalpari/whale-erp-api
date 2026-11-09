@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-09T08:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -13,19 +13,19 @@ sources:
   - id: store-closings-service
     resource: ../../src/store-closings/store-closings.service.ts
     title: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
-    last_modified: 2026-11-09T06:00:00Z
+    last_modified: 2026-11-09T08:00:00Z
   - id: store-closing-response
     resource: ../../src/store-closings/dto/store-closing.response.dto.ts
     title: 폐점 확인 · 결과 응답(점포별 점포명 · 점포코드 + 합계)
-    last_modified: 2026-11-05T02:00:00Z
+    last_modified: 2026-11-09T08:00:00Z
   - id: store-closings-module
     resource: ../../src/store-closings/store-closings.module.ts
-    title: StoreClosingsModule — 회원 탈퇴 · BP 탈퇴가 import 할 진입점(StaffMembersModule 의 RetirementService 를 쓴다)
-    last_modified: 2026-11-04T07:00:00Z
+    title: StoreClosingsModule — 점포 관리 · 회원 탈퇴가 import 하고 BP 탈퇴가 import 할 진입점(StaffMembersModule 의 RetirementService 를 쓴다)
+    last_modified: 2026-11-09T08:00:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-11-06T03:00:00Z
+    last_modified: 2026-11-09T08:00:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 화면 [표] 보기와 같은 열 · 서식(정책은 공통 엑셀)
@@ -33,7 +33,7 @@ sources:
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
-    last_modified: 2026-11-04T09:30:00Z
+    last_modified: 2026-11-09T08:00:00Z
   - id: store-business-verifier
     resource: ../../src/stores/store-business-verifier.ts
     title: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot

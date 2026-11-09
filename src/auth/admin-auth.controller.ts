@@ -400,6 +400,9 @@ export class AdminAuthController {
     description:
       '폐점이 막힘 — 퇴근 기록이 없는 출근(code OPEN_CHECK_IN + storeId) · 이미 폐점한 점포 · 다른 처리와 교착. 탈퇴 전체를 되돌린다',
   })
+  @ApiServiceUnavailableResponse({
+    description: '폐점 트랜잭션이 시간을 넘김. 탈퇴 전체를 되돌린다',
+  })
   @Throttle({
     account: { limit: 10, ttl: 600_000, getTracker: signedInUserTracker },
   })

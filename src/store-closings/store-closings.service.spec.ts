@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
@@ -435,6 +436,45 @@ describe('retryOnDeadlock', () => {
     const run = jest.fn().mockRejectedValue(raw);
     await expect(retryOnDeadlock(run, '점포 11')).rejects.toBe(raw);
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  describe('트랜잭션 시간 초과(P2028)', () => {
+    const timedOut = () =>
+      new Prisma.PrismaClientKnownRequestError('Transaction API error', {
+        code: 'P2028',
+        clientVersion: 'test',
+      });
+    const unavailable = new ServiceUnavailableException(
+      '처리 시간이 초과되어 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.',
+    );
+    let error: jest.SpyInstance;
+
+    beforeEach(() => {
+      error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => {});
+    });
+    afterEach(() => error.mockRestore());
+
+    it('다시 하지 않고 오류 로그를 남긴 뒤 503', async () => {
+      const run = jest.fn().mockRejectedValue(timedOut());
+      await expect(retryOnDeadlock(run, '점포 11')).rejects.toThrow(
+        unavailable,
+      );
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(error.mock.calls[0][0]).toContain('점포 11');
+    });
+
+    it('교착 뒤 다시 한 번에서 나도 503', async () => {
+      const run = jest
+        .fn()
+        .mockRejectedValueOnce(deadlock())
+        .mockRejectedValueOnce(timedOut());
+      await expect(retryOnDeadlock(run, '점포 11')).rejects.toThrow(
+        unavailable,
+      );
+      expect(run).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('두 번째도 교착이면 500 이 아니라 409 「바뀐 것 없음 · 다시 시도」', async () => {

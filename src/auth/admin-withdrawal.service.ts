@@ -120,7 +120,7 @@ export class AdminWithdrawalService {
    * (schema.prisma admin_accounts.isDeleted 주석). BP 는 상태와 대표자 연락처만 바꾸고 상호 · 사업자정보는
    * 남긴다. 점포는 마지막에 폐점 서비스(close)가 같은 트랜잭션에서 닫는다 — 잠금 순서는 BP 행 → admin_accounts 행 → 탈퇴
    * 처리 → close(점포 → 직원 → 계정)이고, close 앞에서 staff_members · accounts 행을 잠그지 않는다. 폐점의 409(열린 출근 ·
-   * 이미 폐점 · 교착) · 404 는 그대로 내보내고 탈퇴째 되돌린다. 교착 재시도가 트랜잭션을 처음부터 다시 연다. 메일은 커밋 뒤
+   * 이미 폐점 · 교착) · 404 · 503(시간 초과)은 그대로 내보내고 탈퇴째 되돌린다. 교착 재시도가 트랜잭션을 처음부터 다시 연다. 메일은 커밋 뒤
    * 지우기 전에 읽어 둔 이메일로 보내고, 실패해도 탈퇴를 되돌리지 않는다.
    */
   async execute(
@@ -173,14 +173,11 @@ export class AdminWithdrawalService {
             if (isInput && !reasonDetail)
               throw new BadRequestException(REASON_DETAIL_REQUIRED);
 
-            // 폐점할 점포는 BP 행을 잠근 뒤 읽는다 — 그 사이 등록 · 폐점된 점포가 섞이지 않는다.
-            const [subAdmins, storeIds] = await Promise.all([
-              tx.adminAccount.findMany({
-                where: subAdminWhere(bpCodeId, adminAccountId),
-                select: { adminAccountId: true, accountStatusCode: true },
-              }),
-              openStoreIds(tx, bpCodeId),
-            ]);
+            const subAdmins = await tx.adminAccount.findMany({
+              where: subAdminWhere(bpCodeId, adminAccountId),
+              select: { adminAccountId: true, accountStatusCode: true },
+            });
+            const storeIds = await lockOpenStoreIds(tx, bpCodeId);
 
             const erasedPersonal = {
               name: null,
@@ -332,6 +329,20 @@ async function openStoreIds(db: Db, bpCodeId: number): Promise<number[]> {
     select: { storeId: true },
   });
   return stores.map((store) => store.storeId);
+}
+
+/**
+ * 폐점할 점포를 읽으며 잠근다. 잠금을 기다린 뒤 PostgreSQL 이 조건을 다시 보므로, 그 사이 폐점 · 삭제된 점포는 빠져서 탈퇴를 409 · 404 로
+ * 되돌리지 않는다. FOR UPDATE 가 아닌 까닭은 close 와 같다 — 외래키 잠금과 부딪치지 않게 한다.
+ */
+async function lockOpenStoreIds(
+  tx: Prisma.TransactionClient,
+  bpCodeId: number,
+): Promise<number[]> {
+  const rows = await tx.$queryRaw<
+    { storeId: number }[]
+  >`SELECT store_id AS "storeId" FROM stores WHERE bp_code_id = ${bpCodeId} AND NOT is_deleted AND store_status_code <> ${CLOSED} ORDER BY store_id FOR NO KEY UPDATE`;
+  return rows.map((row) => row.storeId);
 }
 
 /**
