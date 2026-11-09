@@ -1367,7 +1367,7 @@ describe('ContractDeliveryService', () => {
         code: 'SEND_FAILED',
         status: 'PENDING_SEND',
       });
-      expect(body.message).not.toContain('임시저장');
+      expect(body.message).not.toContain('작성 중');
       expect(tx.invitation.updateMany).toHaveBeenCalledWith({
         where: { invitationId: { in: [40] }, status: 'EXPIRED' },
         data: { status: 'SENT' },

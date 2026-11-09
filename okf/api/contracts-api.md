@@ -953,9 +953,11 @@ transaction.[^contract-status]
 **Status names on screen** come from `GET /enums` (the type comment on `contract_status`), not from this file.
 Since `20261109165622_team3_contract_status_labels` (WHALEERP-659) they are 작성 중 · 서명 요청 전 · 직원 서명 대기 ·
 직원 수정 요청 · 서명 완료 · 서명 거절 · 계약 기간 만료 · 계약 종료, and screens say 「서명」 where the specification says
-「날인」(서명 기한 · 서명본; `SIGNED_COPY` is 서명 완료본). The values did not change. `EXPIRED` is still a missed 서명 기한,
+「날인」(서명 기한 · 서명본; `SIGNED_COPY` is 서명 완료본). The values did not change. The physical model
+(`docs/erd-physical/_model.py`), its generated copies in `docs/raw` and `schema.prisma`'s comments carry the same names, as do the
+`contracts.status` · `contract_documents.kind` column comments — a regenerated DDL would otherwise bring the old names back. `EXPIRED` is still a missed 서명 기한,
 not an ended contract period — its error text and the 만료 notice keep saying so (「서명 기한이 지나 만료된…」). The
-error texts here use the same names; `NOW_STATUS` · `SIGN_DEADLINE_PASSED` are asserted by `contract-status.spec`,
+error texts here use the same names (`contract-status.spec` asserts the `NOW_STATUS` text),
 and the 직원 앱 overrides three names on its own screens (서명 대기 · 수정 요청 · 거절).
 
 | from | to |

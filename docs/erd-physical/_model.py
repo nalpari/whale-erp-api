@@ -280,7 +280,7 @@ _EMPLOY = ("employment_type", ["FULL_TIME", "PART_TIME"], "정직원 · 파트�
 # 임시저장(DRAFT)은 근로계약서를 다 쓰기 전에 저장해 둔 것 — 초대 · 계약서를 보내지 않는다(2026-10-08).
 # 이름은 게시 상태의 임시저장(DRAFT)과 같게. 「초안」은 여전히 발송 대기(PENDING_SEND)다.
 _CSTATUS = ("contract_status", ["DRAFT", "PENDING_SEND", "PENDING_SIGNATURE", "CORRECTION_REQUESTED", "SIGNED", "REJECTED", "EXPIRED", "ENDED"],
-            "임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료")
+            "작성 중 · 서명 요청 전 · 직원 서명 대기 · 직원 수정 요청 · 서명 완료 · 서명 거절 · 계약 기간 만료 · 계약 종료")
 _ACTOR = ("status_change_actor", ["ADMIN", "STAFF", "SYSTEM"], "관리자 · 직원 · 시스템")
 _TODO = ("todo_status", ["PENDING", "IN_PROGRESS", "DONE"], "대기 · 진행 중 · 완료")
 _PAY = ("payslip_status", ["DRAFTING", "REVIEWING", "CONFIRMED", "SENT"], "작성 중 · 검토 중 · 확정 · 발송 완료")
@@ -323,7 +323,7 @@ ENUMS = {
     ("contracts", "draft_action"): ("contract_draft_action", ["SIGNUP_INVITE", "AFFILIATION_CONFIRM", "RETURN_CONFIRM", "IMMEDIATE_SEND"],
                                     "가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송"),
     ("contract_documents", "kind"): ("contract_document_kind", ["SENT_ORIGINAL", "SIGNED_COPY", "PAPER_EMPLOYMENT_CONTRACT", "WAGE_CONTRACT", "SIGNATURE"],
-                                     "발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지"),
+                                     "발송 원본 · 서명 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지"),
     ("contract_status_histories", "from_status"): _CSTATUS,
     ("contract_status_histories", "to_status"): _CSTATUS,
     ("contract_status_histories", "actor"): _ACTOR,
