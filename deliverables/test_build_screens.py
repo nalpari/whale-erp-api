@@ -16,6 +16,7 @@ assert L("Manyfast") and L("whale-erp-front") and L("협의 전 미정") and L("
 for ok in ("운영 정책 ATT-25", "미정산 없음", "SCR-ADM-001", "WHALE-SCR-1.0", "a@example.com로", "010-1234-5678", "TO-DO 기록"):
     assert not L(ok), (ok, L(ok))
 assert L("시간 미정 뒤 협의") == ["미결 메모: 협의"]
+assert L("연결 보류") and L("가입 연결이 보류") and L("본인인증") and L("가입·인증") and L("010-5521-3380") and L("01055213380")
 assert not L("시간 미정") and not L("검토 중", "staff/payslips.html") and L("검토 중", "staff/index.html")
 
 assert B.row_cells({"zone": "목록", "element": "표", "action": "연다", "policies": ["ACC-11", "CTR-19"]})[3] == "운영 정책 ACC-11, 운영 정책 CTR-19"
@@ -29,13 +30,15 @@ except SystemExit:
 all_screens = B.screens()
 ids = [s["id"] for _, s in all_screens]
 assert len(ids) == len(set(ids)), "화면 번호 중복"
-assert all(s["images"] and all(os.path.exists(os.path.join(B.IMG, n)) for n in s["images"]) for _, s in all_screens)
+assert B.NO_IMAGE == {"SCR-PUB-013"}, B.NO_IMAGE  # 이미지 0장 예외는 이 화면 하나뿐
+assert all((s["images"] or s["id"] in B.NO_IMAGE) and all(os.path.exists(os.path.join(B.IMG, n)) for n in s["images"]) for _, s in all_screens)
+assert not [s["id"] for _, s in all_screens if s["id"] in B.NO_IMAGE and s["images"]]
 names = {n for _, s in all_screens for n in s["images"]}
 assert names == set(os.listdir(B.IMG)), set(os.listdir(B.IMG)) ^ names
 if os.path.exists(B.VISIBLE_JSON):  # --capture 를 돌린 뒤에만 있다(out/, 커밋하지 않음)
     visible = json.load(open(B.VISIBLE_JSON, encoding="utf-8"))
-    assert set(visible) == set(ids) and all(visible.values())
-    assert not [s["id"] for _, s in all_screens if L(visible[s["id"]], B.key_of(s))]
+    assert set(visible) == set(ids) - B.NO_IMAGE and all(visible.values())
+    assert not [s["id"] for _, s in all_screens if s["id"] not in B.NO_IMAGE and L(visible[s["id"]], B.key_of(s))]
     assert not any("whale-2026" in t for t in visible.values()), "비밀번호 칸 값이 저장됐다"
     assert not any("이미 출근한 상태로" in t or "만료된 초대면?" in t for t in visible.values()), "데모 이동 버튼이 남음"
 source = json.load(open(B.SOURCE_JSON, encoding="utf-8"))

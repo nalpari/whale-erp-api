@@ -545,10 +545,7 @@
       "demo": {
         "file": "auth/terms.html"
       },
-      "images": [
-        "SCR-PUB-013.jpg",
-        "SCR-PUB-013-2.jpg"
-      ],
+      "images": [],
       "rows": [
         {
           "zone": "진입",

@@ -26,8 +26,6 @@ from common import (EMAIL, HERE, INTERNAL, OUT, PHONE, TEAM, TEAM_NAMES, heading
                     table)
 from build_policy import RULE_IDS
 
-# ponytail: 운영 정책 사본(sources/운영정책.html)이 v271 이라 v273 에 더해진 규칙을 여기 둔다. 사본을 갱신하면 지운다.
-NEWER_RULES = {"LST-08"}
 
 ROOT = os.path.join(HERE, "sources", "screens")
 AREAS = os.path.join(ROOT, "areas")
@@ -64,7 +62,13 @@ TEXT_FIXES = [
     ("pay/index.html#detail", r"\s*끝자리 세무 확인 대기\(PAY-7\)", ""),
     ("staff/payrolls-detail.html", r"\(PAY-22\)", "(운영 정책 PAY-22)"),
     ("system/menus-master.html", r" · 목업 표본에서 생략", ""),
-    ("auth/terms.html", r"\s*\[요금 체계·결제 방식은 아직 확정 전이며, 부가서비스 구독·정산 기능도 1차 범위에 포함되지 않습니다\.\]", ""),
+    # 없앤 상태 · 옛 표현
+    ("staff/index.html", r"^가입·인증$", "가입 상태"),
+    ("staff/contracts.html", r" · 연결 보류$", ""),
+    ("home/index.html", r"휴대폰 본인인증과 ", ""),
+    # 운영자 메모의 내부 말투: 메모 칸을 비운다
+    ("support/inquiry-detail.html", r"(?s)^계약서에 소정근로시간이 주 14시간으로.*", ""),
+    ("support/lead-detail.html", r"(?s)^본사\(㈜한강상회\)가 이미 FRANCHISE PLAN.*", ""),
 ]
 
 # 찍기 전에 숨기는 데모 이동 전용 버튼 (화면 키 glob, 버튼 글자). 못 찾으면 멈춘다. 원본은 고치지 않는다.
@@ -81,6 +85,23 @@ DEMO_BUTTONS = [
     ("check-in/index.html#consent", "이미 출근한 상태로 눌러 보기"),
 ]
 
+# 찍기 전에 숨기는 줄 (화면 키 glob, 숨길 요소 선택자, 그 요소 글자의 정규식). 못 찾으면 멈춘다. 없앤 상태 · 옛 표현.
+HIDE_ROWS = [
+    ("staff/index.html", "label", r"^연결 보류$"),
+    ("staff/index.html", "tr", r"연결 보류 · 4일"),  # 표의 한 줄이 빠진다(보고 목록)
+    ("staff/detail.html", "div:has(> dt)", r"^본인인증"),
+    ("notify/templates.html", "tr", r"가입 연결 보류"),  # 표의 한 줄이 빠진다(보고 목록)
+]
+# 실제 상호가 읽히는 점포 사진은 회색 자리표시로 바꾼다.
+SIGN_PHOTOS = ("store-photo-1.", "store-photo-2.", "store-photo-5.")
+# 이미지를 싣지 않는 화면. 약관 전문은 본문이 초안이라 화면 구성 설명만 싣는다. 이 화면만 예외다.
+NO_IMAGE = {"SCR-PUB-013"}
+# 데모에 실제 값일 수 있어 따로 대조하는 휴대전화번호. 치환 뒤 보이는 글자에 있으면 멈춘다.
+KNOWN_PHONES = ("010-4821-7730", "010-5520-3141", "010-2290-5173", "010-5521-3380", "010-2291-7730", "010-5530-1182",
+                "010-3321-0981")
+MASKED_PHONE = re.compile(r"01[016789][-\s]*\*{2,}[-\s]*\d{0,4}")
+PHONE_JSON = os.path.join(OUT, "screens_phone_check.json")
+
 # 납품본 점검. 쟁점 번호: 운영 정책 번호는 「운영 정책 」을 붙인 것만 통과한다.
 ISSUE = re.compile(r"(?<!운영 정책 )(?<![A-Za-z0-9_-])[A-Z]{2,}-\d+")
 TOOLS = re.compile(r"Manyfast|Plane|BUZZ|Figma|Claude|Orca|DESIGN\.md|목업|데모|시안")
@@ -89,13 +110,12 @@ MEMO = re.compile(r"미정(?!산)|협의|보류|TBD|법무|노무사|검토 중|
 # 미결 메모처럼 보이는 업무어 (화면 파일 glob, 지울 글). 점검 전에 빼고 본다.
 MEMO_ALLOW = [
     ("*", "시간 미정"),  # TO-DO 수행 예정 일시에 시간이 없을 때
-    ("*", "연결 보류"),  # 데모의 옛 상태 표시. 보고 목록에 올린다
     ("notify/index.html", "협의한 날과 다릅니다"),  # 예시 거부 사유
     ("staff/payslips.html", "검토 중"),  # 급여명세서 상태
     ("staff/contracts.html", "소속 확인 중"),  # 소속 추가 확인 진행 표시
-    ("notify/templates.html", "연결이 보류"),  # 데모의 옛 템플릿 문구. 보고 목록에 올린다
 ]
 FAKE_PHONES = {"010-1234-5678", "01012345678"}
+OLD_TERMS = re.compile(r"본인인증|가입·인증")  # 없앤 표현. 「연결 보류」는 MEMO 의 「보류」로 걸린다
 
 
 def leaks(text, key=""):
@@ -106,11 +126,12 @@ def leaks(text, key=""):
             t = t.replace(phrase, "")
     found = []
     for name, rx in (("쟁점 번호", ISSUE), ("팀 표시", TEAM), ("팀원 실명", TEAM_NAMES), ("내부 표지", INTERNAL),
-                     ("내부 도구", TOOLS), ("저장소 경로", REPO_PATH), ("미결 메모", MEMO)):
+                     ("내부 도구", TOOLS), ("저장소 경로", REPO_PATH), ("미결 메모", MEMO), ("없앤 표현", OLD_TERMS)):
         found += [f"{name}: {m.group()}" for m in rx.finditer(t)]
     # 뒤에 조사가 붙으면(「…@example.com로」) common.EMAIL 의 \b 가 안 걸려 바뀐 값도 잡힌다
     found += [f"실제 이메일: {m.group()}" for m in EMAIL.finditer(t) if "@example.com" not in m.group()]
     found += [f"휴대전화번호: {m.group()}" for m in PHONE.finditer(t) if m.group() not in FAKE_PHONES]
+    found += [f"데모 휴대전화번호: {p}" for p in KNOWN_PHONES if p in t or p.replace("-", "") in t]
     return sorted(set(found))
 
 
@@ -192,6 +213,32 @@ _VISIBLE = """() => {
   return { text: [document.body.innerText, ...f.map(e => e.placeholder).filter(Boolean)].join('\\n'),
            values: f.filter(e => e.type !== 'password').map(e => e.value).filter(Boolean).join('\\n') };
 }"""
+_HIDE_ROW = """([sel, rx]) => {
+  const r = new RegExp(rx);
+  const hit = [...document.querySelectorAll(sel)].filter(e => e.getClientRects().length && r.test(e.innerText.trim()));
+  hit.forEach(e => { e.style.display = 'none'; });
+  return hit.length;
+}"""
+_GRAY_PHOTO = """names => {
+  let n = 0;
+  document.querySelectorAll('img').forEach(i => {
+    if (names.some(x => (i.getAttribute('src') || '').includes(x))) {
+      i.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/%3E";
+      i.style.background = '#d9dde2';
+      n++;
+    }
+  });
+  return n;
+}"""
+# 휴대전화번호 대조: 치환 전 글자를 보이는 곳과 숨김 영역(닫힌 팝업 · 안 보이는 상태 · 속성값)으로 나눈다.
+_PHONE_SCAN = """() => {
+  const seen = e => e.checkVisibility && e.checkVisibility({ visibilityProperty: true, contentVisibilityAuto: true });
+  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), vis = [], hid = [];
+  while (w.nextNode()) (w.currentNode.parentElement && seen(w.currentNode.parentElement) ? vis : hid).push(w.currentNode.nodeValue);
+  document.querySelectorAll('input,textarea').forEach(e => { if (e.type !== 'password') (seen(e) ? vis : hid).push(e.value); });
+  document.querySelectorAll('*').forEach(e => { for (const a of e.attributes) if (/01[016789]/.test(a.value)) hid.push(a.value); });
+  return { visible: vis.join('\\n'), hidden: hid.join('\\n') };
+}"""
 _HIDE_BUTTON = """t => {
   const hit = [...document.querySelectorAll('button,a')]
     .filter(e => e.getClientRects().length && e.innerText.replace(/\\s+/g, ' ').trim() === t);
@@ -260,6 +307,7 @@ def capture():
     shutil.rmtree(IMG, ignore_errors=True)
     os.makedirs(IMG)
     source, visible, all_demo, used, hidden = {}, {}, [], set(), set()
+    rows_hidden, phones = set(), {}
     areas = load_areas()
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as pw:
         browser = pw.chromium.launch()
@@ -294,6 +342,9 @@ def capture():
             root = roots["staff" if client == "staff" else "admin"]
             for s in area["screens"]:
                 key = key_of(s)
+                if s["id"] in NO_IMAGE:
+                    s["images"] = []
+                    continue
                 try:
                     page.set_viewport_size({"width": w, "height": h})
                     page.goto("file://" + os.path.join(root, s["demo"]["file"]))
@@ -311,9 +362,19 @@ def capture():
                     for i, (pat, label) in enumerate(DEMO_BUTTONS):
                         if fnmatch.fnmatch(key, pat) and page.evaluate(_HIDE_BUTTON, label):
                             hidden.add(i)
+                    for i, (pat, sel, rx) in enumerate(HIDE_ROWS):
+                        if fnmatch.fnmatch(key, pat) and page.evaluate(_HIDE_ROW, [sel, rx]):
+                            rows_hidden.add(i)
+                    page.evaluate(_GRAY_PHOTO, list(SIGN_PHOTOS))
+                    before = page.evaluate(_PHONE_SCAN)
                     _fix_text(page, key, used)
                     seen = page.evaluate(_VISIBLE)
                     text = seen["text"]
+                    phones[s["id"]] = {
+                        "visibleBefore": sorted({p for p in KNOWN_PHONES if p in before["visible"] or p.replace("-", "") in before["visible"]}),
+                        "hiddenBefore": sorted({p for p in KNOWN_PHONES if p in before["hidden"] or p.replace("-", "") in before["hidden"]}),
+                        "maskedAfter": sorted(set(MASKED_PHONE.findall(f"{text}\n{seen['values']}"))),
+                    }
                     bad = leaks(f"{text}\n{seen['values']}", key)
                     if bad:
                         raise RuntimeError(f"이미지 글자에 내부 표시: {bad}")
@@ -327,6 +388,7 @@ def capture():
     if lost:
         raise SystemExit(f"TEXT_FIXES 의 원문을 찾지 못했습니다(원본이 바뀌었는지 확인): {lost}")
     lost = [DEMO_BUTTONS[i] for i in range(len(DEMO_BUTTONS)) if i not in hidden]
+    lost += [HIDE_ROWS[i] for i in range(len(HIDE_ROWS)) if i not in rows_hidden]
     if lost:
         raise SystemExit(f"DEMO_BUTTONS 의 버튼을 찾지 못했습니다(원본이 바뀌었는지 확인): {lost}")
     with open(SOURCE_JSON, "w", encoding="utf-8") as f:
@@ -334,6 +396,9 @@ def capture():
                   ensure_ascii=False, indent=2)
         f.write("\n")
     os.makedirs(OUT, exist_ok=True)
+    with open(PHONE_JSON, "w", encoding="utf-8") as f:
+        json.dump({k: v for k, v in phones.items() if any(v.values())}, f, ensure_ascii=False, indent=1)
+        f.write("\n")
     with open(VISIBLE_JSON, "w", encoding="utf-8") as f:
         json.dump(visible, f, ensure_ascii=False, indent=1)
         f.write("\n")
@@ -351,7 +416,7 @@ def place(d, client, name):
 
 def row_cells(r):
     for p in r["policies"]:
-        if p not in RULE_IDS | NEWER_RULES:
+        if p not in RULE_IDS:
             raise SystemExit(f"운영정책에 없는 번호: {p}")
     return [r["zone"], r["element"], r["action"], ", ".join(f"운영 정책 {p}" for p in r["policies"]) or "-"]
 
@@ -384,7 +449,7 @@ def write(version, draft=False):
             heading(d, a["area"], 2)
             for s in a["screens"]:
                 total += 1
-                if not s.get("images"):
+                if not s.get("images") and s["id"] not in NO_IMAGE:
                     raise SystemExit(f"{s['id']}: 이미지가 없습니다. --capture 를 먼저 돌려 주세요.")
                 h3 = heading(d, f"{s['id']} {s['name']}", 3)
                 h3.paragraph_format.page_break_before = True
