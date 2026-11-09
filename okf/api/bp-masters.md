@@ -4,20 +4,20 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-05T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-09T00:00:00Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excelCount · excelFile · assertExcelCaller)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-06T02:00:00Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-06T03:00:00Z
   - id: bp-master-excel
     resource: ../../src/bp-masters/bp-master-excel.ts
-    title: BP 목록 엑셀 — columns, both phone numbers masked
-    last_modified: 2026-10-23T00:40:00Z
+    title: BP 목록 엑셀 — 목록 표와 같은 열 · 서식, 연락처만 가림
+    last_modified: 2026-11-06T02:00:00Z
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: 초기 · 초기화 비밀번호와 그 메일 — shared with 플랫폼 관리자 관리 · BP 관리자 관리
@@ -143,8 +143,14 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
 
 # Excel
 
-`GET /bp-masters/excel` takes the list's filters, and both the master's 연락처 and the
-대표자 연락처 have their middle part masked.[^bp-master-excel] Since 2026-10-28 it follows the
+`GET /bp-masters/excel` takes the list's filters and **holds only what the list table shows, in its column
+order** (2026-11-06, 사용자 지정 via front — front `src/app/bp-masters/bp-master-table.tsx`): BP 코드 · 상호명 ·
+아이디 · 이름 · 계정상태 · 연락처 · 이메일 · 사업자등록번호 (3-2-5) · 가입경로 · 등록 (Korean date and time). A
+withdrawn BP's 이름 · 연락처 · 이메일 read 「탈퇴로 삭제됨」, as on the screen. The master's 연락처 is the one
+masked column (middle part starred); the 사업자정보 columns (등록자, 사업자 인증, 대표자명 · 연락처 · 이메일, 개업일자,
+사업장 주소, 업태, 종목, 최종 인증일시) were dropped, and with them the masked 대표자 연락처. Format is shared with
+the 점포 excel: 9pt, gray bold centered header, row 1 frozen ([store management](/api/stores.md)).[^bp-master-excel]
+Since 2026-10-28 it follows the
 common [Excel exports](/api/excel-exports.md) like 점포 엑셀: 10,000 rows or more is 예약
 생성 (202, mailed link), 409 while one is being made, once a minute otherwise, and **every
 download is logged** (`excel_download_logs`, two years) — the front plan's "who · when ·
@@ -162,6 +168,6 @@ no file. The same check runs again as `assertRequester` when the file is downloa
 
 [^bp-masters-service]: BpMastersService
 [^bp-masters-controller]: /bp-masters routes
-[^bp-master-excel]: BP 목록 엑셀
+[^bp-master-excel]: BP 목록 엑셀 — 목록 표와 같은 열 · 서식, 연락처만 가림
 [^admin-password]: 초기 · 초기화 비밀번호와 그 메일
 [^next-bp-code]: nextBpCode

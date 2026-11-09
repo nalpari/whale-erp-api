@@ -1,0 +1,257 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "고객지원 — 공지사항을 읽고 문의를 남기기까지",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    },
+    "views": [
+      {
+        "id": "v1",
+        "label": "문의에서 답변까지",
+        "focus": [
+          "home",
+          "ask",
+          "inbox",
+          "notify",
+          "mine"
+        ],
+        "note": "등록 때는 알림이 없고 답변이 달릴 때만 운영 알림함으로 간다. 메일은 업무 쪽이 따로 보낸다."
+      },
+      {
+        "id": "v2",
+        "label": "공지사항 읽기",
+        "focus": [
+          "home",
+          "notices",
+          "detail"
+        ],
+        "note": "노출 대상에 내가 든 것만 보이고 상단 고정이 먼저 선다."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "user",
+      "label": "BP 사용자 (관리자 웹)"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "ops",
+      "label": "플랫폼 운영자"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "읽기",
+      "fromCol": 0,
+      "toCol": 2
+    },
+    {
+      "id": "p2",
+      "label": "문의",
+      "fromCol": 3,
+      "toCol": 5,
+      "variant": "emphasis"
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "SUPPORT-4 · 화면 셋 · 메뉴 셋",
+      "lane": "user",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "home",
+    "ask",
+    "inbox",
+    "notify",
+    "mine"
+  ],
+  "nodes": [
+    {
+      "id": "home",
+      "lane": "user",
+      "col": 0,
+      "type": "frontend",
+      "label": "고객지원",
+      "sublabel": "공지사항 · FAQ · 문의하기 메뉴",
+      "width": 150
+    },
+    {
+      "id": "notices",
+      "lane": "user",
+      "col": 1,
+      "type": "frontend",
+      "label": "공지사항 · FAQ",
+      "sublabel": "노출 대상에 든 것만",
+      "width": 140
+    },
+    {
+      "id": "detail",
+      "lane": "user",
+      "col": 2,
+      "type": "frontend",
+      "label": "공지사항 상세",
+      "sublabel": "본문 · 첨부",
+      "width": 140
+    },
+    {
+      "id": "ask",
+      "lane": "user",
+      "col": 3,
+      "type": "frontend",
+      "label": "문의 등록",
+      "sublabel": "분류 · 제목 · 내용",
+      "width": 140,
+      "tag": "건수 제한 없음"
+    },
+    {
+      "id": "mine",
+      "lane": "user",
+      "col": 5,
+      "type": "frontend",
+      "label": "내 문의 · 상세",
+      "sublabel": "답변 이력 · 진행",
+      "width": 150
+    },
+    {
+      "id": "dup",
+      "lane": "sys",
+      "col": 3,
+      "type": "security",
+      "label": "중복 차단",
+      "sublabel": "같은 내용 연달아",
+      "width": 140
+    },
+    {
+      "id": "notify",
+      "lane": "sys",
+      "col": 5,
+      "type": "messagebus",
+      "label": "답변 알림",
+      "sublabel": "운영 알림함 + 업무 쪽 메일",
+      "width": 140,
+      "tag": "등록 때는 알림 없음"
+    },
+    {
+      "id": "inbox",
+      "lane": "ops",
+      "col": 4,
+      "type": "frontend",
+      "label": "문의사항 관리",
+      "sublabel": "답변과 내부 메모 분리",
+      "width": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "home",
+      "to": "notices",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e2",
+      "from": "notices",
+      "to": "detail",
+      "variant": "dashed",
+      "label": "제목",
+      "role": "branch"
+    },
+    {
+      "id": "e3",
+      "from": "home",
+      "to": "ask",
+      "variant": "emphasis",
+      "label": "문의하기"
+    },
+    {
+      "id": "e3b",
+      "from": "ask",
+      "to": "dup",
+      "variant": "security",
+      "label": "접수",
+      "role": "error"
+    },
+    {
+      "id": "e4",
+      "from": "ask",
+      "to": "inbox",
+      "variant": "emphasis",
+      "label": "접수 · 답변 대기"
+    },
+    {
+      "id": "e5",
+      "from": "inbox",
+      "to": "notify",
+      "variant": "emphasis",
+      "label": "답변 저장 = 답변 완료"
+    },
+    {
+      "id": "e6",
+      "from": "notify",
+      "to": "mine",
+      "variant": "emphasis",
+      "label": "업무 쪽 메일 · 운영 알림함"
+    },
+    {
+      "id": "e7",
+      "from": "mine",
+      "to": "ask",
+      "variant": "dashed",
+      "label": "이어 쓰기 없음 · 새 문의",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "SUPPORT-1 구독·청구·결제·정산 조회는 2차, 자리 안 남김 · SUPPORT-4 공지사항·FAQ·문의하기 화면 셋이 곧 전체 목록 · 닫힌 문의에 이어 쓰기 없음",
+        "문의 분류는 공통코드 INQUIRY_CATEGORY · 첨부는 이미지·PDF 5개, 파일당 10MB로 1차에 만든다(#281) · 등록하면 토스트, 같은 내용 연달아(409)나 실패는 쓴 내용을 두고 사유를 알린다(#284) · 공지 구분은 점검·기능·약관·안내, FAQ는 카테고리를 보인다(#282·#283)"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "보는 규칙",
+      "items": [
+        "노출 대상에 내가 든 공지사항·FAQ와 내가 등록한 문의만 · 같은 BP의 다른 관리자 문의는 안 보임 · 20건 넘으면 페이지"
+      ]
+    }
+  ]
+}

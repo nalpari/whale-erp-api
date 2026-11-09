@@ -4,7 +4,7 @@ title: Excel exports
 description: 모든 화면의 엑셀 공통 — 1만 건 미만은 바로 파일, 이상은 예약 생성(S3 24시간 · 등록한 이메일로 링크 · 요청한 본인만), 같은 사람 · 같은 화면은 생성 중이면 409 · 1분에 한 번, 모든 요청을 excel_download_logs 에 2년 남긴다. GET /excel-downloads/:id 가 예약 생성한 파일의 주소를 준다.
 tags: [admin, excel, batch, storage, mail, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-29T05:17:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-06T02:00:00Z }
 sources:
   - id: excel-exports-service
     resource: ../../src/excel-exports/excel-exports.service.ts
@@ -14,6 +14,10 @@ sources:
     resource: ../../src/excel-exports/excel-export-policy.ts
     title: 1만 건 · 1분 · 24시간 · 두 번 시도 · 2년, 판단 규칙과 메일 변수
     last_modified: 2026-10-29T02:30:00Z
+  - id: excel-sheet-style
+    resource: ../../src/excel-exports/excel-sheet-style.ts
+    title: 목록 엑셀 공통 서식 — 9pt, 회색 · 굵게 · 가운데 머리글
+    last_modified: 2026-11-06T02:00:00Z
   - id: excel-export-source
     resource: ../../src/excel-exports/excel-export-source.ts
     title: ExcelExportSource — 화면이 주는 건수 · 파일 · 메뉴 URL
@@ -39,6 +43,11 @@ Built 2026-10-28 from 사용자 결정 and the front's settled policy (front `ok
 `ExcelExportsService`; today that is [Store management](/api/stores.md) (`GET /stores/excel`)
 and [BP masters](/api/bp-masters.md) (`GET /bp-masters/excel`). Before this, each kept its own
 in-memory one-a-minute map, answered 10,000+ rows with a 400 and logged nothing.
+
+A list sheet's look is shared too: `styleListSheet` (`excel-sheet-style.ts`, 2026-11-06) sets every cell to
+9pt and the header row to bold on gray `F2F2F2`, centered; the 점포 and BP master files call it after
+adding their rows, so 바로 받기 and 예약 생성 files look the same.[^excel-sheet-style] Which columns a file holds
+is each screen's choice — both mirror their list table.
 
 A screen supplies only an `ExcelExportSource` — its menu URL, a screen name for the mail, the
 query class, the file name, `count` and `build` — and registers it with `ExcelExportRegistry`
@@ -141,7 +150,7 @@ route has no menu guard (the menu comes from the log's `menu_id`, not the path),
 asks `adminHasMenuAction(read)` on that menu — which also needs an active account — and the
 source's `assertRequester` (BP 목록: still a platform account); either failing is 403 and no URL
 is issued. Checking only when the file is built would leave the 24 hours after it open: a role
-group that lost the menu, or an account set to 미사용, could still fetch the 사업자정보 file
+group that lost the menu, or an account set to 미사용, could still fetch the file
 (PR #188 review). Permission is not the whole of it: **a screen with a data scope also compares
 a scope fingerprint**. `ExcelExportSource.scopeKey(caller)` is asked when the file is built and
 stored in `scope_key`, and asked again — with the caller rebuilt from the row — when it is
@@ -153,8 +162,9 @@ and is refused too; asking again builds the file for the current scope. BP 목�
 platform sees every BP) and keeps `assertRequester` only. Each success sets `downloaded_at`. The admin web page behind the mail link calls this and opens the URL — that
 page is front work.
 
-**The API deletes the files.** The files carry 사업자정보 and 대표자명, so 「24 hours」 has to be
-true of the bucket, not only of the link: `excel-download-purge` (below) also deletes from S3
+**The API deletes the files.** The files carry personal and business identifiers — the BP master's
+이름 · 이메일 · (masked) 연락처, and 사업자등록번호, which identifies a person for a sole proprietor — so
+「24 hours」 has to be true of the bucket, not only of the link: `excel-download-purge` (below) also deletes from S3
 every scheduled file whose `expires_at` passed within the last 7 days. The log keeps no
 "deleted" mark, so the same week is swept daily — S3 deletes of a missing key succeed — which
 also covers a purge that did not run for a few days; one failed delete is logged as an error and
@@ -189,6 +199,7 @@ with a 500 (configuration, not user error).
 
 [^excel-exports-service]: ExcelExportsService — request · processPending · download · purgeExpired
 [^excel-export-policy]: 1만 건 · 1분 · 24시간 · 두 번 시도 · 2년, 판단 규칙과 메일 변수
+[^excel-sheet-style]: 목록 엑셀 공통 서식 — 9pt, 회색 · 굵게 · 가운데 머리글
 [^excel-export-source]: ExcelExportSource — 화면이 주는 건수 · 파일 · 메뉴 URL
 [^excel-exports-scheduler]: excel-export(1분) · excel-download-purge(매일 04:30)
 [^excel-downloads-controller]: GET /excel-downloads/:id

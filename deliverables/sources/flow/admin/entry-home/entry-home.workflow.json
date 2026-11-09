@@ -1,0 +1,292 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "진입과 로그인 후 홈",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    },
+    "views": [
+      {
+        "id": "v1",
+        "label": "첫 접속에서 홈까지",
+        "focus": [
+          "landing",
+          "login",
+          "home"
+        ],
+        "note": "비로그인 홈은 마케팅 표면이고, 로그인하면 업무 셸이 시작된다."
+      },
+      {
+        "id": "v2",
+        "label": "범위를 바꾸면",
+        "focus": [
+          "home",
+          "work",
+          "scope",
+          "nope"
+        ],
+        "note": "범위는 데이터만 가른다. 바꾸면 보던 화면에 남지 않고 홈으로 돌아간다."
+      }
+    ],
+    "viewBox": [
+      1090,
+      668
+    ]
+  },
+  "lanes": [
+    {
+      "id": "pre",
+      "label": "로그인 전"
+    },
+    {
+      "id": "auth",
+      "label": "계정"
+    },
+    {
+      "id": "home",
+      "label": "로그인 후 홈"
+    },
+    {
+      "id": "sel",
+      "label": "상단 범위 선택기"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "로그인 전",
+      "fromCol": 0,
+      "toCol": 2
+    },
+    {
+      "id": "p2",
+      "label": "로그인 후",
+      "fromCol": 3,
+      "toCol": 5,
+      "variant": "emphasis"
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "1팀 화면 · 초대 확인은 앱에서",
+      "lane": "auth",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "security"
+    },
+    {
+      "id": "g2",
+      "label": "HOME-4 · STAFF-12 · 늘 전체 · 바꾸면 홈으로",
+      "lane": "sel",
+      "fromCol": 4,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "landing",
+    "login",
+    "home",
+    "work"
+  ],
+  "nodes": [
+    {
+      "id": "landing",
+      "lane": "pre",
+      "col": 0,
+      "type": "frontend",
+      "label": "비로그인 홈",
+      "sublabel": "소개 · 공지사항 · 도입문의",
+      "width": 150
+    },
+    {
+      "id": "notices",
+      "lane": "pre",
+      "col": 1,
+      "type": "frontend",
+      "label": "공지사항 · FAQ",
+      "sublabel": "비회원에게 열린 것만",
+      "width": 140
+    },
+    {
+      "id": "inquiry",
+      "lane": "pre",
+      "col": 2,
+      "type": "frontend",
+      "label": "도입문의",
+      "sublabel": "로그인 없이 접수",
+      "width": 140
+    },
+    {
+      "id": "login",
+      "lane": "auth",
+      "col": 1,
+      "type": "security",
+      "label": "로그인 · 가입 · 찾기",
+      "sublabel": "1팀 화면 · 아이디 로그인",
+      "width": 170
+    },
+    {
+      "id": "home",
+      "lane": "home",
+      "col": 3,
+      "type": "frontend",
+      "label": "로그인 후 홈",
+      "sublabel": "점포 하나면 운영 화면",
+      "width": 140,
+      "tag": "늘 전체 범위로 시작"
+    },
+    {
+      "id": "work",
+      "lane": "home",
+      "col": 5,
+      "type": "frontend",
+      "label": "업무 화면",
+      "sublabel": "직원 · 고객지원 · 운영 알림함",
+      "width": 140
+    },
+    {
+      "id": "scope",
+      "lane": "sel",
+      "col": 4,
+      "type": "backend",
+      "label": "범위 바꾸기",
+      "sublabel": "전체 · 직영 · 가맹 · 점포 하나",
+      "width": 170
+    },
+    {
+      "id": "nope",
+      "lane": "sel",
+      "col": 5,
+      "type": "security",
+      "label": "점포가 없으면",
+      "sublabel": "등록으로 안내",
+      "width": 140
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "landing",
+      "to": "login",
+      "variant": "emphasis",
+      "label": "로그인"
+    },
+    {
+      "id": "e2",
+      "from": "landing",
+      "to": "notices",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e3",
+      "from": "notices",
+      "to": "inquiry",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e5",
+      "from": "login",
+      "to": "home",
+      "variant": "emphasis",
+      "label": "성공"
+    },
+    {
+      "id": "e5b",
+      "from": "landing",
+      "to": "home",
+      "variant": "dashed",
+      "label": "이미 로그인이면",
+      "role": "branch"
+    },
+    {
+      "id": "e6",
+      "from": "home",
+      "to": "work",
+      "variant": "emphasis",
+      "label": "메뉴 · 바로가기"
+    },
+    {
+      "id": "e7",
+      "from": "work",
+      "to": "scope",
+      "variant": "dashed",
+      "label": "범위 바꿈",
+      "role": "branch"
+    },
+    {
+      "id": "e8",
+      "from": "scope",
+      "to": "home",
+      "variant": "dashed",
+      "label": "홈으로 돌아간다",
+      "role": "return"
+    },
+    {
+      "id": "e9",
+      "from": "scope",
+      "to": "nope",
+      "variant": "security",
+      "label": "고를 점포 없음",
+      "role": "error"
+    },
+    {
+      "id": "e-home-landing",
+      "from": "home",
+      "to": "landing",
+      "label": "로그아웃 · 탈퇴",
+      "role": "branch"
+    },
+    {
+      "id": "e-home-login",
+      "from": "home",
+      "to": "login",
+      "label": "접속 만료",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "HOME-4 로그인하면 늘 전체 · STAFF-10·11 하나만 고르고 데이터만 가른다 · 스스로 로그아웃하거나 탈퇴하면 비로그인 홈으로, 접속이 만료되면 로그인 화면으로 간다(1팀 MYPAGE-3 · 2026-09-23)",
+        "도입문의 업종 「기타」를 고르면 아래에 직접 입력(1~50자) · 문의 내용 필수 · 접수하면 완료 팝업, 실패하면 쓴 내용을 두고 다시 하게 한다(#297·#298) · 홈의 가입 버튼은 회원가입 화면으로(#289) · 비로그인 공지사항 상세는 첨부 내려받기, 이전·다음 없음 · 목록은 페이지 번호 · FAQ에 카테고리(#293·#294)"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "밖에 있는 것",
+      "items": [
+        "로그인·가입·계정 찾기는 1팀 화면이다 — 관리자는 아이디로 로그인하고 임시 비밀번호를 메일로 받는다(1팀 AUTH-1·4) · 직원은 웹으로 로그인하지 않고 초대 확인도 직원 근무 앱에서 한다 · 서비스 소개 분량은 HOME-3 보류"
+      ]
+    }
+  ]
+}

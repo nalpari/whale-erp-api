@@ -1,0 +1,348 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "로그인과 계정 유지 — 잠금과 재설정까지",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy",
+        "label": "들어오고 머무르기",
+        "focus": [
+          "login",
+          "auth",
+          "session"
+        ],
+        "note": "이메일과 비밀번호로 들어온다. 마지막 접속으로부터 30일이 지나면 다시 로그인한다."
+      },
+      {
+        "id": "locked",
+        "label": "다섯 번 틀렸을 때",
+        "focus": [
+          "auth",
+          "locked",
+          "forgot",
+          "newpw"
+        ],
+        "note": "잠금을 푸는 길이 두 가지다. 5분을 기다려 자동으로 풀리거나, 비밀번호를 다시 정한 뒤 로그인 화면에서 새 비밀번호로 로그인한다."
+      },
+      {
+        "id": "reset",
+        "label": "비밀번호를 잊었을 때",
+        "focus": [
+          "forgot",
+          "mailpin",
+          "pinin",
+          "pinclosed",
+          "newpw"
+        ],
+        "note": "이메일로 핀을 받는다. 낸 시각부터 10분이고 새 비밀번호 저장까지 같은 시계로 센다. 다섯 번 틀리면 핀이 닫혀 새 핀을 받는다."
+      },
+      {
+        "id": "admin",
+        "label": "관리자가 초기화했을 때",
+        "focus": [
+          "reset",
+          "login",
+          "auth",
+          "newpw"
+        ],
+        "note": "관리자가 초기화하면 재설정 링크가 메일로 온다. 링크는 앱의 로그인 화면으로 열리고 거기서 새 비밀번호를 정한다. 앱이 없으면 앱 스토어로 간다."
+      },
+      {
+        "id": "findmail",
+        "label": "이메일을 잊었을 때",
+        "focus": [
+          "login",
+          "findmail"
+        ],
+        "note": "이름·휴대전화번호·생년월일을 넣으면 가입할 때 쓴 로그인 이메일을 찾아 준다. 세 값 모두 가입 때 직원이 넣은 계정 값이다."
+      }
+    ],
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "앱 화면"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "이메일 발송"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "관리자 웹"
+        }
+      }
+    },
+    "viewBox": [
+      1090,
+      660
+    ]
+  },
+  "lanes": [
+    {
+      "id": "mail",
+      "label": "이메일 · 관리자"
+    },
+    {
+      "id": "app",
+      "label": "직원 근무 앱 화면"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "exc",
+      "label": "잠금 · 핀 닫힘",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p-in",
+      "label": "로그인",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p-pin",
+      "label": "핀",
+      "fromCol": 2,
+      "toCol": 3
+    },
+    {
+      "id": "p-new",
+      "label": "다시 정하기",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-pinclosed",
+      "label": "쿨다운 없음",
+      "lane": "exc",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "login",
+    "auth",
+    "session"
+  ],
+  "nodes": [
+    {
+      "id": "reset",
+      "lane": "mail",
+      "col": 0,
+      "type": "external",
+      "label": "관리자 초기화",
+      "width": 160,
+      "sublabel": "재설정 링크 · 24시간",
+      "tag": "ACC-11"
+    },
+    {
+      "id": "login",
+      "lane": "app",
+      "col": 0,
+      "type": "frontend",
+      "label": "로그인",
+      "sublabel": "이메일이 아이디",
+      "width": 145
+    },
+    {
+      "id": "findmail",
+      "lane": "app",
+      "col": 1,
+      "type": "frontend",
+      "label": "이메일 찾기",
+      "sublabel": "이름 · 번호 · 생년월일",
+      "width": 160,
+      "tag": "LOGIN-8"
+    },
+    {
+      "id": "auth",
+      "lane": "sys",
+      "col": 1,
+      "type": "security",
+      "label": "인증 판정",
+      "sublabel": "다섯 번까지 재시도",
+      "width": 160,
+      "tag": "LOGIN-5"
+    },
+    {
+      "id": "forgot",
+      "lane": "app",
+      "col": 2,
+      "type": "frontend",
+      "label": "비밀번호 찾기",
+      "sublabel": "이메일 입력",
+      "width": 145
+    },
+    {
+      "id": "locked",
+      "lane": "exc",
+      "col": 1,
+      "type": "security",
+      "label": "계정 잠금",
+      "sublabel": "5분 뒤 자동 해제",
+      "width": 160
+    },
+    {
+      "id": "mailpin",
+      "lane": "mail",
+      "col": 3,
+      "type": "messagebus",
+      "label": "핀 메일",
+      "sublabel": "10분 · 저장까지",
+      "width": 145
+    },
+    {
+      "id": "pinin",
+      "lane": "app",
+      "col": 3,
+      "type": "frontend",
+      "label": "핀 입력",
+      "sublabel": "다섯 번까지",
+      "width": 145
+    },
+    {
+      "id": "pinclosed",
+      "lane": "exc",
+      "col": 3,
+      "type": "security",
+      "label": "핀 닫힘",
+      "sublabel": "새 핀 받기",
+      "width": 155
+    },
+    {
+      "id": "newpw",
+      "lane": "app",
+      "col": 4,
+      "type": "frontend",
+      "label": "새 비밀번호",
+      "sublabel": "잠금도 풀림",
+      "width": 140
+    },
+    {
+      "id": "session",
+      "lane": "sys",
+      "col": 5,
+      "type": "database",
+      "label": "접속 유지",
+      "sublabel": "마지막 접속 30일",
+      "width": 155,
+      "tag": "LOGIN-4"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-reset-login",
+      "from": "reset",
+      "to": "login",
+      "label": "링크가 앱으로 열림",
+      "role": "branch"
+    },
+    {
+      "id": "e-login-auth",
+      "from": "login",
+      "to": "auth",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-auth-session",
+      "from": "auth",
+      "to": "session",
+      "label": "일치",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-auth-locked",
+      "from": "auth",
+      "to": "locked",
+      "label": "다섯 번 실패",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-auth-newpw",
+      "from": "auth",
+      "to": "newpw",
+      "label": "링크가 유효하면",
+      "role": "branch"
+    },
+    {
+      "id": "e-login-forgot",
+      "from": "login",
+      "to": "forgot",
+      "label": "비밀번호를 잊음",
+      "role": "branch"
+    },
+    {
+      "id": "e-forgot-mailpin",
+      "from": "forgot",
+      "to": "mailpin",
+      "role": "branch"
+    },
+    {
+      "id": "e-mailpin-pinin",
+      "from": "mailpin",
+      "to": "pinin",
+      "role": "branch"
+    },
+    {
+      "id": "e-pinin-newpw",
+      "from": "pinin",
+      "to": "newpw",
+      "label": "일치",
+      "role": "branch"
+    },
+    {
+      "id": "e-pinin-pinclosed",
+      "from": "pinin",
+      "to": "pinclosed",
+      "label": "다섯 번 실패",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-newpw-session",
+      "from": "newpw",
+      "to": "session",
+      "label": "다시 로그인",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "e-login-findmail",
+      "from": "login",
+      "to": "findmail",
+      "label": "이메일을 잊음",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "아이디는 이메일 · 연속 5회 실패면 5분 잠금 · 핀은 낸 시각부터 10분(새 비밀번호 저장까지 같은 시계), 5회 틀리면 닫혀 새 핀을 받고 쿨다운은 없다 · 새 비밀번호를 정하면 잠금이 풀린다 · 관리자 초기화는 재설정 링크 24시간, 앱으로 열리고 앱이 없으면 스토어로 · 이메일을 잊으면 이름·번호·생년월일로 찾는다"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "여기서 하지 않는 것",
+      "items": [
+        "관리자 초기화 요청은 관리자 웹의 동작 · 비밀번호 규칙은 내 정보 화면에 · 관리자 계정 로그인은 1팀 영역"
+      ]
+    }
+  ]
+}

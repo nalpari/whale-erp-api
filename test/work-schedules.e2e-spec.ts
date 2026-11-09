@@ -1376,6 +1376,9 @@ describe('근무스케줄 (e2e, DB)', () => {
   });
 
   describe('근무스케줄 변경 메일 (WHALEERP-639)', () => {
+    // 날짜는 다른 시험이 쓰지 않는 100일 뒤부터다. 「지난 주 복사」는 오늘 +60~66 의 월요일(mondayOffset)을 기준으로 같은
+    // 직원(directId)의 근무를 원본 주 월 · 수(+53~61)와 복사본 월 · 수(+60~68)에 넣어, 요일에 따라 day(60) · day(62) 와
+    // 겹쳐 409 가 났다(2026-11-05, 목요일에 재현). 그 시험의 +74~86 은 direct2Id 미리보기라 이 직원과 상관없다.
     /** 그 근무스케줄 알림들의 EMAIL 발송 이력 */
     const mailDeliveriesOf = (workScheduleId: number) =>
       prisma.notificationDelivery.findMany({
@@ -1403,10 +1406,10 @@ describe('근무스케줄 (e2e, DB)', () => {
       const to = await emailOf(directId);
       // 앞 시험의 저장도 이 직원에게 메일을 보냈다 — 이 시험 것만 센다
       const since = new Date();
-      const created = await post(directId, day(60), '09:00', '13:00');
+      const created = await post(directId, day(100), '09:00', '13:00');
       const id = (created.body as { workScheduleId: number }).workScheduleId;
       await asAdmin('patch', `/work-schedules/${id}`, {
-        workDate: day(60),
+        workDate: day(100),
         startTime: '10:00',
         endTime: '14:00',
         breakMinutes: 0,
@@ -1495,7 +1498,7 @@ describe('근무스케줄 (e2e, DB)', () => {
       sendMail.mockRejectedValueOnce(
         Object.assign(new Error('smtp down'), { code: 'ECONNECTION' }),
       );
-      const created = await post(directId, day(62), '09:00', '13:00');
+      const created = await post(directId, day(102), '09:00', '13:00');
       expect(created.status).toBe(201);
       const id = (created.body as { workScheduleId: number }).workScheduleId;
       expect(await mailDeliveriesOf(id)).toEqual([
@@ -2002,7 +2005,8 @@ describe('근무스케줄 (e2e, DB)', () => {
     let token: string;
     /** 같은 계정의 퇴직한 다른 직원 레코드 */
     let retiredRecordId: number;
-    // 다른 시험의 날짜(오늘 ±90일 안)와 겹치지 않는 달
+    // 다른 시험이 쓰는 가장 늦은 날짜(오늘 +102, 근무스케줄 변경 메일)와 겹치지 않는 달 — 오늘 +150 이 든 달이라
+    // 그 달 1일은 +120 이후, 앞달 말일(lastOfPrev)은 +119 이후다
     const base = addDays(today, 150);
     const month = iso(base).slice(0, 7);
     const ymd = (d: number) => `${month}-${String(d).padStart(2, '0')}`;

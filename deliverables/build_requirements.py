@@ -13,7 +13,7 @@ from html.parser import HTMLParser
 
 from openpyxl.styles import Alignment, Font
 
-from common import FONT, HERE, open_xlsx, save_xlsx, table_sheet
+from common import FONT, HERE, open_xlsx, safe, save_xlsx, table_sheet
 
 SNAPSHOT = os.path.join(HERE, "sources", "manyfast.json")
 SLOTS = [("preconditions", "전제 조건"), ("trigger", "트리거"), ("action", "동작"), ("outcome", "결과"),
@@ -24,16 +24,6 @@ IMPORTANCE = {"high": "높음", "medium": "보통", "low": "낮음"}
 # 「WHALEERP-137, 2026-10-28」의 날짜는 번호가 아니다(뒤에 - 가 붙는다).
 PLANE = re.compile(r"WHALEERP-(\d+)((?:\s*[·,]\s*\d+(?![\d-]))*)")
 PHASE = re.compile(r"\[([12])차\]")
-EMAIL = re.compile(r"([\w.*+-]+)@(?!example\.com\b)[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}")
-PHONE = re.compile(r"(?<!\d)01[016789]-?\d{3,4}-?\d{4}(?!\d)")
-
-
-def safe(text):
-    """예시 이메일 · 휴대전화번호를 문서용 값으로 바꾼다."""
-    if not isinstance(text, str):
-        return text
-    text = EMAIL.sub(r"\1@example.com", text)
-    return PHONE.sub(lambda m: "010-1234-5678" if "-" in m.group() else "01012345678", text)
 
 
 class _Table(HTMLParser):

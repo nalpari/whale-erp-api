@@ -14,7 +14,7 @@ import re
 
 from openpyxl.styles import Alignment, Font
 
-from common import FONT, HERE, open_xlsx, save_xlsx, table_sheet
+from common import EMAIL, FONT, HERE, INTERNAL, open_xlsx, save_xlsx, table_sheet
 
 ROOT = os.path.join(HERE, "..")
 OPENAPI = os.path.join(ROOT, "openapi", "openapi.json")
@@ -23,10 +23,7 @@ VERBS = {"Get", "Post", "Put", "Patch", "Delete", "All", "Options", "Head"}
 AUTH = {"Public", "UserTypes", "MenuPermission", "UseGuards", "AllowPasswordChangePending"}
 NOT_RULE = re.compile(r"@(Api\w*|Type|Transform|Expose|Exclude)\b")
 UNKNOWN = "코드에서 판정 불가"
-# 납품 문서에 싣지 않는 내부 표지가 든 문장은 뺀다(2026-11-05 재영): 일감 번호 · PR 번호(저장소 이름 없는 #숫자 포함) ·
-# 코드 리뷰 · 소스 파일명 · Manyfast ID · @SkipThrottle. 표지 없이 뺄 문장은 exclude_sentences.txt 에 둔다.
-INTERNAL = re.compile(r"WHALEERP-\d+|\b(?:api|front|staff)\s*#\d*|(?<![\w/&])#\d+|코드 리뷰|[\w./-]+\.ts\b|\b[SFR]-[A-Z]"
-                      r"|@SkipThrottle")
+# 내부 표지(INTERNAL, common.py)가 든 문장은 뺀다. 표지 없이 뺄 문장은 exclude_sentences.txt 에 둔다.
 EXCLUDE = os.path.join(HERE, "exclude_sentences.txt")
 EXCLUDED = {line.strip() for line in open(EXCLUDE, encoding="utf-8") if line.strip() and not line.startswith("#")}
 REMOVED, FOUND, CLEANED = set(), set(), {}  # 뺀 문장 · 찾은 제외 목록 문장 · 결정 기록을 지운 문장(전 → 후)
@@ -36,7 +33,6 @@ _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _POLICY = re.compile(r"운영 정책|[A-Z]{2,5}-\d+|\bv\d+")
 _WORDS = re.compile(r"^(?:[가-힣]{2,4}(?: · | |$))+$")
 _DECIDE = re.compile(r"(?:결정|확인|지정|승인)$")
-EMAIL = re.compile(r"([\w.*+-]+)@(?!example\.com\b)[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}")
 CONSTRAINTS = ("minLength", "maxLength", "minimum", "maximum", "pattern", "format", "minItems", "maxItems")
 
 

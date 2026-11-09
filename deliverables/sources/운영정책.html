@@ -1,0 +1,810 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>WHALE ERP 운영 정책</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ground:      #F4F6F8;
+    --surface:     #FFFFFF;
+    --surface-alt: #EDF1F4;
+    --ink:         #0F1720;
+    --ink-soft:    #33404E;
+    --muted:       #5D6B7A;
+    --faint:       #8593A2;
+    --line:        #D8DFE6;
+    --line-soft:   #E7ECF1;
+
+    --accent:      #0B5D75;
+    --accent-soft: #E0EFF3;
+
+    --warn:        #97590A;
+    --warn-bg:     #FBEEDA;
+    --block:       #A03232;
+    --block-bg:    #F9E5E5;
+    --new:         #1F6F43;
+    --new-bg:      #E1F1E7;
+    --out:         #5D6B7A;
+    --out-bg:      #E6EBEF;
+
+    --sans: "IBM Plex Sans KR", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0C1116;
+      --surface:     #141C24;
+      --surface-alt: #1B242E;
+      --ink:         #E8EDF2;
+      --ink-soft:    #C2CCD6;
+      --muted:       #8F9CA9;
+      --faint:       #6B7885;
+      --line:        #26313C;
+      --line-soft:   #1F2833;
+
+      --accent:      #4FB0C6;
+      --accent-soft: #12313A;
+
+      --warn:        #DDA74A;
+      --warn-bg:     #2E2413;
+      --block:       #E08585;
+      --block-bg:    #331A1A;
+      --new:         #6FC08E;
+      --new-bg:      #16291D;
+      --out:         #8F9CA9;
+      --out-bg:      #1F2833;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0C1116;
+    --surface:     #141C24;
+    --surface-alt: #1B242E;
+    --ink:         #E8EDF2;
+    --ink-soft:    #C2CCD6;
+    --muted:       #8F9CA9;
+    --faint:       #6B7885;
+    --line:        #26313C;
+    --line-soft:   #1F2833;
+
+    --accent:      #4FB0C6;
+    --accent-soft: #12313A;
+
+    --warn:        #DDA74A;
+    --warn-bg:     #2E2413;
+    --block:       #E08585;
+    --block-bg:    #331A1A;
+    --new:         #6FC08E;
+    --new-bg:      #16291D;
+    --out:         #8F9CA9;
+    --out-bg:      #1F2833;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 52px;
+  }
+
+  .masthead { display: flex; flex-direction: column; gap: 18px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(32px, 4.6vw, 46px);
+    font-weight: 700;
+    letter-spacing: -.02em;
+    line-height: 1.18;
+    text-wrap: balance;
+  }
+  .lede { margin: 0; max-width: 62ch; font-size: 17.5px; color: var(--ink-soft); font-weight: 300; }
+
+  .changes {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 14px 18px;
+  }
+  .changes h3 { margin: 0 0 4px; font-size: 15.5px; font-weight: 600; }
+  .changes p { margin: 0; font-size: 15px; color: var(--muted); max-width: 70ch; }
+
+  .toc {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .toc a {
+    background: var(--surface);
+    padding: 12px 15px;
+    text-decoration: none;
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .toc a:hover, .toc a:focus-visible { background: var(--accent-soft); }
+  .toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .toc .k { font-family: var(--mono); font-size: 11.5px; font-weight: 600; letter-spacing: .08em; color: var(--accent); }
+  .toc .t { font-size: 15px; font-weight: 500; }
+  .toc .c { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  section { display: flex; flex-direction: column; gap: 16px; scroll-margin-top: 20px; }
+
+  h2 {
+    margin: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -.01em;
+    padding-bottom: 9px;
+    border-bottom: 2px solid var(--ink);
+  }
+  h2 .code {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    color: var(--accent);
+  }
+  h2 .sub { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: auto; }
+
+  .intro { margin: 0; font-size: 15.5px; color: var(--muted); max-width: 70ch; }
+
+  .rules { display: flex; flex-direction: column; gap: 0; }
+  .rule {
+    display: grid;
+    grid-template-columns: 88px 1fr;
+    gap: 16px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line-soft);
+    align-items: baseline;
+  }
+  .rule:last-child { border-bottom: 0; }
+  .rule .id {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .rule .txt { font-size: 16.5px; }
+  .rule .txt b { font-weight: 600; }
+  .rule .txt em {
+    font-style: normal;
+    font-family: var(--mono);
+    font-size: 14.5px;
+    background: var(--surface-alt);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .rule .txt .src {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--faint);
+    margin-left: 6px;
+    white-space: nowrap;
+  }
+
+  .group {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 6px 20px;
+  }
+
+  .gh {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: var(--accent);
+    margin-top: 4px;
+  }
+
+  .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; min-width: 720px; background: var(--surface); font-size: 15px; }
+  th, td { text-align: left; padding: 10px 13px; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  thead th {
+    background: var(--surface-alt);
+    font-size: 12.5px; font-weight: 600; color: var(--muted);
+    white-space: nowrap; border-bottom: 1px solid var(--line);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.role { font-weight: 600; white-space: nowrap; }
+  td.lvl { font-family: var(--mono); font-size: 13px; color: var(--muted); white-space: nowrap; }
+
+  .flow {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 14.5px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 4px; padding: 14px 16px;
+  }
+  .flow span.s {
+    background: var(--accent-soft); color: var(--accent);
+    padding: 3px 10px; border-radius: 3px; font-weight: 600;
+  }
+  .flow span.arw { color: var(--faint); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-size: 14.5px;
+    background: var(--out-bg); color: var(--out);
+    border-radius: 4px; padding: 6px 12px;
+  }
+
+  .opens { display: flex; flex-direction: column; gap: 12px; }
+  .open {
+    display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: start;
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--k); border-radius: 4px; padding: 14px 16px;
+  }
+  .open--block { --k: var(--block); }
+  .open--warn  { --k: var(--warn); }
+  .open--new   { --k: var(--new); }
+  .open h3 { margin: 0 0 3px; font-size: 15.5px; font-weight: 600; }
+  .open p { margin: 0; font-size: 15px; color: var(--muted); max-width: 62ch; }
+  .tag {
+    font-family: var(--mono); font-size: 11.5px; font-weight: 500;
+    padding: 3px 8px; border-radius: 3px; white-space: nowrap;
+  }
+  .tag--block { background: var(--block-bg); color: var(--block); }
+  .tag--warn  { background: var(--warn-bg);  color: var(--warn); }
+  .tag--new   { background: var(--new-bg);   color: var(--new); }
+
+  .note {
+    margin: 0; font-size: 15px; color: var(--muted); max-width: 70ch;
+    background: var(--surface-alt); border-radius: 4px; padding: 12px 16px;
+  }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    font-family: var(--mono); font-size: 12.5px; color: var(--faint);
+    display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+
+  @media (max-width: 560px) {
+    .wrap { padding: 38px 16px 70px; gap: 42px; }
+    .rule { grid-template-columns: 1fr; gap: 2px; }
+    h2 .sub { margin-left: 0; flex-basis: 100%; }
+    .rule .txt .src { display: block; margin-left: 0; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">1차 범위 · 확정 정책 · 2026-10-19 기준</div>
+    <h1>WHALE ERP 운영 정책</h1>
+    <p class="lede" data-h="lede">기획 문서와 목업에 흩어져 있던 규칙을 주제별로 모아 번호를 붙였습니다. 개발·리뷰·QA에서 이 번호로 참조하십시오. 8월 31일 판을 9월 21일까지의 결정으로 다시 썼고(이후 결정도 이어 반영해 지금은 10월 19일 기준), 그사이 뒤집힌 규칙이 여럿이라 번호도 새로 매겼습니다. 아직 정해지지 않은 것과 1차에서 제외한 것은 문서 끝에 따로 모았습니다.</p>
+    <div class="changes">
+      <h3>8월 31일 판에서 바뀐 것</h3>
+      <p data-h="chg">8월 31일 판에서 크게 바뀐 다섯 가지입니다. 출퇴근은 전용 기기를 두지 않고 직원 근무 앱에서 GPS로 판정합니다. 근로계약 상태가 다섯 개에서 여섯 개로 갈라졌고(10월 12일 임시저장, 10월 16일 수정 요청을 더해 지금은 여덟) 날인 기한은 30일입니다. 급여는 기본급·주휴수당·연장수당을 시스템이 계산하고 나머지 지급 항목과 공제는 관리자가 넣습니다. 업무 범위는 BP를 먼저 고르는 방식을 버리고 선택기 한 곳에서 하나만 고릅니다. 운영 알림은 상세로 들어가면 읽음으로 바뀝니다. 계정·로그인, 신고 정보, 홈 현황, 목록 규칙은 이번에 새로 들어온 절입니다.</p>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <a href="#acc"><span class="k">ACC</span><span class="t">계정·로그인</span><span class="c">23개</span></a>
+    <a href="#scp"><span class="k">SCP</span><span class="t">업무 범위</span><span class="c">8개</span></a>
+    <a href="#hom"><span class="k">HOM</span><span class="t">홈 현황</span><span class="c">8개</span></a>
+    <a href="#joi"><span class="k">JOI</span><span class="t">초대·가입</span><span class="c">10개</span></a>
+    <a href="#ctr"><span class="k">CTR</span><span class="t">근로계약</span><span class="c">29개</span></a>
+    <a href="#tax"><span class="k">TAX</span><span class="t">신고 정보</span><span class="c">9개</span></a>
+    <a href="#pay"><span class="k">PAY</span><span class="t">근무·급여</span><span class="c">21개</span></a>
+    <a href="#att"><span class="k">ATT</span><span class="t">출퇴근</span><span class="c">32개</span></a>
+    <a href="#ntf"><span class="k">NTF</span><span class="t">알림</span><span class="c">27개</span></a>
+    <a href="#cnt"><span class="k">CNT</span><span class="t">콘텐츠·문의</span><span class="c">18개</span></a>
+    <a href="#lst"><span class="k">LST</span><span class="t">목록·시간</span><span class="c">7개</span></a>
+    <a href="#ret"><span class="k">RET</span><span class="t">보존·파기</span><span class="c">9개</span></a>
+    <a href="#prm"><span class="k">PRM</span><span class="t">권한</span><span class="c">10개</span></a>
+  </nav>
+
+  <section id="acc">
+    <h2><span class="code">ACC</span> 계정·로그인 <span class="sub">이번 판에서 새로 들어온 절</span></h2>
+    <p class="intro" data-h="acc">관리자 계정과 직원 계정은 생기는 방식이 반대이고 겹치는 사람도 없습니다. 그래서 테이블도 나눕니다. 관리자 계정은 BP 마스터가 사업자 회원가입으로 만들고 그 아래 계정은 만들어 줍니다. 직원 계정은 초대를 받은 본인이 이름·휴대전화번호·생년월일·성별·외국인 여부와 개인정보를 직접 넣어 가입하고, 넣은 값은 날인 전에 근로계약서 값과 맞춰 봅니다(JOI-10). <b>아래 규칙 가운데 ACC-04부터 ACC-20까지와 ACC-22·ACC-23은 직원 계정에 관한 것이고 3팀이 정합니다.</b> 관리자 로그인·사업자 회원가입·계정 찾기·마이페이지 화면은 1팀 영역이라 ACC-02·ACC-03·ACC-21에는 <b>1팀이 정한 값</b>과 3팀이 그 위에서 쓰는 것만 적었습니다. 1팀은 2026년 9월 23일에 이 세 자리를 모두 확정했습니다.</p>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">ACC-01</span><span class="txt">관리자 계정과 직원 계정은 <b>서로 다른 테이블</b>로 둔다. 관리자이면서 직원인 사람은 없다.<span class="src">ERD</span></span></div>
+        <div class="rule"><span class="id">ACC-02</span><span class="txt"><b>1팀이 정했다.</b> 사업자 회원가입과 그 화면은 1팀 영역이다. <b>가입할 때 BP 유형을 고르지 않고</b> 직영·가맹 구분은 점포 유형이 맡는다(2026-09-23 확정). 3팀이 쓰는 것은 <b>가맹점은 가입하지 않고 본사가 만들어 준 계정으로 로그인한다</b>는 사실 하나뿐이다.<span class="src">1팀 S-RCJXIG · AUTH-3 확정</span></span></div>
+        <div class="rule"><span class="id">ACC-03</span><span class="txt"><b>1팀이 정했다.</b> 웹 로그인 화면의 구성과 관리자 로그인 식별자는 1팀 영역이다. 관리자는 <b>아이디와 비밀번호</b>로 로그인하고, 비밀번호는 <b>임시 비밀번호를 메일로</b> 받아 되찾는다(2026-09-23 확정). 3팀이 쓰는 것은 <b>직원은 웹으로 로그인하지 않고 직원 근무 앱으로 들어온다</b>는 것과, 그 화면에 초대 확인 탭을 두지 않는다는 것이다.<span class="src">1팀 S-XJDKSI · S-EOMSRG · AUTH-1 · AUTH-4 확정</span></span></div>
+        <div class="rule"><span class="id">ACC-04</span><span class="txt">직원의 로그인 아이디는 <b>가입할 때 직원이 정한 이메일</b>이다. 가입 때 넣은 휴대전화번호는 아이디가 아니라 <b>초대 유형 판별·소속 확인의 매칭 키와 본인 대조(JOI-10)</b>에만 쓴다(2026-10-19 재영).<span class="src">LOGIN-1</span></span></div>
+        <div class="rule"><span class="id">ACC-05</span><span class="txt">로그인 화면에 <b>「자동로그인」 체크</b>(기본 꺼짐)를 둔다. 켜고 로그인하면 <b>마지막 접속으로부터 30일</b>, 끄고 로그인하면 <b>마지막 접속으로부터 7일</b> 로그인 상태를 유지한다(2026-10-20 재영 — 09월 「늘 30일」을 바꿈). 갱신해도 처음 정한 길이로만 늘어나며, 끄고 로그인한 접속이 갱신으로 30일이 되지는 않는다(2026-10-20 노영주, api #85). 지문·얼굴 인증은 1차에 넣지 않는다.<span class="src">LOGIN-4 · 2026-10-20 재영</span></span></div>
+        <div class="rule"><span class="id">ACC-06</span><span class="txt">로그인을 <b>5회</b> 틀리면 <b>5분</b> 동안 잠그고 그 시간이 지나면 자동으로 풀린다. 잠금 시간은 단계 없이 5분으로 고정하고, 풀리거나 <b>로그인에 성공하면</b> 실패 횟수를 0으로 되돌린다(5회는 연속 실패). 잠긴 동안에는 비밀번호가 맞아도 들어오지 못하고 「5분 뒤에 다시 시도하거나 비밀번호를 재설정하라」는 잠금 안내를 받는다. 잠긴 동안의 시도는 실패 횟수와 잠금 시간에 더하지 않는다. 비밀번호를 새로 정하면 잠금과 실패 횟수가 함께 지워진다. 이메일 찾기(비밀번호 찾기 화면의 이메일 칸 아래 「이메일이 기억나지 않나요」로 들어간다, 2026-10-20 재영)의 시도 차단도 같은 규칙이다. 다만 이메일 찾기의 성공은 그 휴대전화번호의 탈퇴하지 않은 계정이 <b>모두</b> 맞았을 때만 실패 횟수를 0으로 되돌린다. 일부만 맞으면 맞은 계정의 이메일은 보여 주되 실패 횟수는 그대로 둔다(같은 번호를 여러 계정이 쓸 때 남의 계정 대입을 막기 위해, 2026-10-13 노영주 제안 · 재영 승인).<span class="src">LOGIN-5 · 2026-10-07 노영주 제안 · 재영 승인</span></span></div>
+        <div class="rule"><span class="id">ACC-07</span><span class="txt">로그인 실패 안내는 <b>아이디와 비밀번호 중 어느 쪽이 틀렸는지 구분해 알려 주지 않는다.</b><span class="src">LOGIN-5</span></span></div>
+        <div class="rule"><span class="id">ACC-08</span><span class="txt">비밀번호 재설정은 <b>아이디 이메일로 보내는 핀</b>으로 한다. 핀은 숫자와 영문자를 섞은 여섯 자리이고 <b>낸 시각부터 10분</b> 동안 쓸 수 있다. 핀 확인과 새 비밀번호 저장을 모두 이 한 시계로 판정하고, 핀이 맞은 뒤 따로 시간을 주지 않는다. 새 비밀번호를 저장할 때 핀을 다시 받아 검증한다. 핀 발급 화면에는 계정 유무와 상관없이 누구에게나 「아직 가입을 마치지 않았다면 받은 초대 링크로 가입을 먼저 마치고, 링크가 만료됐으면 근무지에 다시 초대해 달라고 요청하라」는 안내를 둔다(WHALEERP-174). 핀이나 재설정 링크로 새 비밀번호를 정하면 로그인 화면으로 보내 새 비밀번호로 로그인하게 하고, 다른 기기의 접속이 모두 끊겼다고 알린다(WHALEERP-176, 2026-10-13·14 재영).<span class="src">LOGIN-2·3 · ME-1 · 2026-10-08 노영주 제안 · 재영 승인</span></span></div>
+        <div class="rule"><span class="id">ACC-09</span><span class="txt">핀은 하나당 <b>5회</b>까지 입력한다. 5회 틀리면 그 핀은 닫히고 <b>새 핀을 받아야</b> 한다. 남은 시도 횟수는 보이지 않고 「다섯 번 틀리면 새로 받아야 한다」고만 안내한다 — 틀림·만료·닫힘·없는 계정을 같은 응답으로 답하므로 횟수를 주면 가입 여부가 드러난다(WHALEERP-175). 기다리게 하는 쿨다운은 두지 않는다. 새 핀을 내면 이전 핀과 시도 횟수는 무효가 되고, 발급은 1분 간격·하루 10회까지다.<span class="src">LOGIN-3 · 2026-10-08 노영주 제안 · 재영 승인</span></span></div>
+        <div class="rule"><span class="id">ACC-10</span><span class="txt">핀은 발급 뒤 <b>1분</b> 동안 다시 발급하지 못하고(발급 간격이다 — 입력을 기다리게 하는 쿨다운은 ACC-09대로 없다) 하루 <b>10회</b>까지 받을 수 있다. 다시 발급하면 이전 핀과 시도 횟수를 모두 무효로 한다.<span class="src">S-WSPEYJ · 2026-10-08 쿨다운 없앰</span></span></div>
+        <div class="rule"><span class="id">ACC-11</span><span class="txt">관리자 초기화는 <b>보조 경로</b>다. <b>재설정 링크</b>가 직원 이메일로 가고 <b>24시간</b> 유효하며, 직원이 그 링크를 열어 새 비밀번호를 정한다. 시스템이 만든 비밀번호를 보내지 않으므로 관리자도 메일함을 보는 사람도 그 값을 알 수 없다. 관리 범위 점포에 <b>재직 중인 직원</b>에게만 보내고(가입 전·퇴직·탈퇴는 거부), 같은 계정에 <b>1분 안</b> 다시 보내지 못하며 하루 횟수 제한은 없다.<span class="src">LOGIN-6 · 2026-09-18 재영 · 2026-10-08 노영주 정리</span></span></div>
+        <div class="rule"><span class="id">ACC-19</span><span class="txt">재설정 링크와 핀은 <b>한 번만 쓴다.</b> 링크나 핀 어느 쪽으로든 새 비밀번호를 정하면 <b>남은 링크와 핀을 모두 닫는다</b>. 관리자가 링크를 새로 보내면 앞서 보낸 링크와 핀이 바로 무효가 되지만, <b>직원 본인의 핀 요청은 관리자 링크를 무효로 하지 않는다</b>(핀 요청은 이메일만 알면 누구나 보낼 수 있다). 열어만 보고 정하지 않았으면 기한 안에는 아직 쓸 수 있다. 무효 사유는 저장하지 않고 닫힌 시각만 남긴다.<span class="src">2026-09-18 재영 · 2026-10-08 노영주 제안 · 재영 승인</span></span></div>
+        <div class="rule"><span class="id">ACC-12</span><span class="txt">비밀번호는 문자 종류를 <b>3가지 이상 섞으면 8자, 2가지면 10자</b> 이상으로 하고 <b>20자</b>까지 받는다. 아이디 이메일과 같거나 그 앞부분을 그대로 쓴 값은 받지 않는다. 주기적 변경은 강제하지 않고 재사용도 막지 않는다.<span class="src">ME-4</span></span></div>
+        <div class="rule"><span class="id">ACC-13</span><span class="txt">로그인 아이디인 이메일을 바꾸려면 <b>현재 비밀번호를 다시 넣고</b>(2026-10-20 재영 — 토큰만으로 바꾸면 탈취한 사람이 이메일을 바꿔 계정을 가져갈 수 있어서) <b>새 이메일로 핀을 받아</b> 일치를 확인한다. 핀은 15분 동안 유효하고 5회 틀리면 닫히며, 발급은 1분 간격·하루 10회까지다. 다른 계정이 쓰는 주소는 받지 않는다. 바꿔도 접속은 이어지고 다음 로그인부터 새 이메일을 쓰며, 옛 주소로 나간 비밀번호 재설정 핀과 관리자 재설정 링크는 닫는다(2026-10-20 노영주, api #85). 내 정보에서 비밀번호를 바꿀 때는 현재 비밀번호를 확인하고, 바꾸면 그 기기는 로그인이 이어지고 다른 기기는 다시 로그인하며 열려 있던 재설정 핀·링크를 닫는다. 현재 비밀번호를 틀려도 로그인 잠금 횟수(ACC-06)에는 세지 않고, 대신 계정마다 10분에 10번까지만 요청을 받는다(2026-10-20 노영주, api #85). <b>생년월일은 가입한 뒤 직원이 고치지 않고</b>, 잘못 넣었으면 관리자가 확인해 정정한다(TAX-09) (2026-10-19 재영). <b>이름·성별·외국인 여부의 직원 수정은 본인인증 도입 검토가 끝날 때까지 보류한다</b>(2026-10-19 재영). <b>휴대전화번호는 1차에서 직원도 관리자도 바꾸지 않는다</b> — 계정의 신원 기준이다(가입 전 직원의 번호는 관리자가 날인 전에 고친다, CTR-28) (2026-10-19 재영). <b>이름·휴대전화번호는 본인인증을 붙인 뒤 직원이 바꾸는 방향으로 2차에 둔다</b>(쟁점 ME-6, 2026-10-20 재영). 2차에 정할 것은 본인인증 업체 연동, 직원 레코드에 따로 있는 이름·번호를 함께 바꿀지, 날인 대기 근로계약서의 본인 대조가 어긋날 때의 처리, 번호 중복·옛 번호로 나간 초대와 초대 코드·알림톡 받는 번호, 생년월일·성별·외국인 여부도 함께 맞출지, 관리자 운영 알림이다.<span class="src">ME-3 · ME-6 · 2026-10-16 김민식 · 2026-10-19 · 10-20 재영</span></span></div>
+        <div class="rule"><span class="id">ACC-14</span><span class="txt">비밀번호는 되돌릴 수 없는 형태로만 저장하고 변경 이력에 값을 남기지 않는다. 재설정 요청과 변경은 <b>요청자와 시각</b>을 이력으로 남긴다.<span class="src">S-WSPEYJ</span></span></div>
+        <div class="rule"><span class="id">ACC-15</span><span class="txt">직원 계정은 <b>퇴직해도 막지 않는다</b>. 직원이 앱에서 탈퇴하지 않는 한 로그인할 수 있다. 계정 상태는 가입 완료·<b>탈퇴</b> 둘이고(연결 보류는 없앴다, 2026-10-19 재영), 탈퇴한 계정은 비밀번호가 맞아도 로그인되지 않으며 없는 계정과 똑같이 응답해 가입했던 사실을 드러내지 않는다(2026-10-07). 점포의 정보(TO-DO·근무스케줄·출퇴근 등)는 그 점포에 <b>체결 완료 계약이 있어야</b> 보인다(CTR-29). 근무지가 없으면 "근무지가 없습니다"를 보이고 급여 탭에서 급여명세서를 조회한다.<span class="src">HOME-5 · 2026-09-17 · 2026-10-16 김민식 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">ACC-16</span><span class="txt">직원이 로그인 이메일을 잊어 근무지 점포에 물으면 관리자가 직원 상세에서 확인해 알려 준다. <b>근무지에 직접 와서 물은 경우에만</b> 알려 주고 전화나 메시지로는 알려 주지 않는다.<span class="src">LOGIN-10 · 2026-09-17</span></span></div>
+        <div class="rule"><span class="id">ACC-17</span><span class="txt">관리자 웹 직원 상세의 이메일은 <b>가리지 않고</b> 보여 준다. 관리자는 조회만 하고 대신 고치지 않는다(STAFF-9).<span class="src">2026-09-17</span></span></div>
+        <div class="rule"><span class="id">ACC-18</span><span class="txt"><b>휴면 계정은 두지 않는다.</b> 오래 접속하지 않아도 계정을 휴면으로 돌리지 않고, 직원이 탈퇴할 때까지 유지한다.<span class="src">2026-09-17 재영</span></span></div>
+        <div class="rule"><span class="id">ACC-20</span><span class="txt">주소는 <b>외부 주소 검색 API</b>로 도로명 주소를 고르고 <b>상세 주소만 직접</b> 넣는다. <b>내 정보와 계정 등록 화면에 모두 같이</b> 쓴다. 어느 API를 쓸지는 개발에서 정한다. 주소는 계정에 하나라 모든 소속에 같이 보이고, 이미 보낸 근로계약서(당사자 칸의 사본)에는 반영하지 않는다. 상세 주소를 비우고 저장하면 비워진다(2026-10-20 노영주, api #85).<span class="src">ME-2 · 2026-09-17 재영 · 2026-10-20 노영주</span></span></div>
+        <div class="rule"><span class="id">ACC-21</span><span class="txt"><b>1팀이 정했다.</b> 관리자 웹에서 <b>스스로 로그아웃하거나 탈퇴를 마치면 비로그인 홈</b>으로, <b>접속이 만료되면 로그인 화면</b>으로 보낸다. 비로그인 홈은 3팀이 만들고 완료 문구를 따로 띄우지 않는다.<span class="src">1팀 S-TMRGOG · MYPAGE-3 확정</span></span></div>
+        <div class="rule"><span class="id">ACC-22</span><span class="txt"><b>직원은 만 19세 이상만 등록한다</b>(민법상 미성년자 제외). 근로계약서 초안(전자계약·종이 계약 모두)에서 직원 생년월일을 필수로 받고, 계약 시작일 기준 만 19세 미만이면 초안 저장과 종이 계약 등록을 막고 「만 19세 미만 직원은 등록할 수 없습니다. 근로계약·출퇴근·급여는 점포에서 따로 관리해 주세요」를 보인다. 초대도 나가지 않는다. 가입할 때 <b>직원이 넣은 생년월일</b>로 한 번 더 확인한다. 가입 값이 초안과 달라도 <b>계약서 값을 바꾸지 않는다</b> — 계약서 값은 관리자만 고치고, 다르면 본인 대조(JOI-10)가 맞지 않아 날인할 수 없으며 직원이 수정 요청(CTR-27)을 보낸다(2026-10-16 김민식). 가입 때 넣은 생년월일이 가입 시점에 만 19세 미만이면 계정을 만들지 않고 가입을 멈추며 「만 19세 미만은 WHALE ERP로 근로계약과 출퇴근을 관리하지 않습니다. 근무지 관리자에게 알려 주세요.」를 보이고, 초대 상태를 「가입 불가(만 19세 미만)」로 바꿔 관리자에게 운영 알림을 보낸다. 계정 등록 화면은 보내기 전에 넣은 생년월일로 만 나이를 계산해, 만 19세 미만이면 「생년월일이 ○○○○년 ○월 ○일 맞습니까?」로 한 번 더 확인받은 뒤 보낸다. 입력 실수 한 번에 초대가 끝나지 않게 하려는 것이고 판정 기준은 그대로다(2026-10-22 재영, WHALEERP-142). 이미 계정이 있는 직원(소속 추가 확인·복귀 확인·재직)은 <b>계정의 생년월일</b>로 본인 대조한다. 미성년 직원의 근로계약·출퇴근·급여와 연소근로자 특례(가족관계증명서·동의서 비치, 근로시간 제한)는 채용한 점포가 시스템 밖에서 수기로 관리한다. 그래서 위치정보법의 14세 미만 법정대리인 동의 절차(제25조)는 두지 않는다. 이 판단이 맞는지, 그리고 <b>생년월일을 직원이 직접 넣어</b> 나이를 확인하는 것으로 충분한지는 ATT-8에서 확인한다(2026-10-19 재영).<span class="src">2026-09-30 재영 · 우리 판단 · 법무 확인 대기 · 2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-125·128</span></span></div>
+        <div class="rule"><span class="id">ACC-23</span><span class="txt">직원 근무 앱 가입의 계정 등록 화면에서 <b>이름·휴대전화번호·생년월일(8자리)·성별·외국인 여부</b>를 직접 받아 계정에 저장하고(본인 대조 JOI-10, 2026-10-16 김민식), <b>성별은 필수</b>로 받아 빈 채로 가입하지 않는다(2026-10-21 재영). 약관 동의를 받는다. <b>필수 둘</b>(직원 앱 서비스 이용약관 · 개인정보 수집·이용 동의)과 <b>선택 하나</b>(마케팅 정보 수신)이고, 약관마다 「보기」를 두며 필수를 모두 체크해야 다음으로 넘어간다. 가맹 점포 레코드로 가입할 때만 본사 제공 동의(선택, ATT-30)를 같은 화면에 둔다. 위치정보 동의는 가입 때 받지 않고 첫 출근 때 따로 받는다(ATT-06).<span class="src">JOIN-6 · 2026-10-08 재영 · 2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-125</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="scp">
+    <h2><span class="code">SCP</span> 업무 범위 정책 <span class="sub">8월 판에서 전면 교체</span></h2>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">SCP-01</span><span class="txt">업무 범위는 <b>상단 범위 선택기 한 곳</b>에서만 정한다. 화면 안에 점포·근무지 필터를 따로 두지 않는다.<span class="src">STAFF-8</span></span></div>
+        <div class="rule"><span class="id">SCP-02</span><span class="txt">범위는 <em>전체 · 직영 · 가맹 · 개별 점포</em> 중 <b>하나만</b> 고른다. 여러 점포를 임의로 묶지 않는다.<span class="src">STAFF-10</span></span></div>
+        <div class="rule"><span class="id">SCP-03</span><span class="txt">BP는 <b>로그인한 계정이 정한다.</b> 선택기에서 BP를 고르지 않으며, 플랫폼 관리자가 BP를 고르는 화면은 1차 범위 밖이다.<span class="src">STAFF-10</span></span></div>
+        <div class="rule"><span class="id">SCP-04</span><span class="txt">범위는 <b>데이터만 가른다.</b> 메뉴와 권한은 로그인한 계정이 정하고 범위를 바꿔도 달라지지 않는다.<span class="src">STAFF-11</span></span></div>
+        <div class="rule"><span class="id">SCP-05</span><span class="txt">범위는 <b>서버에 저장하지 않고</b> 세션 동안만 유지한다. 로그인하면 늘 <b>전체</b>에서 시작한다. 전체는 그 계정의 권한 범위 안 모든 점포를 뜻한다.<span class="src">HOME-4 · STAFF-8</span></span></div>
+        <div class="rule"><span class="id">SCP-06</span><span class="txt">범위를 바꾸면 보던 화면에 남지 않고 <b>로그인 후 홈으로 돌아간다.</b><span class="src">STAFF-12</span></span></div>
+        <div class="rule"><span class="id">SCP-07</span><span class="txt">고를 점포가 하나뿐이면 선택기를 <b>숨긴다.</b> 점포가 없는 BP에게는 빈 목록 대신 <b>점포를 먼저 등록하라는 안내</b>를 보인다.<span class="src">STAFF-8 · HOME-4</span></span></div>
+        <div class="rule"><span class="id">SCP-08</span><span class="txt">서비스 바로가기는 <b>역할과 구독 상태를 모두 충족</b>할 때만 제공한다. 여러 역할을 가진 관리자는 모든 역할의 허용 메뉴를 합쳐 본다.<span class="src">S-PDWKZO</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="hom">
+    <h2><span class="code">HOM</span> 홈 현황 정책 <span class="sub">이번 판에서 새로 들어온 절</span></h2>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">HOM-01</span><span class="txt">모든 집계는 <b>현재 고정된 업무 범위</b>를 기준으로 하며 범위를 바꾸면 즉시 다시 집계한다.<span class="src">S-JTHJWL</span></span></div>
+        <div class="rule"><span class="id">HOM-02</span><span class="txt">재직 직원은 계정 연결 여부와 관계없이 <b>퇴직 처리되지 않은 직원 레코드</b>로 센다. 날인 전 직원도 세고 <b>임시저장 계약만 있는 레코드는 세지 않는다</b>(CTR-29). 미체결 계약은 상태가 <b>발송 대기·서명 대기·수정 요청</b>인 근로계약으로 센다(2026-10-19 재영).<span class="src">S-JTHJWL · 2026-10-16 김민식 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">HOM-03</span><span class="txt">미조치는 점포별 <b>서명 대기 계약 · 근로계약 수정 요청 · 소속 확인 거절 · 긴급 TO-DO 미완료</b> 건수의 합이다. 연결 확인 필요는 연결 보류를 없애 뺐다(2026-10-19 재영). 소속 확인 거절은 그 직원 레코드의 마지막 초대가 거절이고, 그 뒤 재발송·새 근로계약·퇴직 처리가 없는 동안 남는다(2026-10-27 재영).<span class="src">S-JTHJWL · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">HOM-04</span><span class="txt">경고 밴드는 계약 종료일이 <b>7일 이내</b>로 남은 갱신 예정 계약이 있을 때만 띄운다.<span class="src">HOME-5</span></span></div>
+        <div class="rule"><span class="id">HOM-05</span><span class="txt">로그인 후 홈은 <b>업무 범위가 점포 하나이면 점포 하나 화면</b>을, 여러 점포이면 점포별 현황 표를 보인다. 가맹마스터·가맹관리자는 늘 점포 하나 화면이고, BP 마스터·BP 관리자는 범위 선택기에서 점포 하나를 고르면 점포 하나 화면으로 바뀐다. 점포 하나 화면에는 처리 대기를 두지 않는다.<span class="src">S-JTHJWL · HOME-6 · 2026-10-06 재영</span></span></div>
+        <div class="rule"><span class="id">HOM-06</span><span class="txt">점포별 현황 표는 <b>미조치가 많은 순으로 일곱 곳</b>까지 보이고 나머지는 전체 보기로 넘긴다. 표에 전체·직영·가맹 탭은 두지 않는다 — 상단 범위 선택기와 겹친다(SCP-01, 쟁점 HOME-8, 2026-10-27 재영).<span class="src">HOME-5</span></span></div>
+        <div class="rule"><span class="id">HOM-07</span><span class="txt">처리 대기는 건수가 0인 유형을 숨기고 <em>경고 밴드 대상 → 계약 → 직원 → 문의 → TO-DO</em> 순으로 세운다. 서명 대기 계약은 발송 직후부터 모두 보이고 경과 일수를 함께 적는다. <b>근로계약 수정 요청</b> 건도 계약에 넣는다(운영 알림은 보내지 않는다, 2026-10-19 재영). 문의 줄은 로그인한 관리자가 쓴 문의 가운데 <b>마지막 답변이 최근 7일 안에 달린 것</b>만 세고, 읽음 표시는 두지 않는다. 수치 카드 넷째 칸은 「내 문의」이고, 이 카드와 점포 하나 화면의 「내 문의」 카드는 로그인한 관리자가 쓴 문의만 센다. 플랫폼 마스터·플랫폼 관리자의 로그인 후 홈은 현황 없이 안내만 두고, 도입문의 접수 대기는 1차에 넣지 않는다(2026-10-27 재영).<span class="src">S-JTHJWL · HOME-5 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">HOM-08</span><span class="txt">홈은 <b>운영 알림을 따로 나열하지 않는다.</b> 알림은 상단 진입점과 알림함에서만 본다. 현황은 진입할 때와 범위를 바꿀 때 조회하고 그 밖에는 수동 새로고침으로만 갱신한다.<span class="src">S-JTHJWL</span></span></div>
+        <div class="rule"><span class="id">HOM-09</span><span class="txt">여러 점포 화면에서 그 메뉴의 조회 권한이 없어 값이 없는 영역은 <b>「—」로 두지 않고 숨긴다</b> — 「—」가 0건과 권한 없음을 같이 뜻하지 않게 하기 위해서다. 점포별 현황 표는 값이 없는 열(재직 직원 · 미체결 계약 · 오늘 출근)을 숨기고, 수치 카드는 숨긴 카드 자리를 비워 두지 않고 남은 카드가 칸을 나눠 채운다. 미체결 계약 수는 점포별 현황 표에만 둔다(재직 직원 카드에 두면 직원 정보 관리 권한이 없을 때 근로계약 권한이 있어도 함께 사라진다). 본사 역할이 가맹 점포를 포함해 볼 때는 표 아래에도 미동의 가맹 직원을 세지 않는다는 안내를 보이는 열에 대해서만 붙인다(ATT-30). 처리 대기의 갱신 예정 · 답변완료 · 소속 확인 거절 줄은 목록 api에 그 조건이 없어 묶음 목록을 연다 — 알려진 한계로 둔다(쟁점 HOME-11, 2026-10-28 재영, WHALEERP-620).<span class="src">HOME-11 · 2026-10-28 재영</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="joi">
+    <h2><span class="code">JOI</span> 초대·가입 정책</h2>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">JOI-01</span><span class="txt">초대 유형은 <em>가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인</em> 넷이며 <b>시스템이 계정 조회 결과로 정한다.</b> 관리자가 고르지 않는다.<span class="src">S-VVGXVJ</span></span></div>
+        <div class="rule"><span class="id">JOI-02</span><span class="txt">가입 초대와 재초대는 <b>토큰 링크와 초대 코드</b>를 근로계약서에 넣은 휴대전화번호로 <b>알림톡 또는 SMS</b>로 보낸다. 링크의 토큰은 주소 경로가 아니라 <code>#token=</code> 뒤에 싣는다(재설정 링크와 같은 방식). 링크로 들어오면 바로 초대 확인으로 가고, 링크를 열 수 없으면 앱에서 <b>휴대전화번호와 초대 코드</b>를 넣어 시작한다. 둘이 모두 맞아야 열린다. 초대 코드는 8자리 대문자와 숫자이고 헷갈리는 0·O·1·I는 쓰지 않는다. 같은 번호로 5번 틀리면 30분 동안 막고(초대가 없는 번호도 같은 기준으로 세어 잠금 여부로 초대가 있는지 드러나지 않게 한다), 관리자가 재발송하면 그 번호의 실패 횟수와 잠금은 풀려 새 코드로 다시 시작한다. 접속 IP 기준 제한은 두지 않는다(2026-10-20 재영 — 10-19의 IP 제한을 뺌). 잠금 화면은 「30분 뒤 다시 시도하거나, 근무지 관리자에게 재발송을 요청해 주세요」로 안내한다(2026-10-19 재영). 관리자 웹에는 초대 코드를 보이지 않고 해시로만 저장한다. 가입 화면의 휴대전화번호는 초대에 묶인 번호로 고정하고 직원이 고치지 않는다. 서버는 가입 요청의 번호를 받지 않고 초대나 코드 확인 결과에서 가져온다 — 계정 번호는 매칭 키라 고칠 수 있으면 남의 번호로 가입해 그 사람의 다음 초대를 막을 수 있다. 번호가 틀렸으면 관리자가 날인 전에 당사자 정보를 고쳐 다시 초대한다(CTR-28) (2026-10-19 재영, 쟁점 JOIN-7). 알림톡 버튼이 없어 지금은 비즈뿌리오 SMS 대체로 링크가 간다(api #59). 링크를 받지 못했으면 근로계약서를 작성한 관리자가 <b>직원에게 전화로 날인을 요청하며 번호를 확인한다</b>(JOI-07). 소속 추가 확인과 복귀 확인은 <b>기존 계정의 앱 푸시와 앱 안 확인 화면</b>으로 전달한다(2026-10-16 김민식).<span class="src">S-VVGXVJ · 2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-125</span></span></div>
+        <div class="rule"><span class="id">JOI-03</span><span class="txt">모든 초대는 발송일로부터 <b>30일</b> 유효하다. 만료돼도 미가입 직원 레코드와 계약 초안은 남고, 재초대는 <b>새 초대 객체</b>로 만들되 같은 초안을 쓴다. 재발송하거나 재초대하면 앞의 링크와 초대 코드는 함께 무효가 된다(2026-10-19 재영).<span class="src">JOIN-2 · JOIN-7 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">JOI-04</span><span class="txt">가입하면 계정은 <b>초대 토큰의 직원 레코드에 이어진다.</b> 가입 때 넣은 휴대전화번호가 초안과 같은지로 연결을 가르지 않는다(2026-10-19 재영).<span class="src">JOIN-1 · 2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-125</span></span></div>
+        <div class="rule"><span class="id">JOI-05</span><span class="txt"><b>연결 보류는 두지 않는다.</b> 가입 값(이름·휴대전화번호·생년월일·성별·외국인 여부)이 계약서와 다르면 본인 대조(JOI-10)가 맞지 않아 <b>날인할 수 없고</b>, 직원이 수정 요청(CTR-27)을 보내 관리자가 계약서를 고친다(2026-10-19 재영).<span class="src">JOIN-1 · 2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-125</span></span></div>
+        <div class="rule"><span class="id">JOI-06</span><span class="txt"><b>가입 연결 확인은 없다.</b> 관리자가 보류 건을 승인하는 화면과 계정 상태 「연결 보류」를 두지 않고(ACC-15), 운영 알림 「가입 연결 보류」도 보내지 않는다(NTF-01). 관리자는 홈 처리 대기의 근로계약 수정 요청으로 고칠 계약을 찾는다(HOM-07) (2026-10-19 재영).<span class="src">STAFF-7 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">JOI-07</span><span class="txt">초대 링크를 받지 못했으면 근로계약서를 작성한 관리자가 <b>직원에게 전화로 날인을 요청하며 번호를 확인한다.</b> 번호가 틀렸으면 날인 전에 당사자 정보를 고쳐 새 번호로 다시 초대한다(CTR-28) (2026-10-16 김민식).<span class="src">S-VVGXVJ · 2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-125</span></span></div>
+        <div class="rule"><span class="id">JOI-08</span><span class="txt">소속 확인을 수락하면 <b>계정의 가입 정보(이름·생년월일·휴대전화번호·성별·외국인 여부)만</b> 새 레코드로 복사하고 다른 소속의 정보는 옮기지 않는다. 거절하면 레코드를 지우지 않고 <b>상태만 거절</b>로 둔다.<span class="src">S-VVGXVJ · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">JOI-09</span><span class="txt">초안을 저장하면 관리자가 「발송」을 따로 누르지 않아도 <b>곧바로 직원에게 알림이 나간다</b>(임시저장은 빼고). 가입 전 직원은 초대가 나가 발송 대기가 되고, 가입을 끝내면 근로계약서가 <b>관리자 개입 없이 자동으로</b> 발송돼 서명 대기가 된다. 계정이 이미 그 점포 레코드에 이어진 직원의 초안은 저장 즉시 발송해 곧바로 서명 대기가 된다. 관리자가 따로 하는 것은 재발송(CTR-10) 하나다(2026-10-19 재영). 계정은 있지만 그 점포 레코드에 아직 이어지지 않은 직원(소속 추가 확인·복귀 확인)의 초안은 <b>발송 대기</b>로 두고 「소속 추가 확인 요청」을 알림톡·메일로 보낸다. 직원이 로그인하면 날인 요청 팝업과 같은 모양의 <b>소속 추가 요청 팝업</b>(「소속 추가 요청이 있습니다.」·점포명·고용 형태, [확인하러 가기]·[다음에 하기])로 알리고, 팝업을 닫아도 찾을 수 있게 <b>나의 정보 - 소속 점포</b>에도 요청 점포를 보인다. 둘 다 소속 추가 확인 화면으로 간다. 수락하면 레코드에 계정을 잇고 서명 대기로 바꿔 날인 요청 알림을 보내며 날인 기한 30일은 이때부터 센다. 거절하면 확인창으로 한 번 확인받고 계약을 거부로 닫는다. 거절 사유는 받지 않는다(2026-10-30 김민식, WHALEERP-635). 답하지 않으면 요청(초대)만 30일 뒤 만료되고 계약은 발송 대기로 남는다(JOI-03). 관리자는 직원 목록에서 재발송해 소속 추가 확인 요청 알림톡·메일을 다시 보낸다 — 앞의 요청은 무효가 되고 30일을 새로 센다. 앱 알림 채널(WHALEERP-611)을 기다리지 않는다 (2026-10-26 재영). <b>초대 코드는 가입 첫 단계에서만 쓴다</b> — 가입한 사람이 초대 코드를 넣어 근무지를 더하는 화면은 두지 않는다(2026-10-28 재영). 가입한 사람이 받은 초대(가입 전에 받은 가입 초대 · 소속 추가 확인 · 복귀 확인)는 나의 정보 - 소속 근무지 목록 맨 위 「확인을 기다리는 요청」에 받은 때 최신순으로 고정해 보이고 거기서 수락한다. 그 아래에는 지금 소속 근무지와 퇴직한 근무지(퇴직 표시)를 보인다. 로그인하지 않은 채 「이미 계정이 있습니다」가 나오거나 로그인한 채 초대 링크를 열면 소속 근무지로 간다(2026-10-28 김민식, WHALEERP-603 · 604). 「확인을 기다리는 요청」에는 계정의 휴대전화번호와 함께 <b>계정 이름이 근로계약서(직원 레코드)의 이름과 같은 초대만</b> 보이고 수락할 수 있다. 이름은 본인 대조(JOI-10)처럼 공백을 지우고 영문은 대문자로 바꿔 비교하며, 다르면 목록에 나오지 않는다. 초대 코드 · 링크가 번호를 가진 증거였던 것을 대신해, 번호가 다른 사람에게 넘어갔을 때 옛 계정이 새 주인의 초대를 수락하지 못하게 하기 위해서다(2026-10-28 김민식, WHALEERP-603). 번호를 넘겨받은 사람이 <b>이름까지 같으면</b> 옛 계정이 그 초대를 수락할 수 있는 위험은 받아들인다 — 드물고, 잘못 이어져도 날인 전 본인 대조(생년월일·성별·외국인 여부)에서 막힌다. 번호를 넘겨받은 사람이 가입하지 못하는 문제와 함께 번호 변경을 붙이는 2차에서 다시 본다(2026-10-29 재영, api #180 리뷰). 이름이 다른 소속 추가 확인·복귀 확인 요청은 소속 추가 요청 팝업에도 띄우지 않고 수락도 막는다. 관리자 쪽은 소속 추가 확인 대기로 남는다. 발송 전 이름 불일치 경고는 두지 않는다 — 근로계약서에 넣은 이름 · 번호 그대로 보내고, 일하기로 한 직원이 받지 못했으면 관리자가 전화로 확인한다. 이름을 잘못 넣었으면 근로자 정보 수정으로 고치고, 고치면 다시 발송되어 그 계정에 보인다. 소속 추가 확인 <b>메일은 이름이 계정 이름과 같을 때만</b> 보낸다 — 메일은 번호로 찾은 계정의 이메일로 가므로 이름이 다르면 채용 정보가 남에게 갈 수 있다. 알림톡은 넣은 번호로 그대로 보낸다. 번호를 넘겨받은 새 주인이 옛 계정 때문에 그 번호로 가입하지 못하는 경우도 1차에는 전화 확인으로 대신한다(2026-10-29 김민식 · 재영, WHALEERP-140). 소속 추가 요청 팝업과 날인 요청 팝업이 함께 걸리면 한 번에 하나만 띄우고 <b>날인 요청 팝업을 먼저</b> 띄운다. 닫으면 소속 추가 요청 팝업이 뜬다 — 날인에는 기한이 있고 날인해야 근무가 시작되기 때문이다(2026-10-29 재영, 김민식 staff #49, WHALEERP-148).<span class="src">S-OIILIW · 2026-10-19 재영 · 2026-10-28 재영 · 김민식</span></span></div>
+        <div class="rule"><span class="id">JOI-10</span><span class="txt"><b>본인 대조</b> — 날인 전에 직원 계정의 <b>이름·휴대전화번호·생년월일(8자리)·성별·외국인 여부</b> 다섯 값을 근로계약서 값과 맞춘다. <b>다섯이 모두 같아야 날인</b>할 수 있고, 하나라도 다르면 날인하기를 막고 이유를 보이며 직원이 계약서 정보를 확인해 수정 요청(CTR-27)을 보낸다. 이름은 공백을 모두 지우고 영문은 대문자로 바꿔 비교하며, 저장은 입력한 그대로 한다. 계정이 이미 있는 직원(소속 추가 확인·복귀 확인)도 계정 값으로 대조한다. 계약서 값은 관리자만 고치고 가입 값으로 덮어쓰지 않는다(ACC-22) (2026-10-16 김민식 · 2026-10-19 재영). 성별이 빈 계정을 대조에서 빼는 예외는 두지 않는다 — 가입 때 성별을 필수로 받는다(ACC-23, 2026-10-21 재영). 날인 요청에는 직원이 본 계약의 발송 일시를 시간대 표기와 함께 반드시 받아(빠지거나 시간대가 없으면 날인하지 않는다) 그사이 다시 보냈으면 날인하지 않고, 소속 추가 확인·복귀 확인을 기다리는 계약은 날인하지 못한다. 날인할 때 계정 주소를 계약서 당사자 칸에 고정한다(2026-10-21 김민식, WHALEERP-145).<span class="src">2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-125·145·147</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="ctr">
+    <h2><span class="code">CTR</span> 근로계약 정책 <span class="sub">상태 8종(2026-10-12 임시저장 · 2026-10-16 수정 요청 추가) · 원본 표시와 서명 보관 2026-09-16 확정</span></h2>
+
+    <div class="flow">
+      <span class="s">임시저장</span><span class="arw">→</span>
+      <span class="s">발송 대기</span><span class="arw">→</span>
+      <span class="s">서명 대기</span><span class="arw">→</span>
+      <span class="s">체결 완료</span><span class="arw">→</span>
+      <span class="s">종료</span>
+      <span class="arw">&nbsp;&nbsp;이탈&nbsp;</span>
+      <span class="s">거부</span><span class="arw">·</span>
+      <span class="s">만료</span>
+      <span class="arw">&nbsp;&nbsp;서명 대기 ⇄&nbsp;</span>
+      <span class="s">수정 요청</span>
+    </div>
+
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">CTR-01</span><span class="txt"><b>근로계약서 초안 저장이 채용의 유일한 시작점</b>이다. 초안 없이 초대를 보낼 수 없다.<span class="src">STAFF-1</span></span></div>
+        <div class="rule"><span class="id">CTR-02</span><span class="txt">계약 상태는 <em>임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료</em> 여덟로 관리한다. <b>임시저장</b>은 초안을 다 쓰기 전에 저장해 둔 것으로 다른 칸은 비어도 되지만 <b>이름·휴대전화번호·근무지·직무·고용 형태</b>는 받는다(직원 레코드를 만드는 값이다). 초대·계약서를 보내지 않는다. 초안을 저장하면 <b>곧바로 직원에게 알림이 나간다</b> — 가입 전 직원은 발송 대기가 되고 가입하면 서명 대기로, 계정이 이미 이어진 직원은 곧바로 서명 대기가 된다(JOI-09). 발송 대기는 직원의 가입이나 소속 확인을 기다리는 상태를 포함한다. <b>수정 요청</b>은 직원이 날인 전에 계약서를 고쳐 달라고 한 상태다(CTR-27) (2026-10-16 김민식 · 2026-10-19 재영).<span class="src">STAFF-2 · CON-5 · 2026-10-12 재영(api #14) · 고용 형태 2026-10-13 재영(api #25) · 2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-126</span></span></div>
+        <div class="rule"><span class="id">CTR-03</span><span class="txt">근로계약은 <b>정직원용과 파트타이머용</b>으로 구분한다. 계약 시작일은 필수이고, <b>종료일을 비워 두면 기간의 정함이 없는 계약</b>이다. 종료일이 시작일보다 빠르면 저장하지 않는다. 직원 정보에는 <b>성별(남·여 중 고름)과 외국인 여부(체크)</b>를 필수로 받아 본인 대조(JOI-10)에 쓴다. 주민등록번호는 뒷자리를 포함해 어느 입력에서도 받지 않는다(2026-10-16 김민식).<span class="src">S-OIILIW · 2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-128·132</span></span></div>
+        <div class="rule"><span class="id">CTR-04</span><span class="txt">초안에는 <b>연장·야간·휴일 가산 적용 여부를 넣지 않는다.</b> 상시근로자 5인 미만 여부는 직원이 아니라 사업장의 사실이고 달마다 바뀔 수 있어 급여명세서에서 명세서마다 정한다(PAY-05). 2026-09-29 재영<span class="src">STAFF-5</span></span></div>
+        <div class="rule"><span class="id">CTR-05</span><span class="txt">날인 기한은 <b>발송일로부터 30일</b>이며 지나면 만료로 바꾼다. <b>수정 요청 중에는 기한이 흐르지 않는다.</b> 서명 대기·수정 요청 계약을 고쳐 저장하면 그날부터 <b>새로 30일</b>이다(CTR-19) (2026-10-16 김민식 · 2026-10-19 재영). 발송 대기 계약은 만료시키지 않는다 — 초대만 30일 뒤 만료되고(JOI-03) 계약은 발송 대기로 남아 재발송으로 이어진다(2026-10-26 재영, WHALEERP-152).<span class="src">STAFF-3 · 2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-126</span></span></div>
+        <div class="rule"><span class="id">CTR-06</span><span class="txt">날인은 <b>필기 서명</b>으로 받는다. 날인하기를 누르면 서명란이 열리고, 서명을 그려야 날인 확정 버튼이 살아나며, 다시 그리기로 지운다. 버튼 한 번으로 끝내거나 비밀번호를 다시 넣는 방식은 쓰지 않는다.<span class="src">CON-2</span></span></div>
+        <div class="rule"><span class="id">CTR-07</span><span class="txt">계약 처리 결과는 <b>날인 또는 거부</b> 중 하나로 확정한다. 거부는 <b>사유를 받지 않고</b> 확인창으로만 확인받는다 — 되돌릴 수 없는 확정이기 때문이다. 관리자 근로계약 상세와 거부 운영 알림·메일에도 거부 사유 줄을 두지 않는다(2026-10-30 김민식, WHALEERP-635 — 처음의 「거부 사유 선택 입력」을 바꿈). <b>수정 요청은 처리 결과가 아니다</b> — 날인 전에 계약서를 고쳐 달라는 요청이다(CTR-27) (2026-10-16 김민식).<span class="src">CON-3 · 2026-10-16 김민식 · WHALEERP-145</span></span></div>
+        <div class="rule"><span class="id">CTR-08</span><span class="txt">남은 날인 기한이 <b>7일 이내</b>일 때만 화면에서 기한을 강조한다. 수정 요청 중에는 기한이 흐르지 않으므로 강조하지 않는다(2026-10-16 김민식). <b>임박 알림은 따로 보내지 않고</b> 계약서 발송 알림과 홈의 대기 카드로 알린다.<span class="src">CON-4 · 2026-10-16 김민식</span></span></div>
+        <div class="rule"><span class="id">CTR-09</span><span class="txt">날인한 뒤에는 <b>관리자 요청이 있을 때만</b> 결과를 바꾼다. 거부한 뒤에는 <b>관리자가 재발송했을 때만</b> 다시 처리한다.<span class="src">S-RFOEAG</span></span></div>
+        <div class="rule"><span class="id">CTR-10</span><span class="txt">거부되거나 만료된 계약은 재발송할 수 있고 <b>재발송 이력</b>을 각각 남긴다. 재발송에는 간격 제한을 두지 않는다(2026-10-12 재영). 만료 알림의 「재발송할 수 있습니다」 문구는 그대로 둔다(2026-10-26 재영, WHALEERP-153). 종료된 계약은 재발송하지 않고 새 계약으로 안내한다. 다음 경우에는 거부·만료 계약을 재발송하지 않는다 — 퇴직했거나 퇴직일을 정한 직원, 폐점했거나 삭제된 점포, 같은 점포·같은 휴대전화번호에 다른 진행 중 계약이 있을 때, 계약 기간이 이미 끝난 계약(새 근로계약서로 안내), 기간이 겹치거나 이 계약보다 늦게 시작한 다른 체결 완료 계약이 있을 때(시작일이 빈 옛 계약은 다른 체결 완료 계약이 하나라도 있으면), 같은 직전 계약에 이어진 다른 재계약이 있을 때, 다른 점포 계약과 근무 시간이 겹칠 때(CTR-26). 이때 재발송 버튼을 숨기고, 화면을 연 뒤에 이런 사정이 생기면 까닭을 문장으로 보인다(2026-10-27 김민식 · 재영, WHALEERP-153).<span class="src">S-XDBBDP</span></span></div>
+        <div class="rule"><span class="id">CTR-11</span><span class="txt"><b>체결 완료된 계약의 내용은 고치지 않고</b> 새 계약으로 대체한다. 직원 한 명은 시간에 따라 여러 계약 이력을 가진다. 재계약 기능은 따로 두지 않고 <b>새 계약이 곧 재계약</b>이다 — 같은 점포에 재직 중인 직원에게도 새 계약을 보낸다. 앞 계약은 따로 닫지 않는다 — 새 계약이 체결 완료이고 <b>그 계약의 시작일이 되면</b> 하루 배치가 앞 계약을 종료로 바꾸며, 앞 계약의 종료일 등 체결된 내용은 고치지 않는다. 새 계약에 직전 계약을 이어 둔다. 계약 연장은 같은 직원 레코드에 새 계약을 붙이고, 퇴직 뒤 다시 일하면(재입사) 직원 레코드를 새로 만든다(WHALEERP-615) (2026-10-26 재영 · 김민식, WHALEERP-130·156). 재계약의 <b>시작일은 직전 계약 시작일의 다음 날부터</b>다(작성 화면도 그날부터 고른다). 이 조건을 지키면 직전 계약과 기간이 겹쳐도 되고, 직전 계약이 아닌 체결 완료 계약과 기간이 겹치면 저장을 막는다. 직전 계약은 계약 상세(체결 완료·종료)의 [새 계약]으로 시작하면 그 계약이고 — 체결된 재계약이 이미 이어진 계약에서는 [새 계약]을 누를 수 없어(409) 이어진 줄의 마지막 계약만 직전 계약이 된다. 이어진 재계약이 아직 진행 중(임시저장·발송 대기·서명 대기·수정 요청)이면 [새 계약]으로 새 재계약을 쓸 수 있고, 저장할 때 그 재계약을 대체할지 묻는다(2026-10-27 김민식 · 재영) — 일반 작성으로 쓰면 같은 점포·같은 번호의 재직 레코드에서 체결을 거친 계약 가운데 가장 늦게 시작한 계약이다(2026-10-26 김민식 · 재영, WHALEERP-156). <b>직무·고용 형태는 계약마다 저장한다.</b> 재계약을 저장(임시저장·발송)해도 직원 레코드의 직무·고용 형태는 그대로이고, 그 계약이 체결되고 시작일이 되면 직원 레코드로 옮긴다(미리 날인한 재계약은 시작일에 옮긴다). 계약 상세와 직원 근무 앱 계약서는 그 계약에 적은 값을 보인다. 저장만 해도 바뀌고 거부·만료돼도 되돌아가지 않던 것을 고쳤다(2026-10-27 김민식 · 재영, WHALEERP-156). 직원 레코드의 직무·고용 형태는 그 직원의 <b>가장 늦게 시작한 체결 계약</b> 값을 쓴다 — 기간이 끝난 계약도 포함하고, 시작일이 같으면 나중 계약을 쓴다. 체결 계약이 있는 직원은 다른 계약을 저장해도 직무·고용 형태가 바뀌지 않고, 옛 종이 계약을 늦게 올려도 지금 값을 덮지 않는다(2026-10-27 김민식 · 재영, WHALEERP-156).<span class="src">S-XDBBDP</span></span></div>
+        <div class="rule"><span class="id">CTR-12</span><span class="txt">계약 종료일 <b>30일 전</b>에 갱신 예정 운영 알림을 계약마다 한 번 만들고(2026-10-26 재영, WHALEERP-152), 계약 목록과 직원 상세에 갱신 예정일을 표시한다.<span class="src">S-XDBBDP</span></span></div>
+        <div class="rule"><span class="id">CTR-13</span><span class="txt">초안을 저장할 때 <b>같은 점포의 진행 중인 계약</b>(수정 요청 포함, 대체하면 발송 대기·서명 대기처럼 종료로 닫는다)과 <b>다른 점포 계약의 근무 시간 중복</b>을 검사한다. 같은 점포에 같은 사람의 진행 중인 계약이 있으면 「기존 근로계약을 대체하시겠습니까?」로 확인받고 대체한다. 가입 전 직원 레코드는 휴대전화번호와 이름이 모두 같을 때만 다시 쓰고, 다르면 새 레코드를 만든다. 다른 점포 계약과 근무 시간이 겹치면 CTR-26대로 저장을 막는다(2026-10-13 재영). 수정 요청을 진행 중인 계약에 넣은 것은 2026-10-19 재영. 대체는 대상에 따라 「근로계약 관리」 메뉴 권한을 더 본다 — 진행 중·체결 완료 계약을 닫으면 수정 권한, 임시저장을 지우면 삭제 권한이 필요하고, 임시저장만 대체하면 삭제 권한만 본다. 권한은 대체 확인 전에 보며, 없으면 기존 계약의 이름·기간을 보이지 않는다(2026-10-21 김민식, WHALEERP-592). 체결 완료 계약은 대체로 닫지 않는다 — 재계약이면 새 계약 시작일에 하루 배치가 닫는다(CTR-11). 예외는 종이 계약의 「잘못 올린 계약 바로잡기」 하나다(CTR-23)(2026-10-26 김민식 · 재영, WHALEERP-156).<span class="src">S-OIILIW · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">CTR-14</span><span class="txt">근로계약은 계정이 아니라 <b>직원 레코드</b>에 붙는다. 직원 레코드는 계정 없이도 존재하고, 한 계정은 여러 레코드를 가진다. 계약서 데이터는 <b>발송 원본과 처리 완료본</b>을 모두 보존한다. 발송 원본은 발송 · 재발송할 때 서명 없는 PDF로 같은 계약서 템플릿에서 만들어 저장하고, 사용자 칸(상호 · 대표자 · 사업자번호 · 소재지 · 전화번호)은 보낼 때의 점포 정보로 채운다. 처리 완료본의 사용자 칸은 <b>날인 시점의 점포 정보</b>다 — 날인할 때 그 순간의 점포 정보를 계약에 고정하고 완료본은 그 값으로 만든다. 직원이 날인 화면에서 본 값과 같아야 하고, 점포 정보는 바뀌어도 옛 값을 되살릴 수 없기 때문이다(근로자 주소를 날인 때 계약 당사자에 고정하는 것과 같은 기준). 고정을 시작하기 전에 이미 체결된 계약은 완료본을 만드는 시점 값으로 채우고 그렇게 만들었다는 기록을 남긴다(2026-10-29 김민식 · 재영, WHALEERP-131). 제2조의 <b>근무 장소 · 직무</b>도 같은 기준으로 날인 시점 값에 고정한다 — 날인할 때 근무 장소(비었으면 그때 점포명)와 직무(비었으면 그때 직원 직무)를 계약에 남기고, 체결된 계약의 직원 근무 앱 본문과 처리 완료본은 고정한 값으로 그린다. 점포 이름이나 직무가 바뀌어도 날인 당시 문장과 달라지지 않게 하려는 것이다. 고정 전에 체결된 계약은 백필할 때의 값을 쓴다. 관리자 작성 화면의 근무 장소 · 직무 칸은 그대로다(2026-10-30 김민식, api #211 리뷰 노영주 질문).<span class="src">F-GLGEOF · 2026-10-29</span></span></div>
+        <div class="rule"><span class="id">CTR-15</span><span class="txt">계약서 원본은 <b>계약 조항을 앱 화면에 직접 그려</b> 날인·거부 버튼과 한 화면에서 보여준다. 화면에 그리는 조항과 처리 완료본 PDF는 <b>같은 계약서 템플릿</b>에서 만든다.<span class="src">CON-1</span></span></div>
+        <div class="rule"><span class="id">CTR-16</span><span class="txt">체결이 끝난 계약서는 <b>처리 완료본 PDF를 내보내</b> 직원이 저장하거나 전달할 수 있게 한다. <b>서명 대기 상태에서는 내보내지 않는다.</b> 앱이 공유 시트를 직접 띄우지 않고 「계약서 내보내기」로 파일을 받게 하며, 휴대전화 브라우저가 받은 파일에 띄우는 저장 · 공유를 공유 시트로 쓴다 — 급여명세서 내보내기(PAY-18)와 같은 방식이다. 처리 완료본이 저장소의 다른 출처라 화면이 파일을 읽어 공유 시트에 넘길 수 없고, iOS Safari 가 그 경우 공유 시트를 막기 때문이다. 처리 완료본 파일이 아직 없으면 버튼을 보이지 않는다. 종이 계약의 날인본 · 임금계약서도 같은 방식으로 「받기」로 파일을 받는다(2026-10-28 김민식 · 재영, WHALEERP-149 · api #182).<span class="src">CON-1 · 2026-10-28 김민식</span></span></div>
+        <div class="rule"><span class="id">CTR-17</span><span class="txt">필기 서명은 <b>서명 이미지 파일을 따로 보관</b>하고 <b>처리 완료본 PDF에도 합성</b>한다.<span class="src">STAFF-17</span></span></div>
+        <div class="rule"><span class="id">CTR-18</span><span class="txt">서명 이미지 파일은 <b>계약서 파일과 같은 저장소</b>에 두고 접근 권한과 보존 기간, 파기 시점을 계약서와 같게 관리한다. 관리자 웹은 처리 완료본으로 서명을 확인하며, 서명 이미지를 볼 수 있는 범위는 <b>그 계약을 볼 수 있는 권한과 같다.</b><span class="src">STAFF-17</span></span></div>
+        <div class="rule"><span class="id">CTR-19</span><span class="txt">근로계약서는 <b>날인 전까지</b> 고친다. <b>임시저장·수정 요청</b>은 계약서 전체를, <b>발송 대기·서명 대기</b>는 당사자 정보(CTR-28)만 고친다(2026-10-21 김민식 정리 · 재영, 구현 기준). 그 밖의 상태는 고치지 않고 재발송이나 새 계약으로 간다. <b>서명 대기·수정 요청 계약을 고쳐 저장하면 곧바로 서명 대기</b>가 되고 날인 요청 알림을 다시 보낸다. 날인 기한은 새로 30일이고 앞서 보낸 링크는 무효다. 발송 대기를 거치지 않는다. 발송 대기 계약을 고쳐 저장하면 <b>곧바로 새 초대(새 초대 코드·새 링크)를 다시 보내고</b> 앞서 보낸 초대는 무효로 한다. 날인 기한도 새로 30일이다. 휴대전화번호가 바뀌면 새 번호로 초대 유형을 다시 판별한다(2026-10-16 김민식 · 2026-10-19 재영 · 2026-10-21 김민식 정리). 지울 수 있는 계약은 <b>임시저장뿐</b>이다. 발송 대기 이후의 계약은 지우지 않고 재발송이나 종료로 처리한다(2026-10-13 재영). 채용을 접을 때 관리자는 <b>발송 대기 계약을 상세에서 「종료」로 닫는다</b>. 닫으면 나간 초대(초대 코드·링크)를 무효로 하고 행은 상태 이력과 함께 남는다. 남은 가입 전 직원 레코드는 퇴직 처리로 정리한다(CTR-25, 2026-10-21 재영). 체결이 끝난 계약은 지우지 않는다. <b>임시저장 계약</b>은 이어 쓰기 화면에서 확인을 받고 지울 수 있고, 보낸 적이 없어 남길 기록이 없으므로 <b>행을 지운다</b>. 목록에는 버튼을 두지 않는다. 임시저장 행은 직원 이름으로 이어 쓰기 화면에 바로 들어가고, 다른 상태는 상세 제목 줄에서 상태별로 처리한다. 발송 대기·서명 대기·수정 요청 계약의 상세 제목 줄에는 공통으로 <b>「수정」</b> 버튼 하나를 둔다. 발송 대기·서명 대기는 당사자 정보를, 수정 요청은 계약서 전체를 연다. 발송 대기에는 「종료」도 둔다(2026-10-19 재영 · 2026-10-21 김민식 정리 · 재영). 목록에는 고용 형태 칸을 두고 급여는 시급으로 보인다.<span class="src">2026-09-21 재영 · 2026-10-13 재영 · 2026-10-16 김민식 · 2026-10-19 재영 · 2026-10-21 김민식 정리 · 재영 · WHALEERP-126·128·155·327</span></span></div>
+        <div class="rule"><span class="id">CTR-20</span><span class="txt">계약 조건은 <b>칸을 나눠</b> 받는다. 급여는 현업 엑셀 견본대로 받는다(2026-10-13, front #15). 정직원은 <b>시급</b>을 넣고 월급(시급 × 월 기본시간)·연봉은 읽기 전용으로 셈해 보이며 비과세 항목과 급여항목(기본·연장·야간) 표를 둔다. 파트타이머는 소정근로시간 표에 요일별 근무시간·시급·소계와 주휴수당·주급·월급여 줄을 둔다. 셈한 값(월급·연봉·소계·주급·월급여)은 <b>저장하지 않고</b> 화면에만 보인다. 셈법은 front #15 구현을 따른다 — 정직원 급여항목은 시급 × 시간 × 배율(기본 1 · 연장 1.5 · 야간 가산 0.5), 월급여 = 급여항목 합계 + 비과세 합계, 연봉 = 월급여 × 12. 파트타이머 요일 소계 = 시급 × 그날 시간, 주휴시간 = 주 시간 ÷ 40 × 8(주 15시간 이상, 8시간까지), 주급 = 근무 소계 + 주휴수당, 월급여 = 주급 × 4.345. 셈법은 노무 검토 대상이다(2026-10-14 재영). 현업 요구사항으로 <b>식대·자가운전보조금·육아수당 금액, 월 기본시간·월간 연장근무·기본시간 중 야간근무, 연차휴가 조항·퇴직금 조항</b>도 계약 조건으로 받는다(api #12, 2026-10-12). 기본시간 중 휴일근무·월간 추가 휴일근무는 화면에서 받지 않는다(칸은 api에 남아 있다, 2026-10-14 재영). 소정근로시간은 요일마다 시업·종업·휴게를, 임금지급일은 당월·익월과 날짜를 받고 31은 말일로 본다. 주휴일은 근무하지 않는 요일 하나를 골라 받는다. 주 소정근로시간이 15시간 미만이면 주휴일을 두지 않고, 15시간 이상인데 7일 모두 근무하면 초안을 저장할 수 없다. 급여 지급 방식(계좌·현금)을 필수로 받고, 파트타이머는 작성 화면 표에서 요일마다 시업·종업·휴게를 고친다. 정직원은 수습(기간 1~3개월, 임금 감액률 0~10%)을 둘 수 있다. 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 둘 수 있고, 수습 중 시급이 최저임금의 90% 이상이어야 한다. 최저임금은 <b>공통코드 하나</b>로 관리한다 — 값 하나를 매년 고치고 시행일별 이력은 두지 않는다(초기값 10,320원). 근로계약서를 저장할 때(이어 쓰기 · 종이 계약 · 재계약 · 수정 포함) 서버가 수습 중 시급(시급 × (1 − 감액률))이 지금 값의 90% 미만이면 저장하지 않는다. 계약 시작일과 상관없이 지금 값으로 보므로, 지난 날짜에 시작한 계약은 그때 기준보다 엄격할 수 있고, 연초에 값을 고치기 전까지는 지난해 값으로 본다 — 둘 다 받아들인다. 코드가 없거나 사용 중지됐거나 숫자가 아니면 저장하지 않는다(검사가 조용히 꺼지지 않게). 관리자 웹 화면의 확인과 도움말(「최저임금 …원 이상」, 연도 없음)도 같은 값을 쓴다. 값은 <b>플랫폼 운영자가 매년 1월 1일 전에</b> 공통코드 관리 화면에서 고친다(2026-10-30 김민식 · 재영, WHALEERP-595). 수습이 아닌 시급은 최저임금과 비교해 막지 않는다 — 서버·화면 모두 「시급 ≥ 최저임금」 검사를 두지 않고 시급 칸 도움말에 최저임금을 보이기만 한다. 단순노무 업무 직원의 수습 감액도 직종으로 막지 않고 따로 노무 확인을 올리지 않는다. 수습 기간은 노무 답변의 「3개월 미만」이 아니라 최저임금법 시행령 제3조(수습 시작일부터 3개월 이내)대로 1~3개월로 둔다(2026-10-30 김민식 · 2026-11-02 재영). 수습 기간이 걸린 달의 급여명세서에는 수습 기간임을 표기한다. 연장과 야간이 겹치면 2.0배, 계약하지 않은 요일의 근무는 연장(1.5배)으로 본다(노무사 답변 2026-10-14 질문 4·12·13·19). 이 값이 근무스케줄 기본값, 근무 시간 중복 검사, 급여명세서 계산에 그대로 쓰인다.<span class="src">2026-09-29 재영 · 2026-10-12 재영 · 2026-10-15 김민식(WHALEERP-128·132)</span></span></div>
+        <div class="rule"><span class="id">CTR-21</span><span class="txt">계약서 조항은 <b>열 가지</b>다 &mdash; 근로계약기간 · 근무장소와 업무 · 소정근로시간 · 휴일 · 임금 · 연장·야간·휴일 가산 · 연차유급휴가 · 사회보험 · 계약서 교부 · 기타. 정직원용과 파트타이머용이 같은 구성을 쓴다. 연장·야간·휴일 가산 조항은 계약마다 값을 받지 않고 근로기준법에 따라 가산한다는 일반 문구로 둔다. 휴일 조항에는 관리자가 고른 주휴일 요일을 적는다(노무사 답변 2026-10-14 질문 4, 주휴일은 특정 요일로 정해야 한다). <b>연장·야간·휴일 가산, 연차유급휴가 조항의 문구는 노무사 검토</b>를 거쳐 확정한다(문서 끝). 계약 조건으로 받는 퇴직금 조항(CTR-20)을 열 가지 가운데 어디에 둘지도 같은 검토에서 정한다.<span class="src">2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">CTR-22</span><span class="txt"><b>4대보험 가입 여부</b>(고용보험·산재보험·국민연금·건강보험)는 관리자가 초안에서 각각 체크하고 계약서의 사회보험 조항에 적는다. 사업주가 정하는 값이라 직원이 날인 뒤 넣는 신고 정보와는 따로 둔다.<span class="src">2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">CTR-23</span><span class="txt"><b>종이 계약도 받는다.</b> 관리자가 초안에서 계약 방식을 종이 계약으로 고르고 당사자 모두 날인한 계약서 파일을 올리면 발송·날인 없이 체결 완료로 저장한다. 날인 기한·만료·재발송은 없고 계약 종료일이 지나면 종료로 바뀐다. 종이 계약 직원에게도 <b>가입 초대를 보내고</b> 직원은 가입 뒤 날인 없이 신고 정보 입력으로 넘어간다. 계약 조건 칸과 직원 생년월일은 <b>모두 채워야</b> 등록되고(만 19세 미만이면 등록 불가, ACC-22), 날인본 파일은 <b>PDF와 JPG·PNG</b>를 받는다. 직원 근무 앱에서는 조항 대신 올린 파일을 읽기 전용으로 보여 준다. 종이 계약도 체결 완료 계약을 대체로 닫지 않고 재계약 규칙(CTR-11)을 따른다. 잘못 올린 종이 계약은 같은 점포·같은 번호로 맞는 계약서를 다시 올리며 대체 확인창에서 <b>「잘못 올린 계약 바로잡기」</b>를 골라 앞 계약을 곧바로 종료해 바로잡는다. 사유는 받지 않고, 확인창 문구로 「기존 체결 완료 계약이 바로 종료되고 되돌릴 수 없다 · 같은 계약서의 잘못 적은 값을 고칠 때만 쓴다 · 재계약이면 고르지 않는다」를 강조한다. 이 안내 뒤에 잘못 고른 것은 사용자 실수로 보고 따로 되돌리는 기능은 두지 않는다. 바로잡기로 닫힌 계약은 상태 이력에 관리자가 체결 완료에서 종료로 바꾼 것으로 남는다. 이 경우만 체결 완료를 닫으므로 대체 권한의 「체결 완료 계약을 닫으면 수정 권한」(WHALEERP-592)은 그대로 둔다(2026-10-26 김민식 · 재영, WHALEERP-156). <b>잘못 올린 재계약</b>도 「잘못 올린 계약 바로잡기」로 고친다. 그 재계약만 종료하고 직전 계약은 그대로 두며, 다시 올린 계약이 같은 직전 계약을 잇는다. 가입한 재직 직원에게도 같다(2026-10-27 김민식 · 재영, WHALEERP-156).<span class="src">2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">CTR-24</span><span class="txt">관리자는 직원 상세의 목록 버튼 옆 <b>퇴직 처리</b>로 퇴직일을 정한다. 퇴직일은 오늘 이후이거나 <b>최근 3개월 안</b>의 지난 날짜로 받는다. <b>근로계약은 계약대로 두고 퇴직은 따로 본다</b> — 처리할 때는 퇴직일만 저장하고 계약 종료일은 바꾸지 않으며, 퇴직일까지는 재직(퇴직 예정)이다. <b>퇴직일 다음 날</b> 시스템이 퇴직으로 바꾸면서 그 뒤의 근무스케줄을 지우고, 개인으로 배정된 미완료 TO-DO의 배정을 풀고, 임시저장·발송 대기·서명 대기·수정 요청 계약을 종료로 닫는다(임시저장은 2026-10-12 재영, 수정 요청은 2026-10-19 재영 추가). 지난 날짜로 처리하면 그 자리에서 같은 정리를 한다. 확인창에 정리될 건수를 미리 보인다. 그 점포에 <b>퇴근하지 않은 열린 출근</b>이 있으면 퇴직 처리(퇴직일 저장)를 막고 「먼저 보정으로 닫아 주세요」를 보인다. 퇴직일을 정한 뒤 퇴직으로 바뀌는 날까지 열린 출근이 남아 있으면 퇴근 시각을 넣지 않고 퇴근 미등록으로 두며, 관리자가 보정한다(2026-10-27 재영). 퇴직 예정자에게는 퇴직일 뒤 근무스케줄을 등록하거나 퇴직일 뒤 시작하는 계약을 발송할 수 없다. 퇴직 처리는 직원 레코드 단위이고 계정은 막지 않는다(ACC-15). 점포를 폐점할 때의 일괄 퇴직은 CTR-31을 따른다.<span class="src">S-VZVHSW · 2026-10-07 재영 · 2026-10-08 노영주 정리 · 재영 승인 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">CTR-25</span><span class="txt">퇴직 처리는 <b>퇴직일 전날까지</b> 「퇴직 처리 취소」로 되돌리거나 퇴직일을 바꾼다. 정리는 퇴직일이 지나야 일어나므로 취소·변경은 <b>날짜만 바꾸고</b> 되돌릴 데이터가 없다. 퇴직일이 지난 뒤 다시 일하면 복귀 확인과 새 근로계약으로 처리한다. 퇴직일이 입사일보다 앞설 수 없다는 검사는 <b>입사일이 온 뒤에만</b> 본다 — 시작일이 앞으로인 계약을 체결해 둔 직원이 입사 전에 그만두면 입사일보다 앞선 날로 퇴직 처리할 수 있고, 퇴직일이 계약 시작일보다 앞선 레코드는 입사일을 채우지 않는다. 입사일을 고치는 기능은 따로 두지 않고, 잘못된 계약 시작일은 날인 전 수정 요청(CTR-27)으로 바로잡는다(2026-10-22 김민식, WHALEERP-613). <b>가입 전 레코드도 퇴직 처리할 수 있다</b> — 날인 전에 계약이 거부·만료·종료돼도 재직이 남으므로(CTR-29) 관리자가 재발송하거나 퇴직 처리한다(2026-10-19 재영). 가입 전 레코드를 퇴직 처리하면 이미 나간 가입 초대는 <b>무효</b>로 한다(2026-10-19 재영). 퇴직 처리와 취소는 그 직원 근무지가 업무 범위 안에 있고 <b>직원 정보 관리 수정 권한</b>을 가진 관리자가 한다. 퇴직했거나 퇴직일이 지난 직원(퇴직일 다음 날부터, 퇴직 배치 전이라도)은 날인·거부·수정 요청을 하지 못한다 — 퇴직 처리와 날인이 겹쳐 퇴직 직원에게 체결 완료 계약이 남지 않게 한다(2026-10-21 김민식, WHALEERP-145).<span class="src">S-VZVHSW · 2026-10-07 재영 · 2026-10-08 노영주 정리 · 재영 승인 · 2026-10-16 김민식 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">CTR-26</span><span class="txt">같은 휴대전화번호의 사람이 <b>다른 점포</b>에 발송 대기·서명 대기·수정 요청·체결 완료 근로계약을 갖고 있고 계약 기간과 근무 요일·시간이 겹치면 초안 저장을 막는다. 퇴직한 직원 레코드의 계약은 퇴직일까지만 본다. 막을 때는 <b>「다른 점포 근로계약과 근무 시간이 겹칩니다」</b>만 알리고 다른 점포의 이름·근무 요일·시각은 보이지 않는다 — 번호만으로 다른 BP 직원의 근무 패턴을 알아내지 못하게 하기 위해서다(운영 정책 ATT-30). 수정 요청을 겹침 대상에 넣은 것은 2026-10-19 재영.<span class="src">WHALEERP-129 · 2026-10-13 재영(api #25) · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">CTR-27</span><span class="txt"><b>수정 요청</b> — 직원은 서명 대기 계약의 정보가 틀렸으면 계약서 정보를 확인하고 직접 <b>수정 요청</b>을 보낸다. <b>본인 대조 결과와 상관없이</b> 서명 대기면 보낼 수 있다 — 대조가 맞지 않을 때뿐 아니라 임금 같은 계약 조건이 틀렸을 때도 쓴다(2026-10-21 김민식 · 재영). 보낼 때 <b>수정 요청 사유를 필수로</b> 받는다 — 입력 칸 하나, 선택지 없이 앞뒤 공백을 지운 뒤 1~100자다. 무엇이 틀렸는지 알아야 관리자가 고쳐 다시 보낼 수 있기 때문이다. 관리자 근로계약 상세는 수정 요청 상태일 때 「수정 요청 사유」 줄을 보인다(2026-10-30 김민식, WHALEERP-635 — 처음의 「따로 적지 않는다」를 바꿈). 계약은 수정 요청 상태가 되고 이력을 남기며, 이 동안 날인 기한이 흐르지 않는다(CTR-05). 관리자는 수정 요청 계약의 <b>계약서 전체</b>를 고칠 수 있고, 고쳐 저장하면 곧바로 서명 대기가 되어 날인 요청 알림을 다시 보낸다(CTR-19). 수정 요청은 운영 알림을 보내지 않고 홈 처리 대기·미조치로 보인다(HOM-03·07). 진행 중인 계약으로 보아 같은 점포 대체(CTR-13)·다른 점포 근무 시간 겹침(CTR-26)·퇴직 때 종료(CTR-24) 대상에 넣는다. 수정 요청 계약만 있는 직원의 출퇴근 차단 시트는 서명 대기와 같다(ATT-08) (2026-10-16 김민식 · 2026-10-19 재영).<span class="src">2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-125·126·145·147</span></span></div>
+        <div class="rule"><span class="id">CTR-28</span><span class="txt"><b>날인 전 당사자 정보 수정</b> — 발송 대기·서명 대기·수정 요청 계약에서 관리자는 계약서의 <b>당사자 정보(이름·휴대전화번호·생년월일·성별·외국인 여부)</b>를 고칠 수 있다. 휴대전화번호가 바뀌면 같은 점포 진행 중 계약(CTR-13)·다른 점포 근무 시간 겹침(CTR-26)·초대 유형 판별(JOI-01)을 다시 하고, <b>옛 번호로 나간 초대는 무효</b>로 한 뒤 새 번호로 다시 초대한다. <b>가입한 직원의 휴대전화번호는 바꾸지 않는다</b> — 계정의 신원 기준이다(ACC-13). 생년월일을 고치면 만 19세 미만 검사(ACC-22)를 다시 하고, 미만이면 저장을 막는다. 고쳐 저장한 뒤의 상태·기한·초대는 CTR-19를 따른다 (2026-10-16 김민식 · 2026-10-19 재영).<span class="src">2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-125·126·128·132</span></span></div>
+        <div class="rule"><span class="id">CTR-29</span><span class="txt"><b>재직 기준</b> — 직원은 근로계약서를 받으면(그 점포의 직원 레코드가 생기면) <b>그 점포에 재직</b>이다. 날인했는지는 계약 상태로 가른다. <b>임시저장 계약만 있는 레코드는 재직으로 세지 않는다</b>(초대도 계약서도 나가지 않았다). 직원 근무 앱은 그 점포에 <b>체결 완료 계약이 있어야</b> 그 점포 정보(TO-DO·근무스케줄·출퇴근 등)를 보이고(급여명세서는 점포 정보에 넣지 않고, 급여 탭은 고른 근무지와 관계없이 모든 점포의 명세서를 점포 이름과 함께 보인다, PAY-08 · 2026-10-19·20 재영), 근무지 선택기에서도 체결 완료 계약이 있는 점포만 고른다. 근무지를 고르는 자리는 홈 상단 선택기와 근무 정보 화면의 근무지 카드 두 곳이고, 둘 다 같은 「근무지 고르기」 시트를 열어 앱 전체의 근무지를 바꾼다. 근무지가 하나뿐이면 고르지 않는다(쟁점 HOME-2 · WORK-4, 2026-10-20 재영). 그 전에는 날인을 기다리는 근로계약서 목록만 보인다. 날인 전에 계약이 거부·만료·종료돼도 재직은 그대로이고, 관리자가 재발송하거나 퇴직 처리한다(CTR-25). 관리자 화면의 재직 인원은 날인 전 직원도 센다(HOM-02) (2026-10-16 김민식 · 2026-10-19 재영).<span class="src">2026-10-16 김민식 · 2026-10-19 재영 · WHALEERP-125·313·314</span></span></div>
+        <div class="rule"><span class="id">CTR-30</span><span class="txt">퇴직한 직원이 같은 점포에 다시 입사하면 옛 직원 레코드를 다시 쓰지 않고 <b>새 직원 레코드</b>를 만들어, 새 레코드에 직전 재직 레코드를 연결한다. 가입한 직원은 <b>같은 계정이면서 이름도 같아야</b> 잇고, 가입 전 직원은 같은 휴대전화번호·이름으로 찾는다 — 번호를 넘겨받은 다른 사람의 레코드에 앞사람의 재직 기간이 붙지 않게 한다(2026-10-23 김민식, api #136). 입사일·퇴직일·근로계약·급여명세서·근무 기록은 <b>재직 기간마다 따로</b> 남는다. 계약 기간이 끝난 뒤 다시 계약할 때 퇴직 처리하지 않았으면 <b>연장</b>으로 보고 같은 레코드와 입사일을 유지한다. 공백이 있는 재입사로 다루려면 관리자가 먼저 퇴직 처리하며, 시스템은 공백 기간을 판단하지 않는다(2026-10-22 김민식). 관리자 웹 직원 목록은 레코드마다 한 줄로 두고 묶지 않으며, 이전 재직 기간은 <b>직원 상세의 재직 이력</b>에서 본다(2026-10-22 재영). 재직 이력에는 <b>체결 완료 근로계약이 있는 레코드만</b> 보이고, 임시저장·발송만 한 재입사 레코드는 나오지 않는다(2026-10-23 김민식).<span class="src">2026-10-22 김민식 · 재영 · 2026-10-23 김민식 · WHALEERP-615</span></span></div>
+        <div class="rule"><span class="id">CTR-31</span><span class="txt"><b>점포 폐점</b>은 1팀 점포 api가 하고, 직원·근로계약 정리는 3팀 서비스 둘을 불러 한다 — 퇴직·계약 정리 로직을 한 벌로만 두기 위해서다. <b>폐점 확인</b>(읽기만)은 열린 출근, 폐점하면 종료될 계약 건수, 퇴직될 재직 직원 수, 확정하지 않은 급여명세서 수를 돌려준다. 열린 출근이 있으면 폐점을 막고, 기준은 퇴직 처리와 같다(CTR-24). 본사 제공 동의를 하지 않아 본사 역할에게 가려지는 가맹 직원의 열린 출근은 이름 없이 수만 보인다(ATT-30, WHALEERP-644). 확정하지 않은 급여명세서는 알리기만 하고 막지 않는다. <b>점포 단위 일괄 퇴직</b>은 1팀 폐점 트랜잭션 안에서 돌고, 한 명이라도 실패하면 폐점 전체를 되돌린다. 재직 직원의 퇴직일은 <b>폐점일</b>로 정한다 — 이미 정한 퇴직일이 폐점일 뒤면 폐점일로 당기고, 폐점일 이전이면 그대로 둔다. 임시저장만 있는 가입 전 레코드도 퇴직일을 폐점일로 정한다(2026-11-04 재영, api #240). 일반 퇴직과 달리 대기 계약 4종(임시저장·발송 대기·서명 대기·수정 요청)의 종료와 그 점포 직원에게 나간 초대(가입 초대·소속 추가 확인·복귀 확인)의 만료는 다음 날 배치를 기다리지 않고 <b>폐점 순간 바로</b> 한다 — 폐점 뒤 날인·수락으로 소속이 붙는 틈을 막는다. 퇴직 확정·근무스케줄 삭제·TO-DO 배정 해제는 일반 퇴직처럼 퇴직일 다음 날 한다. 체결 완료 계약은 닫지 않으며, 시작일이 폐점일 뒤인 체결 완료 계약도 일반 퇴직처럼 그대로 둔다. 직원에게 폐점 알림은 보내지 않는다(일반 퇴직과 같음). 직원 근무 앱은 <b>폐점 순간부터 출근을 막고</b> 퇴근은 받는다 — 직원 화면에는 「폐점」을 보이지 않고 「이 근무지에서는 출근을 등록할 수 없습니다. 근무지 관리자에게 문의해 주세요.」를 보인다. 폐점 당일 빠진 근무는 관리자가 보정·대신 등록으로 넣는다.<span class="src">1팀 요청 문서(2026-11-03) · 2026-11-03 재영 · 2026-11-04 재영 · WHALEERP-643·644·647·648</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tax">
+    <h2><span class="code">TAX</span> 신고 정보 정책 <span class="sub">이번 판에서 새로 들어온 절</span></h2>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">TAX-01</span><span class="txt">주민등록번호는 <b>근로계약서 초안과 계약서 어디에도 넣지 않는다.</b> 관리자는 어느 화면에서도 주민등록번호를 입력하지 않는다.<span class="src">STAFF-16 · TAX-1</span></span></div>
+        <div class="rule"><span class="id">TAX-02</span><span class="txt">신고 정보는 <b>계약서 날인을 마친 직후</b> 직원 근무 앱에서 <b>직원 본인이</b> 넣는다. 관리자 대리 입력 경로는 두지 않는다.<span class="src">TAX-2</span></span></div>
+        <div class="rule"><span class="id">TAX-03</span><span class="txt">이 단계에서 <b>주민등록번호와 급여 계좌를 함께</b> 받는다. 계좌를 바꾸면 다음 급여부터 적용한다.<span class="src">TAX-5</span></span></div>
+        <div class="rule"><span class="id">TAX-04</span><span class="txt"><b>동의 체크는 두지 않는다.</b> 주민등록번호의 수집 근거는 4대보험 취득 신고와 근로소득 원천징수를 정한 법령이고, 급여 계좌는 계약 이행이다. 화면에는 쓰는 곳을 그대로 적는다.<span class="src">TAX-3 · TAX-5</span></span></div>
+        <div class="rule"><span class="id">TAX-05</span><span class="txt">신고 정보는 <b>건너뛸 수 없다.</b> 날인 뒤 이 화면을 지나야 앱을 쓸 수 있다.<span class="src">TAX-4</span></span></div>
+        <div class="rule"><span class="id">TAX-06</span><span class="txt">주민등록번호는 <b>암호화해 저장</b>하고 <b>수집 목적과 수집 일시</b>를 함께 기록한다. 화면에는 마스킹한 값만 보이며, 4대보험 신고나 원천징수 서류를 만들 때만 원본을 쓴다.<span class="src">STAFF-16</span></span></div>
+        <div class="rule"><span class="id">TAX-07</span><span class="txt">주민등록번호는 <b>본인만 입력·수정</b>할 수 있고 관리자는 마스킹된 값만 본다. 급여 계좌는 관리자 웹 직원 상세의 근로계약 요약에 은행 이름과 계좌번호 전체(하이픈 없이)로 보인다 — 급여를 이체할 때 바로 보도록(2026-10-29 노영주, WHALEERP-183·184). 다만 <b>그 근무지 사업주 쪽 관리자에게만</b> 보인다 — 가맹 직원의 급여 계좌는 본사 제공 동의를 했어도 본사(BP 마스터·BP 관리자)에게 보이지 않는다. 동의 범위(ATT-30)에 신고 정보가 없고, 급여 계좌는 급여를 주는 근무지 사업주가 받는 것이기 때문이다(TAX-08). 직영 직원은 BP가 사업주라 BP 쪽에 보인다(2026-10-29 재영). 근로계약 상세에도 같은 기준으로 신고 정보를 읽기만 하게 보인다 — 가린 주민등록번호(앞자리와 뒷자리 첫 자, 예 900101-1******, api가 가려 보냄)와 급여 계좌. 넣지 않았거나 본사 역할이 가맹 직원 계약을 볼 때는 「-」이고, 복호화에 실패하면 그 칸만 실패로 보이고 상세는 연다. 신고 정보는 직원 레코드에 하나라 옛 계약에서도 지금 값을 보인다(2026-10-29 김민식 · 재영, WHALEERP-155). 직원 근무 앱 신고 정보 화면에서 고칠 때는 「새로 넣기」로 주민등록번호·급여 계좌 가운데 넣은 쪽만 바꾸고(비워 둔 쪽은 그대로), <b>지금 비밀번호</b>를 함께 받아 틀리면 저장하지 않는다. 요청은 계정마다 10분에 10번까지 받는다. 날인 뒤 처음 넣을 때는 비밀번호를 받지 않는다 — 로그인 토큰만 가진 사람이 바꾸지 못하게 하려는 것으로 이메일 변경(ACC-13)과 같은 방식이다(2026-10-23 노영주, WHALEERP-333·334). 저장 위치는 계정이나 계약 데이터가 아니라 <b>직원 레코드의 별도 암호화 항목</b>이다. 그래서 주민등록번호·급여 계좌는 <b>근무지마다 따로</b> 받고 관리한다 — 받는 쪽이 그 근무지 사업주라서다(TAX-08). 신고 정보 화면 맨 위에 어느 근무지의 신고 정보인지 적는다. 두 번째 근무지의 신고 정보도 그 근무지와 근로계약을 맺을 때 받는다 — 날인을 마치면 「신고 정보 넣기」로 이어지는 첫 근무지와 같은 흐름이고, 앞 근무지 값을 불러오지 않고 새로 넣는다. 직원 근무 앱에서는 내 정보의 소속 근무지를 펼쳐 그 근무지의 근로계약서·급여명세서·신고 정보로 들어가고, 앱 상단에서 고른 근무지와는 관계없다. 소속 근무지에는 퇴직한 근무지도 넣어, 근무 중인 곳 아래에 「퇴직」 표시와 근무 기간을 붙여 흐리게 보이고 같은 세 버튼으로 그곳의 계약서·명세서·신고 정보를 본다. 볼 수 있는 기간은 각 자료의 보존 기간을 따른다(급여명세서 3년, PAY-4) (쟁점 TAX-8 · ME-7, 2026-10-20 재영).<span class="src">S-RFOEAG · TAX-8 · ME-7 · 2026-10-20 재영 · WHALEERP-334 · 2026-10-23 노영주</span></span></div>
+        <div class="rule"><span class="id">TAX-08</span><span class="txt"><b>신고 정보의 근거는 칸마다 따로 알린다.</b> 신고 정보 화면에서 주민등록번호 칸 위에는 「4대보험 취득 신고와 근로소득 원천징수를 위해 법령에 따라 받습니다. 동의 없이 받으며, 신고 서류를 만들 때만 씁니다.」, 급여 계좌 칸 위에는 「근로계약에 따라 급여를 보내기 위해 받습니다. 급여 지급 외에는 쓰지 않습니다.」를 적고, 화면 아래에 「이 정보는 ○○점(사업주)이 받으며, WHALE ERP는 ○○점의 위탁을 받아 암호화해 보관합니다.」를 한 번 적는다(ATT-29). 플랫폼 개인정보 처리방침에는 「회사는 고객사(사업주)의 위탁을 받아 고객사 직원의 근로계약, 근무스케줄, 출퇴근 기록, 급여명세서, 신고 정보(주민등록번호, 급여 계좌)를 처리합니다. 이 정보의 처리 목적과 보유 기간은 고객사가 정하며, 회사는 위탁 계약에서 정한 범위에서만 처리합니다. 주민등록번호는 암호화해 저장하고, 고객사 관리자 화면에는 가린 값만 보이며, 신고 서류를 만들 때만 원본을 씁니다.」를 둔다. BP 처리방침 예시로 주민등록번호(4대보험 취득·상실 신고와 원천징수·지급명세서 제출, 소득세법·국민연금법·국민건강보험법·고용보험법·고용산재보험료징수법, 개인정보보호법 제24조의2, 근로관계 종료 후 5년)와 급여 계좌(임금 지급, 개인정보보호법 제15조제1항제4호, 근로관계 종료 후 3년) 표와 처리위탁 문단을 제공한다. 플랫폼 보관은 3년으로 유지하고, 원천징수 증빙처럼 더 오래 둘 의무가 있는 자료는 BP가 일괄 저장(RET-09)으로 받아 가 채운다. 법조항과 보유 기간은 TAX-7 법무 검토에서 확인한다.<span class="src">2026-09-30 재영 · 우리 판단 · 법무 확인 대기</span></span></div>
+        <div class="rule"><span class="id">TAX-09</span><span class="txt">신고 정보에서 직원이 넣은 주민등록번호 앞자리가 계정 생년월일과 다르면 저장하지 않고 <b>근무지 관리자에게 생년월일 정정을 요청하라</b>고 안내한다. 직원은 생년월일을 고치지 않는다(ACC-13). 관리자는 직원 상세에서 직원의 신분증 등으로 확인한 뒤 <b>계정 생년월일을 정정</b>하고, 정정할 때 만 19세 미만 검사(ACC-22)를 다시 해 미만이면 정정을 막는다. 정정한 관리자·시각·이전 값을 이력으로 남기고, 이미 체결한 계약서의 생년월일은 바꾸지 않는다(2026-10-19 재영). 생년월일은 계정에 하나라 <b>한 BP 관리자가 정정하면 그 사람의 다른 BP 소속에도 같이 바뀐다</b>. 이를 그대로 두고 다른 BP에 따로 알리지 않는다(2026-10-21 재영). 정정은 가입한 직원에게만 한다 — 가입 전 직원은 계정이 없어 근로계약서 당사자 정보로 고치고(CTR-19·28), 탈퇴한 계정과 퇴직한 직원(퇴직일이 지났으면 퇴직 배치 전이라도)은 정정하지 않으며 [정정] 버튼도 보이지 않는다. 퇴직 예정(아직 재직)은 정정한다. 날인 대기 중인 계약이 있어도 정정하고, 날인 때 바뀐 생년월일로 본인 대조(JOI-10)를 다시 한다고 확인창에 알린다. 본사 역할은 본사 제공 동의를 한 가맹 직원만 정정한다(동의로 가린 직원은 정정할 수 없다, ATT-30). 이력은 DB에만 남기고 화면에는 보이지 않으며, 직원이 앱에서 정정을 요청하는 기능은 두지 않는다 (2026-10-26 노영주 · 재영, WHALEERP-602).<span class="src">2026-10-19 · 10-21 재영 · staff #9 리뷰</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="pay">
+    <h2><span class="code">PAY</span> 근무·급여 정책</h2>
+    <p class="intro" data-h="pay">급여는 자동 계산과 수기 입력 사이에서 절충했습니다. 기본급·주휴수당·연장수당은 시스템이 계산해 초안에 넣고 관리자가 고칩니다. 나머지 지급 항목과 4대보험·세금은 관리자가 넣고 공제가 빈 명세서는 검토 대기로 분류합니다. 지급·공제 항목은 옛 시스템의 것을 모두 가져왔습니다.</p>
+
+    <div class="gh">급여명세서</div>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">PAY-01</span><span class="txt">급여명세서 상태는 <em>작성 중 · 검토 중 · 확정 · 발송 완료</em> 넷으로 관리한다. 확정을 취소하면 <b>검토 중</b>으로 돌아가며, 발송한 뒤에도 취소할 수 있다.<span class="src">S-KWTTUF</span></span></div>
+        <div class="rule"><span class="id">PAY-02</span><span class="txt">지급 항목은 <b>기본급·주휴수당·연장수당·야간수당·휴일근무수당·추가근무수당·연차수당·상여·식대·자가운전보조금·육아수당</b> 열한 가지다. 식대·자가운전보조금·육아수당은 비과세로 가른다. 이 가운데 <b>기본급·주휴수당·연장수당만 시스템이 계산</b>하고 관리자가 확인·수정한다. 나머지는 관리자가 넣는다. 야간수당·휴일근무수당은 시스템이 계산하지 않고 관리자가 넣는다(2026-09-30). <b>명세서의 모든 지급·공제 금액은 관리자가 고칠 수 있고</b>, 시스템 계산값을 고친 경우 계산값과 고친 값을 함께 남긴다.<span class="src">STAFF-5 · 2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-03</span><span class="txt"><b>공제 항목은 관리자가 입력</b>한다. 4대보험과 세금은 요율이 매년 바뀌어 시스템이 계산하지 않는다. 명세서에 늘 보이는 <b>기본 공제는 국민연금·건강보험·고용보험·장기요양보험·소득세·지방소득세 여섯</b>이다. <b>추가 공제 열</b>(연말(중도)정산, 연말(중도)정산 소득세, 연말(중도)정산 주민세, 건강보험정산, 장기요양보험정산, 고용보험정산, 국민연금정산, 장기요양보험산정, 퇴사자유보금, 스톡옵션)과 상여는 필요할 때 항목 추가로 붙인다. 파트타이머 3.3% 원천징수도 공제 항목으로 두고, <b>파트타이머 명세서는 3.3%를 적용한 채로 시작한다</b>(2026-09-30). 3.3%(사업소득세 3%·지방소득세 0.3%)를 적용한 명세서에서는 기본 공제의 소득세·지방소득세 두 줄을 빼고 4대보험 네 줄과 3.3%만 두어 세금을 두 번 떼지 않는다. 3.3%는 식대 같은 비과세 항목을 포함한 지급 총액에 매긴다. 비과세는 근로소득 규정이라 사업소득에는 적용하지 않는다고 보기 때문이다. 적용 여부는 연장·야간·휴일 가산처럼 명세서마다 관리자가 끌 수 있고, 새 명세서는 같은 직원의 지난 명세서 값을 따른다. 끄면 근로소득 기준 소득세·지방소득세로 돌아간다. 근로계약을 맺은 직원에게 사업소득 3.3%를 적용해도 되는지는 우리 판단이며 노무·세무 확인을 기다린다. 끝자리 처리(3.3%를 한 번에 계산해 10원 단위로 반올림할지, 사업소득세 3%·지방소득세 0.3%를 따로 계산해 각각 10원 미만을 버릴지)도 함께 세무 확인을 받는다. 확인 전까지 목업은 10원 단위 반올림으로 둔다(2026-10-08 재영).<span class="src">STAFF-5 · 2026-09-29 재영 · 2026-09-30 재영 · 우리 판단 · 노무·세무 확인 대기</span></span></div>
+        <div class="rule"><span class="id">PAY-04</span><span class="txt"><b>주휴수당은 1주 소정근로시간이 15시간 이상이고 그 주의 소정근로일을 개근한 직원</b>에게 준다(근로기준법 제55조). 소정근로시간과 소정근로일은 근로계약서의 요일별 시간에서, 개근 여부는 출퇴근 기록에서 가져온다. 지각·조퇴는 출근으로 본다. 결근한 날이 있으면 그날 급여를 빼고 그 주 주휴수당도 주지 않는다(만근 기준, 노무사 답변 2026-10-14 질문 15). 다만 <b>정직원은 결근해도 시스템이 급여에서 자동으로 빼지 않는다</b> — 뺄 일이 있으면 관리자가 명세서에서 직접 고친다(2026-10-29 재영, 효준 질문 WHALEERP-630). 금액은 <b>그 주에 실제 일한 시간 ÷ 5 × 시급</b>이고(1주 실근무 ÷ 40 × 8과 같다), 실제 일한 시간이 40시간 이상이면 8시간 × 시급이다 — 계약한 소정근로시간이 아니라 출퇴근 기록의 실근무 시간으로 센다(노무사 답변 2026-10-14 질문 1 「총근무시간 ÷ 5」, 2026-10-28 재영). 이 실근무에서 <b>연장 시간(아래 정의)은 뺀다</b> — 파트타이머는 계약한 소정근로시간 안에서 일한 시간까지만 센다. 가산 스위치를 끈 명세서도 같다(2026-10-29 재영). 주휴 대상(1주 소정근로 15시간 이상)은 그대로 계약으로 판정한다. <b>연장근로는 1일 8시간 또는 1주 40시간을 넘긴 시간</b>이다. 파트타이머는 여기에 더해 <b>계약한 요일별 소정근로시간이나 1주 소정근로시간을 넘긴 시간</b>(계약하지 않은 요일에 일한 시간은 전부)도 연장으로 보고, 가산 스위치가 켜진 명세서에서 1.5배를 준다(기간제법 제6조). 같은 시간은 한 번만 가산한다. 정직원 근로계약의 월간 연장(포괄 연장)은 월급에 이미 들어 있으므로, 실제 연장 시간에서 계약의 월간 연장을 빼고 넘친 만큼만 연장수당으로 더 준다(2026-10-23 재영). 달을 걸친 주는 이전 달 근무일만으로 주휴 조건을 채우면 이전 달 명세서에서 주휴를 주고, 못 채우면 다음 달 근무일까지 합쳐 다음 달 명세서에서 센다. 금액도 그 명세서가 판정에 쓴 근무일로 센다 — 이전 달 명세서는 이전 달 근무일의 실근무만 넣고 다음 달 근무일은 보태지 않으며, 다음 달 명세서는 주 전체 실근무로 센다(2026-10-29 재영, 효준 질문 WHALEERP-630). 주 40시간 연장도 같은 주 단위로 센다(2026-10-23 재영, 노무사 답변 2026-10-14 질문 14 확인 뒤 2026-10-28 재영 유지). 한 주의 연장이 12시간(주 52시간)을 넘어도 시스템은 막지 않고 화면에 알리기만 한다 — 근무스케줄 관리에서 근무를 배정할 때(그 주 배정 합계가 52시간을 넘으면)와 급여명세서 검토에서 계산할 때(그 주 실근무가 52시간을 넘으면) 알린다(노무사 답변 질문 5 「확인해야 함, 제약은 없음」, 2026-10-28 재영). 급여 기간 중에 근로계약이 바뀌면 날마다 그날 효력이 있는 계약으로 나눠 계산한다 — 기본급·연장은 그날 계약의 시급·요일별 소정근로시간으로, 주휴는 한 주가 두 계약에 걸치면 그 주 마지막 날에 효력이 있는 계약으로 센다(우리 판단 · 노무 확인 대기, PAY-09). 「기간 중 계약 변경」 사유는 그대로 붙인다(2026-10-26 재영, 효준 질문). 다만 급여 기간 안에서 <b>정직원과 파트타이머 계약이 바뀌면</b>(고용 형태가 섞이면) 두 계산식(정직원은 월 기본시간·일할, 파트타이머는 실근무·주휴)을 나누는 규칙을 정하지 않았으므로 기본급·주휴수당·연장수당을 계산하지 않고 비워 둔다. 「기간 중 계약 변경」 사유에 「직접 입력해 주세요」를 적어 관리자가 세 금액을 넣게 한다. 나눠 계산하는 규칙은 노무 확인 뒤 2차에서 다시 본다(2026-10-27 재영, 효준 PR #159).<span class="src">2026-09-30 재영 · 노무사 답변 2026-10-14(질문 1·2·13·14·15) · 포괄 연장·달 걸친 주 2026-10-23 재영 · 주휴 실근무 기준 2026-10-28 재영 · 계약 나눔 · 일할은 노무 확인 대기</span></span></div>
+        <div class="rule"><span class="id">PAY-05</span><span class="txt">연장·야간·휴일 가산 적용 여부는 <b>급여명세서 한 장마다 관리자가 정한다.</b> 끄면 연장 시간을 가산 없이 1배로만 계산하고(일한 시간의 임금은 준다, 2026-10-23 재영), 바꾸면 연장수당 계산값을 다시 채우며 처리 이력에 수정으로 남는다. 새 명세서는 같은 직원의 지난 명세서 값을 따르고, 첫 명세서는 적용으로 시작한다. 2026-09-29 재영 5인 미만 사업장에는 근로기준법 제56조(연장·야간·휴일 가산)와 기간제법 제6조(파트타이머 초과근로 가산)가 모두 적용되지 않아 한 스위치로 묶는다(2026-09-30). 5인 미만인지는 사업자 번호(점포) 단위로 센다(노무사 답변 2026-10-14 질문 17). 끄면 관리자가 넣는 야간수당·휴일근무수당 칸에도 가산 대상이 아니라는 안내를 보인다.<span class="src">S-KWTTUF</span></span></div>
+        <div class="rule"><span class="id">PAY-06</span><span class="txt"><b>검토 대기</b>로 분류하는 사유는 다섯이다 &mdash; <em>출퇴근 누락 · 계약 만료 후 기록 포함 · 기간 중 계약 변경 · 공제 미입력 · 확인 필요 기록 포함</em>. 확인 필요 기록 포함은 급여 기간의 출퇴근 기록 가운데 확인 필요가 붙은 것이 있을 때다. 달을 걸친 첫 주의 앞 달 날 근무가 이번 달 주휴·연장 계산에 들어가면(PAY-04), 그날의 출퇴근 누락과 확인 필요 기록도 이번 달 명세서의 사유로 붙인다 — 같은 날이 앞 달 명세서에도 사유로 나온다(2026-10-29 재영, 효준 api #193). 급여 기간이 끝나기 전에도 초안은 만들 수 있지만(미리 보기), <b>확정은 급여 기간 마지막 날이 지나야</b> 할 수 있다 — 남은 날 근무가 빠져 덜 센 명세서가 발송되는 것을 막는다(2026-10-29 재영, WHALEERP-630). 기간 중에 퇴직하거나 계약이 끝난 직원은 <b>퇴직일 · 마지막 계약 종료일 · 급여 기간 마지막 날 가운데 가장 빠른 날의 다음 날</b>부터 확정할 수 있다 — 그 뒤로는 셀 근무가 없고, 퇴직 후 14일 안 금품 청산(근로기준법 제36조)을 막지 않기 위해서다(2026-10-29 재영, 효준 api #206 리뷰). 그 계약의 갱신 계약이 체결 전(발송 대기 · 서명 대기 · 수정 요청 — 임시저장은 보내지 않은 것이라 세지 않는다)이고 급여 기간 안에 시작하면 계약 종료일은 보지 않고 급여 기간 마지막 날까지 기다린다(퇴직일은 그대로 본다, 효준 api #206). 일찍 확정한 뒤 같은 달에 시작하는 갱신 계약이 새로 생기면 그 근무는 확정한 명세서에서 빠진다 — 1차는 이를 받아들이고 관리자가 확정 취소 → 「출퇴근으로 다시 계산」으로 바로잡는다. 실제로 생기면 알림을 더 검토한다(2026-10-30 재영). 계약이 끝난 뒤 새 계약 없이 출근한 기록은 확정을 막지 않고 「계약 만료 후 기록 포함」 검토 대기 사유로 보인다 — 그 기간을 계산할 근로계약이 없어 막아도 금액이 맞아지지 않는다(2026-10-29 재영). 기록은 급여 계산에 그대로 넣고, 관리자가 명세서를 확정하기 전에 한 번 보게 한다(쟁점 ATT-11, 2026-10-20 재영 — 반경 밖 출근을 거리 상한 없이 받게 되어서). 검토 대기는 상태가 아니라 분류다 — 사유가 붙어도 상태는 작성 중 그대로 두고(PAY-01) 목록에 「검토 대기」 배지와 필터로 보인다. 「출퇴근으로 다시 계산」을 누를 때마다 그때 데이터로 사유를 모두 새로 판정하고 앞서 「확인」한 표시는 지운다(2026-10-26 재영, 효준 질문). 공제 미입력은 저장된 사유가 아니라 공제 칸으로 판정해, 공제가 비어 있는 작성 중·검토 중 명세서도 검토 대기 목록·건수·배지에 잡는다(확정은 그대로 막는다). 확정 취소하면 사유의 「확인」 표시를 풀어 다시 검토 대기에 잡는다 — 확정 취소는 다시 검토하려는 것이기 때문이다. 목록 건수 줄에서 검토 대기는 상태 넷과 떼어 다른 모양으로 보이고, 줄의 배지도 「검토 중」 상태 배지와 다른 색으로 한다(2026-10-27 재영, 효준 PR #169·#151 리뷰).<span class="src">STAFF-5 · 2026-10-20 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-07</span><span class="txt">근로계약이나 출퇴근 기록이 빠진 직원도 <b>누락 경고를 보인 뒤 초안을 만든다.</b> 다만 유효한 근로계약이 없으면 초안을 만들지 않는다.<span class="src">S-KWTTUF</span></span></div>
+        <div class="rule"><span class="id">PAY-08</span><span class="txt">급여명세서는 <b>이메일로 발송</b>하고 직원은 앱에서 본다. <b>퇴직해 근무지가 없어도 급여 탭에서</b> 보존 기간 동안 볼 수 있다. 발송한 명세서만 직원에게 보인다. 급여 탭은 <b>앱에서 고른 근무지와 관계없이</b> 그 계정의 모든 직원 레코드로 받은 명세서를 보이고, 목록의 명세서마다 <b>점포 이름</b>을 반드시 적는다(예: 「웨일카페 강남역점 · 8월 20일 발송」). 근무스케줄·출퇴근 현황·알림은 고른 근무지를 따르고 급여만 예외다(쟁점 PAY-8, 2026-10-20 재영). 급여 탭 맨 위 카드는 <b>이번 달에 받은 명세서 전체의 실지급액 합계</b>를 근무지와 관계없이 더해 보이고 건수와 점포를 함께 적는다. 합계·건수·점포는 api가 계산해 내리고 앱은 더하지 않는다. 달은 발송일로 가르고(지급일 칸이 없다), 다시 보낸 명세서는 최신 발송일로 센다. 이번 달에 받은 명세서가 없으면 「이번 달에 받은 명세서가 없습니다」로 적고, 카드에는 명세서로 가는 링크를 두지 않는다 — 명세서는 아래 「명세서」 목록에서 연다(쟁점 PAY-9, 2026-10-20 재영). 아래 목록은 이름을 「명세서」로 하고 받은 명세서를 모두 보이며, <b>점포·연도 필터 칩</b>을 둔다. 처음은 전체 점포·올해이고, 칩을 누르면 시트에서 고르며 바꾼 칩은 강조색으로 보이고 제목 옆에 걸러진 건수를 적는다. 점포 선택지는 명세서를 받은 적이 있는 점포 모두(퇴직한 곳 포함)로, 앱 근무지 목록(CTR-29)과 다르다. 연도는 급여 기간 기준이고(2025년 12월 근무분을 2026년 1월에 받아도 2025년), 명세서 보존이 3년(PAY-4)이라 올해부터 3년 전까지 늘 고를 수 있다(2026년이면 2026~2023년). 연도로 끊으므로 「더 보기」는 두지 않고 급여 기간 최신순으로, 같은 달이면 발송일 최신순으로 늘어놓는다. 정정해 다시 보낸 지난달 명세서가 이번 달 명세서 위로 올라오지 않게 하려는 것이다(2026-10-22 재영, 최효준 제안). 결과가 없으면 「조건에 맞는 명세서가 없습니다」와 「필터 지우기」를 보인다. 맨 위 이번 달 합계는 필터와 관계없다(쟁점 PAY-10, 2026-10-20 재영). 보낸 뒤 확정 취소해 「검토 중」인 명세서는 금액이 정해지지 않았으므로 이번 달 합계에서 뺀다(2026-10-21 재영, api #96).<span class="src">S-KWTTUF · PAY-4 · HOME-5 · PAY-8 · PAY-9 · PAY-10 · 2026-10-20 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-19</span><span class="txt">다시 보낸 명세서는 <b>최신 값으로 덮는다</b>. 이전 금액 비교 대신 상세에 <b>처리 이력</b>(발송·확정 취소)을 따로 보인다. 직원 근무 앱은 다시 보낸 명세서 위에 「다시 발송되었습니다」 안내를 두지 않고, 처리 이력에도 「재발송」 줄을 따로 적지 않는다(쟁점 PAY-1, 2026-10-20 재영 — 2026-09-18 「두 번째 발송 줄을 재발송으로 적는다」를 바꿈). 정정되어 다시 온 명세서도 바뀐 항목에 「정정됨」 같은 표시를 붙이지 않고 최신 값만 보인다(쟁점 PAY-1, 2026-10-20 재영). 직원 근무 앱도 관리자 웹과 같이 <b>시각과 한 줄 설명</b>만 남기고 덧붙이는 안내 문단은 두지 않는다. 연장수당은 <b>한 줄 계산식</b>으로 보인다.<span class="src">PAY-1 · PAY-3 · 2026-10-20 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-20</span><span class="txt">명세서의 초안 생성·수정·확정·확정 취소·발송을 <b>처리 이력 한 곳</b>에 남긴다. 금액을 고쳐 저장하면 시스템이 <b>「연장수당 96,000원 → 128,000원」처럼 한 줄</b>을 만들어 이력에 넣는다. 이 내용은 <b>관리자 웹에만</b> 보이고 직원 근무 앱은 유형과 시각만 보인다. 직원 근무 앱은 다섯 유형 가운데 <b>발송과 확정 취소만</b> 보이고 초안 생성과 수정은 보이지 않는다. 다시 보내 발송 줄이 여럿이면 직원 근무 앱은 <b>가장 최근 발송 한 줄만</b> 「발송」으로 보이고 앞의 발송 줄은 보이지 않는다. 확정 취소 줄은 상태를 알 수 있게 그대로 보인다(쟁점 PAY-1, 2026-10-20 재영). 관리자 웹은 모든 줄을 보인다. 한 번이라도 보낸 명세서는 확정 취소 뒤에도 직원 근무 앱 목록·상세·메일 링크에 남고, 다시 보낼 때까지 <b>「검토 중」</b> 배지로 보이며 금액·항목·PDF는 보이지 않는다 — 고치는 중인 값이 직원에게 보이지 않게 서버에서 가린다(2026-10-21 재영, api #96).<span class="src">2026-09-18 재영 · 2026-10-20 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-21</span><span class="txt">지급·공제 항목 목록은 <b>플랫폼 관리자가 관리</b>한다. 점포 관리자는 목록에서 골라 붙이기만 하고 항목을 새로 만들지 않는다. 상여 종류는 본사가 정한다. 다만 <b>1차에는 상여를 명세서에 「상여」 한 줄로만 두고 금액만 넣는다</b>. 본사가 정한 상여 종류에서 골라 붙이고 떼는 것은 2차로 미룬다(2026-10-28 재영, WHALEERP-331).<span class="src">2026-09-29 재영 · 2026-10-28 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-22</span><span class="txt"><b>달 중간에 입사·퇴사한 정직원의 기본급은 일할 계산한다.</b> 그 달에 재직한 날만큼 나눠 채우고, 관리자는 명세서에서 고칠 수 있다(PAY-02). 나누는 기준(역일·소정근로일)은 노무사 질문에 더한다. 우리 판단 · 노무사 확인 대기.<span class="src">WHALEERP-207~223·227 · 2026-10-23 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-09</span><span class="txt">급여 지급 실행은 1차 범위에 넣지 않는다. 주휴·연장 계산식과 가산율은 <b>확정 전에 노무사 검토</b>를 거친다.<span class="src">S-KWTTUF</span></span></div>
+        <div class="rule"><span class="id">PAY-18</span><span class="txt">발송된 급여명세서는 <b>상세 화면에서만</b> 처리 완료본 PDF를 내보낸다. 목록에는 내보내기 버튼을 두지 않는다. 앱이 공유 시트를 직접 띄우지 않고 파일을 받게 하며, 휴대전화 브라우저가 받은 파일에 띄우는 저장 · 공유를 공유 시트로 쓴다(근로계약서 CTR-16 과 같은 방식, 2026-10-28 김민식 — 구현 방식을 정책에 맞춤).<span class="src">PAY-2 · 2026-10-28</span></span></div>
+      </div>
+    </div>
+
+    <div class="gh">근무스케줄과 TO-DO</div>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">PAY-10</span><span class="txt">근무스케줄의 기본값은 <b>근로계약의 근무시간</b>에서 채우되, 자동 반영은 <b>등록하는 시점 한 번</b>뿐이다. 계약을 나중에 고쳐도 이미 등록된 근무스케줄은 바뀌지 않는다.<span class="src">STAFF-14</span></span></div>
+        <div class="rule"><span class="id">PAY-11</span><span class="txt">근무스케줄은 <b>근무일이 체결 완료 근로계약 기간 안에 있는 직원에게만</b> 등록한다. 계약이 미체결이거나 계약 시작 전·종료 후인 날은 받지 않으며, 등록 화면의 직원 선택지와 일괄 등록 체크 목록에서 빼고 지난 주 복사에서도 「제외 · 근로계약 미체결」로 뺀다. 서버도 저장할 때 다시 확인한다. 계약은 있으나 근무시간이 비어 있으면 빈 값으로 연다. 같은 직원의 같은 시간대 근무스케줄이 겹치면 등록을 막는다. 겹침은 <b>같은 점포 안(같은 직원 레코드)</b>만 본다 — 다른 점포와의 근무 시간 겹침은 계약 단계(CTR-26)에서 막는다. 겹치지 않으면 <b>같은 날 여러 번</b>(쪼갠 근무) 등록할 수 있다. <b>자정을 넘는 근무</b>(예: 18:00~익일 01:00)도 받고, 근무일은 <b>시작한 날(한국 날짜)</b>로 센다 — 계약 기간 확인·주 집계·월 달력 표시 모두 같고, 로그인 후 홈(점포 하나 화면)의 근무스케줄도 00~24시 시간축에 같은 기준을 쓴다(영업일 기준은 쓰지 않는다). 시각은 00~24시 어디든 받는다. 휴게는 <b>분</b>으로만 두고, 계약의 휴게 시작·종료 시각을 가져올 때는 그 길이로 바꾼다. 퇴직 예정자에게는 퇴직일 뒤 날짜로 등록하지 못한다(CTR-24) (2026-10-21 재영). 「체결 완료 근로계약 기간」은 한 번이라도 체결된 계약의 기간이다 — 체결된 뒤 대체·만료로 종료된 계약의 기간도 포함해 지난 근무스케줄을 고치거나 넣을 수 있고, 날인 전에 종료·거부·만료된 계약은 넣지 않는다(2026-10-21 재영). 종료일이 빈 계약(기간의 정함이 없음)이 대체 등으로 종료되면 <b>종료 처리한 날</b>을 그 계약 기간의 끝으로 본다(2026-10-21 재영). 근무스케줄은 <b>가입 완료한 직원</b>에게만 등록한다 — 종이 계약으로 체결 완료여도 계정이 이어지지 않은 직원은 받지 않는다(TO-DO와 같다). 시작·종료 시각은 <b>30분 단위</b>(00분·30분)만 받는다. 본사 계정은 본사 제공 동의가 없는 가맹 직원의 근무스케줄을 등록·수정·삭제하지 못한다(ATT-30) (2026-10-21 재영).<span class="src">STAFF-14 · STAFF-29 · 근무스케줄 관리 · 2026-10-08 · 10-21 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-12</span><span class="txt">관리자는 <b>시점 제한 없이</b> 근무스케줄을 고치고 지울 수 있다. 지난 날짜를 고쳐도 경고하지 않고 변경 이력에만 남긴다. 근무스케줄은 <b>급여명세서 계산에 쓰지 않는다</b> — 급여는 근로계약과 출퇴근 기록으로 센다(PAY-04) (2026-10-21 재영). 예외로 근무 시간에서 빼는 <b>휴게</b>는 그날 근무스케줄의 휴게를 먼저 쓰고, 근무스케줄이 없으면 근로계약의 그 요일 휴게를 쓴다(2026-10-23 재영).<span class="src">근무스케줄 관리 · 2026-10-21 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-13</span><span class="txt">지난 주 복사는 <b>비어 있는 주에서만</b> 할 수 있고 원본은 직전 주로 고정한다. <b>재직 중인 직원만</b> 복사하며, 그 근무일에 체결 완료 근로계약이 없는 직원은 「제외 · 근로계약 미체결」로 뺀다(PAY-11). 결과는 저장 즉시 직원 근무 앱에 반영된다(PAY-14). 주 중간에 퇴직·계약 종료가 있는 직원은 받을 수 있는 날만 복사하고 나머지 날은 제외 사유와 함께 보인다. 복사는 한 번에 전부 넣거나 전부 넣지 않는다. 원본 주에 본사에게 가려진 직원(본사 제공 동의 없는 가맹 직원, ATT-30)이 있으면 본사 계정(BP 마스터·BP 관리자)은 지난 주 복사를 하지 못하고 가맹 점포 관리자가 복사한다 — 본사가 복사하면 그 직원만 빠진 채 주가 차서 다시 복사할 수 없게 되기 때문이다(2026-10-21 재영).<span class="src">STAFF-13</span></span></div>
+        <div class="rule"><span class="id">PAY-14</span><span class="txt">근무스케줄에는 <b>확정 단계가 없다</b>. 저장하면 바로 직원 근무 앱에 반영되고, 알림은 <b>저장할 때마다 한 번</b>(일괄 등록·지난 주 복사 포함), 이번 저장에서 등록·수정·삭제된 직원에게만 보낸다. 변경이 없는 직원에게는 보내지 않는다. 퇴직 처리로 퇴직일 뒤 근무스케줄이 지워질 때는 알림을 보내지 않고 변경 이력에만 남긴다 (2026-10-21 재영). 퇴직한 직원의 지난 근무스케줄을 관리자가 고치거나 지울 때도 알림을 보내지 않고, 탈퇴한 계정에도 보내지 않는다(2026-10-21 재영).<span class="src">STAFF-15 · 2026-10-08 · 10-21 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-15</span><span class="txt">TO-DO는 <b>정규 근무 외의 특별업무 전용</b>이다. 반복·정기 업무는 대상이 아니고 반복 설정도 두지 않는다.<span class="src">STAFF-4</span></span></div>
+        <div class="rule"><span class="id">PAY-16</span><span class="txt">배정 대상은 <b>개인 또는 근무지 전체</b>이고, 전체 배정은 <em>각자 수행 · 한 명 수행</em> 중 등록할 때 고르며 뒤에 바꾸지 못한다. 수행 예정 날짜는 필수, 시간은 선택이다. 근무지 전체 · 각자 수행은 <b>등록할 때의 재직자만</b> 넣고 나중에 들어온 직원은 넣지 않는다. TO-DO의 배정·알림 대상은 <b>그 점포에 체결 완료 근로계약이 있고, 가입을 마쳤고, 퇴직하지 않은</b> 직원 레코드이고 퇴직 예정은 넣는다. 직원 근무 앱은 체결 완료 계약이 있어야 그 점포의 TO-DO를 보이고(CTR-29), 종이 계약(CTR-23)은 가입 전에 체결 완료로 시작해 계정 없는 직원이 생기기 때문이다(2026-10-19 재영). 수행 예정 날짜는 한국 날짜 기준으로 오늘보다 앞이면 막는다. 오늘 날짜는 시각이 지났어도 받고, 그 건에는 수행 임박 알림이 가지 않는다(2026-10-19 재영). 제목은 100자, 내용은 2,000자까지다. 배정 그룹을 지울 때 진행 중·완료가 섞여 있으면 <b>대기인 건만</b> 지우고 지운 건수와 남은 건수를 알린다. 수행 예정 일시를 고치면 수행 임박 알림(NTF-12)을 새 일시 기준으로 한 번 더 보낸다(2026-10-19 재영).<span class="src">S-XZSAOE · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">PAY-17</span><span class="txt">TO-DO 상태는 <em>대기 · 진행 중 · 완료</em> 셋이다. <b>긴급 표시는 강조용이다.</b> 직원 근무 앱 홈·근무 탭과 관리자 웹 TO-DO 목록에서 <b>수행 예정 일시와 관계없이 맨 위에</b> 두고 알림함에서 빨간 점으로 가르며 관리자 웹 미조치 합계(HOM-03)에 센다. 긴급 건끼리는 수행 예정 일시 순이다. 완료되지 않은 나머지는 그 아래에 수행 예정 일시 순이다. <b>완료된 건은 긴급이어도 맨 뒤로</b> 가서 수행 예정 일시 순으로 선다. 긴급이라고 <b>따로 푸시를 보내지 않고</b> 표시 이력은 남긴다. 상태는 담당 직원과 관리자가 바꾼다. 관리자는 TO-DO 상세에서 직원 대신 바꾸고, 이력에는 바꾼 관리자를 남긴다(2026-10-19 재영, WHALEERP-113).<span class="src">S-XZSAOE · 2026-09-28 재영 · 2026-10-19 재영</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="att">
+    <h2><span class="code">ATT</span> 출퇴근 정책 <span class="sub">GPS 판정으로 전면 교체 · 2026-09-10</span></h2>
+    <p class="intro" data-h="att">출퇴근의 현장 확인은 GPS 판정 하나로 모았습니다. 위조와 실내 오차라는 약점은 반경 100m, 오차가 크면 확인 필요 꼬리표, 권한을 거부하면 등록 불가로 받아들였습니다. 2차에서 기기 등록이나 QR을 얹을 때는 판정 근거만 갈아 끼우고 나머지 흐름은 그대로 둡니다.</p>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">ATT-01</span><span class="txt">출퇴근 등록은 <b>직원 근무 앱</b>에서 하고, 점포에 도착했다는 사실은 <b>GPS로 판정</b>한다. 점포별 전용 기기와 QR·바코드 식별은 2차에서 다시 본다.<span class="src">ATT-1</span></span></div>
+        <div class="rule"><span class="id">ATT-02</span><span class="txt">근무지 반경은 <b>공통 100m</b>를 기본값으로 하고 지하·실내 점포는 관리자가 더 넓게 잡는다. <b>1차에는 모든 점포를 100m로 고정</b>하고 넓히는 기능은 두지 않는다 — 점포 테이블(1팀)에 반경 칸이 없다(WHALEERP-207·208, 2026-10-23 재영).<span class="src">ATT-2 · WHALEERP-207·208 · 2026-10-23 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-03</span><span class="txt">휴대전화의 위치 <b>권한</b>을 끄면 등록할 수 없다. 이 경우에는 대신 등록을 열지 않고 권한을 켜도록 안내만 한다. 위치정보 <b>동의</b>를 거부하거나 철회한 경우는 ATT-20을 따른다.<span class="src">ATT-3</span></span></div>
+        <div class="rule"><span class="id">ATT-04</span><span class="txt">위치 오차는 <b>따로 판정하지 않는다</b>. 휴대전화가 알려 준 위치로 반경 안·밖만 가르고, 오차 때문에 반경 밖으로 잡히면 ATT-14대로 반경 밖 출근·퇴근 확인 필요가 붙는다. 「위치 흐림」 화면과 확인 필요 사유 「위치 오차 초과」는 두지 않는다. api enum 값 ACCURACY_EXCEEDED 는 지우지 않고 쓰지 않은 채 남긴다(쟁점 ATT-4, 2026-10-20 재영 — 09월 「오차가 반경보다 크면 받되 확인 필요」를 바꿈. 반경 밖 출근도 받게 되어(ATT-11) 오차로 출근이 막힐 일이 없어서).<span class="src">ATT-4 · 2026-10-20 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-05</span><span class="txt"><b>판정은 휴대전화에서 한다.</b> 앱이 근무지 좌표와 반경을 받아 거리를 계산하고, 서버에는 출근·퇴근 요청과, 확인 필요가 붙을 때 그 사유만 보낸다. <b>좌표는 서버로 보내지 않고</b> 어디에도 저장하지 않는다. 다만 출퇴근 탭의 지도(카카오 지도)를 그릴 때 내 주변 지도를 받아 오므로 대략적인 위치가 카카오에 전달된다 — 위치정보 동의서에 이 사실(받는 자 · 목적)을 적고, 제공인지 위탁인지와 문구는 법무(ATT-8)에서 확인한다(2026-10-28 재영).<span class="src">ATT-5 · 2026-09-29 재영 · 2026-10-28 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-06</span><span class="txt">위치정보 동의는 <b>첫 출근 등록 때 필수로</b> 받는다. 서비스 이용약관과 떼어 위치기반서비스 이용약관으로 받고, 가입 단계에서는 받지 않는다. 동의해야 앱으로 출퇴근을 등록할 수 있다. 거부하면 「위치정보 이용에 동의하지 않으면 앱으로 출퇴근을 등록할 수 없습니다. 출퇴근 기록은 근무지 관리자에게 문의해 주세요.」를 보이고, 출퇴근 기록은 운영 정책 ATT-20의 대신 등록으로 남긴다. 동의 시트에는 출퇴근 시각이 남고, 반경 밖이면 확인 필요 표시와 사유만 남았다가 관리자 검토 뒤 지운다고 적는다(위치와 반경 안·밖 판정은 남기지 않는다, 2026-10-23 재영). 동의서 항목과 문구는 법무(ATT-8)에서 확인한다.<span class="src">ATT-5 · 2026-09-30 재영 · 문구 2026-10-23 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-07</span><span class="txt">출퇴근 등록은 <b>앱에서 고른 근무지</b>(홈 상단 근무지 선택기·근무 정보의 근무지 카드, CTR-29)로 한다. 출퇴근 등록 화면에서 근무지를 따로 고르거나 가장 가까운 근무지로 자동으로 바꾸지 않는다 — 어느 근무지로 찍을지는 직원이 판단한다. 고른 근무지의 반경 밖이면 ATT-14대로 출근·퇴근 모두 확인 필요로 받는다(2026-10-20 재영, 2026-09 「가장 가까운 근무지를 먼저 고른다」를 바꿈).<span class="src">ATT-6 · HOME-2 · WORK-4 · 2026-10-20 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-08</span><span class="txt">직원은 <b>시간 제한 없이</b> 출근과 퇴근을 등록한다. 다만 <b>그날이 체결 완료 근로계약 기간 안에 있어야</b> 하며, 계약이 미체결이거나 계약 시작 전·종료 후이면 출근 등록을 막는다. 퇴근은 열린 출근을 닫아야 하므로 막지 않는다(2026-11-09 재영). 막을 때는 시트를 띄우고 두 시트 모두 본문에 「오늘 날짜가 들어간 체결 완료 근로계약이 있어야 출퇴근을 등록할 수 있습니다.」를 적는다. 그 직원에게 <b>서명 대기나 수정 요청 계약이 있으면</b>(수정 요청 계약만 있어도 같다, 2026-10-19 재영) 제목 「근로계약을 체결해야 출근할 수 있습니다」에 계약서 카드를 보이고 닫기·「계약서 보기」로 날인에 안내한다. <b>없으면</b>(계약 시작 전·종료 후·계약 없음) 제목 「오늘은 근로계약 기간이 아닙니다」에 「근무지 관리자에게 문의해 주세요」를 보이고 버튼은 닫기 하나다. ATT-20의 대신 등록도 같은 기준이다.<span class="src">S-EFQGSP · 앱 ATT-12 · staff 3d390a5 · 2026-10-08 재영 · 2026-10-19 재영 · 2026-11-09 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-09</span><span class="txt">기록 시각은 <b>서버가 등록 요청을 받은 시각</b>으로 확정한다. 열려 있는 출근 기록이 있으면 추가 출근을, 대응하는 출근 기록이 없으면 퇴근을 거부한다.<span class="src">S-EFQGSP</span></span></div>
+        <div class="rule"><span class="id">ATT-10</span><span class="txt">출퇴근 기록의 <b>보정은 관리자 웹에서만</b> 하고 직원은 자기 기록을 고치지 못한다. 관리자는 <b>최근 3개월</b> 이내 기록만 보정한다.<span class="src">S-FKFTIW</span></span></div>
+        <div class="rule"><span class="id">ATT-11</span><span class="txt">보정하면 <b>보정자·보정 시각·사유·보정 전후 값</b>을 이력으로 남기고 원본과 분리해 저장한다. 급여명세서가 확정된 뒤에도 보정할 수 있으나 영향 가능성을 경고한다.<span class="src">S-FKFTIW</span></span></div>
+        <div class="rule"><span class="id">ATT-12</span><span class="txt">출퇴근 기록은 현황 조회와 급여명세서 작성의 <b>참조 데이터</b>로 쓴다. 자동 급여 계산과 외부 근태 시스템 연동에는 쓰지 않는다.<span class="src">F-OJGKPZ</span></span></div>
+        <div class="rule"><span class="id">ATT-13</span><span class="txt">퇴근하기를 누르면 바로 기록하지 않고 <b>확인 시트</b>를 한 번 띄운다. 시트에는 출근 시각과 지금까지의 근무 시간을 보이고 직원이 <b>퇴근 확정</b>을 눌러야 기록한다. 출근하기는 확인 없이 바로 기록한다.<span class="src">2026-09-18 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-14</span><span class="txt">근무지 반경 밖에서도 <b>출근과 퇴근을 모두</b> 등록할 수 있고, 시트에 범위 밖임을 알린 뒤 확정하면 <b>확인 필요</b>로 기록한다. 점주가 출근 시간에 다른 곳을 들렀다 오게 할 수 있어 막지 않는다. 출근 확인 시트는 출근할 근무지 이름을 크게 보이고 「근무지가 다르면 홈이나 근무 정보에서 바꿔 주세요」를 적는다(ATT-07). 거리 상한은 두지 않는다. 위치 조작 감지는 그대로 출근을 막는다(ATT-21) (쟁점 ATT-11, 2026-10-20 재영 — 09-18 「출근은 반경 밖에서 등록하지 못한다」를 바꿈).<span class="src">2026-09-18 재영 · ATT-11 · 2026-10-20 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-15</span><span class="txt">등록한 출퇴근 기록을 직원이 <b>되돌리지 못한다.</b> 잘못 등록된 기록은 관리자 보정으로만 고친다.<span class="src">2026-09-18 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-16</span><span class="txt">관리자가 보정한 기록에는 직원 근무 앱에서 <b>연필 표시</b>를 붙인다. 누르면 <b>보정 전후 값·보정자·보정 사유</b>를 상세 시트로 보인다. 보정은 직원 몰래 하는 일이 아니다.<span class="src">HIST-1 · 2026-09-17 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-17</span><span class="txt">직원 근무 앱의 출퇴근 현황은 <em>이번 주 · 기간별</em> 두 탭으로 나눈다. 기간별은 시작일과 종료일을 직접 고르고 한 번에 <b>최대 1년</b>까지 본다. 들어올 때 기본값은 <b>이번 달</b>이다. 기록 보존 3년은 그대로다.<span class="src">HIST-2 · 2026-09-17 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-18</span><span class="txt"><b>확인 필요</b> 건은 직원에게 <b>사실과 사유만</b> 보인다. 직원이 누를 버튼이나 이의제기 절차는 두지 않고 「관리자가 확인 중입니다. 기록이 다르면 근무지 점포에 말씀해 주세요」로 안내한다.<span class="src">HIST-3 · 2026-09-17 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-19</span><span class="txt"><b>위치 판정 결과는 저장하지 않는다.</b> 반경 안·밖은 휴대전화 안에서 판정에만 쓰고 버린다. 정상 출근 기록이 있다는 것 자체가 반경 안이었다는 뜻이라 따로 남길 까닭이 없다. 확인 필요가 붙은 기록에만 <b>사유 글자</b>(반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지 · 근무 12시간 초과)를 남기고, 관리자가 보정하거나 「이상 없음」으로 검토를 마치면 확인 필요와 사유를 지운다. 출퇴근 시각 기록은 3년 둔다. (처음에는 판정 결과를 떼어 따로 저장하기로 했다가 같은 날 바꿨다.) 「이상 없음」은 확인 필요가 붙은 기록에만 두고 출근·퇴근 미등록 줄에는 두지 않는다 — 미등록은 보정으로 채운다(2026-10-26 재영, 효준 질문). <b>근무 12시간 초과</b> — 퇴근을 출근 다음 날까지 받으므로 짝이 길어질 수 있다. 길이 상한은 두지 않고, 출근부터 퇴근까지 12시간이 넘으면 퇴근 기록에 확인 필요 사유 「근무 12시간 초과」를 붙여 관리자가 보정하거나 「이상 없음」으로 검토를 마치게 한다. 직원이 앱으로 등록한 짝에만 붙이고, 관리자가 보정·대신 등록으로 넣은 짝에는 붙이지 않는다. 급여명세서의 「확인 필요 기록 포함」(PAY-06)에도 그대로 걸린다(2026-10-27 재영, 효준 질문).<span class="src">2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-20</span><span class="txt">위치정보 <b>동의를 거부·철회하거나 일시 중지한 직원</b>은 앱으로 출퇴근을 등록하지 못하고, <b>근무지 관리자가 관리자 웹에서 출퇴근 기록을 대신 등록</b>한다. 대신 등록은 최근 3개월 이내 기록만, 사유를 받아 하고, 보정처럼 직원 앱에 연필 표시로 드러난다. 대신 등록한 기록에는 위치 판정 결과가 없다. 대신 등록도 그날 체결 완료 근로계약이 있는 직원에게만 한다(ATT-08). 인사·노무 가이드라인의 대체수단은 이 대신 등록으로 충분하다고 보고 닫는다. WiFi·QR·승인 요청 같은 다른 수단은 1차에 두지 않는다. 휴대전화 위치 권한만 끈 경우는 대신 등록 없이 권한을 켜라고 안내한다(ATT-03). 법무(ATT-8)에는 이 판단이 맞는지 확인만 받는다(2026-09-29). 위치정보에 동의한 직원의 비어 있는 출근·퇴근은 대신 등록이 아니라 <b>보정</b>으로 채운다. 한쪽만 빈 줄을 채워도, 출근·퇴근이 모두 없는 날(미출근 줄)에 두 시각을 넣어도 보정 한 건으로 남기고 「대신 등록」 꼬리표·필터에 넣지 않으며 직원 앱에 연필 표시가 붙는다(ATT-16). 기록이 없는 날을 채우는 보정은 대신 등록과 같은 조건 — 최근 3개월 이내, 사유 필수, 그날 체결 완료 근로계약이 있는 직원 — 으로 한다(2026-10-26 재영, 효준 질문).<span class="src">2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-21</span><span class="txt"><b>위치 조작을 감지한다.</b> 기기 운영체제가 모의 위치라고 알려 주면(Android 모의 위치, iOS 소프트웨어 모의) 출근은 막고 모의 위치 설정이나 가상 위치 앱을 끄라고 안내한다. 퇴근은 막지 않고 사유 「위치 조작 감지」로 확인 필요를 붙여 받는다. 운영체제가 알려 주지 않는 기기에서는 판정하지 않는다. 시프티·다우오피스가 가상 위치 앱을 막는 것과 같은 취지다.<span class="src">2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-22</span><span class="txt"><b>수집·이용·제공사실 확인자료를 자동으로 기록</b>한다(위치정보법 제16조제2항). 대상 직원, 일시, 수집 방법, 수집·이용·제공 구분, 제공받는 자와 목적을 남기고 위치 자체는 넣지 않는다. 출퇴근 기록과 따로 두며 관리자도 직원도 지우거나 고칠 수 없다. 보존 기간은 RET-08을 따른다. 앱은 <b>출퇴근 탭에 들어올 때와 출근·퇴근 버튼을 누를 때</b> 위치를 읽고, 읽을 때마다 등록 성공·실패와 관계없이 확인자료(수집·이용)를 남긴다. 탭에 들어올 때 읽은 위치는 지도에 근무지와 내 위치 · 근무지까지 거리를 보여 주는 데만 쓰고, 출근 · 퇴근 판정은 버튼을 누를 때 위치를 다시 읽어 정한다. 위치정보에 동의하지 않았거나 일시 중지 중이면 탭에 들어와도 위치를 읽지 않는다(2026-10-28 재영, 효준 요청 — 2026-10-23의 「버튼을 누를 때만」을 바꿈). 위치정보 동의 시트 문구는 탭 진입 · 지도 표시 · 카카오 전달(대략적인 위치)을 적은 새 문구로 바꾸고 <b>위치기반서비스 이용약관 버전을 올려 기존 동의자에게 다시 동의를 받는다</b>(ATT-23, 받는 곳 · 쓰는 곳이 늘어서). 법무(ATT-8) 확인이 늦어지면 그때까지 새 약관 버전(v1.1)의 시행을 미룬다 — 시행 전에는 탭 진입 때 위치를 읽지 않고, 지도에는 근무지만 보이며 내 위치는 그리지 않는다(카카오 전달 고지에 동의받기 전이라서). 탭 진입 읽기와 지도의 내 위치는 v1.1 시행과 함께 켜진다(2026-10-28 재영, 직원앱 #45 · api #185 · WHALEERP-628 — 구현 그대로). 관리자·본사가 반경 밖 사유를 보는 것은 제공으로 보지 않아 제공 확인자료를 남기지 않으며, 이 판단은 법무(ATT-8)에서 확인한다. 위치 조작 감지 화면에도 다시 확인 버튼을 두지 않고 「모의 위치를 끈 뒤 출근을 다시 눌러 주세요」로 안내한다(2026-10-26 재영, 효준 질문).<span class="src">2026-09-29 재영 · 시점 2026-10-23 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-23</span><span class="txt"><b>위치정보 동의를 기록하고 앱에서 철회할 수 있게</b> 한다. 동의 기록에는 약관 버전·동의 시각·철회 시각을 남기고, 약관 버전이 바뀌면 다음 등록 때 다시 받는다. 직원 근무 앱 내 정보에 「위치정보 동의」 행을 두어 상태·약관 보기·동의 철회를 제공한다. 철회하면 ATT-06의 거부 때와 같이 「근무지 관리자에게 문의해 주세요」 안내를 보이고 ATT-20의 대신 등록으로 넘어간다. 일시 중지는 ATT-26을 따른다.<span class="src">2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-24</span><span class="txt"><b>앱 무결성 확인은 1차에서 하지 않는다.</b> 판정을 휴대전화에서 하므로(ATT-05) 변조한 앱이 판정 결과를 꾸며 보낼 수 있다는 한계를 알고 둔다. Android Play Integrity·iOS App Attest 같은 확인은 2차에서 다시 본다. 1차의 조작 대응은 모의 위치 감지(ATT-21)까지다.<span class="src">2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-25</span><span class="txt"><b>제공 사실 통보 기능은 두지 않는다.</b> 관리자는 출퇴근 여부(시각·점포)와 검토 전의 확인 필요 사유만 보고 위치나 판정 결과는 보지 않으므로, 위치정보를 제3자에게 제공하는 것으로 보지 않는다는 판단이다. 이 판단이 맞는지는 법무(ATT-8)에서 확인한다. 출퇴근 등록 완료 화면에 두었던 「출퇴근 기록은 근태 확인을 위해 ○○점 관리자가 확인합니다」 한 줄은 <b>없앤다</b>(2026-10-28 재영, 직원 앱 문구 변경 WHALEERP-627). 그래서 제3자 제공으로 보더라도 통보를 대신할 수단이 지금은 없다. 법무(ATT-8)가 제3자 제공으로 보면 통보 방식을 다시 정한다.<span class="src">2026-09-29 재영 · 2026-10-28 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-26</span><span class="txt"><b>위치 수집 일시 중지를 받는다</b>(위치정보법 제24조). 직원 근무 앱 내 정보의 「위치정보 동의」에 「일시 중지」와 「다시 켜기」를 둔다. 멈춘 동안은 동의는 그대로 두고 위치를 읽지 않으며, 철회와 같이 앱 등록을 막고 「일시 중지 중에는 앱으로 출퇴근을 등록할 수 없습니다. 출퇴근 기록은 근무지 관리자에게 문의해 주세요.」를 보이며 ATT-20의 대신 등록으로 넘긴다. 다시 켜면 새로 동의받지 않고 바로 앱 등록으로 돌아온다. 동의·철회·일시 중지·다시 켜기는 할 때마다 <b>위치정보 동의 이력 테이블</b>에 남긴다. 확인자료(ATT-22)는 수집·이용·제공 세 구분 그대로 두고 이 네 동작을 넣지 않는다(WHALEERP-213, 2026-10-23 재영). 이 방식이 요건을 채우는지는 ATT-8에서 확인한다.<span class="src">2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-27</span><span class="txt"><b>위치기반서비스사업으로 신고한다</b>(위치정보법 제9조). 신고 주체는 플랫폼 운영사다. 좌표와 판정 결과를 서버로 받지 않으므로 개인위치정보사업 등록(제5조)은 하지 않고, 소상공인 사후신고 특례(제9조의2)도 쓰지 않는다. 신고는 서비스 개시 전에 마친다. 실제 직원이 위치정보에 동의하고 출퇴근을 등록할 수 있게 되는 첫날이 개시이며, 실제 점포의 시범 운영도 여기에 든다. 신고 서류(위치기반서비스 이용약관, 보호조치 설명)는 ATT-06·22·23을 바탕으로 만든다. 서류를 준비하면서 KISA 위치정보지원센터에 사전 상담을 법무 검토와 함께 신청해 신고 면제 해당 여부와 서류를 확인받는다. 방통위 해설서는 근태 서비스의 출퇴근 기록을 위치정보로 보고, 면제는 위치를 단말기에서만 쓰고 서버로 보내지 않을 때로 한정하므로 면제는 기대하지 않는다. 이 판단이 맞는지는 ATT-8에서 확인한다.<span class="src">2026-09-30 재영 · 우리 판단 · 법무 확인 대기</span></span></div>
+        <div class="rule"><span class="id">ATT-28</span><span class="txt"><b>노사협의는 BP에 알리기만 한다.</b> 상시 30명 이상 사업장은 GPS 출퇴근을 도입하기 전에 노사협의회 협의가 필요할 수 있다(근로자참여법 제20조 「근로자 감시 설비의 설치」). 협의 의무는 BP에 있으므로 플랫폼은 도입 안내 자료와 고객지원 FAQ에 「상시 30명 이상 사업장은 GPS 출퇴근을 쓰기 전에 노사협의회 협의가 필요할 수 있습니다」 한 줄을 두는 데서 멈춘다. 관리자 웹에서 협의 여부를 확인받는 기능은 두지 않는다. 이 판단이 맞는지는 ATT-8에서 확인한다.<span class="src">2026-09-30 재영 · 우리 판단 · 법무 확인 대기</span></span></div>
+        <div class="rule"><span class="id">ATT-29</span><span class="txt"><b>책임 주체는 두 갈래다.</b> 직원의 인사·근태 개인정보(근로계약·근무스케줄·출퇴근 시각·급여명세서)는 고용주인 BP(가맹 점포는 가맹점)가 처리자이고 플랫폼은 수탁자다. 위치정보는 플랫폼이 위치기반서비스사업자로서 직원에게 직접 동의를 받는다(ATT-06·27). 플랫폼 개인정보 처리방침에 개인위치정보 처리방침 절(위치정보법 제21조의2)과 고객사 위탁을 받아 직원 정보를 처리한다는 사실을 적는다. 사업자 이용약관에 개인정보 처리위탁 조항(개인정보보호법 제26조)을 두고, BP가 자기 처리방침에 적을 수탁자 예시 문구를 제공한다. 「직원 동의 확보 책임은 BP에 있다」 조항은 두지 않는다. 인사 정보는 근로계약 이행에 필요해 동의 없이 처리하고, 위치정보 동의는 플랫폼이 직접 받기 때문이다.<span class="src">2026-09-30 재영 · 우리 판단 · 법무 확인 대기</span></span></div>
+        <div class="rule"><span class="id">ATT-30</span><span class="txt"><b>가맹 점포 직원의 정보는 본사 제공 동의를 받은 경우에만 본사가 개인 단위로 본다.</b> 가맹 점포 직원의 고용주는 가맹점이므로 본사(BP 마스터·BP 관리자)가 보는 것은 제3자 제공으로 본다. 동의는 <b>계정에 하나</b> 두고 그 사람의 가맹 점포 소속 모두에 같이 적용한다 — 한 사람이 점포마다 다르게 고를 일이 없어서다(2026-10-20 노영주, api #78). 가입하거나 소속 추가 확인·복귀 확인을 수락할 때, 아직 동의하지 않은 계정에만 선택 동의로 묻는다. 가입 전이라 계정이 없는 직원은 동의하지 않은 것으로 보고 가린다. 각 본사는 자기 BP 점포에 있는 그 사람의 레코드만 보고, 다른 BP 소속은 드러나지 않는다. 받는 자는 가맹본부(BP 이름), 항목은 근로계약·근무스케줄·출퇴근 기록과 확인 필요 사유·급여명세서, 목적은 가맹점 운영 지원과 점검, 보유 기간은 동의 철회나 가맹 관계 종료까지다. 동의하지 않거나 철회하면 본사 화면에서 그 직원은 점포별 숫자에만 들어가고 개인 기록은 가린다. 범위 선택(전체·가맹·개별 점포)과 상관없이 같고, 목록에서는 행을 남긴 채 이름과 내용을 가려 행 수와 인원 숫자를 맞춘다(쟁점 STAFF-23). 가맹마스터·가맹관리자의 열람과 업무는 그대로다. 동의 기록에는 동의 여부·동의한 문구의 버전·동의 시각·철회 시각을 남기고, 문구 버전이 바뀌어 항목이나 목적이 넓어지면 다시 동의를 받는다. 직원은 직원 근무 앱 내 정보에서 동의를 보고 철회한다. 위치기반서비스 이용약관의 「제공받는 자」에 「가맹 점포 직원이 본사 제공에 동의한 경우 해당 가맹본부」를 적는다. 직영 점포는 본사가 고용주라 해당하지 않는다. 가릴지 판단하는 단위는, 직원이 정해진 일(퇴직 처리, 기존 계약의 상세·이어 쓰기·삭제·목록)은 <b>그 직원의 동의</b>로, 직원이 아직 없는 일(새 계약 작성, 점포 목록)은 <b>점포 단위</b>로 한다(2026-10-13 재영). 동의는 보는 것에 대한 것이라 계정 조치는 넓히지 않는다 — <b>재설정 링크(비밀번호 초기화) 발송</b>은 동의와 상관없이 점포 단위로 판단해, 가맹 점포 직원에게는 가맹마스터·가맹관리자만 보낸다(2026-10-14 재영, api #21). TO-DO는 동의 항목이 아니지만 같은 원칙으로 가린다. 본사 계정에서는 동의하지 않은 가맹 직원을 TO-DO 배정 목록·담당자 필터·개인 배정에서 빼고 목록·상세의 담당자 이름도 가리며, 그 점포에는 근무지 전체 배정만 한다. 동의 항목을 넓히는 것이 아니라 보이는 범위를 좁히는 것이라 다시 동의받지 않는다(2026-10-19 재영, api #64 리뷰). 동의 문구의 버전은 위치정보 동의처럼 api 코드에 상수로 두고 문구를 고칠 때 올린다. 버전이 바뀌어 항목이나 목적이 넓어지면, 다시 동의받기 전까지는 미동의로 보고 가리며 직원이 앱에 들어오면 다시 묻는다. 철회한 직원은 내 정보에서 언제든 다시 동의할 수 있다(ATT-32와 같은 방식). 계정의 동의는 가맹 점포 레코드에만 적용한다. 가맹 점포가 폐점해 가맹 관계가 끝나면 그 레코드에는 더 적용하지 않고, 계정의 동의 자체는 끝내지 않는다(보유 기간이 가맹 관계 종료까지라서, 2026-10-20 재영). 동의 이력은 따로 쌓지 않고 계정의 네 칸(동의 여부·버전·동의 시각·철회 시각)만 두며, 다시 동의하면 앞 기록을 덮는다. 문구 버전은 지금도 받아 주는 버전 목록으로 판정한다 — 글자만 고치면 앞 버전을 목록에 남기고, 항목·목적이 넓어지면 새 버전만 남긴다. 목록에 없는 버전으로 동의한 계정은 미동의로 보고 가리며, 내 정보에서 다시 동의를 묻는다. 가맹 관계가 끝날 때 동의를 철회로 찍는 것은 보류한다 — 지금은 점포 유형을 등록 뒤 바꿀 수 없고 점포를 다른 BP로 옮기는 기능도 없어 생기지 않는 경우이며, 붙이게 되면 동의가 계정 하나라 다른 가맹 소속이 남지 않은 계정만 찍는다. 폐점·BP 회원 탈퇴 때도 철회로 찍지 않는다. 가맹 관계가 끝난 그 레코드에만 동의를 적용하지 않고 계정의 동의는 그대로 두며, 탈퇴한 BP의 자료 보관은 RET 규칙을 따른다(2026-10-28 김민식 · 재영, WHALEERP-137). 여기서 「가맹 관계가 끝남」은 <b>점포 폐점</b>이다(BP 회원 탈퇴로 닫힌 점포 포함). 미운영 가맹 점포는 다시 운영할 수 있어 동의를 그대로 적용한다. 폐점한 가맹 점포의 레코드는 본사 역할에게 가린다(목록은 가린 줄, 상세는 404). 가맹마스터·가맹관리자가 보는 직원 상세의 「본사 제공 동의」 칸은 폐점한 레코드도 계정의 동의대로 「동의」로 보인다 — 계정의 동의는 끝나지 않았기 때문이다(2026-10-28 김민식, WHALEERP-137 · api #187). 근무스케줄 화면에서는 동의하지 않은 직원도 행을 두되 이름·ID·직무·고용 형태를 비우고, 등록할 수 있는 날짜와 시간대별 근무 인원에는 넣는다. 이 값으로 그 직원의 계약 기간이나 근무 시간대를 짐작할 수 있는 정도의 노출은 받아들인다(2026-10-21 재영, api #103). 근무스케줄 변경 이력에서는 동의하지 않은 직원의 줄을 아예 빼고 건수에도 세지 않는다. 이력 한 줄에는 변경 전후 근무 시각이 그대로 남아 이름을 가려도 드러나기 때문이다(2026-10-21 재영, api #111). 근로계약 목록에서는 동의하지 않은 직원(가입 전 직원 포함)의 계약을 목록에서 빼고 상태별 개수에도 세지 않는다. 점포 하나로 좁혀 보면 상태별 개수로 그 사람의 계약 상태(거부 · 만료 · 수정 요청 등)가 드러나기 때문이다(2026-10-26 재영, WHALEERP-133 · api #146). 직원 상세의 생년월일은 동의한 직원이면 본사 역할에게도, 퇴직 직원이어도 보인다. 동의 항목인 근로계약서 당사자 정보에 이미 있기 때문이다. 이메일은 계약서에 없는 계정 정보라 본사 역할과 퇴직 직원에게 보이지 않는다(2026-10-21 재영, WHALEERP-183). 출퇴근 현황의 근태 요약(정상·지각·미기록 횟수, 근로시간)에서도 동의하지 않은 직원을 빼고 숫자에 세지 않는다 — 근로계약 목록과 같은 이유다(2026-10-26 재영, 효준 질문). 로그인 후 홈도 근로계약 목록과 같은 기준으로 센다 — 본사 역할에게는 동의하지 않은 가맹 직원(가입 전 직원 포함)의 계약을 미체결 계약·서명 대기·수정 요청·갱신 예정(경고 밴드)·소속 확인 거절 건수에서 빼고, 재직 직원의 정직원·파트타이머 나눔에서도 뺀다. 재직 직원 총수는 직원 목록처럼 센다. 「오늘 출근」의 출근·미출근 수에서도 미동의 가맹 직원을 빼고(출퇴근 기록은 동의 항목), 근무 예정 수는 근무스케줄 화면처럼 그대로 센다(2026-10-27 재영, 홈 PR 리뷰). 출·퇴근 현황 화면 위쪽의 상태별 숫자(정상·지각·미출근·출근 미등록·퇴근 미등록)도 같은 기준으로 미동의 가맹 직원을 빼, 홈·근태 요약과 숫자를 맞춘다(2026-10-27 재영). 점포 하나 화면의 직원 급여 카드(귀속월이 이번 달인 급여명세서를 상태와 상관없이 더한 합계)도 본사 역할에게는 미동의 가맹 직원의 급여명세서를 뺀다(2026-10-27 재영). 이때 카드 아래에 「동의하지 않은 가맹 직원은 급여 합계에 세지 않습니다」를 늘 붙인다. 동의한 직원이 없으면 「0만원 · 직원 0명」이 명세서가 없는 것처럼 읽히기 때문이며, 여러 점포 홈의 수치 카드 안내와 같은 방식이다. 직영 점포와 가맹마스터·가맹관리자에게는 붙이지 않고, 가린 직원 수는 보이지 않는다(쟁점 HOME-10, 2026-10-28 재영). 동의를 철회하거나 가맹 점포가 폐점해 가려진 직원이라도, <b>그 전에 이미 본사 역할에게 보낸 운영 알림은 가리지 않는다</b> — 제목·본문의 직원 이름은 보낼 때 본 정보로 그대로 남고, 눌러 들어간 직원 상세는 가려진다. 가린 뒤에 생기는 운영 알림은 본사 역할에게 보내지 않는다(2026-10-29 재영, api #187 리뷰). 지금 받아 주지 않는 옛 문구 버전에 동의한 직원(다시 동의 필요)에게는 직원 근무 앱에 들어올 때(새로 접속하거나 화면으로 돌아올 때) 홈 위에 다시 동의 시트를 띄우고, 내 정보의 동의 카드에도 「다시 동의 필요」 배지와 「다시 동의하기」를 보인다. 홈 팝업은 한 번에 하나만 띄우며 날인 요청 → 소속 추가 요청 → 다시 동의 순이다. 동의할 때 앱은 화면에 보인 문구 버전을 함께 보내고, 지금 버전과 다르면 409로 막고 새 문구를 다시 보인다 — 옛 문구를 보고 누른 동의가 새 버전으로 기록되지 않게 하려는 것으로, 위치정보 동의(api #185)와 같은 방식이다. 가입·소속 추가 확인·복귀 확인 중에 이 대조로 막히면 동의 단계만 새 문구로 다시 보이고 가입·수락은 막지 않는다 — 본사 제공 동의는 선택 항목이기 때문이다. 위치정보 동의 카드도 같은 「다시 동의 필요」 표시를 둔다(2026-10-29 재영, 김민식 WHALEERP-137 후속). 플랫폼 계정(플랫폼 마스터·플랫폼 관리자)이 범위 선택기에서 고객 BP를 고르면 그 BP의 점포를 모두 보고, 미동의 가맹 직원도 <b>가리지 않는다</b> — 가리는 대상은 본사 역할(BP 마스터·BP 관리자)이고, 플랫폼은 BP 자료의 수탁자(ATT-29)라 운영 지원으로 보는 것은 제3자 제공과 다르다. 1차는 근로계약 · 급여명세서 · 출퇴근 기록 모두 이 기준이다(2026-10-30 재영, WHALEERP-618 · 637 리뷰). 직원 정보(급여 계좌 열람 · 비밀번호 재설정 링크 발송 포함) · 근무스케줄 · TO-DO 도 같은 기준이다(2026-11-05 재영, api #253 · front #225). 가입·소속 근무지에서 받은 가입 초대 수락(「확인을 기다리는 요청」, JOI-09)·소속 추가 확인·복귀 확인 화면의 동의 칸에는 요약 한 문장과 함께 <b>「내용 보기」</b>를 두어, 내 정보 카드·다시 동의 시트와 같은 전문(받는 자·항목·목적·보유 기간·거부할 권리)을 보이게 한다 — 남기는 버전은 전문을 보고 한 동의여야 하고, 제3자 제공 동의는 이 내용을 알리고 받아야 하기 때문이다. 요약만으로 충분한지는 ATT-8 법무 확인에 넣는다(2026-10-30 재영, 김민식 질문).<span class="src">2026-09-30 재영 · 2026-10-20 노영주·재영(api #78) · 2026-11-05 재영(api #253) · 우리 판단 · 법무 확인 대기</span></span></div>
+        <div class="rule"><span class="id">ATT-31</span><span class="txt">직원 근무 앱 출퇴근 현황에서 퇴근 기록이 없는 날은 확인 필요가 아니다. 그 날 카드에 별도 표시 「<b>퇴근 기록 없음</b> · 근무지 관리자에게 문의」를 붙인다. 확인 필요 사유는 ATT-19·21의 넷(반경 밖 출근 · 반경 밖 퇴근 · 위치 조작 감지 · 근무 12시간 초과, 넷째는 2026-10-27 재영) 그대로이고, 급여명세서의 「출퇴근 누락」 검토 대기와도 별개다.<span class="src">HIST-4 · 2026-10-08 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-32</span><span class="txt">위치정보 동의와 본사 제공 동의를 철회한 뒤에도 내 정보에 그 카드가 남아 「<b>동의하지 않음</b> · 철회 일시」와 「<b>다시 동의하기</b>」를 보인다. 위치정보는 다음 출근 등록 때 다시 받는 동의도 그대로 둔다.<span class="src">ME-5 · 2026-10-08 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-33</span><span class="txt">폐점 점포도 근무스케줄 화면의 점포 선택에 그대로 보이고, 그 점포의 근무스케줄과 변경 이력도 그대로 본다. 다만 새 근무스케줄은 만들지 못한다. 등록 · 여러 명 일괄 등록 · 지난 주 복사를 관리자 웹에서 막고 서버에서도 거절한다.<span class="src">WHALEERP-614 · 2026-10-22 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-34</span><span class="txt"><b>출퇴근 상태 판정.</b> 지각은 그날 첫 출근이 첫 근무스케줄 시작보다 1분이라도 늦을 때다(유예 없음). 미출근은 기록 없이 근무스케줄 시작 시각이 지났을 때, 퇴근 미등록은 지난 날에 퇴근 없는 출근이 있을 때(오늘은 「근무 중」), 출근 미등록은 출근 없는 퇴근이 있을 때다. 근무스케줄이 없는 날의 출근은 정상이다. 틀린 판정은 관리자가 보정한다(ATT-11). 직원 근무 앱 출퇴근 현황의 근무 시간·연장은 api가 급여 계산과 같은 방식(휴게는 PAY-12, 연장은 하루 8시간·주 40시간, PAY-04)으로 셈해 내려 주고 앱은 따로 계산하지 않는다(2026-10-26 재영, 효준 질문).<span class="src">WHALEERP-207·208 · 2026-10-23 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-35</span><span class="txt"><b>열린 출근은 계정에 하나다.</b> 퇴근하지 않은 출근이 있으면 다른 점포에 출근하지 못한다. 퇴직한 소속에 열린 출근이 남지 않게 퇴직 처리에서 막는다(CTR-24). 그래도 남은 틈에 대비해 열린 출근은 <b>지금 다니는 소속에서만</b> 찾는다 — 퇴직한 소속의 열린 출근은 직원이 닫을 수 없어 다른 근무지 출근을 영영 막기 때문이다. 그 기록은 관리자 화면에 퇴근 미등록으로 남는다(2026-10-27 재영, 효준 질문).<span class="src">WHALEERP-207·208 · 2026-10-23 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-36</span><span class="txt"><b>점포의 출퇴근 위치 적용이 꺼져 있으면</b> 위치를 읽지 않으므로 위치정보 동의를 묻지 않고 확인자료도 남기지 않는다. 위치 적용이 켜져 있는데 점포 위도·경도가 비어 있으면 반경을 판정할 수 없어 앱 출근을 막고 「근무지 위치가 없습니다」를 보인다. 꺼진 점포는 좌표가 없어도 막지 않는다. 서버도 출근 요청을 받을 때 점포의 위치 적용이 켜져 있고 위도·경도가 비어 있으면 거절한다 — 직원 위치 없이 점포 설정만 보는 검사라 ATT-24 한계와 다르다(2026-10-26 재영, 효준 질문).<span class="src">WHALEERP-207·208 · 2026-10-23 재영</span></span></div>
+        <div class="rule"><span class="id">ATT-37</span><span class="txt"><b>가맹 점포도 출퇴근 기록을 보정한다.</b> 1차 기본 권한은 가맹마스터·가맹관리자에게 출·퇴근 현황 등록·수정을 열어, 보정·「이상 없음」·대신 등록을 하게 한다. 권한 설정의 영역이라 이후 얼마든지 바꿀 수 있다. 1팀 초기 데이터 요청서(출·퇴근 현황 R)와 다르므로 1팀에 알린다.<span class="src">WHALEERP-207~223·227 · 2026-10-23 재영</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="ntf">
+    <h2><span class="code">NTF</span> 알림 정책 <span class="sub">운영 알림 · 직원 알림 · 알림 템플릿</span></h2>
+
+    <div class="gh">운영 알림 &mdash; 관리자 웹</div>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">NTF-01</span><span class="txt">운영 알림 유형은 아홉이다 &mdash; <b>문의사항 접수 · 도입문의 접수</b>, <b>문의사항 답변 · 도입문의 처리 상태 변경</b>, <b>근로계약 날인 · 거부 · 만료</b>, <b>계약 갱신 예정</b>, <b>소속 추가 확인 거절</b>. 만료는 날인 기한 30일이 지나 계약이 만료될 때다. 알림마다 만들 때 쓴 템플릿 코드와 템플릿 제목을 남긴다(제목 칸, 2026-10-13 재영). 이 아홉 가지 밖의 사건(만 19세 미만 가입 불가, 근로계약 수정 요청, 직원 자료 일괄 저장 완료 · 실패)은 운영 알림을 보내지 않고 해당 화면의 상태로 보인다. 알림은 사건을 처리하는 업무 기능이 사건 시점에 공통 알림 함수 하나를 불러 만든다. 알림을 눌러 갈 화면도 그 업무 기능이 자기 화면 링크로 넘겨 알림에 저장한다(관리자 웹 안 경로만, 없으면 「이동할 화면이 없습니다」 안내, NOTIFY-16). 운영 알림 기능이 업무 흐름을 따로 감지하지 않는다(2026-10-13 재영). 가입 연결 보류는 연결 보류를 없애 뺐다(2026-10-19 재영).<span class="src">S-GDUNIT · 2026-10-07 재영 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-02</span><span class="txt">운영 알림은 <b>웹 알림함</b>으로 전달한다. 관리자 전용 앱이 없어 <b>모바일 푸시를 쓰지 않으며</b> 문자 발송도 1차에 넣지 않는다.<span class="src">S-GDUNIT</span></span></div>
+        <div class="rule"><span class="id">NTF-03</span><span class="txt">근로계약 날인·거부·만료, 갱신 예정, 문의 답변 등록은 <b>이메일과 알림함으로 함께</b> 알린다. 운영 알림 함수는 알림함에 넣는 일만 하고 메일을 붙이지 않는다. 어느 채널로 보낼지는 그 사건을 처리하는 업무 기능이 정하고, 업무 기능이 운영 알림과 메일 발송을 <b>각각</b> 부른다(2026-10-13 재영). 이메일은 제목만 보고도 어느 알림인지 알 수 있게 쓴다. 알림함은 받을 때 기준으로 받은 알림을 그대로 보이고, 매핑 · 권한 · 점포 유형이 바뀌어도 다시 거르지 않는다. 알림에서 들어가는 업무 화면은 그 시점 권한으로 판정한다(2026-10-13 재영). 이메일 버튼은 알림함을 거치지 않고 <b>업무 화면으로 바로</b> 간다(관리자 웹 주소 + 업무 경로). 메일로 확인해도 알림함의 읽음은 맞추지 않는다(2026-10-13 재영, 앞서 정한 /notifications/{수신 ID}/open 경로는 걷음).<span class="src">S-GDUNIT · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-04</span><span class="txt">수신자는 이벤트로 갈린다. 문의·도입문의는 플랫폼 운영자가, 근로계약과 갱신 예정은 그 계약을 관리하는 사업자 관리자가(가맹 점포 직원이면 BP 마스터·BP 관리자는 그 직원이 본사 제공에 동의했을 때만, ATT-30 · 2026-10-13 재영), 문의 답변은 그 문의를 등록한 사람이, 소속 확인 거절은 초안을 쓴 관리자가 받는다.<span class="src">S-GDUNIT · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-05</span><span class="txt">같은 이벤트로 같은 수신자에게 <b>같은 알림을 두 번 만들지 않는다.</b> 읽음 상태는 수신자별로 따로 관리한다.<span class="src">S-GDUNIT</span></span></div>
+        <div class="rule"><span class="id">NTF-06</span><span class="txt">알림을 눌러 상세로 가면 <b>읽음으로 바뀐다.</b> 줄마다 두던 읽음 버튼은 없애고 모두 읽음만 남긴다. 처리했는지는 알림함이 아니라 그 업무의 상태로 관리한다.<span class="src">NOTIFY-1</span></span></div>
+        <div class="rule"><span class="id">NTF-07</span><span class="txt">상단 종 아이콘과 알림함 페이지를 <b>둘 다</b> 둔다. 종은 미확인 건수와 최근 몇 건을 보여 주고, 알림함은 걸러 보고 지나간 것을 찾는 자리다.<span class="src">NOTIFY-2</span></span></div>
+        <div class="rule"><span class="id">NTF-08</span><span class="txt">알림 생성에 실패해도 <b>원래 업무의 결과는 유지</b>하고 실패 사실을 기록한다. 템플릿을 못 읽는 등으로 발송을 부른 쪽이 실패를 받아도(NTF-24 · NTF-25) 업무 처리는 되돌리지 않는다.<span class="src">S-GDUNIT</span></span></div>
+      </div>
+    </div>
+
+    <div class="gh">직원 알림 &mdash; 직원 근무 앱</div>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">NTF-09</span><span class="txt">직원 알림 대상은 넷이다 — 근로계약서 발송 · 근무스케줄 변경 · <b>TO-DO 수행 임박</b> · 급여명세서 발송. TO-DO 배정 때는 알림함 줄도 앱 푸시도 보내지 않는다(2026-10-19 재영).<span class="src">S-KAVPFQ · 2026-09-28 재영 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-10</span><span class="txt">직원 알림 채널은 <b>앱 푸시</b>다. <b>푸시가 실패하면 알림톡으로 자동 대체하는 규칙은 두지 않는다.</b> 알림톡을 어느 상황에 보낼지는 NTF-18에서 정한다.<span class="src">S-AYBNWF · NOTI-2 · 2026-09-17 재영 · 2026-10-23 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-11</span><span class="txt"><b>정보 전달</b>인 근로계약서·급여명세서·근무스케줄 변경은 시간과 관계없이 즉시 보낸다.<span class="src">S-KAVPFQ</span></span></div>
+        <div class="rule"><span class="id">NTF-12</span><span class="txt"><b>TO-DO 수행 임박 알림</b> — 대기·진행 중 TO-DO의 수행 예정 일시가 다가오면 배정된 직원에게 앱 푸시와 직원 알림함으로 <b>한 번</b> 보낸다. 수행 예정 시간이 있으면 <b>1시간 전</b>, 날짜만 있으면 <b>당일 09:00</b>이다. 한 명 수행 건은 대상 전원에게 보내고, 이미 완료된 건에는 보내지 않는다. 수행 예정 일시가 지난 뒤에는 보내지 않고, 날짜만 있으면 그날 끝까지 보낸다. 앱 푸시 기본 템플릿은 <code>PUSH_TODO_DUE_SOON</code>(TO-DO 수행 임박 알림)이다(2026-10-19 재영). 앱 푸시는 수신 설정 묶음 TO-DO를 따른다(NTF-14). 배정 알림은 두지 않으며, 직원은 배정된 TO-DO를 직원 근무 앱 홈의 TO-DO 카드와 근무 탭에서 본다. 근무시간 외 보류 규칙은 두지 않는다(2026-10-19 재영, WHALEERP-115).<span class="src">S-KAVPFQ · 2026-09-28 재영 · 2026-10-19 재영 · WHALEERP-115</span></span></div>
+        <div class="rule"><span class="id">NTF-13</span><span class="txt">근무스케줄 변경 알림은 <b>지시가 아니라 변경 사실을 전하는 문구</b>로 쓴다. 제목은 무엇이 언제 바뀌는지를 먼저 드러낸다.<span class="src">S-KAVPFQ</span></span></div>
+        <div class="rule"><span class="id">NTF-14</span><span class="txt">수신 여부는 <b>수신 설정 묶음(근로계약서·근무스케줄·TO-DO·급여명세서)별로 설정</b>하고, <b>네 묶음 모두 직원이 켜고 끈다</b> — 근로계약서·급여명세서를 잠가 두던 규칙은 없앴다(쟁점 NOTI-8, 2026-10-20 재영). 수신을 끈 유형도 알림 데이터는 만들어 알림함에서 볼 수 있게 한다. 날인 요청 팝업(앱 HOME-1)은 앱 안 팝업이라 이 설정과 상관없다. TO-DO 묶음은 수행 임박 알림(NTF-12)의 앱 푸시에 쓴다(2026-10-19 재영). 수신 설정은 채널별로 나누지 않고 묶음마다 스위치 하나다 — 끄면 그 묶음의 앱 푸시 · 알림톡 · 메일 알림을 모두 보내지 않는다(NTF-18). 급여명세서 발송 메일은 알림이 아니라 명세서를 건네는 발송이라 이 설정과 상관없이 나간다. 1차에 TO-DO 묶음은 바깥으로 나가는 알림이 없지만 스위치는 그대로 둔다(2026-10-30 재영).<span class="src">S-AUTBWT · 2026-09-28 · NOTI-8 · 2026-10-20 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-15</span><span class="txt">알림을 눌러 관련 화면으로 가면 <b>자동으로 읽음</b> 처리한다. 알림함은 직원 근무 앱에서만 제공한다.<span class="src">S-VSRIGV</span></span></div>
+        <div class="rule"><span class="id">NTF-16</span><span class="txt">급여명세서는 <b>이메일 발송을 유지</b>하고 앱 알림은 발송 사실을 알리는 용도로 쓴다.<span class="src">F-CSJKIC</span></span></div>
+        <div class="rule"><span class="id">NTF-17</span><span class="txt">직원 근무 앱의 알림함은 <b>화면 위쪽 종 아이콘</b>으로 들어간다. 하단 탭은 홈·근무·출퇴근·급여·내 정보 다섯이다.<span class="src">WORK-2 · 2026-09-17</span></span></div>
+        <div class="rule"><span class="id">NTF-18</span><span class="txt">앱 푸시는 <b>업무 단계마다</b> 보낸다. 알림톡은 일괄 대체 기준 없이 <b>꼭 보내야 하는 상황을 프로세스별로</b> 정해 보낸다. 가입 전 직원에게는 가입 초대·재초대를 알림톡으로 보낸다(JOI-02). 가입한 직원에게는 <b>근로계약서 발송(날인 요청) · 급여명세서 발송(다시 발송 포함) · TO-DO 수행 임박 · 근무스케줄 변경</b> 네 알림을 앱 푸시와 같은 때 알림톡으로도 <b>늘 함께</b> 보낸다 — 푸시가 실패했을 때만 보내는 대체가 아니다. 직원이 수신 설정에서 그 묶음을 끄면 알림톡도 보내지 않는다. 네 알림의 알림톡 템플릿은 새로 더하고 카카오 검수를 받은 뒤 보낸다(2026-10-23 재영, WHALEERP-264). <b>앱 푸시는 2차다</b> — 1차의 직원 근무 앱은 모바일 웹이고 설치형 앱(웹뷰 껍데기)은 2차라 기기 토큰을 받을 곳이 없다. 1차에는 직원 알림함 줄과 알림톡만 보내고, 앱 푸시 줄은 발송 대기로만 남긴다. 그래서 1차에서 가입한 직원에게 밖으로 나가는 알림은 위 네 알림의 알림톡뿐이다(2026-10-29 재영, WHALEERP-261 · 321 2차, 619 1차 유지). <b>알림톡은 근로계약서 발송(날인 요청) 하나로 줄인다</b> — 날인 기한이 있고 날인해야 근무가 시작돼 꼭 닿아야 하기 때문이다. 급여명세서 발송(다시 발송 포함)은 알림톡을 보내지 않는다 — 발송 자체가 이미 <b>급여명세서 메일</b>(EMAIL_PAYSLIP_SENT · RESENT, 직원 계정의 이메일, WHALEERP-231)로 나가기 때문이다. 이 메일은 알림이 아니라 임금명세서를 건네는 발송이라 <b>수신 설정과 상관없이 늘 보낸다</b>. 근무스케줄 변경은 알림톡 대신 <b>메일</b>로 보내고 수신 설정의 근무스케줄 묶음을 따른다. TO-DO 수행 임박은 1차에 <b>직원 알림함만</b> 둔다(1시간 전 알림이라 메일은 늦고, 긴급 TO-DO는 홈 맨 위에 보인다). 그래서 1차에 가입한 직원에게 나가는 바깥 알림은 근로계약서 알림톡과 근무스케줄 변경 메일이고, 급여명세서 메일은 발송으로 따로 나간다. 2차에 앱 푸시가 붙으면 다시 본다(2026-10-30 재영, WHALEERP-619 범위 줄임 · 639 — 같은 날 「급여명세서도 수신 설정을 따르는 메일」로 적었던 것을 바로잡음). 근무스케줄 변경 메일(EMAIL_SCHEDULE_CHANGED, 제목 「[WHALE ERP] 근무스케줄 변경」)은 알림함 줄과 함께 다닌다 — 운영자가 앱 푸시 템플릿(PUSH_SCHEDULE_CHANGED)을 사용 안 함으로 끄면 알림함 줄 · 앱 푸시 · 메일이 모두 나가지 않고, 메일 템플릿만 끄면 메일만 건너뛰고 알림함 줄은 남는다. 템플릿을 끄는 것은 그 알림을 보내지 않겠다는 뜻으로 본다. 메일은 저장이 커밋된 뒤 보내고, 메일이 실패해도 저장은 그대로다(2026-10-30 재영, api #223).<span class="src">NOTI-2 · S-AYBNWF · 2026-10-23 재영 · 앱 푸시 2차 2026-10-29 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-19</span><span class="txt">직원 알림함은 <b>14일</b> 보관한다. 알림 한 줄이 <b>그 알림의 발송 결과</b>까지 담는다. 관리자 웹 운영 알림은 메일을 붙이지 않으므로 알림 줄에 메일 결과를 담지 않고, 메일 결과는 메일 발송 이력에 남는다(NTF-03, 2026-10-13 재영).<span class="src">NOTI-3 · NOTI-4 · NOTIFY-3</span></span></div>
+        <div class="rule"><span class="id">NTF-20</span><span class="txt">급여명세서 알림은 <b>처음 발송과 다시 발송에 같은 문구</b>를 쓴다. 다시 보낼 때도 「7월 급여명세서가 도착했습니다」로 하고, 「다시 발송되었습니다」나 「금액이 바뀌었을 수 있습니다」를 따로 적지 않는다(쟁점 NOTI-6, 2026-10-20 재영 — 2026-09-18 「처음 발송과 다르게」를 바꿈). 앱 푸시와 이메일 모두 같은 기준을 쓴다. 문구의 달은 <b>급여 기간 기준</b>으로 적고 지급월로 적지 않으며, 기간이 두 달에 걸치면 <b>시작 월</b>을 쓴다.<span class="src">PAY-1 · 2026-09-18 재영 · NOTI-6 · 2026-10-20 재영</span></span></div>
+      </div>
+    </div>
+
+    <div class="gh">알림 템플릿 &mdash; 플랫폼 운영자</div>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">NTF-21</span><span class="txt">알림 문구는 <b>알림 템플릿</b>으로 관리한다. 템플릿마다 발송 채널(<em>운영 알림 · 앱 푸시 · 메일 · 알림톡</em>), <b>템플릿 이름</b>, 템플릿 코드를 두고(알림 유형·발송 용도 공통코드는 두지 않는다), <b>플랫폼 마스터·플랫폼 관리자</b>가 관리자 웹 알림 템플릿 관리(플랫폼 시스템관리 아래, NOTIFY-7)에서 <b>등록하고 고친다.</b> 등록한 템플릿은 채널·템플릿 이름·템플릿 코드·제목·본문·변수 목록을 모두 고칠 수 있다. 앱 푸시 템플릿은 직원 수신 설정에 쓰는 묶음(근로계약서·근무스케줄·TO-DO·급여명세서)을 하나 고른다. BP별 문구는 두지 않는다. 고친 문구는 <b>다음 발송부터</b> 쓰이고 이미 만든 알림은 바뀌지 않는다. 고칠 때마다 변경 이력을 남긴다. 기본 템플릿은 <b>기본 문구로 되돌릴 수 있다</b> — 템플릿마다 기본 제목·기본 본문·기본 변수 목록을 따로 두고(처음 넣은 40건에만 값이 있다), 되돌리기는 <b>제목·본문·변수 목록</b>만 그 값으로 바꾸며 템플릿 코드·이름·채널·사용 여부는 그대로 둔다. 운영자가 등록한 템플릿은 기본값이 없어 되돌리기가 없다(NOTIFY-17 · NOTIFY-18, 2026-10-13 재영). 알림톡은 되돌려도 카카오 템플릿 코드를 바꾸지 않으므로, 확인창에서 카카오 템플릿 코드가 검수받은 본문과 맞는지 확인하라고 안내한다. 채널이 바뀌어 기본 문구가 지금 채널 규칙에 맞지 않으면 되돌리지 않는다(2026-10-13 재영, api #27 리뷰). 템플릿은 지우지 않고 <b>사용 안 함</b>으로 끈다. <b>1팀 관리자 메일 8종</b>(회원가입 완료, 관리자 계정 생성, 임시 비밀번호 발급 등)의 문구도 이 메일 채널이 맡고, 1팀 메일 발송 기록은 템플릿 코드를 담는다. 템플릿마다 <b>템플릿 코드</b>를 두며, 등록할 때 채널 접두를 채우고 운영자가 정하며 고칠 수 있다(예: <em>EMAIL_SIGNUP_DONE</em>). 개발자는 이 코드로 템플릿을 불러 발송한다.<span class="src">2026-10-07 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-22</span><span class="txt">운영 알림·앱 푸시·메일 템플릿은 <b>제목과 본문이 모두 필수</b>다. 알림톡 템플릿은 <b>제목을 쓰지 않고</b> 본문만 둔다. 앱 푸시는 <b>제목 40자·본문 100자</b>를 넘으면 저장하지 않는다. 메일 본문은 <b>일반 글만</b> 쓰고 머리·꼬리·버튼은 공통 메일 틀이 붙인다.<span class="src">NOTIFY-4 · NOTIFY-5 · 2026-10-07 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-23</span><span class="txt">알림톡도 <b>플랫폼 운영자가 화면에서 본문을 고친다.</b> 먼저 카카오 검수를 받고, 검수받은 문구와 <b>한 글자도 다르지 않게</b> 넣는다. 다르면 비즈뿌리오가 거절하고 그 결과는 발송 기록에 남는다. 카카오 템플릿 코드와 변수 목록도 화면에서 고친다(NOTIFY-10, 2026-10-07 재영). <b>승인 상태는 두지 않는다.</b><span class="src">NOTIFY-6 · 2026-10-07 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-24</span><span class="txt">등록한 템플릿은 <b>개발자가 그 템플릿 코드로 발송 코드를 연결해야</b> 실제로 나간다. 연결 전 템플릿은 저장만 된다. 템플릿 코드는 기본 템플릿을 포함해 모두 고칠 수 있고, 고치면 발송 코드도 함께 바꿔야 한다. 등록·수정 모두 저장 전에 「저장하시겠습니까?」로 확인받고, 코드를 바꿨으면 같은 확인창에 발송 코드 경고를 함께 보인다. 등록 화면의 변수 목록은 빈 표로 시작한다(2026-10-13 재영). 확인 뒤 코드를 잘못 고쳐 발송이 멈추는 것은 고친 운영자의 책임으로 본다. 코드를 바꾸면 지난 운영 알림의 구분 표시가 비어 보일 수 있는데 이것도 감수한다(2026-10-13 재영). 변수 목록은 템플릿마다 화면에서 정하고, 저장할 때 본문에 쓴 변수가 목록 안에 있는지와 필수 변수가 본문에 있는지 검사한다. 메일 공통 틀이나 알림톡 버튼이 붙이는 링크 변수는 <em>isButtonLink</em> 표시를 달아 이 검사에서 뺀다(2026-10-07 재영). 이 「버튼 링크」 체크 칸은 <b>메일 · 알림톡 템플릿에서만</b> 보인다(NOTIFY-20, 2026-10-13 재영). 발송 때 필수 변수 값이 없거나, 사용 안 함이거나, 템플릿 코드가 없으면 보내지 않고 로그를 남기며 발송을 부른 쪽에 실패를 알린다.<span class="src">2026-10-07 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-26</span><span class="txt">기본 템플릿 <b>40건</b>(운영 알림 10 · 앱 푸시 5 · 메일 24 · 알림톡 1)은 <b>마이그레이션으로 처음 한 번만 넣는다</b>(INSERT). 운영에 들어간 뒤 문구는 플랫폼 운영자가 화면에서만 고치고, 배포로 덮어쓰지 않는다. 운영 기준 데이터는 모두 같은 원칙을 따른다. 가입 연결 보류 두 건(운영 알림 NTF_LINK_HOLD · 메일 EMAIL_LINK_HOLD)은 연결 보류를 없애 쓰지 않는다(2026-10-19 재영).<span class="src">2026-10-07 재영 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-27</span><span class="txt">직원 근무 앱 알림함은 머리에 「미확인 n건 · <b>모두 읽음</b>」을 두고 줄마다 읽음도 그대로 둔다(관리자 웹 운영 알림함은 NTF-06대로 모두 읽음만). 알림은 14일 보관한다.<span class="src">NOTI-7 · NOTI-3 · 2026-10-08 재영</span></span></div>
+        <div class="rule"><span class="id">NTF-25</span><span class="txt">발송할 때 템플릿을 읽지 못하면(없음 · 사용 안 함 · 읽기 실패 모두) <b>채널과 상관없이 보내지 않고</b> 그 사실을 <b>서버 로그</b>에 남기며 발송을 부른 쪽에 실패를 알린다. 운영 알림은 만들지 않고, 메일 · 앱 푸시 · 알림톡도 기본 문구로 대신 보내지 않는다. 발송 기록에는 따로 칸을 두지 않는다.<span class="src">2026-10-07 재영 · 2026-10-13 재영(NOTIFY-15 · NOTIFY-19)</span></span></div>
+      </div>
+    </div>
+
+    <p class="note" data-h="ntf">읽음 처리가 8월 판에서 뒤집혔습니다. 그때는 운영 알림이 상세로 이동해도 읽음이 되지 않았지만 지금은 두 알림 모두 들어가면 읽음입니다. 줄마다 있던 읽음 버튼은 없앴고 모두 읽음으로만 남겼습니다. 처리했는지는 알림함이 아니라 그 업무의 상태가 압니다.</p>
+  </section>
+
+  <section id="cnt">
+    <h2><span class="code">CNT</span> 콘텐츠·문의 운영 정책</h2>
+
+    <div class="flow">
+      <span class="s">임시저장</span><span class="arw">·</span>
+      <span class="s">게시</span><span class="arw">·</span>
+      <span class="s">비공개</span>
+      <span class="arw">&nbsp;&nbsp;문의&nbsp;</span>
+      <span class="s">접수</span><span class="arw">→</span>
+      <span class="s">처리중</span><span class="arw">→</span>
+      <span class="s">답변완료</span>
+    </div>
+
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">CNT-01</span><span class="txt">노출 대상은 <em>비회원 · 회원 · BP · 점포</em> 네 유형에서 <b>여러 값을 함께</b> 고른다. 개별 BP나 점포를 집지는 않는다. 부가서비스는 1차 범위에 없어 고르지 않는다(2026-10-12 재영).<span class="src">SUPPORT-2 · 2026-10-12 재영</span></span></div>
+        <div class="rule"><span class="id">CNT-02</span><span class="txt">노출 대상에 <b>비회원이 포함된 콘텐츠만</b> 비로그인 홈에 보인다. 그 밖의 대상은 고객지원에만 보인다. 게시하려면 대상을 하나 이상 골라야 한다.<span class="src">S-EKJUWE</span></span></div>
+        <div class="rule"><span class="id">CNT-03</span><span class="txt">공지사항과 FAQ는 <em>임시저장 · 게시 · 비공개</em>로 운영한다. 게시된 것을 고치면 <b>즉시</b> 대상 사용자에게 반영한다. 세 상태 사이는 <b>어느 쪽으로든</b> 바꾼다(비공개 → 다시 게시, 게시 → 임시저장 포함). 본문은 <b>평문</b>으로 저장하고 모든 화면이 글자 그대로 보인다(HTML로 해석하지 않음).<span class="src">S-EKJUWE · 2026-10-13 재영</span></span></div>
+        <div class="rule"><span class="id">CNT-04</span><span class="txt"><b>상단 고정은 공지사항에만</b> 있다. 고정된 공지는 목록 맨 위에 서고 여럿이면 그 안에서 게시일 내림차순으로 세운다. 게시 기간·공지사항 유형도 공지사항에만 있고 FAQ에는 저장하지 않는다. FAQ 카테고리는 <b>사용 중인 것만</b> 고르며, 사용 중지된 카테고리의 FAQ는 게시하거나 내용을 고칠 때 카테고리를 바꿔야 하고 비공개 전환·삭제는 그대로 된다.<span class="src">S-EKJUWE · 2026-10-13 재영</span></span></div>
+        <div class="rule"><span class="id">CNT-05</span><span class="txt">게시 시작일과 종료일이 정해진 공지사항은 <b>그 기간에만</b> 비로그인 홈에 보인다.<span class="src">S-YBJAJD</span></span></div>
+        <div class="rule"><span class="id">CNT-06</span><span class="txt">FAQ는 <b>공지사항 화면 안의 탭</b>으로 둔다. 상단 메뉴는 공지사항 하나만 둔다.<span class="src">HOME-1</span></span></div>
+        <div class="rule"><span class="id">CNT-07</span><span class="txt">고객지원은 <b>공지사항·FAQ 열람과 문의사항 등록</b>까지다. 구독, 청구·납부, 결제수단, 정산현황은 2차이며 화면에 준비 중 자리도 두지 않는다. 공지사항·FAQ·문의하기는 <b>화면과 메뉴를 하나씩</b> 두고 LNB 고객지원 아래에 이 순서로 놓는다. 메뉴마다 조회 권한을 따로 준다(2026-10-15 재영, WHALEERP-596. 한 화면 세 탭이던 SUPPORT-4를 바꿈). API도 그 메뉴 권한을 본다. 공지사항·FAQ 조회는 각 메뉴의 조회 권한이 없으면 막고, 문의하기는 조회·등록을 문의하기 메뉴의 조회·등록 권한으로 판정한다. 보이는 글은 지금처럼 노출 대상으로 거른다(2026-10-15 재영, 김창수 질문).<span class="src">SUPPORT-1 · SUPPORT-4</span></span></div>
+        <div class="rule"><span class="id">CNT-08</span><span class="txt">문의 답변 상태는 <em>접수 · 처리중 · 답변완료</em>로 보인다. 답변을 저장하면 즉시 답변완료로 바뀐다. 운영자가 처리중으로 바꾸면 <b>바꾼 시각과 운영자</b>를 남겨 상세 처리 이력의 「확인」 줄에 보인다. 여러 운영자가 같은 문의를 두 번 집지 않게 하려는 것이다(문의사항·도입문의 모두).<span class="src">S-NGHOWA · 2026-10-13 재영</span></span></div>
+        <div class="rule"><span class="id">CNT-09</span><span class="txt"><b>답변이 끝난 문의에 이어 쓰는 기능은 두지 않는다.</b> 답변이 부족하면 새 문의로 등록한다. 등록 건수에는 제한을 두지 않는다. 다만 같은 관리자가 제목과 내용이 같은 문의를 5분 안에 다시 올리면 중복으로 막고 「방금 같은 문의를 등록했습니다. 등록한 문의는 지원 현황에서 확인해 주세요」로 안내한다(409, 2026-10-12 김창수 제안 · 재영 승인, 문구 2026-10-14 재영). 도입문의의 접수 제한(CNT-14)은 문의사항에 두지 않는다(2026-10-14 재영).<span class="src">S-ITFILU</span></span></div>
+        <div class="rule"><span class="id">CNT-10</span><span class="txt">문의 등록 때 <b>문의자에게는</b> 알림을 보내지 않고 답변을 등록할 때만 보낸다. 플랫폼 운영자에게는 등록 때 「문의사항 접수」 운영 알림을 <b>운영 알림함으로만</b> 보낸다(NTF-01·04, 이메일 없음). 사용자에게 보이는 답변과 운영자 내부 메모는 <b>분리된 필드</b>로 저장한다. 고객지원에서는 <b>내가 등록한 문의만</b> 보이고 같은 BP의 다른 관리자 문의는 보이지 않는다. 점포 단위 관리자가 올린 문의는 그 점포로 자동으로 채우고 BP 단위는 비운다. 관리 점포가 여럿인 가맹 관리자가 올린 문의도 비워 BP 단위 문의로 두고, 등록 화면에 점포 선택은 두지 않는다(2026-10-19 재영, 김창수 질문).<span class="src">S-NGHOWA · 2026-10-13 재영</span></span></div>
+        <div class="rule"><span class="id">CNT-11</span><span class="txt"><b>도입문의는 로그인 없이</b> 접수하며 고객지원의 문의사항과 분리된 유형으로 관리한다. 담당자는 영업일 기준 <b>1~2일</b> 안에 연락한다. 상담을 마친 도입문의는 상담 완료일로부터 1년이 지나면 자동으로 지운다. 상담하지 않은 도입문의(상담 완료일 없음)는 자동으로 지우지 않고 관리자가 직접 처리한다(2026-10-13 재영, api #22). 플랫폼 운영자가 도입문의 상세에서 지우는 기능을 둔다(2026-10-14 재영, 후속 일감). 답변완료인 건은 상담 완료일이 비어 있어도 지우지 않는다. 지우거나 1년이 지나 파기할 때 그 도입문의를 가리키는 운영 알림(문의자 이름이 본문에 남는 것)도 함께 지운다(2026-10-15 재영, api #41). <b>접수 확인 메일은 고정 문구</b>로만 보내고 문의자가 적은 이름·업종을 넣지 않는다. 확인되지 않은 주소로 가는 메일이라 입력값이 회사 이름으로 나가지 않게 하려는 것이다. 접수 확인 메일은 서비스 전체에서 <b>시간당 50건</b>까지만 보내고, 넘으면 접수는 받고 확인 메일만 보내지 않는다(2026-10-15 재영, api #50 리뷰). 첫 답변 메일도 문의자가 적은 이름을 넣지 않고 고정 인사 「남겨 주신 WHALE ERP 도입문의에 답변드립니다.」 뒤에 운영자가 쓴 답변만 싣는다(2026-10-15 재영). 첫 답변 메일은 플랫폼 운영자가 답변완료 도입문의 상세에서 <b>다시 보낼</b> 수 있다. 저장된 현재 답변을 보내고 보낸 운영자를 남긴다. 같은 도입문의는 <b>1분</b>에 한 번만 다시 보낸다. 상세에 보이는 마지막 답변 메일 결과·시각은 도입문의에 따로 저장한다(1팀 메일 발송 기록에는 도입문의를 가리키는 칸이 없어서, 2026-10-19 재영, WHALEERP-597).<span class="src">S-SDMDKC</span></span></div>
+        <div class="rule"><span class="id">CNT-12</span><span class="txt">도입문의는 문의자 이름과 업종, 전화번호, 이메일 주소에 관심 서비스와 도입 예정 시기, 문의 내용을 더해 받는다. 회사명과 사업자등록번호, 직원 수, 사업장 주소는 받지 않는다.<span class="src">S-SDMDKC · 2026-09-16 변경</span></span></div>
+        <div class="rule"><span class="id">CNT-13</span><span class="txt">업종은 미리 정한 목록에서 고르되 기타를 고르면 직접 적을 수 있게 한다. 관심 서비스는 매장운영과 재무관리, 프랜차이즈, 기타 중에서 <b>하나 이상 여러 개</b> 고른다. 도입 예정 시기는 목록에서 고르되 <b>고르지 않아도 된다</b>(2026-10-14 재영, api 기준으로 맞춤).<span class="src">S-SDMDKC</span></span></div>
+        <div class="rule"><span class="id">CNT-14</span><span class="txt">같은 전화번호나 이메일로 <b>10분</b> 안에 다시 접수되면 막고 「이미 접수된 문의가 있습니다. 담당자가 영업일 기준 1~2일 안에 연락드립니다」로 안내한다. 같은 접속 주소에서는 <b>시간당 5건</b>까지 받는다.<span class="src">S-SDMDKC · 2026-10-13 재영(api #22)</span></span></div>
+        <div class="rule"><span class="id">CNT-15</span><span class="txt">비로그인 홈 아래쪽에는 사업자 정보와 함께 이용약관, 개인정보처리방침, 상호명 링크를 둔다. 이용약관과 개인정보처리방침은 현재 창에서 전문으로 간다. 상호명은 회사 소개 웹사이트로 새 창에서 연다.<span class="src">S-DKPXLC · 2026-09-16 추가</span></span></div>
+        <div class="rule"><span class="id">CNT-16</span><span class="txt">삭제된 공지사항과 FAQ는 사용자에게 보이지 않게 하되 <b>복구할 수 있게</b> 보관한다. 생성자·생성 일시·최종 수정자·최종 수정 일시를 남긴다.<span class="src">S-EKJUWE</span></span></div>
+        <div class="rule"><span class="id">CNT-17</span><span class="txt">운영자는 답변완료 뒤에도 문의사항 답변을 <b>기한 없이 고칠 수 있다</b>. 고쳐도 상태는 답변완료 그대로이고 문의자에게 <b>알림을 다시 보내지 않는다</b>(CNT-10). 고칠 때마다 이전 답변을 지우지 않고 이력으로 남기며 고친 시각·운영자를 기록한다. 문의자 화면에는 마지막 답변과 「수정됨 · 시각」만 보인다. 도입문의 답변은 이력을 남기지 않는다. 답변은 하나이고 고치면 그 답변과 답변자·시각이 바뀐다(2026-10-19 재영, 김창수 질문). 문의사항은 1차에서 지우지 않는다 — 보낸 사람도 운영자도 삭제 기능이 없다(2026-10-21 재영, 김창수 질문).<span class="src">S-ZXYRPO · 2026-10-08 재영 · 2026-10-19 재영</span></span></div>
+        <div class="rule"><span class="id">CNT-18</span><span class="txt">문의하기에 <b>첨부파일</b>을 붙일 수 있다. <b>이미지(jpg·png)와 PDF만</b>, 문의 1건당 <b>5개</b>, 파일당 <b>10MB</b>까지다(공지사항·FAQ와 같은 제한). 공지사항 첨부도 같은 종류(이미지 jpg·png와 PDF)·같은 내용 확인 규칙을 쓰고 공지 1건당 5개·파일당 10MB이며, FAQ는 첨부를 받지 않는다(2026-10-19 재영, 김창수 질문). 종류는 확장자가 아니라 파일 내용으로 확인한다. 파일 맨 앞이 그 형식의 표지로 시작해야 하며, 앞에 다른 바이트(BOM · 공백 등)가 붙은 PDF는 받지 않는다(2026-10-14 재영). 등록할 때만 붙이고 뒤에 더하거나 빼지 않는다. 운영자 답변에는 첨부를 두지 않는다. 문의자와 플랫폼 운영자만 내려받고 공개 주소로 두지 않는다. 첨부파일 저장소는 1차 ERP 버킷을 같이 쓴다. 따로 접두를 붙이지 않되, 맨 앞 폴더 이름은 1차가 쓰는 <code>images/</code> · <code>attachments/</code>와 겹치지 않게 짓는다(2026-10-14 재영). 내려받기는 권한을 확인한 뒤 <b>300초</b>짜리 서명 주소로만 주고 공개 주소는 만들지 않는다(2026-10-14 재영, api #35). 개발 · 로컬은 테스트 버킷을 따로 쓰고, 접속은 1차와 같은 정적 액세스 키로 한다. 저장소 설정이 비어 있으면 운영에서도 서버는 뜨고 첨부 요청만 막는다(메일과 같은 규칙). 암호화는 버킷 기본 암호화로 시작하고 근로계약서 · 임금계약서를 따로 암호화할지는 노무사 검토 뒤 다시 본다. 업무 데이터를 지우거나 보존 기간이 지나 파기할 때 저장소 파일도 함께 지운다(2026-10-14 재영, Plane #587). 이미지(JPG · PNG)는 올릴 때 원본과 함께 줄인 썸네일을 하나 만들 수 있게 공통 모듈에 옵션을 두고, 목록은 썸네일 · 상세와 확대 보기는 원본을 쓴다. 지우거나 파기할 때 썸네일도 함께 지운다. 썸네일 크기는 부르는 업무가 정한다 — 긴 변을 정한 크기(32~1024px, 기본 320px) 안으로 비율을 지켜 줄이고 자르지 않으며 원본보다 키우지 않는다. JPEG 로 만들고 사진 방향을 바로잡고 메타데이터는 버린다. 정사각형 칸에 맞추는 것은 화면이 한다. 1팀 점포 이미지(목록 48px · 상세 200px)는 400px 로 부르면 고해상도 2배까지 한 장으로 보인다. 깨진 이미지와 너무 큰 이미지(베이스라인 JPEG 1억 화소, PNG · 프로그레시브 JPEG 2500만 화소 초과)는 받지 않고, 썸네일은 한 번에 둘까지 10초 안에 만든다(2026-10-14 재영, Plane #591).<span class="src">S-ITFILU · 2026-10-08 재영</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="lst">
+    <h2><span class="code">LST</span> 목록과 시간 기준</h2>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">LST-01</span><span class="txt">관리자 웹에서 20건을 넘을 수 있는 목록은 모두 <b>페이지 번호</b>로 나눈다. 무한 스크롤은 쓰지 않는다.<span class="src">목록 공통 규칙</span></span></div>
+        <div class="rule"><span class="id">LST-02</span><span class="txt">페이지당 건수는 <em>20 · 50 · 100</em> 중 사용자가 고르고 기본은 20이다. 한 번 고르면 <b>모든 목록이 함께</b> 따른다. 홈의 요약 표는 나누지 않는다.<span class="src">목록 공통 규칙</span></span></div>
+        <div class="rule"><span class="id">LST-03</span><span class="txt">직원 근무 앱에서 기간이 있는 목록은 <b>주·월 단위로 끊고</b>, 기간이 없는 목록만 <b>20건씩 더 보기</b>로 잇는다. 페이지 번호와 건수 선택은 쓰지 않는다.<span class="src">ATT-7</span></span></div>
+        <div class="rule"><span class="id">LST-04</span><span class="txt">앱에서 상세를 보고 돌아오면 <b>보던 위치와 불러온 분량</b>을 유지한다.<span class="src">ATT-7</span></span></div>
+        <div class="rule"><span class="id">LST-05</span><span class="txt">직원 근무 앱의 오늘 근무와 이번 주 근무 요약은 <b>한국 표준시</b>로 계산한다.<span class="src">S-DEXEEQ</span></span></div>
+        <div class="rule"><span class="id">LST-06</span><span class="txt">이번 주 근무는 <b>월요일부터 일요일까지</b>를 기준으로 조회한다.<span class="src">S-DEXEEQ</span></span></div>
+        <div class="rule"><span class="id">LST-07</span><span class="txt">출퇴근 기록에는 <b>기록 시각과 서버 수신 시각을 모두</b> 저장한다.<span class="src">S-EFQGSP</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="ret">
+    <h2><span class="code">RET</span> 보존·파기 정책 <span class="sub">전부 법정 최소인 3년</span></h2>
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">RET-01</span><span class="txt">퇴직자 근로계약 이력 &mdash; <b>퇴직일로부터 3년</b></span></div>
+        <div class="rule"><span class="id">RET-02</span><span class="txt">급여명세서와 근무스케줄 &mdash; <b>생성일로부터 3년</b>. 근무스케줄은 3년이 지나면 <b>1차부터 배치로 파기</b>한다 — 변경 이력을 먼저 지우고 근무스케줄을 지운다 (2026-10-21 재영). 그 근무스케줄을 가리키는 알림도 같은 때 함께 지운다. 알림 본문에 근무지와 근무일·시각이 남기 때문이다 (2026-10-21 재영, WHALEERP-609).</span></div>
+        <div class="rule"><span class="id">RET-03</span><span class="txt">출퇴근 기록과 보정 이력 &mdash; <b>생성일로부터 3년</b></span></div>
+        <div class="rule"><span class="id">RET-04</span><span class="txt">휴대전화번호·주소 변경 이력은 <b>계약·급여 데이터와 같은 보존 기간</b>을 따른다.</span></div>
+        <div class="rule"><span class="id">RET-05</span><span class="txt">보존 기간이 끝나거나 처리 목적을 이룬 개인정보는 <b>지체 없이 파기</b>한다. 법정 최소 기간을 넘겨 보관하면 근거를 관리하고 <b>분리해 저장</b>한다.</span></div>
+        <div class="rule"><span class="id">RET-06</span><span class="txt">삭제된 공지사항과 FAQ는 별도 삭제 정책이 생길 때까지 <b>무기한 복구 가능</b>하게 보관한다.</span></div>
+        <div class="rule"><span class="id">RET-07</span><span class="txt">직원이 앱에서 <b>탈퇴해도</b> 근로계약·급여명세서·근무스케줄·출퇴근 기록은 <b>위 보존 기간대로 보존</b>하고, 기간이 끝나면 파기한다.<span class="src">2026-09-17 재영</span></span></div>
+        <div class="rule"><span class="id">RET-08</span><span class="txt"><b>위치정보 확인자료와 위치정보 동의 기록</b>은 직원 계정 탈퇴와 소속 BP 탈퇴 가운데 <b>늦은 쪽까지</b> 보존하고, 그 뒤 지체 없이 파기한다. 이 기간이 위치정보법의 최소 보존 요건과 맞는지는 ATT-8에서 확인한다.<span class="src">2026-09-29 재영</span></span></div>
+        <div class="rule"><span class="id">RET-09</span><span class="txt"><b>직원 자료 일괄 저장</b>을 둔다. BP가 3년 보존 기간 안에 탈퇴하면 관리자 계정이 모두 미사용이 되어 자료를 볼 수 없으므로, 관리자 웹 직원 관리에서 <b>언제든</b> 근로계약서·출퇴근 기록·급여명세서·근무스케줄을 한 번에 내려받게 한다. 1팀 회원 탈퇴 화면에는 탈퇴 전에 내려받으라는 안내와 바로가기를 넣도록 1팀에 제안한다. 안내에는 <b>가맹 점포 직원 자료는 각 가맹마스터가 내려받아야 한다</b>는 문장도 넣는다 — BP 탈퇴 때 가맹마스터 계정도 함께 탈퇴되는데, BP 마스터 파일에는 본사 제공 동의를 하지 않은 가맹 직원이 빠지기 때문이다. 탈퇴 전에 가맹마스터에게 따로 알림을 보내지는 않는다(2026-10-30 재영, WHALEERP-339). 주민등록번호 원본은 넣지 않는다 — 신고 정보에 저장한 값을 말하며, 종이 계약 날인본·임금계약서처럼 관리자가 올린 계약서 파일은 계약서 원본이라 적힌 내용 그대로 담는다(2026-10-29 재영, WHALEERP-336). <b>BP 마스터와 가맹마스터</b>가 각자의 업무 범위에서 쓰고, 만들어진 파일은 <b>7일</b> 동안 내려받을 수 있다. BP 마스터가 받는 파일에는 본사 제공 동의를 하지 않은 가맹 직원과 폐점한 가맹 점포 직원의 개인 기록을 넣지 않는다 — 본사 화면에서 가리는 것과 같은 기준이다(ATT-30, 2026-10-29 재영). 파일을 만든 뒤 담긴 직원이 본사 제공 동의를 철회하거나 점포가 폐점하면 그 BP 마스터 파일은 내려받지 못하게 막고 「파일을 만든 뒤 담긴 직원의 동의나 점포 상태가 바뀌었습니다. 다시 요청해 주세요」로 새 요청을 안내한다 — 철회 뒤에 새로 내주는 것이 되기 때문이다. 이미 내려받은 파일은 철회 전에 받은 것이라 이미 보낸 운영 알림처럼 그대로 둔다(2026-10-29 재영, WHALEERP-336). 근로계약서 체결 완료본 PDF는 처리 완료본이 생긴 계약만 담는다(처리 완료본은 WHALEERP-131이 만든다). 나머지 자료로 먼저 만들고 처리 완료본은 생기는 대로 담긴다(2026-10-29 재영, WHALEERP-335). 대상은 임시저장이 아닌 근로계약이 있는 직원(CTR-29의 재직)과 <b>퇴직일 다음 날부터 3년이 지나지 않은 퇴직자</b>다. 자료별 3년 보존 삭제는 RET 규칙 그대로 둔다. 7일은 파일이 다 만들어진 때부터 센다. 지난 요청 목록과 내려받기는 요청한 사람만 쓰는 것이 아니다 — <b>같은 BP · 같은 역할(BP 마스터끼리, 가맹마스터끼리)이고 그 요청의 점포를 지금 모두 관리하는 마스터</b>면 보고 받을 수 있다. 역할까지 맞추는 것은 동의로 가리지 않은 가맹마스터 파일이 BP 마스터에게 보이지 않게 하려는 것이다. 내려받기 이력에는 누가 받았는지 남긴다(2026-10-29 재영, WHALEERP-335).<span class="src">2026-09-29 재영</span></span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="prm">
+    <h2><span class="code">PRM</span> 권한 정책 <span class="sub">역할 7종</span></h2>
+
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>역할</th><th>업무 범위</th><th>주요 권한</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="role">플랫폼 마스터</td><td class="lvl">플랫폼 전체</td><td>공지·FAQ·문의·도입문의 운영, 문의 알림 수신</td></tr>
+          <tr><td class="role">플랫폼 관리자</td><td class="lvl">플랫폼 전체</td><td>커뮤니티 운영, 개별 사업자 근무·급여 <b>조회 전용</b></td></tr>
+          <tr><td class="role">BP 마스터</td><td class="lvl">자기 BP 전체</td><td>계약 작성·상태 관리, 근무·급여·TO-DO 관리, 계약 상태 수동 변경</td></tr>
+          <tr><td class="role">BP 관리자</td><td class="lvl">소속 점포</td><td>계약 작성, 근무스케줄·급여·TO-DO 관리, 출퇴근 보정</td></tr>
+          <tr><td class="role">가맹마스터</td><td class="lvl">자기 가맹 전체</td><td>계약 작성·상태 관리, 근무·급여 관리 · 홈은 점포 하나 화면</td></tr>
+          <tr><td class="role">가맹관리자</td><td class="lvl">소속 점포</td><td>계약 작성, 근무·급여 관리, 출퇴근 보정 · 홈은 점포 하나 화면</td></tr>
+          <tr><td class="role">직원</td><td class="lvl">본인 · 연결 근무지</td><td>가입·날인·수정 요청·신고 정보 입력, 본인 근무·급여·TO-DO 조회, 출퇴근 등록</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="group">
+      <div class="rules">
+        <div class="rule"><span class="id">PRM-01</span><span class="txt">관리자는 <b>자신에게 권한이 부여된 BP 또는 점포</b>의 정보에만 접근한다. 범위를 벗어난 직원의 근무·급여 정보에는 접근할 수 없다.</span></div>
+        <div class="rule"><span class="id">PRM-02</span><span class="txt">플랫폼 마스터와 플랫폼 관리자는 개별 사업자의 근무·급여 정보를 <b>조회할 수 있으나 수정할 수 없다.</b></span></div>
+        <div class="rule"><span class="id">PRM-03</span><span class="txt">직원은 <b>본인 계정에 연결된 정보와 본인에게 발송된 계약서만</b> 조회·처리한다. 관리자용 계약서 작성 기능에는 접근할 수 없다.</span></div>
+        <div class="rule"><span class="id">PRM-04</span><span class="txt">관리자는 직원의 <b>이메일 아이디·휴대전화번호·주소·비밀번호를 대신 고치지 않는다.</b> 예외는 비밀번호 초기화 요청 하나이고, 이때도 직원이 <b>재설정 링크</b>를 열어 본인이 정한다.<span class="src">STAFF-9 · 2026-09-18</span></span></div>
+        <div class="rule"><span class="id">PRM-05</span><span class="txt">계약 상태를 바꾸는 동작은 <b>근로계약 관리 메뉴 권한</b>으로 막고, 역할(BP 마스터·가맹마스터)로 따로 제한하지 않는다. 재발송·종료는 수정 권한, 기존 근로계약 대체와 잘못 올린 계약 바로잡기는 대체되는 계약에 맞는 수정·삭제 권한이다(WHALEERP-592). 1팀 권한 그룹(메뉴별 CRUD)이 생긴 뒤 근로계약 동작은 이미 메뉴 권한으로 막고 있기 때문이다(2026-10-28 김민식, WHALEERP-157).<span class="src">S-XDBBDP · 2026-10-28 김민식</span></span></div>
+        <div class="rule"><span class="id">PRM-06</span><span class="txt">출퇴근 기록의 <b>보정은 관리자 웹에서만</b> 한다. 직원은 자기 기록을 고칠 수 없다.</span></div>
+        <div class="rule"><span class="id">PRM-07</span><span class="txt">공지사항·FAQ·문의·도입문의 운영 권한은 <b>플랫폼 마스터와 플랫폼 관리자</b>에게만 준다.</span></div>
+        <div class="rule"><span class="id">PRM-08</span><span class="txt">권한이 없는 메뉴·버튼·진입점은 화면에서 <b>숨긴다.</b> 권한이 없거나 구독하지 않은 서비스의 바로가기도 숨긴다.</span></div>
+        <div class="rule"><span class="id">PRM-09</span><span class="txt">권한이 없는 사용자가 관리 URL로 직접 들어오면 <b>접근을 거부</b>한다. 이동한 관리 화면에서 권한을 다시 검증한다.</span></div>
+        <div class="rule"><span class="id">PRM-10</span><span class="txt">관리자는 자기 계정의 정보 관리·비밀번호 변경·로그아웃만 이용한다.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>1차 범위에서 제외</h2>
+    <div class="chips">
+      <span class="chip">구독료 수익화</span>
+      <span class="chip">실제 결제·정산 실행</span>
+      <span class="chip">4대보험·소득세 공제 자동 계산</span>
+      <span class="chip">급여 지급 실행</span>
+      <span class="chip">전자서명 세부 기술</span>
+      <span class="chip">외부 근태 시스템 연동</span>
+      <span class="chip">매장용 출퇴근 등록 앱과 QR 식별</span>
+      <span class="chip">지문·얼굴 인증</span>
+      <span class="chip">본인인증</span>
+      <span class="chip">운영 알림의 문자·푸시 발송</span>
+      <span class="chip">BP 자체 공지</span>
+      <span class="chip">사용자 간 게시판</span>
+      <span class="chip">실시간 상담</span>
+      <span class="chip">부가서비스 구독·청구·정산 조회</span>
+      <span class="chip">인사 외 재무·판매 업무</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>아직 정해지지 않은 것 <span class="sub">외부 검토 4 · 2차로 미룸 1 · 2026-09-29 확인</span></h2>
+    <div class="opens">
+
+      <div class="open open--warn">
+        <span class="tag tag--warn">노무</span>
+        <div>
+          <h3>주휴·연장 계산식과 가산율, 파트타이머 초과근로, 계약서의 휴일·연차 조항 (PAY-5 · CTR-21)</h3>
+          <p data-h="u5">주휴수당과 연장수당의 계산식, 가산율, 야간 근로 취급, 5인 미만 사업장의 미적용 처리는 노무사 검토를 거쳐 확정합니다. 식이 바뀌어도 화면 구조는 그대로입니다. 근로계약서에 새로 넣는 휴일(주휴일)과 연차유급휴가 조항, 그리고 값을 받지 않는 일반 문구로 바꾼 연장·야간·휴일 가산 조항의 문구도 같은 노무사에게 함께 확인받습니다(2026-09-29). 파트타이머가 계약한 소정근로시간을 넘겨 일한 시간도 묻습니다. 지금은 하루 8시간을 넘긴 시간만 연장으로 보지만, 기간제법 제6조는 단시간근로자의 소정근로시간 초과분에 50% 가산을 정하고 있습니다. 가산해야 한다면 연장 판정 기준이 계약한 요일별 소정근로시간으로 바뀝니다.</p>
+        </div>
+      </div>
+
+      <div class="open open--warn">
+        <span class="tag tag--warn">노무·세무</span>
+        <div>
+          <h3>파트타이머 3.3% 원천징수 (PAY-03)</h3>
+          <p>옛 시스템은 파트타이머 공제를 3.3%(사업소득)로 처리했습니다. 9월 30일에 파트타이머 명세서는 3.3%를 적용한 채로 시작하고, 이때는 소득세·지방소득세 두 줄을 빼 세금이 두 번 빠지지 않게 하기로 했습니다. 관리자는 명세서마다 끌 수 있습니다(PAY-03). 근로계약을 맺은 파트타이머에게 사업소득 3.3%를 적용해도 되는지는 우리 판단이라 노무·세무에 확인받습니다. 근로자로 인정되면 4대보험과 세금을 다시 정산해야 할 수 있습니다.</p>
+        </div>
+      </div>
+
+      <div class="open open--warn">
+        <span class="tag tag--warn">법무</span>
+        <div>
+          <h3>개인정보 처리방침에 적는 방법 (TAX-7)</h3>
+          <p data-h="u6">개인정보 처리방침에 주민등록번호의 수집 근거와 보유 기간, 파기 시점을 적어야 합니다. 급여 계좌는 근거가 계약 이행이라 따로 적습니다. 서비스를 열기 전에 끝나야 합니다. 화면 안내와 처리방침 초안은 우리가 써서 TAX-08에 두었고(2026-09-30), 법무에는 이 초안을 확인받습니다. 플랫폼 보관은 3년으로 두고 더 긴 보관 의무는 BP가 일괄 저장으로 채웁니다.</p>
+        </div>
+      </div>
+
+      <div class="open open--warn">
+        <span class="tag tag--warn">법무</span>
+        <div>
+          <h3>위치정보 수집 주체와 동의·통지 (ATT-8)</h3>
+          <p>GPS 판정에 따르는 개인위치정보를 법무가 봅니다. 국내 근태 서비스 여덟 곳을 조사해 보니(2026-09-29, <a href="https://claude.ai/artifact/L2RM1YC35CtkCjZWF9WrsX">조사 보고서</a>) 질문의 순서가 바뀌었습니다. 먼저 <b>판정 결과가 개인위치정보인지, 관리자 웹에서 판정 결과를 보는 것이 제3자 제공인지, 신고로 충분한지 등록까지 필요한지</b>를 묻고, 그 답에 따라 동의 문구·통지·보존 기간을 정합니다. 질문은 모두 열세 가지입니다. 보존 기간은 출퇴근 시각·판정 결과·확인자료·동의 기록으로 나눠 묻고, 동의 거부·철회 때의 대신 등록(ATT-20)이 대체수단 요건을 채우는지, 가맹 구조에서 제공받는 자가 누구인지, 확인자료 기록과 위치정보관리책임자, 14세 미만, 노사협의, KISA 사전 질의도 함께 묻습니다. 본사 제공 동의(ATT-30)를 가입·수락 화면에서 요약 한 문장과 「내용 보기」 전문으로 받는 방식이 제3자 제공 동의의 고지 요건을 채우는지도 함께 묻습니다(2026-10-30). 서비스를 열기 전에 끝나야 합니다.</p>
+        </div>
+      </div>
+
+
+      <div class="open open--warn">
+        <span class="tag tag--warn">2차</span>
+        <div>
+          <h3>4대보험 신고서와 원천징수 서류 (TAX-6) · 2차로 미룸</h3>
+          <p data-h="u9">시스템이 만들지 외부에 맡길지는 2차에서 정합니다(2026-09-17). 1차는 신고 정보를 받는 데까지만 합니다. 어느 쪽이든 받는 값은 같고 원본을 내보내는 곳만 달라집니다.</p>
+        </div>
+      </div>
+
+    </div>
+    <p class="note">직원 근무 앱 목업에는 화면 구성에 관한 미정 쟁점이 더 남아 있습니다. 알림함 보관 기간(NOTI-3) 등입니다. 정책이 아니라 화면 결정이라 이 문서에는 싣지 않았습니다.</p>
+  </section>
+
+  <section>
+    <h2>근거</h2>
+    <p class="note" data-h="src">Manyfast 명세는 2026년 9월 21일에 직접 읽어 확인했습니다. 그날 어긋난 문장과 빠진 결정을 수정 제안으로 보내 모두 승인받았습니다 &mdash; 비밀번호 재설정의 핀 15분과 관리자 초기화 링크 방식, 내 정보의 주소 검색 API, 출퇴근 현황의 앱 표시(연필 표시·기간별 탭·확인 필요 안내), 급여명세서 재발송 알림 문구 구분, 근로계약서 초안 수정과 삭제입니다. 이 문서의 ACC-08 · ACC-11 · ACC-19 · ACC-20 · CTR-19 · ATT-16~18 · NTF-10 · NTF-20 · PAY-19 · PAY-20이 그 결과입니다. 목업은 관리자 웹과 직원 근무 앱 두 저장소의 확정 쟁점을 모두 반영했습니다. 2026년 9월 22일에 <b>1팀 화면 규칙이 이 문서에 섞여 있던 것</b>을 정리했습니다 — ACC-02·ACC-03이 그것이고, 1팀이 정하는 것과 3팀이 그 위에서 쓰는 것을 갈라 적었습니다. 관리자 계정 체계는 1팀 몫이고 3팀 규칙은 직원 계정에만 걸립니다. 같은 날 도입문의의 업종·도입 예정 시기와 푸터 링크, 신고 정보 수정 화면, 재설정 링크 딥링크 넷이 닫혀 CNT-12·CNT-13·CNT-15에 반영됐습니다. <b>2026년 9월 23일에 1팀이 자기 몫 일곱 건을 모두 확정했습니다</b>(front 커밋 9deab7c) — 관리자는 아이디로 로그인하고 임시 비밀번호를 메일로 받으며, 로그아웃·탈퇴는 비로그인 홈으로 갑니다. ACC-02·ACC-03·ACC-21이 그 결과이고 출처를 1팀 명세 ID로 밝혔습니다. 2026년 9월 28일에 TO-DO 배정의 앱 푸시를 없앴습니다. 직원 근무 앱 홈에 표기하고 알림함에 한 줄 남기며 긴급은 강조용으로 둡니다. 보류할 대상이 없어져 근무시간 외 보류 규칙이 사라졌고 NOTI-1은 외부 검토에서 빠졌습니다. NTF-09 · NTF-12 · NTF-14 · PAY-17이 그 결과입니다. 2026년 9월 29일에 급여명세서의 지급·공제 항목을 옛 시스템에서 모두 가져오기로 했습니다. 지급 항목은 열한 가지, 공제는 기본 여섯과 추가 열, 파트타이머 3.3%입니다. 늘어난 항목은 관리자가 넣고 목록은 플랫폼이 관리합니다. PAY-02 · PAY-03 · PAY-21이 그 결과이고 3.3%는 외부 검토로 올렸습니다. 같은 날 근로계약서의 입력칸과 조항도 정했습니다. 급여는 고용 형태로 단위가 정해지고, 근무시간·임금지급일·주휴일을 칸으로 받으며, 조항은 열 가지로 늘고, 4대보험 가입 여부를 적고, 종이 계약도 받습니다. CTR-03 · CTR-20~23이 그 결과입니다. 같은 날 국내 근태 서비스의 위치정보 처리 방식을 조사해 ATT-8 법무 질문을 열세 가지로 늘렸고, 위치 판정 결과를 출퇴근 시각 기록과 떼어 저장하고(ATT-19) 동의를 거부하거나 철회한 직원은 관리자가 대신 등록하게 했습니다(ATT-20). ATT-03은 휴대전화 위치 권한을 끈 경우로 범위를 좁혔습니다. 2026년 10월 7일에 알림 템플릿 관리를 1차에 넣었습니다. 세 채널의 문구를 플랫폼 운영자가 고치고, 알림톡도 카카오 검수를 받은 뒤 화면에서 고치며, 기본 문구는 마이그레이션으로 한 번만 넣고, 운영 알림 유형에 근로계약 만료를 더해 열 가지가 되었습니다. 같은 날 템플릿 등록을 더하고 등록한 것은 모두 고칠 수 있게 했습니다. NTF-01 · NTF-03 · NTF-21~26이 그 결과입니다. 같은 날 직원 근무 앱 로그인 잠금과 이메일 찾기 차단을 1분·3분·5분 단계에서 5분 고정으로, 핀이 맞은 뒤 새 비밀번호를 정하는 단계를 15분에서 10분으로 바꿨습니다(개발 제안, 재영 승인). ACC-06 · ACC-08이 그 결과입니다. 같은 날 직원 상세에 <b>퇴직 처리</b>를 더했습니다. 퇴직일에 계약이 끝나고 이후 근무스케줄과 개인 TO-DO가 정리되며, 퇴직일 전까지만 되돌립니다. CTR-24 · CTR-25가 그 결과입니다. 같은 날 직원 계정 상태에 탈퇴를 더하고(휴면은 두지 않음), 로그인 잠금 중 안내와 성공하면 실패 횟수를 지우는 규칙을 개발 제안대로 넣었습니다. ACC-06 · ACC-15가 그 결과입니다. 10월 8일에 비밀번호 재설정 핀을 10분 한 시계로 줄이고 핀 쿨다운을 없앴습니다(5회 틀리면 새 핀). ACC-08 · ACC-09가 그 결과입니다. 같은 날 문의사항 답변을 답변완료 뒤에도 고칠 수 있게 하고, 고쳐도 알림은 다시 보내지 않으며 문의자에게 「수정됨」을 보이기로 했습니다. CNT-17이 그 결과입니다. 문의하기에는 이미지·PDF 첨부(5개·10MB)를 더했습니다(CNT-18). 파트타이머 3.3% 끝자리 처리는 세무 확인 대상으로 PAY-03에 더했습니다. 직원 근무 앱 데모를 만들며 가입 약관 동의(ACC-23), 퇴근 기록 없음 표시(ATT-31), 동의 철회 뒤 다시 동의하기(ATT-32), 직원 알림함 모두 읽음(NTF-27)을 정했고, 앱 하단 메뉴는 홈·근무·출퇴근·급여·내 정보 다섯 칸, 계약서 본문 글꼴은 Pretendard로 통일했습니다. 같은 날 근로계약이 체결되지 않은 직원은 근무스케줄과 출퇴근을 받지 않기로 했습니다. 근무일이 체결 완료 계약 기간 밖이면 등록·대신 등록·지난 주 복사에서 모두 뺍니다. PAY-11 · PAY-13 · ATT-08 · ATT-20이 그 결과입니다. 10월 12일에 근로계약 상태에 임시저장을 더해 일곱이 됐고 퇴직 때 임시저장 계약도 닫습니다. 급여는 고용 형태와 상관없이 시급 하나로 받고, 현업 요구사항으로 수당 금액·월 근로시간·연차휴가·퇴직금 조항을 계약 조건에 더했습니다. 노출 대상에서 부가서비스를 뺐습니다. CTR-02 · CTR-19 · CTR-20 · CTR-24 · CNT-01이 그 결과입니다. 10월 13일에는 운영 알림과 메일 발송을 나눠 업무 기능이 각각 부르게 했고(NTF-03 · NTF-19), 알림 템플릿의 기본 문구 칸 · 되돌리기 범위 · 못 읽으면 보내지 않기 · 버튼 링크 칸을 정했습니다(NTF-21 · NTF-24 · NTF-25 · NTF-26). 근로계약은 임시저장 필수 칸, 임시저장만 지우기, 다른 점포 근무 시간 겹침 차단, 기존 계약 대체, 현업 급여 칸을 정했습니다(CTR-02 · CTR-13 · CTR-19 · CTR-20 · CTR-26). 비밀번호 재설정 핀 화면에서 남은 시도를 보이지 않고 가입 전 안내를 두며, 재설정 뒤에는 로그인 화면으로 보냅니다(ACC-08 · ACC-09). 문의 중복 안내 문구와 도입문의 보관, 첨부파일 저장소 결정 대기를 적었습니다(CNT-03 · CNT-09 · CNT-11 · CNT-14 · CNT-18). 10월 14일에 첨부파일 저장소는 1차 ERP 버킷을 같이 쓰고, 따로 접두는 두지 않으며, 내려받기는 300초 서명 주소로만 주고 테스트 버킷 · 정적 키 · 설정이 없을 때의 동작 · 파일 파기를 정했습니다(CNT-18). 이미지에는 공통 모듈에서 썸네일을 함께 만들기로 했습니다(CNT-18). 도입문의 관심 서비스는 여러 개, 도입 예정 시기는 선택으로 api 에 맞췄고, 상담하지 않은 도입문의는 운영자가 지우는 기능을 두기로 했습니다(CNT-11 · CNT-13). 본사 제공 동의로 가리는 단위를 정했습니다(ATT-30). 10월 14일에 재설정 링크 발송은 본사 제공 동의와 상관없이 점포 단위로 판단하기로 했습니다(ATT-30). 10월 15일에 도입문의를 지우거나 파기할 때 그 도입문의의 운영 알림도 함께 지우고, 답변완료 건은 지우지 않기로 했습니다(CNT-11). 같은 날 노무사 답변을 받아 근로계약서 초안에 주휴일 요일 선택·급여 지급 방식·정직원 수습을 더하고, 파트타이머 요일별 시간을 작성 화면에서 고치게 했습니다(CTR-20 · CTR-21). 본사 제공 동의의 문구 버전 관리, 넓어진 버전의 처리, 다시 동의하기, 가맹 관계 종료 때 동의 끝내기를 정했습니다(ATT-30). 10월 16일에 김민식이 근로계약서 <b>본인 대조</b>를 정했습니다. 본인인증 기능은 두지 않고, 직원이 가입할 때 이름·휴대전화번호·생년월일·성별·외국인 여부를 직접 넣습니다. 이 다섯 값이 근로계약서와 모두 같아야 날인하고, 다르면 직원이 <b>수정 요청</b>을 보냅니다. 그래서 근로계약 상태가 여덟이 됐습니다. 근로계약서에서 성별·외국인 여부를 필수로 받고, 날인 전에는 관리자가 당사자 정보를 고칩니다. 재직은 근로계약서를 받을 때부터로 보고, 직원 근무 앱의 점포 정보는 체결 완료 계약이 있어야 보입니다(WHALEERP-125·126·128·132·145·147·313·314). 10월 19일에 재영이 고친 뒤의 흐름을 바로잡았습니다. 김민식 안은 서명 대기·수정 요청 계약을 고치면 발송 대기로 돌아가게 했지만, 고쳐 저장하면 <b>곧바로 서명 대기</b>가 되고 날인 요청 알림을 다시 보내는 것으로 정했습니다. 근로계약서는 저장하는 순간 알림이 나가고, 관리자가 따로 하는 것은 재발송뿐입니다. 같은 날 연결 보류와 가입 연결 확인을 없앴습니다. 계정 상태 「연결 보류」, 운영 알림 「가입 연결 보류」, 미조치·처리 대기 「연결 확인 필요」가 함께 빠지고, 수정 요청 건은 처리 대기·미조치에 들어갑니다(운영 알림은 더하지 않음). 직원은 내 정보에서 이름·성별·외국인 여부를 고치고, 생년월일은 가입한 뒤 고치지 않으며, 휴대전화번호는 1차에서 아무도 바꾸지 않습니다. 가입 전 레코드도 퇴직 처리할 수 있고, 임시저장만 있는 레코드는 재직으로 세지 않습니다. 본인인증은 1차 범위 밖에 적고, 생년월일을 직원이 직접 넣는 것은 ACC-22 법무 확인에 더했습니다. ACC-04 · ACC-13 · ACC-15 · ACC-22 · ACC-23 · HOM-02 · HOM-03 · HOM-07 · JOI-02 · JOI-04~10 · CTR-02 · CTR-03 · CTR-05 · CTR-07 · CTR-08 · CTR-13 · CTR-19 · CTR-24~29 · ATT-08 · NTF-01 · NTF-03 · NTF-04 · NTF-26이 그 결과입니다. 같은 날 TO-DO 배정 알림을 없애고 <b>수행 임박 알림</b>을 두었습니다. 배정 때는 알림함 줄도 앱 푸시도 보내지 않고, 수행 예정 일시 1시간 전(날짜만 있으면 당일 09:00)에 배정된 직원에게 한 번 보냅니다. TO-DO는 관리자도 직원 대신 상태를 바꾸고, 배정 그룹을 지울 때는 대기인 건만 지우며, 근무지 전체 배정은 등록할 때의 재직자만 넣기로 했습니다. NTF-09 · NTF-12 · NTF-14 · PAY-16 · PAY-17이 그 결과입니다(WHALEERP-113·115). 10월 20일에 본사 제공 동의를 직원 레코드가 아니라 계정에 하나 두고 그 사람의 가맹 점포 소속 모두에 같이 적용하기로 했습니다. 아직 동의하지 않은 계정에만 묻고, 가맹 관계가 끝난 점포의 레코드에는 적용하지 않으며 계정의 동의는 끝내지 않습니다. ATT-30이 그 결과입니다(api #78). 같은 날 이름·휴대전화번호는 본인인증을 붙인 뒤 직원이 바꾸는 방향으로 2차에 두었고, 1차는 둘 다 읽기 전용입니다. ACC-13이 그 결과입니다(쟁점 ME-6). 같은 날 직원 알림 수신 설정의 네 묶음을 모두 직원이 켜고 끄게 했습니다. 끈 묶음의 알림도 알림함에는 남습니다. NTF-14가 그 결과입니다(쟁점 NOTI-8). 급여명세서를 다시 보낼 때도 처음과 같은 「…급여명세서가 도착했습니다」를 쓰기로 했습니다. NTF-20이 그 결과입니다(쟁점 NOTI-6). 직원 근무 앱의 급여명세서 화면에서도 다시 발송 안내와 처리 이력의 「재발송」 줄을 뺐습니다. 처리 이력에는 확정 취소와 가장 최근 발송 한 줄만 보입니다. PAY-19 · PAY-20이 그 결과입니다(쟁점 PAY-1). 직원 근무 앱에서 근무지를 고르는 자리는 홈 상단 선택기와 근무 정보의 근무지 카드 두 곳이 됐습니다. CTR-29가 그 결과입니다(쟁점 HOME-2 · WORK-4). 출퇴근 등록도 앱에서 고른 근무지로 하고, 가장 가까운 근무지로 자동으로 바꾸지 않습니다. ATT-07이 그 결과입니다. 급여 탭은 고른 근무지와 관계없이 모든 점포의 명세서를 점포 이름과 함께 보입니다. PAY-08 · CTR-29가 그 결과입니다(쟁점 PAY-8). 초대 코드 입력의 접속 IP 기준 제한은 빼고 번호 기준 잠금만 둡니다. JOI-02가 그 결과입니다(쟁점 JOIN-7). 급여 탭 맨 위 카드는 이번 달에 받은 명세서 전체의 실지급액 합계로 바꿨습니다. PAY-08이 그 결과입니다(쟁점 PAY-9). 급여 탭 목록에는 점포·연도 필터를 두었습니다(쟁점 PAY-10). 정정된 명세서에도 바뀐 항목 표시를 두지 않습니다. PAY-19가 그 결과입니다(쟁점 PAY-1). 반경 밖에서도 출근을 등록하고 확인 필요로 남기게 했습니다. ATT-14 · ATT-07이 그 결과입니다(쟁점 ATT-11). 확인 필요 사유에 「반경 밖 출근」을 더하고, 급여명세서 검토 대기 사유에 「확인 필요 기록 포함」을 더했습니다. ATT-19 · ATT-31 · PAY-06이 그 결과입니다. 같은 날 위치 오차를 따로 판정하지 않기로 해 「위치 오차 초과」 사유와 「위치 흐림」 화면을 없앴고, 확인 필요 사유는 셋이 됐습니다. ATT-04 · ATT-19 · ATT-31이 그 결과입니다(쟁점 ATT-4). 신고 정보는 근무지마다 따로 받고, 내 정보의 소속 근무지에서 그 근무지의 계약서·명세서·신고 정보로 들어가게 했습니다. TAX-07이 그 결과입니다(쟁점 TAX-8 · ME-7). 직원 근무 앱 로그인에 「자동로그인」 체크를 두어 켜면 30일, 끄면 7일 로그인 상태를 유지하게 했습니다. ACC-05가 그 결과입니다(LOGIN-4). 이메일을 바꿀 때 현재 비밀번호를 다시 받기로 했고, 노영주가 api #85로 정한 이메일 변경 핀·비밀번호 변경·주소 규칙을 옮겼습니다. ACC-05 · ACC-13 · ACC-20이 그 결과입니다. 10월 21일에 관리자가 계정 생년월일을 정정하면 그 사람의 다른 BP 소속에도 같이 바뀌는 것을 그대로 두기로 했습니다. TAX-09가 그 결과입니다. 같은 날 김민식이 근로계약·초대 일감을 구현에 맞춰 정리한 것을 받아들여, 발송 대기 계약은 당사자 정보만 고치고 고쳐 저장하면 새 초대를 곧바로 다시 보내게 했습니다. 채용을 접을 때 발송 대기 계약을 「종료」로 닫는 길도 정했습니다. CTR-19 · CTR-28이 그 결과입니다. 같은 날 근무스케줄 개발에 앞서 빈칸을 정했습니다. 자정을 넘는 근무와 쪼갠 근무를 받고, 근무일은 시작한 날로 세며, 겹침은 같은 점포 안만 봅니다. 휴게는 분으로 두고, 근무스케줄은 급여 계산에 쓰지 않아 지난 날짜 경고를 뺐습니다. 퇴직 정리 때는 알림을 보내지 않고, 3년 지난 근무스케줄은 1차부터 배치로 파기합니다. PAY-11 · PAY-12 · PAY-14 · RET-02 · NTF-09가 그 결과입니다. 이어서 근무스케줄은 가입 완료한 직원에게만, 30분 단위로 받고, 본사 계정은 동의 없는 가맹 직원의 근무스케줄을 고치지 못하게 했습니다(PAY-11). 근로계약 날인(WHALEERP-145)을 앞두고 가입 때 성별을 필수로 받아 본인 대조 다섯 가지를 그대로 두기로 했고, 수정 요청은 본인 대조와 상관없이 서명 대기면 보낼 수 있게 넓혔습니다. ACC-23 · JOI-10 · CTR-27이 그 결과입니다. 급여명세서를 보낸 뒤 확정 취소하면 직원 근무 앱에는 「검토 중」으로 남고 금액은 가리며, 이번 달 합계에서는 빼기로 했습니다. PAY-08 · PAY-20이 그 결과입니다. 근무스케줄 조회에서 동의하지 않은 가맹 직원의 날짜·시간대별 인원이 드러나는 정도는 받아들이기로 했습니다(ATT-30). 근로계약 api가 모든 경로에서 「근로계약 관리」 메뉴 권한을 보게 되었고, 기존 근로계약 대체에 필요한 권한을 정했습니다(CTR-13). 문의사항은 1차에서 지우지 않기로 했고(CNT-17), 퇴직·탈퇴한 직원에게는 근무스케줄 변경 알림을 보내지 않기로 했습니다(PAY-14). 지난 주 복사는 날마다 판정해 받을 수 있는 날만 넣고, 원본 주에 본사에게 가려진 직원이 있으면 본사는 복사하지 못하게 했습니다(PAY-13). 날인 요청의 발송 일시를 필수로 하고, 퇴직일이 지난 직원은 날인하지 못하게 했습니다(JOI-10 · CTR-25). 근무스케줄 변경 이력에서는 동의하지 않은 가맹 직원의 줄을 빼기로 했습니다(ATT-30). 근무스케줄을 파기할 때 그 근무스케줄의 알림도 함께 지우기로 했습니다(RET-02). 직원 상세의 생년월일은 동의한 가맹 직원이면 본사에게도 보이기로 했습니다(ATT-30). 2026-10-22: ATT-33을 더했다 — 폐점 점포는 근무스케줄 화면에서 보이되 새 근무스케줄을 만들지 못한다(WHALEERP-614). 2026-10-22: PAY-08 직원 근무 앱 급여명세서 목록을 발송일 최신순에서 급여 기간 최신순(같은 달이면 발송일 최신순)으로 바꿨다. 2026-10-22: CTR-30을 더했다 — 재입사는 새 직원 레코드로 만들어 직전 재직 레코드와 잇고, 목록은 묶지 않고 상세의 재직 이력에서 본다(WHALEERP-615). 2026-10-22: ACC-22에 가입 화면의 생년월일 재확인을 더했다 — 만 19세 미만으로 계산되면 보내기 전에 한 번 더 확인받는다(WHALEERP-142). 2026-10-22: CTR-25에 입사 전 퇴직과 입사일 수정 경로를 더했다(WHALEERP-613). 2026-10-23: NTF-18에 알림톡 대상을 정했다 — 근로계약서 발송·급여명세서 발송·TO-DO 수행 임박·근무스케줄 변경은 앱 푸시와 함께 알림톡도 늘 보내고, 수신 설정을 끄면 둘 다 보내지 않는다(WHALEERP-264). 2026-10-23: CTR-30 재직 이력에는 체결 완료 근로계약이 있는 레코드만 보인다고 더했다(WHALEERP-615). 2026-10-23: CTR-30 재입사 연결에서 가입한 직원도 이름이 같아야 잇는다고 고쳤다(WHALEERP-615, api #136). 2026-10-23: TAX-07에 신고 정보 고치기 규칙을 더했다 — 지금 비밀번호를 받고, 넣은 쪽만 바꾸며, 계정마다 10분에 10번까지 받는다(WHALEERP-333·334). 2026-10-23: 출퇴근 개발 질문을 정했다 — ATT-02 1차 100m 고정, ATT-26 동의 동작은 동의 이력 테이블에만, ATT-34 상태 판정, ATT-35 열린 출근 하나, ATT-36 위치 적용 꺼짐 · 좌표 없음(WHALEERP-207·208·213). 2026-10-23: 출퇴근·급여명세서 개발 질문을 정했다 — ATT-37 가맹도 보정(1차 기본 권한), ATT-06 동의 시트 문구, ATT-22 버튼 누를 때만 위치를 읽고 매번 확인자료, PAY-05 가산을 꺼도 연장 1배, PAY-04 포괄 연장 차감·달 걸친 주, PAY-12 휴게는 근무스케줄 먼저, PAY-22 정직원 기본급 일할(WHALEERP-207~223·227). 2026-10-26: ATT-30에 근로계약 목록은 동의하지 않은 직원의 계약을 상태별 개수에서도 뺀다고 더했다(WHALEERP-133, api #146). 2026-10-26: CTR-11 새 계약이 곧 재계약(재직 직원에게도 보내고, 앞 계약은 새 계약 시작일에 하루 배치가 종료로 바꾸며 종료일은 고치지 않음 — 처음 적은 「체결일로 종료」를 같은 날 민식 결정(WHALEERP-156)으로 정정), JOI-09 소속 추가 확인 요청 흐름(발송 대기 · 토스트 · 나의 정보 - 소속 점포 · 수락·거절·만료), CTR-05 발송 대기 계약은 만료시키지 않음, CTR-10 재발송 간격 제한 없음 · 만료 문구 유지, CTR-12 갱신 예정 알림은 계약마다 한 번. 같은 날: JOI-09 「토스트」를 「소속 추가 요청 팝업」으로 고침, 소속 추가 확인 요청 재발송(알림톡·메일 다시 보냄) 추가. TAX-09 생년월일 정정 대상·조건(가입한 직원만, 퇴직·탈퇴 제외, 날인 대기 중 허용, 본사는 동의한 가맹 직원만, WHALEERP-602). 효준 질문 10개: ATT-19 미등록 줄에 이상 없음 없음, ATT-20 동의 직원의 빈 출퇴근은 보정으로(기록 없는 날 포함), ATT-22 위치 조작 화면 다시 확인 버튼 없음, ATT-30 근태 요약에서도 뺌, ATT-34 앱 근무 시간·연장은 api 값, ATT-36 서버도 좌표 없는 점포 출근 거절, PAY-04 계약 변경 시 날마다 나눠 계산, PAY-06 검토 대기는 분류 · 다시 계산하면 사유 새로 판정. CTR-11 재계약 시작일·기간 겹침·직전 계약 정의, CTR-13 체결 완료는 대체로 닫지 않음, CTR-23 종이 계약 「잘못 올린 계약 바로잡기」(사유 없음 · 확인창 경고 · 사용자 실수).</p>
+  </section>
+
+  <footer>
+    <span>WHALE ERP · 1차 운영 범위</span>
+    <span>기획 문서 · 목업 2026-10-19 기준</span>
+  </footer>
+
+</div>
+
+
+</body></html>

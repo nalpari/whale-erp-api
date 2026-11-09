@@ -1,0 +1,308 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "근무스케줄과 TO-DO",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    },
+    "views": [
+      {
+        "id": "v1",
+        "label": "근무스케줄이 직원에게 가기까지",
+        "focus": [
+          "sched",
+          "copy",
+          "edit",
+          "save",
+          "push",
+          "appSched"
+        ],
+        "note": "복사든 직접 입력이든 저장하면 바로 직원 근무 앱에 닿는다. 확정 단계는 없다."
+      },
+      {
+        "id": "v2",
+        "label": "TO-DO",
+        "focus": [
+          "todoNew",
+          "assign",
+          "appTodo",
+          "state"
+        ],
+        "note": "관리자가 만들고 배정하면 직원 근무 앱 홈과 근무 탭에 뜬다. 푸시는 보내지 않고 알림함에 한 줄 남는다. 직원은 수행 상태만 바꾼다."
+      }
+    ],
+    "viewBox": [
+      1210,
+      668
+    ]
+  },
+  "lanes": [
+    {
+      "id": "sch",
+      "label": "근무스케줄 (관리자 웹)"
+    },
+    {
+      "id": "todo",
+      "label": "TO-DO (관리자 웹)"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "app",
+      "label": "직원 근무 앱"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "작성",
+      "fromCol": 0,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p2",
+      "label": "전달",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "STAFF-13 · 빈 주에서만 · 재직자만",
+      "lane": "sch",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "dashed"
+    },
+    {
+      "id": "g2",
+      "label": "STAFF-4 · 특별업무 전용",
+      "lane": "todo",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "sched",
+    "copy",
+    "edit",
+    "save",
+    "push",
+    "appSched"
+  ],
+  "nodes": [
+    {
+      "id": "sched",
+      "lane": "sch",
+      "col": 0,
+      "type": "frontend",
+      "label": "주간·월간 보기",
+      "sublabel": "00~24시 · 체결 완료만",
+      "width": 140,
+      "tag": "STAFF-26"
+    },
+    {
+      "id": "copy",
+      "lane": "sch",
+      "col": 1,
+      "type": "backend",
+      "label": "지난 주 복사",
+      "sublabel": "바로 반영 · 해당 직원 알림",
+      "width": 150
+    },
+    {
+      "id": "edit",
+      "lane": "sch",
+      "col": 2,
+      "type": "frontend",
+      "label": "등록 · 수정 · 일괄",
+      "sublabel": "계약 근무시간이 기본값",
+      "width": 150,
+      "tag": "STAFF-14"
+    },
+    {
+      "id": "save",
+      "lane": "sch",
+      "col": 3,
+      "type": "backend",
+      "label": "저장 · 바로 반영",
+      "sublabel": "같은 점포 겹침만 막음",
+      "width": 140,
+      "tag": "STAFF-29"
+    },
+    {
+      "id": "todoNew",
+      "lane": "todo",
+      "col": 1,
+      "type": "frontend",
+      "label": "TO-DO 등록",
+      "sublabel": "날짜 필수 · 시간 선택",
+      "width": 140
+    },
+    {
+      "id": "assign",
+      "lane": "todo",
+      "col": 2,
+      "type": "backend",
+      "label": "배정",
+      "sublabel": "개인 또는 근무지 전체",
+      "width": 140,
+      "tag": "각자 · 한 명은 등록 때"
+    },
+    {
+      "id": "state",
+      "lane": "todo",
+      "col": 5,
+      "type": "database",
+      "label": "상태",
+      "sublabel": "대기 · 진행 중 · 완료",
+      "width": 140
+    },
+    {
+      "id": "push",
+      "lane": "sys",
+      "col": 4,
+      "type": "messagebus",
+      "label": "앱 푸시",
+      "sublabel": "저장 때 · 바뀐 사람에게만",
+      "width": 140,
+      "tag": "STAFF-15"
+    },
+    {
+      "id": "appSched",
+      "lane": "app",
+      "col": 4,
+      "type": "external",
+      "label": "근무 일정 보기",
+      "sublabel": "직원은 고치지 못한다",
+      "width": 140
+    },
+    {
+      "id": "appTodo",
+      "lane": "app",
+      "col": 5,
+      "type": "external",
+      "label": "TO-DO 수행",
+      "sublabel": "앱 홈에 뜸 · 상태만 바꿈",
+      "width": 150
+    },
+    {
+      "id": "due",
+      "lane": "sys",
+      "col": 5,
+      "type": "messagebus",
+      "label": "수행 임박 알림",
+      "sublabel": "앱 푸시 · 알림함",
+      "width": 140
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "sched",
+      "to": "copy",
+      "variant": "dashed",
+      "label": "빈 주에서만",
+      "role": "branch"
+    },
+    {
+      "id": "e2",
+      "from": "copy",
+      "to": "edit",
+      "variant": "emphasis",
+      "label": "복사 결과"
+    },
+    {
+      "id": "e3",
+      "from": "edit",
+      "to": "save",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e4",
+      "from": "save",
+      "to": "push",
+      "variant": "emphasis",
+      "label": "바뀐 직원만"
+    },
+    {
+      "id": "e5",
+      "from": "push",
+      "to": "appSched",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e6",
+      "from": "todoNew",
+      "to": "assign",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e7",
+      "from": "assign",
+      "to": "appTodo",
+      "variant": "default",
+      "label": "배정 알림 없음 · 앱 홈에"
+    },
+    {
+      "id": "e9",
+      "from": "appTodo",
+      "to": "state",
+      "variant": "dashed",
+      "label": "상태 변경",
+      "role": "return"
+    },
+    {
+      "id": "e10",
+      "from": "due",
+      "to": "appTodo",
+      "variant": "default",
+      "label": "수행 예정 일시 전"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "STAFF-14 기본값은 계약 근무시간, 등록할 때 한 번 · STAFF-29 근무일에 체결 완료 계약이 없으면 고를 수 없고 서버도 거부 · 겹침은 같은 점포의 같은 직원만 막고 쪼갠 근무·자정 넘김은 받음(근무일은 시작한 날) · STAFF-13 지난 주 복사는 빈 주에서만 · STAFF-4 TO-DO는 반복 없음 · TO-DO 배정 알림은 없고 수행 예정 일시 전에 수행 임박 알림 · 긴급은 맨 위로 강조"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "밖에 있는 것",
+      "items": [
+        "출퇴근 기록의 등록은 직원 근무 앱(GPS)이 맡고 웹은 조회·보정만 · 근무스케줄은 급여 계산에 쓰지 않음(운영 정책 PAY-12)"
+      ]
+    }
+  ]
+}

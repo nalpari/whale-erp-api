@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-06
+* **Update**: [Store management](/api/stores.md) · [BP masters](/api/bp-masters.md) · [Excel exports](/api/excel-exports.md) — 점포 · BP 마스터 목록 엑셀을 화면 표와 같은 열 · 순서로만 만든다(사용자 지정, front 요청). 점포는 [표] 보기의 10열(순번 · 점포코드 · 점포명 · 점포유형 · 점포상태 · 사업자등록번호 · 점포 연락처 · 점포주소(시 · 구) · 재직직원 · 등록일), BP 마스터는 표의 10열(BP 코드 · 상호명 · 아이디 · 이름 · 계정상태 · 연락처 · 이메일 · 사업자등록번호 · 가입경로 · 등록). 뒤에 붙던 사업자정보 열은 뺐다 — 가림은 BP 마스터 연락처만 남는다. 서식은 공통 `styleListSheet`: 모든 셀 9pt, 머리글 회색(F2F2F2) · 굵게 · 가운데, 1행 고정. 예약 생성 파일도 같은 함수라 같다. 조건 · 정렬 · 1만 건 · 파일 이름 · 응답 계약은 그대로.
+
 ## 2026-11-05
 * **Update**: [Admin auth](/api/admin-auth.md) · [Store management](/api/stores.md) · [BP masters](/api/bp-masters.md) — 회원 탈퇴를 점포 폐점 서비스 `StoreClosingsService` 에 연결했다(점포 관리 폐점과 같은 방식, 그 BP 의 폐점 안 한 · 지우지 않은 점포를 한 번에). `GET /auth/admin/me/withdraw-eligibility` 는 `hasInProgressContract` 를 빼고 `closing`(`check` 결과 — 점포별 `stores[]` · `total` · `isBlocked`)을 싣는다. 막는 것은 퇴근 기록 없는 출근 하나뿐이고, 진행 중 계약 400 은 없앴다(체결 완료 계약 때문에 영구히 탈퇴 못 하던 문제). `POST me/withdraw` 는 204 그대로, 트랜잭션 30초 · `retryOnDeadlock` 으로 감싸고 BP 행 → 본인 행 → 탈퇴 처리 → `close` 순으로 닫는다(점포 직접 폐점 · 점포상태 이력은 `close` 로 옮김). 폐점 오류(409 `OPEN_CHECK_IN` + `storeId` · 이미 폐점 · 교착, 404)는 그대로 내보낸다. openapi.json 다시 생성(api ponyta).
 * **Update**: [TO-DO](/api/todos.md) — 탭 BP 리뷰 반영(api #253): 플랫폼 계정이 고객 BP 의 TO-DO 를 고치면 저장 뒤 상세를 그 BP 로 다시 읽는다. bp 없이 다시 읽어 응답만 404 가 나던 것을 고쳤다.

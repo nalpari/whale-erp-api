@@ -1,0 +1,334 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "관리자 권한 — 메뉴 트리에서 권한 그룹까지",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "v1",
+        "label": "메뉴에서 계정까지",
+        "focus": [
+          "svc",
+          "menu",
+          "role",
+          "bprole",
+          "cap",
+          "pick",
+          "apply"
+        ],
+        "note": "서비스가 메뉴 트리를, 메뉴 트리가 권한을 만든다. BP 마스터·가맹 마스터 고정 권한이 BP 권한 그룹의 상한이 되고, 관리자에게는 그룹 하나만 붙는다."
+      },
+      {
+        "id": "v2",
+        "label": "상한 판정",
+        "focus": [
+          "menu",
+          "stop",
+          "role",
+          "bprole",
+          "cap"
+        ],
+        "note": "그룹의 메뉴 CRUD 는 고정 권한과 설정자 본인 범위를 넘지 못한다. 사용중지 메뉴와 사용중지 서비스는 새로 줄 수 없다."
+      },
+      {
+        "id": "v3",
+        "label": "그룹 삭제와 빈 선택지",
+        "focus": [
+          "bprole",
+          "del",
+          "apply",
+          "pick",
+          "nogroup"
+        ],
+        "note": "그룹을 지우려면 연결된 사용자를 대체 그룹으로 옮겨야 하고 후보가 없으면 못 지운다. 가맹 관리자는 가맹 마스터 자신의 그룹이 있어야 등록된다."
+      }
+    ],
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "ops",
+      "label": "플랫폼 운영자"
+    },
+    {
+      "id": "bp",
+      "label": "BP 관리자 (관리자 웹)"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "exc",
+      "label": "막힘 · 예외",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "플랫폼 기준",
+      "fromCol": 0,
+      "toCol": 2
+    },
+    {
+      "id": "p2",
+      "label": "BP 권한 그룹",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p3",
+      "label": "계정에 붙이기",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "SYSTEM-6 · 고정 권한이 곧 상한",
+      "lane": "ops",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "dashed"
+    },
+    {
+      "id": "g2",
+      "label": "CONFIG-5 · 같은 관리계정ID만",
+      "lane": "exc",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "svc",
+    "menu",
+    "role",
+    "bprole",
+    "cap",
+    "pick",
+    "apply"
+  ],
+  "nodes": [
+    {
+      "id": "svc",
+      "lane": "ops",
+      "col": 0,
+      "type": "frontend",
+      "label": "서비스 등록",
+      "sublabel": "공통코드 SERVICE 그룹",
+      "width": 160
+    },
+    {
+      "id": "menu",
+      "lane": "ops",
+      "col": 1,
+      "type": "frontend",
+      "label": "플랫폼 메뉴 관리",
+      "sublabel": "서비스별 트리 · 3단계",
+      "width": 150,
+      "tag": "삭제 · 이력 없음"
+    },
+    {
+      "id": "role",
+      "lane": "ops",
+      "col": 2,
+      "type": "frontend",
+      "label": "플랫폼 권한 관리",
+      "sublabel": "고정 4 · 추가 권한",
+      "width": 150
+    },
+    {
+      "id": "bprole",
+      "lane": "bp",
+      "col": 3,
+      "type": "frontend",
+      "label": "BP 권한 그룹 관리",
+      "sublabel": "메뉴등록 팝업 · CRUD",
+      "width": 160
+    },
+    {
+      "id": "cap",
+      "lane": "sys",
+      "col": 3,
+      "type": "security",
+      "label": "상한 판정",
+      "sublabel": "고정 권한 · 본인 범위",
+      "width": 150
+    },
+    {
+      "id": "pick",
+      "lane": "bp",
+      "col": 4,
+      "type": "frontend",
+      "label": "관리자 등록 · 수정",
+      "sublabel": "권한 그룹 하나 선택",
+      "width": 150
+    },
+    {
+      "id": "apply",
+      "lane": "sys",
+      "col": 5,
+      "type": "backend",
+      "label": "다음 요청부터",
+      "sublabel": "재로그인 없이 반영",
+      "width": 150,
+      "tag": "메뉴는 이동 때"
+    },
+    {
+      "id": "stop",
+      "lane": "exc",
+      "col": 1,
+      "type": "security",
+      "label": "사용중지 메뉴",
+      "sublabel": "새 권한 부여 제외",
+      "width": 150
+    },
+    {
+      "id": "del",
+      "lane": "exc",
+      "col": 3,
+      "type": "security",
+      "label": "권한 그룹 삭제",
+      "sublabel": "대체 그룹으로 옮긴 뒤",
+      "width": 160
+    },
+    {
+      "id": "nogroup",
+      "lane": "exc",
+      "col": 4,
+      "type": "security",
+      "label": "고를 그룹 없음",
+      "sublabel": "그룹을 먼저 만든다",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "svc",
+      "to": "menu",
+      "label": "사용 서비스",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e2",
+      "from": "menu",
+      "to": "role",
+      "label": "메뉴 트리",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e3",
+      "from": "menu",
+      "to": "stop",
+      "label": "사용중지",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e4",
+      "from": "role",
+      "to": "bprole",
+      "label": "BM · FM 상한",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e5",
+      "from": "bprole",
+      "to": "cap",
+      "label": "메뉴 CRUD 저장",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e6",
+      "from": "cap",
+      "to": "pick",
+      "label": "그룹 생성",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e7",
+      "from": "pick",
+      "to": "apply",
+      "label": "저장",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e8",
+      "from": "bprole",
+      "to": "del",
+      "label": "삭제",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e9",
+      "from": "del",
+      "to": "apply",
+      "label": "사용자 이관",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e10",
+      "from": "pick",
+      "to": "nogroup",
+      "label": "후보 없음",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e11",
+      "from": "nogroup",
+      "to": "bprole",
+      "label": "그룹 먼저",
+      "variant": "dashed",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "SYSTEM-6 BP 마스터·가맹 마스터 고정 권한의 메뉴는 권한 관리 수정 권한이면 정하고 본인 범위 상한은 플랫폼 쪽 권한에만 건다 · SYSTEM-5 고정 권한 넷은 지우지 않고 대체 후보가 없으면 추가 권한도 못 지운다 · CONFIG-5 가맹 관리자 그룹의 대체 후보는 같은 관리계정ID 그룹만 · CONFIG-6 권한 그룹에 사용 상태가 없다 · 권한 코드는 유형 + 6자리 자동 채번이고 코드·유형은 등록 뒤 못 바꾼다"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "밖에 있는 것",
+      "items": [
+        "BP 관리자 그룹은 BP 마스터가, 가맹 관리자 그룹은 그 가맹 마스터가 만든다 · 본인이 연결된 권한과 그룹은 스스로 못 고친다 · 권한 변경 이력은 데이터로만 남고 화면에 없다 · 계정 등록과 초기 비밀번호는 관리자 계정 차트에서 다룬다"
+      ]
+    }
+  ]
+}
