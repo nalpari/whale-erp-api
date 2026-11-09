@@ -13,7 +13,11 @@ sources:
   - id: jest-e2e
     resource: ../../test/jest-e2e.json
     title: E2E Jest config
-    last_modified: 2026-08-28T01:50:00Z
+    last_modified: 2026-11-09T07:00:00Z
+  - id: e2e-listen
+    resource: ../../test/e2e-listen-loopback.ts
+    title: E2E loopback listen setup
+    last_modified: 2026-11-09T07:00:00Z
 ---
 
 # Policy
@@ -50,6 +54,14 @@ The consequence that catches people: because the unit config's `rootDir` is
 `src`, a `*.spec.ts` file placed in `test/` is **silently never run** by
 `pnpm test`. Unit tests live beside their subject inside `src/`.
 
+E2E apps listen before the first request: `test/e2e-listen-loopback.ts`[^e2e-listen]
+(`setupFilesAfterEnv`) binds each app to a random `127.0.0.1` port right after
+`init`, and a spec's own `app.listen` reuses that server. Left to itself,
+supertest opens and closes a port per request on `::` and sends to `127.0.0.1`,
+so a local program already holding that port answers instead (stray 501 · 404 ·
+`socket hang up`), and concurrent requests get `ECONNREFUSED` when the first one
+closes the shared server.
+
 # Examples
 
 ```bash
@@ -68,3 +80,4 @@ This is the second way this repo reports "nothing ran" — the first is the
 
 [^jest-unit]: Root Jest config (package.json "jest" key)
 [^jest-e2e]: E2E Jest config
+[^e2e-listen]: E2E loopback listen setup

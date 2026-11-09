@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-09
+* **Update**: [Testing conventions](/conventions/testing.md) — e2e 앱을 init 직후 `127.0.0.1` 의 임의 포트에 미리 listen 한다(`test/e2e-listen-loopback.ts`). supertest 가 요청마다 연 포트를 다른 로컬 프로그램이 잡고 있어 응답을 대신 받거나, 동시 요청이 `ECONNREFUSED` 로 깨지던 것을 막는다. 시험 파일은 고치지 않았다.
+
 ## 2026-11-06
 * **Update**: [Store management](/api/stores.md) · [BP masters](/api/bp-masters.md) · [Excel exports](/api/excel-exports.md) — 점포 · BP 마스터 목록 엑셀을 화면 표와 같은 열 · 순서로만 만든다(사용자 지정, front 요청). 점포는 [표] 보기의 10열(순번 · 점포코드 · 점포명 · 점포유형 · 점포상태 · 사업자등록번호 · 점포 연락처 · 점포주소(시 · 구) · 재직직원 · 등록일), BP 마스터는 표의 10열(BP 코드 · 상호명 · 아이디 · 이름 · 계정상태 · 연락처 · 이메일 · 사업자등록번호 · 가입경로 · 등록). 뒤에 붙던 사업자정보 열은 뺐다 — 가림은 BP 마스터 연락처만 남는다. 서식은 공통 `styleListSheet`: 모든 셀 9pt, 머리글 회색(F2F2F2) · 굵게 · 가운데, 1행 고정. 예약 생성 파일도 같은 함수라 같다. 조건 · 정렬 · 1만 건 · 파일 이름 · 응답 계약은 그대로.
 
