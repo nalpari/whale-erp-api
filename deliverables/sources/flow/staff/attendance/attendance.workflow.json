@@ -1,0 +1,312 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "출퇴근 등록 — 위치로 현장을 확인한다",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy",
+        "label": "점포 안에서 찍기",
+        "focus": [
+          "open",
+          "perm",
+          "gps",
+          "pick",
+          "punch",
+          "record"
+        ],
+        "note": "앱을 열면 위치를 확인하고 점포 반경 안이면 찍는다. 근무지가 여럿이면 가장 가까운 곳을 먼저 고르고 직원이 바꿀 수 있다. 퇴근은 확인 시트에서 한 번 더 누른다."
+      },
+      {
+        "id": "blocked",
+        "label": "찍을 수 없을 때",
+        "focus": [
+          "perm",
+          "denied",
+          "gps",
+          "far",
+          "block"
+        ],
+        "note": "권한을 거부하면 등록할 수 없다. 반경 밖에서는 출근을 할 수 없고 퇴근만 확인 필요로 등록한다. 중복이나 계약 미체결은 막는다."
+      },
+      {
+        "id": "fuzzy",
+        "label": "위치가 흐릴 때",
+        "focus": [
+          "gps",
+          "punch",
+          "record"
+        ],
+        "note": "오차가 반경보다 크면 막지 않고 확인 필요 꼬리표를 달아 등록한다. 관리자가 뒤에서 확인한다."
+      }
+    ],
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "앱 화면"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "database": {
+          "label": "기록"
+        }
+      }
+    },
+    "viewBox": [
+      1088,
+      542
+    ]
+  },
+  "lanes": [
+    {
+      "id": "app",
+      "label": "직원 근무 앱 화면"
+    },
+    {
+      "id": "sys",
+      "label": "시스템 판정"
+    },
+    {
+      "id": "exc",
+      "label": "막히는 경우",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p-open",
+      "label": "진입",
+      "fromCol": 0,
+      "toCol": 0
+    },
+    {
+      "id": "p-check",
+      "label": "위치 판정",
+      "fromCol": 1,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p-punch",
+      "label": "등록",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-radius",
+      "label": "ATT-2 · 반경 100m",
+      "lane": "sys",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "security"
+    },
+    {
+      "id": "g-nocoord",
+      "label": "ATT-5 · 좌표는 저장하지 않는다",
+      "lane": "sys",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "open",
+    "perm",
+    "gps",
+    "pick",
+    "punch",
+    "record"
+  ],
+  "nodes": [
+    {
+      "id": "open",
+      "lane": "app",
+      "col": 0,
+      "type": "frontend",
+      "label": "출퇴근 열기",
+      "sublabel": "지도와 현재 시각",
+      "width": 150
+    },
+    {
+      "id": "perm",
+      "lane": "sys",
+      "col": 1,
+      "type": "security",
+      "label": "동의 · 위치 권한",
+      "sublabel": "첫 등록 때 동의",
+      "width": 150,
+      "tag": "ATT-3"
+    },
+    {
+      "id": "denied",
+      "lane": "exc",
+      "col": 1,
+      "type": "security",
+      "label": "권한 없음",
+      "sublabel": "설정에서 허용",
+      "width": 145
+    },
+    {
+      "id": "gps",
+      "lane": "sys",
+      "col": 2,
+      "type": "security",
+      "label": "반경 판정",
+      "sublabel": "점포에서 100m",
+      "width": 150,
+      "tag": "ATT-1"
+    },
+    {
+      "id": "far",
+      "lane": "exc",
+      "col": 2,
+      "type": "security",
+      "label": "반경 밖",
+      "sublabel": "출근 불가 · 퇴근만",
+      "width": 150
+    },
+    {
+      "id": "pick",
+      "lane": "sys",
+      "col": 3,
+      "type": "backend",
+      "label": "근무지 선택",
+      "sublabel": "가까운 곳 먼저",
+      "width": 150,
+      "tag": "ATT-6"
+    },
+    {
+      "id": "punch",
+      "lane": "app",
+      "col": 4,
+      "type": "frontend",
+      "label": "출근 · 퇴근 찍기",
+      "sublabel": "퇴근은 확인 시트",
+      "width": 160
+    },
+    {
+      "id": "block",
+      "lane": "exc",
+      "col": 4,
+      "type": "security",
+      "label": "막히는 경우",
+      "sublabel": "중복 · 계약 미체결",
+      "width": 160
+    },
+    {
+      "id": "record",
+      "lane": "sys",
+      "col": 5,
+      "type": "database",
+      "label": "기록 저장",
+      "sublabel": "시각과 근무지만",
+      "width": 150
+    },
+    {
+      "id": "history",
+      "lane": "app",
+      "col": 5,
+      "type": "frontend",
+      "label": "현황 보기",
+      "sublabel": "이번 주 · 기간별",
+      "width": 145
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-open-perm",
+      "from": "open",
+      "to": "perm",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-perm-gps",
+      "from": "perm",
+      "to": "gps",
+      "label": "허용",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-perm-denied",
+      "from": "perm",
+      "to": "denied",
+      "label": "거부",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-gps-pick",
+      "from": "gps",
+      "to": "pick",
+      "label": "반경 안",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-gps-far",
+      "from": "gps",
+      "to": "far",
+      "label": "반경 밖",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-gps-punch",
+      "from": "gps",
+      "to": "punch",
+      "label": "오차가 크면 확인 필요",
+      "role": "branch"
+    },
+    {
+      "id": "e-pick-punch",
+      "from": "pick",
+      "to": "punch",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-punch-record",
+      "from": "punch",
+      "to": "record",
+      "label": "등록",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-punch-block",
+      "from": "punch",
+      "to": "block",
+      "label": "중복 · 미체결",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-record-history",
+      "from": "record",
+      "to": "history",
+      "label": "현황에 쌓인다",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "ATT-1 현장 확인은 GPS · ATT-2 반경 100m · ATT-3 권한을 거부하면 등록할 수 없다 · ATT-4 오차가 반경보다 크면 막지 않고 확인 필요 꼬리표 · ATT-5 좌표는 저장하지 않는다 · 위치정보 동의는 첫 등록 때 받는다 · 근무지가 여럿이면 가장 가까운 곳을 먼저 고르고 바꿀 수 있다",
+        "퇴근은 확인 시트에서 퇴근 확정을 눌러야 기록한다 · 반경 밖에서는 출근을 못 하고 퇴근만 확인 필요로 등록한다 · 등록한 기록은 직원이 되돌리지 못하고 관리자 보정으로만 고친다 · 보정된 기록에는 연필 표시가 붙는다 · 현황은 이번 주·기간별 두 탭이고 기간별은 최대 1년"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "여기서 하지 않는 것",
+      "items": [
+        "2차에서 볼 기기 등록과 QR 은 범위 밖 · 매장용 등록 앱은 없앴다 · 위치정보 수집 주체는 플랫폼으로 정했고 법무 확인이 남았다(ATT-8)"
+      ]
+    }
+  ]
+}

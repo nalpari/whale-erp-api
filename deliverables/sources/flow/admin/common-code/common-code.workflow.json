@@ -1,0 +1,325 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "공통코드 — 플랫폼 그룹에서 BP 상세 코드까지",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "v1",
+        "label": "플랫폼제공 그룹",
+        "focus": [
+          "grp",
+          "dtl",
+          "apply",
+          "bpcode",
+          "bpadd",
+          "use"
+        ],
+        "note": "플랫폼제공 그룹은 미적용으로 저장되고 BP에 적용하는 순간 사용 중인 모든 BP에 복사된다. BP는 코드를 고치고 BP전용 코드를 더한다."
+      },
+      {
+        "id": "v2",
+        "label": "플랫폼고정 그룹",
+        "focus": [
+          "grp",
+          "dtl",
+          "fixed",
+          "svc",
+          "bpcode",
+          "owner"
+        ],
+        "note": "플랫폼고정 그룹은 모든 BP에 같은 값으로 가고 BP는 조회만 한다. 서비스 그룹은 메뉴 관리가 읽는다."
+      },
+      {
+        "id": "v3",
+        "label": "적용 뒤 바뀌는 것",
+        "focus": [
+          "apply",
+          "late",
+          "bpcode",
+          "owner"
+        ],
+        "note": "BP 적용은 되돌릴 수 없다. 적용 뒤 더한 코드는 새로 가입하는 BP부터 가고, 사용중지 그룹에는 BP가 코드를 더하지 못한다."
+      }
+    ],
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "ops",
+      "label": "플랫폼 운영자"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "bp",
+      "label": "BP 관리자 (관리자 웹)"
+    },
+    {
+      "id": "exc",
+      "label": "막힘 · 예외",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "플랫폼 정의",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "p2",
+      "label": "BP 배포",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p3",
+      "label": "BP 사용",
+      "fromCol": 3,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "SYSTEM-10 · 코드 값 · 관리 주체 잠금",
+      "lane": "ops",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "dashed"
+    },
+    {
+      "id": "g2",
+      "label": "CONFIG-7 · 상세 코드도 관리 주체 저장",
+      "lane": "bp",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "grp",
+    "dtl",
+    "apply",
+    "bpcode",
+    "bpadd",
+    "use"
+  ],
+  "nodes": [
+    {
+      "id": "grp",
+      "lane": "ops",
+      "col": 0,
+      "type": "frontend",
+      "label": "공통코드 그룹",
+      "sublabel": "플랫폼고정 · 플랫폼제공",
+      "width": 160,
+      "tag": "SYSTEM-10"
+    },
+    {
+      "id": "dtl",
+      "lane": "ops",
+      "col": 1,
+      "type": "frontend",
+      "label": "상세 코드 행 추가",
+      "sublabel": "저장은 패널마다 한 번",
+      "width": 150
+    },
+    {
+      "id": "svc",
+      "lane": "ops",
+      "col": 2,
+      "type": "frontend",
+      "label": "플랫폼 메뉴 관리",
+      "sublabel": "SERVICE 그룹을 읽음",
+      "width": 150
+    },
+    {
+      "id": "fixed",
+      "lane": "sys",
+      "col": 1,
+      "type": "backend",
+      "label": "복사 없이 원본 조회",
+      "sublabel": "모든 BP 같은 값",
+      "width": 150
+    },
+    {
+      "id": "apply",
+      "lane": "sys",
+      "col": 2,
+      "type": "backend",
+      "label": "BP에 적용",
+      "sublabel": "사용 중 BP 전부 복사",
+      "width": 150,
+      "tag": "되돌릴 수 없음"
+    },
+    {
+      "id": "late",
+      "lane": "exc",
+      "col": 2,
+      "type": "security",
+      "label": "적용 뒤 추가 코드",
+      "sublabel": "새로 가입한 BP부터",
+      "width": 150
+    },
+    {
+      "id": "bpcode",
+      "lane": "bp",
+      "col": 3,
+      "type": "frontend",
+      "label": "BP 공통코드 관리",
+      "sublabel": "그룹은 조회 전용",
+      "width": 150
+    },
+    {
+      "id": "owner",
+      "lane": "exc",
+      "col": 3,
+      "type": "security",
+      "label": "관리 주체 판정",
+      "sublabel": "플랫폼고정 · 중지는 막힘",
+      "width": 160
+    },
+    {
+      "id": "bpadd",
+      "lane": "bp",
+      "col": 4,
+      "type": "frontend",
+      "label": "상세 코드 추가",
+      "sublabel": "BP전용 · 이 BP만 보임",
+      "width": 150
+    },
+    {
+      "id": "use",
+      "lane": "bp",
+      "col": 5,
+      "type": "database",
+      "label": "업무 선택지 반영",
+      "sublabel": "고친 값만 보인다",
+      "width": 150,
+      "tag": "원래 값 안 둠"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "grp",
+      "to": "dtl",
+      "label": "그룹 선택",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e2",
+      "from": "dtl",
+      "to": "apply",
+      "label": "BP에 적용",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e3",
+      "from": "dtl",
+      "to": "fixed",
+      "label": "플랫폼고정",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e4",
+      "from": "fixed",
+      "to": "bpcode",
+      "label": "같은 값",
+      "variant": "dashed"
+    },
+    {
+      "id": "e5",
+      "from": "dtl",
+      "to": "svc",
+      "label": "SERVICE",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e6",
+      "from": "apply",
+      "to": "bpcode",
+      "label": "그룹 · 코드 복사",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e7",
+      "from": "apply",
+      "to": "late",
+      "label": "적용 뒤 추가",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e8",
+      "from": "bpcode",
+      "to": "owner",
+      "label": "고정 · 중지 그룹",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e9",
+      "from": "bpcode",
+      "to": "bpadd",
+      "label": "플랫폼제공",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e10",
+      "from": "bpadd",
+      "to": "use",
+      "label": "저장",
+      "variant": "emphasis"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "SYSTEM-10 서비스·그룹·상세 코드와 관리 주체는 등록 뒤 잠그고 그룹명·코드명·순서·사용 상태만 고친다 · CONFIG-7 BP가 더한 코드는 BP전용과 소속 BP를 저장한다 · BP가 고친 플랫폼제공 코드는 고친 값만 보인다 · 그룹을 사용중지하면 BP는 새 코드를 못 더한다"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "밖에 있는 것",
+      "items": [
+        "코드 물리 삭제는 없고 사용 상태를 끈다 · 등록·수정 이력은 데이터로만 남는다 · 적용 서비스로 나누지 않는다 · 플랫폼 사용자는 BP를 골라 조회만 한다 · 탈퇴 사유·메일 유형·약관 유형·층수 구분도 플랫폼고정 그룹이다"
+      ]
+    }
+  ]
+}

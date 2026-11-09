@@ -1,0 +1,328 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "마이페이지 — 내 정보 관리에서 회원 탈퇴까지",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    },
+    "views": [
+      {
+        "id": "v1",
+        "label": "회원 탈퇴",
+        "focus": [
+          "menu",
+          "withdraw",
+          "check",
+          "delete",
+          "landing"
+        ],
+        "note": "BP 마스터만 비밀번호 확인을 거쳐 들어온다. 조건 셋을 채우면 같은 BP의 하위 계정까지 탈퇴되고 점포는 모두 폐점된다."
+      },
+      {
+        "id": "v2",
+        "label": "조건이 모자랄 때",
+        "focus": [
+          "withdraw",
+          "check",
+          "notyet"
+        ],
+        "note": "버튼은 평소 모양 그대로 둔다. 누르면 채워야 할 조건과 조치를 팝업으로 보이고 그 자리에 남는다."
+      },
+      {
+        "id": "v3",
+        "label": "내 정보와 비밀번호",
+        "focus": [
+          "menu",
+          "profile",
+          "reauth",
+          "pw",
+          "sessions"
+        ],
+        "note": "기본정보는 이름·연락처·이메일만 고친다. 비밀번호를 바꿔도 모든 기기의 세션은 이어진다. 로그아웃은 이 브라우저만 끝낸다."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "user",
+      "label": "BP 사용자 (관리자 웹)"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "out",
+      "label": "외부"
+    },
+    {
+      "id": "exc",
+      "label": "탈퇴 막힘",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "내 정보 관리",
+      "fromCol": 0,
+      "toCol": 2
+    },
+    {
+      "id": "p2",
+      "label": "회원 탈퇴",
+      "fromCol": 3,
+      "toCol": 5,
+      "variant": "emphasis"
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "MYPAGE-1 · 탭 안 입력 상자",
+      "lane": "user",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "dashed"
+    },
+    {
+      "id": "g2",
+      "label": "MYPAGE-2 · 누르면 할 일 안내",
+      "lane": "exc",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "menu",
+    "withdraw",
+    "check",
+    "delete",
+    "landing"
+  ],
+  "nodes": [
+    {
+      "id": "menu",
+      "lane": "user",
+      "col": 0,
+      "type": "frontend",
+      "label": "상단 이름 메뉴",
+      "sublabel": "모든 화면 · 로그인 누구나",
+      "width": 160,
+      "tag": "탈퇴는 BP 마스터만"
+    },
+    {
+      "id": "profile",
+      "lane": "user",
+      "col": 1,
+      "type": "frontend",
+      "label": "내 정보",
+      "sublabel": "기본정보 · 사업자정보 탭",
+      "width": 150,
+      "tag": "이메일 소유 인증 없음"
+    },
+    {
+      "id": "reauth",
+      "lane": "out",
+      "col": 1,
+      "type": "cloud",
+      "label": "국세청 재인증",
+      "sublabel": "세 값 다시 · 중복 먼저",
+      "width": 150,
+      "tag": "BP 마스터 탭"
+    },
+    {
+      "id": "pw",
+      "lane": "user",
+      "col": 2,
+      "type": "frontend",
+      "label": "비밀번호 변경",
+      "sublabel": "현재 비밀번호 확인",
+      "width": 150,
+      "tag": "찾기로 가는 길 없음"
+    },
+    {
+      "id": "sessions",
+      "lane": "sys",
+      "col": 2,
+      "type": "backend",
+      "label": "세션 유지",
+      "sublabel": "모든 기기 이어진다",
+      "width": 150
+    },
+    {
+      "id": "withdraw",
+      "lane": "user",
+      "col": 3,
+      "type": "frontend",
+      "label": "회원 탈퇴",
+      "sublabel": "비밀번호 확인 뒤 진입",
+      "width": 150,
+      "tag": "사유는 공통코드"
+    },
+    {
+      "id": "check",
+      "lane": "sys",
+      "col": 4,
+      "type": "security",
+      "label": "탈퇴 조건 확인",
+      "sublabel": "구독 · 정산 · 근로계약",
+      "width": 160,
+      "tag": "점포는 조건 아님"
+    },
+    {
+      "id": "notyet",
+      "lane": "exc",
+      "col": 4,
+      "type": "security",
+      "label": "조건 안내 팝업",
+      "sublabel": "해야 할 일과 조치",
+      "width": 150
+    },
+    {
+      "id": "delete",
+      "lane": "sys",
+      "col": 5,
+      "type": "database",
+      "label": "논리 삭제",
+      "sublabel": "하위 계정 · 점포 전부 폐점",
+      "width": 170,
+      "tag": "메일 뒤 개인정보 삭제"
+    },
+    {
+      "id": "landing",
+      "lane": "out",
+      "col": 5,
+      "type": "frontend",
+      "label": "로그인 전 홈",
+      "sublabel": "3팀 화면 · 스스로 끝냄",
+      "width": 160,
+      "tag": "MYPAGE-3"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "menu",
+      "to": "profile",
+      "label": "내 정보 관리",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e2",
+      "from": "profile",
+      "to": "reauth",
+      "label": "재인증",
+      "variant": "dashed"
+    },
+    {
+      "id": "e3",
+      "from": "menu",
+      "to": "pw",
+      "label": "비밀번호 변경",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e4",
+      "from": "pw",
+      "to": "sessions",
+      "label": "변경",
+      "variant": "default"
+    },
+    {
+      "id": "e5",
+      "from": "menu",
+      "to": "withdraw",
+      "label": "회원 탈퇴",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e6",
+      "from": "withdraw",
+      "to": "check",
+      "label": "사유 고르고",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e7",
+      "from": "check",
+      "to": "notyet",
+      "label": "조건 미충족",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e8",
+      "from": "notyet",
+      "to": "withdraw",
+      "label": "조치 후 다시",
+      "variant": "dashed",
+      "role": "return"
+    },
+    {
+      "id": "e9",
+      "from": "check",
+      "to": "delete",
+      "label": "최종 확인",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e10",
+      "from": "delete",
+      "to": "landing",
+      "label": "완료 안내 뒤",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e11",
+      "from": "menu",
+      "to": "landing",
+      "label": "로그아웃",
+      "variant": "dashed",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "MYPAGE-1 사업자정보 인증은 탭 안 입력 상자 · MYPAGE-2 조건이 모자라도 버튼은 평소 모양, 누르면 할 일 안내 · MYPAGE-3 로그아웃은 로그인 화면, 탈퇴 완료만 로그인 전 홈(2026-10-29 바꿈) · 탈퇴 조건은 구독 해지·미정산 없음·진행 중 근로계약 없음 셋뿐 · 비밀번호를 바꿔도 모든 기기·브라우저 세션을 그대로 둔다(S-PTWREE) · 로그아웃은 이 브라우저의 토큰만 무효로 하고 다른 기기 세션은 그대로다(S-TMRGOG)"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "여기서 하지 않는 것",
+      "items": [
+        "플랫폼 계정은 스스로 탈퇴하지 못한다 · 점포의 사업자등록번호는 점포 수정 화면에서 · 탈퇴한 계정은 되살리지 않고 아이디도 다시 못 쓴다 · 로그인 전 홈은 3팀 차트(entry-home)"
+      ]
+    }
+  ]
+}

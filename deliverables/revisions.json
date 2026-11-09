@@ -22,5 +22,17 @@
     "history": [
       { "version": "1.0", "date": "2026-11-05", "change": "최초 작성", "author": "인터플러그" }
     ]
+  },
+  "POL": {
+    "name": "운영 정책서",
+    "history": [
+      { "version": "1.0", "date": "2026-11-05", "change": "최초 작성", "author": "인터플러그" }
+    ]
+  },
+  "FLOW": {
+    "name": "유저플로우",
+    "history": [
+      { "version": "1.0", "date": "2026-11-05", "change": "최초 작성", "author": "인터플러그" }
+    ]
   }
 }

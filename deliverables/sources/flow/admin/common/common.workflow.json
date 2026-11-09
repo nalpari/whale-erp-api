@@ -1,0 +1,335 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "공통 — 공통코드에서 메일과 약관 동의까지",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "v1",
+        "label": "공통코드에서 화면까지",
+        "focus": [
+          "codes",
+          "bpcodes",
+          "screens",
+          "acct"
+        ],
+        "note": "그룹은 플랫폼만 만들고 관리 주체는 그룹에 붙는다. 플랫폼제공 그룹에만 BP가 코드를 더하고, 업무 화면은 사용 중인 코드만 고른다."
+      },
+      {
+        "id": "v2",
+        "label": "계정 메일",
+        "focus": [
+          "acct",
+          "send",
+          "mailfail",
+          "force"
+        ],
+        "note": "관리자 등록·초기화와 비밀번호 찾기는 12자 비밀번호를 메일로 보낸다. 발송은 3팀 공통 기반이고, 실패해도 계정은 남는다."
+      },
+      {
+        "id": "v3",
+        "label": "약관 동의",
+        "focus": [
+          "terms",
+          "signup",
+          "force",
+          "deny"
+        ],
+        "note": "약관 전문은 한 곳에서 온다. 가입은 필수 두 가지를 받고, 운영자가 만든 계정은 강제 비밀번호 변경 화면에서 같은 두 가지를 받는다."
+      }
+    ],
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "web",
+      "label": "관리자 · 가입자 (관리자 웹)"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "exc",
+      "label": "막힘 · 예외",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "공통코드",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "p2",
+      "label": "계정 메일",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p3",
+      "label": "약관 동의",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "2026-09-17 · 발송은 3팀",
+      "lane": "sys",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "dashed"
+    },
+    {
+      "id": "g2",
+      "label": "필수 둘 동의해야 변경",
+      "lane": "web",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "codes",
+    "acct",
+    "send",
+    "force"
+  ],
+  "nodes": [
+    {
+      "id": "codes",
+      "lane": "sys",
+      "col": 0,
+      "type": "database",
+      "label": "공통코드 그룹",
+      "sublabel": "관리 주체는 그룹에",
+      "width": 150,
+      "tag": "SYSTEM-10"
+    },
+    {
+      "id": "bpcodes",
+      "lane": "web",
+      "col": 0,
+      "type": "frontend",
+      "label": "BP 공통코드 관리",
+      "sublabel": "플랫폼제공만 코드 추가",
+      "width": 160,
+      "tag": "CONFIG-7"
+    },
+    {
+      "id": "screens",
+      "lane": "web",
+      "col": 1,
+      "type": "frontend",
+      "label": "업무 화면 선택지",
+      "sublabel": "사용 중인 코드만",
+      "width": 150,
+      "tag": "서비스 · 고용 형태"
+    },
+    {
+      "id": "acct",
+      "lane": "web",
+      "col": 2,
+      "type": "frontend",
+      "label": "계정 등록 · 초기화",
+      "sublabel": "비밀번호 찾기 포함",
+      "width": 160,
+      "tag": "CONFIG-3"
+    },
+    {
+      "id": "send",
+      "lane": "sys",
+      "col": 3,
+      "type": "messagebus",
+      "label": "메일 발송",
+      "sublabel": "12자 비밀번호 · 1시간",
+      "width": 150,
+      "tag": "3팀 공통 기반"
+    },
+    {
+      "id": "mailfail",
+      "lane": "exc",
+      "col": 3,
+      "type": "security",
+      "label": "발송 실패",
+      "sublabel": "계정은 남고 기록만",
+      "width": 150,
+      "tag": "SYSTEM-3"
+    },
+    {
+      "id": "terms",
+      "lane": "sys",
+      "col": 4,
+      "type": "database",
+      "label": "약관 콘텐츠",
+      "sublabel": "전문 한 곳 · 초안 v0.7",
+      "width": 150,
+      "tag": "F-OFBCVL"
+    },
+    {
+      "id": "signup",
+      "lane": "web",
+      "col": 4,
+      "type": "frontend",
+      "label": "BP 회원가입",
+      "sublabel": "필수 두 가지 동의",
+      "width": 150,
+      "tag": "S-RCJXIG"
+    },
+    {
+      "id": "force",
+      "lane": "web",
+      "col": 5,
+      "type": "frontend",
+      "label": "강제 비밀번호 변경",
+      "sublabel": "운영자 생성 계정만 동의",
+      "width": 170,
+      "tag": "S-VFGQLI"
+    },
+    {
+      "id": "deny",
+      "lane": "exc",
+      "col": 5,
+      "type": "security",
+      "label": "약관 미동의",
+      "sublabel": "로그아웃만 할 수 있다",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "codes",
+      "to": "screens",
+      "label": "사용 값만",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e2",
+      "from": "codes",
+      "to": "bpcodes",
+      "label": "플랫폼제공",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e3",
+      "from": "bpcodes",
+      "to": "screens",
+      "label": "BP전용 추가",
+      "variant": "dashed"
+    },
+    {
+      "id": "e4",
+      "from": "codes",
+      "to": "acct",
+      "label": "권한 유형·상태",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e5",
+      "from": "acct",
+      "to": "send",
+      "label": "12자 비밀번호",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e6",
+      "from": "send",
+      "to": "mailfail",
+      "label": "발송 실패",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e7",
+      "from": "mailfail",
+      "to": "acct",
+      "label": "초기화로 재발송",
+      "variant": "dashed",
+      "role": "return"
+    },
+    {
+      "id": "e8",
+      "from": "send",
+      "to": "force",
+      "label": "받은 비번 로그인",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e9",
+      "from": "terms",
+      "to": "signup",
+      "label": "필수 두 가지",
+      "variant": "default"
+    },
+    {
+      "id": "e10",
+      "from": "terms",
+      "to": "force",
+      "label": "같은 두 가지",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e11",
+      "from": "force",
+      "to": "deny",
+      "label": "미동의",
+      "variant": "security",
+      "role": "error"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "SYSTEM-10 공통코드는 코드 값·관리 주체 모두 잠금 · CONFIG-7 BP가 더한 상세 코드도 관리 주체를 저장하고 다른 BP엔 안 보인다 · 플랫폼이 사용 중지한 코드는 BP가 다시 켜지 못한다 · CONFIG-3·AUTH-4 관리자 초기화와 비밀번호 찾기는 12자 비밀번호 메일이고 들어오면 강제 변경 · SYSTEM-3 메일이 실패해도 계정은 남기고 발송 실패만 기록 · 가입 약관은 필수 두 가지뿐이고 마케팅 동의는 1차에 없다 · 목록은 20건이 넘으면 페이지 번호로 나누고 20·50·100 중 고른 값을 모든 목록이 따른다"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "밖에 있는 것",
+      "items": [
+        "메일 포맷·발송과 발송 이력·실패 재시도 위치는 3팀 공통 기반(2026-09-17) · 직원 앱 약관 ③~⑥은 3팀 직원 근무 앱에서 받는다 · 상단 점포 범위 선택기는 3팀 HOME-4·STAFF-12이고 1팀은 그 점포 데이터만 만든다 · 메일 유형·약관 유형은 플랫폼고정 코드 그룹으로만 둔다"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "아직 미정",
+      "items": [
+        "공통정책 3~13은 1팀·3팀 협의 전 미정 — 점포 전환 뒤 같은 메뉴 목록으로 갈지(3팀 STAFF-12는 홈으로 확정), URL 직접 접근, 권한 없는 버튼 숨김, 삭제 확인창, 저장 토스트, 결과 없음 문구, 검색·페이징 복원, 화면별 특수 버튼 노출 조건 · 시스템 메일 발신 주소와 BCC는 미정 · 약관 전문은 법무 검토 전 초안"
+      ]
+    }
+  ]
+}

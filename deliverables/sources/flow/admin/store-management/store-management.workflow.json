@@ -1,0 +1,352 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "점포 정보 관리 — 등록에서 운영·폐점까지",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "v1",
+        "label": "등록에서 운영까지",
+        "focus": [
+          "list",
+          "new",
+          "nts",
+          "edit",
+          "detail",
+          "opcheck"
+        ],
+        "note": "점포유형·점포명만 넣으면 미운영으로 생긴다. 사업자정보 인증과 좌표를 채워야 운영으로 바꾼다."
+      },
+      {
+        "id": "v2",
+        "label": "폐점",
+        "focus": [
+          "detail",
+          "opcheck",
+          "closecheck",
+          "closed"
+        ],
+        "note": "운영·미운영 모두 폐점할 수 있다. 근로계약·구독·정산 대기가 남으면 막히고 이전 상태로 둔다."
+      },
+      {
+        "id": "v3",
+        "label": "삭제와 막힘",
+        "focus": [
+          "detail",
+          "del",
+          "bpblock"
+        ],
+        "note": "삭제는 미운영 점포만 된다. 소속 BP 가 미사용이면 조회만 되고 점포 상태는 그대로다."
+      }
+    ],
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "user",
+      "label": "BP 관리자 (관리자 웹)"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "ext",
+      "label": "외부"
+    },
+    {
+      "id": "exc",
+      "label": "삭제 · 막힘",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "등록",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "p2",
+      "label": "운영 전환",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p3",
+      "label": "폐점 · 삭제",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "STORE-2 · 운영은 좌표까지",
+      "lane": "sys",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    },
+    {
+      "id": "g2",
+      "label": "STORE-3 · 막힐 때만 안내",
+      "lane": "exc",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "list",
+    "new",
+    "edit",
+    "detail",
+    "opcheck",
+    "closecheck",
+    "closed"
+  ],
+  "nodes": [
+    {
+      "id": "list",
+      "lane": "user",
+      "col": 0,
+      "type": "frontend",
+      "label": "점포 목록",
+      "sublabel": "처음엔 폐점 빼고",
+      "width": 140,
+      "tag": "STORE-4"
+    },
+    {
+      "id": "new",
+      "lane": "user",
+      "col": 1,
+      "type": "frontend",
+      "label": "점포 등록",
+      "sublabel": "점포유형 · 점포명만 필수",
+      "width": 150,
+      "tag": "가맹 역할 불가"
+    },
+    {
+      "id": "nts",
+      "lane": "ext",
+      "col": 1,
+      "type": "cloud",
+      "label": "국세청 진위확인",
+      "sublabel": "번호 · 대표자명 · 개업일",
+      "width": 160,
+      "tag": "등록 때는 선택"
+    },
+    {
+      "id": "edit",
+      "lane": "user",
+      "col": 2,
+      "type": "frontend",
+      "label": "점포 수정",
+      "sublabel": "사업자 인증 · 좌표",
+      "width": 140,
+      "tag": "번호는 못 바꿈"
+    },
+    {
+      "id": "detail",
+      "lane": "user",
+      "col": 3,
+      "type": "frontend",
+      "label": "점포 상세",
+      "sublabel": "상태 변경 · 삭제 팝업",
+      "width": 150,
+      "tag": "STORE-1"
+    },
+    {
+      "id": "opcheck",
+      "lane": "sys",
+      "col": 3,
+      "type": "security",
+      "label": "운영 전환 판정",
+      "sublabel": "인증 · 필수 항목 · 좌표",
+      "width": 160,
+      "tag": "BP 사용 상태도"
+    },
+    {
+      "id": "bpblock",
+      "lane": "exc",
+      "col": 3,
+      "type": "security",
+      "label": "소속 BP 미사용",
+      "sublabel": "조회만 · 상태 그대로",
+      "width": 150
+    },
+    {
+      "id": "closecheck",
+      "lane": "sys",
+      "col": 4,
+      "type": "security",
+      "label": "폐점 판정",
+      "sublabel": "계약 · 구독 · 정산 0",
+      "width": 150,
+      "tag": "사유는 받지 않음"
+    },
+    {
+      "id": "del",
+      "lane": "exc",
+      "col": 4,
+      "type": "security",
+      "label": "점포 삭제",
+      "sublabel": "미운영 · 세 조건 0",
+      "width": 140,
+      "tag": "폐점 점포는 보존"
+    },
+    {
+      "id": "closed",
+      "lane": "sys",
+      "col": 5,
+      "type": "database",
+      "label": "폐점 · 보존",
+      "sublabel": "폐점일 자동 · 조회만",
+      "width": 150,
+      "tag": "되돌릴 수 없음"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "list",
+      "to": "new",
+      "label": "점포 등록",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e2",
+      "from": "new",
+      "to": "nts",
+      "label": "인증(선택)",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e3",
+      "from": "new",
+      "to": "edit",
+      "label": "미운영으로 저장",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e4",
+      "from": "edit",
+      "to": "nts",
+      "label": "최초 · 재인증",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e5",
+      "from": "edit",
+      "to": "detail",
+      "label": "인증 · 좌표 저장",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e6",
+      "from": "detail",
+      "to": "opcheck",
+      "label": "운영으로",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e7",
+      "from": "opcheck",
+      "to": "edit",
+      "label": "인증·좌표 없음",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e8",
+      "from": "opcheck",
+      "to": "closecheck",
+      "label": "운영 뒤 폐점",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e9",
+      "from": "detail",
+      "to": "closecheck",
+      "label": "미운영도 폐점",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e10",
+      "from": "closecheck",
+      "to": "closed",
+      "label": "세 조건 0",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e11",
+      "from": "detail",
+      "to": "del",
+      "label": "미운영 삭제",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e12",
+      "from": "detail",
+      "to": "bpblock",
+      "label": "BP 미사용",
+      "variant": "security",
+      "role": "error"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "STORE-1 수정 권한이면 가맹 역할도 상태를 바꾼다 · STORE-2 운영은 인증·필수 항목·좌표가 있어야 한다 · STORE-3 BP 상태 칸 없이 막혔을 때만 안내 · STORE-4 목록 20·50·100건, 기본 20"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "막히는 조건",
+      "items": [
+        "가맹 마스터·가맹 관리자는 등록하지 못한다 · 폐점은 근로계약·구독 0건과 정산 대기 0원 · 삭제는 미운영이면서 같은 세 조건 · 사업자등록번호는 미운영·운영 점포와 겹칠 수 없다"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "되돌릴 수 없는 것",
+      "items": [
+        "운영은 미운영으로 돌아가지 않는다 · 폐점을 다시 열려면 새 점포로 등록한다 · 점포유형과 사업자등록번호는 바꾸지 못한다 · BP 가 탈퇴하면 미운영·운영 점포를 조건 없이 모두 폐점한다"
+      ]
+    }
+  ]
+}

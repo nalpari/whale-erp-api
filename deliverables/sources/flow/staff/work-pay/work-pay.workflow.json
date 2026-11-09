@@ -1,0 +1,292 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "근무와 급여 보기 — 범위와 목록 넘기기",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "look",
+        "label": "홈에서 목록까지",
+        "focus": [
+          "home",
+          "scope",
+          "lists",
+          "paging",
+          "detail"
+        ],
+        "note": "홈은 오늘과 이번 주만 요약한다. 자세한 것은 근무지별 목록으로 내려가 기간이나 더 보기로 넘긴다."
+      },
+      {
+        "id": "guard",
+        "label": "내 것만 보인다",
+        "focus": [
+          "scope",
+          "deny",
+          "lists",
+          "empty"
+        ],
+        "note": "다른 직원의 정보는 돌려주지 않는다. 볼 것이 없으면 빈 화면이 아니라 안내를 보여준다. 퇴직해 근무지가 없으면 「근무지가 없습니다」를 보이고 급여 탭은 그대로 둔다."
+      },
+      {
+        "id": "todo",
+        "label": "TO-DO 완료",
+        "focus": [
+          "home",
+          "todo",
+          "shared",
+          "save"
+        ],
+        "note": "배정된 TO-DO는 푸시 없이 홈 카드에 뜨고 긴급은 맨 위에 선다. 공유 TO-DO 는 한 명이 완료하면 나머지에게 수행자와 함께 완료로 보인다."
+      }
+    ],
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "앱 화면"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "database": {
+          "label": "기록"
+        }
+      }
+    },
+    "viewBox": [
+      1094,
+      652
+    ]
+  },
+  "lanes": [
+    {
+      "id": "task",
+      "label": "TO-DO"
+    },
+    {
+      "id": "app",
+      "label": "직원 근무 앱 화면"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "exc",
+      "label": "막히는 경우",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p-home",
+      "label": "홈",
+      "fromCol": 0,
+      "toCol": 0
+    },
+    {
+      "id": "p-scope",
+      "label": "범위와 목록",
+      "fromCol": 1,
+      "toCol": 2,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p-read",
+      "label": "넘기고 펼치기",
+      "fromCol": 3,
+      "toCol": 4
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-paging",
+      "label": "ATT-7 · 기간 아니면 스무 건씩",
+      "lane": "app",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "home",
+    "scope",
+    "lists",
+    "paging",
+    "detail"
+  ],
+  "nodes": [
+    {
+      "id": "todo",
+      "lane": "task",
+      "col": 1,
+      "type": "frontend",
+      "label": "TO-DO 완료",
+      "sublabel": "눌러서 체크",
+      "width": 145
+    },
+    {
+      "id": "shared",
+      "lane": "task",
+      "col": 2,
+      "type": "backend",
+      "label": "공유 TO-DO",
+      "sublabel": "한 명이 하면 끝",
+      "width": 150
+    },
+    {
+      "id": "save",
+      "lane": "task",
+      "col": 3,
+      "type": "database",
+      "label": "완료 저장",
+      "sublabel": "직원별 완료 시각",
+      "width": 155
+    },
+    {
+      "id": "home",
+      "lane": "app",
+      "col": 0,
+      "type": "frontend",
+      "label": "홈",
+      "sublabel": "오늘과 이번 주",
+      "width": 140
+    },
+    {
+      "id": "paging",
+      "lane": "app",
+      "col": 3,
+      "type": "frontend",
+      "label": "목록 넘기기",
+      "sublabel": "기간 또는 더 보기",
+      "width": 160
+    },
+    {
+      "id": "detail",
+      "lane": "app",
+      "col": 4,
+      "type": "frontend",
+      "label": "상세 보기",
+      "sublabel": "명세서 · 근무 조건",
+      "width": 160
+    },
+    {
+      "id": "scope",
+      "lane": "sys",
+      "col": 1,
+      "type": "security",
+      "label": "조회 범위",
+      "sublabel": "내 것만 보인다",
+      "width": 150
+    },
+    {
+      "id": "lists",
+      "lane": "sys",
+      "col": 2,
+      "type": "database",
+      "label": "근무 · 출퇴근 · 급여",
+      "sublabel": "근무지별로 나뉨",
+      "width": 175
+    },
+    {
+      "id": "deny",
+      "lane": "exc",
+      "col": 1,
+      "type": "security",
+      "label": "남의 정보",
+      "sublabel": "돌려주지 않는다",
+      "width": 155
+    },
+    {
+      "id": "empty",
+      "lane": "exc",
+      "col": 2,
+      "type": "security",
+      "label": "빈 상태",
+      "sublabel": "근무지 없음도 안내",
+      "width": 145
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-home-scope",
+      "from": "home",
+      "to": "scope",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-home-todo",
+      "from": "home",
+      "to": "todo",
+      "label": "홈에서 바로",
+      "role": "branch"
+    },
+    {
+      "id": "e-scope-lists",
+      "from": "scope",
+      "to": "lists",
+      "label": "내 것만",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-scope-deny",
+      "from": "scope",
+      "to": "deny",
+      "label": "남의 것",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-lists-paging",
+      "from": "lists",
+      "to": "paging",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-lists-empty",
+      "from": "lists",
+      "to": "empty",
+      "label": "볼 것이 없음",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-paging-detail",
+      "from": "paging",
+      "to": "detail",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-todo-shared",
+      "from": "todo",
+      "to": "shared",
+      "role": "branch"
+    },
+    {
+      "id": "e-shared-save",
+      "from": "shared",
+      "to": "save",
+      "label": "수행자와 함께",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "홈은 오늘과 이번 주만 요약 · 기간이 있는 목록은 주·월로, 없는 목록은 스무 건씩 (ATT-7) · 남의 정보는 돌려주지 않는다 · 공유 TO-DO 는 한 명이 완료하면 끝 · 퇴직해 근무지가 없어도 급여 탭은 그대로"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "여기서 하지 않는 것",
+      "items": [
+        "급여 계산은 관리자 웹이 하고 앱은 발송된 명세서만 본다 · 주휴·연장 계산식은 노무사 확인 중(PAY-5)"
+      ]
+    }
+  ]
+}

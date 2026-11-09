@@ -1,0 +1,328 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "BP 마스터 계정 관리 — 등록에서 첫 로그인·상태 변경까지",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "v1",
+        "label": "등록에서 첫 로그인까지",
+        "focus": [
+          "list",
+          "new",
+          "create",
+          "mail",
+          "force"
+        ],
+        "note": "플랫폼 운영자가 등록하면 초기 비밀번호가 메일로만 간다. 첫 로그인 때 비밀번호를 바꾸고 약관에 동의한다."
+      },
+      {
+        "id": "v2",
+        "label": "조회 · 수정 · 상태 변경",
+        "focus": [
+          "detail",
+          "edit",
+          "status",
+          "stop"
+        ],
+        "note": "BP 마스터 계정 상태를 상세에서만 바꾸고, BP 상태는 같은 처리로 따라온다. 미사용은 조건 없이 바로 적용되고, 되돌리면 BP 와 BP 마스터만 살아난다."
+      },
+      {
+        "id": "v3",
+        "label": "초기화와 삭제",
+        "focus": [
+          "detail",
+          "mail",
+          "force",
+          "del"
+        ],
+        "note": "초기화하면 기존 비밀번호는 바로 무효가 되고(로그인 중인 세션은 유지) 전용 메일이 간다. 계정을 지우면 그 계정이 대표하는 BP 정보까지 같은 처리로 함께 지워지고, 로그인한 적 없는 오등록 BP 만 대상이다."
+      }
+    ],
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "ops",
+      "label": "플랫폼 운영자 (관리자 웹)"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "bp",
+      "label": "BP 마스터 (첫 로그인)"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "등록",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "p2",
+      "label": "안내 · 첫 로그인",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p3",
+      "label": "상태 · 삭제",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "BP-4 · 초기화 전용 메일",
+      "lane": "sys",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "dashed"
+    },
+    {
+      "id": "g2",
+      "label": "AUTH-4 · 받은 비번이면 막힘",
+      "lane": "bp",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "list",
+    "new",
+    "create",
+    "mail",
+    "force"
+  ],
+  "nodes": [
+    {
+      "id": "list",
+      "lane": "ops",
+      "col": 0,
+      "type": "frontend",
+      "label": "BP 마스터 계정 목록",
+      "sublabel": "처음엔 전체 · 기본 20건",
+      "width": 160,
+      "tag": "BP-2 인증 필터"
+    },
+    {
+      "id": "new",
+      "lane": "ops",
+      "col": 1,
+      "type": "frontend",
+      "label": "BP 마스터 계정 등록",
+      "sublabel": "필수 다섯 · 인증 선택",
+      "width": 150,
+      "tag": "약관 받지 않음"
+    },
+    {
+      "id": "create",
+      "lane": "sys",
+      "col": 1,
+      "type": "database",
+      "label": "BP · 계정 생성",
+      "sublabel": "사용 · 플랫폼등록 · 미동의",
+      "width": 170,
+      "tag": "BP 코드 자동 채번"
+    },
+    {
+      "id": "detail",
+      "lane": "ops",
+      "col": 2,
+      "type": "frontend",
+      "label": "BP 마스터 계정 상세",
+      "sublabel": "변경 이력 · 최근 로그인",
+      "width": 150,
+      "tag": "BP-3 · BP-5"
+    },
+    {
+      "id": "mail",
+      "lane": "sys",
+      "col": 2,
+      "type": "messagebus",
+      "label": "초기 비밀번호 메일",
+      "sublabel": "12자 · 1시간 유효",
+      "width": 150,
+      "tag": "화면엔 안 보임"
+    },
+    {
+      "id": "edit",
+      "lane": "ops",
+      "col": 3,
+      "type": "frontend",
+      "label": "BP 마스터 계정 수정",
+      "sublabel": "세 값은 재인증으로만",
+      "width": 150,
+      "tag": "상태는 상세에서"
+    },
+    {
+      "id": "force",
+      "lane": "bp",
+      "col": 3,
+      "type": "frontend",
+      "label": "강제 비밀번호 변경",
+      "sublabel": "비밀번호 + 약관 동의",
+      "width": 150,
+      "tag": "로그아웃만 탈출"
+    },
+    {
+      "id": "status",
+      "lane": "ops",
+      "col": 4,
+      "type": "frontend",
+      "label": "계정 상태 변경",
+      "sublabel": "사용 ↔ 미사용 · 사유 없음",
+      "width": 160,
+      "tag": "탈퇴는 고르지 못함"
+    },
+    {
+      "id": "stop",
+      "lane": "sys",
+      "col": 4,
+      "type": "security",
+      "label": "BP 상태 동반 변경",
+      "sublabel": "하위 계정 미사용 · 세션 유지",
+      "width": 150,
+      "tag": "점포 그대로 · 선행 조건 없음"
+    },
+    {
+      "id": "del",
+      "lane": "sys",
+      "col": 5,
+      "type": "security",
+      "label": "BP 정보 동반 삭제",
+      "sublabel": "미로그인 · 하위·점포 0",
+      "width": 160,
+      "tag": "상태 아님 · 아이디 재사용 불가"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "list",
+      "to": "new",
+      "label": "등록",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e2",
+      "from": "new",
+      "to": "create",
+      "label": "인증 없이도",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e3",
+      "from": "create",
+      "to": "mail",
+      "label": "신규 등록 메일",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e4",
+      "from": "create",
+      "to": "detail",
+      "label": "새 BP 상세로",
+      "variant": "default"
+    },
+    {
+      "id": "e5",
+      "from": "mail",
+      "to": "force",
+      "label": "첫 로그인",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e6",
+      "from": "detail",
+      "to": "mail",
+      "label": "비밀번호 초기화",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e7",
+      "from": "detail",
+      "to": "edit",
+      "label": "수정",
+      "variant": "default"
+    },
+    {
+      "id": "e8",
+      "from": "detail",
+      "to": "status",
+      "label": "계정 상태 변경",
+      "variant": "default"
+    },
+    {
+      "id": "e9",
+      "from": "status",
+      "to": "stop",
+      "label": "미사용으로",
+      "variant": "security"
+    },
+    {
+      "id": "e10",
+      "from": "detail",
+      "to": "del",
+      "label": "계정 삭제",
+      "variant": "dashed",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "BP-1 1만 건 넘는 엑셀은 메일 링크 24시간 · BP-2 검색에 사업자정보 인증 여부 · BP-3 등록을 마치면 새 BP 상세 위쪽 띠로 BP 코드 안내 · BP-4 초기화는 전용 메일 포맷 · BP-5 상세에 최근 로그인·약관 동의·강제 변경 대상"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "막히는 조건",
+      "items": [
+        "삭제는 사용·미사용이면서 로그인 기록 없음·하위 관리자 0·등록 점포 0 · 탈퇴 BP 는 조회만 · 아이디·BP 코드·가입경로는 등록 뒤 못 바꾼다 · BP 관리자·가맹 관리자 계정은 이 화면에 없다"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "되돌릴 수 없는 것",
+      "items": [
+        "삭제한 BP 의 아이디와 BP 코드 순번은 다시 쓰지 않는다 · 탈퇴는 BP 마스터의 회원 탈퇴로만 생기고 미운영·운영 점포를 모두 폐점한다 · 초기화하면 기존 비밀번호는 바로 무효이고 로그인 세션은 유지한다"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,356 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "로그인과 가입 — BP 회원가입에서 로그인 후 홈까지",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    },
+    "views": [
+      {
+        "id": "v1",
+        "label": "가입에서 홈까지",
+        "focus": [
+          "signup",
+          "nts",
+          "create",
+          "done",
+          "home"
+        ],
+        "note": "사업자 번호 인증은 선택이다. 가입 완료에서 웨일ERP 시작하기를 누르는 순간 세션이 생기고 강제 변경 없이 홈으로 간다."
+      },
+      {
+        "id": "v2",
+        "label": "로그인 판정",
+        "focus": [
+          "login",
+          "judge",
+          "forcepw",
+          "home"
+        ],
+        "note": "잠금, 아이디·비밀번호, 계정 상태, 강제 변경 순으로 본다. 초기·임시 비밀번호로 들어오면 새 비밀번호부터 정하고, 정하는 순간 다른 기기 로그인은 끝나고 이 기기는 이어진다."
+      },
+      {
+        "id": "v3",
+        "label": "계정 찾기와 잠김",
+        "focus": [
+          "login",
+          "judge",
+          "find",
+          "tmp",
+          "forcepw"
+        ],
+        "note": "이름·이메일로 확인해 임시 비밀번호를 메일로 보낸다. 발급만으로는 기존 비밀번호와 다른 기기 세션을 그대로 두고 잠금만 풀린다. 그 비밀번호로 들어와 새 비밀번호를 정해야 둘 다 만료된다."
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "join",
+      "label": "가입하는 BP (관리자 웹)"
+    },
+    {
+      "id": "user",
+      "label": "BP 사용자 (관리자 웹)"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "exc",
+      "label": "계정 찾기 · 잠김",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "입력 · 판정",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "p2",
+      "label": "생성 · 복구 · 강제 변경",
+      "fromCol": 2,
+      "toCol": 4,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p3",
+      "label": "홈 (3팀)",
+      "fromCol": 5,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "AUTH-3 · 유형 없이 BP 하나",
+      "lane": "join",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "dashed"
+    },
+    {
+      "id": "g2",
+      "label": "AUTH-2·4 · 이름·이메일 · 임시 비밀번호",
+      "lane": "exc",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "signup",
+    "create",
+    "done",
+    "home"
+  ],
+  "nodes": [
+    {
+      "id": "signup",
+      "lane": "join",
+      "col": 0,
+      "type": "frontend",
+      "label": "회원가입",
+      "sublabel": "기본정보 · 약관 두 가지",
+      "width": 150,
+      "tag": "아이디·이메일 중복"
+    },
+    {
+      "id": "nts",
+      "lane": "join",
+      "col": 1,
+      "type": "cloud",
+      "label": "국세청 진위확인",
+      "sublabel": "선택 · 번호 중복 먼저",
+      "width": 150,
+      "tag": "상호명은 직접"
+    },
+    {
+      "id": "create",
+      "lane": "sys",
+      "col": 2,
+      "type": "database",
+      "label": "BP 계정 생성",
+      "sublabel": "BP 마스터 · 점포 없음",
+      "width": 160,
+      "tag": "완료 메일 두 곳"
+    },
+    {
+      "id": "done",
+      "lane": "join",
+      "col": 3,
+      "type": "frontend",
+      "label": "가입 완료",
+      "sublabel": "웨일ERP 시작하기",
+      "width": 150,
+      "tag": "토큰 10분"
+    },
+    {
+      "id": "login",
+      "lane": "user",
+      "col": 0,
+      "type": "frontend",
+      "label": "로그인",
+      "sublabel": "아이디 · 비밀번호",
+      "width": 140,
+      "tag": "여러 기기 동시 로그인"
+    },
+    {
+      "id": "judge",
+      "lane": "sys",
+      "col": 1,
+      "type": "security",
+      "label": "로그인 판정",
+      "sublabel": "잠금 · 일치 · 계정 상태",
+      "width": 160,
+      "tag": "5회 틀리면 5분"
+    },
+    {
+      "id": "find",
+      "lane": "exc",
+      "col": 2,
+      "type": "frontend",
+      "label": "아이디·비밀번호 찾기",
+      "sublabel": "이름 · 이메일 대조",
+      "width": 170,
+      "tag": "아이디는 앞2·뒤1"
+    },
+    {
+      "id": "tmp",
+      "lane": "exc",
+      "col": 3,
+      "type": "messagebus",
+      "label": "임시 비밀번호 메일",
+      "sublabel": "12자 · 1시간 · 계정당 5회",
+      "width": 160,
+      "tag": "기존 비번·세션 유지"
+    },
+    {
+      "id": "forcepw",
+      "lane": "user",
+      "col": 4,
+      "type": "frontend",
+      "label": "강제 비밀번호 변경",
+      "sublabel": "모든 기기 로그인 유지",
+      "width": 170,
+      "tag": "닫기 없음·약관 함께"
+    },
+    {
+      "id": "home",
+      "lane": "user",
+      "col": 5,
+      "type": "frontend",
+      "label": "로그인 후 홈",
+      "sublabel": "3팀 · 늘 전체 범위",
+      "width": 150,
+      "tag": "플랫폼은 첫 메뉴로"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "signup",
+      "to": "nts",
+      "label": "인증하기",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e2",
+      "from": "nts",
+      "to": "create",
+      "label": "인증 토큰 10분",
+      "variant": "dashed"
+    },
+    {
+      "id": "e3",
+      "from": "signup",
+      "to": "create",
+      "label": "회원가입",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e4",
+      "from": "create",
+      "to": "done",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e5",
+      "from": "done",
+      "to": "home",
+      "label": "웨일ERP 시작하기",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e6",
+      "from": "login",
+      "to": "judge",
+      "label": "로그인",
+      "variant": "default"
+    },
+    {
+      "id": "e7",
+      "from": "judge",
+      "to": "home",
+      "label": "통과",
+      "variant": "default"
+    },
+    {
+      "id": "e8",
+      "from": "judge",
+      "to": "forcepw",
+      "label": "초기·임시 비밀번호",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e9",
+      "from": "forcepw",
+      "to": "home",
+      "label": "변경 후",
+      "variant": "default"
+    },
+    {
+      "id": "e10",
+      "from": "judge",
+      "to": "find",
+      "label": "잠김 · 만료",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e11",
+      "from": "login",
+      "to": "find",
+      "label": "찾기 링크",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e12",
+      "from": "find",
+      "to": "tmp",
+      "label": "임시 비밀번호 받기",
+      "variant": "dashed"
+    },
+    {
+      "id": "e13",
+      "from": "tmp",
+      "to": "login",
+      "label": "임시로 로그인",
+      "variant": "dashed",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "AUTH-1 이메일이 아니라 아이디로 로그인 · AUTH-2 계정 찾기는 이름·이메일 대조 · AUTH-3 유형 고르지 않고 BP 하나로 가입 · AUTH-4 재설정 링크 대신 임시 비밀번호 메일 · 로그인 뒤 BP 계정은 BP 홈, 플랫폼 계정은 플랫폼관리 첫 메뉴 · 메뉴가 없으면 권한 요청 안내(공통정책 1, 2026-10-28 변경)"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "세션 규칙",
+      "items": [
+        "여러 기기 동시 로그인(세션은 기기별) · 임시 비밀번호 발급만으로는 기존 비밀번호·세션 유지, 잠금만 풀림 · 강제 변경을 마쳐도 모든 기기 로그인 유지 · 임시 비밀번호 1시간이 지나면 그 세션 종료"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "밖에 있는 것",
+      "items": [
+        "로그인 전 홈과 로그인 후 홈은 3팀 차트(entry-home) · 플랫폼관리는 홈 없이 첫 메뉴로 들어간다 · 가맹점과 직원은 가입하지 않는다 · 운영자 잠금 해제와 마케팅 수신 동의는 1차에 없다 · 메일 발송 포맷은 3팀 · 미정: 약관 전문은 법무 검토 전 초안 · 시스템 자동발송 메일의 발신 주소와 BCC는 미정(공통정책 12)"
+      ]
+    }
+  ]
+}

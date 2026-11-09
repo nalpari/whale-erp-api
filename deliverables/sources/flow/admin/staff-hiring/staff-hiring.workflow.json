@@ -1,0 +1,331 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "직원 채용과 근로계약 — 초안에서 체결까지",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "happy",
+        "label": "초안에서 체결까지",
+        "focus": [
+          "draft",
+          "kind",
+          "signup",
+          "match",
+          "send",
+          "sign",
+          "done"
+        ],
+        "note": "관리자가 초안을 저장하면 초대가 나가고, 직원이 가입을 마치는 순간 계약서가 자동으로 발송된다."
+      },
+      {
+        "id": "hold",
+        "label": "연결 보류",
+        "focus": [
+          "signup",
+          "match",
+          "hold",
+          "kind",
+          "send"
+        ],
+        "note": "본인인증 번호가 초대와 어긋나면 보류한다. 관리자가 직접 확인해 승인하거나 번호를 고쳐 재초대한다."
+      },
+      {
+        "id": "reject",
+        "label": "거부·만료와 재발송",
+        "focus": [
+          "send",
+          "sign",
+          "reject",
+          "done"
+        ],
+        "note": "거부되거나 30일이 지나 만료된 계약은 재발송한다. 새 발송 이력으로 남는다."
+      }
+    ],
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "자동 발송"
+        },
+        "database": {
+          "label": "기록"
+        }
+      }
+    },
+    "viewBox": [
+      1040,
+      668
+    ]
+  },
+  "lanes": [
+    {
+      "id": "web",
+      "label": "관리자 웹"
+    },
+    {
+      "id": "app",
+      "label": "직원 근무 앱"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "exc",
+      "label": "보류·거부",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p-draft",
+      "label": "초안",
+      "fromCol": 0,
+      "toCol": 0
+    },
+    {
+      "id": "p-invite",
+      "label": "초대와 가입",
+      "fromCol": 1,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p-sign",
+      "label": "발송과 날인",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-hold",
+      "label": "STAFF-7 · 최소 정보 + 승인",
+      "lane": "exc",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    },
+    {
+      "id": "g-reject",
+      "label": "STAFF-2·3 · 7종 · 30일",
+      "lane": "exc",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "draft",
+    "kind",
+    "signup",
+    "match",
+    "send",
+    "sign",
+    "done"
+  ],
+  "nodes": [
+    {
+      "id": "draft",
+      "lane": "web",
+      "col": 0,
+      "type": "frontend",
+      "label": "근로계약서 초안 저장",
+      "sublabel": "저장이 곧 초대 발송",
+      "width": 160,
+      "tag": "STAFF-1"
+    },
+    {
+      "id": "kind",
+      "lane": "sys",
+      "col": 1,
+      "type": "backend",
+      "label": "초대 유형 판별",
+      "sublabel": "계정을 조회해 정한다",
+      "width": 170
+    },
+    {
+      "id": "signup",
+      "lane": "app",
+      "col": 2,
+      "type": "frontend",
+      "label": "가입 · 본인인증",
+      "sublabel": "토큰 링크로 들어온다",
+      "width": 140
+    },
+    {
+      "id": "match",
+      "lane": "sys",
+      "col": 3,
+      "type": "security",
+      "label": "연결 판정",
+      "sublabel": "토큰 + 본인인증 휴대전화",
+      "width": 150
+    },
+    {
+      "id": "hold",
+      "lane": "exc",
+      "col": 3,
+      "type": "security",
+      "label": "연결 보류",
+      "sublabel": "관리자 승인 또는 재초대",
+      "tag": "실명·다른 소속은 안 보임",
+      "width": 150
+    },
+    {
+      "id": "send",
+      "lane": "sys",
+      "col": 4,
+      "type": "messagebus",
+      "label": "계약서 발송",
+      "sublabel": "관리자 개입 없이 자동",
+      "width": 150
+    },
+    {
+      "id": "sign",
+      "lane": "app",
+      "col": 5,
+      "type": "frontend",
+      "label": "직원 날인 · 거부",
+      "sublabel": "거부 사유는 선택",
+      "width": 140
+    },
+    {
+      "id": "done",
+      "lane": "web",
+      "col": 5,
+      "type": "database",
+      "label": "체결 완료",
+      "sublabel": "직원 레코드에 붙는다",
+      "width": 140
+    },
+    {
+      "id": "reject",
+      "lane": "exc",
+      "col": 5,
+      "type": "security",
+      "label": "거부 · 만료",
+      "sublabel": "날인 기한 30일 경과",
+      "width": 140
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-draft-kind",
+      "from": "draft",
+      "to": "kind",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-kind-signup",
+      "from": "kind",
+      "to": "signup",
+      "label": "가입 초대 · 재초대",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-signup-match",
+      "from": "signup",
+      "to": "match",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-kind-send",
+      "from": "kind",
+      "to": "send",
+      "label": "재직 중이면 즉시 발송",
+      "variant": "dashed",
+      "role": "branch",
+      "fromSide": "top",
+      "toSide": "top",
+      "channelY": 166
+    },
+    {
+      "id": "e-match-send",
+      "from": "match",
+      "to": "send",
+      "label": "일치 · 자동 연결",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-match-hold",
+      "from": "match",
+      "to": "hold",
+      "label": "불일치",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-hold-send",
+      "from": "hold",
+      "to": "send",
+      "label": "관리자 승인",
+      "variant": "security",
+      "role": "return"
+    },
+    {
+      "id": "e-hold-kind",
+      "from": "hold",
+      "to": "kind",
+      "label": "번호 고쳐 재초대",
+      "variant": "dashed",
+      "role": "return"
+    },
+    {
+      "id": "e-send-sign",
+      "from": "send",
+      "to": "sign",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-sign-done",
+      "from": "sign",
+      "to": "done",
+      "label": "날인",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-sign-reject",
+      "from": "sign",
+      "to": "reject",
+      "label": "거부 · 30일 만료",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-reject-send",
+      "from": "reject",
+      "to": "send",
+      "label": "재발송 · 새 이력",
+      "variant": "dashed",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "STAFF-1 초안 저장이 시작점 · STAFF-3 초대·날인 30일 · STAFF-7 토큰과 휴대전화가 맞아야 자동 연결 · 지우는 것은 임시저장만(이어 쓰기에서 확인 뒤, CTR-19) · 같은 점포 진행 중 계약은 대체 확인 · 다른 점포와 근무 시간이 겹치면 초안 저장을 막는다(CTR-26)"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "여기서 하지 않는 것",
+      "items": [
+        "체결된 계약은 새 계약으로 대체 (STAFF-2) · 신고 정보는 직원이 앱에서 · 전자서명 세부는 범위 밖"
+      ]
+    }
+  ]
+}
