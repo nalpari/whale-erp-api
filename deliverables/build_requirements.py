@@ -13,7 +13,7 @@ from html.parser import HTMLParser
 
 from openpyxl.styles import Alignment, Font
 
-from common import FONT, HERE, open_xlsx, safe, save_xlsx, table_sheet
+from common import FONT, HERE, open_xlsx, record_basis, safe, save_xlsx, table_sheet
 
 SNAPSHOT = os.path.join(HERE, "sources", "manyfast.json")
 SLOTS = [("preconditions", "전제 조건"), ("trigger", "트리거"), ("action", "동작"), ("outcome", "결과"),
@@ -174,6 +174,10 @@ CHILD_HEADERS = (["이름", "상위", "설명", "근거", "성공 기준", "1차
 CHILD_WIDTHS = [30, 26, 50, 40, 30, 8, 9, 8, 14] + [44] * len(SLOTS) + [16, 11]
 
 
+def basis(snap):
+    return f"기획 명세 스냅숏 {snap['readAt']}"
+
+
 def write(version):
     """엑셀을 쓰고 (경로, 요구사항 수, 기능 수, 명세 수) 를 돌려준다."""
     snap = json.load(open(SNAPSHOT, encoding="utf-8"))
@@ -228,6 +232,7 @@ def write(version):
             for c in ws[head + 1 + i]:
                 c.alignment = wrap
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
+    record_basis("REQ", version, path, basis(snap))
     return path, len(req_rows), len(feat_rows), len(spec_rows)
 
 

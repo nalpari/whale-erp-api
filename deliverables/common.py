@@ -1,7 +1,10 @@
 """산출물 생성 스크립트가 함께 쓰는 것: 템플릿 열기, 표지·개정 이력 채우기, 표 시트 · 워드 본문, 저장, 내부 기록 정리."""
+import hashlib
 import json
 import os
 import re
+import subprocess
+from datetime import datetime, timezone
 
 from docx import Document
 from docx.enum.text import WD_BREAK
@@ -14,6 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TEMPLATE_XLSX = os.path.join(HERE, "templates", "template.xlsx")
 TEMPLATE_DOCX = os.path.join(HERE, "templates", "template.docx")
 OUT = os.path.join(HERE, "out")
+MANIFEST = os.path.join(OUT, "manifest.json")
 FONT = "맑은 고딕"
 
 
@@ -103,15 +107,21 @@ def _fill(paragraph, values):
             r.text = values[r.text]
 
 
-def open_docx(abbr, version):
-    """워드 템플릿을 열고 표지 자리표시자(본문 · 표 · 머리글)와 개정 이력 표를 채운 뒤 새 쪽에서 본문을 잇는다."""
+def open_docx(abbr, version, draft=False):
+    """워드 템플릿을 열고 표지 자리표시자(본문 · 표 · 머리글) · 문서 속성 · 개정 이력 표를 채운 뒤 새 쪽에서 본문을 잇는다.
+    draft 면 표지 · 머리글 · 제목 속성의 문서명에 「(초안)」을 붙인다."""
     doc, history = revision(abbr, version)
-    values = {"{{문서명}}": doc["name"], "{{문서 번호}}": f"WHALE-{abbr}-{version}", "{{버전}}": version,
+    shown = f"{doc['name']} (초안)" if draft else doc["name"]
+    values = {"{{문서명}}": shown, "{{문서 번호}}": f"WHALE-{abbr}-{version}", "{{버전}}": version,
               "{{작성일}}": history[-1]["date"], "{{작성자}}": history[-1]["author"]}
     d = Document(TEMPLATE_DOCX)
     cells = [p for t in d.tables for row in t.rows for c in row.cells for p in c.paragraphs]
     for p in d.paragraphs + cells + d.sections[0].header.paragraphs:
         _fill(p, values)
+    made = datetime.strptime(history[-1]["date"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    props = d.core_properties
+    props.author = props.last_modified_by = history[-1]["author"]
+    props.title, props.created, props.modified, props.comments = shown, made, made, ""
     hist = d.tables[1]
     for r in history:
         for c, v in zip(hist.add_row().cells, (r["version"], r["date"], r["change"], r["author"])):
@@ -157,6 +167,49 @@ def save_docx(d, file_name):
     path = os.path.join(OUT, file_name)
     d.save(path)
     return path
+
+
+# ── 생성 기준 기록 ──
+
+def last_commit(*paths):
+    """paths(deliverables 기준 상대 경로)를 마지막으로 바꾼 커밋의 앞 8자리."""
+    out = subprocess.check_output(["git", "log", "-1", "--format=%H", "--", *paths], cwd=HERE, text=True).strip()
+    if not out:
+        raise SystemExit(f"커밋을 찾지 못했습니다: {paths}")
+    return out[:8]
+
+
+def source_basis(path):
+    """front · staff 저장소에서 뜬 스냅숏(SOURCE.json)의 기준."""
+    with open(path, encoding="utf-8") as f:
+        source = json.load(f)
+    return f"관리자 웹 {source['admin']['commit'][:8]} · 직원 근무 앱 {source['staff']['commit'][:8]}"
+
+
+def tree_clean():
+    return not subprocess.check_output(["git", "status", "--porcelain"], cwd=HERE, text=True).strip()
+
+
+def sha256(path):
+    with open(path, "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def read_manifest():
+    try:
+        with open(MANIFEST, encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+
+def record_basis(abbr, version, path, basis, **extra):
+    """문서를 만든 기준을 out/manifest.json 에 남긴다. 완료보고서가 이 값을 읽는다."""
+    data = read_manifest()
+    data[abbr] = {"version": version, "file": os.path.basename(path), "sha256": sha256(path), "basis": basis, "clean": tree_clean(), **extra}
+    os.makedirs(OUT, exist_ok=True)
+    with open(MANIFEST, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 # ── 내부 기록 정리 ──

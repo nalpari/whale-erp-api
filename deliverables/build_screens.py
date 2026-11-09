@@ -23,7 +23,7 @@ from docx.image.image import Image
 from docx.shared import Cm
 
 from common import (EMAIL, HERE, INTERNAL, OUT, TEAM, TEAM_NAMES, heading, open_docx, para, picture, safe, save_docx,
-                    table)
+                    record_basis, source_basis, table)
 from build_policy import RULE_IDS
 
 
@@ -529,6 +529,8 @@ def write(version, draft=False):
     if bad:
         raise SystemExit(f"문서 글자에 내부 표시가 남음: {bad}")
     path = save_docx(d, f"{doc_no}_{doc_name}.docx")
+    if not draft:
+        record_basis("SCR", version, path, source_basis(SOURCE_JSON))
     return path, total, total_img, (len(leaves), len(active), len(empty))
 
 

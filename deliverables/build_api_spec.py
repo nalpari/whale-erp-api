@@ -14,7 +14,7 @@ import re
 
 from openpyxl.styles import Alignment, Font
 
-from common import EMAIL, FONT, HERE, INTERNAL, open_xlsx, save_xlsx, table_sheet
+from common import EMAIL, FONT, HERE, INTERNAL, last_commit, open_xlsx, record_basis, save_xlsx, table_sheet
 
 ROOT = os.path.join(HERE, "..")
 OPENAPI = os.path.join(ROOT, "openapi", "openapi.json")
@@ -484,6 +484,10 @@ def build(doc, routes, dtos):
     return blocks, modules
 
 
+def basis():
+    return f"API 커밋 {last_commit('../openapi/openapi.json', '../src')}"
+
+
 def write(version):
     """엑셀을 쓰고 (경로, API 수, 영역 수, 판정 불가 수) 를 돌려준다."""
     doc = json.load(open(OPENAPI, encoding="utf-8"))
@@ -523,6 +527,7 @@ def write(version):
                 if isinstance(c.value, str) and "@" in c.value:
                     c.value = EMAIL.sub(r"\1@example.com", c.value)
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
+    record_basis("API", version, path, basis())
     return path, len(blocks), len(modules), sum(1 for b in blocks if b[5]), len(REMOVED)
 
 

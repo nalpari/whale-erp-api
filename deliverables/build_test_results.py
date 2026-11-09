@@ -17,7 +17,7 @@ import tempfile
 from urllib.parse import parse_qs, unquote, urlparse, urlsplit
 
 from build_userflow import ISSUE, strip_issue
-from common import EMAIL, HERE, INTERNAL, PHONE, TEAM, TEAM_NAMES, open_xlsx, safe, save_xlsx, strip_records, table_sheet
+from common import EMAIL, HERE, INTERNAL, PHONE, TEAM, TEAM_NAMES, open_xlsx, record_basis, safe, save_xlsx, strip_records, table_sheet
 
 SNAPSHOT = os.path.join(HERE, "sources", "test_results.json")
 API = os.path.dirname(HERE)
@@ -44,8 +44,8 @@ NO_REASON = "코드에서 사유를 찾지 못함"
 
 # 시험 위치의 코드에서 찾는 건너뜀 사유
 SKIP_REASONS = [(re.compile(r"onRealPostgres|E2E_REAL_POSTGRES"),
-                 "연결 두 개가 필요한 동시성 시험이라 E2E_REAL_POSTGRES=1 을 준 실행에서만 돈다. 기본 실행에서 제외"),
-                (re.compile(r"E2E_SINGLE_BACKEND"), "연결 하나짜리 시험 DB 에서는 동시 질의를 할 수 없어 E2E_SINGLE_BACKEND 를 주면 건너뛴다")]
+                 "연결 두 개가 필요한 동시성 시험이라 별도 환경에서만 실행한다. 기본 실행에서 제외"),
+                (re.compile(r"E2E_SINGLE_BACKEND"), "연결 하나짜리 시험 DB 에서는 동시 질의를 할 수 없어 별도 환경에서만 실행한다")]
 ENV_SKIPS = {reason for _, reason in SKIP_REASONS}  # 환경값으로 켜고 끄는 건너뜀
 # 스위트 · 테스트 이름 · 오류 모양이 모두 맞을 때만 쓰는 납품 문체 사유. (사유, 영향, 처리 계획). 스위트 단위 실패는 테스트 이름이 HOOK_FAILED 다.
 KNOWN_FAILURES = {
@@ -376,7 +376,7 @@ def run_all(front, staff):
         raise SystemExit("실행 중에 저장소 커밋이 바뀌었습니다. 결과 파일을 쓰지 않습니다.")
     node = sh(["node", "-v"], API, env).stdout.strip()
     data = {"runAt": datetime.date.today().isoformat(), "commits": commits,
-            "environment": {"node": node, "disposableDb": True, "database": "일회용 PostgreSQL(localhost)", "timeZone": env["TZ"]},
+            "environment": {"node": node, "disposableDb": True, "database": "일회용 PostgreSQL", "timeZone": env["TZ"]},
             "kinds": kinds, "suites": suites, "failures": failures, "skips": skips}
     text = json.dumps(data, ensure_ascii=False, indent=1) + "\n"
     secret = [v for v in (urlparse(url).password, jwt, data_key) if v and v in text]
@@ -393,7 +393,8 @@ def run_all(front, staff):
 
 def plan_of(failure):
     if failure["kind"] in ("type", "lint"):
-        return f"{KINDS[failure['kind']]} 오류: {failure['test']} {failure['error']}", "미확인", "담당 영역에서 확인"
+        impact = "데모 파일이라 앱 동작과 무관" if failure["suite"].startswith("docs/demo/") else "미확인"
+        return f"{KINDS[failure['kind']]} 오류: {failure['test']} {failure['error']}", impact, "담당 영역에서 확인"
     return KNOWN_FAILURES.get((failure["suite"], failure["test"], failure["error"]),
                               (f"원인 미분석: {failure['error']}", "미확인", "원인 확인 후 결정"))
 
@@ -427,6 +428,10 @@ def check(snap):
                 raise SystemExit(f"{k['repo']} {k['kind']}: 스위트 합계가 요약과 다릅니다.")
 
 
+def basis(snap):
+    return " · ".join(f"{repo} {commit[:8]}" for repo, commit in snap["commits"].items())
+
+
 def write(version):
     snap = json.load(open(SNAPSHOT, encoding="utf-8"))
     check(snap)
@@ -444,6 +449,7 @@ def write(version):
     if left:
         raise SystemExit(f"납품본에 내부 표지가 남았습니다: {left[:20]}")
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
+    record_basis("TEST", version, path, basis(snap))
     return path, snap
 
 
