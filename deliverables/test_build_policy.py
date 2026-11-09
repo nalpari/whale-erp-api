@@ -64,6 +64,10 @@ assert "whale-erp-v2" not in cells and "내부 결정 기록" not in cells
 for word in ("(구현 기준)", "(구현 그대로)", "(후속 일감)", "(홈 PR 리뷰)"):
     assert word not in cells, word
 assert "노무사 답변 2026-10-14 질문 14)" in cells  # 노무사 답변 괄호는 남긴다
+for gone in ("2026-09-16 확정", "전면 교체 · 2026-09-10", "2026-09-29 확인"):
+    assert gone not in cells, gone
+for kept in ("상태 8종 · 원본 표시와 서명 보관", "GPS 판정으로 전면 교체", "외부 검토 4 · 2차로 미룸 1", "2026-10-19 기준"):
+    assert kept in cells, kept
 assert 'class="src"' not in cells and "STAFF-5" not in cells  # 출처 줄(예: CTR-04 의 「STAFF-5」)은 없다
 emails = set(re.findall(r"[\w.*+-]+@[\w.-]+\.[A-Za-z]{2,}", cells))
 assert all(e.endswith("@example.com") for e in emails), emails
