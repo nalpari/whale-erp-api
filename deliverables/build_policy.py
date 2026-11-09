@@ -42,6 +42,7 @@ SENTENCE_FIXES = {
     " 안내에는 \x01가맹 점포 직원 자료는": " 회원 탈퇴 화면의 안내에는 \x01가맹 점포 직원 자료는",  # 앞 문장을 뺀 RET-09
     # 문장 안의 쟁점 번호: 번호만 뺀다
     "ATT-8에서": "법무 확인에서",
+    "받게 되어(ATT-11) 오차로": "받게 되어 오차로",
     "ATT-8 법무 확인에": "법무 확인에",
     "TAX-7 법무 검토에서": "법무 검토에서",
     "(앱 HOME-1)": "",
@@ -67,9 +68,8 @@ SENTENCE_FIXES = {
     "1팀 점포 이미지(": "점포 이미지(",
     "1팀 권한 그룹(": "권한 그룹(",
 }
-# 실제 규칙 번호는 남기고 그 밖의 목업 쟁점 번호를 지운다(2026-11-09 재영). PAY-4 는 규칙 번호인지 애매해 남겨 두고 보고한다.
+# 실제 규칙 번호는 남기고 그 밖의 목업 쟁점 번호를 지운다(2026-11-09 재영).
 RULE_IDS = set(re.findall(r'<div class="rule"><span class="id">([A-Z]+-\d+)</span>', open(SOURCE, encoding="utf-8").read()))
-KEEP_ISSUES = {"PAY-4"}
 _T = r"(?<![A-Za-z0-9_-])[A-Z]{2,}-\d+(?:·\d+)*"
 TOKEN = re.compile(_T)
 ISSUE_REMOVED = []
@@ -78,7 +78,7 @@ ISSUE_REMOVED = []
 def is_issue(token):
     head, *more = token.split("·")
     prefix = head.rsplit("-", 1)[0]
-    return token not in KEEP_ISSUES and not all(x in RULE_IDS for x in [head] + [f"{prefix}-{n}" for n in more])
+    return not all(x in RULE_IDS for x in [head] + [f"{prefix}-{n}" for n in more])
 
 
 def strip_issues(text):

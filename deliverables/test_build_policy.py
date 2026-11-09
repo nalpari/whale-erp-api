@@ -23,7 +23,8 @@ assert B.strip_issues("(PAY-5 · CTR-21)") == "(CTR-21)"
 assert B.strip_issues("(플랫폼 아래, NOTIFY-7)") == "(플랫폼 아래)"
 assert B.strip_issues("(쟁점 ATT-4. 받게 되어)") == "(받게 되어)"
 assert B.strip_issues("(ATT-08 · ATT-19·21)") == "(ATT-08 · ATT-19·21)"  # 실제 규칙 번호는 남긴다
-assert B.strip_issues("(급여명세서 3년, PAY-4)") == "(급여명세서 3년, PAY-4)"  # 애매해서 보고
+assert B.strip_issues("(급여명세서 3년, PAY-4)") == "(급여명세서 3년)"
+assert B.strip_issues("보존이 3년(PAY-4)이라") == "보존이 3년이라"
 assert B.issues_left("쟁점") and B.issues_left("(ATT-8)") and not B.issues_left("ATT-08")
 assert S("넣는다(2026-10-29 재영, WHALEERP-261 · 321 2차, 619 1차 유지).") == "넣는다."
 assert S("바꾼다(2026-10-20 재영 — 토큰만으로 바꾸면 위험해서).") == "바꾼다(토큰만으로 바꾸면 위험해서)."
@@ -70,7 +71,8 @@ names = sorted({m.group() for m in TEAM_NAMES.finditer(cells)})
 assert not names, f"팀원 실명이 남음: {names}"
 assert not TEAM.search(cells), TEAM.findall(cells)
 assert "쟁점" not in cells and not [t for x in cells.split("\0") for t in B.issues_left(x)]
-assert "목업" not in cells and "개발·리뷰" not in cells and "2026-10-19 기준" in cells
+assert "받게 되어(ATT-11)" not in cells and "보정한다(ATT-11)" in cells  # ATT-34 는 실제 규칙이라 남긴다
+assert "PAY-4" not in cells and "목업" not in cells and "개발·리뷰" not in cells and "2026-10-19 기준" in cells
 assert "whale-erp-v2" not in cells and "내부 결정 기록" not in cells and f"운영 정책 {B.SOURCE_VERSION}." in cells
 for kept in ("웹 로그인 화면에 초대 확인 탭을 두지 않는다.", "회원 탈퇴 화면의 안내에는 가맹 점포 직원 자료는"):
     assert kept in cells, kept
