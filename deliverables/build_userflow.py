@@ -13,7 +13,7 @@ import re
 import shutil
 import subprocess
 
-from common import HERE, INTERNAL, OUT, heading, open_docx, para, picture, safe, save_docx, strip_records, table
+from common import HERE, INTERNAL, OUT, TEAM_NAMES, heading, open_docx, para, picture, safe, save_docx, strip_records, table
 
 FLOW = os.path.join(HERE, "sources", "flow")
 SOURCE_JSON = os.path.join(FLOW, "SOURCE.json")
@@ -23,6 +23,23 @@ PNG = os.path.join(OUT, "flow_png")
 HEADERS = ["단계", "구간", "화면 · 주체", "유형", "내용", "다음 · 분기"]
 WIDTHS = [1.2, 2.2, 2.8, 2.2, 4.4, 4.2]
 REMOVED = []
+# 카드 항목을 「 · 」로 나눈 조각에 이 말이 있으면 미결 · 팀 간 메모로 보고 싣지 않는다. 「미정산」은 탈퇴 조건이라 뺀다.
+MEMO = re.compile(r"미정(?!산)|보류|협의|법무|노무사|검토|확인 중|[13]팀|두 팀")
+TEAM_MARK = re.compile(r"\([13]팀 [^)]*\)")  # 결정 문장 끝의 「(1팀 MYPAGE-3)」. 문장은 남기고 괄호만 지운다.
+TEAM = re.compile(r"[13]팀|두 팀")
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+# 그림 · 표 칸의 내부 메모(원문 → 바꾼 글, 빈 글이면 그림에서 뺀다). 원본 스냅숏은 고치지 않는다.
+FIGURE_FIXES = {
+    "2026-09-17 · 발송은 3팀": "",
+    "1팀 화면 · 초대 확인은 앱에서": "",
+    "1팀 화면 · 아이디 로그인": "아이디 로그인",
+    "3팀 화면 · 스스로 끝냄": "스스로 끝냄",
+    "3팀 · 늘 전체 범위": "늘 전체 범위",
+    "홈 (3팀)": "홈",
+    "3팀 공통 기반": "",
+    "S-RCJXIG": "", "S-VFGQLI": "", "F-OFBCVL": "",  # 화면에는 투명하게 그려지는 Manyfast ID
+}
+DROPPED = []  # 뺀 카드 조각 (흐름 제목, 카드 제목, 조각)
 
 
 def snapshot():
@@ -69,25 +86,61 @@ def flows():
 
 
 def clean(text):
-    return safe(strip_records(" ".join((text or "").split()), REMOVED))
+    text = " ".join((text or "").split())
+    return safe(strip_records(FIGURE_FIXES.get(text, text), REMOVED))
+
+
+def card_item(title, card_title, item):
+    """카드 항목에서 미결 · 팀 간 메모 조각을 뺀 글. 남는 조각이 없으면 빈 글."""
+    keep = []
+    for piece in TEAM_MARK.sub("", item).split(" · "):
+        if MEMO.search(piece):
+            DROPPED.append((title, card_title, piece))
+        else:
+            keep.append(piece)
+    return " · ".join(keep)
+
+
+def ordered(wf, lane_order):
+    """열 순서로, 같은 열 안에서는 선의 방향대로. 순서가 없거나 순환이면 레인 순서가 앞선 노드부터."""
+    out = []
+    for col in sorted({n["col"] for n in wf["nodes"]}):
+        rest = sorted((n for n in wf["nodes"] if n["col"] == col), key=lambda n: lane_order[n["lane"]])
+        while rest:
+            ids = {n["id"] for n in rest}
+            blocked = {e["to"] for e in wf["edges"] if e["from"] in ids and e["to"] in ids and e["from"] != e["to"]}
+            n = next((x for x in rest if x["id"] not in blocked), rest[0])
+            out.append(n)
+            rest.remove(n)
+    return out
 
 
 def steps(wf):
-    """단계 표 줄. 순서는 열(col) → 레인 순서. 칸 매핑은 계획 문서의 표."""
+    """단계 표 줄. 순서는 ordered(). 칸 매핑은 계획 문서의 표."""
     lanes = {l["id"]: (i, l.get("label", l["id"])) for i, l in enumerate(wf["lanes"])}
     legend = wf["meta"].get("legend", {}).get("entries", {})
     label = {n["id"]: n.get("label", n["id"]) for n in wf["nodes"]}
-    nodes = sorted(wf["nodes"], key=lambda n: (n["col"], lanes[n["lane"]][0]))
+    nodes = ordered(wf, {k: v[0] for k, v in lanes.items()})
     rows = []
     for i, n in enumerate(nodes, 1):
         phase = next((p["label"] for p in wf.get("phases", []) if p["fromCol"] <= n["col"] <= p["toCol"]), "")
-        tag = n.get("tag") if n.get("tag") and not INTERNAL.search(n["tag"]) else ""
-        content = "\n".join(x for x in (n.get("label", ""), n.get("sublabel", "")) if x) + (f" ({tag})" if tag else "")
+        tag = n.get("tag") if n.get("tag") and not INTERNAL.search(n["tag"]) and not TEAM.search(n["tag"]) else ""
+        content = "\n".join(x for x in (n.get("label", ""), FIGURE_FIXES.get(n.get("sublabel", ""), n.get("sublabel", ""))) if x) + (f" ({tag})" if tag else "")
         nexts = "\n".join(f"→ {label.get(e['to'], e['to'])}" + (f" ({e['label']})" if e.get("label") else "")
                           for e in wf["edges"] if e["from"] == n["id"])
         rows.append([str(i), phase, lanes[n["lane"]][1], legend.get(n["type"], {}).get("label", n["type"]),
                      content, nexts])
     return [[clean(c) if "\n" not in c else "\n".join(clean(x) for x in c.split("\n")) for c in r] for r in rows]
+
+
+# 그림 글자를 고치고(빈 글이면 지우고) 남은 글자 목록을 돌려준다.
+FIX_LABELS = """(svg, fixes) => [...svg.querySelectorAll('text')].flatMap(t => {
+  const s = t.textContent.trim();
+  if (!(s in fixes)) return [s];
+  if (fixes[s]) { t.textContent = fixes[s]; return [fixes[s]]; }
+  t.remove();
+  return [];
+})"""
 
 
 def shoot(items):
@@ -106,6 +159,10 @@ def shoot(items):
                 vb = wf["meta"].get("viewBox")
                 sel = f"svg[viewBox='0 0 {vb[0]} {vb[1]}']" if vb else "svg[data-quality-profile]"
                 svg = page.locator(sel).first
+                labels = svg.evaluate(FIX_LABELS, FIGURE_FIXES)
+                bad = sorted({t for t in labels for rx in (INTERNAL, TEAM, TEAM_NAMES, DATE) if rx.search(t)})
+                if bad:
+                    raise RuntimeError(f"그림에 내부 메모가 남음: {bad}")
                 box = svg.bounding_box()
                 if not box or box["width"] < 300 or box["height"] < 150:
                     raise RuntimeError(f"그림 크기 {box}")
@@ -125,12 +182,11 @@ def write(version):
     pngs = shoot([(k, f, wf, p) for k, _, items in groups for f, wf, p in items])
     d, doc_name, doc_no = open_docx("FLOW", version)
     heading(d, "머리말", 1)
-    para(d, [("원본 ", True), ("관리자 웹 · 직원 근무 앱 저장소의 docs/flow(흐름마다 workflow.json 과 그림 HTML). "
-                              "1팀 화면 흐름도 들어 있다.", False)])
+    para(d, [("원본 ", True), ("관리자 웹 · 직원 근무 앱 저장소의 docs/flow(흐름마다 workflow.json 과 그림 HTML).", False)])
     table(d, ["클라이언트", "저장소", "커밋", "커밋 시각"],
           [[lbl, source[k]["repo"] + " " + source[k]["ref"], source[k]["commit"], source[k]["committedAt"]]
            for k, lbl, _ in CLIENTS], widths=[3, 4, 6, 4])
-    para(d, [("단계 표 ", True), ("workflow.json 의 값만 옮겼다. 단계는 열 순서(같은 열이면 레인 순서), 구간은 그 열이 드는 구간, "
+    para(d, [("단계 표 ", True), ("workflow.json 의 값만 옮겼다. 단계는 열 순서(같은 열 안에서는 선의 방향, 순서가 없으면 레인 순서), 구간은 그 열이 드는 구간, "
                                 "화면 · 주체는 레인, 유형은 노드 종류의 범례 이름, 내용은 노드 이름과 보조 설명(관련 번호), "
                                 "다음 · 분기는 그 노드에서 나가는 선의 대상과 선 이름이다.", False)])
     figures, total = 0, 0
@@ -146,13 +202,16 @@ def write(version):
             total += len(rows)
             table(d, HEADERS, rows, widths=WIDTHS)
             for card in wf.get("cards", []):
-                para(d, [(clean(card.get("title", "")), True)])
-                for item in card.get("items", []):
-                    para(d, clean(item), style="List Bullet")
+                kept = [x for x in (card_item(wf["meta"]["title"], card.get("title", ""), i)
+                                    for i in card.get("items", [])) if x]
+                if kept:
+                    para(d, [(clean(card.get("title", "")), True)])
+                    for item in kept:
+                        para(d, clean(item), style="List Bullet")
     texts = [p.text for p in d.paragraphs] + [c.text for t in d.tables for r in t.rows for c in r.cells]
-    leaks = sorted({m.group() for t in texts for m in INTERNAL.finditer(t)})
+    leaks = sorted({m.group() for t in texts for rx in (INTERNAL, TEAM, TEAM_NAMES) for m in rx.finditer(t)})
     if leaks:
-        raise SystemExit(f"내부 표지가 남음: {leaks}")
+        raise SystemExit(f"내부 표지 · 팀 표시 · 팀원 실명이 남음: {leaks}")
     n = sum(len(items) for _, _, items in groups)
     path = save_docx(d, f"{doc_no}_{doc_name}.docx")
     return path, n, figures, total, len(REMOVED)

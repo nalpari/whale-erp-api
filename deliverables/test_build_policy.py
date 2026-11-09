@@ -10,7 +10,7 @@ import re
 from docx import Document
 
 import build_policy as B
-from common import INTERNAL, safe, strip_records
+from common import INTERNAL, TEAM_NAMES, safe, strip_records
 
 S = strip_records
 assert S("둔다(2026-10-30 재영, WHALEERP-618 · 637 리뷰).") == "둔다."
@@ -22,6 +22,11 @@ assert S("바꾼다(2026-10-20 재영 — 토큰만으로 바꾸면 위험해서
 assert S("센다(노무사 답변 2026-10-14 질문 17).") == "센다(노무사 답변 2026-10-14 질문 17)."  # 외부 검토 근거는 남긴다
 assert S("10월 12일(10월 12일 임시저장)") == "10월 12일(10월 12일 임시저장)"  # 결정 기록이 아니면 그대로
 assert S("닫는다(앞은 종료 — 처음 「A」를 같은 날 민식 결정(WHALEERP-156)으로 정정).") == "닫는다(앞은 종료)."
+
+assert S("보인다(구현 기준).") == "보인다."
+assert S("둔다(후속 일감)") == "둔다"
+assert S("간다(홈)") == "간다(홈)"  # 결정 낱말이 아닌 괄호는 그대로
+assert not TEAM_NAMES.search("운영주체") and TEAM_NAMES.search("노영주")
 
 path, rules, chapters, removed = B.write("1.0")
 src = open(B.SOURCE, encoding="utf-8").read()
@@ -46,12 +51,19 @@ diff = [rid for rid, body in want if got.get(rid) != " ".join(f"{rid} {body}".sp
 assert not diff, f"원문과 다른 규칙 {len(diff)}건: {diff[:5]}"
 
 h1 = [p.text for p in doc.paragraphs if p.style.name == "Heading 1"]
-assert len(h1) == src.count("<h2") + 2 == chapters + 2, h1  # + 개정 이력 · 머리말
+assert len(h1) == src.count("<h2") + 1 == chapters + 2, h1  # - 근거 + 개정 이력 · 머리말
+assert not any(t.startswith(B.DROP_CHAPTER) for t in h1), h1
 assert len(doc.tables) == 2 + src.count("<table")  # 표지 · 개정 이력 + 원본 표
 
 cells = "\0".join(paras + [c.text for t in doc.tables for r in t.rows for c in r.cells])
 leaks = sorted({m.group() for m in INTERNAL.finditer(cells)})
 assert not leaks, f"내부 표지가 남음: {leaks}"
+names = sorted({m.group() for m in TEAM_NAMES.finditer(cells)})
+assert not names, f"팀원 실명이 남음: {names}"
+assert "whale-erp-v2" not in cells and "내부 결정 기록" not in cells
+for word in ("(구현 기준)", "(구현 그대로)", "(후속 일감)", "(홈 PR 리뷰)"):
+    assert word not in cells, word
+assert "노무사 답변 2026-10-14 질문 14)" in cells  # 노무사 답변 괄호는 남긴다
 assert 'class="src"' not in cells and "STAFF-5" not in cells  # 출처 줄(예: CTR-04 의 「STAFF-5」)은 없다
 emails = set(re.findall(r"[\w.*+-]+@[\w.-]+\.[A-Za-z]{2,}", cells))
 assert all(e.endswith("@example.com") for e in emails), emails

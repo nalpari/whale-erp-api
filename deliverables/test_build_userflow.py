@@ -9,7 +9,7 @@ import re
 from docx import Document
 
 import build_userflow as B
-from common import INTERNAL
+from common import INTERNAL, TEAM_NAMES
 
 wf = {"meta": {"legend": {"entries": {"frontend": {"label": "앱 화면"}}}},
       "lanes": [{"id": "app", "label": "앱"}, {"id": "sys", "label": "시스템"}],
@@ -22,6 +22,14 @@ rows = B.steps(wf)
 assert rows == [["1", "진입", "앱", "앱 화면", "열기\n지도 (ATT-3)", "→ 판정"],
                 ["2", "진입", "시스템", "backend", "판정", "→ 찍기 (허용)\n→ 열기 (거부)"],  # Manyfast ID tag 는 뺀다
                 ["3", "", "앱", "앱 화면", "찍기", ""]], rows
+
+# 같은 열에서 위 레인 쪽으로 가는 선: 레인 순서가 아니라 선의 방향을 따른다
+up = {"lanes": [{"id": "a"}, {"id": "b"}],
+      "nodes": [{"id": "top", "lane": "a", "col": 0}, {"id": "low", "lane": "b", "col": 0}],
+      "edges": [{"from": "low", "to": "top"}]}
+assert [x["id"] for x in B.ordered(up, {"a": 0, "b": 1})] == ["low", "top"]
+assert B.card_item("흐름", "카드", "탈퇴 조건은 미정산 없음 · 약관 전문은 법무 검토 전 초안 · 끝낸다(1팀 MYPAGE-3)") \
+    == "탈퇴 조건은 미정산 없음 · 끝낸다"
 
 path, n, figures, total, removed = B.write("1.0")
 groups = B.flows()
@@ -48,6 +56,18 @@ texts = [p.text for p in doc.paragraphs] + [c.text for t in doc.tables for r in 
 leaks = sorted({m.group() for t in texts for m in INTERNAL.finditer(t)})
 assert not leaks, f"내부 표지가 남음: {leaks}"
 cells = "\0".join(texts)
+for memo in ("두 팀 문서가 다르다", "협의 전 미정", "법무 검토 전 초안", "1팀", "3팀"):
+    assert memo not in cells, memo
+assert not TEAM_NAMES.search(cells)
+reverse = 0  # 같은 열에서 단계 번호가 선과 거꾸로 가는 선(순환 제외)
+for w in want:
+    lanes = {x["id"]: i for i, x in enumerate(w["lanes"])}
+    index = {x["id"]: i for i, x in enumerate(B.ordered(w, lanes))}
+    col = {x["id"]: x["col"] for x in w["nodes"]}
+    pairs = {(e["from"], e["to"]) for e in w["edges"]}
+    reverse += sum(col[e["from"]] == col[e["to"]] and index[e["from"]] > index[e["to"]]
+                   and (e["to"], e["from"]) not in pairs for e in w["edges"])
+assert reverse == 0, reverse
 emails = set(re.findall(r"[\w.*+-]+@[\w.-]+\.[A-Za-z]{2,}", cells))
 assert all(e.endswith("@example.com") for e in emails), emails
 assert not re.search(r"[가-힣.]\(\s*\)|\s\(\s*\)|, \)|\(, ", cells), "빈 괄호 · 「, )」가 남음"

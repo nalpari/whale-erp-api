@@ -182,6 +182,10 @@ _ANY_DATE = re.compile(r"\d{4}-\d{2}(?:-\d{2})?(?:·\d{1,2})*")
 _NAMES = re.compile(r"노영주|영주|김민식|민식|최효준|효준|김창수|창수|재영")
 _RECORD_WORDS = re.compile(r"제안|승인|정리|결정|확인|확정|질문|요청|리뷰|후속|일감|구현 기준|구현 그대로|변경|바꿈|유지|문구|PR|홈|"
                            r"범위 줄임|직원 앱 문구|직원앱|Plane|[·,~#\s\d—-]")
+# 날짜 · 이름 없이 결정 낱말만 있는 괄호. 「(홈)」 같은 보통 괄호를 지우지 않게 낱말을 넓히지 않는다.
+_WORD_ONLY = re.compile(r"홈 PR 리뷰|구현 기준|구현 그대로|후속 일감")
+# 납품 문서에 남으면 안 되는 팀원 실명. 「운영주체」의 「영주」는 이름이 아니다.
+TEAM_NAMES = re.compile(r"노영주|(?<![운경])영주|김민식|민식|최효준|효준|김창수|창수|재영|유상욱|상욱|김홍기|홍기|최창규|창규|류제영|제영")
 _HISTORY = re.compile(r"(?:바꿈|바로잡음|뺌|걷음|맞춤|정정)$")
 _SEP = re.compile(r"(, | · | — |\. )")
 
@@ -198,6 +202,10 @@ def strip_records(text, removed=None):
     """괄호 안의 결정 기록 조각과 내부 표지가 든 조각만 지운다. 모두 지워지면 괄호째. removed 목록에 (지운 조각, 괄호 원문)을 쌓는다."""
     def paren(m):
         inner = m.group(2)
+        if _WORD_ONLY.fullmatch(inner.strip()):
+            if removed is not None:
+                removed.append((inner, inner))
+            return ""
         if not (_ANY_DATE.search(inner) or _NAMES.search(inner) or INTERNAL.search(inner)):
             return m.group(0)
         parts = _SEP.split(inner)  # [조각, 구분, 조각, ...]

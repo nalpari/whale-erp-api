@@ -2,7 +2,7 @@
 
     .venv/bin/python build_policy.py --version 1.0
 
-원본의 장(h2) · 소제목 순서를 그대로 따르고, 규칙은 「번호 + 본문」으로 싣는다. 출처 줄(span.src)은 싣지 않고,
+원본의 장(h2) · 소제목 순서를 따르되 「근거」 장은 빼고, 규칙은 「번호 + 본문」으로 싣는다. 출처 줄(span.src)은 싣지 않고,
 본문의 결정 기록 괄호 조각은 지운다(common.strip_records). 원본 규칙 수와 문서 규칙 수가 다르면 멈춘다.
 """
 import argparse
@@ -11,16 +11,21 @@ import re
 
 from lxml import html
 
-from common import HERE, INTERNAL, heading, open_docx, para, safe, save_docx, strip_records, table
+from common import HERE, INTERNAL, TEAM_NAMES, heading, open_docx, para, safe, save_docx, strip_records, table
 
 SOURCE = os.path.join(HERE, "sources", "운영정책.html")
 # 파일 안에 버전 표기가 없다. v269 · 복사일은 2026-11-05 지시(header 전달)에서 온 값이다.
 SOURCE_VERSION, COPIED = "v269", "2026-11-05"
 RULES = 220  # 원본 div.rule 수. 스냅숏을 바꾸면 함께 고친다.
-# 괄호 밖 문장 본문의 내부 표지는 표지만 지운다(원문 → 바꾼 글). 원문에서 못 찾으면 멈춘다.
+DROP_CHAPTER = "근거"  # 팀원 실명 · 내부 논의가 담긴 장. 납품본에서 뺀다(규칙 없음).
+# 문장 속 내부 표지 · 결정 표시를 바꾼다(원문 → 바꾼 글). 문장 자체가 결정 표시뿐이면 문장째 뺀다. 원문에서 못 찾으면 멈춘다.
 SENTENCE_FIXES = {
     "셈법은 front #15 구현을 따른다": "셈법은 구현을 따른다",
-    "노영주가 api #85로 정한": "노영주가 정한",
+    " 수정 요청을 진행 중인 계약에 넣은 것은 2026-10-19 재영.": "",
+    " 수정 요청을 겹침 대상에 넣은 것은 2026-10-19 재영.": "",
+    "(임시저장은 2026-10-12 재영, 수정 요청은 2026-10-19 재영 추가)": "",
+    ", 넷째는 2026-10-27 재영": "",
+    "질문 14 확인 뒤 2026-10-28 재영 유지": "질문 14",
 }
 # 괄호 없이 문장 뒤에 붙은 결정 표시(「…정한다. 2026-09-29 재영」). 문장 안의 날짜 · 이름은 건드리지 않는다.
 STAMP = re.compile(r"(?<=[.)])\s+\d{4}-\d{2}-\d{2} 재영(?=\s|$)")
@@ -132,8 +137,7 @@ def write(version):
 
     head = wrap.find("header")
     heading(d, "머리말", 1)
-    para(d, [("원본 ", True), (f"운영 정책 아티팩트 {SOURCE_VERSION}(whale-erp-v2 docs/raw/운영정책.html). 복사한 날 {COPIED}. "
-                              "출처 줄과 내부 결정 기록은 싣지 않았다.", False)])
+    para(d, [("원본 ", True), (f"운영 정책 아티팩트 {SOURCE_VERSION}. 복사한 날 {COPIED}.", False)])
     for el in head:
         if not isinstance(el.tag, str):
             continue
@@ -145,16 +149,20 @@ def write(version):
     footer = wrap.find("footer")
     para(d, " · ".join(plain(s) for s in footer))
 
-    sections = wrap.findall("section")
+    all_sections = wrap.findall("section")
+    sections = [s for s in all_sections if not (s.find("h2").text or "").strip().startswith(DROP_CHAPTER)]
+    if len(all_sections) - len(sections) != 1:
+        raise SystemExit(f"「{DROP_CHAPTER}」 장을 하나 찾아야 합니다: 뺀 장 {len(all_sections) - len(sections)}")
     rules = sum(write_section(d, s) for s in sections)
     if rules != RULES or len(root.xpath('//div[@class="rule"]')) != RULES:
         raise SystemExit(f"원본 규칙 {RULES} · 문서 {rules} 이 다릅니다.")
     lost = sorted(set(SENTENCE_FIXES) - FIXED)
     if lost:
         raise SystemExit(f"SENTENCE_FIXES 의 원문을 찾지 못했습니다(원문이 바뀌었는지 확인): {lost}")
-    leaks = sorted({m.group() for p in d.paragraphs for m in INTERNAL.finditer(p.text)})
+    texts = [p.text for p in d.paragraphs] + [c.text for t in d.tables for r in t.rows for c in r.cells]
+    leaks = sorted({m.group() for t in texts for rx in (INTERNAL, TEAM_NAMES) for m in rx.finditer(t)})
     if leaks:
-        raise SystemExit(f"내부 표지가 남음: {leaks}")
+        raise SystemExit(f"내부 표지 · 팀원 실명이 남음: {leaks}")
     path = save_docx(d, f"{doc_no}_{doc_name}.docx")
     return path, rules, len(sections), len(REMOVED)
 
