@@ -471,7 +471,7 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
         expect.arrayContaining([
           '근로계약_목록.csv',
           '출퇴근_기록.csv',
-          `직영점/재직_${staff['재직']}/근로계약서/${contractIds[0]}_날인 완료본.pdf`,
+          `직영점/재직_${staff['재직']}/근로계약서/${contractIds[0]}_서명 완료본.pdf`,
         ]),
       );
       expect(paths.filter((p) => p.includes('근로계약서/'))).toHaveLength(1);
@@ -703,7 +703,7 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
       const csv = Buffer.from(files['누락_파일.csv']).toString();
       expect(csv).toContain(`재직`);
       expect(csv).toContain(String(contractIds[0]));
-      expect(csv).toContain('날인 완료본');
+      expect(csv).toContain('서명 완료본');
     });
 
     it('올려 둔 키가 있는 채 멈춘 작업은 정리하면서 그 파일을 지운다 — 개인 자료 zip 이 버킷에 남지 않게', async () => {

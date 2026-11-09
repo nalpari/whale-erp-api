@@ -6,9 +6,9 @@ export class SendContractResponseDto {
   contractId: number;
 
   /**
-   * 보낸 뒤의 상태 — 가입 초대는 그대로(발송 대기 · 서명 대기), 가입한 직원은 서명 대기, 소속 추가 확인 요청은 발송 대기(직원이
-   * 수락하면 서명 대기). 거부 · 만료를 되살리면 가입한 직원은 서명 대기, 그 밖에는 발송 대기다(WHALEERP-153). 보내는 사이 직원이
-   * 소속 추가 확인 요청에 먼저 답했으면 그 답의 상태(서명 대기 · 거부)를 그대로 싣는다
+   * 보낸 뒤의 상태 — 가입 초대는 그대로(서명 요청 전 · 서명 대기), 가입한 직원은 서명 대기, 소속 추가 확인 요청은 서명 요청 전(직원이
+   * 수락하면 서명 대기). 서명 거절 · 계약 기간 만료를 되살리면 가입한 직원은 서명 대기, 그 밖에는 서명 요청 전이다(WHALEERP-153). 보내는 사이 직원이
+   * 소속 추가 확인 요청에 먼저 답했으면 그 답의 상태(서명 대기 · 서명 거절)를 그대로 싣는다
    */
   // enumName 을 주면 다른 DTO 의 ContractStatus 스키마와 설명을 나눠 써 한쪽 설명이 덮인다 — 여기서는 펼쳐 둔다
   @ApiProperty({ enum: ContractStatus })
@@ -17,7 +17,7 @@ export class SendContractResponseDto {
   /** 이번 발송 일시 */
   sentAt: string;
 
-  /** 새 날인 기한(보낸 때부터 30일). 소속 추가 확인 요청은 직원이 수락한 때부터 세어 아직 없다(null) */
+  /** 새 서명 기한(보낸 때부터 30일). 소속 추가 확인 요청은 직원이 수락한 때부터 세어 아직 없다(null) */
   @ApiProperty({ nullable: true, type: String })
   signDeadlineAt: string | null;
 }

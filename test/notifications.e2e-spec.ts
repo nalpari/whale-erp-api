@@ -326,7 +326,7 @@ describe('운영 알림 (e2e, DB)', () => {
         relatedType: 'CONTRACT',
         relatedId: 41,
         link: '/contracts/41',
-        title: '근로계약 체결 완료',
+        title: '근로계약 서명 완료',
         dedupeKey: `NTF_CONTRACT_SIGNED:e2e-${n}-first`,
       });
       expect(stored.body).toContain('- 근무지: 알림 테스트 직영점');
@@ -359,8 +359,8 @@ describe('운영 알림 (e2e, DB)', () => {
       expect(body.unreadCount).toBe(2);
       expect(body.items[0]).toMatchObject({
         templateCode: 'NTF_CONTRACT_SIGNED',
-        kind: '근로계약 날인',
-        title: '근로계약 체결 완료',
+        kind: '근로계약 서명 완료',
+        title: '근로계약 서명 완료',
         relatedType: 'CONTRACT',
         relatedId: 41,
         link: '/contracts/41',

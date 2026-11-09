@@ -61,7 +61,7 @@ export class AcceptMyInvitationDto {
   hqSharingConsentVersion?: string;
 }
 
-/** 더한 근무지 — 앱이 그 소속의 날인 대기 근로계약서로 간다 */
+/** 더한 근무지 — 앱이 그 소속의 서명 대기 근로계약서로 간다 */
 export class AcceptMyInvitationResponseDto {
   /** 이 계정에 이어진 직원 레코드 */
   staffMemberId: number;

@@ -4,12 +4,12 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-05T08:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
     title: RetirementService (preview · retire · changeDate · cancel · retireDue · retireStore · retireStores)
-    last_modified: 2026-11-04T06:27:00Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: store-closing-check
     resource: ../../src/staff-members/store-closing-check.ts
     title: storeClosingCheck — 폐점 확인(WHALEERP-647 · 650, 읽기만)

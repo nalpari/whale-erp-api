@@ -1244,7 +1244,7 @@ describe('ContractDeliveryService', () => {
         contractId: 7,
         status: 'DRAFT',
       });
-      expect(body.message).toContain('임시저장으로 두었습니다');
+      expect(body.message).toContain('작성 중 상태로 두었습니다');
       expect(tx.invitation.delete).toHaveBeenCalledWith({
         where: { invitationId: 50 },
       });
@@ -1367,7 +1367,7 @@ describe('ContractDeliveryService', () => {
         code: 'SEND_FAILED',
         status: 'PENDING_SEND',
       });
-      expect(body.message).not.toContain('임시저장');
+      expect(body.message).not.toContain('작성 중');
       expect(tx.invitation.updateMany).toHaveBeenCalledWith({
         where: { invitationId: { in: [40] }, status: 'EXPIRED' },
         data: { status: 'SENT' },

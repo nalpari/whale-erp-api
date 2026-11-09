@@ -51,12 +51,12 @@ CREATE TYPE "pay_month" AS ENUM ('CURRENT_MONTH', 'NEXT_MONTH');  -- 당월 · �
 COMMENT ON TYPE "pay_month" IS '당월 · 익월';
 CREATE TYPE "pay_method" AS ENUM ('ACCOUNT', 'CASH');  -- 계좌 · 현금
 COMMENT ON TYPE "pay_method" IS '계좌 · 현금';
-CREATE TYPE "contract_status" AS ENUM ('DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'CORRECTION_REQUESTED', 'SIGNED', 'REJECTED', 'EXPIRED', 'ENDED');  -- 임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료
-COMMENT ON TYPE "contract_status" IS '임시저장 · 발송 대기 · 서명 대기 · 수정 요청 · 체결 완료 · 거부 · 만료 · 종료';
+CREATE TYPE "contract_status" AS ENUM ('DRAFT', 'PENDING_SEND', 'PENDING_SIGNATURE', 'CORRECTION_REQUESTED', 'SIGNED', 'REJECTED', 'EXPIRED', 'ENDED');  -- 작성 중 · 서명 요청 전 · 직원 서명 대기 · 직원 수정 요청 · 서명 완료 · 서명 거절 · 계약 기간 만료 · 계약 종료
+COMMENT ON TYPE "contract_status" IS '작성 중 · 서명 요청 전 · 직원 서명 대기 · 직원 수정 요청 · 서명 완료 · 서명 거절 · 계약 기간 만료 · 계약 종료';
 CREATE TYPE "contract_draft_action" AS ENUM ('SIGNUP_INVITE', 'AFFILIATION_CONFIRM', 'RETURN_CONFIRM', 'IMMEDIATE_SEND');  -- 가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송
 COMMENT ON TYPE "contract_draft_action" IS '가입 초대 · 소속 추가 확인 · 복귀 확인 · 즉시 발송';
-CREATE TYPE "contract_document_kind" AS ENUM ('SENT_ORIGINAL', 'SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT', 'SIGNATURE');  -- 발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지
-COMMENT ON TYPE "contract_document_kind" IS '발송 원본 · 날인 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지';
+CREATE TYPE "contract_document_kind" AS ENUM ('SENT_ORIGINAL', 'SIGNED_COPY', 'PAPER_EMPLOYMENT_CONTRACT', 'WAGE_CONTRACT', 'SIGNATURE');  -- 발송 원본 · 서명 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지
+COMMENT ON TYPE "contract_document_kind" IS '발송 원본 · 서명 완료본 · 종이 계약 근로계약서 · 임금계약서 · 서명 이미지';
 CREATE TYPE "status_change_actor" AS ENUM ('ADMIN', 'STAFF', 'SYSTEM');  -- 관리자 · 직원 · 시스템
 COMMENT ON TYPE "status_change_actor" IS '관리자 · 직원 · 시스템';
 CREATE TYPE "work_schedule_change_type" AS ENUM ('CREATED', 'UPDATED', 'DELETED');  -- 등록 · 수정 · 삭제
@@ -1407,7 +1407,7 @@ COMMENT ON COLUMN "contracts"."severance_pay_terms" IS '퇴직금 조항 — 계
 COMMENT ON COLUMN "contracts"."pay_method" IS '급여 지급 방식 — 계좌 · 현금 — 계약서 임금 조항 (2026-10-15) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."probation_months" IS '수습 기간 — 개월, 1~3. 비우면 수습 없음 — 정직원이고 계약 기간이 1년 이상이거나 기간의 정함이 없을 때만 (노무사 확인 2026-10-14) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."probation_wage_reduction_rate" IS '수습 임금 감액률 — %, 0~10. 수습 중 시급 = 시급 × (1 − 감액률) — 최저임금의 90% 이상 (노무사 확인 2026-10-14) (물리에서 추가)';
-COMMENT ON COLUMN "contracts"."status" IS '계약 상태 — 임시저장·발송 대기·서명 대기·체결 완료·거부·만료·종료';
+COMMENT ON COLUMN "contracts"."status" IS '계약 상태 — 작성 중·서명 요청 전·직원 서명 대기·직원 수정 요청·서명 완료·서명 거절·계약 기간 만료·계약 종료';
 COMMENT ON COLUMN "contracts"."draft_action" IS '초안 처리 유형 — 가입 초대·소속 추가 확인·복귀 확인·즉시 발송';
 COMMENT ON COLUMN "contracts"."sent_at" IS '발송 일시';
 COMMENT ON COLUMN "contracts"."sign_deadline_at" IS '날인 기한 — 발송일부터 30일';
@@ -1450,7 +1450,7 @@ COMMENT ON COLUMN "contract_parties"."fixed_job_title" IS '고정 직무 — 날
 COMMENT ON TABLE "contract_documents" IS '계약서 파일';
 COMMENT ON COLUMN "contract_documents"."contract_document_id" IS '파일 ID';
 COMMENT ON COLUMN "contract_documents"."contract_id" IS '근로계약';
-COMMENT ON COLUMN "contract_documents"."kind" IS '파일 구분 — 발송 원본·날인 완료본·종이 계약 근로계약서·임금계약서·서명 이미지 — 서명 이미지는 날인 때 그린 필기 서명 PNG, 계약서와 같은 저장소·보존 기간 (WHALEERP-145)';
+COMMENT ON COLUMN "contract_documents"."kind" IS '파일 구분 — 발송 원본·서명 완료본·종이 계약 근로계약서·임금계약서·서명 이미지 — 서명 이미지는 날인 때 그린 필기 서명 PNG, 계약서와 같은 저장소·보존 기간 (WHALEERP-145)';
 COMMENT ON COLUMN "contract_documents"."storage_key" IS '저장 위치';
 COMMENT ON COLUMN "contract_documents"."file_name" IS '원래 파일 이름 — 올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15) (물리에서 추가)';
 COMMENT ON COLUMN "contract_documents"."checksum" IS '파일 해시';

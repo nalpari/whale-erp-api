@@ -51,7 +51,7 @@ export class StaffMemberLinkHoldDto {
 }
 
 /**
- * 가장 최근 근로계약 — 만든 순서로 가장 늦은 것. 연장 재계약이 임시저장이거나 거부 · 만료 · 체결 없이 종료로 끝났으면 건너뛴다
+ * 가장 최근 근로계약 — 만든 순서로 가장 늦은 것. 연장 재계약이 작성 중이거나 서명 거절 · 계약 기간 만료 · 서명 완료 없이 종료로 끝났으면 건너뛴다
  * (NOT_IDLE_RENEWAL, WHALEERP-156) — 지금 효력인 직전 계약과 갱신 예정일이 보이게
  */
 export class StaffMemberContractDto {
@@ -70,13 +70,13 @@ export class StaffMemberContractDto {
   lastSentAt: Date | null;
   /** 계약 종료일(YYYY-MM-DD). 비면 무기한 */
   endDate: string | null;
-  /** 최종 수정 일시. 거부일을 따로 저장하지 않아 「거부 · MM-DD」는 이 값으로 보인다 */
+  /** 최종 수정 일시. 서명 거절일을 따로 저장하지 않아 「서명 거절 · MM-DD」는 이 값으로 보인다 */
   updatedAt: Date | null;
   /**
    * 가입 · 인증 칸 재발송용 — 근로계약 상세의 canResend 와 달리 가입한 직원은 거짓이다(가입한 직원의 앱 알림 재발송은 근로계약
    * 상세에서). 이 칸의 버튼은 이 값 하나만 본다. 참이면 이 계약으로 근로계약 재발송(POST
    * /contracts/{contractId}/send)이 가입 초대 알림톡 또는 소속 추가 확인 요청을 보낸다(설정 누락 503 · 그사이 바뀐 상태 409 · 발송
-   * 실패 502 는 남는다). 발송 대기 · 서명 대기(거부 · 만료 재발송은 근로계약 상세에서, WHALEERP-153) 위에 모두 맞을 때만 참이다: 가입 전 ·
+   * 실패 502 는 남는다). 서명 요청 전 · 서명 대기(서명 거절 · 계약 기간 만료 재발송은 근로계약 상세에서, WHALEERP-153) 위에 모두 맞을 때만 참이다: 가입 전 ·
    * 가입 상태가 가입 대기 · 초대 만료 · 소속 승인 대기 · 복귀 확인(정보 확인 필요 · 만 19세 미만 · 거절은 거짓), 또는 초안이고 이
    * 계약이 소속 추가 확인 · 복귀 확인으로 판별된 것(WHALEERP-130 전 요청 없이 서명 대기가 된 옛 계약) · 보이는 초대가 수락되지
    * 않음 · 휴대폰 번호 · 가린 줄 아님. 간격 제한은 없다.
@@ -147,7 +147,7 @@ export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
   email: string | null;
   /** 직무 */
   jobTitle: string;
-  /** 입사일(YYYY-MM-DD) — 그 점포에서 처음 체결 완료된 근로계약의 시작일. 채우기 전 레코드는 null */
+  /** 입사일(YYYY-MM-DD) — 그 점포에서 처음 서명 완료된 근로계약의 시작일. 채우기 전 레코드는 null */
   hiredDate: string | null;
   /**
    * 생년월일(YYYY-MM-DD). 가입한 계정 값이고, 가입 전 · 탈퇴 계정이면 생년월일이 적힌 가장 최근 계약의 값이다. 둘 다 없으면
@@ -174,11 +174,11 @@ export class StaffMemberDetailResponseDto extends StaffMemberListItemDto {
   hqSharingConsent: HqSharingConsentState | null;
   /**
    * 이전 재직 기간 — 퇴직 뒤 같은 점포에 다시 입사해 이은 옛 레코드들(WHALEERP-615), 가까운 것부터. 누르면 그 레코드의
-   * 상세로 간다. 체결 완료된 계약이 없는 레코드와 이 관리자에게 가려지는 레코드는 빠진다
+   * 상세로 간다. 서명 완료된 계약이 없는 레코드와 이 관리자에게 가려지는 레코드는 빠진다
    */
   previousRecords: StaffMemberEmploymentPeriodDto[];
   /**
-   * 이후 재직 기간 — 이 레코드 뒤에 다시 입사한 레코드들, 가까운 것부터. 체결 완료 전(임시저장 · 발송만 한) 레코드와 가려지는
+   * 이후 재직 기간 — 이 레코드 뒤에 다시 입사한 레코드들, 가까운 것부터. 서명 완료 전(작성 중 · 발송만 한) 레코드와 가려지는
    * 레코드는 빠진다
    */
   laterRecords: StaffMemberEmploymentPeriodDto[];

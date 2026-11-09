@@ -29,7 +29,7 @@ import {
 import { MyAttendanceService } from './my-attendance.service';
 
 const NOT_MINE =
-  '내 소속이 아님 — 없는 id, 남의 레코드, 퇴직했거나 체결 완료 근로계약이 없는 내 레코드. 모두 같은 본문';
+  '내 소속이 아님 — 없는 id, 남의 레코드, 퇴직했거나 서명 완료 근로계약이 없는 내 레코드. 모두 같은 본문';
 const CONSENT =
   'LOCATION_CONSENT_REQUIRED — 위치정보 동의 없음 · 철회 · 약관 버전이 바뀌어 다시 동의 필요 / LOCATION_PAUSED — 위치 수집 일시 중지. 위치를 보지 않는 근무지는 보지 않는다';
 
@@ -90,7 +90,7 @@ export class MyAttendanceController {
   })
   @ApiUnprocessableEntityResponse({
     description:
-      'STORE_CLOSED — 폐점한 근무지 / CONTRACT_PENDING_SIGNATURE — 서명 대기 계약(contractId) / NO_CONTRACT — 오늘이 체결 완료 근로계약 기간 밖이거나 퇴직일이 지남 (ATT-12)',
+      'STORE_CLOSED — 폐점한 근무지 / CONTRACT_PENDING_SIGNATURE — 직원 서명 대기 계약(contractId) / NO_CONTRACT — 오늘이 서명 완료 근로계약 기간 밖이거나 퇴직일이 지남 (ATT-12)',
   })
   checkIn(
     @Body() dto: CheckInDto,

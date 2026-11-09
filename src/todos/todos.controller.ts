@@ -80,7 +80,7 @@ export class TodosController {
     return this.todos.list(user.id, query, bp);
   }
 
-  /** 등록의 직원 고르기 — 그 근무지에 체결 완료 계약이 있고 가입을 마쳤고 퇴직하지 않은 직원, 이름순 */
+  /** 등록의 직원 고르기 — 그 근무지에 서명 완료 계약이 있고 가입을 마쳤고 퇴직하지 않은 직원, 이름순 */
   @Get('assignable-staff')
   @MenuPermission('create')
   @ApiOkResponse({ type: AssignableStaffResponseDto })
@@ -119,7 +119,7 @@ export class TodosController {
   @MenuPermission('create')
   @ApiCreatedResponse({ type: CreatedTodoResponseDto })
   @ApiBadRequestResponse({
-    description: `입력 오류 · 지난 날짜 · 배정 대상과 수행 방식이 맞지 않음 · 퇴직했거나 체결 완료 계약이 없거나 가입 전이거나 다른 근무지 직원 · 그런 재직 직원 없음 · ${BP_MISSING_DESCRIPTION}`,
+    description: `입력 오류 · 지난 날짜 · 배정 대상과 수행 방식이 맞지 않음 · 퇴직했거나 서명 완료 계약이 없거나 가입 전이거나 다른 근무지 직원 · 그런 재직 직원 없음 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
     description: `근무지 점포가 없거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,

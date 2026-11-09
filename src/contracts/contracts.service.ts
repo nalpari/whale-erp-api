@@ -173,9 +173,9 @@ const WORKER_EDITABLE: readonly ContractStatus[] = [
 const JOINED_PHONE_FIXED =
   '가입한 직원의 휴대전화번호는 바꿀 수 없습니다 — 계정의 번호가 기준입니다.';
 const WORKPLACE_FIXED =
-  '수정 요청 근로계약서는 근무지를 바꿀 수 없습니다 — 다른 근무지는 새 근로계약서로 써 주세요.';
+  '직원 수정 요청 근로계약서는 근무지를 바꿀 수 없습니다 — 다른 근무지는 새 근로계약서로 써 주세요.';
 /** 이어 쓰기 409 — 임시저장 · 수정 요청 근로계약서만 고친다 */
-const EDITABLE_ONLY = '임시저장 · 수정 요청 근로계약서만 고칠 수 있습니다.';
+const EDITABLE_ONLY = '작성 중 · 직원 수정 요청 근로계약서만 고칠 수 있습니다.';
 
 /**
  * 근로계약 관리 메뉴 권한을 서비스가 다시 묻는다(WHALEERP-592). 가드는 경로만 봐서, 이어 쓰기 PUT 은 「작성 또는 수정」으로
@@ -192,7 +192,7 @@ async function requireContractAction(
     throw new ForbiddenException(message);
 }
 /** 대체 403 꼬리 — 새로 쓰는 저장은 기존 임시저장을 이어 쓰면 되고, 이어 쓰기 · 근로자 정보 수정은 이미 다른 계약을 고치는 중이라 그럴 수 없다 */
-const CONTINUE_DRAFT = '기존 임시저장을 이어 써 주세요.';
+const CONTINUE_DRAFT = '기존 작성 중 근로계약서를 이어 써 주세요.';
 const ASK_DELETER = '삭제 권한이 있는 관리자에게 맡겨 주세요.';
 
 /**
@@ -211,7 +211,7 @@ async function requireReplaceActions(
   if (!replaced.length) return;
   // 종이 계약 바로잡기는 체결 완료도 대체한다 — checkReplace 의 409 와 같은 말로
   const what = replaced.some((c) => c.status === 'SIGNED')
-    ? '체결 완료되었거나 진행 중인'
+    ? '서명 완료되었거나 진행 중인'
     : '진행 중인';
   if (replaced.some((c) => c.status !== 'DRAFT'))
     await requireContractAction(
@@ -225,7 +225,7 @@ async function requireReplaceActions(
       db,
       adminAccountId,
       'delete',
-      `이 점포에 같은 직원의 임시저장 근로계약이 있습니다. 대체하면 임시저장을 지우므로 근로계약 관리 삭제 권한이 필요합니다 — ${draftHint}`,
+      `이 점포에 같은 직원의 작성 중 근로계약이 있습니다. 대체하면 작성 중 근로계약을 지우므로 근로계약 관리 삭제 권한이 필요합니다 — ${draftHint}`,
     );
 }
 
@@ -420,14 +420,14 @@ function checkPaper(
   const registering = dto.contractMethod === 'PAPER' && !dto.isTemporarySave;
   if (!registering && documents.length)
     throw new BadRequestException(
-      '날인본 파일은 종이 계약을 등록할 때만 올릴 수 있습니다.',
+      '서명본 파일은 종이 계약을 등록할 때만 올릴 수 있습니다.',
     );
   if (
     registering &&
     !documents.some((d) => d.kind === 'PAPER_EMPLOYMENT_CONTRACT')
   )
     throw new BadRequestException(
-      '종이 계약은 당사자가 모두 날인한 근로계약서 파일과 함께 등록합니다.',
+      '종이 계약은 당사자가 모두 서명한 근로계약서 파일과 함께 등록합니다.',
     );
   // 잘못 올린 계약 바로잡기는 종이 계약 등록에서만, 재계약이 아닐 때만(WHALEERP-156)
   if (dto.correctSignedContracts && !registering)
@@ -464,7 +464,7 @@ async function saveDocuments(
         error instanceof Error ? error.stack : String(error),
       );
       throw new ServiceUnavailableException(
-        '날인본을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
+        '서명본을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
       );
     }
     rows.push({
@@ -809,7 +809,7 @@ async function renewalOf(
   });
   if (!previous)
     throw new ConflictException(
-      '체결 완료되었거나 체결 뒤 종료된 근로계약만 재계약할 수 있습니다.',
+      '서명 완료되었거나 서명 완료 뒤 종료된 근로계약만 재계약할 수 있습니다.',
     );
   if (previous.contractsAsPrevious.length)
     throw new ConflictException(
@@ -1865,7 +1865,7 @@ export class ContractsService {
       if (current.status === 'CORRECTION_REQUESTED') {
         if (fields.status !== 'PENDING_SEND')
           throw new BadRequestException(
-            '수정 요청 근로계약서는 고쳐 저장하면 곧바로 다시 보냅니다 — 임시저장 · 종이 계약 등록은 할 수 없습니다.',
+            '직원 수정 요청 근로계약서는 고쳐 저장하면 곧바로 다시 보냅니다 — 임시저장 · 종이 계약 등록은 할 수 없습니다.',
           );
         // 이미 보낸 계약이라 근무지는 그대로다 — 옮기려면 새 계약으로 대체한다(api #58 리뷰)
         if (dto.storeId !== current.storeId)
@@ -2382,9 +2382,7 @@ export class ContractsService {
       if (!current) throw new NotFoundException(CONTRACT_NOT_FOUND);
       sameStore(current.storeId, scopedStore);
       if (current.status !== 'DRAFT')
-        throw new ConflictException(
-          '임시저장한 근로계약서만 지울 수 있습니다.',
-        );
+        throw new ConflictException('작성 중인 근로계약서만 지울 수 있습니다.');
 
       await tx.contractWorkDay.deleteMany({ where: { contractId } });
       await tx.contractParty.deleteMany({ where: { contractId } });
@@ -2393,9 +2391,7 @@ export class ContractsService {
         where: { contractId, status: 'DRAFT' },
       });
       if (count === 0)
-        throw new ConflictException(
-          '임시저장한 근로계약서만 지울 수 있습니다.',
-        );
+        throw new ConflictException('작성 중인 근로계약서만 지울 수 있습니다.');
 
       const others = await tx.contract.count({
         where: { staffMemberId: current.staffMemberId },

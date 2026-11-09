@@ -4,16 +4,20 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-09T07:33:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
 sources:
+  - id: contract-status-labels
+    resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
+    title: 근로계약 상태 표시 이름 · 문서 종류 한글(SIGNED_COPY 서명 완료본) · 서명 완료 · 서명 거절 알림 문구 (WHALEERP-659)
+    last_modified: 2026-11-09T07:55:00Z
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-10-30T06:00:00Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-10-30T06:00:00Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: minimum-wage
     resource: ../../src/contracts/minimum-wage.ts
     title: 최저임금 공통코드 · 수습 중 시급 검사
@@ -25,11 +29,11 @@ sources:
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: contract-status
     resource: ../../src/contracts/contract-status.ts
     title: 계약 상태 전환 (WHALEERP-151)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: contract-send
     resource: ../../src/contracts/contract-send.service.ts
     title: 근로계약 재발송 (WHALEERP-136 · 611)
@@ -37,7 +41,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-11-03T08:51:00Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -49,7 +53,7 @@ sources:
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
-    last_modified: 2026-10-29T08:20:16Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -57,7 +61,7 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-09T07:55:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
@@ -139,9 +143,9 @@ worked example `okf/index.md` used to lack.
   대체 would be a way round `DELETE`. Replacing only 임시저장 closes nothing, so it needs delete alone — the
   same as `DELETE` then save (code-review). These are asked before the 409 `CONTRACT_IN_PROGRESS`, so an admin
   who could not replace never sees the other contracts' names · periods. Their 403 says why instead of the shared
-  text — 「…기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다.」(「체결 완료되었거나 진행 중인」 when a 종이 계약
-  등록 would end a 체결 완료, as the 409 says), and for a 임시저장 「…삭제 권한이 필요합니다 — 기존 임시저장을 이어 써
-  주세요」(`PUT` · `PATCH /:id/worker`: 「삭제 권한이 있는 관리자에게 맡겨 주세요.」 — they are already editing another contract) —
+  text — 「…기존 계약을 대체하려면 근로계약 관리 수정 권한이 필요합니다.」(「서명 완료되었거나 진행 중인」 when a 종이 계약
+  등록 would end a 체결 완료, as the 409 says), and for a 임시저장 「…삭제 권한이 필요합니다 — 기존 작성 중 근로계약서를
+  이어 써 주세요」(`PUT` · `PATCH /:id/worker`: 「삭제 권한이 있는 관리자에게 맡겨 주세요.」 — they are already editing another contract) —
   since the 관리자 웹 shows the 작성 button to them. All are 403 before anything is written;
   `PATCH /:id/worker` and `POST /:id/send` (재발송) need update; `DELETE` needs delete. No permission is
   403 before the service runs. The 관리자 웹 hides the same buttons (`ContractPermission`), mapping in
@@ -542,7 +546,7 @@ contract row exists; if anything later fails, the uploaded keys are deleted
 — originals only (날인본 have no thumbnail) and all at once, so a stalled S3
 waits one delete deadline — before the error is returned (a failed delete is a
 warning in the log). A storage
-error on upload is logged and answered 503 「날인본을 저장하지 못했습니다 …」 —
+error on upload is logged and answered 503 「서명본을 저장하지 못했습니다 …」 —
 the SDK message never reaches the client. The upload stays inside the
 transaction because the key needs the `contractId`; with documents the
 transaction gets 60 seconds (`PAPER_TRANSACTION_TIMEOUT_MS`) instead of the
@@ -575,7 +579,7 @@ old contracts without a party row fall back to the record), the rest of the 직�
 `HH:mm` in weekday order. `PUT` takes the same body as `POST` and replaces the
 whole form: contract fields not sent become NULL, work days are deleted and
 re-created, the party row is upserted. **Only `DRAFT` and `CORRECTION_REQUESTED`
-(수정 요청) can be edited**; anything else is 409 「임시저장 · 수정 요청 근로계약서만 고칠 수
+(수정 요청) can be edited**; anything else is 409 「작성 중 · 직원 수정 요청 근로계약서만 고칠 수
 있습니다.」. A 수정 요청 must be saved as a full 초안 (임시저장 and 종이 계약 are 400) and is
 sent again right away (2026-10-19 재영): **서명 대기** with a new 30-day deadline, never through
 발송 대기 — unless the new phone has no account, which makes it a 가입 초대 (발송 대기). A 수정
@@ -945,6 +949,16 @@ Every status change of a contract goes through `contract-status.ts`: a
 table of allowed moves, a conditional `UPDATE` and a history row
 (`from_status` · `to_status` · `actor` · `changed_at`) in the same
 transaction.[^contract-status]
+
+**Status names on screen** come from `GET /enums` (the type comment on `contract_status`), not from this file.
+Since `20261109165622_team3_contract_status_labels` (WHALEERP-659) they are 작성 중 · 서명 요청 전 · 직원 서명 대기 ·
+직원 수정 요청 · 서명 완료 · 서명 거절 · 계약 기간 만료 · 계약 종료, and screens say 「서명」 where the specification says
+「날인」(서명 기한 · 서명본; `SIGNED_COPY` is 서명 완료본). The values did not change. The physical model
+(`docs/erd-physical/_model.py`), its generated copies in `docs/raw` and `schema.prisma`'s comments carry the same names, as do the
+`contracts.status` · `contract_documents.kind` column comments — a regenerated DDL would otherwise bring the old names back. `EXPIRED` is still a missed 서명 기한,
+not an ended contract period — its error text and the 만료 notice keep saying so (「서명 기한이 지나 만료된…」). The
+error texts here use the same names (`contract-status.spec` asserts one `NOW_STATUS` text, SIGNED's),
+and the 직원 앱 overrides three names on its own screens (서명 대기 · 수정 요청 · 거절).
 
 | from | to |
 |---|---|

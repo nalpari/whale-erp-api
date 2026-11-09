@@ -97,7 +97,7 @@ export class AttendanceStoreDto {
   isLocationApplied: boolean;
 }
 
-/** 출근을 막는 까닭 — 근무지가 폐점했거나(WHALEERP-643) 오늘(근무일)이 체결 완료 근로계약 기간 밖이다(ATT-12) */
+/** 출근을 막는 까닭 — 근무지가 폐점했거나(WHALEERP-643) 오늘(근무일)이 서명 완료 근로계약 기간 밖이다(ATT-12) */
 export class CheckInBlockDto {
   @ApiProperty({
     enum: ['STORE_CLOSED', 'CONTRACT_PENDING_SIGNATURE', 'NO_CONTRACT'],

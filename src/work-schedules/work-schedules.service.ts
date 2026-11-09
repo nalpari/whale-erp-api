@@ -1152,7 +1152,7 @@ export class WorkSchedulesService {
         statusCode: HttpStatus.BAD_REQUEST,
         error: 'Bad Request',
         code: 'WORK_SCHEDULE_NO_CONTRACT',
-        message: '근무일에 체결 완료된 근로계약이 없는 직원입니다.',
+        message: '근무일에 서명 완료된 근로계약이 없는 직원입니다.',
       });
     return { storeId: staff.storeId, contractId: contract.contractId };
   }
