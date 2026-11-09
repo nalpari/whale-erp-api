@@ -22,7 +22,7 @@ from io import BytesIO
 from docx.image.image import Image
 from docx.shared import Cm
 
-from common import (EMAIL, HERE, INTERNAL, OUT, PHONE, TEAM, TEAM_NAMES, heading, open_docx, para, picture, safe, save_docx,
+from common import (EMAIL, HERE, INTERNAL, OUT, TEAM, TEAM_NAMES, heading, open_docx, para, picture, safe, save_docx,
                     table)
 from build_policy import RULE_IDS
 
@@ -31,7 +31,7 @@ ROOT = os.path.join(HERE, "sources", "screens")
 AREAS = os.path.join(ROOT, "areas")
 IMG = os.path.join(ROOT, "img")
 SOURCE_JSON = os.path.join(ROOT, "SOURCE.json")
-VISIBLE_JSON = os.path.join(OUT, "screens_visible_text.json")  # 찍을 때의 보이는 글자. 커밋하지 않는다(점검은 찍을 때 이미 끝난다)
+VISIBLE_JSON = os.path.join(ROOT, "visible_text.json")  # 찍을 때의 보이는 글자(치환 뒤, 입력값 없음). 생성 때 이미지 글자 점검에 쓴다
 EXCLUDED_JSON = os.path.join(ROOT, "excluded.json")
 MENUS_JSON = os.path.join(HERE, "sources", "menus.json")
 V2 = os.path.expanduser("~/IdeaProjects/whale-erp-v2")
@@ -40,8 +40,10 @@ CLIENTS = [("admin", "관리자 웹"), ("staff", "직원 근무 앱"), ("public"
 VIEW = {"admin": (1440, 900, 1), "staff": (390, 844, 2), "public": (1720, 900, 1)}  # 비로그인 화면은 고정 폭 1720 디자인이라 이 폭으로 찍는다
 SLICE = {"admin": 1900, "staff": 1100, "public": 1900}  # 긴 화면을 자르는 높이(CSS px). 한 장이 워드 한 쪽에 들어가는 값
 WIDTH_CM = {"admin": 15, "staff": 7, "public": 15}
-MAX_HEIGHT_CM = 20
+MAX_HEIGHT_CM = 18.5  # 쪽 높이 22.86cm 에서 제목 · 정보 표를 뺀 값
+FIRST_MAX_HEIGHT_CM = 15.5  # 영역 첫 화면은 장 · 영역 제목까지 같은 쪽에 놓인다
 GROW = 1800  # 안쪽 스크롤을 펴려고 뷰포트를 늘리는 한도
+MAX_WIDTH = 2400  # 표 가로 넘침을 없애려고 폭을 늘리는 한도
 QUALITY = 72
 HEADERS = ["구역", "구성 요소", "동작", "관련 운영 정책 번호"]
 WIDTHS = [2.6, 4, 6.1, 2.5]
@@ -91,31 +93,51 @@ HIDE_ROWS = [
     ("staff/index.html", "tr", r"연결 보류 · 4일"),  # 표의 한 줄이 빠진다(보고 목록)
     ("staff/detail.html", "div:has(> dt)", r"^본인인증"),
     ("notify/templates.html", "tr", r"가입 연결 보류"),  # 표의 한 줄이 빠진다(보고 목록)
+    ("staff/index.html", 'aside[aria-label="가입 연결 확인"]', r""),  # 화면 밖의 닫힌 패널
+    ("staff/contracts-new.html", "span", r"^초대 발송과 가입 연결의 기준값$"),
+    ("staff/contracts-draft.html", "span", r"^초대 발송과 가입 연결의 기준값$"),
+    # 미결 · 내부 범위 표기
+    ("home/index.html", "span", r"^요금 확정 예정$"),
+    ("mypage/withdraw.html", "p", r"^1차 범위 밖 — 1차에서는 확인하지 않습니다\.$"),
 ]
 # 실제 상호가 읽히는 점포 사진은 회색 자리표시로 바꾼다.
 SIGN_PHOTOS = ("store-photo-1.", "store-photo-2.", "store-photo-5.")
 # 이미지를 싣지 않는 화면. 약관 전문은 본문이 초안이라 화면 구성 설명만 싣는다. 이 화면만 예외다.
 NO_IMAGE = {"SCR-PUB-013"}
-# 데모에 실제 값일 수 있어 따로 대조하는 휴대전화번호. 치환 뒤 보이는 글자에 있으면 멈춘다.
-KNOWN_PHONES = ("010-4821-7730", "010-5520-3141", "010-2290-5173", "010-5521-3380", "010-2291-7730", "010-5530-1182",
-                "010-3321-0981")
-MASKED_PHONE = re.compile(r"01[016789][-\s]*\*{2,}[-\s]*\d{0,4}")
-PHONE_JSON = os.path.join(OUT, "screens_phone_check.json")
+# 휴대전화번호 형태: 하이픈 · 점 · 공백 구분, 하이픈 없음, +82. 치환은 한 줄 안의 표기, 점검은 줄바꿈으로 나뉜 표기까지 본다.
+PHONE_ANY = re.compile(r"(?<![\d-])(?:\+?82[-. ]?1[016789]|01[016789])[-. ]?\d{3,4}[-. ]?\d{4}(?!\d)")
+PHONE_LOOSE = re.compile(r"(?<![\d-])(?:\+?82[-.\s]?1[016789]|01[016789])[-.\s]?\d{3,4}[-.\s]?\d{4}(?!\d)")
+PHONE_MASKED = re.compile(r"(?<!\d)01[016789][-\s]*\*{2,}[-\s]*\d{4}(?!\d)")
+FAKE_MASKED = "010-****-5678"
 
 # 납품본 점검. 쟁점 번호: 운영 정책 번호는 「운영 정책 」을 붙인 것만 통과한다.
 ISSUE = re.compile(r"(?<!운영 정책 )(?<![A-Za-z0-9_-])[A-Z]{2,}-\d+")
 TOOLS = re.compile(r"Manyfast|Plane|BUZZ|Figma|Claude|Orca|DESIGN\.md|목업|데모|시안")
 REPO_PATH = re.compile(r"whale-erp-(?:v2|api|front|staff)|docs/(?:demo|mockup|flow)|src/(?:app|pages)|\.mjs\b")
-MEMO = re.compile(r"미정(?!산)|협의|보류|TBD|법무|노무사|검토 중|확인 중|확정 전|세무 확인|추후|쟁점")
+MEMO = re.compile(r"미정(?!산)|협의|보류|TBD|법무|노무사|검토 중|확인 중|확정 전|세무 확인|추후|쟁점|확정 예정|1차")
 # 미결 메모처럼 보이는 업무어 (화면 파일 glob, 지울 글). 점검 전에 빼고 본다.
 MEMO_ALLOW = [
     ("*", "시간 미정"),  # TO-DO 수행 예정 일시에 시간이 없을 때
     ("notify/index.html", "협의한 날과 다릅니다"),  # 예시 거부 사유
+    ("*", "1차 비밀번호"),  # 업무어(지금 데모에는 없다)
+    ("*", "1차 오픈 일정 안내"),  # 예시 공지 제목. 보고 목록에 올린다
+    ("*", "1차 서비스 오픈 안내"),
     ("staff/payslips.html", "검토 중"),  # 급여명세서 상태
     ("staff/contracts.html", "소속 확인 중"),  # 소속 추가 확인 진행 표시
 ]
-FAKE_PHONES = {"010-1234-5678", "01012345678"}
-OLD_TERMS = re.compile(r"본인인증|가입·인증")  # 없앤 표현. 「연결 보류」는 MEMO 의 「보류」로 걸린다
+FAKE_DIGITS = {"01012345678", "821012345678"}
+OLD_TERMS = re.compile(r"본인인증|가입·인증|가입 연결")  # 없앤 표현. 「연결 보류」는 MEMO 의 「보류」로도 걸린다
+
+
+def _fake_phone(number):
+    """예시 번호이거나 자리표시 글자(010 / 0000 / 0000)."""
+    digits = re.sub(r"\D", "", number)
+    return digits in FAKE_DIGITS or set(digits[-8:]) == {"0"}
+
+
+def _mask(number):
+    """오류 메시지에 번호 값이 남지 않게 숫자를 가린다."""
+    return re.sub(r"\d", "#", number)
 
 
 def leaks(text, key=""):
@@ -130,8 +152,8 @@ def leaks(text, key=""):
         found += [f"{name}: {m.group()}" for m in rx.finditer(t)]
     # 뒤에 조사가 붙으면(「…@example.com로」) common.EMAIL 의 \b 가 안 걸려 바뀐 값도 잡힌다
     found += [f"실제 이메일: {m.group()}" for m in EMAIL.finditer(t) if "@example.com" not in m.group()]
-    found += [f"휴대전화번호: {m.group()}" for m in PHONE.finditer(t) if m.group() not in FAKE_PHONES]
-    found += [f"데모 휴대전화번호: {p}" for p in KNOWN_PHONES if p in t or p.replace("-", "") in t]
+    found += [f"휴대전화번호 형태: {_mask(m.group())}" for m in PHONE_LOOSE.finditer(t) if not _fake_phone(m.group())]
+    found += [f"가운데를 가린 휴대전화번호: {_mask(m.group())}" for m in PHONE_MASKED.finditer(t) if re.sub(r"\s", "", m.group()) != FAKE_MASKED]
     return sorted(set(found))
 
 
@@ -209,9 +231,9 @@ _SET = """v => window.__nodes.forEach((x, i) => {
 })"""
 # 보이는 글자: innerText + 자리표시 글자. 입력값은 점검에만 쓰고 저장하지 않는다(values). 비밀번호 칸 값은 점검에서도 뺀다.
 _VISIBLE = """() => {
-  const f = [...document.querySelectorAll('input,textarea')].filter(e => e.offsetParent);
+  const f = [...document.querySelectorAll('input,select,textarea')].filter(e => e.offsetParent);
   return { text: [document.body.innerText, ...f.map(e => e.placeholder).filter(Boolean)].join('\\n'),
-           values: f.filter(e => e.type !== 'password').map(e => e.value).filter(Boolean).join('\\n') };
+           values: f.filter(e => e.type !== 'password').map(e => e.value).filter(Boolean).join(' ') };
 }"""
 _HIDE_ROW = """([sel, rx]) => {
   const r = new RegExp(rx);
@@ -230,14 +252,29 @@ _GRAY_PHOTO = """names => {
   });
   return n;
 }"""
-# 휴대전화번호 대조: 치환 전 글자를 보이는 곳과 숨김 영역(닫힌 팝업 · 안 보이는 상태 · 속성값)으로 나눈다.
-_PHONE_SCAN = """() => {
-  const seen = e => e.checkVisibility && e.checkVisibility({ visibilityProperty: true, contentVisibilityAuto: true });
-  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), vis = [], hid = [];
-  while (w.nextNode()) (w.currentNode.parentElement && seen(w.currentNode.parentElement) ? vis : hid).push(w.currentNode.nodeValue);
-  document.querySelectorAll('input,textarea').forEach(e => { if (e.type !== 'password') (seen(e) ? vis : hid).push(e.value); });
-  document.querySelectorAll('*').forEach(e => { for (const a of e.attributes) if (/01[016789]/.test(a.value)) hid.push(a.value); });
-  return { visible: vis.join('\\n'), hidden: hid.join('\\n') };
+# 세 칸(010 / 가운데 / 끝자리)으로 나뉜 번호를 예시 번호로 바꾼다.
+_SPLIT_PHONE = r"""() => {
+  const c = [...document.querySelectorAll('input,select,textarea')];
+  let n = 0;
+  for (let i = 0; i < c.length - 2; i++) {
+    const [a, b, d] = [c[i], c[i + 1], c[i + 2]];
+    if (/^01[016789]$/.test(a.value) && /^\d{3,4}$/.test(b.value) && /^\d{4}$/.test(d.value)) {
+      a.value = '010'; b.value = '1234'; d.value = '5678'; n++;
+    }
+  }
+  return n;
+}"""
+# 안쪽 요소의 가로 넘침(px). 가로 스크롤 요소와 표를 품고 잘리는 요소를 본다. 데모 프레임과 닫힌 패널은 뺀다.
+_OVERFLOW = """() => {
+  let m = 0;
+  for (const e of document.querySelectorAll('body *')) {
+    if (e.matches('[class*="min-w-[1720px]"]') || !e.getClientRects().length || e.scrollWidth <= e.clientWidth + 2) continue;
+    const s = getComputedStyle(e), r = e.getBoundingClientRect();
+    if (r.left >= innerWidth || r.width < 1 || e.closest('[inert]')) continue;
+    if (/(auto|scroll)/.test(s.overflowX) || (/(hidden|clip)/.test(s.overflowX) && e.querySelector('table') && s.textOverflow !== 'ellipsis'))
+      m = Math.max(m, e.scrollWidth - e.clientWidth);
+  }
+  return m;
 }"""
 _HIDE_BUTTON = """t => {
   const hit = [...document.querySelectorAll('button,a')]
@@ -258,6 +295,7 @@ _SCROLL = """() => {
 
 def _fix_text(page, key, used):
     """글자 노드 · 입력값에 TEXT_FIXES 와 safe 를 건다."""
+    page.evaluate(_SPLIT_PHONE)
     vals = page.evaluate(_TEXTS)
     out = []
     for v in vals:
@@ -267,7 +305,8 @@ def _fix_text(page, key, used):
                 if v2 != v:
                     used.add(i)
                 v = v2
-        out.append(safe(v))
+        v = PHONE_ANY.sub("010-1234-5678", safe(v))
+        out.append(PHONE_MASKED.sub(FAKE_MASKED, v))
     page.evaluate(_SET, out)
 
 
@@ -307,7 +346,7 @@ def capture():
     shutil.rmtree(IMG, ignore_errors=True)
     os.makedirs(IMG)
     source, visible, all_demo, used, hidden = {}, {}, [], set(), set()
-    rows_hidden, phones = set(), {}
+    rows_hidden, widened = set(), {}
     areas = load_areas()
     with tempfile.TemporaryDirectory() as tmp, sync_playwright() as pw:
         browser = pw.chromium.launch()
@@ -357,7 +396,19 @@ def capture():
                         page.wait_for_timeout(200)
                     page.evaluate("document.fonts.ready")
                     page.wait_for_timeout(150)
-                    page.set_viewport_size({"width": w, "height": h + min(page.evaluate(_SCROLL), GROW)})
+                    width = w  # 표가 넘치면 그 화면만 폭을 늘린다
+                    for _ in range(4):
+                        extra = page.evaluate(_OVERFLOW)
+                        if not extra or width >= MAX_WIDTH:
+                            break
+                        width = min(width + extra, MAX_WIDTH)
+                        page.set_viewport_size({"width": width, "height": h})
+                        page.wait_for_timeout(150)
+                    if page.evaluate(_OVERFLOW):
+                        raise RuntimeError(f"안쪽 요소의 가로 넘침 {page.evaluate(_OVERFLOW)}px (폭 {width})")
+                    if width != w:
+                        widened[s["id"]] = width
+                    page.set_viewport_size({"width": width, "height": h + min(page.evaluate(_SCROLL), GROW)})
                     page.wait_for_timeout(150)
                     for i, (pat, label) in enumerate(DEMO_BUTTONS):
                         if fnmatch.fnmatch(key, pat) and page.evaluate(_HIDE_BUTTON, label):
@@ -366,15 +417,9 @@ def capture():
                         if fnmatch.fnmatch(key, pat) and page.evaluate(_HIDE_ROW, [sel, rx]):
                             rows_hidden.add(i)
                     page.evaluate(_GRAY_PHOTO, list(SIGN_PHOTOS))
-                    before = page.evaluate(_PHONE_SCAN)
                     _fix_text(page, key, used)
                     seen = page.evaluate(_VISIBLE)
                     text = seen["text"]
-                    phones[s["id"]] = {
-                        "visibleBefore": sorted({p for p in KNOWN_PHONES if p in before["visible"] or p.replace("-", "") in before["visible"]}),
-                        "hiddenBefore": sorted({p for p in KNOWN_PHONES if p in before["hidden"] or p.replace("-", "") in before["hidden"]}),
-                        "maskedAfter": sorted(set(MASKED_PHONE.findall(f"{text}\n{seen['values']}"))),
-                    }
                     bad = leaks(f"{text}\n{seen['values']}", key)
                     if bad:
                         raise RuntimeError(f"이미지 글자에 내부 표시: {bad}")
@@ -396,21 +441,18 @@ def capture():
                   ensure_ascii=False, indent=2)
         f.write("\n")
     os.makedirs(OUT, exist_ok=True)
-    with open(PHONE_JSON, "w", encoding="utf-8") as f:
-        json.dump({k: v for k, v in phones.items() if any(v.values())}, f, ensure_ascii=False, indent=1)
-        f.write("\n")
     with open(VISIBLE_JSON, "w", encoding="utf-8") as f:
         json.dump(visible, f, ensure_ascii=False, indent=1)
         f.write("\n")
-    return source, sum(len(s["images"]) for _, a in areas for s in a["screens"])
+    return source, sum(len(s["images"]) for _, a in areas for s in a["screens"]), widened
 
 
 # ── 워드 ──
 
-def place(d, client, name):
+def place(d, client, name, max_height):
     path = os.path.join(IMG, name)
     img = Image.from_file(path)
-    width = min(WIDTH_CM[client], MAX_HEIGHT_CM * img.px_width / img.px_height)
+    width = min(WIDTH_CM[client], max_height * img.px_width / img.px_height)
     picture(d, path, width_cm=width)
 
 
@@ -442,17 +484,19 @@ def write(version, draft=False):
     d, doc_name, doc_no = open_docx("SCR", version)
     total_img, total = 0, 0
     empty = []
-    visible = json.load(open(VISIBLE_JSON, encoding="utf-8")) if os.path.exists(VISIBLE_JSON) else {}  # 찍을 때 이미 점검했다
-    for key, label in CLIENTS:
-        heading(d, label, 1)
-        for _, a in (x for x in areas if x[1]["client"] == key):
-            heading(d, a["area"], 2)
-            for s in a["screens"]:
+    if not os.path.exists(VISIBLE_JSON):
+        raise SystemExit(f"{VISIBLE_JSON} 이 없습니다. --capture 를 먼저 돌려 주세요.")
+    visible = json.load(open(VISIBLE_JSON, encoding="utf-8"))
+    for c, (key, label) in enumerate(CLIENTS):
+        heading(d, label, 1).paragraph_format.page_break_before = c > 0  # 첫 장은 표지 뒤 쪽 나눔이 이미 있다
+        for n_area, (_, a) in enumerate(x for x in areas if x[1]["client"] == key):
+            heading(d, a["area"], 2).paragraph_format.page_break_before = n_area > 0
+            for n_screen, s in enumerate(a["screens"]):
                 total += 1
                 if not s.get("images") and s["id"] not in NO_IMAGE:
                     raise SystemExit(f"{s['id']}: 이미지가 없습니다. --capture 를 먼저 돌려 주세요.")
                 h3 = heading(d, f"{s['id']} {s['name']}", 3)
-                h3.paragraph_format.page_break_before = True
+                h3.paragraph_format.page_break_before = n_screen > 0  # 영역 첫 화면은 제목과 같은 쪽에 둔다
                 route = s.get("route") or "경로 없음"
                 if s.get("routeNote"):
                     route += f" ({s['routeNote']})"
@@ -462,7 +506,7 @@ def write(version, draft=False):
                 for name in s["images"]:
                     if not os.path.exists(os.path.join(IMG, name)):
                         raise SystemExit(f"{s['id']}: 이미지 파일 {name} 이 없습니다.")
-                    place(d, key, name)
+                    place(d, key, name, MAX_HEIGHT_CM if n_screen else FIRST_MAX_HEIGHT_CM)
                     total_img += 1
                 if s["rows"]:
                     table(d, HEADERS, [row_cells(r) for r in s["rows"]], widths=WIDTHS)
@@ -470,6 +514,8 @@ def write(version, draft=False):
                     empty.append(s["id"])
                     if draft:
                         para(d, "(설명 표는 다음 단계에서 채운다)")
+                if s["id"] not in NO_IMAGE and s["id"] not in visible:
+                    raise SystemExit(f"{s['id']}: 이미지 글자가 없습니다. --capture 를 다시 돌려 주세요.")
                 bad = leaks(visible.get(s["id"], ""), key_of(s))
                 if bad:
                     raise SystemExit(f"{s['id']}: 이미지 글자 점검 실패 {bad}")
@@ -499,11 +545,12 @@ def main():
     ap.add_argument("--draft", action="store_true", help="설명 표가 빈 화면을 허용한다(1단계)")
     a = ap.parse_args()
     if a.capture:
-        source, images = capture()
+        source, images, widened = capture()
         for k in REPOS:
             print(f"{k}: {source[k]['repo']} {source[k]['commit']}")
         size = sum(os.path.getsize(os.path.join(IMG, f)) for f in os.listdir(IMG))
         print(f"화면 {len(screens())} · 이미지 {images} · 합계 {size / 1024 / 1024:.1f}MB")
+        print(f"표가 넘쳐 폭을 늘린 화면: {widened}")
         report()
         return
     if not a.version:
