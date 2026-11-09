@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T08:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-09T10:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: store-closings-service
     resource: ../../src/store-closings/store-closings.service.ts
     title: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
-    last_modified: 2026-11-09T08:00:00Z
+    last_modified: 2026-11-09T10:00:00Z
   - id: store-closing-response
     resource: ../../src/store-closings/dto/store-closing.response.dto.ts
     title: 폐점 확인 · 결과 응답(점포별 점포명 · 점포코드 + 합계)
@@ -25,7 +25,7 @@ sources:
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-11-09T08:00:00Z
+    last_modified: 2026-11-09T10:00:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 화면 [표] 보기와 같은 열 · 서식(정책은 공통 엑셀)
@@ -255,7 +255,9 @@ are.[^store-closings-service][^store-closing-response]
   `40P01` and `40001` to it, and under READ COMMITTED it is a deadlock — or `P2010` whose message carries
   ``Code: `40P01` ``) is logged as a warning and retried once from the start; the rolled-back attempt
   left nothing. A second deadlock is a **409** 「다른 처리와 겹쳐 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤
-  다시 시도해 주세요.」 rather than a bare 500. Several stores are always locked in ascending id.
+  다시 시도해 주세요.」 rather than a bare 500. A transaction timeout (`P2028`) is not retried: it is logged and
+  answered **503** with `code: 'STORE_CLOSING_TIMEOUT'`. A gateway 503 leaves the outcome unknown; this code says
+  everything was rolled back. Several stores are always locked in ascending id.
 - **Neither lock keeps new rows out of a closing store.** `FOR UPDATE` only made a foreign-key insert
   (`FOR KEY SHARE`) wait until the closing committed — then the store row was still there and the insert
   succeeded. So a staff record or contract whose transaction checked the store before the closing committed

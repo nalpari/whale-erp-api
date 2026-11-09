@@ -70,7 +70,7 @@ type Db = PrismaService | Prisma.TransactionClient;
  * 같이 지운다 — BP 가 탈퇴하지 않은 하위 관리자의 미사용과는 이 점이 다르다(2026-11-04 사용자 지정, 전엔 하위 관리자도 탈퇴). getEligibility 는 그 전에 보여줄 영향 범위만 세고, execute 가 실제로 탈퇴한다.
  *
  * 점포 폐점은 점포 관리 폐점(PUT /stores/:id)과 같은 StoreClosingsService 로 한다 — 다른 점은 그 BP 의 폐점 안 한 점포를
- * 한 번에 닫는 것뿐이다. 조회는 check, 실행은 close 이고 둘 다 openStoreWhere 의 점포만 넘긴다. 막는 것은 퇴근 기록 없는
+ * 한 번에 닫는 것뿐이다. 조회는 check, 실행은 close 이고 둘 다 폐점 안 한 · 지우지 않은 점포만 넘긴다(조회는 openStoreWhere, 실행은 같은 조건의 lockOpenStoreIds). 막는 것은 퇴근 기록 없는
  * 출근 하나뿐이다(진행 중 계약은 폐점이 종료하고, 체결 완료 계약은 막지 않는다 — 2026-11-05 사용자 결정).
  */
 @Injectable()
@@ -118,9 +118,9 @@ export class AdminWithdrawalService {
    * 탈퇴 실행. 확인(존재 · 역할 · 비밀번호 · 사유)을 모두 마친 뒤에만 쓴다. 본인은 탈퇴, 하위 관리자는
    * 미사용으로 상태를 바꾸고 둘 다 개인정보(이름 · 휴대폰 · 이메일)를 지운다 — isDeleted · loginId 는 그대로 둔다
    * (schema.prisma admin_accounts.isDeleted 주석). BP 는 상태와 대표자 연락처만 바꾸고 상호 · 사업자정보는
-   * 남긴다. 점포는 마지막에 폐점 서비스(close)가 같은 트랜잭션에서 닫는다 — 잠금 순서는 BP 행 → admin_accounts 행 → 탈퇴
-   * 처리 → close(점포 → 직원 → 계정)이고, close 앞에서 staff_members · accounts 행을 잠그지 않는다. 폐점의 409(열린 출근 ·
-   * 이미 폐점 · 교착) · 404 · 503(시간 초과)은 그대로 내보내고 탈퇴째 되돌린다. 교착 재시도가 트랜잭션을 처음부터 다시 연다. 메일은 커밋 뒤
+   * 남긴다. 점포는 마지막에 폐점 서비스(close)가 같은 트랜잭션에서 닫는다 — 잠금 순서는 BP 행 → admin_accounts 행 → 폐점할 점포 행 → 탈퇴
+   * 처리 → close(직원 → 계정)이고, close 앞에서 staff_members · accounts 행을 잠그지 않는다. 폐점의 409(열린 출근 ·
+   * 교착) · 503(시간 초과)은 그대로 내보내고 탈퇴째 되돌린다. 교착 재시도가 트랜잭션을 처음부터 다시 연다. 메일은 커밋 뒤
    * 지우기 전에 읽어 둔 이메일로 보내고, 실패해도 탈퇴를 되돌리지 않는다.
    */
   async execute(
@@ -317,7 +317,7 @@ function subAdminWhere(
   };
 }
 
-/** 함께 강제 폐점할 점포 — 지우지 않은, 아직 폐점하지 않은 점포. */
+/** 함께 강제 폐점할 점포 — 지우지 않은, 아직 폐점하지 않은 점포. lockOpenStoreIds 의 SQL 과 같은 조건이다 — 고치면 함께 고친다. */
 function openStoreWhere(bpCodeId: number): Prisma.StoreWhereInput {
   return { bpCodeId, isDeleted: false, storeStatusCode: { not: CLOSED } };
 }
@@ -333,7 +333,7 @@ async function openStoreIds(db: Db, bpCodeId: number): Promise<number[]> {
 
 /**
  * 폐점할 점포를 읽으며 잠근다. 잠금을 기다린 뒤 PostgreSQL 이 조건을 다시 보므로, 그 사이 폐점 · 삭제된 점포는 빠져서 탈퇴를 409 · 404 로
- * 되돌리지 않는다. FOR UPDATE 가 아닌 까닭은 close 와 같다 — 외래키 잠금과 부딪치지 않게 한다.
+ * 되돌리지 않는다. FOR UPDATE 가 아닌 까닭은 close 와 같다 — 외래키 잠금과 부딪치지 않게 한다. 조건은 openStoreWhere 와 같다.
  */
 async function lockOpenStoreIds(
   tx: Prisma.TransactionClient,

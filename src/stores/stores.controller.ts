@@ -276,7 +276,7 @@ export class StoresController {
   })
   @ApiServiceUnavailableResponse({
     description:
-      '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함 · 폐점 트랜잭션이 시간을 넘김(바뀐 것 없음)',
+      '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함 · 폐점 트랜잭션이 시간을 넘김(code STORE_CLOSING_TIMEOUT, 바뀐 것 없음)',
   })
   @ApiTooManyRequestsResponse({
     description:

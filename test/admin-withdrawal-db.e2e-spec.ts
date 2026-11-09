@@ -13,6 +13,8 @@ import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 
 const PASSWORD = 'Whale-admin-1';
+// 실제 PostgreSQL 에서만 도는 동시성 검사. PGlite 는 세션이 하나라 연결이 서로 잠금을 기다리지 않는다.
+const onRealPostgres = process.env.E2E_REAL_POSTGRES === '1' ? it : it.skip;
 const ELIGIBILITY = '/auth/admin/me/withdraw-eligibility';
 const WITHDRAW = '/auth/admin/me/withdraw';
 
@@ -141,6 +143,7 @@ describe('회원 탈퇴 (e2e, DB)', () => {
         },
       });
     const open = await store('열린 점포');
+    const second = await store('두 번째 점포');
     const closed = await store('이미 폐점', 'CLOSED');
     const staff = await prisma.staffMember.create({
       data: {
@@ -169,6 +172,7 @@ describe('회원 탈퇴 (e2e, DB)', () => {
       sub,
       token,
       open,
+      second,
       closed,
       staff,
       pending: await contract('PENDING_SIGNATURE'),
@@ -188,7 +192,7 @@ describe('회원 탈퇴 (e2e, DB)', () => {
     const body = res.body as WithdrawEligibilityResponseDto;
     expect(body).toMatchObject({
       adminCount: 1,
-      storeCount: 1,
+      storeCount: 2,
       closing: { isBlocked: false },
     });
     expect(body).not.toHaveProperty('hasInProgressContract');
@@ -197,6 +201,12 @@ describe('회원 탈퇴 (e2e, DB)', () => {
         storeId: s.open.storeId,
         storeName: '열린 점포',
         storeCode: s.open.storeCode,
+        isBlocked: false,
+      }),
+      expect.objectContaining({
+        storeId: s.second.storeId,
+        storeName: '두 번째 점포',
+        storeCode: s.second.storeCode,
         isBlocked: false,
       }),
     ]);
@@ -208,6 +218,13 @@ describe('회원 탈퇴 (e2e, DB)', () => {
     });
     expect(open.storeStatusCode).toBe('CLOSED');
     expect(open.closedDate).not.toBeNull();
+    expect(
+      (
+        await prisma.store.findUniqueOrThrow({
+          where: { storeId: s.second.storeId },
+        })
+      ).storeStatusCode,
+    ).toBe('CLOSED');
     expect(await statusOf(s.pending.contractId)).toBe('ENDED');
     expect(await statusOf(s.signed.contractId)).toBe('SIGNED');
     expect(
@@ -322,4 +339,56 @@ describe('회원 탈퇴 (e2e, DB)', () => {
     // 접속도 끊기지 않았다
     await eligibility(s.token).expect(200);
   });
+
+  onRealPostgres(
+    '탈퇴가 점포 잠금을 기다리는 동안 그 점포가 닫히면 목록에서 빠지고 탈퇴는 성공한다',
+    async () => {
+      const s = await seed();
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      let holding!: (pid: number) => void;
+      const held = new Promise<number>((resolve) => (holding = resolve));
+      const closer = prisma.$transaction(
+        async (tx) => {
+          const [{ pid }] = await tx.$queryRaw<
+            { pid: number }[]
+          >`SELECT pg_backend_pid() AS pid`;
+          await tx.$executeRaw`UPDATE stores SET store_status_code = 'CLOSED', closed_date = CURRENT_DATE WHERE store_id = ${s.second.storeId}`;
+          holding(pid);
+          await released;
+        },
+        { timeout: 20_000 },
+      );
+      const holder = await held;
+
+      const withdrawal = post(s.token).then((res) => res);
+      let isBlocked = false;
+      for (let i = 0; i < 200 && !isBlocked; i++) {
+        const [{ c }] = await prisma.$queryRaw<{ c: number }[]>`
+          SELECT count(*)::int AS c FROM pg_stat_activity
+           WHERE ${holder}::int = ANY (pg_blocking_pids(pid))`;
+        isBlocked = c > 0;
+        if (!isBlocked) await new Promise((r) => setTimeout(r, 25));
+      }
+      release();
+      await closer;
+      expect(isBlocked).toBe(true);
+
+      expect((await withdrawal).status).toBe(204);
+      expect(
+        (
+          await prisma.store.findUniqueOrThrow({
+            where: { storeId: s.open.storeId },
+          })
+        ).storeStatusCode,
+      ).toBe('CLOSED');
+      // 먼저 닫힌 점포는 탈퇴의 폐점 대상이 아니었다 — 점포상태 이력이 없다
+      expect(
+        await prisma.storeChangeHistory.count({
+          where: { storeId: s.second.storeId },
+        }),
+      ).toBe(0);
+    },
+    30_000,
+  );
 });

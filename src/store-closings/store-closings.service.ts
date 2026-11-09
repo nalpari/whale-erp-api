@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  HttpStatus,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -238,7 +239,12 @@ function withoutRawTimeout(error: unknown, label: string): unknown {
   )
     return error;
   logger.error(`폐점 트랜잭션 시간 초과 (${label})`, error.stack);
-  return new ServiceUnavailableException(TIMED_OUT);
+  return new ServiceUnavailableException({
+    statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+    error: 'Service Unavailable',
+    code: 'STORE_CLOSING_TIMEOUT',
+    message: TIMED_OUT,
+  });
 }
 
 /**

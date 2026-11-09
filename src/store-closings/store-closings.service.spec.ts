@@ -444,9 +444,20 @@ describe('retryOnDeadlock', () => {
         code: 'P2028',
         clientVersion: 'test',
       });
-    const unavailable = new ServiceUnavailableException(
-      '처리 시간이 초과되어 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.',
-    );
+    // 게이트웨이 503 은 결과를 모르지만 이 503 은 전부 되돌아간 것이 확실하다 — front 가 code 로 가른다.
+    const expectTimedOut = async (run: jest.Mock) => {
+      const thrown: unknown = await retryOnDeadlock(run, '점포 11').catch(
+        (e: unknown) => e,
+      );
+      expect(thrown).toBeInstanceOf(ServiceUnavailableException);
+      expect((thrown as ServiceUnavailableException).getResponse()).toEqual({
+        statusCode: 503,
+        error: 'Service Unavailable',
+        code: 'STORE_CLOSING_TIMEOUT',
+        message:
+          '처리 시간이 초과되어 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.',
+      });
+    };
     let error: jest.SpyInstance;
 
     beforeEach(() => {
@@ -458,9 +469,7 @@ describe('retryOnDeadlock', () => {
 
     it('다시 하지 않고 오류 로그를 남긴 뒤 503', async () => {
       const run = jest.fn().mockRejectedValue(timedOut());
-      await expect(retryOnDeadlock(run, '점포 11')).rejects.toThrow(
-        unavailable,
-      );
+      await expectTimedOut(run);
       expect(run).toHaveBeenCalledTimes(1);
       expect(error.mock.calls[0][0]).toContain('점포 11');
     });
@@ -470,9 +479,7 @@ describe('retryOnDeadlock', () => {
         .fn()
         .mockRejectedValueOnce(deadlock())
         .mockRejectedValueOnce(timedOut());
-      await expect(retryOnDeadlock(run, '점포 11')).rejects.toThrow(
-        unavailable,
-      );
+      await expectTimedOut(run);
       expect(run).toHaveBeenCalledTimes(2);
     });
   });
