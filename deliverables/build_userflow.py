@@ -41,6 +41,15 @@ FIGURE_FIXES = {
     "S-RCJXIG": "", "S-VFGQLI": "", "F-OFBCVL": "",  # 화면에는 투명하게 그려지는 Manyfast ID
 }
 DROPPED = []  # 뺀 카드 조각 (흐름 제목, 카드 제목, 조각)
+# 목업 쟁점 번호(ATT-2, CONFIG-3, HOME-4 등). 「운영 정책 ATT-25」처럼 인용한 번호는 지우지 않는다.
+_ISSUE = r"(?<!운영 정책 )(?<![A-Za-z0-9_-])[A-Z]{2,}-\d+(?:[·~]\d+)*"
+ISSUE = re.compile(_ISSUE)
+_ISSUE_PAREN = re.compile(rf"\s*\((?:{_ISSUE})(?:\s*[·,]\s*(?:{_ISSUE}))*\)")
+_ISSUE_CHAIN = re.compile(rf"(?:{_ISSUE})(?:\s*·\s*(?:{_ISSUE}|\d+(?![0-9A-Za-z가-힣])))*(?:\s*·\s*|\s+|$)")
+# 원문에 「운영 정책」 없이 적힌 운영 정책 번호. 납품본에는 「운영 정책 」을 붙인다(2026-11-09 재영).
+POLICY_CITES = re.compile(r"(?<!운영 정책 )(?<![A-Za-z0-9_-])(?:ACC-11|CTR-19|CTR-26)\b")
+COMMON_POLICY = re.compile(r"\s*\(공통정책 \d+\)")
+ISSUE_REMOVED = []
 
 
 def snapshot():
@@ -86,9 +95,22 @@ def flows():
     return out
 
 
+def strip_issue(text):
+    """쟁점 번호를 지운다. 괄호 안에 번호뿐이면 괄호째, 앞머리 번호는 뒤의 구분자까지."""
+    def gone(m):
+        ISSUE_REMOVED.extend(ISSUE.findall(m.group()))
+        return ""
+    text = POLICY_CITES.sub(lambda m: f"운영 정책 {m.group()}", text)
+    return _ISSUE_CHAIN.sub(gone, _ISSUE_PAREN.sub(gone, text))
+
+
+def issues_left(text):
+    return ISSUE.findall(text) + re.findall(r"공통정책 \d+", text)
+
+
 def clean(text):
     text = " ".join((text or "").split())
-    return safe(strip_records(FIGURE_FIXES.get(text, text), REMOVED))
+    return COMMON_POLICY.sub("", safe(strip_records(strip_issue(FIGURE_FIXES.get(text, text)), REMOVED)))
 
 
 def card_item(title, card_title, item):
@@ -98,7 +120,9 @@ def card_item(title, card_title, item):
         if MEMO.search(piece):
             DROPPED.append((title, card_title, piece))
         else:
-            keep.append(piece)
+            piece = strip_issue(piece)
+            if piece:
+                keep.append(piece)
     return " · ".join(keep)
 
 
@@ -126,6 +150,8 @@ def steps(wf):
     for i, n in enumerate(nodes, 1):
         phase = next((p["label"] for p in wf.get("phases", []) if p["fromCol"] <= n["col"] <= p["toCol"]), "")
         tag = n.get("tag") if n.get("tag") and not INTERNAL.search(n["tag"]) and not TEAM.search(n["tag"]) else ""
+        tag = strip_issue(tag)
+        tag = "" if re.fullmatch(r"[\d\s·]*", tag) else tag
         content = "\n".join(x for x in (n.get("label", ""), FIGURE_FIXES.get(n.get("sublabel", ""), n.get("sublabel", ""))) if x) + (f" ({tag})" if tag else "")
         nexts = "\n".join(f"→ {label.get(e['to'], e['to'])}" + (f" ({e['label']})" if e.get("label") else "")
                           for e in wf["edges"] if e["from"] == n["id"])
@@ -160,8 +186,11 @@ def shoot(items):
                 vb = wf["meta"].get("viewBox")
                 sel = f"svg[viewBox='0 0 {vb[0]} {vb[1]}']" if vb else "svg[data-quality-profile]"
                 svg = page.locator(sel).first
-                labels = svg.evaluate(FIX_LABELS, FIGURE_FIXES)
-                bad = sorted({t for t in labels for rx in (INTERNAL, TEAM, TEAM_NAMES, DATE) if rx.search(t)})
+                texts = svg.evaluate("s => [...s.querySelectorAll('text')].map(t => t.textContent.trim())")
+                fixes = {t: strip_issue(FIGURE_FIXES.get(t, t)) for t in set(texts)}
+                labels = svg.evaluate(FIX_LABELS, {a: b for a, b in fixes.items() if a != b})
+                bad = sorted({t for t in labels for rx in (INTERNAL, TEAM, TEAM_NAMES, DATE) if rx.search(t)}
+                             | {t for t in labels if issues_left(t)})
                 if bad:
                     raise RuntimeError(f"그림에 내부 메모가 남음: {bad}")
                 box = svg.bounding_box()
@@ -180,6 +209,7 @@ def write(version):
     """워드를 쓰고 (경로, 흐름 수, 그림 수, 단계 수, 지운 조각 수) 를 돌려준다."""
     source = json.load(open(SOURCE_JSON, encoding="utf-8"))
     groups = flows()
+    ISSUE_REMOVED.clear()
     pngs = shoot([(k, f, wf, p) for k, _, items in groups for f, wf, p in items])
     d, doc_name, doc_no = open_docx("FLOW", version)
     heading(d, "머리말", 1)
@@ -188,7 +218,7 @@ def write(version):
           [[lbl, source[k]["repo"] + " " + source[k]["ref"], source[k]["commit"], source[k]["committedAt"]]
            for k, lbl, _ in CLIENTS], widths=[3, 4, 6, 4])
     para(d, [("단계 표 ", True), ("단계는 열 순서(같은 열 안에서는 선의 방향, 순서가 없으면 레인 순서), 구간은 그 열이 드는 구간, "
-                                "화면 · 주체는 레인, 유형은 노드 종류의 범례 이름, 내용은 노드 이름과 보조 설명(관련 번호), "
+                                "화면 · 주체는 레인, 유형은 노드 종류의 범례 이름, 내용은 노드 이름과 보조 설명, "
                                 "다음 · 분기는 그 노드에서 나가는 선의 대상과 선 이름이다.", False)])
     figures, total = 0, 0
     for key, label, items in groups:
@@ -213,6 +243,9 @@ def write(version):
     leaks = sorted({m.group() for t in texts for rx in (INTERNAL, TEAM, TEAM_NAMES) for m in rx.finditer(t)})
     if leaks:
         raise SystemExit(f"내부 표지 · 팀 표시 · 팀원 실명이 남음: {leaks}")
+    left = sorted({x for t in texts for x in issues_left(t)})
+    if left:
+        raise SystemExit(f"쟁점 번호가 남음: {left}")
     n = sum(len(items) for _, _, items in groups)
     path = save_docx(d, f"{doc_no}_{doc_name}.docx")
     return path, n, figures, total, len(REMOVED)
@@ -230,7 +263,7 @@ def main():
     if not a.version:
         ap.error("--version 이 필요합니다")
     path, n, figures, total, removed = write(a.version)
-    print(f"{path}\n흐름 {n} · 그림 {figures} · 단계 {total} · 지운 결정 기록 조각 {removed}")
+    print(f"{path}\n흐름 {n} · 그림 {figures} · 단계 {total} · 지운 결정 기록 조각 {removed} · 지운 쟁점 번호 {len(ISSUE_REMOVED)}")
 
 
 if __name__ == "__main__":

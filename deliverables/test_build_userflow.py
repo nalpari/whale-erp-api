@@ -19,7 +19,7 @@ wf = {"meta": {"legend": {"entries": {"frontend": {"label": "앱 화면"}}}},
                 {"id": "c", "lane": "app", "col": 1, "type": "frontend", "label": "찍기"}],
       "edges": [{"from": "a", "to": "b"}, {"from": "b", "to": "c", "label": "허용"}, {"from": "b", "to": "a", "label": "거부"}]}
 rows = B.steps(wf)
-assert rows == [["1", "진입", "앱", "앱 화면", "열기\n지도 (ATT-3)", "→ 판정"],
+assert rows == [["1", "진입", "앱", "앱 화면", "열기\n지도", "→ 판정"],
                 ["2", "진입", "시스템", "backend", "판정", "→ 찍기 (허용)\n→ 열기 (거부)"],  # Manyfast ID tag 는 뺀다
                 ["3", "", "앱", "앱 화면", "찍기", ""]], rows
 
@@ -30,6 +30,20 @@ up = {"lanes": [{"id": "a"}, {"id": "b"}],
 assert [x["id"] for x in B.ordered(up, {"a": 0, "b": 1})] == ["low", "top"]
 assert B.card_item("흐름", "카드", "탈퇴 조건은 미정산 없음 · 약관 전문은 법무 검토 전 초안 · 끝낸다(1팀 MYPAGE-3)") \
     == "탈퇴 조건은 미정산 없음 · 끝낸다"
+
+S = B.strip_issue
+assert S("ATT-5 좌표는 저장하지 않는다") == "좌표는 저장하지 않는다"
+assert S("ATT-2 · 반경 100m") == "반경 100m"
+assert S("HOME-4 · STAFF-12 · 늘 전체") == "늘 전체"
+assert S("CONFIG-3·AUTH-4 관리자 초기화") == "관리자 초기화"
+assert S("스무 건씩 (ATT-7)") == "스무 건씩"
+assert S("둔다(운영 정책 PAY-12)") == "둔다(운영 정책 PAY-12)"  # 인용한 운영 정책 번호는 남긴다
+assert S("SYSTEM-8 · 9") == "" and S("STAFF-2·3 · 7종 · 30일") == "7종 · 30일"
+assert S("ATT-3") == "" and S("TO-DO 기록") == "TO-DO 기록"
+assert S("확인 뒤, CTR-19)") == "확인 뒤, 운영 정책 CTR-19)"  # 운영 정책 번호는 「운영 정책 」을 붙인다
+assert S("운영 정책 CTR-26") == "운영 정책 CTR-26" and S("ACC-11") == "운영 정책 ACC-11"
+assert B.clean("안내(공통정책 1, 2026-09-23 재영)") == "안내"
+assert B.issues_left("(ATT-2)") and B.issues_left("공통정책 3") and not B.issues_left("운영 정책 ATT-25")
 
 path, n, figures, total, removed = B.write("1.0")
 groups = B.flows()
@@ -59,6 +73,9 @@ cells = "\0".join(texts)
 for memo in ("두 팀 문서가 다르다", "협의 전 미정", "법무 검토 전 초안", "1팀", "3팀"):
     assert memo not in cells, memo
 assert not TEAM_NAMES.search(cells)
+assert not [t for x in texts for t in B.issues_left(x)]
+assert B.ISSUE_REMOVED, "지운 쟁점 번호가 없음"
+assert "(운영 정책 ACC-11)" in cells and "운영 정책 CTR-19" in cells and "운영 정책 CTR-26" in cells and "공통정책" not in cells
 assert "관리자는 아이디로 로그인하고 임시 비밀번호를 메일로 받는다" in cells
 assert "직원 앱 약관 ③~⑥은 직원 근무 앱에서 받는다" in cells
 assert "workflow.json" not in cells and "docs/flow" not in cells and "초안 v0.7" not in cells
