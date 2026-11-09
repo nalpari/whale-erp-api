@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-09
+* **Update**: [Staff members](/api/staff-members.md) · [Staff signup](/api/staff-signup.md) · [Contracts API](/api/contracts-api.md) — 직원 가입 상태 화면 이름 변경(WHALEERP-660, 2026-11-09 재영): 초대 발송 → 가입 대기(`INVITED`), 소속 추가 확인 → 소속 승인 대기(`AFFILIATION_PENDING`), 연결 보류 → 정보 확인 필요(`LINK_HOLD`). `STAFF_JOIN_STATE_LABELS` · `staff_member_join_status` 타입 설명(`20261109161807_team3_staff_join_status_labels`, 타입 · 칸 `COMMENT`) · `db-enums.generated.ts` · Swagger 설명만 바뀐다. 초대 유형 이름(가입 초대 · 재초대 · 소속 추가 확인 · 복귀 확인) · 「소속 추가 확인 요청」 · enum 값은 그대로.
+
 ## 2026-11-06
 * **Update**: [Store management](/api/stores.md) · [BP masters](/api/bp-masters.md) · [Excel exports](/api/excel-exports.md) — 점포 · BP 마스터 목록 엑셀을 화면 표와 같은 열 · 순서로만 만든다(사용자 지정, front 요청). 점포는 [표] 보기의 10열(순번 · 점포코드 · 점포명 · 점포유형 · 점포상태 · 사업자등록번호 · 점포 연락처 · 점포주소(시 · 구) · 재직직원 · 등록일), BP 마스터는 표의 10열(BP 코드 · 상호명 · 아이디 · 이름 · 계정상태 · 연락처 · 이메일 · 사업자등록번호 · 가입경로 · 등록). 뒤에 붙던 사업자정보 열은 뺐다 — 가림은 BP 마스터 연락처만 남는다. 서식은 공통 `styleListSheet`: 모든 셀 9pt, 머리글 회색(F2F2F2) · 굵게 · 가운데, 1행 고정. 예약 생성 파일도 같은 함수라 같다. 조건 · 정렬 · 1만 건 · 파일 이름 · 응답 계약은 그대로.
 

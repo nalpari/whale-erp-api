@@ -3,6 +3,7 @@ import {
   joinStateOf,
   joinStateWhere,
   JoinStateInvitation,
+  STAFF_JOIN_STATE_LABELS,
   STAFF_JOIN_STATES,
 } from './join-state';
 
@@ -184,5 +185,32 @@ describe('joinStateWhere', () => {
         '"joinStatus":{"not":"JOINED"}',
       );
     }
+  });
+});
+
+describe('STAFF_JOIN_STATE_LABELS (WHALEERP-660, 2026-11-09 재영)', () => {
+  it('상태 이름 — 가입 대기 · 소속 승인 대기 · 정보 확인 필요', () => {
+    expect(STAFF_JOIN_STATE_LABELS).toEqual({
+      JOINED: '가입 완료',
+      LINK_HOLD: '정보 확인 필요',
+      UNDER_AGE: '가입 불가(만 19세 미만)',
+      AFFILIATION_PENDING: '소속 승인 대기',
+      RETURN_PENDING: '복귀 확인',
+      INVITED: '가입 대기',
+      EXPIRED: '초대 만료',
+      REJECTED: '거절',
+      DRAFT: '초안',
+    });
+    expect(Object.keys(STAFF_JOIN_STATE_LABELS)).toEqual([
+      'JOINED',
+      'LINK_HOLD',
+      'UNDER_AGE',
+      'AFFILIATION_PENDING',
+      'RETURN_PENDING',
+      'INVITED',
+      'EXPIRED',
+      'REJECTED',
+      'DRAFT',
+    ]);
   });
 });

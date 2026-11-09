@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-05T08:00:00Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-09T07:19:00Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-11-05T08:00:00Z
+    last_modified: 2026-11-09T07:19:00Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
@@ -29,7 +29,7 @@ sources:
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
-    last_modified: 2026-10-12T07:48:54Z
+    last_modified: 2026-11-09T07:19:00Z
   - id: staff-members-controller
     resource: ../../src/staff-members/staff-members.controller.ts
     title: GET /staff-members · GET /staff-members/:id (직원 정보 관리 조회 권한)
@@ -37,7 +37,7 @@ sources:
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
-    last_modified: 2026-10-27T07:26:42Z
+    last_modified: 2026-11-09T07:19:00Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -133,7 +133,7 @@ null 은 「근로계약 조회 권한 없음」, `[]` 는 「근무 요일 없�
 
 `joinState` · `employmentType` · `storeIds` · `storeTypes` 는 쉼표 목록이다. 공백 처리는 다르다 — `joinState` ·
 `employmentType` 은 조각의 앞뒤 공백을 지우고, 점포 두 칸(`storeIds` · `storeTypes`)은 공백이 있으면 400 이다(근로계약
-목록과 같은 형식). 화면의 「가입·인증」 묶음(초대 발송 =
+목록과 같은 형식). 화면의 「가입·인증」 묶음(가입 대기 =
 `INVITED,EXPIRED,REJECTED`)을 그대로 받아 하나라도 맞으면 낸다. 빈 값은 400 이라 「하나도 고르지 않음」은 api 로
 표현되지 않는다 — 화면이 부르지 않고 0건으로 그린다. 파라미터를 빼면 전체가 나오므로 둘을 바꿔 쓰면 안 된다.
 
@@ -399,7 +399,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 
 # 가입·인증 상태는 DB 칸이 아니다
 
-`StaffJoinState` 는 직원 레코드 · 초대 · 연결 보류에서 만든 API 전용 enum 이다(`GET /enums` 로 나간다).
+`StaffJoinState` 는 직원 레코드 · 초대 · 정보 확인 필요(연결 보류)에서 만든 API 전용 enum 이다(`GET /enums` 로 나간다).
 표시(`joinStateOf`)와 필터(`joinStateWhere`)는 `src/staff-members/join-state.ts` 한 파일에 있다 — 한쪽만
 고치면 필터 결과에 다른 상태가 섞인다. 「한 직원에 발송 중 초대는 하나」라는 가정(136 의 재발송 규칙)에 기댄다.
 「마지막 초대」는 관계 조건으로 표현되지 않으므로 발송 중 초대가 없을 때는 순서가 아니라 있고 없음으로 가른다
@@ -478,10 +478,10 @@ e2e(staff-members · staff-member-summary · staff-member-work-schedules · staf
 초대 행이 없는 줄은 invitation 이 null 이라 보일 수 없어 api #164 리뷰로 contract 쪽에 옮겼다. 화면이 옮겨 가면 뺀다).
 모두 맞아야 한다:
 
-- 가입 상태가 초대 발송 · 초대 만료 · 소속 추가 확인 · 복귀 확인이고 **보이는 초대**가 수락되지 않음(이미 수락한 초대는
-  받은 링크로 다시 들어온다, 2026-10-12 yjnoh). 앞 초대만 수락했고 그 뒤 재초대(연결 보류 → 번호 수정 후 재초대)가 나갔으면
+- 가입 상태가 가입 대기 · 초대 만료 · 소속 승인 대기 · 복귀 확인이고 **보이는 초대**가 수락되지 않음(이미 수락한 초대는
+  받은 링크로 다시 들어온다, 2026-10-12 yjnoh). 앞 초대만 수락했고 그 뒤 재초대(정보 확인 필요 → 번호 수정 후 재초대)가 나갔으면
   그 재초대가 보이는 초대라 다시 보낼 수 있다 — 「수락한 초대가 하나라도 있으면 거짓」으로 하면 재초대가 만료된 뒤 다시
-  보낼 길이 없다. 연결 보류 · 만 19세 미만은 api 가 보낼 수 있어도 정책으로 거짓이다(거절은 계약이 거부라 api 도 409 다).
+  보낼 길이 없다. 정보 확인 필요 · 만 19세 미만은 api 가 보낼 수 있어도 정책으로 거짓이다(거절은 계약이 거부라 api 도 409 다).
 - 또는 가입 상태가 초안(초대 행이 하나도 없음)이고 최근 계약의 초대 유형이 소속 추가 확인 · 복귀 확인 — WHALEERP-130 전
   요청 없이 서명 대기가 된 옛 계약이다(재발송이 첫 요청을 보낸다, api #164 리뷰). 다른 초대 없는 줄은 거짓이다.
 - 최근 계약이 발송 대기 · 서명 대기(`INVITE_RESENDABLE`) — 거부 · 만료 재발송은 되살릴 수 있는지까지 봐야 해 근로계약 상세에서 한다(WHALEERP-153).
@@ -492,7 +492,7 @@ e2e(staff-members · staff-member-summary · staff-member-work-schedules · staf
 **가입 완료 직원은 거짓이다** — 목록의 재발송은 「가입·인증」 칸의 가입 초대 재발송이고, 가입한 직원의 앱 알림
 재발송은 근로계약 상세에서 한다(가입 초대가 아니다). 그래도 어긋날 수 있는 것: 읽은 뒤 바뀐 상태(409 — 화면이
 다시 읽는다), 서버 설정 누락(`STAFF_APP_URL` · `BIZPPURIO_SMS_FROM` · 템플릿 — 503), 발송 실패(502). 거짓 · 참이
-계정 유무를 드러내지 않는다 — 소속 추가 확인 · 복귀 확인 가입 상태가 이미 같은 것을 보인다. 소속 추가 확인 요청을
+계정 유무를 드러내지 않는다 — 소속 승인 대기 · 복귀 확인 가입 상태가 이미 같은 것을 보인다. 소속 추가 확인 요청을
 직원이 거절하면 초대가 거절이라 가입 상태는 「거절」, 함께 온 계약은 거부라 canResend 는 거짓이다 — 근로계약 상세에서
 재발송하면 같은 계약이 발송 대기로 되살아나고 새 요청이 나간다(WHALEERP-153). 한 번 거절한 직원은 뒤 요청이 만료돼도
 목록에서는 다시 보내지 않는다.
