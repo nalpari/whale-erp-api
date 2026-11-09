@@ -129,7 +129,7 @@ export class AffiliationRequestsService {
     for (const r of rows)
       if (sameName(r.staffMember.name, account.realName)) mine.push(r);
       else hidden.push(r.invitationId);
-    // 관리자 쪽은 소속 추가 확인 대기로만 남아 원인이 보이지 않는다 — 걸러진 요청 id 만 남긴다(이름은 남기지 않음). 앱이 열 때마다
+    // 관리자 쪽은 소속 승인 대기로만 남아 원인이 보이지 않는다 — 걸러진 요청 id 만 남긴다(이름은 남기지 않음). 앱이 열 때마다
     // 읽는 목록이라 debug 로 두고, 직원이 답하려다 막힌 때(lockRequest)만 warn 으로 남긴다
     if (hidden.length)
       this.logger.debug(

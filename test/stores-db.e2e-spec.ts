@@ -668,7 +668,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
           },
         });
     };
-    // 세지 않는다 — 초안만 · 초대 발송만 · 서명 대기만(가입한 직원의 첫 계약) · 퇴직(아래)
+    // 세지 않는다 — 초안만 · 가입 대기만 · 서명 대기만(가입한 직원의 첫 계약) · 퇴직(아래)
     await staffWith(['DRAFT'], { joinStatus: 'DRAFT' });
     await staffWith(['PENDING_SEND'], { joinStatus: 'INVITED' });
     await staffWith(['PENDING_SIGNATURE']);
