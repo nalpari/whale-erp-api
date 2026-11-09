@@ -1,0 +1,16 @@
+{
+  "admin": {
+    "repo": "whale-erp-front",
+    "ref": "origin/main",
+    "commit": "fbc4830ff01d3bea2b034b217e98a45f97ec9ca0",
+    "committedAt": "2026-11-05T17:51:47+09:00",
+    "files": 30
+  },
+  "staff": {
+    "repo": "whale-erp-staff",
+    "ref": "origin/main",
+    "commit": "78085e706ce587c81addb10c4d31000b52f3ab6f",
+    "committedAt": "2026-11-03T13:09:15+09:00",
+    "files": 10
+  }
+}

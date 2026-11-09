@@ -1,0 +1,246 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "급여명세서 — 초안 계산에서 발송까지",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "화면"
+        },
+        "backend": {
+          "label": "시스템 처리"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "발송 · 알림"
+        },
+        "database": {
+          "label": "기록"
+        },
+        "external": {
+          "label": "직원 근무 앱"
+        },
+        "cloud": {
+          "label": "외부"
+        }
+      }
+    },
+    "views": [
+      {
+        "id": "v1",
+        "label": "초안에서 발송까지",
+        "focus": [
+          "list",
+          "draft",
+          "review",
+          "confirm",
+          "send",
+          "app"
+        ],
+        "note": "시스템이 계산한 지급 항목에 관리자가 공제를 넣어 확정하면 이메일로 간다."
+      },
+      {
+        "id": "v2",
+        "label": "확정 취소",
+        "focus": [
+          "send",
+          "cancel",
+          "review"
+        ],
+        "note": "발송 후에도 취소할 수 있고 검토 중으로 돌아간다."
+      }
+    ],
+    "viewBox": [
+      1040,
+      668
+    ]
+  },
+  "lanes": [
+    {
+      "id": "web",
+      "label": "관리자 웹"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "app",
+      "label": "직원 근무 앱"
+    },
+    {
+      "id": "exc",
+      "label": "확정 취소",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p1",
+      "label": "계산과 검토",
+      "fromCol": 0,
+      "toCol": 3,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p2",
+      "label": "발송",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "groups": [
+    {
+      "id": "g1",
+      "label": "STAFF-5 · 지급은 계산, 공제는 입력",
+      "lane": "web",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "dashed"
+    }
+  ],
+  "mainPath": [
+    "list",
+    "draft",
+    "review",
+    "confirm",
+    "send",
+    "app"
+  ],
+  "nodes": [
+    {
+      "id": "list",
+      "lane": "web",
+      "col": 0,
+      "type": "frontend",
+      "label": "명세서 목록",
+      "sublabel": "작성 중 · 검토 중 · 확정 · 발송",
+      "width": 160
+    },
+    {
+      "id": "draft",
+      "lane": "sys",
+      "col": 1,
+      "type": "backend",
+      "label": "초안 계산",
+      "sublabel": "기본급 · 주휴 · 연장",
+      "width": 140,
+      "tag": "계약과 출퇴근이 기준"
+    },
+    {
+      "id": "review",
+      "lane": "web",
+      "col": 2,
+      "type": "frontend",
+      "label": "검토 · 공제 입력",
+      "sublabel": "요율은 관리자가 넣는다",
+      "width": 150
+    },
+    {
+      "id": "confirm",
+      "lane": "web",
+      "col": 3,
+      "type": "backend",
+      "label": "확정",
+      "sublabel": "공제 전엔 비활성",
+      "width": 140
+    },
+    {
+      "id": "send",
+      "lane": "sys",
+      "col": 4,
+      "type": "messagebus",
+      "label": "이메일 발송",
+      "sublabel": "발송 완료 상태",
+      "width": 140
+    },
+    {
+      "id": "app",
+      "lane": "app",
+      "col": 5,
+      "type": "external",
+      "label": "직원 근무 앱 조회",
+      "sublabel": "퇴직 뒤에도 급여 탭",
+      "width": 140
+    },
+    {
+      "id": "cancel",
+      "lane": "exc",
+      "col": 4,
+      "type": "security",
+      "label": "확정 취소",
+      "sublabel": "발송 후에도 · 검토 중으로",
+      "width": 140
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "list",
+      "to": "draft",
+      "variant": "emphasis",
+      "label": "작성 시작"
+    },
+    {
+      "id": "e2",
+      "from": "draft",
+      "to": "review",
+      "variant": "emphasis",
+      "label": "검토 대기 사유"
+    },
+    {
+      "id": "e3",
+      "from": "review",
+      "to": "confirm",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e4",
+      "from": "confirm",
+      "to": "send",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e5",
+      "from": "send",
+      "to": "app",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e6",
+      "from": "send",
+      "to": "cancel",
+      "variant": "security",
+      "label": "취소",
+      "role": "error"
+    },
+    {
+      "id": "e7",
+      "from": "cancel",
+      "to": "review",
+      "variant": "dashed",
+      "label": "검토 중으로",
+      "role": "return"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "STAFF-5 기본급·주휴·연장은 시스템, 공제는 관리자 · 주휴 주 15시간 · 연장 1일 8시간·1주 40시간 초과 · 처리 이력 한 곳에 · 퇴직해도 급여 탭에서 본다"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "밖에 있는 것",
+      "items": [
+        "지급 실행은 없다 · 계산식과 가산율은 노무사 검토(PAY-5) · 3년 보존"
+      ]
+    }
+  ]
+}

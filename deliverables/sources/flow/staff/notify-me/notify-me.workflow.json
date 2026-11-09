@@ -1,0 +1,311 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "알림과 내 정보 — 받는 것과 고치는 것",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "noti",
+        "label": "알림이 오면",
+        "focus": [
+          "notify",
+          "inbox",
+          "jump"
+        ],
+        "note": "알림은 계약·급여·근무에서 나온다. TO-DO 배정 알림은 없고, 수행 예정 일시가 다가오면 수행 임박 알림이 앱 푸시와 알림함으로 간다. 화면 위쪽 종으로 알림함에 들어가고, 누르면 그 화면으로 바로 간다. 알림함은 14일 보관한다."
+      },
+      {
+        "id": "me",
+        "label": "내 정보를 고치기",
+        "focus": [
+          "home",
+          "me",
+          "change",
+          "verify",
+          "fail"
+        ],
+        "note": "고칠 수 있는 것은 이메일·주소·비밀번호와 신고 정보다. 이메일은 새 이메일로 받은 핀을 통과해야 바뀐다. 휴대전화번호는 1차에 바꾸지 않는다."
+      },
+      {
+        "id": "locked",
+        "label": "고칠 수 없는 값",
+        "focus": [
+          "me",
+          "readonly",
+          "out"
+        ],
+        "note": "생년월일은 가입한 뒤 고치지 않고 휴대전화번호는 1차에 바꾸지 않는다. 소속과 고용 형태는 근로계약이 정한다. 앱에서는 볼 뿐이다."
+      },
+      {
+        "id": "tax",
+        "label": "신고 정보 고치기",
+        "focus": [
+          "me",
+          "change",
+          "taxinfo"
+        ],
+        "note": "내 정보의 「신고 정보 · 보기」로 들어가 고친다. 주민등록번호는 뒷자리를 다시 보여 주지 않으므로 새로 넣고, 그때 수집 일시가 바뀐다. 급여 계좌는 다음 급여부터 적용한다."
+      }
+    ],
+    "legend": {
+      "entries": {
+        "frontend": {
+          "label": "앱 화면"
+        },
+        "security": {
+          "label": "판정 · 예외"
+        },
+        "messagebus": {
+          "label": "알림 발송"
+        },
+        "database": {
+          "label": "기록"
+        }
+      }
+    },
+    "viewBox": [
+      1084,
+      660
+    ]
+  },
+  "lanes": [
+    {
+      "id": "noti",
+      "label": "알림"
+    },
+    {
+      "id": "app",
+      "label": "직원 근무 앱 화면"
+    },
+    {
+      "id": "sys",
+      "label": "시스템"
+    },
+    {
+      "id": "exc",
+      "label": "막히는 경우",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p-in",
+      "label": "들어가기",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p-edit",
+      "label": "고치기",
+      "fromCol": 2,
+      "toCol": 3
+    }
+  ],
+  "groups": [
+    {
+      "id": "g-inbox",
+      "label": "ATT-7 · 스무 건씩 더 보기",
+      "lane": "noti",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "dashed"
+    },
+    {
+      "id": "g-verify",
+      "label": "ME-3 · 새 이메일로 받은 핀",
+      "lane": "sys",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "home",
+    "me",
+    "change",
+    "verify"
+  ],
+  "nodes": [
+    {
+      "id": "notify",
+      "lane": "noti",
+      "col": 0,
+      "type": "messagebus",
+      "label": "알림 발송",
+      "sublabel": "계약 · 급여 · 근무",
+      "width": 160
+    },
+    {
+      "id": "inbox",
+      "lane": "noti",
+      "col": 1,
+      "type": "frontend",
+      "label": "알림함",
+      "sublabel": "종에서 · 14일 보관",
+      "width": 145
+    },
+    {
+      "id": "jump",
+      "lane": "noti",
+      "col": 2,
+      "type": "frontend",
+      "label": "그 화면으로",
+      "sublabel": "눌러서 바로",
+      "width": 150
+    },
+    {
+      "id": "home",
+      "lane": "app",
+      "col": 0,
+      "type": "frontend",
+      "label": "홈",
+      "sublabel": "탭으로 오간다",
+      "width": 140
+    },
+    {
+      "id": "me",
+      "lane": "app",
+      "col": 1,
+      "type": "frontend",
+      "label": "내 정보",
+      "sublabel": "고칠 것만 열림",
+      "width": 150
+    },
+    {
+      "id": "change",
+      "lane": "app",
+      "col": 2,
+      "type": "frontend",
+      "label": "내 것 고치기",
+      "sublabel": "이메일 · 주소 · 비밀번호",
+      "width": 160
+    },
+    {
+      "id": "readonly",
+      "lane": "sys",
+      "col": 2,
+      "type": "database",
+      "label": "읽기 전용 값",
+      "sublabel": "생년월일 · 번호 · 소속",
+      "width": 160
+    },
+    {
+      "id": "verify",
+      "lane": "sys",
+      "col": 3,
+      "type": "security",
+      "label": "이메일 핀",
+      "sublabel": "통과해야 바뀐다",
+      "width": 160
+    },
+    {
+      "id": "fail",
+      "lane": "exc",
+      "col": 3,
+      "type": "security",
+      "label": "인증 실패",
+      "sublabel": "값은 그대로",
+      "width": 145
+    },
+    {
+      "id": "out",
+      "lane": "exc",
+      "col": 1,
+      "type": "security",
+      "label": "로그아웃",
+      "sublabel": "내 정보 맨 아래",
+      "width": 155
+    },
+    {
+      "id": "taxinfo",
+      "lane": "app",
+      "col": 4,
+      "type": "frontend",
+      "label": "신고 정보",
+      "sublabel": "주민번호 새로 · 계좌",
+      "width": 160,
+      "tag": "TAX-8"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-notify-inbox",
+      "from": "notify",
+      "to": "inbox",
+      "label": "도착"
+    },
+    {
+      "id": "e-inbox-jump",
+      "from": "inbox",
+      "to": "jump",
+      "label": "눌러서"
+    },
+    {
+      "id": "e-home-me",
+      "from": "home",
+      "to": "me",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-me-change",
+      "from": "me",
+      "to": "change",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-me-readonly",
+      "from": "me",
+      "to": "readonly",
+      "label": "고칠 수 없는 값",
+      "role": "branch"
+    },
+    {
+      "id": "e-me-out",
+      "from": "me",
+      "to": "out",
+      "label": "로그아웃",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "id": "e-change-verify",
+      "from": "change",
+      "to": "verify",
+      "label": "이메일",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e-verify-fail",
+      "from": "verify",
+      "to": "fail",
+      "label": "실패",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "e-change-taxinfo",
+      "from": "change",
+      "to": "taxinfo",
+      "label": "신고 정보 보기",
+      "role": "branch"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "확정된 결정",
+      "items": [
+        "직원이 고치는 것은 이메일·주소·비밀번호·신고 정보 · 이메일은 핀을 통과해야 바뀐다 · 생년월일은 가입한 뒤 고치지 않고 휴대전화번호는 1차에 바꾸지 않는다 · 소속·고용 형태는 근로계약이 정한다 · 알림함은 종에서 들어가고 14일 보관 · 알림 수신은 네 묶음 모두 직원이 켜고 끈다"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "여기서 하지 않는 것",
+      "items": [
+        "TO-DO 배정 알림은 없고 수행 임박 알림이 푸시·알림함으로 간다 · 관리자 초기화는 로그인 장에 있다"
+      ]
+    }
+  ]
+}
