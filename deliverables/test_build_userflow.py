@@ -60,6 +60,8 @@ for memo in ("두 팀 문서가 다르다", "협의 전 미정", "법무 검토 
     assert memo not in cells, memo
 assert not TEAM_NAMES.search(cells)
 assert "관리자는 아이디로 로그인하고 임시 비밀번호를 메일로 받는다" in cells
+assert "직원 앱 약관 ③~⑥은 직원 근무 앱에서 받는다" in cells
+assert "workflow.json" not in cells and "docs/flow" not in cells and "초안 v0.7" not in cells
 reverse = 0  # 같은 열에서 단계 번호가 선과 거꾸로 가는 선(순환 제외)
 for w in want:
     lanes = {x["id"]: i for i, x in enumerate(w["lanes"])}

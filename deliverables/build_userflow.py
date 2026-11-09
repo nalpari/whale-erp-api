@@ -13,7 +13,7 @@ import re
 import shutil
 import subprocess
 
-from common import HERE, INTERNAL, OUT, TEAM_NAMES, heading, open_docx, para, picture, safe, save_docx, strip_records, table
+from common import HERE, INTERNAL, OUT, TEAM, TEAM_NAMES, heading, open_docx, para, picture, safe, save_docx, strip_records, table
 
 FLOW = os.path.join(HERE, "sources", "flow")
 SOURCE_JSON = os.path.join(FLOW, "SOURCE.json")
@@ -25,9 +25,8 @@ WIDTHS = [1.2, 2.2, 2.8, 2.2, 4.4, 4.2]
 REMOVED = []
 # 카드 항목을 「 · 」로 나눈 조각에 이 말이 있으면 미결 · 팀 간 메모로 보고 싣지 않는다. 「미정산」은 탈퇴 조건이라 뺀다.
 MEMO = re.compile(r"미정(?!산)|보류|협의|법무|노무사|검토|확인 중|[13]팀|두 팀")
-# 결정 문장 끝의 「(1팀 MYPAGE-3)」과 「진입과 홈」의 앞머리. 뒤의 사실 설명은 남긴다.
-TEAM_MARK = re.compile(r"\([13]팀 [^)]*\)|로그인·가입·계정 찾기는 1팀 화면이다 — ")
-TEAM = re.compile(r"[13]팀|두 팀")
+# 결정 문장 끝의 「(1팀 MYPAGE-3)」, 「진입과 홈」의 앞머리, 약관 조각의 팀 표시. 나머지 사실 설명은 남긴다.
+TEAM_MARK = re.compile(r"\([13]팀 [^)]*\)|로그인·가입·계정 찾기는 1팀 화면이다 — |(?<=약관 ③~⑥은 )3팀 ")
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 # 그림 · 표 칸의 내부 메모(원문 → 바꾼 글, 빈 글이면 그림에서 뺀다). 원본 스냅숏은 고치지 않는다.
 FIGURE_FIXES = {
@@ -37,6 +36,7 @@ FIGURE_FIXES = {
     "3팀 화면 · 스스로 끝냄": "스스로 끝냄",
     "3팀 · 늘 전체 범위": "늘 전체 범위",
     "홈 (3팀)": "홈",
+    "전문 한 곳 · 초안 v0.7": "전문 한 곳",
     "3팀 공통 기반": "",
     "S-RCJXIG": "", "S-VFGQLI": "", "F-OFBCVL": "",  # 화면에는 투명하게 그려지는 Manyfast ID
 }
@@ -183,11 +183,11 @@ def write(version):
     pngs = shoot([(k, f, wf, p) for k, _, items in groups for f, wf, p in items])
     d, doc_name, doc_no = open_docx("FLOW", version)
     heading(d, "머리말", 1)
-    para(d, [("원본 ", True), ("관리자 웹 · 직원 근무 앱 저장소의 docs/flow(흐름마다 workflow.json 과 그림 HTML).", False)])
+    para(d, [("원본 커밋", True)])
     table(d, ["클라이언트", "저장소", "커밋", "커밋 시각"],
           [[lbl, source[k]["repo"] + " " + source[k]["ref"], source[k]["commit"], source[k]["committedAt"]]
            for k, lbl, _ in CLIENTS], widths=[3, 4, 6, 4])
-    para(d, [("단계 표 ", True), ("workflow.json 의 값만 옮겼다. 단계는 열 순서(같은 열 안에서는 선의 방향, 순서가 없으면 레인 순서), 구간은 그 열이 드는 구간, "
+    para(d, [("단계 표 ", True), ("단계는 열 순서(같은 열 안에서는 선의 방향, 순서가 없으면 레인 순서), 구간은 그 열이 드는 구간, "
                                 "화면 · 주체는 레인, 유형은 노드 종류의 범례 이름, 내용은 노드 이름과 보조 설명(관련 번호), "
                                 "다음 · 분기는 그 노드에서 나가는 선의 대상과 선 이름이다.", False)])
     figures, total = 0, 0

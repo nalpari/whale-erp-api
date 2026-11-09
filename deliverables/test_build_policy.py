@@ -10,7 +10,7 @@ import re
 from docx import Document
 
 import build_policy as B
-from common import INTERNAL, TEAM_NAMES, safe, strip_records
+from common import INTERNAL, TEAM, TEAM_NAMES, safe, strip_records
 
 S = strip_records
 assert S("둔다(2026-10-30 재영, WHALEERP-618 · 637 리뷰).") == "둔다."
@@ -60,7 +60,10 @@ leaks = sorted({m.group() for m in INTERNAL.finditer(cells)})
 assert not leaks, f"내부 표지가 남음: {leaks}"
 names = sorted({m.group() for m in TEAM_NAMES.finditer(cells)})
 assert not names, f"팀원 실명이 남음: {names}"
-assert "whale-erp-v2" not in cells and "내부 결정 기록" not in cells
+assert not TEAM.search(cells), TEAM.findall(cells)
+assert "whale-erp-v2" not in cells and "내부 결정 기록" not in cells and f"운영 정책 {B.SOURCE_VERSION}." in cells
+for gone in ("1팀에 알린다", "1팀에 제안한다", "목업은 10원", "미정 쟁점이 더 남아"):
+    assert gone not in cells, gone
 for word in ("(구현 기준)", "(구현 그대로)", "(후속 일감)", "(홈 PR 리뷰)"):
     assert word not in cells, word
 assert "노무사 답변 2026-10-14 질문 14)" in cells  # 노무사 답변 괄호는 남긴다
