@@ -64,6 +64,9 @@ TEXT_FIXES = [
     ("pay/index.html#detail", r"\s*끝자리 세무 확인 대기\(PAY-7\)", ""),
     ("staff/payrolls-detail.html", r"\(PAY-22\)", "(운영 정책 PAY-22)"),
     ("system/menus-master.html", r" · 목업 표본에서 생략", ""),
+    # 로그인 사용자 · 작성자 칸의 팀원 실명 → 데모 인물과 겹치지 않는 예시 이름
+    ("*", r"김지영", "한예솔"),
+    ("*", r"platjiyoung", "platyesol"),
     # 없앤 상태 · 옛 표현
     ("staff/index.html", r"^가입·인증$", "가입 상태"),
     ("staff/contracts.html", r" · 연결 보류$", ""),

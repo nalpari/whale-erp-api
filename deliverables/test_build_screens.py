@@ -23,6 +23,10 @@ assert L("010-****-1111") and not L("010-****-5678") and not L("+82 10-1234-5678
 assert not L("105-22-81934") and not L("2026-09-14")  # 사업자등록번호 · 날짜는 번호가 아니다
 assert L("요금 확정 예정") and L("1차 범위 밖") and L("초대 발송과 가입 연결의 기준값") and not L("1차 비밀번호")
 assert not hasattr(B, "KNOWN_PHONES")
+for name in ("김지영", "지영 님", "hyojun.choi", "JungPyo.Lee", "JeYoung.Ryu", "Young Joo", "HONGGI", "nalpari"):
+    assert L(name), name  # 팀원 표기
+for word in ("유지영역", "이정표", "Kim", "young", "Platform"):
+    assert not L(word), word  # 일반어
 assert not L("시간 미정") and not L("검토 중", "staff/payslips.html") and L("검토 중", "staff/index.html")
 
 assert B.row_cells({"zone": "목록", "element": "표", "action": "연다", "policies": ["ACC-11", "CTR-19"]})[3] == "운영 정책 ACC-11, 운영 정책 CTR-19"

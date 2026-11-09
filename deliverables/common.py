@@ -185,7 +185,12 @@ _RECORD_WORDS = re.compile(r"제안|승인|정리|결정|확인|확정|질문|�
 # 날짜 · 이름 없이 결정 낱말만 있는 괄호. 「(홈)」 같은 보통 괄호를 지우지 않게 낱말을 넓히지 않는다.
 _WORD_ONLY = re.compile(r"홈 PR 리뷰|구현 기준|구현 그대로|후속 일감")
 # 납품 문서에 남으면 안 되는 팀원 실명. 「운영주체」의 「영주」는 이름이 아니다.
-TEAM_NAMES = re.compile(r"노영주|(?<![운경])영주|김민식|민식|최효준|효준|김창수|창수|재영|유상욱|상욱|김홍기|홍기|최창규|창규|류제영|제영")
+# 영문은 표시 이름 · 커밋 작성자 이름 · Plane ID. 대소문자를 구분하고 앞뒤 경계를 둔다(단독 「Kim」 등은 넣지 않는다). 지영은 「유지영역」 같은 낱말에 걸리지 않게 앞 글자를 본다.
+# 정표(「이정표」와 겹침, 실명 미확인)는 넣지 않고 영문 표기만 둔다.
+TEAM_NAMES = re.compile(r"노영주|(?<![운경])영주|김민식|민식|최효준|효준|김창수|창수|재영|유상욱|상욱|김홍기|홍기|최창규|창규|류제영|제영|김지영|(?<![가-힣])지영"
+                        r"|(?<![A-Za-z0-9._-])(?:hyojun\.choi|JungPyo\.Lee|leejungpyo|jungpyo2001|JeYoung\.Ryu|rjy1537(?:-eng)?|changsoo kim|chang soo"
+                        r"|chang-su98|chang-kyu|chang9811|ck_choi|Young Joo|yjnoh|Kim Minsik|Minsiki?|mskim|HONGGI|hkim|JiyoungKim|jyKim|JaeYoung"
+                        r"|Jaeyoung Lee|LEE\.JY|jy-lee|nalpari)(?![A-Za-z0-9_-])")
 TEAM = re.compile(r"[13]팀|두 팀")  # 납품 문서에 남으면 안 되는 팀 표시
 _HISTORY = re.compile(r"(?:바꿈|바로잡음|뺌|걷음|맞춤|정정)$")
 _SEP = re.compile(r"(, | · | — |\. )")
