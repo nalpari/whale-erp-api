@@ -64,6 +64,7 @@ assert not TEAM.search(cells), TEAM.findall(cells)
 assert "whale-erp-v2" not in cells and "내부 결정 기록" not in cells and f"운영 정책 {B.SOURCE_VERSION}." in cells
 for kept in ("웹 로그인 화면에 초대 확인 탭을 두지 않는다.", "회원 탈퇴 화면의 안내에는 가맹 점포 직원 자료는"):
     assert kept in cells, kept
+assert "2026-11-09" not in " ".join(p for p in paras if p.startswith("ATT-08")), "ATT-08 결정 기록이 남음"
 for gone in ("1팀에 알린다", "1팀에 제안한다", "목업은 10원", "미정 쟁점이 더 남아"):
     assert gone not in cells, gone
 for word in ("(구현 기준)", "(구현 그대로)", "(후속 일감)", "(홈 PR 리뷰)"):
