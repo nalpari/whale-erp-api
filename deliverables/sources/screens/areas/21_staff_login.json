@@ -1,0 +1,676 @@
+{
+  "client": "staff",
+  "area": "로그인·가입",
+  "screens": [
+    {
+      "id": "SCR-APP-001",
+      "name": "로그인",
+      "menu": "로그인 전",
+      "route": "/login",
+      "demo": {
+        "file": "login/index.html",
+        "state": "login"
+      },
+      "images": [
+        "SCR-APP-001.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "입력",
+          "element": "이메일·비밀번호 칸",
+          "action": "가입 때 정한 이메일을 로그인 아이디로 쓴다. 실패 안내는 어느 쪽이 틀렸는지 가르지 않는다.",
+          "policies": [
+            "ACC-04",
+            "ACC-07"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "「아이디 저장하기」 체크",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "입력",
+          "element": "「자동로그인」 체크",
+          "action": "처음에는 꺼져 있다. 켜고 로그인하면 마지막 접속부터 30일, 끄면 7일 로그인 상태를 유지한다.",
+          "policies": [
+            "ACC-05"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「로그인」",
+          "action": "로그인한다. 5회 연속 틀리면 5분 동안 잠근다.",
+          "policies": [
+            "ACC-06"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「비밀번호를 잊으셨나요」",
+          "action": "비밀번호 재설정 화면으로 간다.",
+          "policies": [
+            "ACC-08"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「초대 코드로 가입」",
+          "action": "초대 코드 입력 화면으로 간다.",
+          "policies": [
+            "JOI-02"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-002",
+      "name": "이메일 찾기",
+      "menu": "로그인 전",
+      "route": "/email-find",
+      "demo": {
+        "file": "login/index.html",
+        "state": "find"
+      },
+      "images": [
+        "SCR-APP-002.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "입력",
+          "element": "이름·휴대전화번호·생년월일 칸",
+          "action": "가입할 때 넣은 세 값으로 로그인 이메일을 찾는다.",
+          "policies": [
+            "ACC-06"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「이메일 찾기」",
+          "action": "세 값이 맞는 계정의 이메일을 보여 준다. 일부 계정만 맞으면 맞은 계정의 이메일만 보인다.",
+          "policies": [
+            "ACC-06"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "시도 제한",
+          "action": "5회 연속 틀리면 5분 동안 막는다. 계속 찾지 못하면 근무지에 직접 와서 묻는다.",
+          "policies": [
+            "ACC-06",
+            "ACC-16"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-003",
+      "name": "비밀번호 재설정",
+      "menu": "로그인 전",
+      "route": "/password-reset",
+      "demo": {
+        "file": "login/index.html",
+        "state": "forgot"
+      },
+      "images": [
+        "SCR-APP-003.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "입력",
+          "element": "이메일 칸",
+          "action": "가입한 이메일을 넣는다.",
+          "policies": [
+            "ACC-08"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "「이메일이 기억나지 않나요?」",
+          "action": "이메일 찾기 화면으로 간다.",
+          "policies": [
+            "ACC-06"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "「이메일을 사용할 수 없다면」",
+          "action": "관리자 초기화로 재설정 링크를 이메일로 받는 길과, 메일함을 쓸 수 없을 때 근무지에 직접 와서 묻는 길을 안내한다. 관리자는 이메일을 대신 고치지 않는다.",
+          "policies": [
+            "ACC-11",
+            "ACC-16",
+            "ACC-17"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "「아직 가입을 마치지 않았다면」",
+          "action": "계정 유무와 상관없이 누구에게나 초대 링크로 가입을 먼저 마치라고 안내한다.",
+          "policies": [
+            "ACC-08"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「인증번호 받기」",
+          "action": "이메일로 핀을 보낸다. 발급은 1분 간격, 하루 10회까지다.",
+          "policies": [
+            "ACC-08",
+            "ACC-10"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「로그인으로 돌아가기」",
+          "action": "로그인 화면으로 돌아간다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-004",
+      "name": "인증번호 입력",
+      "menu": "로그인 전",
+      "route": "/password-reset/pin",
+      "demo": {
+        "file": "login/index.html",
+        "state": "pin"
+      },
+      "images": [
+        "SCR-APP-004.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "입력",
+          "element": "「인증번호」 칸",
+          "action": "이메일로 받은 핀 여섯 자리를 넣는다.",
+          "policies": [
+            "ACC-08"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "「남은 시간」",
+          "action": "핀을 낸 시각부터 10분을 센다.",
+          "policies": [
+            "ACC-08"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "「5회 틀리면 다시 받아야 합니다」",
+          "action": "핀 하나당 5회까지 넣는다. 남은 횟수는 보이지 않는다.",
+          "policies": [
+            "ACC-09"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "재발급 안내",
+          "action": "다시 받으면 이전 핀을 쓸 수 없다고 알린다.",
+          "policies": [
+            "ACC-10"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「확인」",
+          "action": "핀이 맞으면 새 비밀번호 설정 화면으로 간다.",
+          "policies": [
+            "ACC-08"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「인증번호 다시 받기」",
+          "action": "발급 뒤 1분이 지나야 누를 수 있다.",
+          "policies": [
+            "ACC-10"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-005",
+      "name": "새 비밀번호 설정",
+      "menu": "로그인 전",
+      "route": "/password-reset/new-password",
+      "demo": {
+        "file": "login/index.html",
+        "state": "newpw"
+      },
+      "images": [
+        "SCR-APP-005.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "입력",
+          "element": "「남은 시간」",
+          "action": "핀 입력과 같은 10분 시계를 이어서 센다. 핀이 맞은 뒤 따로 시간을 주지 않는다.",
+          "policies": [
+            "ACC-08"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "새 비밀번호·확인 칸",
+          "action": "새 비밀번호를 두 번 넣는다.",
+          "policies": [
+            "ACC-12"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "「비밀번호 조건」",
+          "action": "문자 종류를 3가지 이상 섞으면 8자, 2가지면 10자 이상으로 하고 20자까지 받는다. 이메일 아이디와 같거나 그 앞부분을 쓴 값은 받지 않는다.",
+          "policies": [
+            "ACC-12"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "변경 안내",
+          "action": "새 비밀번호를 정하면 다른 기기의 접속이 모두 끊기고 로그인 잠금도 풀린다.",
+          "policies": [
+            "ACC-06",
+            "ACC-08"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「비밀번호 변경」",
+          "action": "저장할 때 핀을 다시 검증하고, 남은 링크와 핀을 닫은 뒤 로그인 화면으로 보낸다.",
+          "policies": [
+            "ACC-08",
+            "ACC-19"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-006",
+      "name": "재설정 링크로 새 비밀번호 설정",
+      "menu": "로그인 전",
+      "route": "/password-reset/link",
+      "demo": {
+        "file": "login/index.html",
+        "state": "temp"
+      },
+      "images": [
+        "SCR-APP-006.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "안내",
+          "element": "링크 유효 안내",
+          "action": "관리자가 보낸 재설정 링크는 24시간 동안 한 번만 쓴다.",
+          "policies": [
+            "ACC-11",
+            "ACC-19"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "새 비밀번호·확인 칸",
+          "action": "직원이 새 비밀번호를 직접 정한다.",
+          "policies": [
+            "ACC-11"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "「비밀번호 조건」",
+          "action": "문자 종류를 3가지 이상 섞으면 8자, 2가지면 10자 이상으로 하고 20자까지 받는다. 이메일 아이디와 같거나 그 앞부분을 쓴 값은 받지 않는다.",
+          "policies": [
+            "ACC-12"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "변경 안내",
+          "action": "새 비밀번호를 정하면 다른 기기의 접속이 모두 끊기고 로그인 잠금도 풀린다.",
+          "policies": [
+            "ACC-06",
+            "ACC-08"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「비밀번호 변경」",
+          "action": "저장하면 남은 링크와 핀을 닫고 로그인 화면으로 보낸다.",
+          "policies": [
+            "ACC-08",
+            "ACC-19"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-007",
+      "name": "초대 코드로 가입",
+      "menu": "로그인 전",
+      "route": "/join",
+      "demo": {
+        "file": "join/index.html",
+        "state": "code"
+      },
+      "images": [
+        "SCR-APP-007.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단",
+          "element": "단계 표시",
+          "action": "가입 네 단계 가운데 첫 단계임을 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "입력",
+          "element": "휴대전화번호·초대 코드 칸",
+          "action": "초대받은 번호와 8자리 초대 코드를 넣는다. 둘이 모두 맞아야 열린다.",
+          "policies": [
+            "JOI-02"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "초대 코드 안내",
+          "action": "코드는 근무지에서 보낸 알림톡·문자에서 확인하고, 받지 못했으면 근무지 관리자에게 요청한다.",
+          "policies": [
+            "JOI-02"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「다음」",
+          "action": "두 칸을 채우면 켜지고 초대 확인 화면으로 간다. 같은 번호로 5번 틀리면 30분 동안 막는다.",
+          "policies": [
+            "JOI-02"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-008",
+      "name": "초대 확인",
+      "menu": "로그인 전",
+      "route": "/join/invitation",
+      "demo": {
+        "file": "join/index.html",
+        "state": "invite"
+      },
+      "images": [
+        "SCR-APP-008.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "초대 안내",
+          "action": "초대한 근무지 이름을 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "본문",
+          "element": "근무지·고용 형태 카드",
+          "action": "근무지 주소와 고용 형태를 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "안내",
+          "element": "사용 기한",
+          "action": "초대는 발송일부터 30일 동안 쓸 수 있다.",
+          "policies": [
+            "JOI-03"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「가입하기」",
+          "action": "계정 등록 화면으로 간다.",
+          "policies": [
+            "ACC-23"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-009",
+      "name": "계정 등록",
+      "menu": "로그인 전",
+      "route": "/join/signup",
+      "demo": {
+        "file": "join/index.html",
+        "state": "signup"
+      },
+      "images": [
+        "SCR-APP-009.jpg",
+        "SCR-APP-009-2.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "인적사항",
+          "element": "이름·성별·외국인 여부",
+          "action": "직원이 직접 넣어 계정에 저장하고 날인 전 본인 대조에 쓴다. 성별은 필수다.",
+          "policies": [
+            "ACC-23",
+            "JOI-10"
+          ]
+        },
+        {
+          "zone": "인적사항",
+          "element": "휴대전화번호",
+          "action": "초대에 묶인 번호로 고정하고 직원이 고치지 않는다.",
+          "policies": [
+            "JOI-02"
+          ]
+        },
+        {
+          "zone": "인적사항",
+          "element": "생년월일",
+          "action": "8자리로 받는다. 만 19세 미만이면 한 번 더 확인받고, 그래도 미만이면 계정을 만들지 않는다. 가입한 뒤에는 직원이 고치지 않는다.",
+          "policies": [
+            "ACC-13",
+            "ACC-22"
+          ]
+        },
+        {
+          "zone": "로그인 정보",
+          "element": "이메일·비밀번호·비밀번호 확인",
+          "action": "이메일을 로그인 아이디로 쓴다. 비밀번호 조건을 함께 보인다.",
+          "policies": [
+            "ACC-04",
+            "ACC-12"
+          ]
+        },
+        {
+          "zone": "주소",
+          "element": "「주소」·「상세주소」",
+          "action": "「검색」으로 도로명 주소를 고르고 상세주소만 직접 넣는다.",
+          "policies": [
+            "ACC-20"
+          ]
+        },
+        {
+          "zone": "약관 동의",
+          "element": "약관 체크·「가입하기」",
+          "action": "필수 둘을 모두 체크해야 가입한다. 마케팅 정보 수신은 선택이고, 가맹 점포로 가입할 때만 본사 제공 동의를 선택으로 묻는다. 화면에는 「사업자 제공 동의」로 적는다.",
+          "policies": [
+            "ACC-23",
+            "ATT-30"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-010",
+      "name": "가입 완료",
+      "menu": "로그인 전",
+      "route": "/join/done",
+      "demo": {
+        "file": "join/index.html",
+        "state": "done"
+      },
+      "images": [
+        "SCR-APP-010.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "완료 안내",
+          "action": "계정이 초대받은 근무지의 직원 레코드에 이어졌음을 알린다.",
+          "policies": [
+            "JOI-04"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "이름·생년월일·근무지",
+          "action": "가입한 값을 보인다. 인적사항은 가입한 뒤 앱에서 고치지 않는다.",
+          "policies": [
+            "ACC-13"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「근로계약서가 도착했습니다」 카드",
+          "action": "가입을 마치면 근로계약서가 자동으로 발송되어 서명 대기가 된다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "종이 계약 안내",
+          "action": "종이 계약은 날인 없이 신고 정보 입력으로 넘어간다.",
+          "policies": [
+            "CTR-23"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「홈으로」",
+          "action": "홈으로 간다. 서명 대기 계약이 있으면 날인 요청 팝업을 띄운다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-011",
+      "name": "소속 추가 확인",
+      "menu": "내 정보 > 소속 근무지",
+      "route": "/affiliations",
+      "demo": {
+        "file": "join/index.html",
+        "state": "addsite"
+      },
+      "images": [
+        "SCR-APP-011.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "새 근무지 카드",
+          "action": "초대한 근무지와 고용 형태만 보인다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "공유 정보 안내",
+          "action": "수락하면 이름·휴대전화번호·생년월일·성별·외국인 여부만 새 근무지로 옮긴다. 다른 소속의 정보는 옮기지 않는다.",
+          "policies": [
+            "JOI-08"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "근무 조건 안내",
+          "action": "시급·근무 시간은 수락한 뒤 받는 근로계약서에서 확인한다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「사업자 제공 동의」 체크",
+          "action": "가맹 점포이고 아직 동의하지 않은 계정에만 본사 제공 동의를 선택으로 묻는다.",
+          "policies": [
+            "ATT-30"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「거절」",
+          "action": "확인창으로 한 번 확인받고 계약을 거부로 닫는다. 사유는 받지 않는다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「수락」",
+          "action": "직원 레코드에 계정을 잇고 서명 대기로 바꾼다. 날인 기한 30일은 이때부터 센다.",
+          "policies": [
+            "JOI-09"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-012",
+      "name": "소속 추가 완료",
+      "menu": "내 정보 > 소속 근무지",
+      "route": "/affiliations/done",
+      "demo": {
+        "file": "join/index.html",
+        "state": "addsite-done"
+      },
+      "images": [
+        "SCR-APP-012.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "완료 안내",
+          "action": "추가된 근무지를 보이고 지금 계정을 그대로 쓴다고 알린다.",
+          "policies": [
+            "JOI-08"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "공유된 정보·공유되지 않은 정보",
+          "action": "새 근무지에 옮긴 값과 옮기지 않은 값을 나눠 보인다.",
+          "policies": [
+            "JOI-08"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "근로계약서 도착 안내",
+          "action": "날인해야 근무를 시작할 수 있다고 알린다.",
+          "policies": [
+            "CTR-29",
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "계약서 이동 버튼",
+          "action": "새 근무지의 근로계약서로 간다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「홈으로」",
+          "action": "홈으로 간다.",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}

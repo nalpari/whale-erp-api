@@ -1,0 +1,1022 @@
+{
+  "client": "admin",
+  "area": "직원관리",
+  "screens": [
+    {
+      "id": "SCR-ADM-011",
+      "name": "직원 정보 관리",
+      "menuCode": "MN000005",
+      "route": "/staff-members",
+      "demo": {
+        "file": "staff/index.html"
+      },
+      "images": [
+        "SCR-ADM-011.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "직원 초대",
+          "action": "누르면 근로계약서 초안 작성으로 간다.",
+          "policies": [
+            "CTR-01"
+          ]
+        },
+        {
+          "zone": "필터",
+          "element": "이름·휴대전화번호 · 고용 형태 · 가입 상태 · 재직 상태",
+          "action": "조건에 맞는 직원 레코드만 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "직원 목록",
+          "element": "일괄 저장",
+          "action": "누르면 직원 자료 일괄 저장으로 간다.",
+          "policies": [
+            "RET-09"
+          ]
+        },
+        {
+          "zone": "직원 목록",
+          "element": "직원 이름",
+          "action": "링크가 있는 이름을 누르면 직원 상세로 간다.",
+          "policies": []
+        },
+        {
+          "zone": "직원 목록",
+          "element": "가입 상태 열",
+          "action": "가입 완료 · 초대 발송 · 소속 추가 확인 · 가입 불가(만 19세 미만)를 보인다.",
+          "policies": [
+            "JOI-01",
+            "ACC-22"
+          ]
+        },
+        {
+          "zone": "직원 목록",
+          "element": "재직 열",
+          "action": "퇴직일을 정한 직원은 퇴직일까지 재직으로 두고 퇴직 예정일을 함께 보인다.",
+          "policies": [
+            "CTR-24"
+          ]
+        },
+        {
+          "zone": "직원 목록",
+          "element": "본사에 정보제공 미동의",
+          "action": "본사 제공에 동의하지 않은 가맹 점포 직원은 본사 계정에 행을 남긴 채 이름과 내용을 가린다.",
+          "policies": [
+            "ATT-30"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-012",
+      "name": "직원 상세",
+      "menuCode": "MN000005",
+      "route": "/staff-members/[id]",
+      "demo": {
+        "file": "staff/detail.html"
+      },
+      "images": [
+        "SCR-ADM-012.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "퇴직 처리",
+          "action": "퇴직일을 정한다. 퇴직일까지는 재직이고 다음 날 퇴직으로 바뀐다. 퇴직일 전날까지 취소하거나 날짜를 바꾼다.",
+          "policies": [
+            "CTR-24",
+            "CTR-25"
+          ]
+        },
+        {
+          "zone": "기본 정보",
+          "element": "이름 · 직무 · 고용 형태 · 소속 근무지 · 입사일 · 재직 상태 · 생년월일 · 휴대전화번호",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "기본 정보",
+          "element": "이메일",
+          "action": "가리지 않고 보여 준다. 본사 역할과 퇴직 직원에게는 보이지 않는다. 관리자는 조회만 하고 고치지 않는다.",
+          "policies": [
+            "ACC-17",
+            "ATT-30"
+          ]
+        },
+        {
+          "zone": "기본 정보",
+          "element": "비밀번호 초기화",
+          "action": "직원 이메일로 재설정 링크를 보낸다. 링크는 24시간 유효하고 한 번만 쓴다.",
+          "policies": [
+            "ACC-11",
+            "ACC-19"
+          ]
+        },
+        {
+          "zone": "근로계약",
+          "element": "계약 유형 · 계약 기간 · 계약 상태 · 최근 발송일 · 갱신 예정일",
+          "action": "현재 계약을 요약해 보이고 관리를 누르면 근로계약 관리로 간다.",
+          "policies": [
+            "CTR-12"
+          ]
+        },
+        {
+          "zone": "근무스케줄 · 출퇴근 현황",
+          "element": "주 이동 · 주간 표 · 관리",
+          "action": "고른 주의 근무스케줄과 출퇴근 상태를 보인다.",
+          "policies": [
+            "ATT-34"
+          ]
+        },
+        {
+          "zone": "급여명세서",
+          "element": "지급월별 금액 · 상태 · 미발송 건수",
+          "action": "지급월별 명세서와 상태를 보인다.",
+          "policies": [
+            "PAY-01"
+          ]
+        },
+        {
+          "zone": "TO-DO",
+          "element": "배정 대상 · 수행 예정 일시 · 상태",
+          "action": "이 직원에게 배정된 TO-DO와 완료·미완료 건수를 보인다.",
+          "policies": [
+            "PAY-16",
+            "PAY-17"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-013",
+      "name": "직원 자료 일괄 저장",
+      "menuCode": "MN000005",
+      "route": "/staff-members/export",
+      "demo": {
+        "file": "staff/export.html"
+      },
+      "images": [
+        "SCR-ADM-013.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "안내",
+          "element": "탈퇴 전 내려받기 안내",
+          "action": "BP가 탈퇴하면 자료를 볼 수 없으니 미리 받으라고 안내한다. 평소에도 받을 수 있다.",
+          "policies": [
+            "RET-09"
+          ]
+        },
+        {
+          "zone": "담기는 자료",
+          "element": "근로계약서 · 출퇴근 기록 · 급여명세서 · 근무스케줄",
+          "action": "자료별로 담기는 내용과 형식을 보인다. 네 가지를 ZIP 파일 한 개로 받는다.",
+          "policies": [
+            "RET-09"
+          ]
+        },
+        {
+          "zone": "새로 요청",
+          "element": "업무 범위 · 대상 직원 · 파일 형식 · 일괄 저장 요청",
+          "action": "업무 범위 안 대상 직원 수를 보이고, 버튼을 누르면 파일 만들기를 요청한다.",
+          "policies": [
+            "RET-09"
+          ]
+        },
+        {
+          "zone": "지난 요청",
+          "element": "요청 일시 · 요청자 · 대상 · 상태 · 내려받기",
+          "action": "요청별 상태를 보인다. 파일은 다 만들어진 때부터 7일 동안 내려받는다.",
+          "policies": [
+            "RET-09"
+          ]
+        },
+        {
+          "zone": "만드는 중",
+          "element": "요청 접수 · 자료 모으는 중",
+          "action": "진행 단계와 처리한 직원 수를 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "받은 뒤",
+          "element": "보관 책임 안내",
+          "action": "내려받은 파일의 보관 책임이 BP에 있음을 알린다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-014",
+      "name": "근로계약 관리",
+      "menuCode": "MN000006",
+      "route": "/contracts",
+      "demo": {
+        "file": "staff/contracts.html"
+      },
+      "images": [
+        "SCR-ADM-014.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "계약서 작성",
+          "action": "누르면 근로계약서 초안 작성으로 간다.",
+          "policies": [
+            "CTR-01"
+          ]
+        },
+        {
+          "zone": "필터",
+          "element": "직원 · 상태",
+          "action": "직원 이름과 근로계약 상태로 걸러 본다.",
+          "policies": []
+        },
+        {
+          "zone": "근로계약 목록",
+          "element": "직원 이름",
+          "action": "임시저장 계약은 이어 쓰기로 바로 들어가고, 다른 상태는 근로계약 상세로 간다.",
+          "policies": [
+            "CTR-19"
+          ]
+        },
+        {
+          "zone": "근로계약 목록",
+          "element": "상태 열",
+          "action": "근로계약 상태를 보인다. 서명 대기는 날인 기한까지 남은 날을 함께 보인다.",
+          "policies": [
+            "CTR-02",
+            "CTR-05"
+          ]
+        },
+        {
+          "zone": "근로계약 목록",
+          "element": "갱신 예정 표시",
+          "action": "종료일이 다가온 계약에 갱신 예정과 남은 날을 보인다.",
+          "policies": [
+            "CTR-12"
+          ]
+        },
+        {
+          "zone": "근로계약 목록",
+          "element": "무기계약 전환 안내",
+          "action": "파트타이머를 반복 갱신해 첫 계약부터 2년이 넘는 계약을 표시한다는 안내를 보인다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-015",
+      "name": "근로계약서 초안 작성",
+      "menuCode": "MN000006",
+      "route": "/contracts/new",
+      "demo": {
+        "file": "staff/contracts-new.html"
+      },
+      "images": [
+        "SCR-ADM-015.jpg",
+        "SCR-ADM-015-2.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "임시저장",
+          "action": "다 쓰기 전에 저장한다. 초대와 계약서를 보내지 않는다. 이름 · 휴대전화번호 · 근무지 · 직무 · 고용 형태는 받는다.",
+          "policies": [
+            "CTR-02"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "초안 저장",
+          "action": "저장하면 곧바로 직원에게 알림이 나간다. 임시저장이 아니면 따로 발송을 누르지 않는다.",
+          "policies": [
+            "CTR-01",
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "직원 정보",
+          "element": "이름 · 휴대전화번호 · 생년월일 · 소속 근무지 · 직무",
+          "action": "계약서에 넣을 직원 값을 받는다. 주민등록번호는 받지 않는다.",
+          "policies": [
+            "CTR-03",
+            "TAX-01"
+          ]
+        },
+        {
+          "zone": "계약 방식",
+          "element": "고용 형태 · 전자계약 · 종이 계약",
+          "action": "정직원용과 파트타이머용을 고른다. 종이 계약은 날인한 파일을 올리면 발송·날인 없이 체결 완료로 저장한다.",
+          "policies": [
+            "CTR-03",
+            "CTR-23"
+          ]
+        },
+        {
+          "zone": "계약 조건",
+          "element": "계약 기간 · 근무요일 · 근무시간 · 휴게시간 · 시급 · 급여항목 · 비과세 항목",
+          "action": "계약 시작일은 필수이고 종료일을 비우면 기간의 정함이 없는 계약이다. 셈한 값은 화면에만 보이고 저장하지 않는다.",
+          "policies": [
+            "CTR-03",
+            "CTR-20"
+          ]
+        },
+        {
+          "zone": "계약 조건",
+          "element": "급여 지급 방식 · 주휴일 · 임금지급일 · 근무 장소",
+          "action": "급여 지급 방식과 주휴일은 필수다. 주 15시간 미만이면 주휴일을 두지 않는다.",
+          "policies": [
+            "CTR-20",
+            "CTR-21"
+          ]
+        },
+        {
+          "zone": "수습 · 4대보험",
+          "element": "수습 여부 · 4대보험 가입 여부",
+          "action": "수습 적용 여부를 고르고, 4대보험 가입 여부를 체크해 계약서 사회보험 조항에 적는다.",
+          "policies": [
+            "CTR-20",
+            "CTR-22"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "만 19세 미만 · 기존 근로계약 대체 · 근무 시간 겹침",
+          "action": "만 19세 미만이면 저장을 막는다. 같은 점포에 진행 중인 계약이 있으면 대체를 묻고, 다른 점포 계약과 근무 시간이 겹치면 저장을 막는다.",
+          "policies": [
+            "ACC-22",
+            "CTR-13",
+            "CTR-26"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-016",
+      "name": "근로계약서 이어 쓰기",
+      "menuCode": "MN000006",
+      "route": "/contracts/[contractId]/edit",
+      "demo": {
+        "file": "staff/contracts-draft.html"
+      },
+      "images": [
+        "SCR-ADM-016.jpg",
+        "SCR-ADM-016-2.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "진입",
+          "element": "근로계약 목록의 임시저장 계약",
+          "action": "직원 이름을 누르면 이 화면으로 들어온다.",
+          "policies": [
+            "CTR-19"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "삭제",
+          "action": "확인을 받고 임시저장 계약을 지운다.",
+          "policies": [
+            "CTR-19"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "임시저장",
+          "action": "마저 쓰기 전에 다시 저장한다. 초대와 계약서를 보내지 않는다.",
+          "policies": [
+            "CTR-02"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "초안 저장",
+          "action": "저장하면 곧바로 직원에게 알림이 나간다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "입력 칸",
+          "element": "직원 정보 · 계약 방식 · 계약 조건 · 수습 · 4대보험",
+          "action": "근로계약서 초안 작성과 같은 칸을 이어서 채운다.",
+          "policies": [
+            "CTR-20"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "만 19세 미만 · 기존 근로계약 대체 · 근무 시간 겹침",
+          "action": "근로계약서 초안 작성과 같은 기준으로 저장을 막거나 대체를 묻는다.",
+          "policies": [
+            "ACC-22",
+            "CTR-13",
+            "CTR-26"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-017",
+      "name": "근로계약 상세",
+      "menuCode": "MN000006",
+      "route": "/contracts/[contractId]",
+      "demo": {
+        "file": "staff/contracts-signed.html"
+      },
+      "images": [
+        "SCR-ADM-017.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "새 계약",
+          "action": "체결 완료 계약은 고치지 않고 새 계약으로 대체한다. 누르면 새 계약 작성으로 간다.",
+          "policies": [
+            "CTR-11"
+          ]
+        },
+        {
+          "zone": "계약 내용",
+          "element": "원본 내려받기 · 날인본 내려받기",
+          "action": "보관된 계약서 파일을 내려받는다. 전자계약에서는 날인본 내려받기가 비활성이고, 종이 계약일 때만 쓴다.",
+          "policies": [
+            "CTR-14",
+            "CTR-16",
+            "CTR-23"
+          ]
+        },
+        {
+          "zone": "계약 내용",
+          "element": "직원 · 근무지 · 고용 형태 · 계약 기간 · 월급 · 소정근로시간 · 주휴일 · 임금지급일 · 4대보험 · 근무 장소",
+          "action": "체결한 계약 조건을 읽기 전용으로 보인다.",
+          "policies": [
+            "CTR-11"
+          ]
+        },
+        {
+          "zone": "상태 변경이력",
+          "element": "일시 · 변경 전 · 변경 후 · 처리 주체",
+          "action": "계약 상태가 언제 누구에 의해 바뀌었는지 보인다.",
+          "policies": [
+            "CTR-02"
+          ]
+        },
+        {
+          "zone": "진행",
+          "element": "초안 저장 · 계약서 자동 발송 · 직원 날인",
+          "action": "단계별 처리 시각을 보인다. 가입을 끝내면 근로계약서가 자동으로 발송된다.",
+          "policies": [
+            "JOI-09"
+          ]
+        },
+        {
+          "zone": "발송",
+          "element": "계약 방식 · 발송일 · 날인 기한 · 최종 처리일 · 재발송 횟수",
+          "action": "날인 기한은 발송일로부터 30일이다.",
+          "policies": [
+            "CTR-05",
+            "CTR-10"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-018",
+      "name": "급여명세서 관리",
+      "menuCode": "MN000009",
+      "route": "/payslips",
+      "demo": {
+        "file": "staff/payslips.html"
+      },
+      "images": [
+        "SCR-ADM-018.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "필터",
+          "element": "직원 · 명세서 상태 · 검토 대기만",
+          "action": "명세서 상태 넷과 검토 대기 분류로 걸러 본다.",
+          "policies": [
+            "PAY-01",
+            "PAY-06"
+          ]
+        },
+        {
+          "zone": "상단",
+          "element": "지급월 이동 · 상태별 건수",
+          "action": "고른 달의 명세서 건수를 상태별로 보인다.",
+          "policies": [
+            "PAY-01"
+          ]
+        },
+        {
+          "zone": "상단",
+          "element": "급여명세서 작성",
+          "action": "명세서 초안을 만든다. 유효한 근로계약이 없으면 초안을 만들지 않는다.",
+          "policies": [
+            "PAY-07"
+          ]
+        },
+        {
+          "zone": "상단",
+          "element": "확정 건수 발송",
+          "action": "확정한 명세서를 이메일로 발송한다. 발송한 명세서만 직원에게 보인다.",
+          "policies": [
+            "PAY-08"
+          ]
+        },
+        {
+          "zone": "급여명세서 목록",
+          "element": "직원 이름",
+          "action": "링크가 있는 이름을 누르면 급여명세서 검토로 간다.",
+          "policies": []
+        },
+        {
+          "zone": "급여명세서 목록",
+          "element": "상태 열",
+          "action": "명세서 상태와 검토 대기 표시를 보인다. 계약이 없는 직원은 계약 없음 · 초안 없음으로 보인다.",
+          "policies": [
+            "PAY-06",
+            "PAY-07"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-019",
+      "name": "급여명세서 검토",
+      "menuCode": "MN000009",
+      "route": "/payslips/[payslipId]",
+      "demo": {
+        "file": "staff/payrolls-detail.html"
+      },
+      "images": [
+        "SCR-ADM-019.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "목록 · 임시저장 · 확정",
+          "action": "확정은 급여 기간 마지막 날이 지나야 할 수 있다. 기본 공제나 붙인 추가 공제가 비어 있으면 확정할 수 없다.",
+          "policies": [
+            "PAY-01",
+            "PAY-06"
+          ]
+        },
+        {
+          "zone": "경고",
+          "element": "검토 대기 안내 · 출퇴근 보정",
+          "action": "검토 대기로 분류된 까닭을 보이고, 누르면 출퇴근 보정으로 간다.",
+          "policies": [
+            "PAY-06"
+          ]
+        },
+        {
+          "zone": "지급 내역",
+          "element": "연장·야간·휴일 가산 적용 여부",
+          "action": "명세서마다 정한다. 끄면 연장 시간을 가산 없이 1배로 계산하고 처리 이력에 수정으로 남는다.",
+          "policies": [
+            "PAY-05"
+          ]
+        },
+        {
+          "zone": "지급",
+          "element": "지급 항목 · 비과세 항목 · 출퇴근으로 다시 계산",
+          "action": "기본급 · 주휴수당 · 연장수당만 시스템이 계산하고 관리자가 확인·수정한다. 나머지는 관리자가 넣는다.",
+          "policies": [
+            "PAY-02"
+          ]
+        },
+        {
+          "zone": "공제",
+          "element": "기본 공제 · 추가 공제 · 지난 명세서에서 불러오기 · 항목 추가",
+          "action": "공제는 관리자가 입력한다. 기본 공제 여섯은 늘 보이고 추가 공제는 항목 추가로 붙인다.",
+          "policies": [
+            "PAY-03"
+          ]
+        },
+        {
+          "zone": "검토 사유",
+          "element": "사유 · 내용 · 그 밖의 사유",
+          "action": "이 명세서에 붙은 검토 대기 사유를 보인다.",
+          "policies": [
+            "PAY-06"
+          ]
+        },
+        {
+          "zone": "참조한 것",
+          "element": "근로계약 · 계약 급여 · 출퇴근 기간 · 집계 근로시간",
+          "action": "계산에 쓴 근로계약과 출퇴근 값을 보인다. 버튼으로 출퇴근 기록과 근로계약을 연다.",
+          "policies": []
+        },
+        {
+          "zone": "처리 이력",
+          "element": "일시 · 구분 · 내용",
+          "action": "초안 생성 · 수정 · 확정 · 확정 취소 · 발송을 모두 남겨 보인다.",
+          "policies": [
+            "PAY-20"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-020",
+      "name": "근무스케줄 관리",
+      "menuCode": "MN000010",
+      "route": "/work-schedules",
+      "demo": {
+        "file": "staff/work-schedules.html"
+      },
+      "images": [
+        "SCR-ADM-020.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단",
+          "element": "주간 보기 · 월간 보기",
+          "action": "보기 방식을 바꾼다.",
+          "policies": []
+        },
+        {
+          "zone": "상단",
+          "element": "근무지 선택 · 주 이동 · 이번 주",
+          "action": "점포와 주를 고른다. 폐점 점포도 고를 수 있지만 새 근무스케줄은 만들지 못한다.",
+          "policies": [
+            "ATT-33"
+          ]
+        },
+        {
+          "zone": "상단",
+          "element": "지난 주 복사",
+          "action": "비어 있는 주에 직전 주를 복사한다. 그 근무일에 체결 완료 근로계약이 없는 직원은 뺀다.",
+          "policies": [
+            "PAY-13"
+          ]
+        },
+        {
+          "zone": "상단",
+          "element": "근무스케줄 등록",
+          "action": "등록·수정 패널을 연다.",
+          "policies": [
+            "PAY-11"
+          ]
+        },
+        {
+          "zone": "일별 표",
+          "element": "직원별 근무 막대 · 근무 인원 · 이 시간대에 배정",
+          "action": "시간대별 근무 인원과 배정이 없는 공백 시간을 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "등록·수정 패널",
+          "element": "등록 인원 · 근무일 · 직원 · 근로계약 시간적용 · 시작시간 · 종료시간 · 휴게시간",
+          "action": "근무일이 체결 완료 근로계약 기간 안에 있는 직원에게만 등록한다. 근로계약 시간적용은 등록 시점에 계약 시간을 채운다.",
+          "policies": [
+            "PAY-10",
+            "PAY-11"
+          ]
+        },
+        {
+          "zone": "등록·수정 패널",
+          "element": "저장 · 삭제",
+          "action": "저장하면 바로 직원 근무 앱에 반영되고, 변경된 직원에게만 알림을 보낸다.",
+          "policies": [
+            "PAY-14"
+          ]
+        },
+        {
+          "zone": "변경이력",
+          "element": "변경일시 · 구분 · 내용",
+          "action": "추가 · 수정 · 삭제 내역을 보인다. 지난 날짜를 고쳐도 경고 없이 이력에 남긴다.",
+          "policies": [
+            "PAY-12"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-021",
+      "name": "출·퇴근 현황 조회",
+      "menuCode": "MN000025",
+      "route": "/attendance-records",
+      "demo": {
+        "file": "staff/attendance.html"
+      },
+      "images": [
+        "SCR-ADM-021.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "필터",
+          "element": "직원 · 고용 형태 · 출퇴근 상태 · 확인 필요 사유 · 기록 구분 · 재직 상태",
+          "action": "조건에 맞는 출퇴근 기록만 보인다.",
+          "policies": [
+            "ATT-19",
+            "ATT-34"
+          ]
+        },
+        {
+          "zone": "일별 출퇴근",
+          "element": "날짜 이동 · 예정 · 출근 · 퇴근 · 비고",
+          "action": "고른 날의 직원별 출퇴근 상태를 보인다.",
+          "policies": [
+            "ATT-34"
+          ]
+        },
+        {
+          "zone": "출퇴근 요약",
+          "element": "정상 출근 · 지각 · 미기록 · 근로시간",
+          "action": "고른 주의 횟수와 근로시간을 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "보정이 필요한 기록",
+          "element": "기간 · 직원 · 날짜 · 출근 · 퇴근 · 사유",
+          "action": "미등록과 확인 필요 사유가 있는 기록, 보정·대신 등록한 기록을 보인다.",
+          "policies": [
+            "ATT-19",
+            "ATT-34"
+          ]
+        },
+        {
+          "zone": "보정이 필요한 기록",
+          "element": "보정",
+          "action": "최근 3개월 이내 기록을 사유와 함께 고친다. 보정하면 확인 필요와 사유를 지우고, 직원 근무 앱에 연필 표시가 붙는다.",
+          "policies": [
+            "ATT-10",
+            "ATT-11",
+            "ATT-16",
+            "ATT-19"
+          ]
+        },
+        {
+          "zone": "보정이 필요한 기록",
+          "element": "이상 없음",
+          "action": "확인 필요가 붙은 기록에만 있다. 누르면 검토를 마치고 확인 필요와 사유를 지운다.",
+          "policies": [
+            "ATT-19"
+          ]
+        },
+        {
+          "zone": "보정이 필요한 기록",
+          "element": "이력",
+          "action": "보정 전후 값과 보정자, 사유를 본다.",
+          "policies": [
+            "ATT-11"
+          ]
+        },
+        {
+          "zone": "출퇴근 대신 등록",
+          "element": "직원 · 날짜 · 출근 · 퇴근 · 사유",
+          "action": "위치정보 동의를 거부·철회하거나 일시 중지한 직원의 기록을 관리자가 남긴다. 최근 3개월 이내만 사유를 받아 등록한다.",
+          "policies": [
+            "ATT-20"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-022",
+      "name": "TO-DO 리스트 관리",
+      "menuCode": "MN000026",
+      "route": "/todos",
+      "demo": {
+        "file": "staff/todos.html"
+      },
+      "images": [
+        "SCR-ADM-022.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "TO-DO 등록",
+          "action": "누르면 TO-DO 등록으로 간다.",
+          "policies": []
+        },
+        {
+          "zone": "필터",
+          "element": "상태 · 배정 대상 · 긴급만 · 수행 예정 일시",
+          "action": "조건에 맞는 TO-DO만 보인다.",
+          "policies": [
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "TO-DO 목록",
+          "element": "순서",
+          "action": "긴급 건을 수행 예정 일시와 관계없이 맨 위에 둔다. 완료된 건은 맨 뒤로 간다.",
+          "policies": [
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "TO-DO 목록",
+          "element": "제목",
+          "action": "누르면 TO-DO 상세로 간다.",
+          "policies": []
+        },
+        {
+          "zone": "TO-DO 목록",
+          "element": "배정 대상 · 수행 방식",
+          "action": "개인이나 근무지 전체, 각자 수행이나 한 명 수행을 보인다.",
+          "policies": [
+            "PAY-16"
+          ]
+        },
+        {
+          "zone": "TO-DO 목록",
+          "element": "상태 · 완료 / 배정 직원",
+          "action": "대기 · 진행 중 · 완료와 완료한 직원 수를 보인다.",
+          "policies": [
+            "PAY-17"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-023",
+      "name": "TO-DO 등록",
+      "menuCode": "MN000026",
+      "route": "/todos/new",
+      "demo": {
+        "file": "staff/todos-new.html"
+      },
+      "images": [
+        "SCR-ADM-023.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "입력",
+          "element": "제목 · 내용",
+          "action": "제목은 100자, 내용은 2,000자까지 받는다. 제목은 필수다.",
+          "policies": [
+            "PAY-16"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "수행 예정 날짜 · 시간",
+          "action": "날짜는 필수이고 시간은 선택이다.",
+          "policies": [
+            "PAY-16"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "긴급",
+          "action": "켜면 직원 근무 앱 홈·근무 탭 맨 위에 보이고 관리자 웹 미조치에 센다. 따로 푸시를 보내지 않는다.",
+          "policies": [
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "배정 설정",
+          "element": "근무지 · 배정 대상",
+          "action": "개인 또는 근무지 전체를 고른다. 근무지 전체는 각자 수행과 한 명 수행 중에서 고른다.",
+          "policies": [
+            "PAY-16"
+          ]
+        },
+        {
+          "zone": "배정 설정",
+          "element": "직원 선택",
+          "action": "체결 완료 근로계약이 있고 가입을 마친 재직 직원을 고른다. 퇴직 예정도 넣는다.",
+          "policies": [
+            "PAY-16"
+          ]
+        },
+        {
+          "zone": "TO-DO 안내",
+          "element": "등록 뒤 변경 불가 안내",
+          "action": "근무지 · 배정 대상 · 수행 방식은 등록한 뒤에 바꾸지 못한다.",
+          "policies": [
+            "PAY-16"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "취소 · 저장",
+          "action": "저장하면 TO-DO를 등록한다. 배정 알림은 보내지 않는다.",
+          "policies": [
+            "NTF-09"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-024",
+      "name": "TO-DO 상세",
+      "menuCode": "MN000026",
+      "route": "/todos/[id]",
+      "demo": {
+        "file": "staff/todos-detail.html"
+      },
+      "images": [
+        "SCR-ADM-024.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "수행 예정 일시 · 상태 · 완료 인원 · 긴급",
+          "action": "TO-DO 요약을 보인다.",
+          "policies": [
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "삭제 · 수정 · 목록",
+          "action": "삭제할 때 진행 중·완료가 섞여 있으면 대기인 건만 지우고 건수를 알린다. 수정은 TO-DO 수정으로 간다.",
+          "policies": [
+            "PAY-16"
+          ]
+        },
+        {
+          "zone": "TO-DO",
+          "element": "내용 · 근무지 · 배정 대상 · 등록",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "직원별 상태",
+          "element": "직원 · 상태 · 상태 변경 · 완료 일시",
+          "action": "관리자가 직원 대신 상태를 바꾼다. 이력에는 바꾼 관리자를 남긴다.",
+          "policies": [
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "직원별 상태",
+          "element": "본사에 정보제공 미동의",
+          "action": "본사 계정에는 동의하지 않은 가맹 점포 직원의 이름을 가린다.",
+          "policies": [
+            "ATT-30"
+          ]
+        },
+        {
+          "zone": "상태 변경이력",
+          "element": "변경일시 · 변경자 · 상태",
+          "action": "고른 직원의 상태 변경 내역을 보인다.",
+          "policies": [
+            "PAY-17"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-025",
+      "name": "TO-DO 수정",
+      "menuCode": "MN000026",
+      "route": "/todos/[id]/edit",
+      "demo": {
+        "file": "staff/todos-edit.html"
+      },
+      "images": [
+        "SCR-ADM-025.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "입력",
+          "element": "제목 · 내용",
+          "action": "제목은 100자, 내용은 2,000자까지 받는다.",
+          "policies": [
+            "PAY-16"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "수행 예정 날짜 · 시간",
+          "action": "고치면 수행 임박 알림을 새 일시 기준으로 한 번 더 보낸다.",
+          "policies": [
+            "PAY-16"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "긴급",
+          "action": "켜면 직원 근무 앱 홈·근무 탭 맨 위에 보이고 관리자 웹 미조치에 센다.",
+          "policies": [
+            "PAY-17"
+          ]
+        },
+        {
+          "zone": "배정내역",
+          "element": "근무지 · 배정 대상",
+          "action": "읽기 전용이다. 등록한 뒤에 바꾸지 못한다.",
+          "policies": [
+            "PAY-16"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "취소 · 저장",
+          "action": "저장하면 고친 내용을 반영한다.",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}

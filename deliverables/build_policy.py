@@ -14,9 +14,9 @@ from lxml import html
 from common import HERE, INTERNAL, TEAM, TEAM_NAMES, heading, open_docx, para, safe, save_docx, strip_records, table
 
 SOURCE = os.path.join(HERE, "sources", "운영정책.html")
-# 파일 안에 버전 표기가 없다. v271 · 복사일은 2026-11-09 지시(header 전달)에서 온 값이다.
-SOURCE_VERSION, COPIED = "v271", "2026-11-09"
-RULES = 220  # 원본 div.rule 수. 스냅숏을 바꾸면 함께 고친다.
+# 파일 안에 버전 표기가 없다. v273 · 복사일은 2026-11-09 지시(header 전달)에서 온 값이다.
+SOURCE_VERSION, COPIED = "v273", "2026-11-09"
+RULES = 221  # 원본 div.rule 수. 스냅숏을 바꾸면 함께 고친다.
 DROP_CHAPTER = "근거"  # 팀원 실명 · 내부 논의가 담긴 장. 납품본에서 뺀다(규칙 없음).
 # 문장 속 내부 표지 · 결정 표시를 바꾼다(원문 → 바꾼 글). 문장 자체가 결정 표시뿐이면 문장째 뺀다. 원문에서 못 찾으면 멈춘다.
 SENTENCE_FIXES = {
@@ -40,6 +40,7 @@ SENTENCE_FIXES = {
     "1팀 영역이라 ACC-02·ACC-03·ACC-21에는 \x011팀이 정한 값\x02과 3팀이 그 위에서 쓰는 것만 적었습니다. "
     "1팀은 2026년 9월 23일에 이 세 자리를 모두 확정했습니다.": "ACC-20까지와 ACC-22·ACC-23은 직원 계정에 관한 것입니다.\x02",
     " 안내에는 \x01가맹 점포 직원 자료는": " 회원 탈퇴 화면의 안내에는 \x01가맹 점포 직원 자료는",  # 앞 문장을 뺀 RET-09
+    "(2026-11-09 김홍기 공통 정책 공지, 재영 반영)": "",  # LST-08 끝의 결정 기록
     # 문장 안의 쟁점 번호: 번호만 뺀다
     "ATT-8에서": "법무 확인에서",
     "받게 되어(ATT-11) 오차로": "받게 되어 오차로",

@@ -1,0 +1,281 @@
+{
+  "client": "admin",
+  "area": "공통(메뉴 밖 화면)",
+  "screens": [
+    {
+      "id": "SCR-ADM-001",
+      "name": "로그인 후 홈",
+      "menu": "메뉴 밖 > 로그인 후 홈",
+      "route": "/home",
+      "demo": {
+        "file": "home/signed-in.html"
+      },
+      "images": [
+        "SCR-ADM-001.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단 헤더",
+          "element": "범위 선택기",
+          "action": "전체·직영·가맹·개별 점포 중 하나를 고른다. 바꾸면 로그인 후 홈으로 돌아간다.",
+          "policies": [
+            "SCP-01",
+            "SCP-02",
+            "SCP-03",
+            "SCP-06"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "기준 시각 · 새로고침",
+          "action": "집계 기준 시각을 보인다. 현황은 진입할 때와 범위를 바꿀 때 조회하고, 그 밖에는 새로고침으로 갱신한다.",
+          "policies": [
+            "HOM-08"
+          ]
+        },
+        {
+          "zone": "경고 밴드",
+          "element": "갱신 예정 안내 · 계약 보기 · 새 계약 작성",
+          "action": "계약 종료일이 7일 이내로 남은 갱신 예정 계약이 있을 때만 보인다.",
+          "policies": [
+            "HOM-04"
+          ]
+        },
+        {
+          "zone": "수치 카드",
+          "element": "운영 점포 · 재직 직원 · 오늘 출근 · 내 문의",
+          "action": "현재 업무 범위 기준으로 센다. 내 문의는 로그인한 관리자가 쓴 문의만 센다.",
+          "policies": [
+            "HOM-01",
+            "HOM-02",
+            "HOM-07"
+          ]
+        },
+        {
+          "zone": "점포별 현황 표",
+          "element": "점포 · 유형 · 재직 직원 · 미체결 계약 · 오늘 출근 · 미조치",
+          "action": "미조치가 많은 순으로 일곱 곳까지 보인다. 미체결 계약은 발송 대기 · 서명 대기 · 수정 요청 계약 수다.",
+          "policies": [
+            "HOM-02",
+            "HOM-03",
+            "HOM-06"
+          ]
+        },
+        {
+          "zone": "처리 대기",
+          "element": "구분 · 항목 · 내용",
+          "action": "건수가 0인 유형을 숨기고 경고 밴드 대상, 계약, 직원, 문의, TO-DO 순으로 세운다.",
+          "policies": [
+            "HOM-07"
+          ]
+        },
+        {
+          "zone": "화면 전체",
+          "element": "점포 하나 화면 전환",
+          "action": "업무 범위가 점포 하나이면 점포 하나 화면을, 여러 점포이면 이 화면을 보인다.",
+          "policies": [
+            "HOM-05"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-002",
+      "name": "비밀번호 강제 변경 팝업",
+      "menu": "메뉴 밖 > 로그인 직후",
+      "route": null,
+      "routeNote": "로그인 뒤 화면 위에 뜨는 팝업, 별도 주소 없음",
+      "demo": {
+        "file": "auth/force-password.html"
+      },
+      "images": [
+        "SCR-ADM-002.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "안내",
+          "element": "남은 시간",
+          "action": "남은 시간을 보이고 시간 안에 새 비밀번호로 변경하라고 안내한다.",
+          "policies": []
+        },
+        {
+          "zone": "입력",
+          "element": "새 비밀번호 · 새 비밀번호 확인",
+          "action": "새 비밀번호를 두 번 입력한다. 둘 다 필수다.",
+          "policies": []
+        },
+        {
+          "zone": "약관동의",
+          "element": "모두 동의 · 이용약관 동의 · 개인정보 수집·이용 동의",
+          "action": "필수 약관 둘을 체크한다. 전문 보기로 약관 본문을 연다.",
+          "policies": []
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "로그아웃 · 변경",
+          "action": "변경은 입력한 새 비밀번호로 바꾼다. 로그아웃은 변경하지 않고 나간다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-003",
+      "name": "플랫폼 권한 요청 안내",
+      "menu": "메뉴 밖 > 접근할 플랫폼 메뉴가 없을 때",
+      "route": "/platform",
+      "demo": {
+        "file": "auth/platform-no-menu.html"
+      },
+      "images": [
+        "SCR-ADM-003.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "안내",
+          "element": "접근할 수 있는 메뉴가 없습니다",
+          "action": "플랫폼관리 메뉴 권한이 없는 계정에 보인다. 관리자에게 권한을 요청하라고 안내한다.",
+          "policies": []
+        },
+        {
+          "zone": "계정 정보",
+          "element": "아이디 · 사용자 권한",
+          "action": "권한을 요청할 때 전할 계정 정보를 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "내정보 관리 · 로그아웃",
+          "action": "내정보 관리를 열거나 로그아웃한다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-004",
+      "name": "내정보 관리",
+      "menu": "메뉴 밖 > 헤더 사용자 메뉴",
+      "route": null,
+      "routeNote": "헤더 사용자 메뉴에서 여는 패널, 별도 주소 없음",
+      "demo": {
+        "file": "mypage/profile.html"
+      },
+      "images": [
+        "SCR-ADM-004.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "탭",
+          "element": "기본정보 · 사업자정보",
+          "action": "기본정보와 사업자정보를 탭으로 나눠 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "계정 정보",
+          "element": "아이디 · 사용자 권한 · 최근 로그인 · 가입일",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "기본정보",
+          "element": "이름 · 휴대전화번호 · 이메일",
+          "action": "세 칸 모두 필수로 받는다.",
+          "policies": []
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "저장",
+          "action": "입력한 기본정보를 저장한다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-005",
+      "name": "비밀번호 변경",
+      "menu": "메뉴 밖 > 헤더 사용자 메뉴",
+      "route": null,
+      "routeNote": "헤더 사용자 메뉴에서 여는 패널, 별도 주소 없음",
+      "demo": {
+        "file": "mypage/password.html"
+      },
+      "images": [
+        "SCR-ADM-005.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "입력",
+          "element": "현재 비밀번호",
+          "action": "지금 쓰고 있는 비밀번호를 입력한다. 필수다.",
+          "policies": []
+        },
+        {
+          "zone": "입력",
+          "element": "새 비밀번호 · 새 비밀번호 확인",
+          "action": "새 비밀번호를 두 번 입력한다. 둘 다 필수다.",
+          "policies": []
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "비밀번호 변경",
+          "action": "입력한 값으로 비밀번호를 바꾼다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-006",
+      "name": "회원 탈퇴",
+      "menu": "메뉴 밖 > 헤더 사용자 메뉴",
+      "route": null,
+      "routeNote": "헤더 사용자 메뉴에서 여는 팝업, 별도 주소 없음",
+      "demo": {
+        "file": "mypage/withdraw.html"
+      },
+      "images": [
+        "SCR-ADM-006.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "탈퇴 전 안내",
+          "element": "서비스 이용 종료 · 관리자 계정 미사용 · 점포 폐점 · 개인정보 삭제 · 복구 불가",
+          "action": "탈퇴하면 생기는 일을 항목별로 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "탈퇴 전 안내",
+          "element": "직원 자료 일괄 저장",
+          "action": "탈퇴 전에 직원 자료를 내려받도록 안내하고, 누르면 직원 자료 일괄 저장으로 간다. 본사 제공에 동의하지 않은 가맹 점포 직원의 자료는 가맹마스터만 내려받을 수 있다고 알린다.",
+          "policies": [
+            "RET-09"
+          ]
+        },
+        {
+          "zone": "탈퇴 조건",
+          "element": "부가서비스 구독 해지 · 미정산 금액 없음 · 진행 중인 근로계약 없음",
+          "action": "조건별 충족 여부를 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "탈퇴 사유",
+          "element": "탈퇴 사유 선택",
+          "action": "목록에서 사유를 고른다. 필수다.",
+          "policies": []
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "회원 탈퇴",
+          "action": "비밀번호 확인 팝업을 연다.",
+          "policies": []
+        },
+        {
+          "zone": "비밀번호 확인 팝업",
+          "element": "현재 비밀번호 · 닫기 · 확인",
+          "action": "현재 비밀번호를 넣고 확인하면 탈퇴를 마치고 비로그인 홈으로 간다.",
+          "policies": [
+            "ACC-21"
+          ]
+        }
+      ]
+    }
+  ]
+}

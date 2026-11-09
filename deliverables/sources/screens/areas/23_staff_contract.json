@@ -1,0 +1,461 @@
+{
+  "client": "staff",
+  "area": "계약·신고 정보",
+  "screens": [
+    {
+      "id": "SCR-APP-023",
+      "name": "근로계약 목록",
+      "menu": "홈·알림에서 진입",
+      "route": "/contracts",
+      "demo": {
+        "file": "contract/index.html",
+        "state": "list"
+      },
+      "images": [
+        "SCR-APP-023.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "목록",
+          "element": "계약 줄",
+          "action": "근무지와 고용 형태를 보인다. 누르면 계약서 화면으로 간다.",
+          "policies": [
+            "CTR-15"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "상태 칩",
+          "action": "서명 대기·체결 완료·거부·만료·종료를 보인다. 거부는 화면에 「거절」로 적는다.",
+          "policies": [
+            "CTR-02"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "「서명 기한」 줄",
+          "action": "날인 기한을 보이고 남은 기한이 7일 이내일 때만 강조한다.",
+          "policies": [
+            "CTR-05",
+            "CTR-08"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "「종이 계약」 줄",
+          "action": "관리자가 올린 종이 계약은 발송·날인 없이 체결 완료로 보인다.",
+          "policies": [
+            "CTR-23"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "기한 안내",
+          "action": "날인 기한은 발송일부터 30일이다.",
+          "policies": [
+            "CTR-05"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-024",
+      "name": "근로계약서",
+      "menu": "홈·알림에서 진입",
+      "route": "/contracts/[contractId]",
+      "demo": {
+        "file": "contract/index.html",
+        "state": "detail"
+      },
+      "images": [
+        "SCR-APP-024.jpg",
+        "SCR-APP-024-2.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "머리",
+          "element": "근무지·고용 형태·「서명 기한」·상태 칩",
+          "action": "날인 기한을 보이고 7일 이내면 강조한다.",
+          "policies": [
+            "CTR-08"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "계약서 조항",
+          "action": "조항 열 가지를 앱 화면에 직접 그린다.",
+          "policies": [
+            "CTR-15",
+            "CTR-21"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「계약서에 들어가는 내 정보」",
+          "action": "계약서에 들어가는 직원 정보를 보인다. 주소는 날인할 때 계정 주소로 고정한다.",
+          "policies": [
+            "JOI-10"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「서명하기」",
+          "action": "서명란으로 간다. 본인 대조의 다섯 값이 모두 같아야 날인할 수 있다.",
+          "policies": [
+            "CTR-06",
+            "JOI-10"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「수정 요청」",
+          "action": "정보가 틀렸을 때 사유를 적어 수정을 요청하는 시트를 연다.",
+          "policies": [
+            "CTR-27"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「거절하기」",
+          "action": "사유 없이 확인창으로만 확인받고 거부로 확정한다.",
+          "policies": [
+            "CTR-07"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-025",
+      "name": "서명란",
+      "menu": "홈·알림에서 진입",
+      "route": "/contracts/[contractId]/sign",
+      "demo": {
+        "file": "contract/index.html",
+        "state": "sign"
+      },
+      "images": [
+        "SCR-APP-025.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "서명란",
+          "action": "손가락으로 필기 서명을 그린다. 그린 뒤에는 「다시 그리기」로 지운다.",
+          "policies": [
+            "CTR-06"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「계약서」·「서명하는 사람」",
+          "action": "날인할 계약과 직원 이름을 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「서명 완료」",
+          "action": "필기 서명을 그려야 켜지고, 누르면 날인을 확정한다. 서명 이미지는 따로 보관하고 처리 완료본 PDF에 합성한다.",
+          "policies": [
+            "CTR-06",
+            "CTR-17"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「계약서로 돌아가기」",
+          "action": "계약서 화면으로 돌아간다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-026",
+      "name": "서명 완료",
+      "menu": "홈·알림에서 진입",
+      "route": "/contracts/[contractId]/done",
+      "demo": {
+        "file": "contract/index.html",
+        "state": "signed"
+      },
+      "images": [
+        "SCR-APP-026.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "「서명 시각」",
+          "action": "날인을 마친 시각을 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "본문",
+          "element": "근무지·고용 형태·계약 기간",
+          "action": "체결한 계약을 요약해 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "안내",
+          "element": "신고 정보 안내",
+          "action": "날인을 마친 직후 직원 본인이 신고 정보를 넣는다고 알린다.",
+          "policies": [
+            "TAX-02"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "계약 변경 안내",
+          "action": "체결 완료 계약은 고치지 않으며 변경은 근무지 관리자에게 문의한다.",
+          "policies": [
+            "CTR-11"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「신고 정보 입력하기」",
+          "action": "신고 정보 입력으로 간다. 이 단계는 건너뛸 수 없다.",
+          "policies": [
+            "TAX-05"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-027",
+      "name": "수정 요청",
+      "menu": "홈·알림에서 진입",
+      "route": "/contracts/[contractId]",
+      "routeNote": "같은 화면 위의 바텀시트",
+      "demo": {
+        "file": "contract/index.html",
+        "state": "correction"
+      },
+      "images": [
+        "SCR-APP-027.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "시트",
+          "element": "수정 요청 시트",
+          "action": "서명 대기 계약의 정보가 틀렸을 때 연다. 본인 대조 결과와 상관없이 보낼 수 있다.",
+          "policies": [
+            "CTR-27"
+          ]
+        },
+        {
+          "zone": "시트",
+          "element": "「수정 요청 사유」 칸",
+          "action": "필수 입력이다. 앞뒤 공백을 지운 뒤 1~100자를 받는다.",
+          "policies": [
+            "CTR-27"
+          ]
+        },
+        {
+          "zone": "시트",
+          "element": "「수정 요청하기」",
+          "action": "계약을 수정 요청 상태로 바꾼다. 이 동안 날인 기한은 흐르지 않는다.",
+          "policies": [
+            "CTR-05",
+            "CTR-27"
+          ]
+        },
+        {
+          "zone": "시트",
+          "element": "안내 문구",
+          "action": "관리자가 고쳐 저장하면 곧바로 서명 대기가 되고 날인 요청 알림을 다시 보낸다.",
+          "policies": [
+            "CTR-19",
+            "CTR-27"
+          ]
+        },
+        {
+          "zone": "시트",
+          "element": "「취소」",
+          "action": "시트를 닫는다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-028",
+      "name": "신고 정보 안내",
+      "menu": "내 정보 > 소속 근무지",
+      "route": "/me/memberships/[staffMemberId]/tax-profile/new",
+      "demo": {
+        "file": "tax/index.html",
+        "state": "intro"
+      },
+      "images": [
+        "SCR-APP-028.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "본문",
+          "element": "안내 제목",
+          "action": "계약 날인을 마친 뒤 직원 본인이 신고 정보를 넣는다고 알린다.",
+          "policies": [
+            "TAX-02"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「이용 목적」",
+          "action": "4대보험 자격취득 신고, 근로소득 원천징수, 급여 지급을 적는다. 동의 체크는 두지 않는다.",
+          "policies": [
+            "TAX-04"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "보관 안내",
+          "action": "주민등록번호는 암호화해 저장하고 신고 서류를 만들 때만 원본을 쓴다.",
+          "policies": [
+            "TAX-06"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「주민등록번호를 따로 받는 이유」",
+          "action": "안내 시트를 연다. 주민등록번호는 계약서에 넣지 않는다.",
+          "policies": [
+            "TAX-01"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「입력하기」",
+          "action": "입력 화면으로 간다. 건너뛰는 길은 없다.",
+          "policies": [
+            "TAX-05"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-029",
+      "name": "신고 정보 입력",
+      "menu": "내 정보 > 소속 근무지",
+      "route": "/me/memberships/[staffMemberId]/tax-profile/new",
+      "demo": {
+        "file": "tax/index.html",
+        "state": "form"
+      },
+      "images": [
+        "SCR-APP-029.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "입력",
+          "element": "「주민등록번호」",
+          "action": "앞 6자리와 뒤 7자리를 넣는다. 앞자리가 계정 생년월일과 다르면 저장하지 않고 근무지 관리자에게 정정을 요청하라고 안내한다.",
+          "policies": [
+            "TAX-09"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "「급여 계좌」",
+          "action": "필수로 받는다.",
+          "policies": [
+            "TAX-03"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "수집 근거",
+          "action": "칸마다 근거를 적는다. 주민등록번호는 법령, 급여 계좌는 근로계약 이행이다.",
+          "policies": [
+            "TAX-04",
+            "TAX-08"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "이름·생년월일",
+          "action": "가입할 때 넣은 값을 보인다.",
+          "policies": [
+            "TAX-09"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "수집 주체 안내",
+          "action": "근무지 사업주가 수집하고 플랫폼은 위탁을 받아 암호화해 보관한다고 적는다.",
+          "policies": [
+            "TAX-08"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「등록하기」",
+          "action": "신고 정보를 저장한다. 수집 목적과 수집 일시를 함께 기록한다.",
+          "policies": [
+            "TAX-06"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-APP-030",
+      "name": "등록된 신고 정보",
+      "menu": "내 정보 > 소속 근무지",
+      "route": "/me/memberships/[staffMemberId]/tax-profile",
+      "demo": {
+        "file": "tax/index.html",
+        "state": "view"
+      },
+      "images": [
+        "SCR-APP-030.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단",
+          "element": "근무지 이름",
+          "action": "어느 근무지에 낸 값인지 보인다.",
+          "policies": [
+            "TAX-08"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「주민등록번호」",
+          "action": "뒷자리를 가린 값만 보인다.",
+          "policies": [
+            "TAX-06"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「급여 계좌」",
+          "action": "가린 값을 보인다. 계좌를 바꾸면 다음 급여부터 적용한다.",
+          "policies": [
+            "TAX-03"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「등록 정보」",
+          "action": "등록 일시와 이용 목적을 보인다.",
+          "policies": [
+            "TAX-06"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "「수집 근거」",
+          "action": "주민등록번호와 급여 계좌의 근거를 나눠 적는다.",
+          "policies": [
+            "TAX-08"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "입력 이동 버튼",
+          "action": "신고 정보를 다시 넣는 화면으로 간다.",
+          "policies": [
+            "TAX-07"
+          ]
+        }
+      ]
+    }
+  ]
+}
