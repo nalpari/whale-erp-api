@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T00:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-09T06:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: store-closings-service
     resource: ../../src/store-closings/store-closings.service.ts
     title: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
-    last_modified: 2026-11-05T02:00:00Z
+    last_modified: 2026-11-09T06:00:00Z
   - id: store-closing-response
     resource: ../../src/store-closings/dto/store-closing.response.dto.ts
     title: 폐점 확인 · 결과 응답(점포별 점포명 · 점포코드 + 합계)
@@ -239,8 +239,8 @@ are.[^store-closings-service][^store-closing-response]
   naming the ids. A store missing from the name lookup is a 500, not an empty name — it cannot happen after
   that 404, so it means a broken contract.
 - **`close(tx, storeIds, adminAccountId)`** — inside the caller's transaction: lock every store row in
-  ascending id `FOR NO KEY UPDATE` (404 if one is gone, 409 「이미 폐점한 점포입니다.」 if one is closed — both
-  name the store ids, for the multi-store callers),
+  ascending id `FOR NO KEY UPDATE` (404 if one is gone, naming the store ids because a missing row has no name; 409 「이미 폐점한 점포입니다.」
+  if one is closed, naming the store names because the screen shows the message as it is),
   then `retireStores` (it locks staff then accounts, re-checks open check-ins and refuses with 409
   `OPEN_CHECK_IN` + `storeId`, sets retirement dates, ends pending contracts, expires invitations), then
   `CLOSED` · `closed_date` (Korean today) and one 점포상태 history row per store. A 3팀 exception is not

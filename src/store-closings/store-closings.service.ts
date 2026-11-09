@@ -22,8 +22,9 @@ import type {
 type Tx = Prisma.TransactionClient;
 
 const CLOSED = 'CLOSED';
-/** 문구 끝에 점포 id 를 괄호로 붙인다 — 3팀 확인의 404 와 같은 모양. 여러 점포를 닫는 탈퇴에서 어느 점포인지 알게 한다 */
+/** 404 는 문구 끝에 점포 id 를 괄호로 붙인다 — 행이 없을 수 있어 이름을 못 쓴다. 3팀 확인의 404 와 같은 모양 */
 const NOT_FOUND = '점포를 찾을 수 없습니다.';
+/** 409 는 문구 끝에 점포명을 괄호로 붙인다 — 화면에 그대로 나오는데 내부 id 는 고객이 알 수 없다(2026-11-09) */
 const ALREADY_CLOSED = '이미 폐점한 점포입니다.';
 /**
  * 폐점의 열린 출근 409 문구 — 3팀 문구는 가장 이른 열린 출근의 날짜 · 시각을 싣는데, 점포 전체에서 고르므로 본사에게 가려지는
@@ -133,7 +134,7 @@ export class StoreClosingsService {
     const closed = live.filter((s) => s.storeStatusCode === CLOSED);
     if (closed.length)
       throw new ConflictException(
-        `${ALREADY_CLOSED} (${closed.map((s) => s.storeId).join(', ')})`,
+        `${ALREADY_CLOSED} (${closed.map((s) => s.name).join(', ')})`,
       );
 
     const closedDate = kstToday(now);

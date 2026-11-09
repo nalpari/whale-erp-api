@@ -346,7 +346,7 @@ describe('StoreClosingsService', () => {
       expect(retire.retireStores).not.toHaveBeenCalled();
     });
 
-    it('잠근 뒤 보니 이미 폐점한 점포가 섞이면 409', async () => {
+    it('잠근 뒤 보니 이미 폐점한 점포가 섞이면 409 — 문구에 그 점포명', async () => {
       locked([
         { storeId: 11, name: '강남점', storeCode: 'ST000011' },
         {
@@ -355,10 +355,18 @@ describe('StoreClosingsService', () => {
           storeCode: 'ST000012',
           storeStatusCode: 'CLOSED',
         },
+        {
+          storeId: 13,
+          name: '선릉점',
+          storeCode: 'ST000013',
+          storeStatusCode: 'CLOSED',
+        },
       ]);
       await expect(
-        service.close(client as any, [11, 12], 7, NOW),
-      ).rejects.toThrow(new ConflictException('이미 폐점한 점포입니다. (12)'));
+        service.close(client as any, [11, 12, 13], 7, NOW),
+      ).rejects.toThrow(
+        new ConflictException('이미 폐점한 점포입니다. (역삼점, 선릉점)'),
+      );
       expect(retire.retireStores).not.toHaveBeenCalled();
     });
 
