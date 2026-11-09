@@ -15,7 +15,7 @@
           "paging",
           "detail"
         ],
-        "note": "홈은 오늘과 이번 주만 요약한다. 자세한 것은 근무지별 목록으로 내려가 기간이나 더 보기로 넘긴다."
+        "note": "홈은 오늘과 이번 주만 요약한다. 근무스케줄·출퇴근은 고른 근무지를 따르고 급여만 모든 근무지의 명세서를 보인다. 근무·출퇴근 목록은 기간이나 더 보기로 넘기고, 급여는 연도로 끊어 더 보기가 없다."
       },
       {
         "id": "guard",
@@ -57,7 +57,7 @@
       }
     },
     "viewBox": [
-      1094,
+      1102,
       652
     ]
   },
@@ -188,8 +188,8 @@
       "col": 2,
       "type": "database",
       "label": "근무 · 출퇴근 · 급여",
-      "sublabel": "근무지별로 나뉨",
-      "width": 175
+      "sublabel": "고른 근무지 · 급여만 모든 근무지",
+      "width": 192
     },
     {
       "id": "deny",
@@ -215,14 +215,18 @@
       "id": "e-home-scope",
       "from": "home",
       "to": "scope",
-      "variant": "emphasis"
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
     },
     {
       "id": "e-home-todo",
       "from": "home",
       "to": "todo",
       "label": "홈에서 바로",
-      "role": "branch"
+      "role": "branch",
+      "fromSide": "right",
+      "toSide": "bottom"
     },
     {
       "id": "e-scope-lists",
@@ -251,7 +255,14 @@
       "to": "empty",
       "label": "볼 것이 없음",
       "variant": "security",
-      "role": "error"
+      "role": "error",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "route": "straight",
+      "labelAt": [
+        522,
+        410
+      ]
     },
     {
       "id": "e-paging-detail",

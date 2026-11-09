@@ -12,7 +12,6 @@
           "draft",
           "kind",
           "signup",
-          "match",
           "send",
           "sign",
           "done"
@@ -20,27 +19,39 @@
         "note": "관리자가 초안을 저장하면 초대가 나가고, 직원이 가입을 마치는 순간 계약서가 자동으로 발송된다."
       },
       {
-        "id": "hold",
-        "label": "연결 보류",
+        "id": "correct",
+        "label": "본인 대조와 수정 요청",
         "focus": [
-          "signup",
-          "match",
-          "hold",
-          "kind",
-          "send"
+          "send",
+          "sign",
+          "correct"
         ],
-        "note": "본인인증 번호가 초대와 어긋나면 보류한다. 관리자가 직접 확인해 승인하거나 번호를 고쳐 재초대한다."
+        "note": "날인 전에 이름·휴대전화번호·생년월일·성별·외국인 여부를 계약서와 맞춘다. 다르면 날인을 막고, 직원이 사유를 적어 수정 요청을 보낸다. 관리자가 고쳐 저장하면 새 30일로 다시 간다."
+      },
+      {
+        "id": "account",
+        "label": "계정이 있는 직원",
+        "focus": [
+          "kind",
+          "affil",
+          "wait",
+          "send",
+          "sign",
+          "reject"
+        ],
+        "note": "계정은 있지만 그 점포 레코드에 이어지지 않았으면 소속 추가 확인 요청을 보낸다. 메일·팝업·목록은 이름이 같을 때만이고 답도 그때만 받는다. 이름이 다르면 근로자 정보를 고쳐 다시 보낸다. 답이 없으면 요청만 30일 뒤 만료된다."
       },
       {
         "id": "reject",
         "label": "거부·만료와 재발송",
         "focus": [
+          "kind",
           "send",
           "sign",
           "reject",
           "done"
         ],
-        "note": "거부되거나 30일이 지나 만료된 계약은 재발송한다. 새 발송 이력으로 남는다."
+        "note": "거부되거나 30일이 지나 만료된 계약은 재발송한다. 재발송 때 유형을 다시 판별하고 새 발송 이력으로 남는다."
       }
     ],
     "legend": {
@@ -64,7 +75,7 @@
       }
     },
     "viewBox": [
-      1040,
+      1240,
       668
     ]
   },
@@ -83,7 +94,7 @@
     },
     {
       "id": "exc",
-      "label": "보류·거부",
+      "label": "거부 · 만료",
       "variant": "exception"
     }
   ],
@@ -110,16 +121,8 @@
   ],
   "groups": [
     {
-      "id": "g-hold",
-      "label": "STAFF-7 · 최소 정보 + 승인",
-      "lane": "exc",
-      "fromCol": 3,
-      "toCol": 3,
-      "variant": "security"
-    },
-    {
       "id": "g-reject",
-      "label": "STAFF-2·3 · 7종 · 30일",
+      "label": "STAFF-2·3 · 8종 · 30일",
       "lane": "exc",
       "fromCol": 5,
       "toCol": 5,
@@ -130,7 +133,6 @@
     "draft",
     "kind",
     "signup",
-    "match",
     "send",
     "sign",
     "done"
@@ -160,28 +162,9 @@
       "lane": "app",
       "col": 2,
       "type": "frontend",
-      "label": "가입 · 본인인증",
-      "sublabel": "토큰 링크로 들어온다",
+      "label": "가입",
+      "sublabel": "초대 링크로 직접 입력",
       "width": 140
-    },
-    {
-      "id": "match",
-      "lane": "sys",
-      "col": 3,
-      "type": "security",
-      "label": "연결 판정",
-      "sublabel": "토큰 + 본인인증 휴대전화",
-      "width": 150
-    },
-    {
-      "id": "hold",
-      "lane": "exc",
-      "col": 3,
-      "type": "security",
-      "label": "연결 보류",
-      "sublabel": "관리자 승인 또는 재초대",
-      "tag": "실명·다른 소속은 안 보임",
-      "width": 150
     },
     {
       "id": "send",
@@ -189,7 +172,7 @@
       "col": 4,
       "type": "messagebus",
       "label": "계약서 발송",
-      "sublabel": "관리자 개입 없이 자동",
+      "sublabel": "자동으로 발송",
       "width": 150
     },
     {
@@ -197,9 +180,9 @@
       "lane": "app",
       "col": 5,
       "type": "frontend",
-      "label": "직원 날인 · 거부",
-      "sublabel": "거부 사유는 선택",
-      "width": 140
+      "label": "본인 대조 · 날인 · 거부",
+      "sublabel": "다섯 값이 같아야 날인",
+      "width": 160
     },
     {
       "id": "done",
@@ -218,6 +201,33 @@
       "label": "거부 · 만료",
       "sublabel": "날인 기한 30일 경과",
       "width": 140
+    },
+    {
+      "id": "affil",
+      "lane": "sys",
+      "col": 2,
+      "type": "messagebus",
+      "label": "소속 추가 · 복귀 확인",
+      "sublabel": "알림톡 · 이름 같을 때 메일",
+      "width": 170
+    },
+    {
+      "id": "correct",
+      "lane": "sys",
+      "col": 5,
+      "type": "security",
+      "label": "수정 요청",
+      "sublabel": "사유 필수 · 날인 기한 멈춤",
+      "width": 160
+    },
+    {
+      "id": "wait",
+      "lane": "exc",
+      "col": 2,
+      "type": "security",
+      "label": "소속 추가 확인 대기",
+      "sublabel": "답 없으면 요청만 만료 · 재발송",
+      "width": 190
     }
   ],
   "edges": [
@@ -225,7 +235,9 @@
       "id": "e-draft-kind",
       "from": "draft",
       "to": "kind",
-      "variant": "emphasis"
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "left"
     },
     {
       "id": "e-kind-signup",
@@ -235,16 +247,41 @@
       "variant": "emphasis"
     },
     {
-      "id": "e-signup-match",
+      "id": "e-signup-send",
       "from": "signup",
-      "to": "match",
-      "variant": "emphasis"
+      "to": "send",
+      "label": "가입하면 레코드에 잇는다",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [
+        [
+          642,
+          246
+        ],
+        [
+          642,
+          316
+        ],
+        [
+          705,
+          316
+        ],
+        [
+          705,
+          372
+        ]
+      ],
+      "labelAt": [
+        674,
+        300
+      ]
     },
     {
       "id": "e-kind-send",
       "from": "kind",
       "to": "send",
-      "label": "재직 중이면 즉시 발송",
+      "label": "그 점포 레코드에 계정이 이어져 있으면 즉시 발송",
       "variant": "dashed",
       "role": "branch",
       "fromSide": "top",
@@ -252,41 +289,12 @@
       "channelY": 166
     },
     {
-      "id": "e-match-send",
-      "from": "match",
-      "to": "send",
-      "label": "일치 · 자동 연결",
-      "variant": "emphasis"
-    },
-    {
-      "id": "e-match-hold",
-      "from": "match",
-      "to": "hold",
-      "label": "불일치",
-      "variant": "security",
-      "role": "error"
-    },
-    {
-      "id": "e-hold-send",
-      "from": "hold",
-      "to": "send",
-      "label": "관리자 승인",
-      "variant": "security",
-      "role": "return"
-    },
-    {
-      "id": "e-hold-kind",
-      "from": "hold",
-      "to": "kind",
-      "label": "번호 고쳐 재초대",
-      "variant": "dashed",
-      "role": "return"
-    },
-    {
       "id": "e-send-sign",
       "from": "send",
       "to": "sign",
-      "variant": "emphasis"
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
     },
     {
       "id": "e-sign-done",
@@ -301,15 +309,142 @@
       "to": "reject",
       "label": "거부 · 30일 만료",
       "variant": "security",
-      "role": "error"
+      "role": "error",
+      "fromSide": "right",
+      "toSide": "right"
     },
     {
-      "id": "e-reject-send",
+      "id": "e-reject-kind",
       "from": "reject",
-      "to": "send",
+      "to": "kind",
       "label": "재발송 · 새 이력",
       "variant": "dashed",
-      "role": "return"
+      "role": "return",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "channelY": 566
+    },
+    {
+      "id": "e-kind-affil",
+      "from": "kind",
+      "to": "affil",
+      "label": "계정은 있고 레코드 미연결",
+      "variant": "default",
+      "role": "branch"
+    },
+    {
+      "id": "e-affil-send",
+      "from": "affil",
+      "to": "send",
+      "label": "수락",
+      "variant": "default",
+      "fromSide": "top",
+      "toSide": "left",
+      "labelAt": [
+        610,
+        330
+      ],
+      "via": [
+        [
+          556,
+          330
+        ],
+        [
+          690,
+          330
+        ],
+        [
+          690,
+          372
+        ]
+      ]
+    },
+    {
+      "id": "e-affil-reject",
+      "from": "affil",
+      "to": "reject",
+      "label": "거절 · 사유 없음",
+      "variant": "security",
+      "role": "error",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [
+        [
+          680,
+          372
+        ],
+        [
+          680,
+          498
+        ]
+      ],
+      "labelAt": [
+        780,
+        498
+      ]
+    },
+    {
+      "id": "e-sign-correct",
+      "from": "sign",
+      "to": "correct",
+      "label": "다르면 · 정보가 틀리면",
+      "variant": "security",
+      "role": "error",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        1000,
+        309
+      ]
+    },
+    {
+      "id": "e-correct-send",
+      "from": "correct",
+      "to": "send",
+      "label": "관리자가 고쳐 저장 · 새 30일",
+      "variant": "dashed",
+      "role": "return",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "channelY": 440
+    },
+    {
+      "id": "e-affil-wait",
+      "from": "affil",
+      "to": "wait",
+      "label": "이름 다르면 · 답 못 함",
+      "variant": "security",
+      "role": "error",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        614,
+        435
+      ]
+    },
+    {
+      "id": "e-wait-affil",
+      "from": "wait",
+      "to": "affil",
+      "label": "근로자 정보 수정으로 고침 · 다시 발송",
+      "variant": "dashed",
+      "role": "return",
+      "fromSide": "left",
+      "toSide": "left",
+      "via": [
+        [
+          445,
+          498
+        ],
+        [
+          445,
+          372
+        ]
+      ],
+      "labelAt": [
+        380,
+        440
+      ]
     }
   ],
   "cards": [
@@ -317,7 +452,7 @@
       "dot": "emerald",
       "title": "확정된 결정",
       "items": [
-        "STAFF-1 초안 저장이 시작점 · STAFF-3 초대·날인 30일 · STAFF-7 토큰과 휴대전화가 맞아야 자동 연결 · 지우는 것은 임시저장만(이어 쓰기에서 확인 뒤, CTR-19) · 같은 점포 진행 중 계약은 대체 확인 · 다른 점포와 근무 시간이 겹치면 초안 저장을 막는다(CTR-26)"
+        "STAFF-1 초안 저장이 시작점 · STAFF-3 초대·날인 30일 · 가입하면 초대 토큰의 직원 레코드에 바로 잇는다 · 날인의 다섯 값은 이름·휴대전화번호·생년월일·성별·외국인 여부 · 지우는 것은 임시저장만(이어 쓰기에서 확인 뒤, CTR-19) · 같은 점포 진행 중 계약은 대체 확인 · 다른 점포와 근무 시간이 겹치면 초안 저장을 막는다(CTR-26)"
       ]
     },
     {
