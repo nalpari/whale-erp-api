@@ -5085,7 +5085,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       </div>
     </div>
 
-    <script id="archify-guided-views-data" type="application/json">[{"id":"happy","label":"초안에서 체결까지","focus":["draft","kind","signup","match","send","sign","done"],"note":"관리자가 초안을 저장하면 초대가 나가고, 직원이 가입을 마치는 순간 계약서가 자동으로 발송된다."},{"id":"hold","label":"연결 보류","focus":["signup","match","hold","kind","send"],"note":"본인인증 번호가 초대와 어긋나면 보류한다. 관리자가 직접 확인해 승인하거나 번호를 고쳐 재초대한다."},{"id":"reject","label":"거부·만료와 재발송","focus":["send","sign","reject","done"],"note":"거부되거나 30일이 지나 만료된 계약은 재발송한다. 새 발송 이력으로 남는다."}]</script>
+    <script id="archify-guided-views-data" type="application/json">[{"id":"happy","label":"초안에서 체결까지","focus":["draft","kind","signup","send","sign","done"],"note":"관리자가 초안을 저장하면 초대가 나가고, 직원이 가입을 마치는 순간 계약서가 자동으로 발송된다."},{"id":"correct","label":"본인 대조와 수정 요청","focus":["send","sign","correct"],"note":"날인 전에 이름·휴대전화번호·생년월일·성별·외국인 여부를 계약서와 맞춘다. 다르면 날인을 막고, 직원이 사유를 적어 수정 요청을 보낸다. 관리자가 고쳐 저장하면 새 30일로 다시 간다."},{"id":"account","label":"계정이 있는 직원","focus":["kind","affil","wait","send","sign","reject"],"note":"계정은 있지만 그 점포 레코드에 이어지지 않았으면 소속 추가 확인 요청을 보낸다. 메일·팝업·목록은 이름이 같을 때만이고 답도 그때만 받는다. 이름이 다르면 근로자 정보를 고쳐 다시 보낸다. 답이 없으면 요청만 30일 뒤 만료된다."},{"id":"reject","label":"거부·만료와 재발송","focus":["kind","send","sign","reject","done"],"note":"거부되거나 30일이 지나 만료된 계약은 재발송한다. 재발송 때 유형을 다시 판별하고 새 발송 이력으로 남는다."}]</script>
 
     <script id="archify-i18n-data" type="application/json">{"locale":"en","messages":{"viewer.kind.frontend":"Frontend","viewer.kind.backend":"Backend","viewer.kind.database":"Database","viewer.kind.cloud":"Cloud","viewer.kind.security":"Security","viewer.kind.messagebus":"Message bus","viewer.kind.external":"External","viewer.kind.neutral":"Neutral","viewer.kind.node":"Node","viewer.kind.start":"Start","viewer.kind.active":"Active","viewer.kind.waiting":"Waiting","viewer.kind.decision":"Decision","viewer.kind.success":"Success","viewer.kind.failure":"Failure","viewer.toolbar.actions":"Diagram actions","viewer.theme.toggle.title":"Toggle theme (T)","viewer.theme.toggle":"Toggle color theme","viewer.theme.dark":"Dark","viewer.theme.light":"Light","viewer.preset.choose.title":"Choose visual style (S cycles)","viewer.preset.choose":"Choose visual style","viewer.preset.style":"Style","viewer.preset.menu":"Visual style","viewer.preset.identity":"Visual identity","viewer.preset.cycles":"S cycles","viewer.preset.classic":"Classic","viewer.preset.classic.short":"Classic","viewer.preset.classic.hint":"Stable technical default","viewer.preset.flow":"Signal Flow","viewer.preset.flow.short":"Flow","viewer.preset.flow.hint":"Motion-forward presentation","viewer.preset.blueprint":"Blueprint","viewer.preset.blueprint.hint":"Engineering review","viewer.preset.editorial":"Editorial","viewer.preset.editorial.hint":"Publication and launch notes","viewer.preset.badge.signalFlow":"SIGNAL FLOW","viewer.preset.badge.blueprint":"BLUEPRINT / REV 01","viewer.preset.badge.editorial":"EDITORIAL / FIELD NOTE","viewer.preset.badge.editorialPlate":"ARCHIFY / PLATE 04","viewer.preset.current":"Visual style: {style}. Choose visual style","viewer.motion.live":"Live","viewer.motion.still":"Still","viewer.motion.pause":"Pause motion","viewer.motion.resume":"Resume motion","viewer.motion.reduced":"Motion paused by reduced-motion preference","viewer.motion.hidden":"Motion paused while this page is hidden","viewer.motion.yielding":"Pause motion; currently yielding to {owner}","viewer.motion.yielding.title":"Live preview enabled · yielding to {owner}","viewer.owner.story":"the guided story","viewer.owner.chapter":"the active chapter","viewer.owner.chapterPreview":"the chapter delta preview","viewer.owner.handoff":"the chapter handoff","viewer.owner.route":"Route Probe","viewer.owner.lens":"Semantic Lens","viewer.owner.relationship":"Relationship Preview","viewer.owner.intent":"Intent Trace","viewer.owner.focus":"semantic focus","viewer.owner.legend":"legend preview","viewer.owner.reader":"reader interaction","viewer.present.enter":"Enter presentation stage","viewer.present.enter.title":"Presentation stage (F)","viewer.present.exit":"Exit presentation stage","viewer.present.exit.title":"Exit presentation stage (F or Escape)","viewer.present.present":"Present","viewer.present.exit.label":"Exit","viewer.export.button":"Export","viewer.export.button.title":"Export diagram (E)","viewer.export.diagram":"Export diagram","viewer.export.menu":"Export","viewer.export.subtitle":"Portable, clean outputs","viewer.export.share":"Share","viewer.export.shareCard":"Share Card","viewer.export.routeShareCard":"Route Share Card","viewer.export.reachShareCard":"Reach Share Card","viewer.export.copyShareCard":"Copy Share Card","viewer.export.copyDiagram":"Copy diagram","viewer.export.clipboardPng":"PNG to clipboard","viewer.export.raster":"Raster images","viewer.export.image":"Image","viewer.export.lossless":"Lossless image","viewer.export.compact":"Compact image","viewer.export.modern":"Modern image","viewer.export.vectorMotion":"Vector and motion","viewer.export.vectorMotion.heading":"Vector \u0026 motion","viewer.export.editable":"Editable vector","viewer.export.motion6s":"6s motion","viewer.export.unsupported":"Not supported by this browser","viewer.export.clipboardUnsupported":"Clipboard image write not supported by this browser","viewer.export.clipboardUnsupported.period":"Clipboard image write not supported by this browser.","viewer.export.clipboardUnsupported.short":"Clipboard image write not supported in this browser.","viewer.export.motionUnavailable":"Motion capture unavailable in this browser","viewer.export.webmUnavailable":"WebM unavailable in this browser","viewer.export.failed":"Export failed: {message}","viewer.export.unknownVariant":"Unknown Share Card variant: {variant}","viewer.export.routeRequired":"Trace a route before exporting a Route Share Card","viewer.export.reachRequired":"Trace authored reach before exporting a Reach Share Card","viewer.export.unknown":"unknown","viewer.export.routeFailed":"Route Share Card export failed: {message}","viewer.export.reachFailed":"Reach Share Card export failed: {message}","viewer.export.copyFailed":"Copy failed: {message}","viewer.export.copiedPng":"Copied PNG to clipboard","viewer.export.copiedShare":"Copied Share Card","viewer.export.downloadedShare":"Downloaded Share Card","viewer.export.downloadedRoute":"Downloaded Route Share Card","viewer.export.downloadedReach":"Downloaded Reach Share Card","viewer.export.downloadedWebm":"Downloaded WebM","viewer.export.recording":"Recording 6 seconds of motion…","viewer.export.card.routeSummary.one":"Route: {source} → {target} · {count} directed hop","viewer.export.card.routeSummary.other":"Route: {source} → {target} · {count} directed hops","viewer.export.card.reachSummary":"Authored {direction} from {origin} · {nodes} · {links} · max {hops}","viewer.export.card.node.one":"{count} node","viewer.export.card.node.other":"{count} nodes","viewer.export.card.link.one":"{count} link","viewer.export.card.link.other":"{count} links","viewer.export.card.hop.one":"{count} hop","viewer.export.card.hop.other":"{count} hops","viewer.export.card.routeBadge":"ARCHIFY · ROUTE · {hops}","viewer.export.card.reachBadge":"ARCHIFY · {direction} REACH","viewer.export.card.defaultBadge":"ARCHIFY · {preset} · {theme}","viewer.export.direction.upstream":"Upstream","viewer.export.direction.downstream":"Downstream","viewer.export.error.canvasUnavailable":"Canvas unavailable for {label}","viewer.export.error.contextUnavailable":"2D canvas context unavailable for {label}","viewer.export.error.toBlobUnavailable":"canvas.toBlob unavailable for {label}","viewer.export.error.toBlobNull":"canvas.toBlob returned no data for {label}","viewer.export.error.variantsCombined":"Share Card variants cannot be combined","viewer.export.error.viewerState":"Share Card export could not remove temporary viewer state","viewer.export.error.routeState":"Route Card export could not preserve the resolved route safely","viewer.export.error.reachState":"Reach Card export could not preserve authored reach safely","viewer.export.error.webmRequirements":"WebM motion export requires a trace animation and browser MediaRecorder support","viewer.export.error.mediaRecorder":"MediaRecorder failed","viewer.export.error.emptyWebm":"MediaRecorder produced an empty WebM","viewer.export.error.webmBackground":"SVG background could not be loaded for WebM export","viewer.guided.region":"Guided diagram views","viewer.guided.previous":"Previous guided view","viewer.guided.previous.title":"Previous guided view ([)","viewer.guided.next":"Next guided view","viewer.guided.next.title":"Next guided view (])","viewer.guided.views":"Guided views","viewer.guided.explore":"Explore this system","viewer.guided.intro":"Step through curated paths without changing the source diagram.","viewer.guided.trail":"Story trail","viewer.guided.beat":"Beat","viewer.guided.nextBeat":"Next","viewer.guided.play":"Play guided story","viewer.guided.play.title":"Play guided story (P)","viewer.guided.pause":"Pause guided story","viewer.guided.pause.title":"Pause guided story (P)","viewer.guided.replay":"Replay guided story","viewer.guided.replay.title":"Replay guided story (P)","viewer.guided.playStory":"Play story","viewer.guided.pauseStory":"Pause","viewer.guided.replayStory":"Replay story","viewer.guided.motionUnavailable":"Story playback unavailable while motion is Still","viewer.guided.enableMotion":"Switch motion to Live to play the guided story","viewer.guided.selectBeatLink":"Select a Story Beat to copy its exact link","viewer.guided.copyMoment":"Copy moment","viewer.guided.momentCopied":"Moment link copied","viewer.guided.momentCopyFailed":"Could not copy story moment link","viewer.guided.copied":"Copied","viewer.guided.copyFailed":"Copy failed","viewer.guided.showAll":"Show all","viewer.guided.showAll.aria":"Show entire diagram","viewer.guided.chapters":"Story chapters","viewer.guided.storyTrail":"Story trail for {label}: {count} beats","viewer.guided.chapter.open":"Open chapter {index} of {total}: {label}, {count} stops","viewer.guided.chapter.current":"Current chapter {index} of {total}: {label}, {count} stops","viewer.guided.chapter.selectedNodes":"{count} selected nodes","viewer.guided.chapter.stops":"{count} stops","viewer.guided.chapter.stop.one":"{count} stop","viewer.guided.chapter.stop.other":"{count} stops","viewer.guided.chapter.current.title":"{label} — current chapter, {count} stops","viewer.guided.chapter.delta.expanded":"{stay} stay, {enter} enter, {leave} leave","viewer.guided.chapter.delta.aria":"Open chapter {index} of {total}: {label}. Chapter focus delta: {delta}","viewer.guided.chapter.delta.title":"{label} — {delta} chapter focus","viewer.guided.handoff":"{from} → {to} · via {label}","viewer.guided.share.chapter":"Chapter {index} / {total}","viewer.guided.share.initial":"Chapter 01 / 01","viewer.guided.share.default":"Guided chapter","viewer.guided.state.ready":"Ready","viewer.guided.state.playing":"Playing","viewer.guided.state.settled":"Settled","viewer.guided.state.paused":"Paused","viewer.guided.state.pinned":"Pinned","viewer.guided.state.still":"Still","viewer.guided.share.step":"Step {index} / {total} · {label}","viewer.guided.share.staticMoment":"{step} · Static moment","viewer.guided.share.complete":"{count} steps complete · {note}","viewer.guided.share.settled":"Path settled for reading.","viewer.guided.share.staticPath":"{count} steps · Static path","viewer.guided.share.ready":"{count} steps · Ready","viewer.guided.share.aria":"{state} chapter {index} of {total}: {label}. {beat}. {route}","viewer.guided.beat.start":"Beat {index} / {total} · {label} · starting point","viewer.guided.beat.forward":"Beat {index} / {total} · {from} → {to}","viewer.guided.beat.reverse":"Beat {index} / {total} · {from} → {to} · reverse authored link","viewer.guided.beat.multiple":"Beat {index} / {total} · {from} ⇄ {to} · {count} authored links","viewer.guided.beat.group":"Beat {index} / {total} · {from} · {to} · grouped · no direct link","viewer.guided.beat.aria.prefix":"Story beat {index} of {total}: {label}. ","viewer.guided.beat.aria.start":"Starting point.","viewer.guided.beat.aria.forward":"From {from} through one authored forward relationship.","viewer.guided.beat.aria.reverse":"From {from}; the authored relationship points from {to} to {from}.","viewer.guided.beat.aria.multiple":"From {from} through {count} authored relationships; shown without arbitrary motion.","viewer.guided.beat.aria.group":"Grouped from {from} with no direct authored relationship.","viewer.guided.caption.start":"Starting point","viewer.guided.caption.grouped":"Grouped transition · no direct authored link","viewer.guided.caption.more":" +{count} more","viewer.guided.caption.reverse":"Reverse authored relationship","viewer.guided.caption.relationships":"{count} authored relationships","viewer.guided.caption.relationship":"Authored relationship","viewer.guided.caption.direction":"authored direction: {from} → {to}","viewer.guided.caption.starting":"Authored starting point","viewer.guided.beatLink":"Copy link to current story moment: Beat {index} of {total}: {label}","viewer.guided.noStory":"This diagram has no authored guided story.","viewer.guide.eyebrow":"Diagram guide","viewer.guide.close":"Close diagram guide","viewer.guide.inspecting":"Inspecting compiled semantics","viewer.guide.actions":"Diagram exploration actions","viewer.guide.find":"Find any node","viewer.guide.find.hint":"Search labels, responsibilities, kinds, and stable IDs.","viewer.guide.route":"Trace a route","viewer.guide.route.aria":"Trace a directed route","viewer.guide.route.hint":"Ask how two semantic nodes connect in authored direction.","viewer.guide.map":"See the whole system","viewer.guide.map.hint":"Open Semantic Radar with a live viewport and stable nodes.","viewer.guide.lens":"Compare semantic kinds","viewer.guide.lens.hint":"Count roles, reveal their traffic, and compare direct authored links.","viewer.guide.story":"Play the guided story","viewer.guide.story.hint":"Walk the authored chapters and real relationships.","viewer.guide.present":"Enter Presentation Stage","viewer.guide.present.hint":"Give the live diagram the viewport without changing export.","viewer.guide.shortcuts":"Additional keyboard shortcuts","viewer.guide.shortcut.export":"Export","viewer.guide.shortcut.theme":"Theme","viewer.guide.shortcut.style":"Style","viewer.guide.shortcut.reset":"Reset","viewer.guide.shortcut.zoomIn":"Zoom in","viewer.guide.shortcut.zoomOut":"Zoom out","viewer.guide.shortcut.close":"Close","viewer.guide.facts":"{nodes} · {relationships} · {views}","viewer.guide.fact.node.one":"{count} semantic node","viewer.guide.fact.node.other":"{count} semantic nodes","viewer.guide.fact.relationship.one":"{count} relationship","viewer.guide.fact.relationship.other":"{count} relationships","viewer.guide.fact.view.one":"{count} guided view","viewer.guide.fact.view.other":"{count} guided views","viewer.guide.story.available.one":"Walk {count} authored chapter and its real relationships.","viewer.guide.story.available.other":"Walk {count} authored chapters and their real relationships.","viewer.guide.story.unavailable":"No authored guided story in this diagram.","viewer.guide.open":"Open diagram guide","viewer.guide.noStory":"This diagram has no authored guided story.","viewer.finder.title":"Find a node","viewer.finder.close":"Close node finder","viewer.finder.placeholder":"Search labels or IDs","viewer.finder.search":"Search diagram nodes","viewer.finder.results":"Diagram nodes","viewer.finder.empty":"No matching nodes","viewer.finder.result.focus":"Focus {label}","viewer.finder.result.routeStart":"Choose {label} as route start","viewer.finder.result.routeTarget":"Choose {label} as route destination, {links}","viewer.finder.status.empty":"No matching nodes","viewer.finder.status.count.one":"{count} matching node","viewer.finder.status.count.other":"{count} matching nodes","viewer.finder.noun.nodes":"nodes","viewer.finder.link.one":"{count} link","viewer.finder.link.other":"{count} links","viewer.finder.result.focus.one":"Focus {label}, {count} related connection","viewer.finder.result.focus.other":"Focus {label}, {count} related connections","viewer.finder.status.filtered":"{visible} of {available} {noun}","viewer.finder.status.all":"{available} {noun}","viewer.passport.eyebrow":"Semantic passport","viewer.passport.metadata":"Node metadata","viewer.passport.evidence":"Verified source evidence","viewer.passport.verified":"Verified source","viewer.passport.verificationScope":"Verified against local Git at the pinned revision. Remote access has not been checked.","viewer.passport.reach":"Authored reach","viewer.passport.reach.trace":"Trace authored reachability","viewer.passport.upstream":"Upstream","viewer.passport.downstream":"Downstream","viewer.passport.upstream.trace":"Trace upstream authored reachability","viewer.passport.downstream.trace":"Trace downstream authored reachability","viewer.passport.close":"Close semantic passport","viewer.passport.copy":"Copy link","viewer.passport.copy.focus":"Copy link to focused node","viewer.passport.relations":"Relations","viewer.passport.relations.show":"Show connected relationships","viewer.passport.relations.hide":"Hide connected relationships","viewer.passport.relations.list":"Connected relationships","viewer.passport.copyRelation":"Copy relation","viewer.passport.copyNode":"Copy node","viewer.passport.copyPinned":"Copy link to pinned relationship","viewer.passport.copySource":"Copy link to source node","viewer.passport.copy.focused.success":"Focused node link copied","viewer.passport.copy.pinned.success":"Pinned relationship link copied","viewer.passport.copy.focused.failed":"Could not copy focused node link","viewer.passport.copy.pinned.failed":"Could not copy pinned relationship link","viewer.passport.relationship.none":"No connected relationships","viewer.passport.relationship.count.one":"{count} relation","viewer.passport.relationship.count.other":"{count} relations","viewer.passport.relationship.show.one":"Show {count} connected relationship","viewer.passport.relationship.show.other":"Show {count} connected relationships","viewer.passport.relationship.summary":"{out} outgoing · {in} incoming{loops}","viewer.passport.relationship.loops":" · {count} loop","viewer.passport.relationship.explorer":"Direct relationship explorer","viewer.passport.relationship.help":"Use arrow keys to explore relationships. Press Enter or Space to pin details; Escape clears.","viewer.passport.relationship.loopsBack":"loops back","viewer.passport.relationship.connectsTo":"connects to","viewer.passport.relationship.connectsFrom":"connects from","viewer.passport.relationship.pinned":"Pinned relationship · {from} → {to} · {label}","viewer.passport.relationship.inspect":"Inspect relationship {index} of {total}: {from} to {to}, {label}. Press Enter for details.","viewer.passport.relationship.group.out":"Outgoing","viewer.passport.relationship.group.in":"Incoming","viewer.passport.relationship.group.loop":"Self loops","viewer.passport.relationship.row":"{group}: {relationship}, {neighbor}","viewer.passport.relationship.direction.out":"OUT →","viewer.passport.relationship.direction.in":"← IN","viewer.passport.relationship.direction.loop":"LOOP","viewer.passport.sourceCount.one":"{count} verified source reference","viewer.passport.sourceCount.other":"{count} verified source references","viewer.passport.sourceMarker":"SRC","viewer.passport.beacon.one":"{count} verified source; focus this node to inspect","viewer.passport.beacon.other":"{count} verified sources; focus this node to inspect","viewer.passport.repository.open":"Open verified repository revision {revision}","viewer.passport.source.open":"Open verified source {path} at revision {revision}","viewer.passport.source.openLink":"Open ↗","viewer.passport.reach.upstream.one":"Trace {count} upstream authored node","viewer.passport.reach.upstream.other":"Trace {count} upstream authored nodes","viewer.passport.reach.downstream.one":"Trace {count} downstream authored node","viewer.passport.reach.downstream.other":"Trace {count} downstream authored nodes","viewer.passport.reach.noUpstream":"No upstream authored nodes","viewer.passport.reach.noDownstream":"No downstream authored nodes","viewer.passport.reach.status":"{direction} · {nodes} nodes · {links} links · max {hops} hops","viewer.route.eyebrow":"Route probe","viewer.route.start":"Choose a start node","viewer.route.start.find":"Find start","viewer.route.start.find.aria":"Find a route start","viewer.route.copy":"Copy link","viewer.route.copy.aria":"Copy link to traced route","viewer.route.clear":"Clear","viewer.route.clear.aria":"Clear route probe","viewer.route.traced":"Traced route","viewer.route.pickTwo":"Pick two semantic nodes on the diagram","viewer.route.pickOne":"Pick a semantic node on the diagram","viewer.route.controls":"Route journey controls","viewer.route.previous":"Previous route position","viewer.route.play":"Play route journey","viewer.route.pause":"Pause route journey","viewer.route.replay":"Replay route journey","viewer.route.next":"Next route position","viewer.route.journey":"Journey","viewer.route.pause.label":"Pause","viewer.route.replay.label":"Replay","viewer.route.overview":"Overview","viewer.route.overview.aria":"Show complete route overview","viewer.route.instructions":"Choose the source, then the destination. Direction matters.","viewer.route.destination":"Choose a destination from {label}","viewer.route.destination.find":"Find target","viewer.route.destination.find.aria":"Find a reachable route destination","viewer.route.differentDestination":"Choose a different destination","viewer.route.distinct":"A route needs two distinct semantic nodes.","viewer.route.unreachable":"No directed route to {label}","viewer.route.unreachable.detail":"{target} is not reachable from {source}. Pick a highlighted destination.","viewer.route.start.instructions":"Select the source. The next step will reveal only directed destinations.","viewer.route.copy.success":"Traced route link copied","viewer.route.copy.failed":"Could not copy traced route link","viewer.route.position":"Route position {index} of {total}: {label}","viewer.route.step":"Step {index} of {total} · {phase} · {label}","viewer.route.motionRequired":"Automatic journey requires Live motion","viewer.route.trigger.clear":"Clear traced route","viewer.route.overview.status":"{nodes} · {hops} · shortest authored route","viewer.route.overview.node.one":"{count} node","viewer.route.overview.node.other":"{count} nodes","viewer.route.overview.hop.one":"{count} directed hop","viewer.route.overview.hop.other":"{count} directed hops","viewer.route.phase.playing":"Playing","viewer.route.phase.complete":"Complete","viewer.route.phase.inspecting":"Inspecting","viewer.route.destination.count.one":"{count} directed destination available. Pick a highlighted node.","viewer.route.destination.count.other":"{count} directed destinations available. Pick a highlighted node.","viewer.route.noOutgoing":"No outgoing route starts here. Clear and choose another source.","viewer.route.result.title":"{source} to {target}","viewer.route.finder.source.title":"Choose route start","viewer.route.finder.source.placeholder":"Search route sources","viewer.route.finder.source.empty":"No matching route sources","viewer.route.finder.source.results":"Nodes that can start a route","viewer.route.finder.source.noun":"route sources","viewer.route.finder.source.badge":"start","viewer.route.finder.target.title":"Destination from {label}","viewer.route.finder.target.placeholder":"Search reachable destinations","viewer.route.finder.target.empty":"No matching reachable destinations","viewer.route.finder.target.results":"Reachable route destinations","viewer.route.finder.target.noun":"reachable destinations","viewer.route.hop.one":"{count} hop","viewer.route.hop.other":"{count} hops","viewer.lens.eyebrow":"Semantic lens","viewer.lens.title":"Compare system roles","viewer.lens.close":"Close semantic lens","viewer.lens.instruction":"Choose up to two semantic kinds. One reveals its real traffic; two compare only direct authored relationships.","viewer.lens.kinds":"Semantic kinds","viewer.lens.choose":"Choose a kind to inspect its nodes and touching relationships.","viewer.lens.copy":"Copy link to semantic lens","viewer.lens.clear":"Clear semantic lens","viewer.lens.open":"Open semantic lens","viewer.lens.openActive":"Open active semantic lens","viewer.lens.legend":"Semantic legend","viewer.lens.legend.inspect.one":"Inspect {label}, {count} node","viewer.lens.legend.inspect.other":"Inspect {label}, {count} nodes","viewer.lens.kind.count.one":"{label}, {count} node","viewer.lens.kind.count.other":"{label}, {count} nodes","viewer.lens.compare.one":"{first} → {second}: {forward} · {second} → {first}: {reverse} · {count} direct relationship","viewer.lens.compare.other":"{first} → {second}: {forward} · {second} → {first}: {reverse} · {count} direct relationships","viewer.lens.single":"{nodes} · {relationships} · connected peers remain visible","viewer.lens.node.one":"{count} {label} node","viewer.lens.node.other":"{count} {label} nodes","viewer.lens.relationship.one":"{count} touching relationship","viewer.lens.relationship.other":"{count} touching relationships","viewer.radar.title":"Semantic radar","viewer.radar.building":"Building overview","viewer.radar.openFull":"Open full semantic radar","viewer.radar.open":"Open radar","viewer.radar.close":"Close semantic radar","viewer.radar.surface":"Diagram overview. Click a node to focus it, or use arrow keys to pan.","viewer.radar.click":"Click node","viewer.radar.drag":"Drag to pan","viewer.radar.space":"Semantic radar needs more MAP space.","viewer.radar.nodes":"Semantic diagram radar nodes","viewer.radar.focus":"Focus {label} from Semantic Radar","viewer.radar.status":"{count} nodes · {viewport}","viewer.radar.fullMap":"{count} nodes · full map","viewer.radar.compacted":"Radar compacted to avoid covering the Semantic Passport or MAP controls.","viewer.radar.cancelWaiting":"Cancel semantic radar waiting for more MAP space","viewer.radar.needsSpace":"Semantic radar needs more visible MAP space","viewer.radar.viewport.full":"full map","viewer.radar.viewport.width":"{percent}% width","viewer.radar.viewport.scale":"{percent}% viewport","viewer.nav.controls":"Diagram view controls","viewer.nav.route":"Trace a directed route","viewer.nav.route.title":"Trace route (R)","viewer.nav.route.short":"PATH","viewer.nav.radar":"Open semantic radar","viewer.nav.radar.title":"Semantic radar (M)","viewer.nav.radar.short":"MAP","viewer.nav.lens":"Open semantic lens","viewer.nav.lens.title":"Semantic lens (L)","viewer.nav.lens.short":"LENS","viewer.nav.find":"Find a node","viewer.nav.find.title":"Find a node (/)","viewer.nav.guide":"Open diagram guide","viewer.nav.guide.title":"Diagram guide (?)","viewer.nav.zoomOut":"Zoom out","viewer.nav.zoomOut.title":"Zoom out (-)","viewer.nav.reset":"Reset diagram view","viewer.nav.reset.title":"Reset view (0)","viewer.nav.read":"READ","viewer.nav.zoomIn":"Zoom in","viewer.nav.zoomIn.title":"Zoom in (+)","viewer.nav.camera":"{hint}. Reset diagram view","viewer.nav.camera.title":"{semantic}{hint} · reset view (0)","viewer.nav.camera.semantic":"Semantic camera active · ","viewer.nav.level.map":"MAP","viewer.nav.level.read":"READ","viewer.nav.level.full":"FULL","viewer.nav.level.auto":"AUTO","viewer.nav.detail.map":"Zoom in to reveal relationship labels and node context","viewer.nav.detail.read":"Zoom in again to reveal tags and annotations","viewer.nav.detail.full":"Full diagram detail","viewer.intent.summary":"{label}. {out} outgoing, {in} incoming{loops}. {total} connections. Press Enter for details.","viewer.intent.loops":", {count} self loop","viewer.common.copied":"Copied","viewer.common.copyFailed":"Copy failed","viewer.common.copyLink":"Copy link","viewer.common.clear":"Clear","viewer.common.close":"Close"}}</script>
     <div class="guided-views no-print" id="guided-views" hidden aria-label="Guided diagram views">
@@ -5130,7 +5130,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
     <!-- Main Diagram -->
     <div class="diagram-container" data-detail-level="read"
          data-preset-badge-editorial-plate="ARCHIFY / PLATE 04">
-      <svg viewBox="0 0 1040 668" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
+      <svg viewBox="0 0 1240 668" role="img" lang="en" aria-labelledby="archify-diagram-title archify-diagram-description" data-preset="classic" data-quality-profile="showcase">
         <title id="archify-diagram-title">직원 채용과 근로계약 — 초안에서 체결까지</title>
         <desc id="archify-diagram-description">A workflow diagram generated by Archify.</desc>
         <!-- Definitions -->
@@ -5156,49 +5156,50 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <rect width="100%" height="100%" fill="url(#grid)" />
 
         <!-- Swimlanes -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="926" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-0" x="40" y="52" width="1045" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="74" class="t-dim" font-size="10" font-weight="600">01 / 관리자 웹</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-1" x="40" y="178" width="926" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-1" x="40" y="178" width="1045" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="200" class="t-dim" font-size="10" font-weight="600">02 / 직원 근무 앱</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-2" x="40" y="304" width="926" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-2" x="40" y="304" width="1045" height="106" rx="10" class="c-lane" stroke-width="1"/>
         <text x="54" y="326" class="t-dim" font-size="10" font-weight="600">03 / 시스템</text>
 
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-3" x="40" y="430" width="926" height="114" rx="10" class="c-lane" stroke-width="1"/>
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="exception-lane" data-composition-frame-id="lane-3-exception" x="46" y="436" width="914" height="102" rx="8" class="c-security-group" stroke-width="1"/>
-        <text x="54" y="452" class="t-security" font-size="10" font-weight="600">EX / 보류·거부</text>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="lane" data-composition-frame-id="lane-3" x="40" y="430" width="1045" height="106" rx="10" class="c-lane" stroke-width="1"/>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="exception-lane" data-composition-frame-id="lane-3-exception" x="46" y="436" width="1033" height="94" rx="8" class="c-security-group" stroke-width="1"/>
+        <text x="54" y="452" class="t-security" font-size="10" font-weight="600">EX / 거부 · 만료</text>
 
         <!-- Phase headers -->
         <line x1="82" y1="35" x2="174" y2="35" class="a-default" stroke-width="1.1"/>
         <rect x="82" y="27" width="92" height="16" rx="4" class="c-mask"/>
         <text x="128" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">초안</text>
-        <line x1="202" y1="35" x2="534" y2="35" class="a-emphasis" stroke-width="1.1"/>
-        <rect x="202" y="27" width="332" height="16" rx="4" class="c-mask"/>
-        <text x="368" y="39" class="t-backend" font-size="8" font-weight="600" text-anchor="middle">초대와 가입</text>
-        <line x1="686.8" y1="35" x2="898.8" y2="35" class="a-default" stroke-width="1.1"/>
-        <rect x="686.8" y="27" width="212" height="16" rx="4" class="c-mask"/>
-        <text x="792.8" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">발송과 날인</text>
+        <line x1="202" y1="35" x2="722" y2="35" class="a-emphasis" stroke-width="1.1"/>
+        <rect x="202" y="27" width="520" height="16" rx="4" class="c-mask"/>
+        <text x="462" y="39" class="t-backend" font-size="8" font-weight="600" text-anchor="middle">초대와 가입</text>
+        <line x1="750" y1="35" x2="1029" y2="35" class="a-default" stroke-width="1.1"/>
+        <rect x="750" y="27" width="279" height="16" rx="4" class="c-mask"/>
+        <text x="889.5" y="39" class="t-muted" font-size="8" font-weight="600" text-anchor="middle">발송과 날인</text>
 
         <!-- Workflow groups -->
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="group" data-composition-frame-id="group-0" x="409" y="468" width="194.60000000000002" height="72" rx="9" class="c-security-group" stroke-width="1"/>
-        <text x="419" y="466" class="t-security" font-size="7" font-weight="600">STAFF-7 · 최소 정보 + 승인</text>
-        <rect data-graph-role="structural-frame" data-composition-frame-kind="group" data-composition-frame-id="group-1" x="778.8" y="468" width="178.39999999999998" height="72" rx="9" class="c-lane" stroke-width="1"/>
-        <text x="788.8" y="466" class="t-messagebus" font-size="7" font-weight="600">STAFF-2·3 · 7종 · 30일</text>
+        <rect data-graph-role="structural-frame" data-composition-frame-kind="group" data-composition-frame-id="group-0" x="909" y="468" width="167.20000000000005" height="64" rx="9" class="c-lane" stroke-width="1"/>
+        <text x="919" y="466" class="t-messagebus" font-size="7" font-weight="600">STAFF-2·3 · 8종 · 30일</text>
 
         <!-- Edge paths -->
-        <path data-edge-from="draft" data-edge-to="kind" data-edge-key="0" data-edge-id="e-draft-kind" data-composition-points="208,120;248,120;248,346" d="M 208 120 L 248 120 L 248 346" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="hold" data-edge-to="kind" data-edge-label="번호 고쳐 재초대" data-edge-key="1" data-edge-id="e-hold-kind" data-composition-points="413,505;248,505;248,398" d="M 413 505 L 248 505 L 248 398" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="hold" data-edge-to="send" data-edge-label="관리자 승인" data-edge-key="2" data-edge-id="e-hold-send" data-composition-points="563,498;725.8,498;725.8,398" d="M 563 498 L 725.8 498 L 725.8 398" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="kind" data-edge-to="send" data-edge-label="재직 중이면 즉시 발송" data-edge-key="3" data-edge-id="e-kind-send" data-composition-points="248,346;248,166;732.8,166;732.8,346" d="M 248 346 L 248 166 L 732.8 166 L 732.8 346" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="kind" data-edge-to="signup" data-edge-label="가입 초대 · 재초대" data-edge-key="4" data-edge-id="e-kind-signup" data-composition-points="248,346;248,294;368,294;368,272" d="M 248 346 L 248 294 L 368 294 L 368 272" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="match" data-edge-to="hold" data-edge-label="불일치" data-edge-key="5" data-edge-id="e-match-hold" data-composition-points="488,398;488,420;579,420;579,512;563,512" d="M 488 398 L 488 420 L 579 420 L 579 512 L 563 512" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="match" data-edge-to="send" data-edge-label="일치 · 자동 연결" data-edge-key="6" data-edge-id="e-match-send" data-composition-points="563,372;657.8,372" d="M 563 372 L 657.8 372" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="reject" data-edge-to="send" data-edge-label="재발송 · 새 이력" data-edge-key="7" data-edge-id="e-reject-send" data-composition-points="852.8,531;852.8,560;739.8,560;739.8,398" d="M 852.8 531 L 852.8 560 L 739.8 560 L 739.8 398" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
-        <path data-edge-from="send" data-edge-to="sign" data-edge-key="8" data-edge-id="e-send-sign" data-composition-points="807.8,372;852.8,372;852.8,272" d="M 807.8 372 L 852.8 372 L 852.8 272" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="sign" data-edge-to="done" data-edge-label="날인" data-edge-key="9" data-edge-id="e-sign-done" data-composition-points="852.8,220;852.8,146" d="M 852.8 220 L 852.8 146" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
-        <path data-edge-from="sign" data-edge-to="reject" data-edge-label="거부 · 30일 만료" data-edge-key="10" data-edge-id="e-sign-reject" data-composition-points="922.8,246;1005.6,246;1005.6,505;922.8,505" d="M 922.8 246 L 1005.6 246 L 1005.6 505 L 922.8 505" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
-        <path data-edge-from="signup" data-edge-to="match" data-edge-key="11" data-edge-id="e-signup-match" data-composition-points="368,272;368,372;413,372" d="M 368 272 L 368 372 L 413 372" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="affil" data-edge-to="reject" data-edge-label="거절 · 사유 없음" data-edge-key="0" data-edge-id="e-affil-reject" data-composition-points="641,372;680,372;680,498;913,498" d="M 641 372 L 680 372 L 680 498 L 913 498" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="affil" data-edge-to="send" data-edge-label="수락" data-edge-key="1" data-edge-id="e-affil-send" data-composition-points="556,346;556,330;690,330;690,372;721,372" d="M 556 346 L 556 330 L 690 330 L 690 372 L 721 372" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="affil" data-edge-to="wait" data-edge-label="이름 다르면 · 답 못 함" data-edge-key="2" data-edge-id="e-affil-wait" data-composition-points="556,398;556,472" d="M 556 398 L 556 472" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="correct" data-edge-to="send" data-edge-label="관리자가 고쳐 저장 · 새 30일" data-edge-key="3" data-edge-id="e-correct-send" data-composition-points="983,398;983,440;796,440;796,398" d="M 983 398 L 983 440 L 796 440 L 796 398" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="draft" data-edge-to="kind" data-edge-key="4" data-edge-id="e-draft-kind" data-composition-points="128,154;128,170;20,170;20,372;163,372" d="M 128 154 L 128 170 L 20 170 L 20 372 L 163 372" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="kind" data-edge-to="affil" data-edge-label="계정은 있고 레코드 미연결" data-edge-key="5" data-edge-id="e-kind-affil" data-composition-points="333,372;471,372" d="M 333 372 L 471 372" class="a-default" stroke-width="1.4" marker-end="url(#arrowhead)"/>
+        <path data-edge-from="kind" data-edge-to="send" data-edge-label="그 점포 레코드에 계정이 이어져 있으면 즉시 발송" data-edge-key="6" data-edge-id="e-kind-send" data-composition-points="248,346;248,166;796,166;796,346" d="M 248 346 L 248 166 L 796 166 L 796 346" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="kind" data-edge-to="signup" data-edge-label="가입 초대 · 재초대" data-edge-key="7" data-edge-id="e-kind-signup" data-composition-points="248,346;248,246;486,246" d="M 248 346 L 248 246 L 486 246" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="reject" data-edge-to="kind" data-edge-label="재발송 · 새 이력" data-edge-key="8" data-edge-id="e-reject-kind" data-composition-points="983,524;983,566;248,566;248,398" d="M 983 524 L 983 566 L 248 566 L 248 398" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
+        <path data-edge-from="send" data-edge-to="sign" data-edge-key="9" data-edge-id="e-send-sign" data-composition-points="871,372;887,372;887,246;903,246" d="M 871 372 L 887 372 L 887 246 L 903 246" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="sign" data-edge-to="correct" data-edge-label="다르면 · 정보가 틀리면" data-edge-key="10" data-edge-id="e-sign-correct" data-composition-points="983,272;983,346" d="M 983 272 L 983 346" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="sign" data-edge-to="done" data-edge-label="날인" data-edge-key="11" data-edge-id="e-sign-done" data-composition-points="983,220;983,146" d="M 983 220 L 983 146" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="sign" data-edge-to="reject" data-edge-label="거부 · 30일 만료" data-edge-key="12" data-edge-id="e-sign-reject" data-composition-points="1063,246;1135.8,246;1135.8,498;1053,498" d="M 1063 246 L 1135.8 246 L 1135.8 498 L 1053 498" class="a-security" stroke-width="1.4" marker-end="url(#arrowhead-security)"/>
+        <path data-edge-from="signup" data-edge-to="send" data-edge-label="가입하면 레코드에 잇는다" data-edge-key="13" data-edge-id="e-signup-send" data-composition-points="626,246;642,246;642,316;705,316;705,372;721,372" d="M 626 246 L 642 246 L 642 316 L 705 316 L 705 372 L 721 372" class="a-emphasis" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
+        <path data-edge-from="wait" data-edge-to="affil" data-edge-label="근로자 정보 수정으로 고침 · 다시 발송" data-edge-key="14" data-edge-id="e-wait-affil" data-composition-points="461,498;445,498;445,372;471,372" d="M 461 498 L 445 498 L 445 372 L 471 372" class="a-dashed" stroke-width="1.4" marker-end="url(#arrowhead-dashed)"/>
 
         <!-- Nodes -->
         <g id="node-draft" data-node-id="draft" data-node-label="근로계약서 초안 저장" tabindex="0" role="button" aria-label="Focus 근로계약서 초안 저장, 저장이 곧 초대 발송, 관리자 웹 › 초안" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="저장이 곧 초대 발송" data-node-tag="STAFF-1" data-node-context="관리자 웹 › 초안">
@@ -5218,42 +5219,42 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
         <g id="node-done" data-node-id="done" data-node-label="체결 완료" tabindex="0" role="button" aria-label="Focus 체결 완료, 직원 레코드에 붙는다, 관리자 웹 › 발송과 날인" aria-pressed="false" data-node-kind="database" data-node-sublabel="직원 레코드에 붙는다" data-node-context="관리자 웹 › 발송과 날인">
           <title>체결 완료 · 직원 레코드에 붙는다 · 관리자 웹 › 발송과 날인</title>
-          <rect x="782.8" y="94" width="140" height="52" rx="6" class="c-mask"/>
-          <rect x="782.8" y="94" width="140" height="52" rx="6" class="c-database" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(788.8 100) scale(0.6875)">
+          <rect x="913" y="94" width="140" height="52" rx="6" class="c-mask"/>
+          <rect x="913" y="94" width="140" height="52" rx="6" class="c-database" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="database" class="semantic-sigil s-database" transform="translate(919 100) scale(0.6875)">
             <ellipse cx="8" cy="4" rx="5" ry="2"/>
             <path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="852.8" y="115" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">체결 완료</text>
-          <text data-detail="context" x="852.8" y="132" class="t-muted" font-size="8" text-anchor="middle">직원 레코드에 붙는다</text>
+          <text data-node-label="" data-detail-anchor="" x="983" y="115" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">체결 완료</text>
+          <text data-detail="context" x="983" y="132" class="t-muted" font-size="8" text-anchor="middle">직원 레코드에 붙는다</text>
         </g>
 
-        <g id="node-signup" data-node-id="signup" data-node-label="가입 · 본인인증" tabindex="0" role="button" aria-label="Focus 가입 · 본인인증, 토큰 링크로 들어온다, 직원 근무 앱 › 초대와 가입" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="토큰 링크로 들어온다" data-node-context="직원 근무 앱 › 초대와 가입">
-          <title>가입 · 본인인증 · 토큰 링크로 들어온다 · 직원 근무 앱 › 초대와 가입</title>
-          <rect x="298" y="220" width="140" height="52" rx="6" class="c-mask"/>
-          <rect x="298" y="220" width="140" height="52" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(304 226) scale(0.6875)">
+        <g id="node-signup" data-node-id="signup" data-node-label="가입" tabindex="0" role="button" aria-label="Focus 가입, 초대 링크로 직접 입력, 직원 근무 앱 › 초대와 가입" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="초대 링크로 직접 입력" data-node-context="직원 근무 앱 › 초대와 가입">
+          <title>가입 · 초대 링크로 직접 입력 · 직원 근무 앱 › 초대와 가입</title>
+          <rect x="486" y="220" width="140" height="52" rx="6" class="c-mask"/>
+          <rect x="486" y="220" width="140" height="52" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(492 226) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="368" y="241" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">가입 · 본인인증</text>
-          <text data-detail="context" x="368" y="258" class="t-muted" font-size="8" text-anchor="middle">토큰 링크로 들어온다</text>
+          <text data-node-label="" data-detail-anchor="" x="556" y="241" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">가입</text>
+          <text data-detail="context" x="556" y="258" class="t-muted" font-size="8" text-anchor="middle">초대 링크로 직접 입력</text>
         </g>
 
-        <g id="node-sign" data-node-id="sign" data-node-label="직원 날인 · 거부" tabindex="0" role="button" aria-label="Focus 직원 날인 · 거부, 거부 사유는 선택, 직원 근무 앱 › 발송과 날인" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="거부 사유는 선택" data-node-context="직원 근무 앱 › 발송과 날인">
-          <title>직원 날인 · 거부 · 거부 사유는 선택 · 직원 근무 앱 › 발송과 날인</title>
-          <rect x="782.8" y="220" width="140" height="52" rx="6" class="c-mask"/>
-          <rect x="782.8" y="220" width="140" height="52" rx="6" class="c-frontend" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(788.8 226) scale(0.6875)">
+        <g id="node-sign" data-node-id="sign" data-node-label="본인 대조 · 날인 · 거부" tabindex="0" role="button" aria-label="Focus 본인 대조 · 날인 · 거부, 다섯 값이 같아야 날인, 직원 근무 앱 › 발송과 날인" aria-pressed="false" data-node-kind="frontend" data-node-sublabel="다섯 값이 같아야 날인" data-node-context="직원 근무 앱 › 발송과 날인">
+          <title>본인 대조 · 날인 · 거부 · 다섯 값이 같아야 날인 · 직원 근무 앱 › 발송과 날인</title>
+          <rect x="903" y="220" width="160" height="52" rx="6" class="c-mask"/>
+          <rect x="903" y="220" width="160" height="52" rx="6" class="c-frontend" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="frontend" class="semantic-sigil s-frontend" transform="translate(909 226) scale(0.6875)">
             <rect x="2" y="3" width="12" height="10" rx="2"/>
             <path d="M2 6.5h12"/>
             <circle cx="4.1" cy="4.8" r=".7" class="sigil-fill"/>
             <circle cx="6.3" cy="4.8" r=".7" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="852.8" y="241" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">직원 날인 · 거부</text>
-          <text data-detail="context" x="852.8" y="258" class="t-muted" font-size="8" text-anchor="middle">거부 사유는 선택</text>
+          <text data-node-label="" data-detail-anchor="" x="983" y="241" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">본인 대조 · 날인 · 거부</text>
+          <text data-detail="context" x="983" y="258" class="t-muted" font-size="8" text-anchor="middle">다섯 값이 같아야 날인</text>
         </g>
 
         <g id="node-kind" data-node-id="kind" data-node-label="초대 유형 판별" tabindex="0" role="button" aria-label="Focus 초대 유형 판별, 계정을 조회해 정한다, 시스템 › 초대와 가입" aria-pressed="false" data-node-kind="backend" data-node-sublabel="계정을 조회해 정한다" data-node-context="시스템 › 초대와 가입">
@@ -5267,120 +5268,148 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <text data-detail="context" x="248" y="384" class="t-muted" font-size="8" text-anchor="middle">계정을 조회해 정한다</text>
         </g>
 
-        <g id="node-match" data-node-id="match" data-node-label="연결 판정" tabindex="0" role="button" aria-label="Focus 연결 판정, 토큰 + 본인인증 휴대전화, 시스템 › 초대와 가입" aria-pressed="false" data-node-kind="security" data-node-sublabel="토큰 + 본인인증 휴대전화" data-node-context="시스템 › 초대와 가입">
-          <title>연결 판정 · 토큰 + 본인인증 휴대전화 · 시스템 › 초대와 가입</title>
-          <rect x="413" y="346" width="150" height="52" rx="6" class="c-mask"/>
-          <rect x="413" y="346" width="150" height="52" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(419 352) scale(0.6875)">
-            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
-            <path d="m5.8 8 1.5 1.5 3-3"/>
-          </g>
-          <text data-node-label="" data-detail-anchor="" x="488" y="367" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">연결 판정</text>
-          <text data-detail="context" x="488" y="384" class="t-muted" font-size="8" text-anchor="middle">토큰 + 본인인증 휴대전화</text>
-        </g>
-
-        <g id="node-send" data-node-id="send" data-node-label="계약서 발송" tabindex="0" role="button" aria-label="Focus 계약서 발송, 관리자 개입 없이 자동, 시스템 › 발송과 날인" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="관리자 개입 없이 자동" data-node-context="시스템 › 발송과 날인">
-          <title>계약서 발송 · 관리자 개입 없이 자동 · 시스템 › 발송과 날인</title>
-          <rect x="657.8" y="346" width="150" height="52" rx="6" class="c-mask"/>
-          <rect x="657.8" y="346" width="150" height="52" rx="6" class="c-messagebus" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(663.8 352) scale(0.6875)">
+        <g id="node-affil" data-node-id="affil" data-node-label="소속 추가 · 복귀 확인" tabindex="0" role="button" aria-label="Focus 소속 추가 · 복귀 확인, 알림톡 · 이름 같을 때 메일, 시스템 › 초대와 가입" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="알림톡 · 이름 같을 때 메일" data-node-context="시스템 › 초대와 가입">
+          <title>소속 추가 · 복귀 확인 · 알림톡 · 이름 같을 때 메일 · 시스템 › 초대와 가입</title>
+          <rect x="471" y="346" width="170" height="52" rx="6" class="c-mask"/>
+          <rect x="471" y="346" width="170" height="52" rx="6" class="c-messagebus" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(477 352) scale(0.6875)">
             <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
             <circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
             <circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
             <circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="732.8" y="367" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">계약서 발송</text>
-          <text data-detail="context" x="732.8" y="384" class="t-muted" font-size="8" text-anchor="middle">관리자 개입 없이 자동</text>
+          <text data-node-label="" data-detail-anchor="" x="556" y="367" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">소속 추가 · 복귀 확인</text>
+          <text data-detail="context" x="556" y="384" class="t-muted" font-size="8" text-anchor="middle">알림톡 · 이름 같을 때 메일</text>
         </g>
 
-        <g id="node-hold" data-node-id="hold" data-node-label="연결 보류" tabindex="0" role="button" aria-label="Focus 연결 보류, 관리자 승인 또는 재초대, 보류·거부 › STAFF-7 · 최소 정보 + 승인 › 초대와 가입" aria-pressed="false" data-node-kind="security" data-node-sublabel="관리자 승인 또는 재초대" data-node-tag="실명·다른 소속은 안 보임" data-node-context="보류·거부 › STAFF-7 · 최소 정보 + 승인 › 초대와 가입">
-          <title>연결 보류 · 관리자 승인 또는 재초대 · 보류·거부 › STAFF-7 · 최소 정보 + 승인 › 초대와 가입 · 실명·다른 소속은 안 보임</title>
-          <rect x="413" y="471" width="150" height="68" rx="6" class="c-mask"/>
-          <rect x="413" y="471" width="150" height="68" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(419 477) scale(0.6875)">
+        <g id="node-send" data-node-id="send" data-node-label="계약서 발송" tabindex="0" role="button" aria-label="Focus 계약서 발송, 자동으로 발송, 시스템 › 발송과 날인" aria-pressed="false" data-node-kind="messagebus" data-node-sublabel="자동으로 발송" data-node-context="시스템 › 발송과 날인">
+          <title>계약서 발송 · 자동으로 발송 · 시스템 › 발송과 날인</title>
+          <rect x="721" y="346" width="150" height="52" rx="6" class="c-mask"/>
+          <rect x="721" y="346" width="150" height="52" rx="6" class="c-messagebus" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="messagebus" class="semantic-sigil s-messagebus" transform="translate(727 352) scale(0.6875)">
+            <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/>
+            <circle cx="5" cy="4.5" r="1" class="sigil-fill"/>
+            <circle cx="10.5" cy="8" r="1" class="sigil-fill"/>
+            <circle cx="7" cy="11.5" r="1" class="sigil-fill"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="796" y="367" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">계약서 발송</text>
+          <text data-detail="context" x="796" y="384" class="t-muted" font-size="8" text-anchor="middle">자동으로 발송</text>
+        </g>
+
+        <g id="node-correct" data-node-id="correct" data-node-label="수정 요청" tabindex="0" role="button" aria-label="Focus 수정 요청, 사유 필수 · 날인 기한 멈춤, 시스템 › 발송과 날인" aria-pressed="false" data-node-kind="security" data-node-sublabel="사유 필수 · 날인 기한 멈춤" data-node-context="시스템 › 발송과 날인">
+          <title>수정 요청 · 사유 필수 · 날인 기한 멈춤 · 시스템 › 발송과 날인</title>
+          <rect x="903" y="346" width="160" height="52" rx="6" class="c-mask"/>
+          <rect x="903" y="346" width="160" height="52" rx="6" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(909 352) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="488" y="492" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">연결 보류</text>
-          <text data-detail="context" x="488" y="509" class="t-muted" font-size="8" text-anchor="middle">관리자 승인 또는 재초대</text>
-        <text data-detail="fine" x="488" y="527" class="t-security" font-size="7" text-anchor="middle">실명·다른 소속은 안 보임</text>
+          <text data-node-label="" data-detail-anchor="" x="983" y="367" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">수정 요청</text>
+          <text data-detail="context" x="983" y="384" class="t-muted" font-size="8" text-anchor="middle">사유 필수 · 날인 기한 멈춤</text>
         </g>
 
-        <g id="node-reject" data-node-id="reject" data-node-label="거부 · 만료" tabindex="0" role="button" aria-label="Focus 거부 · 만료, 날인 기한 30일 경과, 보류·거부 › STAFF-2·3 · 7종 · 30일 › 발송과 날인" aria-pressed="false" data-node-kind="security" data-node-sublabel="날인 기한 30일 경과" data-node-context="보류·거부 › STAFF-2·3 · 7종 · 30일 › 발송과 날인">
-          <title>거부 · 만료 · 날인 기한 30일 경과 · 보류·거부 › STAFF-2·3 · 7종 · 30일 › 발송과 날인</title>
-          <rect x="782.8" y="479" width="140" height="52" rx="6" class="c-mask"/>
-          <rect x="782.8" y="479" width="140" height="52" rx="6" class="c-security" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(788.8 485) scale(0.6875)">
+        <g id="node-wait" data-node-id="wait" data-node-label="소속 추가 확인 대기" tabindex="0" role="button" aria-label="Focus 소속 추가 확인 대기, 답 없으면 요청만 만료 · 재발송, 거부 · 만료 › 초대와 가입" aria-pressed="false" data-node-kind="security" data-node-sublabel="답 없으면 요청만 만료 · 재발송" data-node-context="거부 · 만료 › 초대와 가입">
+          <title>소속 추가 확인 대기 · 답 없으면 요청만 만료 · 재발송 · 거부 · 만료 › 초대와 가입</title>
+          <rect x="461" y="472" width="190" height="52" rx="6" class="c-mask"/>
+          <rect x="461" y="472" width="190" height="52" rx="6" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(467 478) scale(0.6875)">
             <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
             <path d="m5.8 8 1.5 1.5 3-3"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="852.8" y="500" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">거부 · 만료</text>
-          <text data-detail="context" x="852.8" y="517" class="t-muted" font-size="8" text-anchor="middle">날인 기한 30일 경과</text>
+          <text data-node-label="" data-detail-anchor="" x="556" y="493" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">소속 추가 확인 대기</text>
+          <text data-detail="context" x="556" y="510" class="t-muted" font-size="8" text-anchor="middle">답 없으면 요청만 만료 · 재발송</text>
+        </g>
+
+        <g id="node-reject" data-node-id="reject" data-node-label="거부 · 만료" tabindex="0" role="button" aria-label="Focus 거부 · 만료, 날인 기한 30일 경과, 거부 · 만료 › STAFF-2·3 · 8종 · 30일 › 발송과 날인" aria-pressed="false" data-node-kind="security" data-node-sublabel="날인 기한 30일 경과" data-node-context="거부 · 만료 › STAFF-2·3 · 8종 · 30일 › 발송과 날인">
+          <title>거부 · 만료 · 날인 기한 30일 경과 · 거부 · 만료 › STAFF-2·3 · 8종 · 30일 › 발송과 날인</title>
+          <rect x="913" y="472" width="140" height="52" rx="6" class="c-mask"/>
+          <rect x="913" y="472" width="140" height="52" rx="6" class="c-security" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="security" class="semantic-sigil s-security" transform="translate(919 478) scale(0.6875)">
+            <path d="M8 2.2 13 4v3.5c0 3.1-1.8 5.4-5 6.5-3.2-1.1-5-3.4-5-6.5V4Z"/>
+            <path d="m5.8 8 1.5 1.5 3-3"/>
+          </g>
+          <text data-node-label="" data-detail-anchor="" x="983" y="493" class="t-primary" font-size="11" font-weight="600" text-anchor="middle">거부 · 만료</text>
+          <text data-detail="context" x="983" y="510" class="t-muted" font-size="8" text-anchor="middle">날인 기한 30일 경과</text>
         </g>
 
         <!-- Edge labels -->
-
-        <g data-detail="context" data-edge-from="hold" data-edge-to="kind" data-edge-label="번호 고쳐 재초대" data-edge-key="1" data-edge-id="e-hold-kind">
-          <rect x="287.1" y="485" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="330.5" y="495" class="t-database" font-size="8" text-anchor="middle">번호 고쳐 재초대</text>
+        <g data-detail="context" data-edge-from="affil" data-edge-to="reject" data-edge-label="거절 · 사유 없음" data-edge-key="0" data-edge-id="e-affil-reject">
+          <rect x="736.6" y="488" width="86.8" height="14" rx="3" class="c-mask"/>
+          <text x="780" y="498" class="t-security" font-size="8" text-anchor="middle">거절 · 사유 없음</text>
         </g>
-        <g data-detail="context" data-edge-from="hold" data-edge-to="send" data-edge-label="관리자 승인" data-edge-key="2" data-edge-id="e-hold-send">
-          <rect x="613" y="478" width="62.8" height="14" rx="3" class="c-mask"/>
-          <text x="644.4" y="488" class="t-security" font-size="8" text-anchor="middle">관리자 승인</text>
+        <g data-detail="context" data-edge-from="affil" data-edge-to="send" data-edge-label="수락" data-edge-key="1" data-edge-id="e-affil-send">
+          <rect x="595" y="320" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="610" y="330" class="t-muted" font-size="8" text-anchor="middle">수락</text>
         </g>
-        <g data-detail="context" data-edge-from="kind" data-edge-to="send" data-edge-label="재직 중이면 즉시 발송" data-edge-key="3" data-edge-id="e-kind-send">
-          <rect x="435" y="146" width="110.8" height="14" rx="3" class="c-mask"/>
-          <text x="490.4" y="156" class="t-database" font-size="8" text-anchor="middle">재직 중이면 즉시 발송</text>
+        <g data-detail="context" data-edge-from="affil" data-edge-to="wait" data-edge-label="이름 다르면 · 답 못 함" data-edge-key="2" data-edge-id="e-affil-wait">
+          <rect x="556.2" y="425" width="115.6" height="14" rx="3" class="c-mask"/>
+          <text x="614" y="435" class="t-security" font-size="8" text-anchor="middle">이름 다르면 · 답 못 함</text>
         </g>
-        <g data-detail="context" data-edge-from="kind" data-edge-to="signup" data-edge-label="가입 초대 · 재초대" data-edge-key="4" data-edge-id="e-kind-signup">
-          <rect x="259.8" y="274" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="308" y="284" class="t-backend" font-size="8" text-anchor="middle">가입 초대 · 재초대</text>
-        </g>
-        <g data-detail="context" data-edge-from="match" data-edge-to="hold" data-edge-label="불일치" data-edge-key="5" data-edge-id="e-match-hold">
-          <rect x="514.1" y="400" width="38.8" height="14" rx="3" class="c-mask"/>
-          <text x="533.5" y="410" class="t-security" font-size="8" text-anchor="middle">불일치</text>
-        </g>
-        <g data-detail="context" data-edge-from="match" data-edge-to="send" data-edge-label="일치 · 자동 연결" data-edge-key="6" data-edge-id="e-match-send">
-          <rect x="567" y="352" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="610.4" y="362" class="t-backend" font-size="8" text-anchor="middle">일치 · 자동 연결</text>
-        </g>
-        <g data-detail="context" data-edge-from="reject" data-edge-to="send" data-edge-label="재발송 · 새 이력" data-edge-key="7" data-edge-id="e-reject-send">
-          <rect x="752.9" y="540" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="796.3" y="550" class="t-database" font-size="8" text-anchor="middle">재발송 · 새 이력</text>
+        <g data-detail="context" data-edge-from="correct" data-edge-to="send" data-edge-label="관리자가 고쳐 저장 · 새 30일" data-edge-key="3" data-edge-id="e-correct-send">
+          <rect x="817.3" y="420" width="144.4" height="14" rx="3" class="c-mask"/>
+          <text x="889.5" y="430" class="t-database" font-size="8" text-anchor="middle">관리자가 고쳐 저장 · 새 30일</text>
         </g>
 
-        <g data-detail="context" data-edge-from="sign" data-edge-to="done" data-edge-label="날인" data-edge-key="9" data-edge-id="e-sign-done">
-          <rect x="837.8" y="200" width="30" height="14" rx="3" class="c-mask"/>
-          <text x="852.8" y="210" class="t-backend" font-size="8" text-anchor="middle">날인</text>
+        <g data-detail="context" data-edge-from="kind" data-edge-to="affil" data-edge-label="계정은 있고 레코드 미연결" data-edge-key="5" data-edge-id="e-kind-affil">
+          <rect x="337" y="352" width="130" height="14" rx="3" class="c-mask"/>
+          <text x="402" y="362" class="t-muted" font-size="8" text-anchor="middle">계정은 있고 레코드 미연결</text>
         </g>
-        <g data-detail="context" data-edge-from="sign" data-edge-to="reject" data-edge-label="거부 · 30일 만료" data-edge-key="10" data-edge-id="e-sign-reject">
-          <rect x="920.8000000000001" y="226" width="86.8" height="14" rx="3" class="c-mask"/>
-          <text x="964.2" y="236" class="t-security" font-size="8" text-anchor="middle">거부 · 30일 만료</text>
+        <g data-detail="context" data-edge-from="kind" data-edge-to="send" data-edge-label="그 점포 레코드에 계정이 이어져 있으면 즉시 발송" data-edge-key="6" data-edge-id="e-kind-send">
+          <rect x="404.2" y="146" width="235.6" height="14" rx="3" class="c-mask"/>
+          <text x="522" y="156" class="t-database" font-size="8" text-anchor="middle">그 점포 레코드에 계정이 이어져 있으면 즉시 발송</text>
+        </g>
+        <g data-detail="context" data-edge-from="kind" data-edge-to="signup" data-edge-label="가입 초대 · 재초대" data-edge-key="7" data-edge-id="e-kind-signup">
+          <rect x="318.8" y="226" width="96.39999999999999" height="14" rx="3" class="c-mask"/>
+          <text x="367" y="236" class="t-backend" font-size="8" text-anchor="middle">가입 초대 · 재초대</text>
+        </g>
+        <g data-detail="context" data-edge-from="reject" data-edge-to="kind" data-edge-label="재발송 · 새 이력" data-edge-key="8" data-edge-id="e-reject-kind">
+          <rect x="572.1" y="546" width="86.8" height="14" rx="3" class="c-mask"/>
+          <text x="615.5" y="556" class="t-database" font-size="8" text-anchor="middle">재발송 · 새 이력</text>
         </g>
 
+        <g data-detail="context" data-edge-from="sign" data-edge-to="correct" data-edge-label="다르면 · 정보가 틀리면" data-edge-key="10" data-edge-id="e-sign-correct">
+          <rect x="942.2" y="299" width="115.6" height="14" rx="3" class="c-mask"/>
+          <text x="1000" y="309" class="t-security" font-size="8" text-anchor="middle">다르면 · 정보가 틀리면</text>
+        </g>
+        <g data-detail="context" data-edge-from="sign" data-edge-to="done" data-edge-label="날인" data-edge-key="11" data-edge-id="e-sign-done">
+          <rect x="968" y="200" width="30" height="14" rx="3" class="c-mask"/>
+          <text x="983" y="210" class="t-backend" font-size="8" text-anchor="middle">날인</text>
+        </g>
+        <g data-detail="context" data-edge-from="sign" data-edge-to="reject" data-edge-label="거부 · 30일 만료" data-edge-key="12" data-edge-id="e-sign-reject">
+          <rect x="1051" y="478" width="86.8" height="14" rx="3" class="c-mask"/>
+          <text x="1094.4" y="488" class="t-security" font-size="8" text-anchor="middle">거부 · 30일 만료</text>
+        </g>
+        <g data-detail="context" data-edge-from="signup" data-edge-to="send" data-edge-label="가입하면 레코드에 잇는다" data-edge-key="13" data-edge-id="e-signup-send">
+          <rect x="611.4" y="290" width="125.19999999999999" height="14" rx="3" class="c-mask"/>
+          <text x="674" y="300" class="t-backend" font-size="8" text-anchor="middle">가입하면 레코드에 잇는다</text>
+        </g>
+        <g data-detail="context" data-edge-from="wait" data-edge-to="affil" data-edge-label="근로자 정보 수정으로 고침 · 다시 발송" data-edge-key="14" data-edge-id="e-wait-affil">
+          <rect x="286.2" y="430" width="187.6" height="14" rx="3" class="c-mask"/>
+          <text x="380" y="440" class="t-database" font-size="8" text-anchor="middle">근로자 정보 수정으로 고침 · 다시 발송</text>
+        </g>
 
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
-          <text x="20" y="568" class="t-primary" font-size="12" font-weight="650">Legend</text>
-          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="화면" data-legend-x="20" data-legend-baseline="588" data-legend-width="61">
-            <rect x="20" y="580" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
-            <text x="42" y="588" class="t-muted" font-size="7.5" font-weight="500">화면</text>
+          <text x="20" y="560" class="t-primary" font-size="12" font-weight="650">Legend</text>
+          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="화면" data-legend-x="20" data-legend-baseline="580" data-legend-width="61">
+            <rect x="20" y="572" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
+            <text x="42" y="580" class="t-muted" font-size="7.5" font-weight="500">화면</text>
           </g>
-          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="시스템 처리" data-legend-x="88" data-legend-baseline="588" data-legend-width="91">
-            <rect x="88" y="580" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
-            <text x="110" y="588" class="t-muted" font-size="7.5" font-weight="500">시스템 처리</text>
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="시스템 처리" data-legend-x="88" data-legend-baseline="580" data-legend-width="91">
+            <rect x="88" y="572" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
+            <text x="110" y="580" class="t-muted" font-size="7.5" font-weight="500">시스템 처리</text>
           </g>
-          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="판정 · 예외" data-legend-x="186" data-legend-baseline="588" data-legend-width="91">
-            <rect x="186" y="580" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
-            <text x="208" y="588" class="t-muted" font-size="7.5" font-weight="500">판정 · 예외</text>
+          <g data-legend-semantic-kind="security" data-legend-kind="security" data-legend-label="판정 · 예외" data-legend-x="186" data-legend-baseline="580" data-legend-width="91">
+            <rect x="186" y="572" width="14" height="9" rx="2" class="c-security" stroke-width="1"/>
+            <text x="208" y="580" class="t-muted" font-size="7.5" font-weight="500">판정 · 예외</text>
           </g>
-          <g data-legend-semantic-kind="messagebus" data-legend-kind="messagebus" data-legend-label="자동 발송" data-legend-x="284" data-legend-baseline="588" data-legend-width="83">
-            <rect x="284" y="580" width="14" height="9" rx="2" class="c-messagebus" stroke-width="1"/>
-            <text x="306" y="588" class="t-muted" font-size="7.5" font-weight="500">자동 발송</text>
+          <g data-legend-semantic-kind="messagebus" data-legend-kind="messagebus" data-legend-label="자동 발송" data-legend-x="284" data-legend-baseline="580" data-legend-width="83">
+            <rect x="284" y="572" width="14" height="9" rx="2" class="c-messagebus" stroke-width="1"/>
+            <text x="306" y="580" class="t-muted" font-size="7.5" font-weight="500">자동 발송</text>
           </g>
-          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="기록" data-legend-x="374" data-legend-baseline="588" data-legend-width="61">
-            <rect x="374" y="580" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
-            <text x="396" y="588" class="t-muted" font-size="7.5" font-weight="500">기록</text>
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="기록" data-legend-x="374" data-legend-baseline="580" data-legend-width="61">
+            <rect x="374" y="572" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
+            <text x="396" y="580" class="t-muted" font-size="7.5" font-weight="500">기록</text>
           </g>
         </g>
       </svg>
@@ -5575,7 +5604,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <h3>확정된 결정</h3>
         </div>
         <ul>
-          <li>&bull; STAFF-1 초안 저장이 시작점 · STAFF-3 초대·날인 30일 · STAFF-7 토큰과 휴대전화가 맞아야 자동 연결 · 지우는 것은 임시저장만(이어 쓰기에서 확인 뒤, CTR-19) · 같은 점포 진행 중 계약은 대체 확인 · 다른 점포와 근무 시간이 겹치면 초안 저장을 막는다(CTR-26)</li>
+          <li>&bull; STAFF-1 초안 저장이 시작점 · STAFF-3 초대·날인 30일 · 가입하면 초대 토큰의 직원 레코드에 바로 잇는다 · 날인의 다섯 값은 이름·휴대전화번호·생년월일·성별·외국인 여부 · 지우는 것은 임시저장만(이어 쓰기에서 확인 뒤, CTR-19) · 같은 점포 진행 중 계약은 대체 확인 · 다른 점포와 근무 시간이 겹치면 초안 저장을 막는다(CTR-26)</li>
         </ul>
       </div>
 
