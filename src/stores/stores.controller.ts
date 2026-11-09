@@ -275,7 +275,8 @@ export class StoresController {
       '동시 수정 · 폐점한 점포 · 소속 BP 미사용 · 사업자등록번호 중복 · 퇴근 기록이 없는 출근(폐점, code OPEN_CHECK_IN · storeId) · 다른 처리와 겹침(폐점, 교착이 다시 해도 나면 — 바뀐 것 없음, 다시 시도)',
   })
   @ApiServiceUnavailableResponse({
-    description: '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함',
+    description:
+      '사업자 인증을 보냈는데 진위확인 연동이 없거나 실패함 · 폐점 트랜잭션이 시간을 넘김(code STORE_CLOSING_TIMEOUT, 바뀐 것 없음)',
   })
   @ApiTooManyRequestsResponse({
     description:

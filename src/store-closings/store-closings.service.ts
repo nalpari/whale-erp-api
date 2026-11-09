@@ -1,9 +1,11 @@
 import {
   ConflictException,
+  HttpStatus,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { kstToday } from '../staff-members/kst-date';
@@ -22,8 +24,9 @@ import type {
 type Tx = Prisma.TransactionClient;
 
 const CLOSED = 'CLOSED';
-/** 문구 끝에 점포 id 를 괄호로 붙인다 — 3팀 확인의 404 와 같은 모양. 여러 점포를 닫는 탈퇴에서 어느 점포인지 알게 한다 */
+/** 404 는 문구 끝에 점포 id 를 괄호로 붙인다 — 행이 없을 수 있어 이름을 못 쓴다. 3팀 확인의 404 와 같은 모양 */
 const NOT_FOUND = '점포를 찾을 수 없습니다.';
+/** 409 는 문구 끝에 점포명을 괄호로 붙인다 — 화면에 그대로 나오는데 내부 id 는 고객이 알 수 없다(2026-11-09) */
 const ALREADY_CLOSED = '이미 폐점한 점포입니다.';
 /**
  * 폐점의 열린 출근 409 문구 — 3팀 문구는 가장 이른 열린 출근의 날짜 · 시각을 싣는데, 점포 전체에서 고르므로 본사에게 가려지는
@@ -36,6 +39,9 @@ const OPEN_CHECK_IN_MESSAGE =
 /** 교착이 두 번 나면 — 모두 되돌아갔으므로 다시 하면 된다는 것을 알린다(500 이 아니라 409) */
 const BUSY =
   '다른 처리와 겹쳐 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.';
+/** 트랜잭션이 제한 시간을 넘기면 — 모두 되돌아갔으므로 설명 없는 500 대신 503 으로 알린다 */
+const TIMED_OUT =
+  '처리 시간이 초과되어 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.';
 
 const logger = new Logger('StoreClosings');
 
@@ -46,7 +52,7 @@ const logger = new Logger('StoreClosings');
 export const STORE_CLOSING_TRANSACTION_TIMEOUT_MS = 30_000;
 
 /**
- * 점포 폐점(확인 · 저장) — 점포 폐점(`PUT /stores/:id`)이 쓰고, 회원 탈퇴 · BP 탈퇴가 같이 쓸 예정이다(아직 연결 전). 업무 범위 · 권한 · BP 상태 판단은
+ * 점포 폐점(확인 · 저장) — 점포 폐점(`PUT /stores/:id`)이 쓰고, 회원 탈퇴가 쓰고, BP 탈퇴가 같이 쓸 예정이다. 업무 범위 · 권한 · BP 상태 판단은
  * 부르는 쪽이 하고, 여기서는 받은 점포 id 만 다룬다. 결과에는 점포마다 점포명 · 점포코드를 붙여 부르는 쪽이 그대로 내보낼 수
  * 있게 한다. 3팀 `storeClosingCheck` · `RetirementService.retireStores`(여러 점포 버전)를 감싼다.
  */
@@ -133,7 +139,7 @@ export class StoreClosingsService {
     const closed = live.filter((s) => s.storeStatusCode === CLOSED);
     if (closed.length)
       throw new ConflictException(
-        `${ALREADY_CLOSED} (${closed.map((s) => s.storeId).join(', ')})`,
+        `${ALREADY_CLOSED} (${closed.map((s) => s.name).join(', ')})`,
       );
 
     const closedDate = kstToday(now);
@@ -198,13 +204,13 @@ export async function retryOnDeadlock<T>(
   try {
     return await run();
   } catch (error) {
-    if (!isDeadlock(error)) throw error;
+    if (!isDeadlock(error)) throw withoutRawTimeout(error, label);
     logger.warn(`폐점 교착 — 한 번 다시 한다 (${label}): ${error.message}`);
   }
   try {
     return await run();
   } catch (error) {
-    if (!isDeadlock(error)) throw error;
+    if (!isDeadlock(error)) throw withoutRawTimeout(error, label);
     logger.warn(`폐점 교착 — 다시 해도 겹쳐 409 (${label}): ${error.message}`);
     throw new ConflictException(BUSY);
   }
@@ -223,6 +229,22 @@ function isDeadlock(
     error.code === 'P2034' ||
     (error.code === 'P2010' && error.message.includes('Code: `40P01`'))
   );
+}
+
+/** 트랜잭션 시간 초과(P2028)를 오류 로그와 503 으로 바꾼다 — 다시 해도 같은 일이 되풀이되므로 재시도하지 않는다. 다른 오류는 그대로 돌려준다 */
+function withoutRawTimeout(error: unknown, label: string): unknown {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== 'P2028'
+  )
+    return error;
+  logger.error(`폐점 트랜잭션 시간 초과 (${label})`, error.stack);
+  return new ServiceUnavailableException({
+    statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+    error: 'Service Unavailable',
+    code: 'STORE_CLOSING_TIMEOUT',
+    message: TIMED_OUT,
+  });
 }
 
 /**

@@ -49,7 +49,7 @@ export interface StoreClosingCounts {
 }
 
 export interface StoreClosingCheck {
-  /** 점포별 결과 — id 오름차순. 회원 탈퇴 화면이 점포마다 열린 출근 수와 이름을 내보낼 수 있는 첫 건을 보인다 */
+  /** 점포별 결과 — id 오름차순. 1팀 폐점 서비스는 열린 출근의 수만 내보내고 첫 건(`first`)은 버린다 */
   stores: (StoreClosingCounts & { storeId: number })[];
   /** 같은 칸의 합 — `openCheckIns.first` 는 이름을 내보내는 것 가운데 전체에서 가장 이른 것 */
   total: StoreClosingCounts;
@@ -74,7 +74,7 @@ const retiringStaff = (storeIds: number[]) =>
 const HQ_ROLE = 'BM';
 
 /**
- * 폐점 확인(WHALEERP-647 · 650, 운영 정책 CTR-31) — 1팀 점포 폐점 · 회원 탈퇴가 폐점 전에 부르려는 읽기 전용 검사. 점포 하나는
+ * 폐점 확인(WHALEERP-647 · 650, 운영 정책 CTR-31) — 1팀 점포 폐점 · 회원 탈퇴가 폐점 전에 부르는 읽기 전용 검사. 점포 하나는
  * `[storeId]` 로 부른다. 점포 수만큼 쿼리가 늘지 않게 표마다 IN 으로 한 번에 묻는다. 중복 id 는 한 번만 센다. 점포 수정 화면 · 폐점 확인
  * 팝업 · 폐점 저장 직전(1팀 트랜잭션 안)이 같은 값을 보도록 받은 `client`(PrismaService 또는 트랜잭션)로만 읽고 쓰지 않는다.
  * 업무 범위 · 권한은 부르는 쪽이 이미 봤다고 보고, 폐점을 막을지도 부르는 쪽이 정한다.

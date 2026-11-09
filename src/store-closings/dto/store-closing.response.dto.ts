@@ -52,7 +52,7 @@ export class StoreClosingStoreCheckDto extends StoreClosingCountsDto {
   storeCode: string;
 }
 
-/** 폐점 확인 — 점포 폐점이 쓰고, 회원 탈퇴 · BP 탈퇴가 같이 쓸 예정이다 */
+/** 폐점 확인 — 점포 폐점과 회원 탈퇴(조건 조회의 closing)가 쓰고, BP 탈퇴가 같이 쓸 예정이다 */
 export class StoreClosingCheckResponseDto {
   /** 점포별 결과 — 점포 id 오름차순 */
   stores: StoreClosingStoreCheckDto[];
@@ -91,7 +91,7 @@ export class StoreClosingStoreResultDto extends StoreClosingRetirementDto {
   storeCode: string;
 }
 
-/** 폐점 결과 — 점포 폐점이 쓰고, 회원 탈퇴 · BP 탈퇴가 같이 쓸 예정이다 */
+/** 폐점 결과 — 점포 폐점이 응답으로 쓴다. 회원 탈퇴는 close 를 부르지만 204 라 이 결과를 내보내지 않는다. BP 탈퇴가 같이 쓸 예정이다 */
 export class StoreClosingResultResponseDto {
   /** 점포별 결과 — 점포 id 오름차순 */
   stores: StoreClosingStoreResultDto[];

@@ -65,7 +65,7 @@ export function storeTypeLabel(code: string): string {
 export const FRANCHISE_ROLE_TYPES = ['FM', 'FA'];
 
 /**
- * 점포 삭제(와 회원 탈퇴)를 막는 근로계약 — 거부 · 만료 · 종료되지 않은 것. 폐점은 2026-11-04 부터 이 목록으로 막지 않는다. 체결 전(임시저장 · 발송 대기 · 서명 대기 · 수정 요청)과
+ * 점포 삭제를 막는 근로계약 — 거부 · 만료 · 종료되지 않은 것. 폐점 · 회원 탈퇴는 이 목록으로 막지 않는다. 체결 전(임시저장 · 발송 대기 · 서명 대기 · 수정 요청)과
  * 체결 완료가 남아 있으면 그 점포에서 일할 사람이 있다는 뜻이다.
  */
 export const IN_PROGRESS_CONTRACT_STATUSES = [

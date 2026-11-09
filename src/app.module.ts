@@ -48,6 +48,9 @@ import { HomeModule } from './home/home.module';
     }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    // /staff-members/bulk-exports 가 /staff-members/:id 에 먹히지 않게 StaffMembersModule 보다 먼저 등록한다.
+    // AuthModule 이 회원 탈퇴 때문에 StoreClosingsModule → StaffMembersModule 을 가져오므로 AuthModule 앞이어야 한다.
+    BulkExportsModule,
     AuthModule,
     AdminSignupModule,
     EnumsModule,
@@ -63,8 +66,6 @@ import { HomeModule } from './home/home.module';
     BpCodesModule,
     BpMastersModule,
     TermsVersionsModule,
-    // /staff-members/bulk-exports 가 /staff-members/:id 에 먹히지 않게 StaffMembersModule 앞
-    BulkExportsModule,
     StaffMembersModule,
     PayslipsModule,
     ContractsModule,

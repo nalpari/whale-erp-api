@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Prisma } from '@prisma/client';
@@ -346,7 +347,7 @@ describe('StoreClosingsService', () => {
       expect(retire.retireStores).not.toHaveBeenCalled();
     });
 
-    it('잠근 뒤 보니 이미 폐점한 점포가 섞이면 409', async () => {
+    it('잠근 뒤 보니 이미 폐점한 점포가 섞이면 409 — 문구에 그 점포명', async () => {
       locked([
         { storeId: 11, name: '강남점', storeCode: 'ST000011' },
         {
@@ -355,10 +356,18 @@ describe('StoreClosingsService', () => {
           storeCode: 'ST000012',
           storeStatusCode: 'CLOSED',
         },
+        {
+          storeId: 13,
+          name: '선릉점',
+          storeCode: 'ST000013',
+          storeStatusCode: 'CLOSED',
+        },
       ]);
       await expect(
-        service.close(client as any, [11, 12], 7, NOW),
-      ).rejects.toThrow(new ConflictException('이미 폐점한 점포입니다. (12)'));
+        service.close(client as any, [11, 12, 13], 7, NOW),
+      ).rejects.toThrow(
+        new ConflictException('이미 폐점한 점포입니다. (역삼점, 선릉점)'),
+      );
       expect(retire.retireStores).not.toHaveBeenCalled();
     });
 
@@ -427,6 +436,52 @@ describe('retryOnDeadlock', () => {
     const run = jest.fn().mockRejectedValue(raw);
     await expect(retryOnDeadlock(run, '점포 11')).rejects.toBe(raw);
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  describe('트랜잭션 시간 초과(P2028)', () => {
+    const timedOut = () =>
+      new Prisma.PrismaClientKnownRequestError('Transaction API error', {
+        code: 'P2028',
+        clientVersion: 'test',
+      });
+    // 게이트웨이 503 은 결과를 모르지만 이 503 은 전부 되돌아간 것이 확실하다 — front 가 code 로 가른다.
+    const expectTimedOut = async (run: jest.Mock) => {
+      const thrown: unknown = await retryOnDeadlock(run, '점포 11').catch(
+        (e: unknown) => e,
+      );
+      expect(thrown).toBeInstanceOf(ServiceUnavailableException);
+      expect((thrown as ServiceUnavailableException).getResponse()).toEqual({
+        statusCode: 503,
+        error: 'Service Unavailable',
+        code: 'STORE_CLOSING_TIMEOUT',
+        message:
+          '처리 시간이 초과되어 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤 다시 시도해 주세요.',
+      });
+    };
+    let error: jest.SpyInstance;
+
+    beforeEach(() => {
+      error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => {});
+    });
+    afterEach(() => error.mockRestore());
+
+    it('다시 하지 않고 오류 로그를 남긴 뒤 503', async () => {
+      const run = jest.fn().mockRejectedValue(timedOut());
+      await expectTimedOut(run);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(error.mock.calls[0][0]).toContain('점포 11');
+    });
+
+    it('교착 뒤 다시 한 번에서 나도 503', async () => {
+      const run = jest
+        .fn()
+        .mockRejectedValueOnce(deadlock())
+        .mockRejectedValueOnce(timedOut());
+      await expectTimedOut(run);
+      expect(run).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('두 번째도 교착이면 500 이 아니라 409 「바뀐 것 없음 · 다시 시도」', async () => {

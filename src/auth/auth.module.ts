@@ -9,6 +9,7 @@ import { BusinessVerificationService } from '../admin-signup/business-verificati
 import { CodesModule } from '../codes/codes.module';
 import { optionalMailServiceProvider } from '../mail/mail.module';
 import { NtsModule } from '../nts/nts.module';
+import { StoreClosingsModule } from '../store-closings/store-closings.module';
 import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminLoginIdFindService } from './admin-login-id-find.service';
@@ -53,6 +54,8 @@ import { AUTH_THROTTLERS } from './throttle';
     CodesModule,
     // 내 BP 사업자정보 재인증(S-UOJVUR)이 가입과 같은 국세청 클라이언트를 쓴다.
     NtsModule,
+    // 회원 탈퇴가 그 BP 의 점포를 점포 관리 폐점과 같은 서비스로 닫는다.
+    StoreClosingsModule,
     // 로그인·갱신은 공개 경로이고 비밀번호 검증이 비싸다. 로그인 컨트롤러에
     // @UseGuards(ThrottlerGuard) 를 걸면 한도를 넘은 요청은 scrypt 에 닿기 전에 429 로 끊긴다.
     ThrottlerModule.forRoot(AUTH_THROTTLERS),

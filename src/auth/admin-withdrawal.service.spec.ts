@@ -1,55 +1,52 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment -- expect.objectContaining 은 any 를 돌려준다 */
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
 import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  STORE_CLOSING_TRANSACTION_TIMEOUT_MS,
+  StoreClosingsService,
+} from '../store-closings/store-closings.service';
 import { ADMIN_PASSWORD_MESSAGES } from './admin-password-policy';
 import { AdminWithdrawalService } from './admin-withdrawal.service';
 import { hashPassword } from './password';
-
-// 점포 폐점 · 삭제를 막는 목록(store-format.ts)과 같다 — 수정 요청(CORRECTION_REQUESTED)도 날인 전 진행 중이다.
-// 목록을 가져다 쓰지 않고 적어 둔다 — 원본이 바뀌면 이 테스트가 알린다.
-const IN_PROGRESS_STATUSES = [
-  'DRAFT',
-  'PENDING_SEND',
-  'PENDING_SIGNATURE',
-  'CORRECTION_REQUESTED',
-  'SIGNED',
-];
-
-/** 상태 목록에 수정 요청이 들어 있을 때만 1건을 세는 contract.count — 수정 요청 계약 하나만 있는 BP. */
-const countOnlyCorrectionRequested = ({
-  where,
-}: {
-  where: { status: { in: string[] } };
-}) => Promise.resolve(where.status.in.includes('CORRECTION_REQUESTED') ? 1 : 0);
 
 describe('AdminWithdrawalService.getEligibility', () => {
   let service: AdminWithdrawalService;
   let prisma: {
     adminAccount: { findFirst: jest.Mock; count: jest.Mock };
     bpCode: { findUniqueOrThrow: jest.Mock };
-    store: { count: jest.Mock; findMany: jest.Mock };
-    contract: { count: jest.Mock };
+    store: { findMany: jest.Mock };
   };
+  let closings: { check: jest.Mock };
+
+  /** 폐점 확인 결과 — 점포별 값은 front 가 점포를 골라 보여 줄 때 그대로 쓴다 */
+  const closingOf = (isBlocked: boolean) => ({
+    stores: [{ storeId: 101, storeName: '강남점', storeCode: 'ST000101' }],
+    total: { isBlocked },
+    isBlocked,
+  });
 
   beforeEach(async () => {
     prisma = {
       adminAccount: { findFirst: jest.fn(), count: jest.fn() },
       bpCode: { findUniqueOrThrow: jest.fn() },
-      store: { count: jest.fn(), findMany: jest.fn() },
-      contract: { count: jest.fn() },
+      store: { findMany: jest.fn() },
     };
+    closings = { check: jest.fn() };
     service = (
       await Test.createTestingModule({
         providers: [
           AdminWithdrawalService,
           { provide: PrismaService, useValue: prisma },
+          { provide: StoreClosingsService, useValue: closings },
           { provide: OPTIONAL_MAIL_SERVICE, useValue: null },
         ],
       }).compile()
@@ -81,7 +78,7 @@ describe('AdminWithdrawalService.getEligibility', () => {
       where: { adminAccountId: 1, isDeleted: false },
       select: { roleTypeCode: true, bpCodeId: true, accountStatusCode: true },
     });
-    expect(prisma.contract.count).not.toHaveBeenCalled();
+    expect(closings.check).not.toHaveBeenCalled();
   });
 
   it('플랫폼 BP 면 403', async () => {
@@ -99,28 +96,10 @@ describe('AdminWithdrawalService.getEligibility', () => {
       new ForbiddenException('플랫폼 BP 는 탈퇴할 수 없습니다.'),
     );
     expect(prisma.adminAccount.count).not.toHaveBeenCalled();
+    expect(closings.check).not.toHaveBeenCalled();
   });
 
-  it('수정 요청(CORRECTION_REQUESTED) 계약도 진행 중으로 센다', async () => {
-    prisma.adminAccount.findFirst.mockResolvedValue({
-      roleTypeCode: 'BM',
-      bpCodeId: 7,
-      accountStatusCode: 'ACTIVE',
-    });
-    prisma.bpCode.findUniqueOrThrow.mockResolvedValue({
-      tradeName: '웨일분식',
-    });
-    prisma.adminAccount.count.mockResolvedValue(0);
-    prisma.store.count.mockResolvedValue(1);
-    prisma.store.findMany.mockResolvedValue([{ storeId: 101 }]);
-    prisma.contract.count.mockImplementation(countOnlyCorrectionRequested);
-
-    const result = await service.getEligibility(1);
-
-    expect(result.hasInProgressContract).toBe(true);
-  });
-
-  it('BP명·하위 관리자 수·점포 수·진행중 계약 여부를 반환한다', async () => {
+  it('BP명 · 하위 관리자 수 · 점포 수와, 폐점 안 한 점포 전부의 폐점 확인을 돌려준다', async () => {
     prisma.adminAccount.findFirst.mockResolvedValue({
       roleTypeCode: 'BM',
       bpCodeId: 7,
@@ -129,26 +108,19 @@ describe('AdminWithdrawalService.getEligibility', () => {
       tradeName: '웨일분식',
     });
     prisma.adminAccount.count.mockResolvedValue(6);
-    prisma.store.count.mockResolvedValue(11);
-    // contracts 테이블은 1팀 stores 와 Prisma 관계로 잇지 않는다(schema.prisma 머리말) —
-    // storeId 는 정수 칸만 있어 그 BP 의 점포 id 를 먼저 받아 와야 한다.
     prisma.store.findMany.mockResolvedValue([
       { storeId: 101 },
       { storeId: 102 },
     ]);
-    prisma.contract.count.mockResolvedValue(1);
+    closings.check.mockResolvedValue(closingOf(true));
 
     const result = await service.getEligibility(1);
 
     expect(result).toEqual({
       bpName: '웨일분식',
       adminCount: 6,
-      storeCount: 11,
-      hasInProgressContract: true,
-    });
-    expect(prisma.bpCode.findUniqueOrThrow).toHaveBeenCalledWith({
-      where: { bpCodeId: 7 },
-      select: { tradeName: true, accountStatusCode: true, isPlatform: true },
+      storeCount: 2,
+      closing: closingOf(true),
     });
     expect(prisma.adminAccount.count).toHaveBeenCalledWith({
       where: {
@@ -158,22 +130,19 @@ describe('AdminWithdrawalService.getEligibility', () => {
         accountStatusCode: { not: 'WITHDRAWN' },
       },
     });
-    expect(prisma.store.count).toHaveBeenCalledWith({
+    // 이미 폐점했거나 지운 점포는 확인 대상에 넣지 않는다
+    expect(prisma.store.findMany).toHaveBeenCalledWith({
       where: {
         bpCodeId: 7,
         isDeleted: false,
         storeStatusCode: { not: 'CLOSED' },
       },
+      select: { storeId: true },
     });
-    expect(prisma.contract.count).toHaveBeenCalledWith({
-      where: {
-        storeId: { in: [101, 102] },
-        status: { in: IN_PROGRESS_STATUSES },
-      },
-    });
+    expect(closings.check).toHaveBeenCalledWith(prisma, [101, 102]);
   });
 
-  it('진행중 계약이 없으면 hasInProgressContract 는 false', async () => {
+  it('진행 중 계약은 보지 않는다 — 막힘은 폐점 확인의 isBlocked 뿐이다', async () => {
     prisma.adminAccount.findFirst.mockResolvedValue({
       roleTypeCode: 'BM',
       bpCodeId: 7,
@@ -182,13 +151,14 @@ describe('AdminWithdrawalService.getEligibility', () => {
       tradeName: '웨일분식',
     });
     prisma.adminAccount.count.mockResolvedValue(0);
-    prisma.store.count.mockResolvedValue(0);
     prisma.store.findMany.mockResolvedValue([]);
-    prisma.contract.count.mockResolvedValue(0);
+    closings.check.mockResolvedValue(closingOf(false));
 
     const result = await service.getEligibility(1);
 
-    expect(result.hasInProgressContract).toBe(false);
+    expect(result.closing.isBlocked).toBe(false);
+    expect(result).not.toHaveProperty('hasInProgressContract');
+    expect(closings.check).toHaveBeenCalledWith(prisma, []);
   });
 });
 
@@ -200,6 +170,7 @@ describe('AdminWithdrawalService.execute', () => {
   let service: AdminWithdrawalService;
   let passwordHash: string;
   let mailService: { send: jest.Mock };
+  let closings: { close: jest.Mock };
   let prisma: {
     $transaction: jest.Mock;
     $queryRaw: jest.Mock;
@@ -210,10 +181,7 @@ describe('AdminWithdrawalService.execute', () => {
       updateMany: jest.Mock;
     };
     bpCode: { findUniqueOrThrow: jest.Mock; update: jest.Mock };
-    store: { findMany: jest.Mock; updateMany: jest.Mock };
-    contract: { count: jest.Mock };
     adminChangeHistory: { createMany: jest.Mock };
-    storeChangeHistory: { createMany: jest.Mock };
     bpChangeHistory: { create: jest.Mock };
     adminSession: { updateMany: jest.Mock };
   };
@@ -236,7 +204,12 @@ describe('AdminWithdrawalService.execute', () => {
       await Test.createTestingModule({
         providers: [
           AdminWithdrawalService,
-          { provide: PrismaService, useValue: prisma },
+          // 바깥 클라이언트에는 $transaction 만 — 나머지는 전부 트랜잭션(tx)으로 해야 통과한다.
+          {
+            provide: PrismaService,
+            useValue: { $transaction: prisma.$transaction },
+          },
+          { provide: StoreClosingsService, useValue: closings },
           { provide: OPTIONAL_MAIL_SERVICE, useValue: mail },
         ],
       }).compile()
@@ -247,7 +220,7 @@ describe('AdminWithdrawalService.execute', () => {
     jest.setSystemTime(now);
     prisma = {
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(prisma)),
-      $queryRaw: jest.fn(),
+      $queryRaw: jest.fn().mockResolvedValue([]),
       adminAccount: {
         findFirst: jest.fn().mockResolvedValue(master()),
         findMany: jest.fn().mockResolvedValue([]),
@@ -261,18 +234,14 @@ describe('AdminWithdrawalService.execute', () => {
         }),
         update: jest.fn(),
       },
-      // 첫 호출은 진행 중 계약 확인용(그 BP 의 모든 점포), 둘째는 폐점할 점포 목록이다.
-      store: {
-        findMany: jest.fn().mockResolvedValue([]),
-        updateMany: jest.fn(),
-      },
-      contract: { count: jest.fn().mockResolvedValue(0) },
       adminChangeHistory: { createMany: jest.fn() },
-      storeChangeHistory: { createMany: jest.fn() },
       bpChangeHistory: { create: jest.fn() },
       adminSession: { updateMany: jest.fn() },
     };
     mailService = { send: jest.fn().mockResolvedValue(undefined) };
+    closings = {
+      close: jest.fn().mockResolvedValue({ stores: [], total: {} }),
+    };
     service = await build(mailService);
   });
 
@@ -282,7 +251,7 @@ describe('AdminWithdrawalService.execute', () => {
     expect(prisma.adminAccount.update).not.toHaveBeenCalled();
     expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
     expect(prisma.bpCode.update).not.toHaveBeenCalled();
-    expect(prisma.store.updateMany).not.toHaveBeenCalled();
+    expect(closings.close).not.toHaveBeenCalled();
     expect(prisma.adminChangeHistory.createMany).not.toHaveBeenCalled();
     expect(prisma.adminSession.updateMany).not.toHaveBeenCalled();
     expect(mailService.send).not.toHaveBeenCalled();
@@ -323,24 +292,6 @@ describe('AdminWithdrawalService.execute', () => {
     expectNoMutation();
   });
 
-  it('한국 0시~9시에 탈퇴해도 폐점일은 한국 날짜다', async () => {
-    jest.setSystemTime(new Date('2026-10-26T16:00:00Z')); // 한국 2026-10-27 01:00
-    prisma.store.findMany
-      .mockResolvedValueOnce([{ storeId: 101 }])
-      .mockResolvedValueOnce([{ storeId: 101, storeStatusCode: 'OPERATING' }]);
-
-    await service.execute(1, dto);
-
-    expect(prisma.store.updateMany).toHaveBeenCalledWith({
-      where: { storeId: { in: [101] } },
-      data: {
-        storeStatusCode: 'CLOSED',
-        closedDate: new Date('2026-10-27T00:00:00Z'),
-        updatedBy: 1,
-      },
-    });
-  });
-
   it('하위 관리자가 없어도 본인 접속은 끝낸다', async () => {
     await service.execute(1, dto);
     expect(prisma.adminSession.updateMany).toHaveBeenCalledWith({
@@ -371,40 +322,41 @@ describe('AdminWithdrawalService.execute', () => {
     expectNoMutation();
   });
 
-  it('수정 요청(CORRECTION_REQUESTED) 계약만 있어도 400', async () => {
-    prisma.store.findMany.mockResolvedValueOnce([{ storeId: 101 }]);
-    prisma.contract.count.mockImplementation(countOnlyCorrectionRequested);
-    await expect(service.execute(1, dto)).rejects.toThrow(
-      new BadRequestException(
-        '진행 중인 근로계약이 있어 탈퇴할 수 없습니다. 근로계약을 모두 종료한 뒤 다시 시도해 주세요.',
-      ),
-    );
-    expectNoMutation();
+  it('트랜잭션을 폐점 제한 시간으로 연다', async () => {
+    await service.execute(1, dto);
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      timeout: STORE_CLOSING_TRANSACTION_TIMEOUT_MS,
+    });
   });
 
-  it('진행 중인 근로계약이 있으면 400', async () => {
-    prisma.store.findMany.mockResolvedValueOnce([
-      { storeId: 101 },
-      { storeId: 102 },
-    ]);
-    prisma.contract.count.mockResolvedValue(1);
-    await expect(service.execute(1, dto)).rejects.toThrow(
-      new BadRequestException(
-        '진행 중인 근로계약이 있어 탈퇴할 수 없습니다. 근로계약을 모두 종료한 뒤 다시 시도해 주세요.',
-      ),
-    );
-    // 조건 조회(getEligibility)와 같은 점포 범위 · 같은 상태로 센다.
-    expect(prisma.store.findMany).toHaveBeenCalledWith({
-      where: { bpCodeId: 7 },
-      select: { storeId: true },
+  it('진행 중 계약(서명 완료 포함)은 보지 않는다 — 계약 때문에 막지 않는다', async () => {
+    await expect(service.execute(1, dto)).resolves.toBeUndefined();
+  });
+
+  it('폐점 서비스의 409(퇴근 기록 없는 출근)는 그대로 내보내고 메일을 보내지 않는다', async () => {
+    const openCheckIn = new ConflictException({
+      code: 'OPEN_CHECK_IN',
+      storeId: 101,
+      message: '퇴근 기록이 없는 출근이 있어 폐점할 수 없습니다.',
     });
-    expect(prisma.contract.count).toHaveBeenCalledWith({
-      where: {
-        storeId: { in: [101, 102] },
-        status: { in: IN_PROGRESS_STATUSES },
-      },
+    closings.close.mockRejectedValue(openCheckIn);
+    await expect(service.execute(1, dto)).rejects.toBe(openCheckIn);
+    expect(mailService.send).not.toHaveBeenCalled();
+  });
+
+  it('교착이 두 번 나면 트랜잭션을 처음부터 두 번 열고 409', async () => {
+    const deadlock = new Prisma.PrismaClientKnownRequestError('deadlock', {
+      code: 'P2034',
+      clientVersion: 'test',
     });
-    expectNoMutation();
+    prisma.$transaction.mockRejectedValue(deadlock);
+    const warned = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    await expect(service.execute(1, dto)).rejects.toThrow(ConflictException);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(mailService.send).not.toHaveBeenCalled();
+    warned.mockRestore();
   });
 
   it('본인은 WITHDRAWN, 하위 관리자는 개인정보를 지우고 INACTIVE 로 바꾸고 점포를 폐점하고 이력과 메일을 남긴다', async () => {
@@ -412,12 +364,10 @@ describe('AdminWithdrawalService.execute', () => {
       { adminAccountId: 2, accountStatusCode: 'ACTIVE' },
       { adminAccountId: 3, accountStatusCode: 'INACTIVE' },
     ]);
-    prisma.store.findMany
-      .mockResolvedValueOnce([{ storeId: 101 }, { storeId: 102 }])
-      .mockResolvedValueOnce([
-        { storeId: 101, storeStatusCode: 'OPERATING' },
-        { storeId: 102, storeStatusCode: 'NOT_OPERATING' },
-      ]);
+    prisma.$queryRaw
+      .mockResolvedValueOnce([]) // BP 행
+      .mockResolvedValueOnce([]) // 본인 행
+      .mockResolvedValueOnce([{ storeId: 101 }, { storeId: 102 }]); // 폐점할 점포
 
     await service.execute(1, dto);
 
@@ -429,6 +379,12 @@ describe('AdminWithdrawalService.execute', () => {
     expect(calls[0][1]).toBe(7);
     expect(locks[1]).toContain('FROM admin_accounts');
     expect(locks[1]).toContain('FOR UPDATE');
+    // 폐점할 점포는 BP 행 · 본인 행 뒤에 읽으며 잠근다 — 잠금을 기다린 뒤 폐점 · 삭제된 행은 조건에서 빠진다.
+    expect(locks[2]).toContain('FROM stores');
+    expect(locks[2]).toContain('NOT is_deleted');
+    expect(locks[2]).toContain('store_status_code <>');
+    expect(locks[2]).toContain('FOR NO KEY UPDATE');
+    expect(calls[2].slice(1)).toEqual([7, 'CLOSED']);
     expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
       where: { adminAccountId: 1, isDeleted: false },
       select: {
@@ -495,36 +451,22 @@ describe('AdminWithdrawalService.execute', () => {
         updatedBy: 1,
       },
     });
-    expect(prisma.store.findMany).toHaveBeenLastCalledWith({
-      where: {
-        bpCodeId: 7,
-        isDeleted: false,
-        storeStatusCode: { not: 'CLOSED' },
-      },
-      select: { storeId: true, storeStatusCode: true },
-    });
-    expect(prisma.store.updateMany).toHaveBeenCalledWith({
-      where: { storeId: { in: [101, 102] } },
-      data: {
-        storeStatusCode: 'CLOSED',
-        closedDate: new Date('2026-10-27T00:00:00Z'), // 날짜만(@db.Date) — 한국 오늘
-        updatedBy: 1,
-      },
-    });
-    const retainEndDate = new Date('2031-10-27T00:00:00Z'); // 한국 오늘 + 5년
-    expect(prisma.storeChangeHistory.createMany).toHaveBeenCalledWith({
-      data: [
-        { storeId: 101, beforeValue: '운영' },
-        { storeId: 102, beforeValue: '미운영' },
-      ].map((row) => ({
-        ...row,
-        field: '점포상태',
-        afterValue: '폐점',
-        changedBy: 1,
-        changedAt: now,
-        retainEndDate,
-      })),
-    });
+    // 폐점(점포 상태 · 폐점일 · 점포상태 이력 · 3팀 퇴직)은 폐점 서비스가 같은 트랜잭션에서 한다.
+    expect(closings.close).toHaveBeenCalledWith(prisma, [101, 102], 1, now);
+    // 폐점은 탈퇴 처리 뒤 마지막이다 — 그 앞에서 직원 · 계정 행을 잠그지 않는다(3팀 점포 → 직원 → 계정 순서).
+    const lastWrite = Math.max(
+      ...[
+        prisma.adminAccount.update,
+        prisma.adminAccount.updateMany,
+        prisma.adminSession.updateMany,
+        prisma.bpCode.update,
+        prisma.adminChangeHistory.createMany,
+        prisma.bpChangeHistory.create,
+      ].flatMap((m) => m.mock.invocationCallOrder),
+    );
+    expect(closings.close.mock.invocationCallOrder[0]).toBeGreaterThan(
+      lastWrite,
+    );
     expect(prisma.adminChangeHistory.createMany).toHaveBeenCalledWith({
       // 상태가 바뀐 계정만 — BP 마스터는 탈퇴, 사용이던 하위 관리자는 미사용. 이미 미사용(3)은 남기지 않는다
       data: [
@@ -587,8 +529,8 @@ describe('AdminWithdrawalService.execute', () => {
   it('하위 관리자 · 폐점할 점포가 없으면 그 쓰기를 건너뛴다', async () => {
     await service.execute(1, dto);
     expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
-    expect(prisma.store.updateMany).not.toHaveBeenCalled();
-    expect(prisma.storeChangeHistory.createMany).not.toHaveBeenCalled();
+    // 폐점할 점포가 없으면 폐점 서비스가 빈 결과로 바로 돌아온다(잠그지 않는다).
+    expect(closings.close).toHaveBeenCalledWith(prisma, [], 1, now);
     expect(prisma.adminChangeHistory.createMany).toHaveBeenCalledWith({
       data: [expect.objectContaining({ adminAccountId: 1 })],
     });

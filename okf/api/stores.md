@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-09T10:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -13,19 +13,19 @@ sources:
   - id: store-closings-service
     resource: ../../src/store-closings/store-closings.service.ts
     title: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
-    last_modified: 2026-11-05T02:00:00Z
+    last_modified: 2026-11-09T10:00:00Z
   - id: store-closing-response
     resource: ../../src/store-closings/dto/store-closing.response.dto.ts
     title: 폐점 확인 · 결과 응답(점포별 점포명 · 점포코드 + 합계)
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-09T08:00:00Z
   - id: store-closings-module
     resource: ../../src/store-closings/store-closings.module.ts
-    title: StoreClosingsModule — 회원 탈퇴 · BP 탈퇴가 import 할 진입점(StaffMembersModule 의 RetirementService 를 쓴다)
-    last_modified: 2026-11-04T07:00:00Z
+    title: StoreClosingsModule — 점포 관리 · 회원 탈퇴가 import 하고 BP 탈퇴가 import 할 진입점(StaffMembersModule 의 RetirementService 를 쓴다)
+    last_modified: 2026-11-09T08:00:00Z
   - id: stores-controller
     resource: ../../src/stores/stores.controller.ts
     title: /stores routes and the menu permission per action (`/stores`, MN000002 today)
-    last_modified: 2026-11-06T03:00:00Z
+    last_modified: 2026-11-09T10:00:00Z
   - id: store-excel
     resource: ../../src/stores/store-excel.ts
     title: 점포 목록 엑셀 — 화면 [표] 보기와 같은 열 · 서식(정책은 공통 엑셀)
@@ -33,7 +33,7 @@ sources:
   - id: store-format
     resource: ../../src/stores/store-format.ts
     title: 상태 전환 · 운영 조건 · 진행 중 근로계약 · 이력 보존 기한 · 라벨
-    last_modified: 2026-11-04T09:30:00Z
+    last_modified: 2026-11-09T08:00:00Z
   - id: store-business-verifier
     resource: ../../src/stores/store-business-verifier.ts
     title: STORE_BUSINESS_VERIFIER — 국세청 진위확인 slot
@@ -216,7 +216,7 @@ The save checks again; the screen's answer is advice.
 
 # Closing a store
 
-One service closes stores for three callers — 점포 폐점 here, and later 회원 탈퇴 and BP 탈퇴, which close
+One service closes stores for three callers — 점포 폐점 here, 회원 탈퇴 ([admin auth](/api/admin-auth.md), 2026-11-05) and later BP 탈퇴, which close
 every not-yet-closed store of a BP at once (`StoreClosingsService`, module `StoreClosingsModule`, no route
 of its own). It wraps 3팀's multi-store `storeClosingCheck` and `RetirementService.retireStores`
 ([staff retirement](/api/staff-retirement.md)) and takes only store ids: scope, permission and BP status are
@@ -239,8 +239,8 @@ are.[^store-closings-service][^store-closing-response]
   naming the ids. A store missing from the name lookup is a 500, not an empty name — it cannot happen after
   that 404, so it means a broken contract.
 - **`close(tx, storeIds, adminAccountId)`** — inside the caller's transaction: lock every store row in
-  ascending id `FOR NO KEY UPDATE` (404 if one is gone, 409 「이미 폐점한 점포입니다.」 if one is closed — both
-  name the store ids, for the multi-store callers),
+  ascending id `FOR NO KEY UPDATE` (404 if one is gone, naming the store ids because a missing row has no name; 409 「이미 폐점한 점포입니다.」
+  if one is closed, naming the store names because the screen shows the message as it is),
   then `retireStores` (it locks staff then accounts, re-checks open check-ins and refuses with 409
   `OPEN_CHECK_IN` + `storeId`, sets retirement dates, ends pending contracts, expires invitations), then
   `CLOSED` · `closed_date` (Korean today) and one 점포상태 history row per store. A 3팀 exception is not
@@ -255,7 +255,9 @@ are.[^store-closings-service][^store-closing-response]
   `40P01` and `40001` to it, and under READ COMMITTED it is a deadlock — or `P2010` whose message carries
   ``Code: `40P01` ``) is logged as a warning and retried once from the start; the rolled-back attempt
   left nothing. A second deadlock is a **409** 「다른 처리와 겹쳐 폐점하지 못했습니다. 바뀐 것은 없으니 잠시 뒤
-  다시 시도해 주세요.」 rather than a bare 500. Several stores are always locked in ascending id.
+  다시 시도해 주세요.」 rather than a bare 500. A transaction timeout (`P2028`) is not retried: it is logged and
+  answered **503** with `code: 'STORE_CLOSING_TIMEOUT'`. A gateway 503 leaves the outcome unknown; this code says
+  everything was rolled back. Several stores are always locked in ascending id.
 - **Neither lock keeps new rows out of a closing store.** `FOR UPDATE` only made a foreign-key insert
   (`FOR KEY SHARE`) wait until the closing committed — then the store row was still there and the insert
   succeeded. So a staff record or contract whose transaction checked the store before the closing committed
@@ -274,7 +276,7 @@ was, then calls `close`, which writes the status, the date and the 점포상태 
 not, so there is one row). The `PUT` now answers **200** with `{ closing }`: the closing's per-store and
 total counts, or `null` when the save was not a closing (it was 204 with no body before 2026-11-04).
 `canClose` is 「BP 사용 중 · 폐점 아님 · `closing.isBlocked` false」; `closing` is `null` on a closed
-store. 회원 탈퇴 and BP 탈퇴 are not wired to it yet.
+store. 회원 탈퇴 is wired to it the same way (2026-11-05, [admin auth](/api/admin-auth.md)); BP 탈퇴 is not yet.
 
 # 재직 직원 수
 
