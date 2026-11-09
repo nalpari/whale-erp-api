@@ -35,7 +35,7 @@ import {
 
 /**
  * 직원 자료 일괄 저장(WHALEERP-336). 직원 정보 관리 메뉴(`/staff-members`)의 조회 권한 위에서 권한 유형을 따로 본다 — BP
- * 마스터 · 가맹마스터만, 그 밖은 403. `/staff-members/:id` 보다 먼저 등록돼야 한다(AppModule 에서 StaffMembersModule 앞).
+ * 마스터 · 가맹마스터만, 그 밖은 403. `/staff-members/:id` 보다 먼저 등록돼야 한다(AppModule 에서 StaffMembersModule 을 가져오는 AuthModule 앞).
  */
 @ApiBearerAuth()
 @ApiForbiddenResponse({

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-09
+* **Update**: [Bulk exports](/api/bulk-exports.md) · [whale-erp-api](/api/whale-erp-api.md) — api #260 머지 블로커: `AuthModule` 이 회원 탈퇴 때문에 `StoreClosingsModule` → `StaffMembersModule` 을 가져오면서 `GET /staff-members/bulk-exports` 가 `/staff-members/:id` 에 먹혀 404 가 됐다. `BulkExportsModule` 을 `AuthModule` 앞으로 옮겼다. openapi.json 다시 생성.
 * **Update**: [Admin auth](/api/admin-auth.md) · [Store management](/api/stores.md) — api #260 리뷰 반영: 폐점 시간 초과 503 에 `code: 'STORE_CLOSING_TIMEOUT'` 을 붙였다(게이트웨이 503 과 달리 전부 되돌아간 것이 확실하다, 2026-11-09 사용자). 회원 탈퇴 Swagger 409 에서 나올 수 없는 「이미 폐점」을 뺐다(탈퇴가 점포를 미리 잠그고 거른다). e2e 를 점포 2개로 넓히고, 실제 PostgreSQL 전용으로 잠금 대기 중 닫힌 점포가 빠지는 케이스를 더했다. openapi.json 다시 생성.
 * **Update**: [Admin auth](/api/admin-auth.md) — 회원 탈퇴 e2e `test/admin-withdrawal-db.e2e-spec.ts`(api #260): 폐점 안 한 점포를 닫고 대기 계약 종료 · 체결 완료 유지 · 직원 퇴직일 · 개인정보 삭제 · 접속 끊기를 실제 DB 로 확인하고, 열린 출근의 409 가 이미 쓴 계정 · BP · 이력을 전부 되돌리는지 본다.
 * **Update**: [Admin auth](/api/admin-auth.md) · [Store management](/api/stores.md) · [Authentication](/api/auth.md) · [Staff retirement](/api/staff-retirement.md) · [BP masters](/api/bp-masters.md) — api #260 리뷰 반영: `retryOnDeadlock` 이 트랜잭션 시간 초과(P2028)를 설명 없는 500 대신 오류 로그와 503 「바뀐 것은 없으니 잠시 뒤 다시 시도」로 바꾼다(재시도하지 않음, 회원 탈퇴 · 점포 폐점 공통, Swagger 503). 회원 탈퇴가 폐점할 점포를 읽으며 `FOR NO KEY UPDATE` 로 잠가, 그 사이 폐점 · 삭제된 점포는 잠금을 기다린 뒤 조건에서 빠지고 탈퇴를 409 · 404 로 되돌리지 않는다. 「아직 연결 전」 주석을 고치고 `auth.module.ts` 출처를 맞췄다. 탈퇴 단위 테스트가 트랜잭션 밖 클라이언트를 쓰면 실패하도록 고쳤다. openapi.json 다시 생성(api ponyta).
