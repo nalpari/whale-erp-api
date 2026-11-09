@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-09
+* **Update**: [Admin auth](/api/admin-auth.md) — 회원 탈퇴 경로의 Swagger 설명을 지금 동작에 맞췄다: 막는 조건은 퇴근 기록이 없는 출근(`closing.isBlocked`) 하나이고, `POST me/withdraw` 의 400 에서 진행 중 계약을 빼고 409(폐점이 막힘, 탈퇴 전체 되돌림)를 더했다. openapi.json 다시 생성(api ponyta).
 * **Update**: [Store management](/api/stores.md) — 폐점 저장의 409 「이미 폐점한 점포입니다.」 문구 끝 괄호를 점포 id 에서 점포명으로 바꾼다(`(역삼점, 선릉점)`, 2026-11-09 사용자). 화면에 그대로 나오는데 내부 번호는 고객이 알 수 없다. 404 「점포를 찾을 수 없습니다. (12, 13)」는 행이 없을 수 있어 id 그대로(api ponyta).
 
 ## 2026-11-06

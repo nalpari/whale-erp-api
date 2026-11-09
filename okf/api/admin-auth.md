@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, the store list version (`stores-version`, `me/stores`) the header store picker refreshes by, and the login info version (`me/login-info-version`) the screen re-reads login-info by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-11-05T06:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:00:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -25,7 +25,7 @@ sources:
   - id: admin-auth-controller
     resource: ../../src/auth/admin-auth.controller.ts
     title: POST /auth/admin/login · refresh · logout · signup-session · login-id-find-attempts · me/password-change · me/password-verifications, GET /auth/admin/login-info · me · me/bp · me/email-availability · me/stores · me/login-info-version, PATCH /auth/admin/me · me/bp, POST /auth/admin/me/bp/business-verification
-    last_modified: 2026-11-02T08:10:00Z
+    last_modified: 2026-11-09T07:00:00Z
   - id: admin-profile-service
     resource: ../../src/auth/admin-profile.service.ts
     title: 마이페이지 내 정보(F-AMTDCK > S-JXKHCM) — get(사용 중이 아니면 403) · update(동시 수정 검사 · 임시 비밀번호 무효화, 이메일을 바꿔도 지금 비밀번호는 보지 않음) · checkEmailAvailable, 로그인한 관리자 자신만
