@@ -1,0 +1,32 @@
+{
+  "admin": {
+    "repo": "whale-erp-front",
+    "ref": "origin/main",
+    "commit": "77ad9250f460472f7a1fa257a04a6c7c7eec2d95",
+    "committedAt": "2026-11-09T14:07:45+09:00"
+  },
+  "staff": {
+    "repo": "whale-erp-staff",
+    "ref": "origin/main",
+    "commit": "1fc8116181ec97e031a35358d6b46725079a7a6d",
+    "committedAt": "2026-11-09T12:27:43+09:00"
+  },
+  "viewport": {
+    "admin": [
+      1440,
+      900,
+      1
+    ],
+    "staff": [
+      390,
+      844,
+      2
+    ],
+    "public": [
+      1720,
+      900,
+      1
+    ]
+  },
+  "jpegQuality": 72
+}

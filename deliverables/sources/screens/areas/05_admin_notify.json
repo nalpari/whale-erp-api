@@ -1,0 +1,62 @@
+{
+  "client": "admin",
+  "area": "운영 알림",
+  "screens": [
+    {
+      "id": "SCR-ADM-031",
+      "name": "운영 알림함",
+      "menuCode": "MN000042",
+      "route": "/notifications",
+      "demo": {
+        "file": "notify/index.html"
+      },
+      "images": [
+        "SCR-ADM-031.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단",
+          "element": "총 건수 · 미확인 건수",
+          "action": "받은 운영 알림 수와 읽지 않은 알림 수를 보인다.",
+          "policies": []
+        },
+        {
+          "zone": "상단",
+          "element": "전체 선택 · 선택 삭제",
+          "action": "고른 알림을 지운다. 고른 알림이 없으면 선택 삭제가 막힌다.",
+          "policies": []
+        },
+        {
+          "zone": "상단",
+          "element": "모두 읽음",
+          "action": "미확인 알림을 모두 읽음으로 바꾼다. 줄마다 읽음 버튼은 두지 않는다.",
+          "policies": [
+            "NTF-06"
+          ]
+        },
+        {
+          "zone": "알림 표",
+          "element": "알림 줄",
+          "action": "누르면 관련 화면으로 가면서 읽음으로 바뀐다. 미확인 줄에 빨간 점을 보인다.",
+          "policies": [
+            "NTF-06"
+          ]
+        },
+        {
+          "zone": "알림 표",
+          "element": "구분",
+          "action": "근로계약 거부 · 날인 · 만료, 문의사항 답변처럼 알림 유형을 보인다.",
+          "policies": [
+            "NTF-01"
+          ]
+        },
+        {
+          "zone": "알림 표",
+          "element": "일시",
+          "action": "알림이 만들어진 일시를 보인다.",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}

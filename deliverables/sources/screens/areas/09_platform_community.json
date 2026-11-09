@@ -1,0 +1,410 @@
+{
+  "client": "admin",
+  "area": "커뮤니티관리",
+  "screens": [
+    {
+      "id": "SCR-ADM-051",
+      "name": "공지사항",
+      "menuCode": "MN000219",
+      "route": "/platform-notices",
+      "demo": {
+        "file": "support/community-notices.html"
+      },
+      "images": [
+        "SCR-ADM-051.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "공지사항 등록",
+          "action": "공지사항 등록 화면으로 간다.",
+          "policies": [
+            "PRM-07"
+          ]
+        },
+        {
+          "zone": "필터",
+          "element": "상태",
+          "action": "게시·임시저장·비공개로 목록을 좁힌다.",
+          "policies": [
+            "CNT-03",
+            "LST-08"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "상태·유형·제목",
+          "action": "상단 고정 공지사항은 고정 표시가 붙고 맨 위에 선다.",
+          "policies": [
+            "CNT-04"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "최종수정",
+          "action": "최종 수정 일시와 수정자를 표시한다.",
+          "policies": [
+            "CNT-16"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-052",
+      "name": "공지사항 수정",
+      "menuCode": "MN000219",
+      "route": "/platform-notices/[id]",
+      "demo": {
+        "file": "support/notice-edit.html"
+      },
+      "images": [
+        "SCR-ADM-052.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "삭제",
+          "action": "사용자에게 보이지 않게 하고 복구할 수 있게 보관한다.",
+          "policies": [
+            "CNT-16"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "비공개·임시저장·게시",
+          "action": "세 상태 사이를 어느 쪽으로든 바꾼다. 게시된 글을 고치면 대상 사용자에게 바로 반영한다.",
+          "policies": [
+            "CNT-03"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "유형·제목·본문",
+          "action": "유형은 공지사항에만 있다. 본문은 입력한 글자 그대로 보인다.",
+          "policies": [
+            "CNT-03",
+            "CNT-04"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "첨부파일",
+          "action": "JPG·PNG·PDF를 5개까지, 파일당 10MB까지 붙인다.",
+          "policies": [
+            "CNT-18"
+          ]
+        },
+        {
+          "zone": "오른쪽",
+          "element": "상단 고정·게시 기간",
+          "action": "상단 고정 공지사항은 목록 맨 위에 선다. 시작일과 종료일이 정해지면 그 기간에만 비로그인 홈에 보인다.",
+          "policies": [
+            "CNT-04",
+            "CNT-05"
+          ]
+        },
+        {
+          "zone": "오른쪽",
+          "element": "노출 대상",
+          "action": "비회원·회원·BP·점포에서 여러 값을 고른다. 비회원이 포함된 글만 비로그인 홈에 보인다. 게시하려면 하나 이상 골라야 한다.",
+          "policies": [
+            "CNT-01",
+            "CNT-02"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-053",
+      "name": "FAQ",
+      "menuCode": "MN000220",
+      "route": "/platform-faqs",
+      "demo": {
+        "file": "support/community-faq.html"
+      },
+      "images": [
+        "SCR-ADM-053.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "FAQ 등록",
+          "action": "FAQ 등록 화면으로 간다.",
+          "policies": [
+            "PRM-07"
+          ]
+        },
+        {
+          "zone": "필터",
+          "element": "상태",
+          "action": "게시·임시저장·비공개로 목록을 좁힌다.",
+          "policies": [
+            "CNT-03",
+            "LST-08"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "상태·카테고리·질문·최종수정",
+          "action": "최종 수정 일시와 수정자를 표시한다.",
+          "policies": [
+            "CNT-16"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-054",
+      "name": "FAQ 수정",
+      "menuCode": "MN000220",
+      "route": "/platform-faqs/[id]",
+      "demo": {
+        "file": "support/faq-edit.html"
+      },
+      "images": [
+        "SCR-ADM-054.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "삭제",
+          "action": "사용자에게 보이지 않게 하고 복구할 수 있게 보관한다.",
+          "policies": [
+            "CNT-16"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "비공개·임시저장·게시",
+          "action": "세 상태 사이를 어느 쪽으로든 바꾼다. 게시된 글을 고치면 대상 사용자에게 바로 반영한다.",
+          "policies": [
+            "CNT-03"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "카테고리",
+          "action": "사용 중인 카테고리만 고른다.",
+          "policies": [
+            "CNT-04"
+          ]
+        },
+        {
+          "zone": "입력",
+          "element": "질문·답변",
+          "action": "입력한 글자 그대로 보인다. FAQ는 첨부파일을 받지 않는다.",
+          "policies": [
+            "CNT-03",
+            "CNT-18"
+          ]
+        },
+        {
+          "zone": "오른쪽",
+          "element": "노출 대상",
+          "action": "비회원·회원·BP·점포에서 여러 값을 고른다. 비회원이 포함된 글만 비로그인 홈에 보인다. 게시하려면 하나 이상 골라야 한다.",
+          "policies": [
+            "CNT-01",
+            "CNT-02"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-055",
+      "name": "문의사항",
+      "menuCode": "MN000221",
+      "route": "/platform-inquiries",
+      "demo": {
+        "file": "support/community-asks.html"
+      },
+      "images": [
+        "SCR-ADM-055.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "필터",
+          "element": "제목·문의자",
+          "action": "제목이나 BP·점포·이름으로 문의사항을 찾는다.",
+          "policies": []
+        },
+        {
+          "zone": "목록",
+          "element": "분류·제목·문의자·BP상호명·접수",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "목록",
+          "element": "제목",
+          "action": "문의사항 상세로 간다.",
+          "policies": [
+            "PRM-07"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-056",
+      "name": "문의사항 상세",
+      "menuCode": "MN000221",
+      "route": "/platform-inquiries/[id]",
+      "demo": {
+        "file": "support/inquiry-detail.html"
+      },
+      "images": [
+        "SCR-ADM-056.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "머리",
+          "element": "접수일시·분류·상태",
+          "action": "상태는 접수·처리중·답변완료로 보인다.",
+          "policies": [
+            "CNT-08"
+          ]
+        },
+        {
+          "zone": "첨부파일",
+          "element": "첨부파일 목록",
+          "action": "문의자와 플랫폼 운영자만 내려받는다.",
+          "policies": [
+            "CNT-18"
+          ]
+        },
+        {
+          "zone": "답변",
+          "element": "답변 저장",
+          "action": "바로 답변완료로 바뀌고 문의자의 알림함과 이메일로 안내한다. 답변완료 뒤에도 고칠 수 있고 이전 답변은 이력으로 남긴다.",
+          "policies": [
+            "CNT-08",
+            "CNT-17",
+            "NTF-03"
+          ]
+        },
+        {
+          "zone": "문의자 정보",
+          "element": "이름·BP상호명·권한유형·점포",
+          "action": "점포 단위 관리자의 문의는 그 점포를 채우고 BP 단위 문의는 비운다.",
+          "policies": [
+            "CNT-10"
+          ]
+        },
+        {
+          "zone": "처리이력",
+          "element": "접수·확인·답변",
+          "action": "처리중으로 바꾼 시각과 운영자를 확인 줄에 표시한다.",
+          "policies": [
+            "CNT-08"
+          ]
+        },
+        {
+          "zone": "운영자 메모",
+          "element": "메모 저장",
+          "action": "답변과 따로 저장하며 문의자에게 보이지 않는다.",
+          "policies": [
+            "CNT-10"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-057",
+      "name": "도입문의",
+      "menuCode": "MN000222",
+      "route": "/platform-leads",
+      "demo": {
+        "file": "support/community-leads.html"
+      },
+      "images": [
+        "SCR-ADM-057.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "목록",
+          "element": "문의자·업종·관심 서비스·접수",
+          "action": "로그인 없이 접수한 문의를 문의사항과 나누어 관리한다.",
+          "policies": [
+            "CNT-11"
+          ]
+        },
+        {
+          "zone": "목록",
+          "element": "문의자",
+          "action": "도입문의 상세로 간다.",
+          "policies": [
+            "PRM-07"
+          ]
+        },
+        {
+          "zone": "목록 하단",
+          "element": "페이지 이동",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-058",
+      "name": "도입문의 상세",
+      "menuCode": "MN000222",
+      "route": "/platform-leads/[id]",
+      "demo": {
+        "file": "support/lead-detail.html"
+      },
+      "images": [
+        "SCR-ADM-058.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "처리 시작",
+          "action": "처리중으로 바꾸고 시각과 운영자를 확인 줄에 표시한다.",
+          "policies": [
+            "CNT-08"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "삭제",
+          "action": "상담이 필요 없는 문의를 지운다. 지운 문의는 복구할 수 없다. 답변완료인 건은 지우지 않는다.",
+          "policies": [
+            "CNT-11"
+          ]
+        },
+        {
+          "zone": "도입 문의 내용",
+          "element": "관심 서비스·도입 예정 시기·문의 내용",
+          "action": "화면 표시",
+          "policies": [
+            "CNT-12",
+            "CNT-13"
+          ]
+        },
+        {
+          "zone": "답변",
+          "element": "답변 저장",
+          "action": "답변완료로 바뀌고 상담 완료일을 기록하며 문의자에게 답변 메일을 보낸다.",
+          "policies": [
+            "CNT-08",
+            "CNT-11"
+          ]
+        },
+        {
+          "zone": "문의자 정보·보관",
+          "element": "이름·업종·전화번호·이메일, 상담 완료일·파기 예정일",
+          "action": "상담을 마친 도입문의는 상담 완료일로부터 1년이 지나면 지운다.",
+          "policies": [
+            "CNT-11",
+            "CNT-12"
+          ]
+        },
+        {
+          "zone": "운영자 메모",
+          "element": "메모 저장",
+          "action": "운영자에게만 표시한다. 내용을 모두 지우고 저장하면 메모를 삭제한다.",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}

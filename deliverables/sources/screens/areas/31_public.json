@@ -1,0 +1,579 @@
+{
+  "client": "public",
+  "area": "비로그인 화면",
+  "screens": [
+    {
+      "id": "SCR-PUB-001",
+      "name": "비로그인 홈",
+      "menu": "상단 내비게이션",
+      "route": "/",
+      "demo": {
+        "file": "home/index.html"
+      },
+      "images": [
+        "SCR-PUB-001.jpg",
+        "SCR-PUB-001-2.jpg",
+        "SCR-PUB-001-3.jpg",
+        "SCR-PUB-001-4.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단 내비게이션",
+          "element": "로고, 매장운영·재무관리·프랜차이즈·부가 서비스, LOGIN, 도입문의, 공지사항",
+          "action": "누르면 해당 화면으로 이동한다.",
+          "policies": []
+        },
+        {
+          "zone": "첫 화면·가입 안내",
+          "element": "「무료로 시작하기」·「가입하고 시작하기」·「사업자 회원가입」·「도입문의」 버튼",
+          "action": "회원가입 또는 도입문의 화면으로 이동한다.",
+          "policies": []
+        },
+        {
+          "zone": "서비스 소개",
+          "element": "매장운영·재무관리·프랜차이즈·부가서비스 카드, 「자세히 보기」, 「부가서비스 둘러보기」",
+          "action": "각 소개 화면으로 이동한다.",
+          "policies": []
+        },
+        {
+          "zone": "운영 유형별 안내",
+          "element": "네 가지 운영 유형별 추천 기능과 부가서비스, 「본사 계정으로 로그인」",
+          "action": "소개 화면 또는 로그인 화면으로 이동한다. 가맹점은 회원가입 없이 본사가 만들어 준 계정으로 로그인한다.",
+          "policies": [
+            "ACC-02"
+          ]
+        },
+        {
+          "zone": "FAQ·새로운 소식",
+          "element": "FAQ 일부와 「전체 질문 보기」, 공지사항 제목과 「전체 보기」",
+          "action": "공지사항 화면의 FAQ 탭이나 목록으로 이동하고, 제목을 누르면 공지사항 상세로 이동한다. 노출 대상에 비회원이 포함된 글만 게시 기간 안에 보인다.",
+          "policies": [
+            "CNT-02",
+            "CNT-05",
+            "CNT-06"
+          ]
+        },
+        {
+          "zone": "바닥글",
+          "element": "이용약관·개인정보처리방침 링크, 사업자 정보",
+          "action": "링크를 누르면 현재 창에서 약관 전문 화면으로 이동한다.",
+          "policies": [
+            "CNT-15"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-002",
+      "name": "매장운영",
+      "menu": "상단 내비게이션",
+      "route": "/store-operations",
+      "demo": {
+        "file": "home/store-operations.html"
+      },
+      "images": [
+        "SCR-PUB-002.jpg",
+        "SCR-PUB-002-2.jpg",
+        "SCR-PUB-002-3.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단 제목",
+          "element": "「사업자 회원가입」·「도입문의」 버튼",
+          "action": "회원가입·도입문의 화면으로 이동한다.",
+          "policies": []
+        },
+        {
+          "zone": "도입 전후 비교",
+          "element": "도입 전과 도입 후를 나란히 놓은 카드 세 묶음",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "기능 소개",
+          "element": "점포 관리, 점검·시설물, 근로계약·급여, 근무·출퇴근 네 구역",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "업무 흐름",
+          "element": "직원 초대에서 급여명세서까지 다섯 단계",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "부가서비스",
+          "element": "관련 부가서비스 카드, 「부가서비스 전체 보기」",
+          "action": "부가서비스 화면으로 이동한다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-003",
+      "name": "재무관리",
+      "menu": "상단 내비게이션",
+      "route": "/finance-management",
+      "demo": {
+        "file": "home/finance-management.html"
+      },
+      "images": [
+        "SCR-PUB-003.jpg",
+        "SCR-PUB-003-2.jpg",
+        "SCR-PUB-003-3.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단 제목",
+          "element": "「사업자 회원가입」·「도입문의」 버튼",
+          "action": "회원가입·도입문의 화면으로 이동한다.",
+          "policies": []
+        },
+        {
+          "zone": "도입 전후 비교",
+          "element": "도입 전과 도입 후를 나란히 놓은 카드 세 묶음",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "기능 소개",
+          "element": "입출금, 매출·매입 등록, 계정별 현황, 매출 조회·통계 네 구역",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "업무 흐름",
+          "element": "통장 연동에서 기간 비교까지 다섯 단계",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "부가서비스",
+          "element": "관련 부가서비스 카드, 「부가서비스 전체 보기」",
+          "action": "부가서비스 화면으로 이동한다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-004",
+      "name": "프랜차이즈",
+      "menu": "상단 내비게이션",
+      "route": "/franchise",
+      "demo": {
+        "file": "home/franchise.html"
+      },
+      "images": [
+        "SCR-PUB-004.jpg",
+        "SCR-PUB-004-2.jpg",
+        "SCR-PUB-004-3.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "상단 제목",
+          "element": "「사업자 회원가입」·「도입문의」 버튼",
+          "action": "회원가입·도입문의 화면으로 이동한다.",
+          "policies": []
+        },
+        {
+          "zone": "도입 전후 비교",
+          "element": "도입 전과 도입 후를 나란히 놓은 카드 세 묶음",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "기능 소개",
+          "element": "가맹계약, 가맹점 등록, 상품·가격 배포, 가맹점 점검·정보공개서 네 구역",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "업무 흐름",
+          "element": "템플릿 등록에서 운영 시작까지 다섯 단계",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "부가서비스",
+          "element": "관련 부가서비스 카드, 「부가서비스 전체 보기」",
+          "action": "부가서비스 화면으로 이동한다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-005",
+      "name": "부가서비스",
+      "menu": "상단 내비게이션",
+      "route": "/add-on-services",
+      "demo": {
+        "file": "home/add-on-services.html"
+      },
+      "images": [
+        "SCR-PUB-005.jpg",
+        "SCR-PUB-005-2.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "판매용 부가서비스",
+          "element": "Pick up Order, POS, KIOSK, Table Order, QR Order 카드",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "관리용 부가서비스",
+          "element": "레시피 관리, 발주 관리, 점포 재고 관리, 대기 순번 관리, 예약 관리 카드",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "확장 옵션",
+          "element": "점포수 추가, 직원수 추가, 재무관리 카드",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "구독 안내",
+          "element": "구독 단위, 권한, 계약 기간 안내 카드 세 개",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-006",
+      "name": "도입문의",
+      "menu": "상단 내비게이션",
+      "route": "/leads",
+      "demo": {
+        "file": "home/inquiry.html"
+      },
+      "images": [
+        "SCR-PUB-006.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "문의자 정보",
+          "element": "이름, 전화번호, 업종, 이메일(모두 필수)",
+          "action": "로그인 없이 입력한다. 업종은 목록에서 고르고, 기타를 고르면 직접 적는다.",
+          "policies": [
+            "CNT-11",
+            "CNT-12",
+            "CNT-13"
+          ]
+        },
+        {
+          "zone": "도입 문의 내용",
+          "element": "관심 서비스(필수), 도입 예정 시기(선택), 문의 내용(필수, 2,000자까지)",
+          "action": "관심 서비스는 하나 이상 여러 개 고른다.",
+          "policies": [
+            "CNT-12",
+            "CNT-13"
+          ]
+        },
+        {
+          "zone": "개인정보 수집 및 이용 동의",
+          "element": "안내 글, 수집·이용 동의(필수), 마케팅 정보 수신 동의(선택)",
+          "action": "필수 동의를 거부하면 접수되지 않는다. 상담 완료일로부터 1년이 지나면 파기한다.",
+          "policies": [
+            "CNT-11"
+          ]
+        },
+        {
+          "zone": "접수",
+          "element": "「문의 접수하기」 버튼",
+          "action": "도입문의를 접수하고 담당자가 영업일 기준 1~2일 안에 연락한다. 같은 전화번호나 이메일로 10분 안에 다시 접수하면 막고 안내한다. 같은 접속 주소에서는 시간당 5건까지 받는다.",
+          "policies": [
+            "CNT-11",
+            "CNT-14"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-007",
+      "name": "공지사항",
+      "menu": "상단 내비게이션",
+      "route": "/notices",
+      "demo": {
+        "file": "home/notices.html"
+      },
+      "images": [
+        "SCR-PUB-007.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목",
+          "element": "「도입문의」 버튼",
+          "action": "도입문의 화면으로 이동한다.",
+          "policies": []
+        },
+        {
+          "zone": "탭",
+          "element": "공지사항, FAQ",
+          "action": "공지사항 목록과 FAQ를 전환한다.",
+          "policies": [
+            "CNT-06"
+          ]
+        },
+        {
+          "zone": "공지사항 목록",
+          "element": "고정 표시, 공지사항 유형, 제목, 게시일",
+          "action": "고정된 공지가 맨 위에 서고 그 안에서는 게시일 내림차순이다. 노출 대상에 비회원이 포함된 글만 게시 기간 안에 보인다. 제목을 누르면 공지사항 상세로 이동한다.",
+          "policies": [
+            "CNT-02",
+            "CNT-04",
+            "CNT-05"
+          ]
+        },
+        {
+          "zone": "페이지 번호",
+          "element": "페이지 번호",
+          "action": "해당 페이지의 목록을 보여 준다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-008",
+      "name": "공지사항 상세",
+      "menu": "상단 내비게이션",
+      "route": "/notices/[id]",
+      "demo": {
+        "file": "home/notice-detail.html"
+      },
+      "images": [
+        "SCR-PUB-008.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "글 머리",
+          "element": "고정 표시, 공지사항 유형, 제목, 게시일",
+          "action": "화면 표시",
+          "policies": [
+            "CNT-04"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "공지사항 본문",
+          "action": "저장된 글자 그대로 보여 준다.",
+          "policies": [
+            "CNT-03"
+          ]
+        },
+        {
+          "zone": "첨부파일",
+          "element": "파일 이름, 크기",
+          "action": "누르면 첨부파일을 내려받는다.",
+          "policies": [
+            "CNT-18"
+          ]
+        },
+        {
+          "zone": "하단",
+          "element": "「목록」 버튼",
+          "action": "공지사항 목록으로 돌아간다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-009",
+      "name": "로그인",
+      "menu": "상단 내비게이션",
+      "route": "/login",
+      "demo": {
+        "file": "auth/login.html"
+      },
+      "images": [
+        "SCR-PUB-009.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "로그인 입력",
+          "element": "아이디, 비밀번호, 비밀번호 보기 아이콘, 「LOGIN」 버튼",
+          "action": "아이디와 비밀번호로 로그인해 권한에 맞는 화면으로 이동한다. 실패하면 어느 쪽이 틀렸는지 구분하지 않고 안내한다.",
+          "policies": [
+            "ACC-03",
+            "ACC-07"
+          ]
+        },
+        {
+          "zone": "계정 찾기",
+          "element": "「아이디/비밀번호 찾기」 링크",
+          "action": "아이디/비밀번호 찾기 화면으로 이동한다.",
+          "policies": [
+            "ACC-03"
+          ]
+        },
+        {
+          "zone": "회원가입 안내",
+          "element": "「사업자 회원가입」 버튼",
+          "action": "회원가입 화면으로 이동한다.",
+          "policies": [
+            "ACC-02"
+          ]
+        },
+        {
+          "zone": "직원 안내",
+          "element": "「직원이신가요?」 안내 글",
+          "action": "직원은 웹으로 로그인하지 않고 직원 근무 앱을 쓰도록 안내한다.",
+          "policies": [
+            "ACC-03"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-010",
+      "name": "아이디/비밀번호 찾기",
+      "menu": "로그인 화면",
+      "route": "/find",
+      "demo": {
+        "file": "auth/find.html"
+      },
+      "images": [
+        "SCR-PUB-010.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "탭",
+          "element": "ID 찾기, 비밀번호 찾기",
+          "action": "입력 칸과 안내 문구를 전환한다.",
+          "policies": []
+        },
+        {
+          "zone": "ID 찾기",
+          "element": "이름, 이메일, 「아이디 확인」 버튼",
+          "action": "일치하면 아이디를 앞 2자와 뒤 1자만 보여 준다.",
+          "policies": []
+        },
+        {
+          "zone": "비밀번호 찾기",
+          "element": "이름, 아이디, 이메일",
+          "action": "입력한 이메일 주소로 임시 비밀번호를 보낸다. 임시 비밀번호는 발급 후 1시간 동안 쓸 수 있다.",
+          "policies": [
+            "ACC-03"
+          ]
+        },
+        {
+          "zone": "하단 버튼",
+          "element": "「회원가입」·「로그인 이동」 버튼",
+          "action": "회원가입·로그인 화면으로 이동한다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-011",
+      "name": "회원가입",
+      "menu": "로그인 화면",
+      "route": "/signup",
+      "demo": {
+        "file": "auth/signup.html"
+      },
+      "images": [
+        "SCR-PUB-011.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "기본정보",
+          "element": "아이디, 이름, 비밀번호, 비밀번호 확인, 이메일, 「연락처」, 상호명(모두 필수)",
+          "action": "입력한다. 가입할 때 BP 유형은 고르지 않는다.",
+          "policies": [
+            "ACC-02"
+          ]
+        },
+        {
+          "zone": "사업자정보 인증(선택)",
+          "element": "사업자등록번호, 대표자명, 개업일자, 「인증하기」 버튼, 인증 상태",
+          "action": "입력한 값이 국세청에 등록된 정보와 일치하는지 확인한다.",
+          "policies": []
+        },
+        {
+          "zone": "약관동의",
+          "element": "「모두 동의합니다.」, 이용약관 동의(필수), 개인정보 수집·이용 동의(필수), 「내용보기」",
+          "action": "항목별 또는 한 번에 체크하고, 「내용보기」로 약관 내용을 본다.",
+          "policies": []
+        },
+        {
+          "zone": "제출",
+          "element": "「회원가입」 버튼, 「로그인」 링크",
+          "action": "가입을 마치면 가입 완료 화면으로 이동한다. 「로그인」은 로그인 화면으로 이동한다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-012",
+      "name": "가입 완료",
+      "menu": "회원가입 뒤",
+      "route": "/signup/done",
+      "demo": {
+        "file": "auth/signup-done.html"
+      },
+      "images": [
+        "SCR-PUB-012.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "가입 환영",
+          "element": "상호명, 아이디, 안내 메일을 보낸 이메일 주소",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "시작",
+          "element": "「웨일ERP 시작하기」 버튼",
+          "action": "로그인 후 홈으로 이동한다.",
+          "policies": []
+        },
+        {
+          "zone": "안내",
+          "element": "화면 유지 시간 안내 글",
+          "action": "이 화면은 10분 동안만 열리고, 시간이 지나면 로그인 화면에서 가입한 아이디로 들어온다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-PUB-013",
+      "name": "약관 전문",
+      "menu": "바닥글",
+      "route": "/terms",
+      "demo": {
+        "file": "auth/terms.html"
+      },
+      "images": [
+        "SCR-PUB-013.jpg",
+        "SCR-PUB-013-2.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "진입",
+          "element": "바닥글의 이용약관·개인정보처리방침 링크",
+          "action": "현재 창에서 이 화면의 해당 문서를 연다.",
+          "policies": [
+            "CNT-15"
+          ]
+        },
+        {
+          "zone": "문서 목록",
+          "element": "플랫폼 이용약관(BP사업자 회원가입용), 개인정보 수집·이용, 플랫폼 이용약관(직원앱 회원가입용), 개인정보 수집·이용(직원앱), 마케팅 수신, 위치정보 수집·이용",
+          "action": "고른 문서를 오른쪽 본문에 보여 준다.",
+          "policies": [
+            "ACC-23",
+            "ATT-06"
+          ]
+        },
+        {
+          "zone": "본문",
+          "element": "문서 제목, 버전, 시행일, 조항",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}

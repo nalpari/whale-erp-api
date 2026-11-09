@@ -1,0 +1,442 @@
+{
+  "client": "admin",
+  "area": "환경설정",
+  "screens": [
+    {
+      "id": "SCR-ADM-032",
+      "name": "BP 관리자 관리",
+      "menuCode": "MN000012",
+      "route": "/bp-admins",
+      "demo": {
+        "file": "config/admins.html"
+      },
+      "images": [
+        "SCR-ADM-032.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "필터",
+          "element": "아이디·이름, 역할, 권한명, 계정상태",
+          "action": "조건으로 목록을 좁힌다. 체크박스는 모두 체크된 상태로 시작한다.",
+          "policies": [
+            "LST-08"
+          ]
+        },
+        {
+          "zone": "목록 상단",
+          "element": "표시 건수",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "목록",
+          "element": "아이디·이름·역할·대상점포·권한명·계정상태·최근 로그인",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "목록",
+          "element": "이름",
+          "action": "상세 패널을 연다.",
+          "policies": []
+        },
+        {
+          "zone": "제목 줄",
+          "element": "등록",
+          "action": "등록 패널을 연다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-033",
+      "name": "BP 관리자 등록",
+      "menuCode": "MN000012",
+      "route": "/bp-admins",
+      "routeNote": "목록 위 슬라이드 패널, 별도 주소 없음",
+      "demo": {
+        "file": "config/admins-new.html"
+      },
+      "images": [
+        "SCR-ADM-033.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "기본정보",
+          "element": "아이디·이름·이메일",
+          "action": "별표 칸은 필수다.",
+          "policies": []
+        },
+        {
+          "zone": "기본정보",
+          "element": "계정 역할·권한명",
+          "action": "계정 역할을 먼저 고른 뒤 권한명을 고른다.",
+          "policies": []
+        },
+        {
+          "zone": "대상점포",
+          "element": "범위",
+          "action": "전체 점포 또는 일부 점포를 고른다.",
+          "policies": []
+        },
+        {
+          "zone": "대상점포",
+          "element": "점포 찾기·일괄 검색·전체 제거",
+          "action": "일부 점포일 때 대상 점포를 더하거나 뺀다.",
+          "policies": []
+        },
+        {
+          "zone": "패널 하단",
+          "element": "저장",
+          "action": "초기화 비밀번호를 등록한 이메일로 보낸다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-034",
+      "name": "BP 관리자 상세",
+      "menuCode": "MN000012",
+      "route": "/bp-admins",
+      "routeNote": "목록 위 슬라이드 패널, 별도 주소 없음",
+      "demo": {
+        "file": "config/admins-detail.html"
+      },
+      "images": [
+        "SCR-ADM-034.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "패널 머리",
+          "element": "이름·역할·권한명·계정상태",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "기본정보",
+          "element": "비밀번호 초기화",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "기본정보",
+          "element": "아이디·이름·이메일·최근 로그인·등록·최종수정",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "대상점포",
+          "element": "점포명·점포코드·점포 상태",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "패널 하단",
+          "element": "닫기·수정·변경이력",
+          "action": "수정은 수정 패널을 연다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-035",
+      "name": "BP 관리자 수정",
+      "menuCode": "MN000012",
+      "route": "/bp-admins",
+      "routeNote": "목록 위 슬라이드 패널, 별도 주소 없음",
+      "demo": {
+        "file": "config/admins-edit.html"
+      },
+      "images": [
+        "SCR-ADM-035.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "패널 머리",
+          "element": "아이디",
+          "action": "표시만 하고 고치지 않는다.",
+          "policies": []
+        },
+        {
+          "zone": "기본정보",
+          "element": "이름·이메일·계정상태",
+          "action": "별표 칸은 필수다.",
+          "policies": []
+        },
+        {
+          "zone": "기본정보",
+          "element": "계정 역할·권한명",
+          "action": "계정 역할은 표시만 하고 권한명을 바꾼다.",
+          "policies": []
+        },
+        {
+          "zone": "대상점포",
+          "element": "범위·점포 찾기·일괄 검색·전체 제거",
+          "action": "대상 점포를 고친다.",
+          "policies": []
+        },
+        {
+          "zone": "패널 하단",
+          "element": "취소·저장",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-036",
+      "name": "BP 권한 그룹 관리",
+      "menuCode": "MN000013",
+      "route": "/bp-role-groups",
+      "demo": {
+        "file": "config/roles.html"
+      },
+      "images": [
+        "SCR-ADM-036.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "등록",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "권한 그룹 목록",
+          "element": "권한유형·코드·권한명·최종수정",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "권한 그룹 목록",
+          "element": "권한명",
+          "action": "오른쪽에 권한 그룹 상세를 표시한다.",
+          "policies": []
+        },
+        {
+          "zone": "권한 그룹 목록",
+          "element": "메뉴설정 칸의 설정",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "권한 그룹 목록",
+          "element": "가맹마스터 메뉴설정 보기",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-037",
+      "name": "BP 공통코드 관리",
+      "menuCode": "MN000014",
+      "route": "/bp-code-groups",
+      "demo": {
+        "file": "config/codes.html"
+      },
+      "images": [
+        "SCR-ADM-037.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "필터",
+          "element": "그룹 코드·그룹명",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "공통코드 그룹",
+          "element": "그룹 코드·그룹명·관리주체",
+          "action": "선택한 그룹의 상세 코드를 오른쪽에 표시한다.",
+          "policies": []
+        },
+        {
+          "zone": "상세 코드",
+          "element": "이동·코드명·표시 순서·사용여부",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "상세 코드",
+          "element": "관리주체",
+          "action": "플랫폼제공과 BP전용을 구분해 표시한다.",
+          "policies": []
+        },
+        {
+          "zone": "상세 코드",
+          "element": "추가·저장·삭제",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-038",
+      "name": "BP 휴일 관리",
+      "menuCode": "MN000015",
+      "route": "/bp-holidays",
+      "demo": {
+        "file": "config/holidays.html"
+      },
+      "images": [
+        "SCR-ADM-038.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "등록",
+          "action": "BP 휴일 등록 패널을 연다.",
+          "policies": []
+        },
+        {
+          "zone": "탭",
+          "element": "캘린더·목록·변경이력",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "캘린더",
+          "element": "공식 휴일 숨기기",
+          "action": "달력에서 공식 휴일을 숨긴다. BP 휴일과 공식 휴일은 색으로 구분한다.",
+          "policies": []
+        },
+        {
+          "zone": "캘린더 옆",
+          "element": "선택한 날의 휴일",
+          "action": "적용 범위·휴일명·반복 유형·대상점포를 표시한다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-039",
+      "name": "BP 휴일 등록",
+      "menuCode": "MN000015",
+      "route": "/bp-holidays",
+      "routeNote": "목록 위 슬라이드 패널, 별도 주소 없음",
+      "demo": {
+        "file": "config/holidays-new.html"
+      },
+      "images": [
+        "SCR-ADM-039.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "휴일정보",
+          "element": "휴일명·날짜",
+          "action": "필수다. 날짜는 하루·기간·반복 중에서 고른다.",
+          "policies": []
+        },
+        {
+          "zone": "휴일정보",
+          "element": "설명",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "적용 대상",
+          "element": "전체 점포·일부 점포",
+          "action": "일부 점포면 대상점포를 반드시 고른다.",
+          "policies": []
+        },
+        {
+          "zone": "적용 대상",
+          "element": "점포 찾기·일괄 검색·전체 제거",
+          "action": "대상점포를 더하거나 뺀다.",
+          "policies": []
+        },
+        {
+          "zone": "화면 하단",
+          "element": "취소·저장",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-040",
+      "name": "BP 휴일 상세",
+      "menuCode": "MN000015",
+      "route": "/bp-holidays",
+      "routeNote": "목록 위 슬라이드 패널, 별도 주소 없음",
+      "demo": {
+        "file": "config/holidays-detail.html"
+      },
+      "images": [
+        "SCR-ADM-040.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "머리",
+          "element": "휴일명·적용 범위·휴일유형·진행 상태",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "휴일정보",
+          "element": "날짜·설명·등록·최종수정",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "대상점포",
+          "element": "점포명·점포코드·적용 기간",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "화면 하단",
+          "element": "삭제·강제 종료",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "화면 하단",
+          "element": "목록·수정·변경이력",
+          "action": "수정은 BP 휴일 수정으로 간다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-041",
+      "name": "BP 휴일 수정",
+      "menuCode": "MN000015",
+      "route": "/bp-holidays",
+      "routeNote": "목록 위 슬라이드 패널, 별도 주소 없음",
+      "demo": {
+        "file": "config/holidays-edit.html"
+      },
+      "images": [
+        "SCR-ADM-041.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "휴일정보",
+          "element": "휴일명·설명",
+          "action": "휴일명은 필수다.",
+          "policies": []
+        },
+        {
+          "zone": "휴일정보",
+          "element": "날짜·반복유형·종료조건",
+          "action": "진행 중인 휴일은 날짜·반복·적용 범위를 바꿀 수 없다.",
+          "policies": []
+        },
+        {
+          "zone": "적용 대상",
+          "element": "대상점포",
+          "action": "휴일을 적용할 점포를 고른다.",
+          "policies": []
+        },
+        {
+          "zone": "화면 하단",
+          "element": "취소·저장",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}

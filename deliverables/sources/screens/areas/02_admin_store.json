@@ -1,0 +1,202 @@
+{
+  "client": "admin",
+  "area": "점포관리",
+  "screens": [
+    {
+      "id": "SCR-ADM-007",
+      "name": "점포 정보 관리",
+      "menuCode": "MN000002",
+      "route": "/stores",
+      "demo": {
+        "file": "stores/index.html"
+      },
+      "images": [
+        "SCR-ADM-007.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "필터",
+          "element": "사업자등록번호·점포상태·점포유형",
+          "action": "조건으로 점포 목록을 좁힌다. 점포상태의 폐점은 해제된 상태로 시작한다.",
+          "policies": [
+            "LST-08"
+          ]
+        },
+        {
+          "zone": "목록 상단",
+          "element": "카드·표 전환, 엑셀 다운로드, 표시 건수",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "점포 카드",
+          "element": "점포명·점포코드·유형·점포상태·재직 직원 수·주소",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "점포 카드",
+          "element": "사업자정보 미인증 표시",
+          "action": "사업자정보를 인증하지 않은 점포에 표시한다.",
+          "policies": []
+        },
+        {
+          "zone": "제목 줄",
+          "element": "등록",
+          "action": "점포 등록 화면으로 간다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-008",
+      "name": "점포 등록",
+      "menuCode": "MN000002",
+      "route": "/stores/new",
+      "demo": {
+        "file": "stores/new.html"
+      },
+      "images": [
+        "SCR-ADM-008.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "점포 기본정보",
+          "element": "점포상태·점포유형·점포명",
+          "action": "새 점포는 미운영으로 시작한다. 점포유형(직영·가맹)과 점포명은 필수다.",
+          "policies": []
+        },
+        {
+          "zone": "점포 기본정보",
+          "element": "점포 주소·위도·경도",
+          "action": "주소를 넣으면 위도·경도가 자동으로 표시된다.",
+          "policies": []
+        },
+        {
+          "zone": "점포 기본정보",
+          "element": "출퇴근 위치적용",
+          "action": "사용이면 이 좌표를 기준으로 직원의 출퇴근 위치를 확인한다. 위도·경도가 없으면 사용으로 바꿀 수 없다.",
+          "policies": [
+            "ATT-36"
+          ]
+        },
+        {
+          "zone": "점포 기본정보",
+          "element": "대표 이미지",
+          "action": "JPG·PNG 사진 1장을 5MB까지 올린다. 화면 상단 저장을 눌러야 적용된다.",
+          "policies": []
+        },
+        {
+          "zone": "사업자정보",
+          "element": "인증하기",
+          "action": "국세청에 등록된 정보와 일치하는지 확인한다. 등록할 때는 선택이고, 점포상태를 운영으로 바꾸려면 인증을 마쳐야 한다.",
+          "policies": []
+        },
+        {
+          "zone": "점포 공간정보",
+          "element": "층 추가",
+          "action": "층별 면적과 좌석 수를 넣는다.",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-009",
+      "name": "점포 상세",
+      "menuCode": "MN000002",
+      "route": "/stores/[storeId]",
+      "demo": {
+        "file": "stores/detail.html"
+      },
+      "images": [
+        "SCR-ADM-009.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "제목 줄",
+          "element": "상태 변경",
+          "action": "점포상태를 바꾼다. 폐점 전에 열린 출근, 종료될 계약 건수, 퇴직될 재직 직원 수, 확정하지 않은 급여명세서 수를 확인하고 열린 출근이 있으면 폐점을 막는다.",
+          "policies": [
+            "CTR-31"
+          ]
+        },
+        {
+          "zone": "제목 줄",
+          "element": "삭제",
+          "action": "미운영 점포만 삭제할 수 있다.",
+          "policies": []
+        },
+        {
+          "zone": "제목 줄",
+          "element": "수정·목록",
+          "action": "수정 화면이나 목록으로 간다.",
+          "policies": []
+        },
+        {
+          "zone": "점포 기본정보",
+          "element": "점포상태·연락 번호·주소·위치정보·재직 직원 수",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "사업자정보",
+          "element": "인증 상태·상호명·사업자등록번호·대표자·개업일자·업태·종목·주소",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "점포 공간정보",
+          "element": "층구분·면적·좌석 수",
+          "action": "화면 표시",
+          "policies": []
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-010",
+      "name": "점포 수정",
+      "menuCode": "MN000002",
+      "route": "/stores/[storeId]/edit",
+      "demo": {
+        "file": "stores/edit.html"
+      },
+      "images": [
+        "SCR-ADM-010.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "점포 기본정보",
+          "element": "점포상태·점포명",
+          "action": "점포상태는 운영·폐점 중에서 고른다. 별표 칸은 필수다.",
+          "policies": []
+        },
+        {
+          "zone": "점포 기본정보",
+          "element": "주소로 다시 계산·출퇴근 위치적용",
+          "action": "주소로 위도·경도를 다시 채운다. 위도·경도가 없으면 위치적용을 사용으로 바꿀 수 없다.",
+          "policies": [
+            "ATT-36"
+          ]
+        },
+        {
+          "zone": "점포 기본정보",
+          "element": "이미지 바꾸기·이미지 삭제",
+          "action": "이미지를 고른 뒤 화면 상단 저장을 눌러야 적용된다.",
+          "policies": []
+        },
+        {
+          "zone": "사업자정보",
+          "element": "인증 상태·재인증",
+          "action": "화면 표시",
+          "policies": []
+        },
+        {
+          "zone": "점포 공간정보",
+          "element": "층 추가·삭제",
+          "action": "층별 정보를 더하거나 지운다.",
+          "policies": []
+        }
+      ]
+    }
+  ]
+}

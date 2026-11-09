@@ -34,5 +34,11 @@
     "history": [
       { "version": "1.0", "date": "2026-11-05", "change": "최초 작성", "author": "인터플러그" }
     ]
+  },
+  "SCR": {
+    "name": "화면설계서",
+    "history": [
+      { "version": "1.0", "date": "2026-11-09", "change": "최초 작성", "author": "인터플러그" }
+    ]
   }
 }
