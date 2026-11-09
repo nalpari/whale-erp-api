@@ -13,7 +13,8 @@ import re
 import shutil
 import subprocess
 
-from common import HERE, INTERNAL, OUT, TEAM, TEAM_NAMES, heading, open_docx, para, picture, safe, save_docx, strip_records, table
+from common import (HERE, INTERNAL, OUT, TEAM, TEAM_NAMES, heading, open_docx, para, picture, record_basis, safe, save_docx, source_basis,
+                    strip_records, table)
 
 FLOW = os.path.join(HERE, "sources", "flow")
 SOURCE_JSON = os.path.join(FLOW, "SOURCE.json")
@@ -248,6 +249,7 @@ def write(version):
         raise SystemExit(f"쟁점 번호가 남음: {left}")
     n = sum(len(items) for _, _, items in groups)
     path = save_docx(d, f"{doc_no}_{doc_name}.docx")
+    record_basis("FLOW", version, path, source_basis(SOURCE_JSON))
     return path, n, figures, total, len(REMOVED)
 
 

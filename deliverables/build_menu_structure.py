@@ -9,7 +9,7 @@ import argparse
 import json
 import os
 
-from common import HERE, open_xlsx, save_xlsx, table_sheet
+from common import HERE, open_xlsx, record_basis, save_xlsx, table_sheet
 
 SNAPSHOT = os.path.join(HERE, "sources", "menus.json")
 MIGRATIONS = os.path.join(HERE, "..", "prisma", "migrations")
@@ -53,6 +53,10 @@ def tree_rows(snap):
     return rows, label
 
 
+def basis(snap):
+    return f"마이그레이션 {snap['lastMigration'].split('_')[0]}"
+
+
 def write(version):
     """엑셀을 쓰고 (경로, 메뉴 수, 서비스별 수) 를 돌려준다."""
     snap = json.load(open(SNAPSHOT, encoding="utf-8"))
@@ -74,6 +78,7 @@ def write(version):
     for code, rs in counts.items():
         table_sheet(wb, f"{CLIENT} - {label.get(code, code)}"[:31], HEADERS, rs, WIDTHS, top_rows=notes[:1])
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
+    record_basis("MENU", version, path, basis(snap))
     return path, len(rows), {label.get(k, k): len(v) for k, v in counts.items()}
 
 

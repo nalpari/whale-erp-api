@@ -3,13 +3,13 @@
     .venv/bin/python build_completion_report.py --version 1.0
 
 손으로 적은 숫자는 없다. 값을 못 읽거나 합이 맞지 않으면 멈춘다. 전체 재생성의 맨 마지막에 돌린다.
---draft 는 낡은 메뉴 스냅숏을 허용한다(경고를 찍는다). 납품본은 --draft 없이 만든다.
+기준 칸은 각 생성기가 문서를 만들 때 남긴 out/manifest.json 을 읽는다.
+납품본은 산출물 8종, 기준 일치, 깨끗한 작업 트리를 확인한다. --draft 는 이 확인을 건너뛰고 표지 · 머리글 · 파일 이름에 초안을 표시한다.
 """
 import argparse
 import json
 import os
 import re
-import subprocess
 from collections import Counter
 
 from lxml import html
@@ -22,13 +22,16 @@ import build_screens as SCR
 import build_table_definition as TBL
 import build_test_results as TEST
 import build_userflow as FLOW
-from common import HERE, heading, open_docx, para, revision, save_docx, table
+from common import HERE, MANIFEST, OUT, heading, open_docx, para, read_manifest, revision, save_docx, sha256, source_basis, table, tree_clean
 
-ROLE_CHAPTER, EXCLUDE_CHAPTER, OPEN_CHAPTER = "PRM", "1차 범위에서 제외", "아직 정해지지 않은 것"
+PRD = os.path.join(HERE, "sources", "manyfast_prd.json")
+RAW_POLICY = os.path.expanduser("~/IdeaProjects/whale-erp-v2/docs/raw/운영정책.html")
+EXCLUDE_CHAPTER, OPEN_CHAPTER = "1차 범위에서 제외", "아직 정해지지 않은 것"
 FORMATS = {"REQ": "xlsx", "MENU": "xlsx", "API": "xlsx", "TBL": "xlsx", "POL": "docx", "FLOW": "docx", "SCR": "docx",
            "TEST": "xlsx", "RPT": "docx"}
-DEVICES = {"웹": "관리자 웹", "직원 근무 앱": "직원 근무 앱"}
 CLIENTS = {"admin": "관리자 웹", "staff": "직원 근무 앱", "public": "비로그인 화면"}
+# 비로그인 화면 중 서비스를 소개만 하는 화면. 이름만 적으면 재무관리 · 부가서비스를 제공하는 것처럼 읽힌다.
+INTRO_ROUTES = {"/store-operations", "/finance-management", "/franchise", "/add-on-services"}
 PHASE2 = "2차"
 BEFORE_OPEN = "서비스를 열기 전에 끝나야"
 ANY_ID = re.compile(r"\s*\([A-Z]{2,}-\d+[^()]*\)|\s*· 2차로 미룸")
@@ -37,21 +40,19 @@ ANY_ID = re.compile(r"\s*\([A-Z]{2,}-\d+[^()]*\)|\s*· 2차로 미룸")
 EXTRA_LEAKS = [SCR.TOOLS, SCR.REPO_PATH, SCR.PHONE_LOOSE,
                re.compile(r"쟁점|미정(?!산)|보류|추후|TBD|FIXME|TODO|\{\{|\b(?:src|docs|prisma|deliverables|test)/[\w./-]*"
                           r"|임시저장|발송 대기|체결 완료|(?<!직원 )서명 ?대기|(?<!소속 )승인 대기"),
-               re.compile(r"manyfast|plane|buzz|figma|claude|orca|archify|github|notion", re.I)]
+               re.compile(r"localhost|E2E_"),
+               re.compile(r"manyfast|plane|buzz|figma|claude|orca|archify|github|notion|DESKTOP-\w+", re.I),
+               re.compile(r"(?<![A-Za-z])(?:Kim|Lee|Noh|Choi|Ryu|Minsik|Honggi|Jeyoung|Jungpyo|Hyojun|Changsoo|Jiyoung|Young Joo|Jaeyoung)(?![A-Za-z])", re.I)]
+DEMO_FILE = "데모 파일"  # 린트 실패의 영향 설명. 화면설계서 점검의 「데모」는 화면 이미지용이라 이 말만 뺀다
+FINAL_LEAKS = re.compile(r"미분석|미확인")  # 납품본에서만 멈춘다
 
 
-def first_sentence(text):
-    body = POL.clean(REQ.split_tables(text)[0])
-    return re.split(r"(?<=다\.)\s", body)[0].replace("웹 알림함", "운영 알림함")
-
-
-def overview(snap):
-    """(요구사항 줄, 사용 기기). 요구사항 설명의 첫 문장만 쓴다."""
-    rows = [[r["data"]["name"], first_sentence(r["data"]["description"])] for r in snap["requirements"]]
-    empty = [r[0] for r in rows if not r[1]]
-    if empty:
-        raise SystemExit(f"설명이 빈 요구사항: {empty}")
-    return rows, [DEVICES[d] for d in snap["devices"].values()]
+def prd():
+    with open(PRD, encoding="utf-8") as f:
+        data = json.load(f)
+    if not data["goal"] or not data["targetUser"]:
+        raise SystemExit("PRD 스냅숏의 목적 · 대상을 읽지 못했습니다.")
+    return data
 
 
 def req_counts(snap):
@@ -77,6 +78,23 @@ def menu_snapshot(draft):
 
 def is_used(menu):
     return menu["status"] == "ACTIVE" and not menu["is_deleted"]
+
+
+def feature_rows(menus, areas):
+    """[구분, 영역, 사용 중 메뉴 또는 화면 이름]. 메뉴가 있는 영역은 사용 중인 하위 메뉴, 없는 영역은 화면 이름을 적는다."""
+    by_name = {m["name"]: m for m in menus if m["parent_menu_id"] is None and is_used(m)}
+    rows = []
+    for a in areas:
+        root = by_name.get(a["area"]) if a["client"] == "admin" else None
+        if root:
+            kids = sorted((m for m in menus if m["parent_menu_id"] == root["menu_id"] and is_used(m)), key=lambda m: (m["sort_order"], m["menu_id"]))
+            names = [m["name"] for m in kids] or [root["name"]]
+        else:
+            intro = [s["name"] for s in a["screens"] if s.get("route") in INTRO_ROUTES]
+            names = [s["name"] for s in a["screens"] if s.get("route") not in INTRO_ROUTES]
+            names += [f"서비스 소개({' · '.join(intro)})"] if intro else []
+        rows.append([CLIENTS[a["client"]], a["area"], " · ".join(dict.fromkeys(names))])
+    return rows
 
 
 def scope_rows(menus, areas):
@@ -109,14 +127,6 @@ def chapter(sections, prefix):
     return found[0]
 
 
-def roles(section):
-    """역할 표의 [역할, 업무 범위]."""
-    rows = [[POL.plain(c) for c in tr if c.tag in ("th", "td")] for tr in section.iter("tr")]
-    if not rows[1:] or rows[0][:2] != ["역할", "업무 범위"]:
-        raise SystemExit("운영 정책 역할 표를 읽지 못했습니다.")
-    return [r[:2] for r in rows[1:]]
-
-
 def exclusions(section):
     items = [POL.plain(c) for chips in section.xpath('./div[@class="chips"]') for c in chips]
     if not items:
@@ -141,41 +151,58 @@ def open_items(section):
     return external, later
 
 
-def last_commit(*paths):
-    out = subprocess.check_output(["git", "log", "-1", "--format=%H", "--", *paths], cwd=HERE, text=True).strip()
-    if not out:
-        raise SystemExit(f"커밋을 찾지 못했습니다: {paths}")
-    return out[:8]
+def bases(req_snap, menu_snap, test_snap):
+    """지금 원본 기준으로 계산한 기준 값. 기록과 대조하는 데 쓴다."""
+    return {"REQ": REQ.basis(req_snap), "MENU": MENU.basis(menu_snap), "API": API.basis(), "TBL": TBL.basis(), "POL": POL.basis(),
+            "FLOW": source_basis(FLOW.SOURCE_JSON), "SCR": source_basis(SCR.SOURCE_JSON), "TEST": TEST.basis(test_snap)}
 
 
-def short_commits(commits):
-    return " · ".join(f"{label} {commit[:8]}" for label, commit in commits)
-
-
-def source_commits(path):
-    source = json.load(open(path, encoding="utf-8"))
-    return short_commits([(CLIENTS["admin"], source["admin"]["commit"]), (CLIENTS["staff"], source["staff"]["commit"])])
-
-
-def deliverables(req_snap, menu_snap, test_snap, version):
-    """산출물 목록. revisions.json 의 문서가 9종이 아니면 멈춘다."""
+def latest_versions():
     with open(os.path.join(HERE, "revisions.json"), encoding="utf-8") as f:
         docs = json.load(f)
     if set(docs) != set(FORMATS):
         raise SystemExit(f"revisions.json 의 문서가 9종과 다릅니다: {sorted(set(docs) ^ set(FORMATS))}")
-    bases = {"REQ": f"기획 명세 스냅숏 {req_snap['readAt']}",
-             "MENU": f"마이그레이션 {menu_snap['lastMigration'].split('_')[0]}",
-             "API": f"API 커밋 {last_commit('../openapi/openapi.json', '../src')}",
-             "TBL": f"API 커밋 {last_commit('../prisma/schema.prisma')}",
-             "POL": f"운영 정책 {POL.SOURCE_VERSION}",
-             "FLOW": source_commits(FLOW.SOURCE_JSON),
-             "SCR": source_commits(SCR.SOURCE_JSON),
-             "TEST": short_commits(test_snap["commits"].items()),
-             "RPT": "위 8종의 기준"}
+    return {abbr: (doc["name"], doc["history"][-1]["version"]) for abbr, doc in docs.items()}
+
+
+def policy_differs():
+    """운영 정책 원본이 있으면 사본과 대조한다. 원본을 볼 수 없으면 대조하지 않는다."""
+    return os.path.exists(RAW_POLICY) and sha256(RAW_POLICY) != sha256(POL.SOURCE)
+
+
+def delivery_problems(manifest, current, versions, out=OUT):
+    """납품본을 만들어도 되는지 본다. 문제 목록을 돌려준다."""
+    problems = [] if tree_clean() else ["작업 트리가 깨끗하지 않습니다."]
+    if policy_differs():
+        problems.append("운영 정책 사본이 원본과 다릅니다.")
+    for abbr, basis in current.items():
+        e = manifest.get(abbr)
+        if not e:
+            problems.append(f"{abbr}: 기준 기록이 없습니다.")
+            continue
+        path = os.path.join(out, e["file"])
+        if not os.path.exists(path):
+            problems.append(f"{abbr}: 산출물 파일이 없습니다.")
+        elif sha256(path) != e["sha256"]:
+            problems.append(f"{abbr}: 산출물 파일이 기록과 다릅니다.")
+        if e["version"] != versions[abbr][1]:
+            problems.append(f"{abbr}: 버전이 다릅니다.")
+        if e["basis"] != basis:
+            problems.append(f"{abbr}: 기준이 다릅니다(기록 {e['basis']} · 지금 {basis}).")
+        if not e["clean"]:
+            problems.append(f"{abbr}: 깨끗하지 않은 작업 트리에서 만들었습니다.")
+    if manifest.get("POL") and manifest["POL"].get("sourceSha") != sha256(POL.SOURCE):
+        problems.append("POL: 문서를 만든 뒤 운영 정책 사본이 바뀌었습니다.")
+    return problems
+
+
+def deliverables(manifest, versions, version):
+    """산출물 목록. 기준은 생성 때 남긴 기록을 읽는다."""
     rows = []
-    for abbr, doc in docs.items():
-        v = version if abbr == "RPT" else doc["history"][-1]["version"]
-        rows.append([f"WHALE-{abbr}-{v}", doc["name"], FORMATS[abbr], v, bases[abbr]])
+    for abbr, (name, v) in versions.items():
+        v = version if abbr == "RPT" else v
+        basis = "위 8종의 기준" if abbr == "RPT" else manifest.get(abbr, {}).get("basis", "기준 기록 없음")
+        rows.append([f"WHALE-{abbr}-{v}", name, FORMATS[abbr], v, basis])
     return rows
 
 
@@ -229,6 +256,8 @@ def failure_groups(snap):
         reason, impact, plan = TEST.plan_of(f)
         if f["kind"] in ("type", "lint"):
             reason = f"{TEST.KINDS[f['kind']]} 오류: {f['test'].rsplit(':', 1)[0]}"
+        elif reason.startswith("원인 미분석"):  # 오류 원문은 싣지 않는다
+            reason = "원인 미분석"
         groups[("실패", f["repo"], TEST.KINDS[f["kind"]], reason, impact, plan)] += 1
     for row, skip in zip(TEST.detail_rows({**snap, "failures": []}), snap["skips"]):
         groups[("제외", row[1], TEST.KINDS[skip["kind"]], row[4], row[5], row[6])] += 1
@@ -238,13 +267,18 @@ def failure_groups(snap):
     return list(groups.items())
 
 
-def leaks(texts):
-    return sorted({x for t in texts for x in TEST.leaks(t) + [m.group() for rx in EXTRA_LEAKS for m in rx.finditer(t or "")]})
+def leaks(texts, final=False):
+    patterns = EXTRA_LEAKS + ([FINAL_LEAKS] if final else [])
+    texts = [(t or "").replace(DEMO_FILE, "") for t in texts]
+    return sorted({x for t in texts for x in TEST.leaks(t) + [m.group() for rx in patterns for m in rx.finditer(t)]})
 
 
 def all_text(d):
     cells = [p.text for t in d.tables for r in t.rows for c in r.cells for p in c.paragraphs]
-    return [p.text for p in d.paragraphs] + cells + [p.text for p in d.sections[0].header.paragraphs]
+    section = d.sections[0]
+    c = d.core_properties
+    props = [c.author, c.last_modified_by, c.title, c.subject, c.comments, c.keywords, c.category]
+    return [p.text for p in d.paragraphs] + cells + [p.text for p in section.header.paragraphs + section.footer.paragraphs] + props
 
 
 def write(version, draft=False):
@@ -256,24 +290,32 @@ def write(version, draft=False):
         test_snap = json.load(f)
     TEST.check(test_snap)
     menu_snap = menu_snapshot(draft)
-    areas, devices = overview(req_snap)
+    versions = latest_versions()
+    manifest = read_manifest()
+    if not draft:
+        problems = delivery_problems(manifest, bases(req_snap, menu_snap, test_snap), {k: v for k, v in versions.items()})
+        if problems:
+            raise SystemExit("납품본을 만들 수 없습니다(초안은 --draft):\n" + "\n".join(problems))
+    purpose = prd()
     area_list = [a for _, a in SCR.load_areas()]
     scope, used_menus = scope_rows(menu_snap["menus"], area_list)
     sections = chapters()[0]
     excluded = exclusions(chapter(sections, EXCLUDE_CHAPTER))
     external, later = open_items(chapter(sections, OPEN_CHAPTER))
-    role_rows = roles(chapter(sections, ROLE_CHAPTER))
-    docs = deliverables(req_snap, menu_snap, test_snap, version)
+    docs = deliverables(manifest, versions, version)
+    features = feature_rows(menu_snap["menus"], area_list)
     counts = {**count_all(), "req": req_counts(req_snap)}
     result_rows = results(counts, menu_snap, used_menus)
     groups = failure_groups(test_snap)
 
-    d, doc_name, doc_no = open_docx("RPT", version)
+    d, doc_name, doc_no = open_docx("RPT", version, draft)
     heading(d, "프로젝트 개요", 1)
-    para(d, f"WHALE ERP 는 아래 {len(areas)}개 영역의 업무를 제공한다. 사용 기기는 {' · '.join(devices)} 다.")
-    table(d, ["영역", "내용"], areas, widths=[4, 12.5])
-    heading(d, "대상", 2)
-    table(d, ["역할", "업무 범위"], role_rows, widths=[6, 10.5])
+    para(d, [("목적 ", True), (purpose["goal"], False)])
+    para(d, [("대상 ", True), (purpose["targetUser"], False)])
+    para(d, [("화면 구분 ", True), (" · ".join(dict.fromkeys(r[0] for r in features)), False)])
+    heading(d, "제공 기능", 2)
+    para(d, "메뉴가 있는 영역은 사용 중인 메뉴를, 메뉴가 없는 영역은 화면을 적는다.")
+    table(d, ["구분", "영역", "메뉴 · 화면"], features, widths=[2.6, 3.6, 10.3])
 
     heading(d, "수행 범위", 1)
     para(d, f"1차 범위는 아래 영역의 화면 {sum(r[2] for r in scope)}개와 사용 메뉴 {used_menus}개다. "
@@ -309,7 +351,7 @@ def write(version, draft=False):
     fails = [k for k, _ in groups if k[0] == "실패"]
     table(d, ["저장소", "사유", "영향", "처리 계획"], [[k[1], k[3], k[4], k[5]] for k in fails], widths=[2.4, 7.5, 3.1, 3.5])
 
-    left = leaks(all_text(d))
+    left = leaks(all_text(d), final=not draft)
     if left:
         raise SystemExit(f"납품본에 내부 표지가 남았습니다: {left[:30]}")
     path = save_docx(d, f"{doc_no}_{doc_name}{'_초안' if draft else ''}.docx")

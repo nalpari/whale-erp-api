@@ -26,6 +26,10 @@ def menu(i, name, parent=None, status="ACTIVE"):
 # 영역 표: 사용 메뉴만 세고, 영역과 이어지지 않은 사용 메뉴가 있으면 멈춘다
 menus = [menu(1, "직원관리"), menu(2, "직원 목록", 1), menu(3, "숨김", 1, "INACTIVE"), menu(4, "재무관리", None, "INACTIVE")]
 areas = [{"client": "admin", "area": "직원관리", "screens": [1, 2]}, {"client": "staff", "area": "홈", "screens": [1]}]
+for m, order in zip(menus, range(4)):
+    m["sort_order"] = order
+assert R.feature_rows(menus, [{"client": "admin", "area": "직원관리", "screens": []}, {"client": "staff", "area": "홈", "screens": [{"name": "로그인"}]}]) == [
+    ["관리자 웹", "직원관리", "직원 목록"], ["직원 근무 앱", "홈", "로그인"]]  # 사용 중지 메뉴는 싣지 않는다
 assert R.scope_rows(menus, areas) == ([["관리자 웹", "직원관리", 2, 2], ["직원 근무 앱", "홈", 1, "-"]], 2)
 assert stops(R.scope_rows, menus + [menu(5, "고객지원")], areas)
 
@@ -43,14 +47,35 @@ assert groups[0][0][3] == "린트 오류: rule-x"
 assert stops(R.failure_groups, {**snap, "failures": snap["failures"][:2]})  # 실패가 목록에서 빠지면 멈춘다
 assert stops(R.failure_groups, {**snap, "skips": []})
 
+assert R.feature_rows([], [{"client": "public", "area": "비로그인", "screens": [{"name": "홈", "route": "/"}, {"name": "재무관리", "route": "/finance-management"}]}]) == [
+    ["비로그인 화면", "비로그인", "홈 · 서비스 소개(재무관리)"]]
+
 # 납품본 점검: 하나씩 잡는다. 문서 번호와 새 상태 이름은 잡지 않는다.
 for bad in ("쟁점", "ATT-5", "1팀", "재영", "WHALEERP-659", "#263", "Manyfast", "미정", "a@b.co.kr", "01099998888",
             "/Users/x", "whale-erp-api", "whale-erp-v2", "src/modules/foo", "docs/plans/a.md", "prisma/schema.prisma",
-            "manyfast.json", "github", "Notion", "TODO:", "추후 결정", "010 9999 8888", "+82-10-9999-8888",
+            "manyfast.json", "github", "Notion", "TODO:", "추후 결정", "010 9999 8888", "+82-10-9999-8888", "localhost", "E2E_REAL_POSTGRES", "Lee", "DESKTOP-ABC",
             "{{문서명}}", "임시저장", "서명 대기", "서명대기", "승인 대기"):
     assert R.leaks([bad]), bad
 assert not R.leaks(["WHALE-RPT-1.0", "직원 서명 대기", "미정산 탈퇴 조건", "담당 영역에서 시험 수정", "소속 승인 대기", "TO-DO",
-                    "react-hooks/rules-of-hooks", "법무", "1차 범위"])
+                    "react-hooks/rules-of-hooks", "법무", "1차 범위", "데모 파일이라 앱 동작과 무관"])
+
+assert R.leaks(["원인 미분석"], final=True) and not R.leaks(["원인 미분석"]) and R.leaks(["미확인"], final=True)
+
+# 납품 조건: 기록 · 파일 · 버전 · 기준 · 깨끗한 트리
+with tempfile.TemporaryDirectory() as tmp:
+    doc_path = os.path.join(tmp, "a.xlsx")
+    open(doc_path, "w").write("x")
+    good = {"A": {"file": "a.xlsx", "sha256": R.sha256(doc_path), "version": "1.0", "basis": "c1", "clean": True}}
+    versions, current = {"A": ("이름", "1.0")}, {"A": "c1"}
+    original = R.tree_clean, R.policy_differs
+    R.tree_clean, R.policy_differs = (lambda: True), (lambda: False)
+    assert R.delivery_problems(good, current, versions, tmp) == []
+    assert R.delivery_problems({}, current, versions, tmp)
+    for change in ({"sha256": "0"}, {"version": "2.0"}, {"basis": "c0"}, {"clean": False}, {"file": "없음.xlsx"}):
+        assert R.delivery_problems({"A": {**good["A"], **change}}, current, versions, tmp), change
+    R.tree_clean = lambda: False
+    assert R.delivery_problems(good, current, versions, tmp)
+    R.tree_clean, R.policy_differs = original
 
 # 낡은 메뉴 스냅숏은 --draft 없이는 멈춘다
 source = json.load(open(R.MENU.SNAPSHOT, encoding="utf-8"))
@@ -65,6 +90,8 @@ with tempfile.TemporaryDirectory() as tmp:
 out, info = R.write("1.0", draft=True)
 doc = Document(out)
 assert not R.leaks(R.all_text(doc))
+assert any("초안" in p.text for p in doc.paragraphs[:5]) and "초안" in doc.sections[0].header.paragraphs[0].text and "_초안" in out
+assert doc.core_properties.author == "인터플러그" and doc.core_properties.comments == ""
 tests = json.load(open(R.TEST.SNAPSHOT, encoding="utf-8"))
 assert info["fails"] == len(tests["failures"]) and info["skips"] == len(tests["skips"])
 assert len(info["docs"]) == 9

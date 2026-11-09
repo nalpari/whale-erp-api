@@ -11,7 +11,7 @@ import re
 
 from lxml import html
 
-from common import HERE, INTERNAL, TEAM, TEAM_NAMES, heading, open_docx, para, safe, save_docx, strip_records, table
+from common import HERE, INTERNAL, TEAM, TEAM_NAMES, heading, open_docx, para, record_basis, safe, save_docx, sha256, strip_records, table
 
 SOURCE = os.path.join(HERE, "sources", "운영정책.html")
 # 파일 안에 버전 표기가 없다. v273 · 복사일은 2026-11-09 지시(header 전달)에서 온 값이다.
@@ -213,6 +213,10 @@ def write_section(d, sec):
     return n
 
 
+def basis():
+    return f"운영 정책 {SOURCE_VERSION}"
+
+
 def write(version):
     """워드를 쓰고 (경로, 규칙 수, 장 수, 지운 조각 수) 를 돌려준다."""
     root = html.fromstring(open(SOURCE, encoding="utf-8").read())
@@ -253,6 +257,7 @@ def write(version):
     if left:
         raise SystemExit(f"쟁점 번호가 남음: {left}")
     path = save_docx(d, f"{doc_no}_{doc_name}.docx")
+    record_basis("POL", version, path, basis(), sourceSha=sha256(SOURCE))
     return path, rules, len(sections), len(REMOVED)
 
 
