@@ -22,11 +22,10 @@ snap = {"requirements": [{"id": "R-1", "data": {"name": "직원", "description":
                                          "description": "(WHALEERP-261 · 321, 2026-10-28) WHALEERP-280·281·282"}}],
         "devices": {"W": "웹", "A": "직원 근무 앱"}}
 reqs, feats, specs, _ = B.build(snap)
-assert reqs == [["직원", "설명", "[완료] a\nb", "", "할 일", "높음", "", "R-1"]]
-assert feats[0][:7] == ["[2차] 초대", "직원", "WHALEERP-12 참고", "", "", "2차", ""] and feats[0][-2:] == ["WHALEERP-12", "F-1"]
+assert reqs == [["직원", "설명", "[완료] a\nb", "", "할 일", "높음", "R-1"]]
+assert feats[0][:7] == ["[2차] 초대", "직원", "WHALEERP-12 참고", "", "", "2차", ""] and feats[0][-1] == "F-1"
 assert feats[0][8] == "웹, 직원 근무 앱" and feats[0][9 + 1] == "해당 없음" and feats[0][9 + 7] == "규칙"
 assert specs[0][1] == "[2차] 초대" and specs[0][6] == "완료" and specs[0][9 + 1] == ""
-assert specs[0][-2] == "WHALEERP-261, WHALEERP-321, WHALEERP-280, WHALEERP-281, WHALEERP-282", specs[0][-2]
 rest, tables = B.split_tables("앞 글\n\n<table><tbody><tr><th><p>구분</p></th><th><p>기준</p></th></tr>"
                                "<tr><td><p>가</p><p>나</p></td><td><p>다</p></td></tr></tbody></table>\n\n"
                                "| 구분 | 기준 |\n| --- | --- |\n| 라 | 마 |\n뒤 글")
@@ -77,8 +76,6 @@ wanted = {" ".join(B.expected(B.safe(t), B.FIXES).split()) for k in ("requiremen
 missing = [t for t in wanted if t not in cells]
 assert not missing, f"셀에 없는 본문 {len(missing)}건: {[m[:60] for m in missing[:3]]}"
 by_name = {it["data"]["name"]: it for k in ("features", "specs") for it in snapshot[k]}
-assert {"WHALEERP-282", "WHALEERP-283", "WHALEERP-284"} <= set(B.plane(by_name["지원 현황 조회와 문의사항 등록"]["data"]).split(", "))
-assert {"WHALEERP-266", "WHALEERP-321"} <= set(B.plane(by_name["직원 알림"]["data"]).split(", "))
 na = sum(1 for w in ("기능", "명세") for row in wb[w].iter_rows(values_only=True) for v in row if v == "해당 없음")
 want_na = sum(1 for k in ("features", "specs") for it in snapshot[k] for v in (it["data"].get("slots") or {}).values()
               if v.get("applicability") == "na" and not v.get("value"))
