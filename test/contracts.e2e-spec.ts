@@ -711,6 +711,13 @@ describe('근로계약 목록 (e2e)', () => {
       await post({ ...body, baseHours: null, isTemporarySave: true }).expect(
         201,
       );
+      // 비운 값은 0 이 아니라 NULL 로 남는다
+      for (const [args] of prisma.staffMember.create.mock.calls) {
+        expect(args.data.contracts).toMatchObject({
+          create: { status: 'DRAFT', baseHours: null },
+        });
+      }
+      expect(prisma.staffMember.create).toHaveBeenCalledTimes(2);
     });
 
     it('파트타이머는 월 기본시간을 비워도 되지만, 보낸 값은 1 이상이어야 한다', async () => {
@@ -1308,14 +1315,34 @@ describe('근로계약 목록 (e2e)', () => {
     });
 
     it('정직원 임시저장을 다 써서 저장할 때 월 기본시간이 없으면 400', async () => {
-      const res = await put('/contracts/7', {
+      // 나머지 칸은 다 채워 월 기본시간만 빠진 요청 — 문구가 그것 하나여야 한다
+      const complete = {
         ...draft,
+        birthDate: '1998-07-12',
+        gender: 'MALE',
         employmentType: 'FULL_TIME',
+        startDate: '2026-09-14',
+        wageAmount: 12000,
+        workDays: [
+          {
+            weekday: 'MON',
+            startTime: '09:00',
+            endTime: '18:00',
+            breakStartTime: '12:00',
+            breakEndTime: '13:00',
+          },
+        ],
+        payMonth: 'NEXT_MONTH',
+        payDay: 10,
+        payMethod: 'ACCOUNT',
+        isHealthPensionInsured: true,
+        isEmploymentInjuryInsured: false,
         isTemporarySave: false,
-      }).expect(400);
-      expect((res.body as { message: string[] }).message).toContain(
+      };
+      const res = await put('/contracts/7', complete).expect(400);
+      expect((res.body as { message: string[] }).message).toEqual([
         '월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.',
-      );
+      ]);
     });
 
     // api #49 4차 리뷰 — 동의로만 보이는 관리자(본사 역할)가 번호를 바꿔 보내면 그 번호의 같은 점포 계약이

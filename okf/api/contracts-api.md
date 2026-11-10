@@ -353,8 +353,9 @@ employment type, 임시저장 included — must be ≥ 1 and in 30-minute steps;
 missing or wrong value is a 400 with the single message 「월 기본시간은 1 이상,
 30분(0.5시간) 단위의 시간입니다.」 (2026-11-10 사용자 지정). 관리자 웹 fills 209 by
 default. Only create and update check it: a 정직원 contract already saved
-without it is resent as it is — 서명 요청 전 · 직원 서명 대기, and the
-서명 거절 · 계약 기간 만료 resend too.
+without it is sent again as it is — the resend of 서명 요청 전 · 직원 서명 대기
+and of 서명 거절 · 계약 기간 만료, and the 근로자 정보 수정 (`PATCH
+/contracts/:id/worker`, whose DTO has no `baseHours`) that re-sends it.
 The 재직 확인, the duplicate checks, 초대 유형 판별 and the writes run in one
 transaction under a transaction-scoped advisory lock on `contracts:{phone}`
 (`lockPeople`) — per person, not per store, because the overlap check looks
