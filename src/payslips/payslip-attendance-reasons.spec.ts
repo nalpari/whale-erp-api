@@ -140,7 +140,7 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
         },
         now,
       );
-    // 기간 안에만 있으면 「급여 기간에」
+    // 기간 안에만 있으면 날짜 없는 기본 문장
     count.mockResolvedValueOnce(2).mockResolvedValueOnce(0);
     expect(await october()).toContainEqual({
       reviewReason: 'ATTENDANCE_NEEDS_REVIEW',
@@ -274,7 +274,7 @@ describe('출퇴근 검토 대기 사유 (WHALEERP-229)', () => {
     });
   });
 
-  it('확인 필요 문구 — 앞 달 날이 하루면 그 날 하나만, 앞 달 날 것이 없으면 「급여 기간에」', () => {
+  it('확인 필요 문구 — 앞 달 날이 하루면 그 날 하나만, 앞 달 날 것이 없으면 괄호 예시가 붙은 기본 문장', () => {
     expect(flaggedDetail(1, 1, ['2026-09-30'])).toBe(
       '이번 급여 기간과 첫 주에 포함된 지난달 날짜(9월 30일)에 확인 필요로 표시된 출퇴근 기록이 1건 있습니다.',
     );
