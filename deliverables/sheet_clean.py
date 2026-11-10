@@ -12,7 +12,7 @@ from common import INTERNAL, OUT, TEAM, TEAM_NAMES, strip_records
 
 UNUSED = "1차에서 쓰지 않는 값"
 # 이미 표준인 표기를 다시 바꾸지 않게 앞을 본다
-_OLD = r"(?<![가-힣])(?:임시저장|(?<!직원 )수정 요청|(?<!서명 )거부|(?<!기간 )만료|(?<!계약 )종료)"
+_OLD = r"(?<![가-힣])(?:임시저장|(?<!직원 )수정 요청|(?<!서명 )거부|(?<!기간 )(?<!근로계약 )만료|(?<!계약 )종료)"
 OLD_WORD = re.compile(_OLD)
 NEW = {"임시저장": "작성 중", "수정 요청": "직원 수정 요청", "거부": "서명 거절", "만료": "계약 기간 만료", "종료": "계약 종료"}
 _SEP = r"(?:·| · |, | 및 )"
@@ -28,16 +28,17 @@ STATE_TERMS = re.compile(r"임시저장|발송 대기|(?<!직원 )서명 대기|
 _PARTICLE = {"로": "으로", "가": "이", "는": "은", "를": "을", "와": "과"}
 ALWAYS = [(re.compile(r"(?<!직원 )서명 대기"), "직원 서명 대기"), (re.compile(r"체결 완료"), "서명 완료"),
           # 상태를 정의하는 줄의 머리말
-          (re.compile(r"^- 거부는(?= 사유)"), "- 서명 거절은"), (re.compile(r"^- 임시저장은(?= 근로계약서)"), "- 작성 중은")]
+          (re.compile(r"^- 거부는(?= 사유)"), "- 서명 거절은"), (re.compile(r"(?<![가-힣])임시저장은(?= (?:근로계약서 )?초안)"), "작성 중은"),
+          (re.compile(r"(?<=계약을 )종료(?=로 닫)"), "계약 종료")]
+# 앱 푸시의 「발송 대기」는 뜻이 달라 바꾸지 않는다
+_SEND_WAIT = re.compile(r"발송 대기([로가는를와])(?![가-힣])")
 IN_CONTRACT = [
-    (re.compile(r"발송 대기([로가는를와])(?![가-힣])"), lambda m: "서명 요청 전" + _PARTICLE[m.group(1)]),
-    (re.compile(r"발송 대기"), "서명 요청 전"),
     (re.compile(r"(?<![가-힣])거부와 만료"), "서명 거절과 계약 기간 만료"),
     (re.compile(r"(?<=근로계약 )거부(?=[,·\s]|$)"), "서명 거절"),
     (re.compile(r"(?<=근로계약서 )거부와"), "서명 거절과"),
-    (re.compile(r"(?<![가-힣])거부(?=로 (?:변경|처리|닫|확정|바꾼)|된 (?:계약|근로계약)| 상태| 후에는| 또는 만료)"), "서명 거절"),
+    (re.compile(r"(?<![가-힣])거부(?=로 (?:변경|처리|닫|확정|바꾼)|된 (?:계약|근로계약)| 상태| 후에는| 또는)"), "서명 거절"),
     (re.compile(r"(?<=상태가 )거부|(?<=상태를 )거부|(?<=상태는 )거부"), "서명 거절"),
-    (re.compile(r"(?<=또는 )만료(?=된 계약)|(?<![가-힣 ])만료(?= 상태)"), "계약 기간 만료"),
+    (re.compile(r"(?<=또는 )만료(?=된 계약| 상태)|(?<![가-힣 ])만료(?= 상태)"), "계약 기간 만료"),
     (re.compile(r"(?<![가-힣])임시저장(?= (?:계약|근로계약|상태|초안|행))|(?<=상태가 )임시저장"), "작성 중"),
     (re.compile(r"(?<![가-힣])(?<!직원 )수정 요청(?= 상태|으로 (?:전환|변경|바꾼))|(?<=상태가 )수정 요청"), "직원 수정 요청"),
 ]
@@ -47,7 +48,7 @@ GONE = re.compile(r"연결 보류|본인인증|가입 연결")
 AMBIGUOUS = re.compile(r"(?:계약|날인|재발송|서명).{0,25}(?<![가-힣])(?:거부|만료|종료|임시저장|수정 요청)|(?<![가-힣])(?:거부|만료|종료|임시저장|수정 요청).{0,25}(?:계약|날인|재발송|서명)")
 TOOLS = re.compile(r"Manyfast|\bMCP\b|Plane|BUZZ|Figma|Claude|Orca|목업")
 WORK_NO = re.compile(r"\(\d{3}\s*·")
-DOUBLE = re.compile(r"계약 기간 계약 기간|직원 직원|계약 계약 종료|서명 서명|서명 거절 서명 거절|작성 중 작성 중")
+DOUBLE = re.compile(r"계약 기간 계약 기간|계약 계약 기간|직원 직원|계약 계약 종료|서명 서명|서명 거절 서명 거절|작성 중 작성 중")
 COUNTS = Counter()
 _ISSUE = r"[A-Z]{2,}-\d+"
 _MARKED = re.compile(rf"(?:쟁점|채쟁점)\s*{_ISSUE}(?:\s*[·,]\s*{_ISSUE})*")
@@ -108,9 +109,18 @@ def _sentence_states(sentence):
     return out
 
 
+def _send_wait(sentence):
+    if "푸시" in sentence:
+        return sentence
+    out = _SEND_WAIT.sub(lambda m: "서명 요청 전" + _PARTICLE[m.group(1)], sentence)
+    return out.replace("발송 대기", "서명 요청 전")
+
+
 def states(line):
     for rx, repl in ALWAYS:  # 먼저 바꿔야 혼합 나열의 항목으로 읽힌다
         line = rx.sub(repl, line)
+    line = "".join(_send_wait(s) for s in re.split(r"((?<=[다요음])\. )", line))
+    line = STATE_LIST.sub(lambda m: _map_list(m) if re.search(_NEW_ITEM, m.group()) else m.group(), line)  # 표준 이름이 섞인 나열은 근로계약 상태다
     return "".join(_sentence_states(s) for s in re.split(r"((?<=[다요음])\. )", line))
 
 
