@@ -713,6 +713,15 @@ describe('근로계약 목록 (e2e)', () => {
       );
     });
 
+    it('파트타이머는 월 기본시간을 비워도 되지만, 보낸 값은 1 이상이어야 한다', async () => {
+      const partTime = { ...body, employmentType: 'PART_TIME' };
+      await post({ ...partTime, baseHours: undefined }).expect(201);
+      const res = await post({ ...partTime, baseHours: 0.5 }).expect(400);
+      expect((res.body as { message: string[] }).message).toEqual([
+        '월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.',
+      ]);
+    });
+
     it('월 기본시간은 1 부터 받는다', async () => {
       await post({ ...body, baseHours: 1 }).expect(201);
     });
@@ -1154,6 +1163,17 @@ describe('근로계약 목록 (e2e)', () => {
       expect(res.status).toBe(400);
     });
 
+    it('정직원 종이 계약도 월 기본시간이 없으면 400 — 파일을 올리지 않는다', async () => {
+      const res = await paper()
+        .field('data', JSON.stringify({ ...data, employmentType: 'FULL_TIME' }))
+        .attach('employmentContract', PDF, 'a.pdf');
+      expect(res.status).toBe(400);
+      expect((res.body as { message: string[] }).message).toEqual([
+        '월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.',
+      ]);
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
     it('파일 종류는 내용으로 본다 — 확장자만 pdf 인 글자 파일은 400', async () => {
       const res = await paper()
         .field('data', JSON.stringify(data))
@@ -1285,6 +1305,17 @@ describe('근로계약 목록 (e2e)', () => {
         status: 'DRAFT',
         draftAction: null,
       });
+    });
+
+    it('정직원 임시저장을 다 써서 저장할 때 월 기본시간이 없으면 400', async () => {
+      const res = await put('/contracts/7', {
+        ...draft,
+        employmentType: 'FULL_TIME',
+        isTemporarySave: false,
+      }).expect(400);
+      expect((res.body as { message: string[] }).message).toContain(
+        '월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.',
+      );
     });
 
     // api #49 4차 리뷰 — 동의로만 보이는 관리자(본사 역할)가 번호를 바꿔 보내면 그 번호의 같은 점포 계약이
