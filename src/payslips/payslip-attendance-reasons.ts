@@ -25,7 +25,8 @@ export const ATTENDANCE_REVIEW_REASONS = [
   'ATTENDANCE_NEEDS_REVIEW',
 ] as const;
 
-export const NO_ATTENDANCE_DETAIL = '급여 기간에 출퇴근 기록이 없습니다.';
+export const NO_ATTENDANCE_DETAIL =
+  '이번 급여 기간에 등록된 출퇴근 기록이 없습니다.';
 /** 상세에 날짜를 늘어놓는 최대 개수 — 넘으면 「외 N일」 */
 const LISTED_DAYS = 10;
 const WEEKDAYS: readonly Weekday[] = [
@@ -42,7 +43,11 @@ const weekdayOf = (day: string) =>
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 const kstDate = (at: Date) =>
   new Date(at.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-const mmdd = (day: string) => day.slice(5);
+/** 「10월 9일」 */
+const monthDay = (day: string) =>
+  `${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일`;
+/** 「2026년 10월 15일」 */
+const yearMonthDay = (day: string) => `${day.slice(0, 4)}년 ${monthDay(day)}`;
 
 export interface ContractSpan {
   start: string;
@@ -115,17 +120,17 @@ const listed = (items: string[]) =>
     ? `${items.slice(0, LISTED_DAYS).join(', ')} 외 ${items.length - LISTED_DAYS}일`
     : items.join(', ');
 
-/** 「출퇴근 기록이 2일 누락되었습니다 — 09-05 퇴근 미등록, 08-22 출근·퇴근 모두 없음.」(데모 payrolls-detail) */
+/** 「출퇴근 기록이 등록되지 않은 날이 2일 있습니다(9월 5일 퇴근 미등록, 8월 22일 출근·퇴근 미등록).」(문구 수정 요청 2026-11) */
 export const missingDetail = (days: readonly MissingDay[]) =>
-  `출퇴근 기록이 ${days.length}일 누락되었습니다 — ${listed(
+  `출퇴근 기록이 등록되지 않은 날이 ${days.length}일 있습니다(${listed(
     days.map(
       (d) =>
-        `${mmdd(d.date)} ${d.kind === 'NONE' ? '출근·퇴근 모두 없음' : '퇴근 미등록'}`,
+        `${monthDay(d.date)} ${d.kind === 'NONE' ? '출근·퇴근 미등록' : '퇴근 미등록'}`,
     ),
-  )}.`;
+  )}).`;
 
 /**
- * 「급여 기간에 확인 필요 출퇴근 기록이 2건 있습니다.」. 달을 걸친 첫 주의 앞 달 날에 센 기록이 있으면(`fromLeadDays` > 0) 그 날짜
+ * 「확인 필요로 표시된 출퇴근 기록이 2건 있습니다(근무지 반경 밖 퇴근, 위치 조작 감지 등).」 — 괄호 안 예시는 고정 글자다. 달을 걸친 첫 주의 앞 달 날에 센 기록이 있으면(`fromLeadDays` > 0) 그 날짜
  * 범위를 밝힌다 — 그 달 출퇴근 화면에서 찾지 못하지 않게. 앞 달 날이 하루면 그 날 하나만.
  */
 export const flaggedDetail = (
@@ -134,9 +139,11 @@ export const flaggedDetail = (
   leadDays: readonly string[],
 ) => {
   const lead = leadDays.length
-    ? [...new Set([leadDays[0], leadDays.at(-1)!])].map(mmdd).join(' ~ ')
+    ? [...new Set([leadDays[0], leadDays.at(-1)!])].map(monthDay).join('~')
     : '';
-  return `${fromLeadDays > 0 && lead ? `급여 기간과 첫 주 앞 달 날(${lead})` : '급여 기간'}에 확인 필요 출퇴근 기록이 ${count}건 있습니다.`;
+  return fromLeadDays > 0 && lead
+    ? `이번 급여 기간과 첫 주에 포함된 지난달 날짜(${lead})에 확인 필요로 표시된 출퇴근 기록이 ${count}건 있습니다.`
+    : `확인 필요로 표시된 출퇴근 기록이 ${count}건 있습니다(근무지 반경 밖 퇴근, 위치 조작 감지 등).`;
 };
 
 /**
@@ -171,11 +178,11 @@ const flaggedWhere = (
 });
 
 export const afterEndDetail = (r: { end: string; days: string[] }) =>
-  `근로계약 만료일(${r.end}) 뒤 출퇴근 기록이 ${r.days.length}일 있습니다 — ${listed(r.days.map(mmdd))}.`;
+  `근로계약 종료일(${yearMonthDay(r.end)}) 이후의 출퇴근 기록이 ${r.days.length}일 있습니다(${listed(r.days.map(monthDay))}).`;
 
 /**
  * 명세서 하나의 출퇴근 검토 대기 사유. 급여 기간(한국, 달을 걸친 첫 주는 그 주 월요일부터)의 그 직원 레코드 출퇴근 기록과 급여 기간에 걸친 근로계약(`contractIds`)을 본다.
- * - 출퇴근 누락: 급여 기간 안 출근이 한 건도 없으면 「급여 기간에 출퇴근 기록이 없습니다.」, 있으면 빠진 날과 일수(오늘은 아직 끝나지 않아 어제까지).
+ * - 출퇴근 누락: 급여 기간 안 출근이 한 건도 없으면 「이번 급여 기간에 등록된 출퇴근 기록이 없습니다.」, 있으면 빠진 날과 일수(오늘은 아직 끝나지 않아 어제까지).
  * - 계약 만료 후 기록: 가장 늦은 계약 종료일 뒤에 출근한 날.
  * - 확인 필요 기록 포함: 확인 필요 사유가 남은(검토 전) 기록 건수(ATT-11) — 짝 퇴근은 출근한 날로 센다(급여 계산과 같다). 확인 필요
  *   기록도 급여 계산에는 넣는다.
@@ -313,8 +320,8 @@ export function reviewReasonsOf(
             reviewReason: 'CONTRACT_CHANGED' as const,
             // 고용형태가 섞이면 계산하지 않는다(calculatePay) — 맞게 계산된 것으로 읽히지 않게 문구를 가른다
             detail: mixed
-              ? `급여 기간에 고용형태가 다른 근로계약이 걸쳐 있어 기본급 · 주휴수당 · 연장수당을 계산하지 않았습니다. 직접 입력해 주세요.`
-              : `급여 기간에 근로계약이 ${contractIds.length}건 걸쳐 있어 날마다 그날 효력이 있는 계약으로 나눠 계산했습니다.`,
+              ? `급여 기간 중 정직원 계약과 파트타이머 계약이 함께 있어 기본급 · 주휴수당 · 연장수당은 자동 계산되지 않았습니다. 금액을 직접 입력해 주세요.`
+              : `급여 기간 중 적용된 근로계약이 ${contractIds.length}건이어서, 날짜별로 해당 계약을 기준으로 나누어 계산했습니다.`,
           },
         ]
       : []),

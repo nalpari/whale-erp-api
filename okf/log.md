@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-10
+* **Update**: [Payslips](/api/payslips.md) · [Attendance](/api/attendance.md) — 검토 사유 상세 문장을 「급여명세서 관리 수정 요청.xlsx」대로 바꿨다(사용자 지정): 출퇴근 누락 「출퇴근 기록이 등록되지 않은 날이 N일 있습니다(10월 9일 출근·퇴근 미등록, …).」 · 기록 없음 「이번 급여 기간에 등록된 출퇴근 기록이 없습니다.」, 계약 만료 후 「근로계약 종료일(2026년 10월 15일) 이후의 출퇴근 기록이 N일 있습니다(…).」, 기간 중 계약 변경 「급여 기간 중 적용된 근로계약이 N건이어서, …」 · 고용형태 섞임 「…정직원 계약과 파트타이머 계약이 함께 있어 … 금액을 직접 입력해 주세요.」, 확인 필요 「확인 필요로 표시된 출퇴근 기록이 N건 있습니다(근무지 반경 밖 퇴근, 위치 조작 감지 등).」. 날짜는 「M월 D일」. 상세는 만들 때 저장되므로 이미 만든 명세서는 다시 계산하기 전까지 옛 문장이다(api ditto).
+
 ## 2026-11-09
 * **Update**: [Bulk exports](/api/bulk-exports.md) · [whale-erp-api](/api/whale-erp-api.md) — api #260 머지 블로커: `AuthModule` 이 회원 탈퇴 때문에 `StoreClosingsModule` → `StaffMembersModule` 을 가져오면서 `GET /staff-members/bulk-exports` 가 `/staff-members/:id` 에 먹혀 404 가 됐다. `BulkExportsModule` 을 `AuthModule` 앞으로 옮겼다. openapi.json 다시 생성.
 * **Update**: [Admin auth](/api/admin-auth.md) · [Store management](/api/stores.md) — api #260 리뷰 반영: 폐점 시간 초과 503 에 `code: 'STORE_CLOSING_TIMEOUT'` 을 붙였다(게이트웨이 503 과 달리 전부 되돌아간 것이 확실하다, 2026-11-09 사용자). 회원 탈퇴 Swagger 409 에서 나올 수 없는 「이미 폐점」을 뺐다(탈퇴가 점포를 미리 잠그고 거른다). e2e 를 점포 2개로 넓히고, 실제 PostgreSQL 전용으로 잠금 대기 중 닫힌 점포가 빠지는 케이스를 더했다. openapi.json 다시 생성.
