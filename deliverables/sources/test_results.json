@@ -2,7 +2,7 @@
  "runAt": "2026-11-10",
  "commits": {
   "API": "97e04fcbb06d8e9b9d9fdd243f4cef730c7d9f5d",
-  "관리자 웹": "34144d03960545dc7c2a33f3d02872db3a03a7b4",
+  "관리자 웹": "b4b45678d8cbff5de59775466b2353b17466e5fb",
   "직원 근무 앱": "1d560ba52631db01e9a3fb20191fae53de86ff8c"
  },
  "environment": {
