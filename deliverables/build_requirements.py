@@ -14,6 +14,7 @@ from html.parser import HTMLParser
 from openpyxl.styles import Alignment, Font
 
 from common import FONT, HERE, open_xlsx, record_basis, safe, save_xlsx, table_sheet
+from sheet_clean import deliver, expected  # noqa: F401 (자체 검사가 쓴다)
 
 SNAPSHOT = os.path.join(HERE, "sources", "manyfast.json")
 SLOTS = [("preconditions", "전제 조건"), ("trigger", "트리거"), ("action", "동작"), ("outcome", "결과"),
@@ -174,6 +175,18 @@ CHILD_HEADERS = (["이름", "상위", "설명", "근거", "성공 기준", "1차
 CHILD_WIDTHS = [30, 26, 50, 40, 30, 8, 9, 8, 14] + [44] * len(SLOTS) + [16, 11]
 
 
+# 없앤 개념을 지금 기능처럼 적은 문장(원문 → 바꾼 글). 1차 범위 밖이라고 설명하는 문장은 그대로 둔다.
+FIXES = {"가입자의 본인인증 정보가 초대와 불일치해 연결이 보류되거나 ": ""}
+
+
+def trace_cell(ws, cell):
+    """추적용 Plane · ID 칸은 원문 그대로 둔다."""
+    if ws.title not in ("요구사항", "기능", "명세"):
+        return False
+    head = next(r for r in range(1, 8) if ws.cell(r, 1).value == "이름")
+    return ws.cell(head, cell.column).value in ("Plane", "ID")
+
+
 def basis(snap):
     return f"기획 명세 스냅숏 {snap['readAt']}"
 
@@ -231,6 +244,7 @@ def write(version):
             c.font = link
             for c in ws[head + 1 + i]:
                 c.alignment = wrap
+    deliver(wb, "REQ", FIXES, trace_cell)
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
     record_basis("REQ", version, path, basis(snap))
     return path, len(req_rows), len(feat_rows), len(spec_rows)

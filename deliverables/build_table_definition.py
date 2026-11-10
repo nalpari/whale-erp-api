@@ -17,6 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 from openpyxl.styles import Alignment, Font
 
 from common import FONT, HERE, last_commit, open_xlsx, record_basis, save_xlsx, table_sheet
+from sheet_clean import deliver
 
 SCHEMA = os.path.join(HERE, "..", "prisma", "schema.prisma")
 SCALAR = {"String": "text", "Int": "integer", "BigInt": "bigint", "Boolean": "boolean", "Float": "double precision",
@@ -242,6 +243,11 @@ def sheet_title(table, used):
     return t
 
 
+FIXES = {"실명 — 본인인증 값, 수정 불가": "실명 — 가입 때 직원이 넣은 값, 수정 불가",
+         "생년월일 — 본인인증 값, 직원은 수정 불가": "생년월일 — 가입 때 직원이 넣은 값, 직원은 수정 불가",
+         "휴대전화번호 — 본인인증, 변경 시 재인증": "휴대전화번호 — 가입 때 직원이 넣은 값, 1차에는 변경 불가"}
+
+
 def basis():
     return f"API 커밋 {last_commit('../prisma/schema.prisma')}"
 
@@ -291,6 +297,7 @@ def write(version):
                 c.hyperlink = f"#'enum 목록'!A{enum_row[f['type']]}"
                 c.font = Font(name=FONT, size=10, color="0563C1", underline="single")
 
+    deliver(wb, "TBL", FIXES)
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
     record_basis("TBL", version, path, basis())
     return path, len(models), sum(len(m["fields"]) for m in models)

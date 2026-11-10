@@ -72,7 +72,7 @@ def bodies(x, key=None):
 
 
 cells = "\0".join(" ".join(str(c.value).split()) for w in wb.worksheets for row in w.iter_rows() for c in row if c.value)
-wanted = {" ".join(B.safe(t).split()) for k in ("requirements", "features", "specs") for it in snapshot[k]
+wanted = {" ".join(B.expected(B.safe(t), B.FIXES).split()) for k in ("requirements", "features", "specs") for it in snapshot[k]
           for t in bodies(it["data"])}
 missing = [t for t in wanted if t not in cells]
 assert not missing, f"셀에 없는 본문 {len(missing)}건: {[m[:60] for m in missing[:3]]}"
