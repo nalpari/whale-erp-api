@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-10
+* **Update**: [Contracts API](/api/contracts-api.md) — 근로계약 작성 · 수정의 월 기본시간(`baseHours`): 정직원은 임시저장이 아니면 필수, 보낸 값은 고용 형태와 상관없이 1 이상 · 30분 단위다. 빠지거나 틀리면 400 문구 하나 「월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.」(2026-11-10 사용자 지정, 관리자 웹은 209 를 기본으로 채운다). 이미 값 없이 저장된 정직원 계약의 재발송은 검사하지 않는다. openapi.json 다시 생성.
+
 ## 2026-11-09
 * **Update**: [Bulk exports](/api/bulk-exports.md) · [whale-erp-api](/api/whale-erp-api.md) — api #260 머지 블로커: `AuthModule` 이 회원 탈퇴 때문에 `StoreClosingsModule` → `StaffMembersModule` 을 가져오면서 `GET /staff-members/bulk-exports` 가 `/staff-members/:id` 에 먹혀 404 가 됐다. `BulkExportsModule` 을 `AuthModule` 앞으로 옮겼다. openapi.json 다시 생성.
 * **Update**: [Admin auth](/api/admin-auth.md) · [Store management](/api/stores.md) — api #260 리뷰 반영: 폐점 시간 초과 503 에 `code: 'STORE_CLOSING_TIMEOUT'` 을 붙였다(게이트웨이 503 과 달리 전부 되돌아간 것이 확실하다, 2026-11-09 사용자). 회원 탈퇴 Swagger 409 에서 나올 수 없는 「이미 폐점」을 뺐다(탈퇴가 점포를 미리 잠그고 거른다). e2e 를 점포 2개로 넓히고, 실제 PostgreSQL 전용으로 잠금 대기 중 닫힌 점포가 빠지는 케이스를 더했다. openapi.json 다시 생성.

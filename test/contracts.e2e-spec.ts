@@ -630,6 +630,7 @@ describe('근로계약 목록 (e2e)', () => {
       contractMethod: 'ELECTRONIC',
       startDate: '2026-09-14',
       wageAmount: 12000,
+      baseHours: 209,
       workDays: [
         {
           weekday: 'MON',
@@ -699,6 +700,28 @@ describe('근로계약 목록 (e2e)', () => {
       };
       // 계약 방식도 임시저장이면 비워 둘 수 있다
       await post(partial).expect(201);
+    });
+
+    it('정직원 임시저장은 월 기본시간을 비워도(null 도) 201', async () => {
+      await post({
+        ...body,
+        baseHours: undefined,
+        isTemporarySave: true,
+      }).expect(201);
+      await post({ ...body, baseHours: null, isTemporarySave: true }).expect(
+        201,
+      );
+    });
+
+    it('월 기본시간은 1 부터 받는다', async () => {
+      await post({ ...body, baseHours: 1 }).expect(201);
+    });
+
+    it('정직원 월 기본시간이 없으면 한글 문구 하나로 400', async () => {
+      const res = await post({ ...body, baseHours: null }).expect(400);
+      expect((res.body as { message: string[] }).message).toEqual([
+        '월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.',
+      ]);
     });
 
     it('api #12 칸(수당 · 월 근로시간 · 조항)을 받아 계약에 넣는다', async () => {
@@ -783,6 +806,9 @@ describe('근로계약 목록 (e2e)', () => {
       ['근무지 id 가 integer 를 넘음', { storeId: 3_000_000_000 }],
       ['수당이 음수', { carAllowanceAmount: -1 }],
       ['근로시간이 30분 단위가 아님', { baseHours: 1.3 }],
+      ['정직원인데 월 기본시간이 없음', { baseHours: undefined }],
+      ['월 기본시간이 1 미만', { baseHours: 0.5 }],
+      ['임시저장인데 월 기본시간이 0', { isTemporarySave: true, baseHours: 0 }],
       ['근로시간이 numeric(5,1) 을 넘음', { monthlyOvertimeHours: 10000 }],
       ['조항이 1000자를 넘음', { severancePayTerms: 'x'.repeat(1001) }],
       ['대체할 계약 id 가 숫자가 아님', { replaceContractIds: ['a'] }],

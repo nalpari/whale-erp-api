@@ -55,6 +55,21 @@ const HalfHours = () =>
     },
   });
 
+/** 월 기본시간 — 1 이상, 30분 단위. 숫자 · 범위 · 단위를 한 검사로 두어 빠지거나 틀리면 문구가 하나만 나간다 */
+const BaseHours = () =>
+  ValidateBy({
+    name: 'baseHours',
+    validator: {
+      validate: (v: unknown) =>
+        typeof v === 'number' &&
+        v >= 1 &&
+        v <= MAX_HOURS &&
+        Number.isInteger(v * 2),
+      defaultMessage: () =>
+        '월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.',
+    },
+  });
+
 /** 근무하는 요일 하나. 휴게는 둘 다 넣거나 둘 다 비운다 */
 export class ContractWorkDayDto {
   @ApiProperty({ enum: Weekday, enumName: 'Weekday' })
@@ -189,10 +204,13 @@ export class CreateContractDto {
   @Max(MAX_INT)
   childcareAllowanceAmount?: number;
 
-  /** 월 기본시간 — 시간, 30분 단위 */
-  @IsOptional()
-  @IsNumber()
-  @HalfHours()
+  /** 월 기본시간 — 시간, 30분 단위, 1 이상. 정직원은 필수다(임시저장은 비워도 된다). 보낸 값은 고용 형태와 상관없이 1 이상이어야 한다 */
+  @ValidateIf(
+    (o: CreateContractDto, v: unknown) =>
+      (o.employmentType === 'FULL_TIME' && !o.isTemporarySave) ||
+      (v !== undefined && v !== null),
+  )
+  @BaseHours()
   baseHours?: number;
 
   /** 월간 연장근무 — 시간, 30분 단위 */
