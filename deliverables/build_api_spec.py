@@ -15,6 +15,7 @@ import re
 from openpyxl.styles import Alignment, Font
 
 from common import EMAIL, FONT, HERE, INTERNAL, last_commit, open_xlsx, record_basis, save_xlsx, table_sheet
+from sheet_clean import deliver
 
 ROOT = os.path.join(HERE, "..")
 OPENAPI = os.path.join(ROOT, "openapi", "openapi.json")
@@ -484,6 +485,17 @@ def build(doc, routes, dtos):
     return blocks, modules
 
 
+FIXES = {"대소문자를 구분하므로(1팀)": "대소문자를 구분하므로", "1팀 연락처 범위(": "연락처 범위(", "3팀 출퇴근 위치 확인이": "출퇴근 위치 확인이",
+         "가입 연결이 보류된 계정(`LINK_HOLD`)도 로그인된다.": "가입 연결이 보류된 계정(`LINK_HOLD`, 1차에서 쓰지 않는 값)도 로그인된다.",
+         "계정이 JOINED 아님(탈퇴 · 연결 보류)": "계정이 JOINED 아님(탈퇴 · 연결 보류, 1차에서 쓰지 않는 값)",
+         "`JOINED`, 탈퇴 · 연결 보류 아님": "`JOINED`, 탈퇴 · 연결 보류(1차에서 쓰지 않는 값) 아님",
+         "계정이 탈퇴 · 연결 보류여도": "계정이 탈퇴 · 연결 보류(1차에서 쓰지 않는 값)여도",
+         "가입자가 본인인증한 번호의 끝 4자리": "가입자가 본인인증한 번호의 끝 4자리(1차에서 쓰지 않는 값)",
+         "(본인인증 정보의 주소를 보인다)": "(본인인증 정보의 주소를 보인다, 1차에서 쓰지 않는 값)",
+         "로그인 뒤 관리자가 가입 연결 보류를 풀거나 이메일이 바뀌어도": "로그인 뒤 이메일이 바뀌어도",
+         "계정의 본인인증 값과 모두 맞으면": "계정에 저장된 값과 모두 맞으면", "본인인증 실명. 앞뒤": "계정 이름. 앞뒤"}
+
+
 def basis():
     return f"API 커밋 {last_commit('../openapi/openapi.json', '../src')}"
 
@@ -526,6 +538,7 @@ def write(version):
             for c in row:
                 if isinstance(c.value, str) and "@" in c.value:
                     c.value = EMAIL.sub(r"\1@example.com", c.value)
+    deliver(wb, "API", FIXES)
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
     record_basis("API", version, path, basis())
     return path, len(blocks), len(modules), sum(1 for b in blocks if b[5]), len(REMOVED)

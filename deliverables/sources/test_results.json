@@ -1,9 +1,9 @@
 {
- "runAt": "2026-11-09",
+ "runAt": "2026-11-10",
  "commits": {
-  "API": "14715937deb03b87b125bee2d66537e4fe6aa631",
-  "관리자 웹": "3ba8b6cacad23bfad7acb290a801f621ccf1ba1f",
-  "직원 근무 앱": "c2f667b4476f89d9b3cff76b1849bc8c1b7d7784"
+  "API": "97e04fcbb06d8e9b9d9fdd243f4cef730c7d9f5d",
+  "관리자 웹": "b4b45678d8cbff5de59775466b2353b17466e5fb",
+  "직원 근무 앱": "1d560ba52631db01e9a3fb20191fae53de86ff8c"
  },
  "environment": {
   "node": "v22.23.3",
@@ -16,8 +16,8 @@
    "repo": "API",
    "kind": "unit",
    "available": true,
-   "total": 5323,
-   "passed": 5323,
+   "total": 5327,
+   "passed": 5327,
    "failed": 0,
    "skipped": 0,
    "note": ""
@@ -26,10 +26,10 @@
    "repo": "API",
    "kind": "e2e",
    "available": true,
-   "total": 1309,
-   "passed": 1293,
+   "total": 1312,
+   "passed": 1295,
    "failed": 1,
-   "skipped": 15,
+   "skipped": 16,
    "note": "실패 스위트 2 (테스트 밖 실패 1)"
   },
   {
@@ -46,8 +46,8 @@
    "repo": "API",
    "kind": "lint",
    "available": true,
-   "total": 918,
-   "passed": 918,
+   "total": 919,
+   "passed": 919,
    "failed": 0,
    "skipped": 0,
    "note": "오류 0 · 경고 22"
@@ -56,8 +56,8 @@
    "repo": "관리자 웹",
    "kind": "unit",
    "available": true,
-   "total": 1070,
-   "passed": 1070,
+   "total": 1078,
+   "passed": 1078,
    "failed": 0,
    "skipped": 0,
    "note": ""
@@ -96,8 +96,8 @@
    "repo": "직원 근무 앱",
    "kind": "unit",
    "available": true,
-   "total": 210,
-   "passed": 210,
+   "total": 211,
+   "passed": 211,
    "failed": 0,
    "skipped": 0,
    "note": ""
@@ -1756,8 +1756,8 @@
    "kind": "unit",
    "area": "enums",
    "suite": "src/enums/db-enums.generated.spec.ts",
-   "total": 1,
-   "passed": 1,
+   "total": 2,
+   "passed": 2,
    "failed": 0,
    "skipped": 0,
    "suiteError": ""
@@ -2889,8 +2889,8 @@
    "kind": "unit",
    "area": "staff-members",
    "suite": "src/staff-members/join-state.spec.ts",
-   "total": 22,
-   "passed": 22,
+   "total": 23,
+   "passed": 23,
    "failed": 0,
    "skipped": 0,
    "suiteError": ""
@@ -3186,8 +3186,8 @@
    "kind": "unit",
    "area": "store-closings",
    "suite": "src/store-closings/store-closings.service.spec.ts",
-   "total": 22,
-   "passed": 22,
+   "total": 24,
+   "passed": 24,
    "failed": 0,
    "skipped": 0,
    "suiteError": ""
@@ -3509,6 +3509,17 @@
    "passed": 6,
    "failed": 0,
    "skipped": 0,
+   "suiteError": ""
+  },
+  {
+   "repo": "API",
+   "kind": "e2e",
+   "area": "공통",
+   "suite": "test/admin-withdrawal-db.e2e-spec.ts",
+   "total": 3,
+   "passed": 2,
+   "failed": 0,
+   "skipped": 1,
    "suiteError": ""
   },
   {
@@ -4330,8 +4341,8 @@
    "kind": "unit",
    "area": "app/contracts",
    "suite": "src/app/contracts/contract-list.test.ts",
-   "total": 20,
-   "passed": 20,
+   "total": 22,
+   "passed": 22,
    "failed": 0,
    "skipped": 0,
    "suiteError": ""
@@ -4517,8 +4528,8 @@
    "kind": "unit",
    "area": "app/staff-members",
    "suite": "src/app/staff-members/staff-row.test.ts",
-   "total": 18,
-   "passed": 18,
+   "total": 20,
+   "passed": 20,
    "failed": 0,
    "skipped": 0,
    "suiteError": ""
@@ -5210,8 +5221,8 @@
    "kind": "unit",
    "area": "lib",
    "suite": "src/lib/withdrawal-form.test.ts",
-   "total": 15,
-   "passed": 15,
+   "total": 19,
+   "passed": 19,
    "failed": 0,
    "skipped": 0,
    "suiteError": ""
@@ -5287,8 +5298,8 @@
    "kind": "unit",
    "area": "lib",
    "suite": "src/lib/contract-rules.test.ts",
-   "total": 19,
-   "passed": 19,
+   "total": 20,
+   "passed": 20,
    "failed": 0,
    "skipped": 0,
    "suiteError": ""
@@ -5534,6 +5545,13 @@
   }
  ],
  "skips": [
+  {
+   "repo": "API",
+   "kind": "e2e",
+   "suite": "test/admin-withdrawal-db.e2e-spec.ts",
+   "test": "회원 탈퇴 (e2e, DB) 탈퇴가 점포 잠금을 기다리는 동안 그 점포가 닫히면 목록에서 빠지고 탈퇴는 성공한다",
+   "reason": "연결 두 개가 필요한 동시성 시험이라 별도 환경에서만 실행한다. 기본 실행에서 제외"
+  },
   {
    "repo": "API",
    "kind": "e2e",

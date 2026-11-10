@@ -9,6 +9,8 @@ import tempfile
 
 from openpyxl import load_workbook
 
+from sheet_clean import expected
+
 import build_api_spec as B
 
 CONTROLLER = '''
@@ -135,7 +137,7 @@ def descriptions(x, key=None):
 
 
 # 내부 표지가 든 문장은 뺀 뒤의 원문이 기준이다(2026-11-05 (가)안)
-wanted = {" ".join(B.paragraphs(d).split()) for d in descriptions({k: v for k, v in doc.items() if k != "info"})} - {""}
+wanted = {" ".join(expected(B.paragraphs(d), B.FIXES).split()) for d in descriptions({k: v for k, v in doc.items() if k != "info"})} - {""}
 wb = load_workbook(path)
 cells = "\0".join(" ".join(str(c.value).split()) for w in wb.worksheets for r in w.iter_rows() for c in r if c.value)
 missing = sorted(d for d in wanted if d not in cells)
