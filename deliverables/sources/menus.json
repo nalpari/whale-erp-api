@@ -1,7 +1,7 @@
 {
-  "readAt": "2026-11-05",
+  "readAt": "2026-11-10",
   "source": "일회용 로컬 Postgres(embedded-postgres)에 prisma/migrations 전부를 pnpm prisma migrate deploy 로 적용한 뒤 SELECT 로 읽음",
-  "lastMigration": "20261104093700_team1_withdrawn_bp_sub_admins_inactive",
+  "lastMigration": "20261109165622_team3_contract_status_labels",
   "menuCount": 63,
   "services": [
     {
