@@ -15,7 +15,7 @@ from common import HERE, INTERNAL, TEAM, TEAM_NAMES, heading, open_docx, para, r
 
 SOURCE = os.path.join(HERE, "sources", "운영정책.html")
 # 파일 안에 버전 표기가 없다. v273 · 복사일은 2026-11-09 지시(header 전달)에서 온 값이다.
-SOURCE_VERSION, COPIED = "v273", "2026-11-09"
+SOURCE_VERSION, COPIED = "v275", "2026-11-10"
 RULES = 221  # 원본 div.rule 수. 스냅숏을 바꾸면 함께 고친다.
 DROP_CHAPTER = "근거"  # 팀원 실명 · 내부 논의가 담긴 장. 납품본에서 뺀다(규칙 없음).
 # 문장 속 내부 표지 · 결정 표시를 바꾼다(원문 → 바꾼 글). 문장 자체가 결정 표시뿐이면 문장째 뺀다. 원문에서 못 찾으면 멈춘다.

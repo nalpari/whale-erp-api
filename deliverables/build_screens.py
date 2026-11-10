@@ -69,7 +69,7 @@ TEXT_FIXES = [
     ("*", r"platjiyoung", "platyesol"),
     # 없앤 상태 · 옛 표현
     ("staff/index.html", r"^가입·인증$", "가입 상태"),
-    ("staff/contracts.html", r" · 연결 보류$", ""),
+    ("staff/contracts.html", r" · 정보 확인 필요$", ""),  # 없앤 연결 보류의 새 표기
     ("home/index.html", r"휴대폰 본인인증과 ", ""),
     # 운영자 메모의 내부 말투: 메모 칸을 비운다
     ("support/inquiry-detail.html", r"(?s)^계약서에 소정근로시간이 주 14시간으로.*", ""),
@@ -92,8 +92,8 @@ DEMO_BUTTONS = [
 
 # 찍기 전에 숨기는 줄 (화면 키 glob, 숨길 요소 선택자, 그 요소 글자의 정규식). 못 찾으면 멈춘다. 없앤 상태 · 옛 표현.
 HIDE_ROWS = [
-    ("staff/index.html", "label", r"^연결 보류$"),
-    ("staff/index.html", "tr", r"연결 보류 · 4일"),  # 표의 한 줄이 빠진다(보고 목록)
+    ("staff/index.html", "label", r"^정보 확인 필요$"),  # 없앤 연결 보류의 새 표기
+    ("staff/index.html", "tr", r"정보 확인 필요 · 4일"),  # 표의 한 줄이 빠진다(보고 목록)
     ("staff/detail.html", "div:has(> dt)", r"^본인인증"),
     ("notify/templates.html", "tr", r"가입 연결 보류"),  # 표의 한 줄이 빠진다(보고 목록)
     ("staff/index.html", 'aside[aria-label="가입 연결 확인"]', r""),  # 화면 밖의 닫힌 패널
@@ -121,7 +121,6 @@ MEMO = re.compile(r"미정(?!산)|협의|보류|TBD|법무|노무사|검토 중|
 # 미결 메모처럼 보이는 업무어 (화면 파일 glob, 지울 글). 점검 전에 빼고 본다.
 MEMO_ALLOW = [
     ("*", "시간 미정"),  # TO-DO 수행 예정 일시에 시간이 없을 때
-    ("notify/index.html", "협의한 날과 다릅니다"),  # 예시 거부 사유
     ("*", "1차 비밀번호"),  # 업무어(지금 데모에는 없다)
     ("*", "1차 오픈 일정 안내"),  # 예시 공지 제목. 보고 목록에 올린다
     ("*", "1차 서비스 오픈 안내"),

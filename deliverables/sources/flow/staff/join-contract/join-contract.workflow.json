@@ -2,12 +2,12 @@
   "schema_version": 2,
   "diagram_type": "workflow",
   "meta": {
-    "title": "가입과 계약 날인 — 초대 코드·링크에서 신고 정보까지",
+    "title": "가입과 계약 서명 — 초대 코드·링크에서 신고 정보까지",
     "quality_profile": "showcase",
     "views": [
       {
         "id": "happy",
-        "label": "초대 코드에서 체결까지",
+        "label": "초대 코드에서 서명 완료까지",
         "focus": [
           "login",
           "code",
@@ -18,7 +18,7 @@
           "done",
           "rrn"
         ],
-        "note": "앱을 직접 열면 로그인 화면 아래 「초대 코드로 가입」에서 휴대전화번호와 초대 코드를 넣는다. 계정을 등록하면 초대의 직원 레코드에 바로 이어지고 계약서가 자동으로 도착한다. 날인하면 체결되고, 그 뒤에 주민등록번호를 본인이 넣는다."
+        "note": "앱을 직접 열면 로그인 화면 아래 「초대 코드로 가입」에서 휴대전화번호와 초대 코드를 넣는다. 계정을 등록하면 초대의 직원 레코드에 바로 이어지고 계약서가 자동으로 도착한다. 서명하면 서명 완료가 되고, 그 뒤에 주민등록번호를 본인이 넣는다."
       },
       {
         "id": "link",
@@ -43,7 +43,7 @@
           "sign",
           "done"
         ],
-        "note": "그 번호로 계정이 있으면 가입을 다시 하지 않는다. 「이미 계정이 있습니다」에서 로그인하면 소속 근무지의 「확인을 기다리는 요청」으로 간다(운영 정책 JOI-09). 수락은 소속 연결까지이고 조건은 계약서에서 날인한다."
+        "note": "그 번호로 계정이 있으면 가입을 다시 하지 않는다. 「이미 계정이 있습니다」에서 로그인하면 소속 근무지의 「확인을 기다리는 요청」으로 간다(운영 정책 JOI-09). 수락은 소속 연결까지이고 조건은 계약서에서 서명한다."
       },
       {
         "id": "rrn",
@@ -108,7 +108,7 @@
     },
     {
       "id": "p-sign",
-      "label": "발송과 날인",
+      "label": "발송과 서명",
       "fromCol": 3,
       "toCol": 5
     }
@@ -237,8 +237,8 @@
       "lane": "app",
       "col": 4,
       "type": "frontend",
-      "label": "본인 대조 · 날인 · 거부",
-      "sublabel": "다섯 값이 같아야 날인",
+      "label": "본인 대조 · 서명 · 거절",
+      "sublabel": "다섯 값이 같아야 서명",
       "width": 158
     },
     {
@@ -246,7 +246,7 @@
       "lane": "sys",
       "col": 5,
       "type": "database",
-      "label": "체결 완료",
+      "label": "서명 완료",
       "sublabel": "처리 완료본 보존",
       "width": 106
     },
@@ -255,8 +255,8 @@
       "lane": "exc",
       "col": 5,
       "type": "security",
-      "label": "거부 · 만료",
-      "sublabel": "날인 기한 30일",
+      "label": "거절",
+      "sublabel": "또는 계약 기간 만료",
       "width": 106
     },
     {
@@ -283,7 +283,7 @@
       "col": 4,
       "type": "security",
       "label": "수정 요청",
-      "sublabel": "사유 필수 · 날인 기한 멈춤",
+      "sublabel": "사유 필수 · 서명 기한 멈춤",
       "width": 158
     }
   ],
@@ -420,7 +420,7 @@
       "from": "send",
       "to": "sign",
       "variant": "emphasis",
-      "label": "날인 요청 팝업",
+      "label": "서명 요청 팝업",
       "fromSide": "top",
       "toSide": "left",
       "via": [
@@ -446,7 +446,7 @@
       "id": "e-sign-done",
       "from": "sign",
       "to": "done",
-      "label": "날인",
+      "label": "서명",
       "variant": "emphasis",
       "fromSide": "right",
       "toSide": "left",
@@ -469,7 +469,7 @@
       "id": "e-sign-reject",
       "from": "sign",
       "to": "reject",
-      "label": "거부 · 기한 경과",
+      "label": "거절 · 기한 경과",
       "variant": "security",
       "role": "error",
       "fromSide": "right",
@@ -514,7 +514,7 @@
       "id": "e-sign-rrn",
       "from": "sign",
       "to": "rrn",
-      "label": "날인 뒤",
+      "label": "서명 뒤",
       "role": "branch",
       "fromSide": "right",
       "toSide": "left",
@@ -538,7 +538,7 @@
       "id": "e-addsite-reject",
       "from": "addsite",
       "to": "reject",
-      "label": "이름 같을 때만 거절 · 계약 거부",
+      "label": "이름 같을 때만 거절 · 계약 거절",
       "variant": "security",
       "role": "error",
       "fromSide": "bottom",
@@ -621,7 +621,7 @@
       "dot": "emerald",
       "title": "확정된 결정",
       "items": [
-        "JOIN-1 가입하면 초대의 직원 레코드에 바로 잇는다 · JOIN-2 초대 30일 · 거절은 사유 없이 확인창으로만(운영 정책 JOI-09 · 운영 정책 CTR-07) · JOIN-7 앱을 직접 열면 초대 코드로 가입하고 계정 등록의 휴대전화번호는 읽기 전용 · 계약서가 오면 날인 요청 팝업 · 날인은 이름·휴대전화번호·생년월일·성별·외국인 여부 다섯 값이 같아야 한다(운영 정책 JOI-10) · 주민등록번호와 급여 계좌는 날인 뒤 직접 넣고 건너뛸 수 없다"
+        "JOIN-1 가입하면 초대의 직원 레코드에 바로 잇는다 · JOIN-2 초대 30일 · 거절은 사유 없이 확인창으로만(운영 정책 JOI-09 · 운영 정책 CTR-07) · JOIN-7 앱을 직접 열면 초대 코드로 가입하고 계정 등록의 휴대전화번호는 읽기 전용 · 계약서가 오면 서명 요청 팝업 · 서명은 이름·휴대전화번호·생년월일·성별·외국인 여부 다섯 값이 같아야 한다(운영 정책 JOI-10) · 주민등록번호와 급여 계좌는 서명 뒤 직접 넣고 건너뛸 수 없다"
       ]
     },
     {

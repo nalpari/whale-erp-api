@@ -80,7 +80,8 @@ for line in open(B.SCHEMA, encoding="utf-8"):
     elif cur:
         blocks.append(" ".join(" ".join(cur).split()))
         cur = []
-missing = [b for b in blocks if b and b not in cells]
+from sheet_clean import expected
+missing = [b for b in blocks if b and " ".join(expected(b, B.FIXES).split()) not in cells]
 assert not missing, f"엑셀에 없는 /// {len(missing)}건: {missing[:5]}"
 assert "가입 · 휴대전화번호 변경" in cells  # 2026-11-05 대조에서 빠졌던 enum 설명
 print(f"ok — /// {len(blocks)}블록 모두 있음")

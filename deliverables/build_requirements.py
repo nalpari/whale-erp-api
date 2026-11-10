@@ -14,15 +14,13 @@ from html.parser import HTMLParser
 from openpyxl.styles import Alignment, Font
 
 from common import FONT, HERE, open_xlsx, record_basis, safe, save_xlsx, table_sheet
+from sheet_clean import deliver, expected  # noqa: F401 (자체 검사가 쓴다)
 
 SNAPSHOT = os.path.join(HERE, "sources", "manyfast.json")
 SLOTS = [("preconditions", "전제 조건"), ("trigger", "트리거"), ("action", "동작"), ("outcome", "결과"),
          ("exceptions", "예외"), ("display", "표시"), ("permissions", "권한"), ("rules", "규칙"), ("dataSpec", "데이터")]
 PROGRESS = {"todo": "할 일", "in_progress": "진행 중", "inProgress": "진행 중", "done": "완료", "blocked": "차단됨"}
 IMPORTANCE = {"high": "높음", "medium": "보통", "low": "낮음"}
-# 「WHALEERP-261 · 321」 「WHALEERP-280·281·282」처럼 접두 없이 이어 쓴 번호도 같은 접두로 읽는다.
-# 「WHALEERP-137, 2026-10-28」의 날짜는 번호가 아니다(뒤에 - 가 붙는다).
-PLANE = re.compile(r"WHALEERP-(\d+)((?:\s*[·,]\s*\d+(?![\d-]))*)")
 PHASE = re.compile(r"\[([12])차\]")
 
 
@@ -101,7 +99,7 @@ def split_tables(text):
 
 
 def texts(x):
-    """항목 data 안의 모든 문자열(Plane 번호 찾기 · 자체 검사용)."""
+    """항목 data 안의 모든 문자열(자체 검사용)."""
     if isinstance(x, str):
         yield x
     elif isinstance(x, dict):
@@ -110,11 +108,6 @@ def texts(x):
     elif isinstance(x, list):
         for v in x:
             yield from texts(v)
-
-
-def plane(data):
-    nums = (n for t in texts(data) for m in PLANE.finditer(t) for n in [m.group(1)] + re.findall(r"\d+", m.group(2)))
-    return ", ".join(dict.fromkeys(f"WHALEERP-{n}" for n in nums))
 
 
 def phase(data):
@@ -156,22 +149,52 @@ def build(snap):
     req_rows = [[r["data"].get("name", ""), split_tables(r["data"].get("description", ""))[0],
                  "\n".join(("[완료] " if a.get("isDone") else "") + a.get("description", "")
                            for a in r["data"].get("acceptanceCriteria") or [])]
-                + common(r) + [plane(r["data"]), r["id"]] for r in reqs]
+                + common(r) + [r["id"]] for r in reqs]
 
     def child(x):
         d = x["data"]
         return ([d.get("name", ""), name.get(d.get("parentId"), d.get("parentId") or ""), d.get("description", ""),
                  d.get("rationale", ""), d.get("successCriteria", "")] + common(x)
                 + [", ".join(devices.get(i, i) for i in d.get("devices") or [])] + slot_values(d)
-                + [plane(d), x["id"]])
+                + [x["id"]])
 
     return req_rows, [child(f) for f in feats], [child(s) for s in specs], {x["id"]: x for x in reqs + feats + specs}
 
 
 # 역할(roles)은 PRD 에도 항목에도 값이 없어 칸을 두지 않는다(2026-11-05 스냅숏 기준).
 CHILD_HEADERS = (["이름", "상위", "설명", "근거", "성공 기준", "1차/2차", "상태", "중요도", "사용 기기"]
-                 + [label for _, label in SLOTS] + ["Plane", "ID"])
-CHILD_WIDTHS = [30, 26, 50, 40, 30, 8, 9, 8, 14] + [44] * len(SLOTS) + [16, 11]
+                 + [label for _, label in SLOTS] + ["ID"])
+CHILD_WIDTHS = [30, 26, 50, 40, 30, 8, 9, 8, 14] + [44] * len(SLOTS) + [11]
+
+
+# 없앤 개념을 지금 기능처럼 적은 문장(원문 → 바꾼 글). 1차 범위 밖이라고 설명하는 문장은 그대로 둔다.
+FIXES = {
+    "가입자의 본인인증 정보가 초대와 불일치해 연결이 보류되거나 ": "",
+    # 팀 표시가 든 문장은 문장 단위로 고친다
+    "그 상황은 3팀이 정한다.": "그 상황은 별도로 정한다.",
+    "아이디·비밀번호 찾기의 화면과 방법은 1팀이 정하며, 관리자는": "아이디·비밀번호 찾기에서 관리자는",
+    "웹 로그인 화면의 구성은 1팀 영역이며, 3팀은 그 화면에 초대 확인 탭을 두지 않는다는 것만 정한다": "웹 로그인 화면에는 초대 확인 탭을 두지 않는다",
+    "BP 등록 절차 자체는 1팀 영역이며 이 명세는": "BP 등록 절차 자체는 이 명세 범위 밖이며 이 명세는",
+    "운영 점포 정보 카드는 1팀 점포 정보를": "운영 점포 정보 카드는 점포 정보를",
+    "점장·영업시간은 1팀 점포 데이터에": "점장·영업시간은 점포 데이터에",
+    "메일 채널은 1팀 관리자 메일 8종의 문구도 맡는다. 1팀 메일 발송 기록은": "메일 채널은 관리자 메일 8종의 문구도 맡는다. 메일 발송 기록은",
+    "운영 정책 PAY-08. 「발송일 최신순」이던 쟁점 PAY-10을 바꿈)": "운영 정책 PAY-08)",
+    "확인 필요 기록 포함은 쟁점 ATT-11, ": "",
+    "- 1팀 회원 탈퇴 화면의 안내 바로가기로": "- 회원 탈퇴 화면의 안내 바로가기로",
+    "- 1팀 회원 탈퇴 화면에는 탈퇴 전에 직원 자료를 내려받으라는 안내와 일괄 저장 바로가기를 두도록 1팀에 제안한다.": "- 회원 탈퇴 화면에는 탈퇴 전에 직원 자료를 내려받으라는 안내와 일괄 저장 바로가기를 두도록 제안한다.",
+    "- 1팀 회원 탈퇴 화면의 탈퇴 전 안내에는": "- 회원 탈퇴 화면의 탈퇴 전 안내에는",
+    "문장을 넣도록 1팀에 제안한다.": "문장을 넣도록 제안한다.",
+    "보내지 않는다. 1팀 화면이라 3팀은 고치지 않는다(운영": "보내지 않는다(운영",
+    "1팀 권한 그룹(메뉴별 CRUD)이": "권한 그룹(메뉴별 CRUD)이",
+}
+
+
+def trace_cell(ws, cell):
+    """추적용 ID 칸은 원문 그대로 둔다."""
+    if ws.title not in ("요구사항", "기능", "명세"):
+        return False
+    head = next(r for r in range(1, 8) if ws.cell(r, 1).value == "이름")
+    return ws.cell(head, cell.column).value == "ID"
 
 
 def basis(snap):
@@ -189,11 +212,10 @@ def write(version):
         if counts.get(key) != len(rows):
             raise SystemExit(f"Manyfast {key} {counts[key]} · 문서 {len(rows)} 이 다릅니다. 스냅숏을 다시 만들어 주세요.")
     wb, doc_name, doc_no = open_xlsx("REQ", version)
-    source = [("원본", f"Manyfast 「{snap['title']}」 — {snap['method']}. 읽은 날 {snap['readAt']}"),
-              ("참고", "PRD 는 싣지 않는다. Plane 칸은 Manyfast 본문에 WHALEERP-번호가 적힌 것만 옮긴다. "
-                     "1차/2차 칸은 Manyfast 에 차수 칸이 없어 이름에 [1차] · [2차] 표시가 있을 때만 적는다.")]
-    sheets = [("요구사항", ["이름", "설명", "수락 기준", "1차/2차", "상태", "중요도", "Plane", "ID"], req_rows,
-               [30, 60, 60, 8, 9, 8, 16, 11]),
+    source = [("원본", f"기획 명세 스냅숏. 읽은 날 {snap['readAt']}"),
+              ("참고", "요구사항 → 기능 → 명세 순으로 싣는다. 1차/2차 칸은 이름에 표시가 있을 때만 적는다.")]
+    sheets = [("요구사항", ["이름", "설명", "수락 기준", "1차/2차", "상태", "중요도", "ID"], req_rows,
+               [30, 60, 60, 8, 9, 8, 11]),
               ("기능", CHILD_HEADERS, feat_rows, CHILD_WIDTHS), ("명세", CHILD_HEADERS, spec_rows, CHILD_WIDTHS)]
     rows_at = {}  # ID → (시트, 행)
     made = []
@@ -224,13 +246,14 @@ def write(version):
             policy += [[r["data"].get("name", "")] + row for row in t[1:]]
     if policy:
         ws, head = table_sheet(wb, "정책 표", ["요구사항"] + (head_row or []), [[safe(v) for v in r] for r in policy],
-                               [26, 18, 22, 80], top_rows=[("원본", "요구사항 설명 안의 정책 표(Manyfast 원문의 표를 칸으로 풀었다)")])
+                               [26, 18, 22, 80], top_rows=[("원본", "요구사항 설명 안의 정책 표")])
         for i, r in enumerate(policy):
             c = ws.cell(head + 1 + i, 1)
             c.hyperlink = f"#'요구사항'!A{rows_at[next(x['id'] for x in snap['requirements'] if x['data'].get('name') == r[0])][1]}"
             c.font = link
             for c in ws[head + 1 + i]:
                 c.alignment = wrap
+    deliver(wb, "REQ", FIXES, trace_cell)
     path = save_xlsx(wb, doc_name, f"{doc_no}_{doc_name}.xlsx")
     record_basis("REQ", version, path, basis(snap))
     return path, len(req_rows), len(feat_rows), len(spec_rows)
