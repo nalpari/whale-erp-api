@@ -94,6 +94,10 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
   let pmToken: string;
   let fmToken: string;
   let noMenuToken: string;
+  /** 시설물 메뉴에 조회 · 등록만 있는 BP 관리자 */
+  let createOnlyRoleGroupId: number;
+  let createOnlyToken: string;
+  let createOnlyAdminId: number;
   const objects = new Map<string, Buffer>();
   const storage = {
     put: jest.fn((key: string, body: Buffer) => {
@@ -330,6 +334,28 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
     fmToken = (await loginAs('FM', true, { roleCode: 'FM000001' })).token;
     noMenuToken = (await loginAs('BA', true, { roleGroupId: emptyRoleGroupId }))
       .token;
+    // 시설물 메뉴에 조회 · 등록만 있는 권한 그룹(수정 · 삭제 없음)
+    const facilitiesMenu = await prisma.menu.findFirstOrThrow({
+      where: { menuCode: 'MN000022' },
+    });
+    ({ roleGroupId: createOnlyRoleGroupId } = await prisma.roleGroup.create({
+      data: {
+        roleCode: `BA${n + 1}`,
+        bpCodeId,
+        roleTypeCode: 'BA',
+        name: `시설물 조회 · 등록만 ${n}`,
+      },
+    }));
+    await prisma.roleGroupMenu.create({
+      data: {
+        roleGroupId: createOnlyRoleGroupId,
+        menuId: facilitiesMenu.menuId,
+        isReadable: true,
+        isCreatable: true,
+      },
+    });
+    ({ token: createOnlyToken, adminAccountId: createOnlyAdminId } =
+      await loginAs('BA', true, { roleGroupId: createOnlyRoleGroupId }));
   });
 
   afterAll(async () => {
@@ -364,10 +390,15 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
       await prisma.adminLoginLog.deleteMany({ where: byAdmin });
       await prisma.adminSession.deleteMany({ where: byAdmin });
       await prisma.adminAccount.deleteMany({ where: byAdmin });
-      if (emptyRoleGroupId !== undefined)
-        await prisma.roleGroup.deleteMany({
-          where: { roleGroupId: emptyRoleGroupId },
-        });
+      const roleGroupIds = [emptyRoleGroupId, createOnlyRoleGroupId].filter(
+        (id): id is number => id !== undefined,
+      );
+      await prisma.roleGroupMenu.deleteMany({
+        where: { roleGroupId: { in: roleGroupIds } },
+      });
+      await prisma.roleGroup.deleteMany({
+        where: { roleGroupId: { in: roleGroupIds } },
+      });
       await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
     }
     await app?.close();
@@ -1076,6 +1107,55 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
         data: { status: 'ACTIVE' },
       });
     }
+  });
+
+  it('등록 권한만 있으면 직접 등록한 시설물에 처음 올리는 문서만 — 교체 · 남의 시설물은 403(수정 권한)', async () => {
+    const mine = (
+      await call('post', '/facilities', createOnlyToken)
+        .send({ ...base(), name: '등록 권한 장비' })
+        .expect(201)
+    ).body as { facilityId: number };
+    expect(
+      (
+        await prisma.facility.findUniqueOrThrow({
+          where: { facilityId: mine.facilityId },
+        })
+      ).createdBy,
+    ).toBe(createOnlyAdminId);
+    // 등록 화면 흐름 — 방금 등록한 시설물에 처음 올리기
+    await call(
+      'put',
+      `/facilities/${mine.facilityId}/documents/WARRANTY`,
+      createOnlyToken,
+    )
+      .attach('file', PDF, '보증서.pdf')
+      .expect(200);
+    // 이미 있는 문서를 바꾸는 것은 수정이다
+    await call(
+      'put',
+      `/facilities/${mine.facilityId}/documents/WARRANTY`,
+      createOnlyToken,
+    )
+      .attach('file', PDF, '보증서2.pdf')
+      .expect(403);
+    await call(
+      'delete',
+      `/facilities/${mine.facilityId}/documents/WARRANTY`,
+      createOnlyToken,
+    ).expect(403);
+    // 남이 등록한 시설물에는 처음 올리는 문서도 안 된다
+    const others = await create({ name: '남이 등록한 장비' });
+    await call(
+      'put',
+      `/facilities/${others.facilityId}/documents/USER_MANUAL`,
+      createOnlyToken,
+    )
+      .attach('file', PDF, '매뉴얼.pdf')
+      .expect(403);
+    const d = await detail(mine.facilityId);
+    expect(d.documents.map((x) => [x.documentKind, x.fileName])).toEqual([
+      ['WARRANTY', '보증서.pdf'],
+    ]);
   });
 
   it('범위 밖 id 는 DB 에 묻지 않고 404', async () => {

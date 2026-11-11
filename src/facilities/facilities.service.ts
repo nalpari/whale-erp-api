@@ -26,7 +26,10 @@ import {
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
-import type { TargetBpContext } from '../auth/menu-permission.guard';
+import {
+  adminHasMenuAction,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
 import { PLATFORM_BP_CODE } from '../codes/codes.service';
 import { containsText } from '../common/contains-text';
 import { dateOnly } from '../common/date-only';
@@ -82,6 +85,10 @@ const READ_ONLY = '폐점 점포의 시설물·장비는 조회만 할 수 있�
 const CHANGED_MEANWHILE =
   '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.';
 const DOCUMENT_TYPES = Object.values(AttachmentFileType);
+/** 이 화면의 메뉴 — 서비스가 권한을 다시 물을 때(adminHasMenuAction). 가드도 컨트롤러 경로의 첫 단계로 같은 메뉴를 찾는다 */
+const FACILITIES_MENU = { url: '/facilities' } as const;
+const DOCUMENT_UPDATE_DENIED =
+  '문서를 바꾸려면 수정 권한이 필요합니다. 등록 권한으로는 직접 등록한 시설물에 처음 올리는 문서만 올릴 수 있습니다.';
 
 /** multipart 로 받은 문서 파일 한 개 */
 export type FacilityDocumentUpload = {
@@ -496,8 +503,10 @@ export class FacilitiesService implements OnModuleInit {
       FACILITY_DOCUMENT_MAX_BYTES,
     );
     const caller = await this.loadCaller(callerId, bp);
-    assertEditable(await this.findFacility(this.prisma, caller, facilityId));
-    // 저장소가 없다는 503 은 입력 · 범위 · 상태 검사 뒤에 낸다 — 404 · 409 를 가리지 않게.
+    const row = await this.findFacility(this.prisma, caller, facilityId);
+    assertEditable(row);
+    await this.assertDocumentWritable(caller, row, documentKind);
+    // 저장소가 없다는 503 은 입력 · 범위 · 상태 · 권한 검사 뒤에 낸다 — 404 · 409 · 403 을 가리지 않게.
     const storage = requireStorage(this.storage);
 
     const storageKey = StorageService.newKey(
@@ -560,6 +569,33 @@ export class FacilitiesService implements OnModuleInit {
     }
     const [document] = await this.documentsOf([saved]);
     return document;
+  }
+
+  /**
+   * 문서 올리기 권한. 가드는 경로만 봐서 「등록 또는 수정」으로 들어온다 — 등록 화면이 시설물을 등록한 뒤 이 경로로 문서를
+   * 올리기 때문이다. 그 허용을 등록 화면 흐름으로 좁힌다: 수정 권한이 있으면 그대로, 등록 권한만 있으면 직접 등록한
+   * 시설물에 그 종류 문서가 아직 없을 때만(처음 올리기). 이미 있는 문서를 바꾸거나 남이 등록한 시설물에 올리는 것은 기존
+   * 시설물을 고치는 일이라 수정 권한이다 — 수정 권한 없이 빼기(DELETE, 가드가 수정)는 막히는데 덮어쓰기로는 되던 틈.
+   * 근로계약 이어 쓰기와 같은 방식(WHALEERP-592, requireContractAction).
+   */
+  private async assertDocumentWritable(
+    caller: FacilityCaller,
+    row: Pick<DetailRow, 'createdBy' | 'documents'>,
+    documentKind: FacilityDocumentKind,
+  ): Promise<void> {
+    if (
+      await adminHasMenuAction(
+        this.prisma,
+        caller.adminAccountId,
+        FACILITIES_MENU,
+        ['update'],
+      )
+    )
+      return;
+    const firstUpload =
+      row.createdBy === caller.adminAccountId &&
+      !row.documents.some((d) => d.documentKind === documentKind);
+    if (!firstUpload) throw new ForbiddenException(DOCUMENT_UPDATE_DENIED);
   }
 
   /**

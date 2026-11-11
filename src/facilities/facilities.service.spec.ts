@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -70,6 +71,7 @@ describe('FacilitiesService', () => {
     facility: { findFirst: jest.Mock };
     facilityDocument: { count: jest.Mock };
     codeItem: { count: jest.Mock };
+    roleGroupMenu: { count: jest.Mock };
     staffMember: { count: jest.Mock; findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -127,6 +129,8 @@ describe('FacilitiesService', () => {
       facility: { findFirst: jest.fn().mockResolvedValue(facilityRow()) },
       facilityDocument: { count: jest.fn().mockResolvedValue(0) },
       codeItem: { count: jest.fn().mockResolvedValue(1) },
+      // 메뉴 권한 다시 묻기(adminHasMenuAction) — 기본은 수정 권한 있음
+      roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
       staffMember: {
         count: jest.fn().mockResolvedValue(1),
         // 담당자 표시 — 본사 제공 동의한 직원(가리지 않음)
@@ -353,6 +357,61 @@ describe('FacilitiesService', () => {
       await expect(service.remove(9, BP, 11)).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('문서 올리기 권한 — 등록 권한만 있으면 직접 등록한 시설물에 처음 올리는 문서만', () => {
+    const createOnly = () => prisma.roleGroupMenu.count.mockResolvedValue(0);
+
+    it('수정 권한이 있으면 남의 시설물 문서도 바꾼다', async () => {
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({
+          createdBy: 77,
+          documents: [{ documentKind: 'WARRANTY' }],
+        }),
+      );
+      await service.putDocument(9, BP, 11, 'WARRANTY', upload);
+      expect(prisma.roleGroupMenu.count).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          menu: expect.objectContaining({ url: '/facilities' }) as unknown,
+          OR: [{ isUpdatable: true }],
+        }) as Record<string, unknown>,
+      });
+      expect(tx.facilityDocument.create).toHaveBeenCalled();
+    });
+
+    it('등록 권한만 있어도 직접 등록한 시설물에 아직 없는 종류는 올린다(등록 화면 흐름)', async () => {
+      createOnly();
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({ createdBy: 9, documents: [] }),
+      );
+      await service.putDocument(9, BP, 11, 'WARRANTY', upload);
+      expect(tx.facilityDocument.create).toHaveBeenCalled();
+    });
+
+    it('등록 권한만으로는 이미 있는 문서를 바꾸지 못한다 — 403, 저장소에 올리지도 않는다', async () => {
+      createOnly();
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({
+          createdBy: 9,
+          documents: [{ documentKind: 'WARRANTY' }],
+        }),
+      );
+      await expect(
+        service.putDocument(9, BP, 11, 'WARRANTY', upload),
+      ).rejects.toThrow(ForbiddenException);
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
+    it('등록 권한만으로는 남이 등록한 시설물에 올리지 못한다 — 403', async () => {
+      createOnly();
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({ createdBy: 77, documents: [] }),
+      );
+      await expect(
+        service.putDocument(9, BP, 11, 'WARRANTY', upload),
+      ).rejects.toThrow(ForbiddenException);
+      expect(storage.put).not.toHaveBeenCalled();
     });
   });
 

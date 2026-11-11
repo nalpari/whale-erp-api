@@ -192,7 +192,8 @@ export class FacilitiesController {
 
   /**
    * 문서 올리기 · 바꾸기(종류마다 1개). multipart 의 `file` 한 개, JPG · PNG · PDF 10MB 이하 — 종류는 확장자가 아니라
-   * 내용으로 본다. 등록 화면은 등록한 뒤 이 경로로 올리므로 등록 또는 수정 권한이면 된다.
+   * 내용으로 본다. 등록 화면은 등록한 뒤 이 경로로 올리므로 가드는 등록 또는 수정 권한을 받고, 서비스가 좁힌다 — 등록
+   * 권한만 있으면 직접 등록한 시설물에 그 종류 문서가 아직 없을 때만(처음 올리기), 교체 · 남의 시설물은 수정 권한.
    */
   @Put(':id/documents/:kind')
   @MenuPermission(['create', 'update'])
@@ -214,6 +215,10 @@ export class FacilitiesController {
   })
   @ApiNotFoundResponse({ description: `${NOT_FOUND_DESCRIPTION} · 문서 종류` })
   @ApiConflictResponse({ description: READ_ONLY_DESCRIPTION })
+  @ApiForbiddenResponse({
+    description:
+      '메뉴 권한 없음(가드) · 등록 권한만 있는데 이미 있는 문서를 바꾸거나 남이 등록한 시설물에 올림(수정 권한 필요)',
+  })
   @ApiServiceUnavailableResponse({
     description: '첨부파일 저장소가 설정되지 않았거나 올리기에 실패함',
   })
