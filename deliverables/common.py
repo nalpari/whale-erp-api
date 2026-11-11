@@ -183,7 +183,9 @@ def source_basis(path):
     """front · staff 저장소에서 뜬 스냅숏(SOURCE.json)의 기준."""
     with open(path, encoding="utf-8") as f:
         source = json.load(f)
-    return f"관리자 웹 {source['admin']['commit'][:8]} · 직원 근무 앱 {source['staff']['commit'][:8]}"
+    admin = source["admin"]
+    part = f"(일부 화면 {admin['overlay']['commit'][:8]})" if "overlay" in admin else ""  # 화면설계서: 바뀐 화면만 다른 커밋에서 찍었을 때
+    return f"관리자 웹 {admin['commit'][:8]}{part} · 직원 근무 앱 {source['staff']['commit'][:8]}"
 
 
 def tree_clean():
