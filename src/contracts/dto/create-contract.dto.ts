@@ -283,7 +283,7 @@ export class CreateContractDto {
   @Max(10)
   probationWageReductionRate?: number;
 
-  /** 계약서 근무 장소 조항에 적는 주소. 근무지 점포와 따로다 */
+  /** 계약서 근무 장소 조항. 관리자 웹은 소속 근무지를 고르면 근무지명으로 채우고 관리자가 고칠 수 있다. 비우면 발송 · 날인 때 그때 점포명을 쓴다 */
   @IsOptional()
   @IsString()
   @MaxLength(200)

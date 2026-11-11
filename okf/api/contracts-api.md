@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-10T09:10:00Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -61,7 +61,7 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-10T09:10:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
@@ -341,7 +341,8 @@ CTR-02, 재영 2026-10-13) lists 이름 · 휴대전화번호 · 근무지 · �
 as the fields a 임시저장 needs, since 고용 형태 is a value of the 직원 레코드
 the save creates. The list response types the
 contract fields as nullable for the same reason. `workLocation` (근무 장소,
-≤ 200 chars) is optional on both, and so are the api #12 칸 — 식대 ·
+≤ 200 chars — 관리자 웹 fills it with the 근무지명 when a 근무지 is picked and the
+관리자 may edit it; empty means that day's 점포명 at 발송 · 날인, front #250) is optional on both, and so are the api #12 칸 — 식대 ·
 자가운전보조금 · 육아수당 (원, 0 이상), 월 기본시간 · 월간 연장근무 · 기본시간 중 야간 ·
 휴일근무 · 월간 추가 휴일근무 (시간, 0.5 단위, ≤ 9999.5 for `numeric(5,1)`;
 the two 휴일근무 칸: 화면(front #15)에서는 받지 않는다. 칸은 남아 있다 —
