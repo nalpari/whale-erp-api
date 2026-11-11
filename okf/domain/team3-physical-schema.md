@@ -4,12 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-10T09:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-11T00:17:00Z }
 sources:
   - id: contract-work-location-comment
     resource: ../../prisma/migrations/20261111091227_team3_contract_work_location_comment/migration.sql
     title: 근무 장소 work_location 설명 — 소속 근무지를 고르면 근무지명으로 채움 (front #250)
-    last_modified: 2026-11-10T09:10:00Z
+    last_modified: 2026-11-11T00:17:00Z
   - id: contract-correction-reason
     resource: ../../prisma/migrations/20261030120000_team3_contract_correction_reason/migration.sql
     title: 수정 요청 사유 correction_reason 추가 · 거부 · 거절 사유 reject_reason 두 칸 삭제 (WHALEERP-635)
@@ -89,19 +89,19 @@ sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-11-10T09:10:00Z
+    last_modified: 2026-11-11T00:17:00Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-11-10T09:10:00Z
+    last_modified: 2026-11-11T00:17:00Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-11-10T09:10:00Z
+    last_modified: 2026-11-11T00:17:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 27개)
-    last_modified: 2026-11-10T09:10:00Z
+    last_modified: 2026-11-11T00:17:00Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션

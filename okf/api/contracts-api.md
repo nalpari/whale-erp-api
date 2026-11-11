@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-10T09:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-11T00:17:00Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -61,7 +61,7 @@ sources:
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
-    last_modified: 2026-11-10T09:10:00Z
+    last_modified: 2026-11-11T00:17:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
@@ -1079,7 +1079,7 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   (상호, else 점포명) · `employer_ceo_name` · `employer_registration_number` · `employer_address` ·
   `employer_address_detail` (사업자 주소) · `employer_phone` (점포 연락처) · `employer_fixed_at` from the store and its
   `store_business_profiles` (`employerOf` in `contract-files.service.ts`), and **제2조 too** — `fixed_work_location`
-  (근무 장소, or the 점포명 when empty) · `fixed_job_title` (the contract's 직무, or the 직원 레코드's when an old contract
+  (근무 장소, or the 점포명 when it is null — an empty string is fixed as is) · `fixed_job_title` (the contract's 직무, or the 직원 레코드's when an old contract
   has none; 2026-10-30 김민식, api #211 review) — so a later store rename or 직무 change does not alter the signed text
   (WHALEERP-131, 2026-10-29 김민식: the 처리 완료본
   uses 날인 시점 값 — the app showed the live store values when the 직원 signed, and a later edit cannot be traced
