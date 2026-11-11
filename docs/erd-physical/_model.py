@@ -174,7 +174,7 @@ ADD = {
                       (None, "", "등록 일시", "datetime", "created_at", ""),
                       (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "link_holds": [(None, "", "보류 일시", "datetime", "created_at", "")],
-    "contracts": [("store_id", "", "근무 장소", "text", "work_location", "계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08)"),
+    "contracts": [("store_id", "", "근무 장소", "text", "work_location", "계약서 근무 장소 조항. 관리자 웹이 소속 근무지를 고르면 근무지명으로 채우고 관리자가 고칠 수 있다 — 비어 있으면 발송 · 날인 때 그때 점포명 (2026-11-10)"),
                   ("wage_amount", "", "식대", "money", "meal_allowance_amount", "원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)"),
                   ("meal_allowance_amount", "", "자가운전보조금", "money", "car_allowance_amount", "원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)"),
                   ("car_allowance_amount", "", "육아수당", "money", "childcare_allowance_amount", "원. 비과세 수당 — 계약서 임금 조항 (2026-10-12)"),

@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T06:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-11T00:17:00Z }
 sources:
+  - id: contract-work-location-comment
+    resource: ../../prisma/migrations/20261111091227_team3_contract_work_location_comment/migration.sql
+    title: 근무 장소 work_location 설명 — 소속 근무지를 고르면 근무지명으로 채움 (front #250)
+    last_modified: 2026-11-11T00:17:00Z
   - id: contract-correction-reason
     resource: ../../prisma/migrations/20261030120000_team3_contract_correction_reason/migration.sql
     title: 수정 요청 사유 correction_reason 추가 · 거부 · 거절 사유 reject_reason 두 칸 삭제 (WHALEERP-635)
@@ -85,19 +89,19 @@ sources:
   - id: physical-erd
     resource: ../../docs/raw/2026-10-06-3팀-물리-ERD.md
     title: 3팀 물리 ERD 테이블 정의서
-    last_modified: 2026-10-21T01:10:00Z
+    last_modified: 2026-11-11T00:17:00Z
   - id: physical-sql
     resource: ../../docs/raw/2026-10-06-3팀-schema.sql
     title: 3팀 물리 스키마 DDL
-    last_modified: 2026-10-26T02:09:03Z
+    last_modified: 2026-11-11T00:17:00Z
   - id: physical-model
     resource: ../../docs/erd-physical/_model.py
     title: 물리 결정 (이름 변경 · 나눔 · 추가 · 뺌 · 제약)
-    last_modified: 2026-10-26T02:32:13Z
+    last_modified: 2026-11-11T00:17:00Z
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 27개)
-    last_modified: 2026-10-27T04:12:31Z
+    last_modified: 2026-11-11T00:17:00Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -329,10 +333,15 @@ table document:
   store.
 
 - **근무 장소 is its own column** (`contracts.work_location`, text, 2026-10-08,
-  `20261008000500_team3_contract_work_location`). It is the address written
-  into the contract's 근무 장소 clause, typed by the 관리자 (mockup
-  contracts-new), and is separate from 근무지 `store_id`. The naming table has
-  no row for 근무 장소 yet; the source belongs to the 기획 세션.
+  `20261008000500_team3_contract_work_location`). It is the text of the
+  contract's 근무 장소 clause. It started as an address typed by the 관리자,
+  separate from 근무지 `store_id`; since 2026-11-10 (front #250) 관리자 웹 fills it
+  with the 근무지명 when a 근무지 is picked and the 관리자 may edit it, and a
+  missing (null) value still becomes that day's 점포명 at 발송 · 날인 — an empty
+  string does not (`?? storeName`), so 관리자 웹 omits a blank field. The column comment
+  was rewritten to match by `20261111091227_team3_contract_work_location_comment`
+  (comment only). The naming table has no row for 근무 장소 yet; the source
+  belongs to the 기획 세션.
 - **임금 · 근로시간 · 연차휴가 · 퇴직금 clauses are columns on `contracts`**
   (2026-10-12, `20261012182445_team3_contract_allowances_hours_terms`), all
   NULL allowed like the rest of the table. 비과세 수당 식대 · 자가운전보조금 ·

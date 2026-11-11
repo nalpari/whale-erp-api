@@ -1381,7 +1381,7 @@ COMMENT ON TABLE "contracts" IS '근로계약';
 COMMENT ON COLUMN "contracts"."contract_id" IS '근로계약 ID';
 COMMENT ON COLUMN "contracts"."staff_member_id" IS '직원 레코드';
 COMMENT ON COLUMN "contracts"."store_id" IS '근무지';
-COMMENT ON COLUMN "contracts"."work_location" IS '근무 장소 — 계약서 근무 장소 조항. 관리자가 직접 적는다 (목업 contracts-new, 2026-10-08) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."work_location" IS '근무 장소 — 계약서 근무 장소 조항. 관리자 웹이 소속 근무지를 고르면 근무지명으로 채우고 관리자가 고칠 수 있다 — 비어 있으면 발송 · 날인 때 그때 점포명 (2026-11-10) (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."previous_contract_id" IS '직전 계약 — 재계약일 때';
 COMMENT ON COLUMN "contracts"."employment_type" IS '계약 유형 — 정직원·파트타이머 (논리 contract_type)';
 COMMENT ON COLUMN "contracts"."job_title" IS '직무 — 계약서에 적은 직무 — 그 계약이 시작하면 직원 레코드의 직무로 옮긴다(재계약을 저장만 해도 바뀌지 않게) (WHALEERP-156, 2026-10-27 김민식) (물리에서 추가)';

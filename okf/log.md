@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-11
+* **Update**: [Team 3 physical schema](/domain/team3-physical-schema.md) · [Contracts API](/api/contracts-api.md) — 근무 장소(`contracts.work_location`) 정의를 「관리자가 직접 적는 주소, 근무지와 따로」에서 「관리자 웹이 소속 근무지를 고르면 근무지명으로 채우고 고칠 수 있다, 비우면 발송 · 날인 때 점포명」으로 바꿨다(front #250). 빈 문자열은 점포명으로 바뀌지 않는다고 적었다(`?? storeName`). 칸 설명 마이그레이션 `20261111091227_team3_contract_work_location_comment`(설명만), `_model.py` · 물리 DDL · 물리 ERD · `schema.prisma` 설명 · DTO 주석을 같은 문장으로, [Team 1 physical schema](/domain/team1-physical-schema.md) 의 `schema.prisma` 갱신 시각도.
 * **Update**: [Employment contract batch](/api/employment-contract-batch.md) — 로그인 후 홈 개편(WHALEERP-665, 운영 정책 v278 HOM-03~10): `GET /home/summary` 는 운영 점포만 세고(미운영은 운영 점포 카드의 `notOperating` 수로만), 점포별 현황 표는 일곱 곳 제한 없이 운영 점포 모두를 확인 필요 많은 순으로 준다. 점포별 `notCheckedInCount`(미출근) · `todayTodo`(오늘 TO-DO 완료 / 전체, 배정 그룹은 한 건이고 모두 완료여야 완료)와 카드 `todayTodo` 를 더했다. 점포별 확인 필요(`pendingActionCount`)에 계약 갱신 예정을 더했다. `GET /home/pending` 의 계약 갱신 예정은 종료 30일 안(`RENEWAL_NOTICE_DAYS`)으로 넓히고 가장 이른 종료까지 `dueInDays`(D-N)를 준다. 경고 밴드용 `renewals` 는 없앴다. TO-DO 는 본사 역할에게도 TO-DO 목록처럼 가리지 않고 센다. openapi.json 다시 생성.
 
 ## 2026-11-10
