@@ -38,8 +38,8 @@ CREATE TABLE "facilities" (
     "installation_location" TEXT,
     "vendor_name" TEXT,
     "vendor_phone" TEXT,
-    "sales_rep_name" TEXT,
-    "sales_rep_phone" TEXT,
+    "sales_representative_name" TEXT,
+    "sales_representative_phone" TEXT,
     "unit_price_amount" NUMERIC(10,0),
     "quantity" INTEGER NOT NULL DEFAULT 1,
     "total_amount" NUMERIC(14,0),
@@ -71,9 +71,9 @@ ALTER TABLE "facilities" ADD CONSTRAINT "facilities_memo_length" CHECK (char_len
 ALTER TABLE "facilities" ADD CONSTRAINT "facilities_product_text_length" CHECK (
   char_length("brand") <= 100 AND char_length("manufacturer") <= 100
   AND char_length("serial_number") <= 100 AND char_length("installation_location") <= 100);
-ALTER TABLE "facilities" ADD CONSTRAINT "facilities_purchase_text_length" CHECK (char_length("vendor_name") <= 100 AND char_length("sales_rep_name") <= 50);
+ALTER TABLE "facilities" ADD CONSTRAINT "facilities_purchase_text_length" CHECK (char_length("vendor_name") <= 100 AND char_length("sales_representative_name") <= 50);
 ALTER TABLE "facilities" ADD CONSTRAINT "facilities_phone_format" CHECK (
-  "vendor_phone" ~ '^[0-9]{9,12}$' AND "sales_rep_phone" ~ '^[0-9]{9,12}$'
+  "vendor_phone" ~ '^[0-9]{9,12}$' AND "sales_representative_phone" ~ '^[0-9]{9,12}$'
   AND "manager_phone" ~ '^[0-9]{9,12}$' AND "service_center_phone" ~ '^[0-9]{9,12}$');
 ALTER TABLE "facilities" ADD CONSTRAINT "facilities_unit_price_amount_range" CHECK ("unit_price_amount" >= 0);
 ALTER TABLE "facilities" ADD CONSTRAINT "facilities_quantity_range" CHECK ("quantity" BETWEEN 1 AND 9999);
@@ -101,7 +101,7 @@ COMMENT ON TABLE "facilities" IS '시설물·장비';
 COMMENT ON COLUMN "facilities"."facility_id" IS '시설물·장비 ID';
 COMMENT ON COLUMN "facilities"."store_id" IS '점포 — stores FK. 등록 뒤 바꾸지 않는다(정책서 PL-1)';
 COMMENT ON COLUMN "facilities"."name" IS '시설물/장비명 — 1~100자';
-COMMENT ON COLUMN "facilities"."facility_status_code" IS '운영상태 — 공통코드 FACILITY_STATUS(플랫폼고정: 운영 · 보관 · 폐기). 운영만 수리 · 점검 대상';
+COMMENT ON COLUMN "facilities"."facility_status_code" IS '운영상태 — 공통코드 FACILITY_STATUS(플랫폼고정: 운영 · 보관 · 폐기). 수리 이력 · 점검표가 생기면 운영인 것만 그 대상으로 고른다';
 COMMENT ON COLUMN "facilities"."facility_group_code" IS '그룹 — 공통코드 그룹 STORE_FACILITY(점포 시설물) · STORE_EQUIPMENT(점포 장비)';
 COMMENT ON COLUMN "facilities"."facility_category_code" IS '분류 — 그룹(facility_group_code)의 상세 코드. 점포 BP 의 행';
 COMMENT ON COLUMN "facilities"."memo" IS '메모 — 200자';
@@ -111,8 +111,8 @@ COMMENT ON COLUMN "facilities"."serial_number" IS 'Serial number';
 COMMENT ON COLUMN "facilities"."installation_location" IS '설치 위치';
 COMMENT ON COLUMN "facilities"."vendor_name" IS '구매처';
 COMMENT ON COLUMN "facilities"."vendor_phone" IS '구매처 전화번호 — 숫자 9~12자리';
-COMMENT ON COLUMN "facilities"."sales_rep_name" IS '영업사원';
-COMMENT ON COLUMN "facilities"."sales_rep_phone" IS '영업사원 전화번호 — 숫자 9~12자리';
+COMMENT ON COLUMN "facilities"."sales_representative_name" IS '영업사원';
+COMMENT ON COLUMN "facilities"."sales_representative_phone" IS '영업사원 전화번호 — 숫자 9~12자리';
 COMMENT ON COLUMN "facilities"."unit_price_amount" IS '단가 — 원, 숫자 10자리까지';
 COMMENT ON COLUMN "facilities"."quantity" IS '수량 — 1~9,999, 기본 1';
 COMMENT ON COLUMN "facilities"."total_amount" IS '총금액 — 단가 × 수량, 서버가 계산. 단가가 없으면 비움';
@@ -129,7 +129,7 @@ COMMENT ON COLUMN "facilities"."service_center_zip_code" IS 'A/S센터 우편번
 COMMENT ON COLUMN "facilities"."service_center_address" IS 'A/S센터 기본주소(도로명)';
 COMMENT ON COLUMN "facilities"."service_center_address_detail" IS 'A/S센터 상세주소 — 100자';
 COMMENT ON COLUMN "facilities"."service_center_phone" IS 'A/S센터 전화번호 — 숫자 9~12자리';
-COMMENT ON COLUMN "facilities"."is_deleted" IS '삭제 여부 — 수리 이력 · 점검 결과가 있으면 지우지 않고 폐기로 바꾼다';
+COMMENT ON COLUMN "facilities"."is_deleted" IS '삭제 여부 — 잘못 등록한 것을 지운다. 수리 이력 · 점검 결과가 생기면 그것이 있는 행은 지우지 않고 폐기로 바꾸게 한다(정책서 PL-4, 미구현)';
 COMMENT ON COLUMN "facilities"."created_at" IS '등록 일시';
 COMMENT ON COLUMN "facilities"."created_by" IS '등록자 — admin_accounts FK';
 COMMENT ON COLUMN "facilities"."updated_at" IS '최근 수정 일시';
@@ -154,6 +154,8 @@ ALTER TABLE "facility_documents" ADD CONSTRAINT "facility_documents_size_bytes_r
 ALTER TABLE "facility_documents" ADD CONSTRAINT "facility_documents_file_name_length" CHECK (char_length("file_name") BETWEEN 1 AND 255);
 -- 문서는 종류마다 하나 — 바꾸면 옛 행을 지움 표시하고 새 행을 넣는다.
 CREATE UNIQUE INDEX "facility_documents_facility_id_document_kind_key" ON "facility_documents" ("facility_id", "document_kind") WHERE NOT "is_deleted";
+-- 저장소 키는 행마다 다르다(newKey 의 UUID). 올리기가 실패한 뒤 그 파일을 가리키는 행이 있는지 이 키로 센다.
+CREATE UNIQUE INDEX "facility_documents_storage_key_key" ON "facility_documents" ("storage_key");
 ALTER TABLE "facility_documents" ADD CONSTRAINT "facility_documents_facility_id_fkey" FOREIGN KEY ("facility_id") REFERENCES "facilities" ("facility_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "facility_documents" ADD CONSTRAINT "facility_documents_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 

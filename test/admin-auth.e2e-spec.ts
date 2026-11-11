@@ -355,13 +355,18 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
       ]);
       // 초기 데이터의 그룹(1팀 12 · 3팀 5)과 최저임금(MINIMUM_WAGE, WHALEERP-595), 시설물 4(20261111153316).
       expect(Object.keys(codes)).toHaveLength(22);
-      // 시설물 그룹은 지금 있는 그룹 뒤에 붙는다 — 먼저 보이지 않는다.
-      expect(Object.keys(codes).slice(-4)).toEqual([
+      // 시설물 그룹은 지금 있던 그룹(마지막 MINIMUM_WAGE) 뒤에 붙는다 — 먼저 보이지 않는다. 이 뒤에 그룹이 더해져도 깨지지 않게
+      // 끝자리 대신 순서만 본다.
+      const order = Object.keys(codes);
+      for (const group of [
         'FACILITY_STATUS',
         'STORE_FACILITY',
         'STORE_EQUIPMENT',
         'INSPECTION_CYCLE',
-      ]);
+      ])
+        expect(order.indexOf(group)).toBeGreaterThan(
+          order.indexOf('MINIMUM_WAGE'),
+        );
       expect(codes.FACILITY_STATUS).toEqual([
         { value: 'OPERATING', label: '운영', order: 1 },
         { value: 'STORED', label: '보관', order: 2 },

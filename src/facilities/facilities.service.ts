@@ -54,6 +54,7 @@ import {
   FACILITY_DOCUMENT_KINDS,
   FACILITY_DOCUMENT_MAX_BYTES,
   FACILITY_GROUPS,
+  type FacilityGroup,
   FACILITY_STATUS_GROUP,
   INSPECTION_CYCLE_GROUP,
   documentKindLabel,
@@ -210,7 +211,8 @@ export class FacilitiesService implements OnModuleInit {
         isStoreClosed: r.store.storeStatusCode === 'CLOSED',
         facilityStatusCode: r.facilityStatusCode,
         facilityStatusLabel: labels.status(r.facilityStatusCode),
-        facilityGroupCode: r.facilityGroupCode,
+        // DB CHECK(facilities_facility_group_code_allowed)가 두 값만 받는다.
+        facilityGroupCode: r.facilityGroupCode as FacilityGroup,
         facilityGroupLabel: labels.group(r.facilityGroupCode),
         facilityCategoryCode: r.facilityCategoryCode,
         facilityCategoryLabel: labels.item(
@@ -254,7 +256,7 @@ export class FacilitiesService implements OnModuleInit {
       name: row.name,
       facilityStatusCode: row.facilityStatusCode,
       facilityStatusLabel: labels.status(row.facilityStatusCode),
-      facilityGroupCode: row.facilityGroupCode,
+      facilityGroupCode: row.facilityGroupCode as FacilityGroup,
       facilityGroupLabel: labels.group(row.facilityGroupCode),
       facilityCategoryCode: row.facilityCategoryCode,
       facilityCategoryLabel: labels.item(
@@ -271,8 +273,8 @@ export class FacilitiesService implements OnModuleInit {
       installationLocation: row.installationLocation,
       vendorName: row.vendorName,
       vendorPhone: row.vendorPhone,
-      salesRepName: row.salesRepName,
-      salesRepPhone: row.salesRepPhone,
+      salesRepresentativeName: row.salesRepresentativeName,
+      salesRepresentativePhone: row.salesRepresentativePhone,
       unitPriceAmount: row.unitPriceAmount?.toNumber() ?? null,
       quantity: row.quantity,
       totalAmount: row.totalAmount?.toNumber() ?? null,
@@ -340,12 +342,10 @@ export class FacilitiesService implements OnModuleInit {
     assertEditable(current);
     const data = await this.validated(caller, dto, current.storeId, current);
     return this.prisma.$transaction(async (tx) => {
+      // 잠근 뒤 지움 · 폐점을 다시 본다 — 그 사이 지웠으면 404, 폐점했으면 409(조회만). 남은 0건은 동시 수정이다.
+      await lockEditable(tx, facilityId);
       const { count } = await tx.facility.updateMany({
-        where: {
-          facilityId,
-          isDeleted: false,
-          updatedAt: sameMillisecond(dto.updatedAt),
-        },
+        where: { facilityId, updatedAt: sameMillisecond(dto.updatedAt) },
         data: { ...data, updatedBy: caller.adminAccountId },
       });
       if (count === 0) throw new ConflictException(CHANGED_MEANWHILE);
@@ -365,12 +365,12 @@ export class FacilitiesService implements OnModuleInit {
     const caller = await this.loadCaller(callerId, bp);
     assertEditable(await this.findFacility(this.prisma, caller, facilityId));
     await this.prisma.$transaction(async (tx) => {
-      const { count } = await tx.facility.updateMany({
-        where: { facilityId, isDeleted: false },
+      // 그 사이 다른 요청이 지웠으면 404(이미 없는 것과 같다), 폐점했으면 409.
+      await lockEditable(tx, facilityId);
+      await tx.facility.update({
+        where: { facilityId },
         data: { isDeleted: true, updatedBy: caller.adminAccountId },
       });
-      // 그 사이 다른 요청이 지웠다 — 이미 없는 것과 같다.
-      if (count === 0) throw new NotFoundException(NOT_FOUND);
       await tx.facilityDocument.updateMany({
         where: { facilityId, isDeleted: false },
         data: { isDeleted: true },
@@ -423,8 +423,9 @@ export class FacilitiesService implements OnModuleInit {
   }
 
   /**
-   * 문서 올리기 · 바꾸기(종류마다 1개). 저장소에 먼저 올리고, 시설물 행을 잠근 채 그 종류의 옛 문서를 지움 표시한 뒤
-   * 새 행을 넣는다 — 같은 시설물의 교체끼리 줄을 서서 마지막 것이 남는다. DB 저장이 실패하면 올린 파일을 지운다.
+   * 문서 올리기 · 바꾸기(종류마다 1개). 저장소에 먼저 올리고, 시설물 행을 잠근 채(지움 · 폐점을 다시 본다) 그 종류의 옛
+   * 문서를 지움 표시한 뒤 새 행을 넣는다 — 같은 시설물의 교체 · 빼기끼리 줄을 서서 마지막 것이 남는다. DB 저장이 실패하면
+   * 그 파일을 가리키는 행이 없을 때만 올린 파일을 지운다(COMMIT 뒤 연결이 끊겼을 수 있다).
    */
   async putDocument(
     callerId: number,
@@ -472,11 +473,8 @@ export class FacilitiesService implements OnModuleInit {
     let saved: DocumentRow;
     try {
       saved = await this.prisma.$transaction(async (tx) => {
-        // 잠근 뒤 다시 본다 — 검사와 잠금 사이에 지워졌으면 지운 시설물에 살아 있는 문서가 남는다.
-        const [locked] = await tx.$queryRaw<{ is_deleted: boolean }[]>`
-          SELECT "is_deleted" FROM "facilities" WHERE "facility_id" = ${facilityId} FOR UPDATE`;
-        if (!locked || locked.is_deleted)
-          throw new NotFoundException(NOT_FOUND);
+        // 잠근 뒤 다시 본다 — 올리는 동안(저장소 왕복) 지워지거나 폐점했으면 404 · 409 이고, 올린 파일은 아래에서 지운다.
+        await lockEditable(tx, facilityId);
         await tx.facilityDocument.updateMany({
           where: { facilityId, documentKind, isDeleted: false },
           data: { isDeleted: true },
@@ -513,7 +511,10 @@ export class FacilitiesService implements OnModuleInit {
     return document;
   }
 
-  /** 문서 빼기 — 그 종류의 행을 지움 표시하고 파일은 남긴다. 없으면 아무것도 하지 않는다. */
+  /**
+   * 문서 빼기 — 그 종류의 행을 지움 표시하고 파일은 남긴다. 없으면 아무것도 하지 않는다. 올리기와 같은 행 잠금으로 줄을
+   * 서므로, 진행 중인 교체가 먼저 커밋되면 그 새 문서를 뺀다.
+   */
   async removeDocument(
     callerId: number,
     bp: TargetBpContext,
@@ -523,9 +524,12 @@ export class FacilitiesService implements OnModuleInit {
     const documentKind = kindOrNotFound(rawKind);
     const caller = await this.loadCaller(callerId, bp);
     assertEditable(await this.findFacility(this.prisma, caller, facilityId));
-    await this.prisma.facilityDocument.updateMany({
-      where: { facilityId, documentKind, isDeleted: false },
-      data: { isDeleted: true },
+    await this.prisma.$transaction(async (tx) => {
+      await lockEditable(tx, facilityId);
+      await tx.facilityDocument.updateMany({
+        where: { facilityId, documentKind, isDeleted: false },
+        data: { isDeleted: true },
+      });
     });
   }
 
@@ -561,7 +565,7 @@ export class FacilitiesService implements OnModuleInit {
         PLATFORM_BP_CODE,
       ))
     )
-      throw new BadRequestException('운영상태를 선택해 주세요.');
+      throw new BadRequestException('운영상태를 다시 선택해 주세요.');
     const keepsCategory =
       current?.facilityGroupCode === dto.facilityGroupCode &&
       current.facilityCategoryCode === dto.facilityCategoryCode;
@@ -573,7 +577,9 @@ export class FacilitiesService implements OnModuleInit {
         caller.targetBpCode,
       ))
     )
-      throw new BadRequestException('분류를 선택해 주세요.');
+      throw new BadRequestException(
+        '쓸 수 없는 분류입니다. 다시 선택해 주세요.',
+      );
     const cycle = dto.inspectionCycleCode ?? null;
     if (
       cycle !== null &&
@@ -613,8 +619,8 @@ export class FacilitiesService implements OnModuleInit {
       installationLocation: dto.installationLocation ?? null,
       vendorName: dto.vendorName ?? null,
       vendorPhone: dto.vendorPhone ?? null,
-      salesRepName: dto.salesRepName ?? null,
-      salesRepPhone: dto.salesRepPhone ?? null,
+      salesRepresentativeName: dto.salesRepresentativeName ?? null,
+      salesRepresentativePhone: dto.salesRepresentativePhone ?? null,
       unitPriceAmount: unitPrice,
       quantity: dto.quantity,
       totalAmount: totalAmountOf(unitPrice, dto.quantity),
@@ -634,7 +640,10 @@ export class FacilitiesService implements OnModuleInit {
     };
   }
 
-  /** 사용 중인 공통코드인가 — 그룹도 사용 중이어야 한다. 플랫폼고정은 플랫폼 원본, 플랫폼제공은 그 BP 의 행을 본다. */
+  /**
+   * 그 BP(bpCode)의 사용 중인 상세 코드인가 — 그룹도 사용 중이어야 한다. 관리 주체로 나누는 것은 부르는 쪽이다:
+   * 플랫폼고정 그룹은 PLATFORM_BP_CODE 를, 플랫폼제공 그룹은 대상 BP 코드를 넘긴다.
+   */
   private async isActiveCode(
     groupCode: string,
     itemCode: string,
@@ -740,14 +749,14 @@ export class FacilitiesService implements OnModuleInit {
         fileName: r.fileName,
         fileType: r.fileType,
         sizeBytes: r.sizeBytes,
-        downloadUrl: await this.signed(r.storageKey, () =>
-          this.storage!.downloadUrl(r.storageKey, r.fileName),
+        downloadUrl: await this.signed(r.storageKey, (storage) =>
+          storage.downloadUrl(r.storageKey, r.fileName),
         ),
         thumbnailUrl:
           r.fileType === 'PDF'
             ? null
-            : await this.signed(r.storageKey, () =>
-                this.storage!.thumbnailUrl(r.storageKey),
+            : await this.signed(r.storageKey, (storage) =>
+                storage.thumbnailUrl(r.storageKey),
               ),
       })),
     );
@@ -755,11 +764,11 @@ export class FacilitiesService implements OnModuleInit {
 
   private async signed(
     storageKey: string,
-    sign: () => Promise<string | null>,
+    sign: (storage: StorageService) => Promise<string | null>,
   ): Promise<string | null> {
     if (!this.storage) return null;
     try {
-      return await sign();
+      return await sign(this.storage);
     } catch (error) {
       this.logger.warn(
         `시설물 문서 서명 주소를 만들지 못했다 storageKey=${storageKey}`,
@@ -851,6 +860,27 @@ function facilityScope(caller: FacilityCaller): Prisma.FacilityWhereInput {
 /** 폐점 점포의 시설물·장비는 조회만 된다(PL-1). */
 function assertEditable(row: { store: { storeStatusCode: string } }): void {
   if (row.store.storeStatusCode === 'CLOSED')
+    throw new ConflictException(READ_ONLY);
+}
+
+/**
+ * 쓰기 트랜잭션 첫 줄 — 시설물 행을 잠그고(FOR UPDATE) 점포 행은 공유 잠금(FOR SHARE)으로 읽어, 트랜잭션 밖에서 본 지움 ·
+ * 폐점을 다시 본다. 점포 공유 잠금은 폐점(점포 행 FOR NO KEY UPDATE)과 줄을 세워 「폐점 점포는 조회만」을 지킨다.
+ * 없거나 지웠으면 404, 폐점이면 409.
+ */
+async function lockEditable(
+  tx: Prisma.TransactionClient,
+  facilityId: number,
+): Promise<void> {
+  const [row] = await tx.$queryRaw<
+    { is_deleted: boolean; store_status_code: string }[]
+  >`
+    SELECT f."is_deleted", s."store_status_code"
+      FROM "facilities" f JOIN "stores" s ON s."store_id" = f."store_id"
+     WHERE f."facility_id" = ${facilityId}
+       FOR UPDATE OF f FOR SHARE OF s`;
+  if (!row || row.is_deleted) throw new NotFoundException(NOT_FOUND);
+  if (row.store_status_code === 'CLOSED')
     throw new ConflictException(READ_ONLY);
 }
 

@@ -10970,10 +10970,10 @@
             "description": "검색 조건 형식 · 그룹 없이 분류 · 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄"
           },
           "404": {
-            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
+            "description": "플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -10981,7 +10981,7 @@
             "bearer": []
           }
         ],
-        "summary": "목록. 등록일 최신순, 한 쪽 50 · 100건. 분류는 그룹을 고른 경우에만 건다.",
+        "summary": "목록. 등록일 최신순, 한 쪽 50 · 100건. 분류는 그룹을 고른 경우에만 — 그룹 없이 보내면 400.",
         "tags": [
           "Facilities"
         ]
@@ -11024,10 +11024,10 @@
             "description": "입력 형식 · 고를 수 없는 점포(범위 밖) · 폐점 점포 · 쓸 수 없는 운영상태 · 분류 · 점검 주기 · 설치일이 구매일보다 앞섬 · A/S센터 주소 짝이 맞지 않음 · 그 점포 재직 직원이 아닌 관리 담당자 · 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄"
           },
           "404": {
-            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
+            "description": "플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -11080,10 +11080,10 @@
             "description": "플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄"
           },
           "404": {
-            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
+            "description": "플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -11136,10 +11136,10 @@
             "description": "플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄"
           },
           "404": {
-            "description": "볼 수 없는 점포 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
+            "description": "볼 수 없는 점포 · 플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -11190,10 +11190,10 @@
             "description": "플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄"
           },
           "404": {
-            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
+            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           }
         },
         "security": [
@@ -11251,10 +11251,10 @@
             "description": "입력 형식(점포를 보내도 400) · 쓸 수 없는 운영상태 · 분류 · 점검 주기 · 설치일이 구매일보다 앞섬 · A/S센터 주소 짝 · 재직 직원이 아닌 관리 담당자 · 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄"
           },
           "404": {
-            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
+            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "동시 수정 · 폐점 점포의 시설물·장비(조회만 된다)"
@@ -11299,10 +11299,10 @@
             "description": "플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄"
           },
           "404": {
-            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
+            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
             "description": "폐점 점포의 시설물·장비(조회만 된다)"
@@ -11381,13 +11381,13 @@
             }
           },
           "400": {
-            "description": "파일 없음 · JPG · PNG · PDF 가 아님 · 10MB 초과 · 파일 2개 이상 · 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
+            "description": "파일 없음 · JPG · PNG · PDF 가 아님 · 10MB 초과 · 파일 2개 이상 · 썸네일을 만들 수 없는 그림(깨짐 · 화소 초과) · 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄"
           },
           "404": {
-            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) · 문서 종류"
+            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) · 문서 종류"
           },
           "409": {
             "description": "폐점 점포의 시설물·장비(조회만 된다)"
@@ -11444,10 +11444,10 @@
             "description": "플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
           },
           "403": {
-            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+            "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄"
           },
           "404": {
-            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) · 문서 종류"
+            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) · 문서 종류"
           },
           "409": {
             "description": "폐점 점포의 시설물·장비(조회만 된다)"
@@ -29598,9 +29598,25 @@
           "closing"
         ]
       },
+      "FacilityGroup": {
+        "type": "string",
+        "enum": [
+          "STORE_FACILITY",
+          "STORE_EQUIPMENT"
+        ],
+        "description": "그룹 — STORE_FACILITY(점포 시설물) · STORE_EQUIPMENT(점포 장비)"
+      },
       "FacilityListItemDto": {
         "type": "object",
         "properties": {
+          "facilityGroupCode": {
+            "description": "그룹 — STORE_FACILITY(점포 시설물) · STORE_EQUIPMENT(점포 장비)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FacilityGroup"
+              }
+            ]
+          },
           "facilityId": {
             "type": "number"
           },
@@ -29625,10 +29641,6 @@
             "type": "string",
             "description": "운영상태 한글 — 운영 · 보관 · 폐기"
           },
-          "facilityGroupCode": {
-            "type": "string",
-            "description": "그룹 — STORE_FACILITY · STORE_EQUIPMENT"
-          },
           "facilityGroupLabel": {
             "type": "string",
             "description": "그룹 한글 — 공통코드 그룹명(점포 시설물 · 점포 장비)"
@@ -29649,6 +29661,7 @@
           }
         },
         "required": [
+          "facilityGroupCode",
           "facilityId",
           "storeId",
           "storeCode",
@@ -29656,7 +29669,6 @@
           "isStoreClosed",
           "facilityStatusCode",
           "facilityStatusLabel",
-          "facilityGroupCode",
           "facilityGroupLabel",
           "facilityCategoryCode",
           "facilityCategoryLabel",
@@ -29842,7 +29854,7 @@
           "thumbnailUrl": {
             "type": "string",
             "nullable": true,
-            "description": "64px 썸네일 주소 — 그림(JPG · PNG)만, PDF 면 null"
+            "description": "썸네일 주소(긴 변 320px JPEG, 5분 동안 유효) — 그림(JPG · PNG)만, PDF 면 null. 저장소가 없거나 서명에 실패해도 null"
           }
         },
         "required": [
@@ -29858,6 +29870,14 @@
       "FacilityDetailResponseDto": {
         "type": "object",
         "properties": {
+          "facilityGroupCode": {
+            "description": "그룹 — STORE_FACILITY(점포 시설물) · STORE_EQUIPMENT(점포 장비)",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/FacilityGroup"
+              }
+            ]
+          },
           "facilityId": {
             "type": "number"
           },
@@ -29871,9 +29891,6 @@
             "type": "string"
           },
           "facilityStatusLabel": {
-            "type": "string"
-          },
-          "facilityGroupCode": {
             "type": "string"
           },
           "facilityGroupLabel": {
@@ -29917,11 +29934,11 @@
             "type": "string",
             "nullable": true
           },
-          "salesRepName": {
+          "salesRepresentativeName": {
             "type": "string",
             "nullable": true
           },
-          "salesRepPhone": {
+          "salesRepresentativePhone": {
             "type": "string",
             "nullable": true
           },
@@ -30031,12 +30048,12 @@
           }
         },
         "required": [
+          "facilityGroupCode",
           "facilityId",
           "store",
           "name",
           "facilityStatusCode",
           "facilityStatusLabel",
-          "facilityGroupCode",
           "facilityGroupLabel",
           "facilityCategoryCode",
           "facilityCategoryLabel",
@@ -30048,8 +30065,8 @@
           "installationLocation",
           "vendorName",
           "vendorPhone",
-          "salesRepName",
-          "salesRepPhone",
+          "salesRepresentativeName",
+          "salesRepresentativePhone",
           "unitPriceAmount",
           "quantity",
           "totalAmount",
@@ -30143,12 +30160,12 @@
             "description": "구매처 전화번호 — 숫자 9~12자리. 하이픈은 떼고 받는다",
             "example": "0212345678"
           },
-          "salesRepName": {
+          "salesRepresentativeName": {
             "type": "string",
             "nullable": true,
             "description": "영업사원 — 50자"
           },
-          "salesRepPhone": {
+          "salesRepresentativePhone": {
             "type": "string",
             "nullable": true,
             "description": "영업사원 전화번호 — 숫자 9~12자리"
@@ -30204,7 +30221,7 @@
           "managerPhone": {
             "type": "string",
             "nullable": true,
-            "description": "관리 담당자 전화번호 — 숫자 9~12자리. 화면이 담당자 휴대폰으로 채우고 고칠 수 있다"
+            "description": "관리 담당자 전화번호 — 숫자 9~12자리. 화면이 담당자 휴대폰으로 채우고 고칠 수 있다. 담당자를 고르지 않아도 따로 저장할 수 있다(2026-11-11 사용자 결정)"
           },
           "inspectionCycleCode": {
             "type": "string",
@@ -30326,12 +30343,12 @@
             "description": "구매처 전화번호 — 숫자 9~12자리. 하이픈은 떼고 받는다",
             "example": "0212345678"
           },
-          "salesRepName": {
+          "salesRepresentativeName": {
             "type": "string",
             "nullable": true,
             "description": "영업사원 — 50자"
           },
-          "salesRepPhone": {
+          "salesRepresentativePhone": {
             "type": "string",
             "nullable": true,
             "description": "영업사원 전화번호 — 숫자 9~12자리"
@@ -30387,7 +30404,7 @@
           "managerPhone": {
             "type": "string",
             "nullable": true,
-            "description": "관리 담당자 전화번호 — 숫자 9~12자리. 화면이 담당자 휴대폰으로 채우고 고칠 수 있다"
+            "description": "관리 담당자 전화번호 — 숫자 9~12자리. 화면이 담당자 휴대폰으로 채우고 고칠 수 있다. 담당자를 고르지 않아도 따로 저장할 수 있다(2026-11-11 사용자 결정)"
           },
           "inspectionCycleCode": {
             "type": "string",

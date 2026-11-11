@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { IsDateOnly } from '../../common/is-date-only';
 import { NO_NUL } from '../../common/no-nul';
+import { CODE_PATTERN } from '../../code-groups/code-format';
 import { IsUpdatedAt } from '../../common/updated-at';
 import {
   emptyToNull,
@@ -28,8 +29,6 @@ import {
 } from '../facility-format';
 
 const NUL_MESSAGE = '쓸 수 없는 문자가 있습니다.';
-/** 공통코드 상세코드 모양 — 영문 대문자로 시작, 대문자 · 숫자 · 밑줄 20자. 값이 있는지는 서비스가 공통코드로 본다. */
-const CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,19}$/;
 
 /** 전화번호는 세 칸을 이어 숫자만 받는다 — 하이픈 · 공백은 떼고, 비면 null(지운다). */
 const phoneDigits = ({ value }: { value: unknown }): unknown => {
@@ -38,7 +37,7 @@ const phoneDigits = ({ value }: { value: unknown }): unknown => {
   return digits === '' ? null : digits;
 };
 
-/** 메모는 공백 · 줄바꿈을 포함해 센다 — 앞뒤 공백을 지우지 않는다. 빈 문자열만 null. */
+/** 메모는 공백 · 줄바꿈을 포함해 센다 — 앞뒤 공백을 지우지 않는다. 비었거나 공백뿐이면 null. */
 const blankToNull = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' && value.trim() === '' ? null : value;
 
@@ -140,11 +139,11 @@ export class SaveFacilityDto {
 
   /** 영업사원 — 50자 */
   @OptionalText(50)
-  salesRepName?: string | null;
+  salesRepresentativeName?: string | null;
 
   /** 영업사원 전화번호 — 숫자 9~12자리 */
   @OptionalPhone('영업사원')
-  salesRepPhone?: string | null;
+  salesRepresentativePhone?: string | null;
 
   /** 단가 — 원, 0 이상 정수 10자리까지. 총금액(단가 × 수량)은 서버가 계산한다 */
   @IsOptional()
@@ -190,7 +189,7 @@ export class SaveFacilityDto {
   @Max(INT4_MAX)
   managerStaffMemberId?: number | null;
 
-  /** 관리 담당자 전화번호 — 숫자 9~12자리. 화면이 담당자 휴대폰으로 채우고 고칠 수 있다 */
+  /** 관리 담당자 전화번호 — 숫자 9~12자리. 화면이 담당자 휴대폰으로 채우고 고칠 수 있다. 담당자를 고르지 않아도 따로 저장할 수 있다(2026-11-11 사용자 결정) */
   @OptionalPhone('관리 담당자')
   managerPhone?: string | null;
 

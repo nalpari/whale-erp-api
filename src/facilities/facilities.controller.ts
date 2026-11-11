@@ -59,7 +59,7 @@ import {
 import { FACILITY_DOCUMENT_MAX_BYTES } from './facility-format';
 
 const BP_NOT_FOUND_DESCRIPTION =
-  '플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)';
+  '플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)';
 const NOT_FOUND_DESCRIPTION = `없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · ${BP_NOT_FOUND_DESCRIPTION}`;
 const BP_MISSING_DESCRIPTION =
   '플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)';
@@ -80,7 +80,7 @@ const KIND_PARAM = {
 @ApiBearerAuth()
 @ApiForbiddenResponse({
   description:
-    '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더',
+    '직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄',
 })
 @ApiBadRequestResponse({ description: BP_MISSING_DESCRIPTION })
 @UserTypes('admin')
@@ -88,7 +88,7 @@ const KIND_PARAM = {
 export class FacilitiesController {
   constructor(private readonly facilities: FacilitiesService) {}
 
-  /** 목록. 등록일 최신순, 한 쪽 50 · 100건. 분류는 그룹을 고른 경우에만 건다. */
+  /** 목록. 등록일 최신순, 한 쪽 50 · 100건. 분류는 그룹을 고른 경우에만 — 그룹 없이 보내면 400. */
   @Get()
   @MenuPermission('read')
   @ApiBadRequestResponse({
@@ -210,7 +210,7 @@ export class FacilitiesController {
   })
   @ApiOkResponse({ type: FacilityDocumentDto })
   @ApiBadRequestResponse({
-    description: `파일 없음 · JPG · PNG · PDF 가 아님 · 10MB 초과 · 파일 2개 이상 · ${BP_MISSING_DESCRIPTION}`,
+    description: `파일 없음 · JPG · PNG · PDF 가 아님 · 10MB 초과 · 파일 2개 이상 · 썸네일을 만들 수 없는 그림(깨짐 · 화소 초과) · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({ description: `${NOT_FOUND_DESCRIPTION} · 문서 종류` })
   @ApiConflictResponse({ description: READ_ONLY_DESCRIPTION })

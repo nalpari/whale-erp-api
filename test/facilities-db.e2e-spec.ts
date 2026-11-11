@@ -29,6 +29,10 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
   let bpCode: string;
   let storeId: number;
   let otherStoreId: number;
+  /** 다른 BP 와 그 점포 · 시설물 — 격리 확인용 */
+  let foreignBpCodeId: number;
+  let foreignBpCode: string;
+  let foreignStoreId: number;
   let closedStoreId: number;
   let staffMemberId: number;
   let retiredStaffMemberId: number;
@@ -149,10 +153,38 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
           },
         })
       ).storeId;
-    const s = randomInt(100_000, 999_997);
+    const s = randomInt(100_000, 999_996);
     storeId = await makeStore(`ST${s}`);
     otherStoreId = await makeStore(`ST${s + 1}`);
     closedStoreId = await makeStore(`ST${s + 2}`, 'CLOSED');
+
+    // 다른 BP — 점포 하나와 시설물 하나. 이 BP 의 데이터가 첫 BP 계정에게 보이면 안 된다.
+    foreignBpCode = `BP${n + 1}`;
+    ({ bpCodeId: foreignBpCodeId } = await prisma.bpCode.create({
+      data: {
+        bpCode: foreignBpCode,
+        tradeName: '시설물 DB 테스트 다른 BP',
+        accountStatusCode: 'ACTIVE',
+      },
+    }));
+    await prisma.codeItem.create({
+      data: {
+        groupCode: 'STORE_EQUIPMENT',
+        itemCode: 'GRINDER',
+        bpCode: foreignBpCode,
+        label: '그라인더',
+        manageOwnerCode: 'PLATFORM_PROVIDED',
+      },
+    });
+    ({ storeId: foreignStoreId } = await prisma.store.create({
+      data: {
+        storeCode: `ST${s + 3}`,
+        bpCodeId: foreignBpCodeId,
+        storeTypeCode: 'DIRECT',
+        name: '다른 BP 점포',
+        storeStatusCode: 'OPERATING',
+      },
+    }));
     const staff = (name: string, employmentStatus: 'EMPLOYED' | 'RETIRED') =>
       prisma.staffMember.create({
         data: {
@@ -238,8 +270,11 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
   afterAll(async () => {
     // bpCodeId 가 없으면(준비 실패) 아무것도 지우지 않는다 — where 의 undefined 는 조건 없음이다.
     if (prisma && bpCodeId !== undefined) {
+      const bpIds = [bpCodeId, foreignBpCodeId].filter(
+        (id): id is number => id !== undefined,
+      );
       const stores = await prisma.store.findMany({
-        where: { bpCodeId },
+        where: { bpCodeId: { in: bpIds } },
         select: { storeId: true },
       });
       const byStore = { storeId: { in: stores.map((s) => s.storeId) } };
@@ -251,7 +286,13 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
       await prisma.staffMember.deleteMany({ where: byStore });
       await prisma.adminStoreMapping.deleteMany({ where: byStore });
       await prisma.store.deleteMany({ where: byStore });
-      await prisma.codeItem.deleteMany({ where: { bpCode } });
+      await prisma.codeItem.deleteMany({
+        where: {
+          bpCode: {
+            in: [bpCode, foreignBpCode].filter((c) => c !== undefined),
+          },
+        },
+      });
       await prisma.adminLoginLog.deleteMany({ where: byAdmin });
       await prisma.adminSession.deleteMany({ where: byAdmin });
       await prisma.adminAccount.deleteMany({ where: byAdmin });
@@ -259,7 +300,7 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
         await prisma.roleGroup.deleteMany({
           where: { roleGroupId: emptyRoleGroupId },
         });
-      await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+      await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
     }
     await app?.close();
   });
@@ -547,6 +588,10 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
     await call('put', `/facilities/${row.facilityId}/documents/USER_MANUAL`)
       .attach('file', PDF, 'manual.pdf')
       .expect(409);
+    await call(
+      'delete',
+      `/facilities/${row.facilityId}/documents/WARRANTY`,
+    ).expect(409);
     const list = (
       await call('get', '/facilities?keyword=폐점 점포').expect(200)
     ).body as FacilityListResponseDto;
@@ -672,6 +717,172 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
     await expect(
       set({ unitPriceAmount: null, totalAmount: null }),
     ).resolves.toBeDefined();
+  });
+
+  it('다른 BP 격리 — 다른 BP 의 시설물 · 점포는 어느 경로로도 보이지 않고 고칠 수 없다', async () => {
+    const foreign = await prisma.facility.create({
+      data: {
+        storeId: foreignStoreId,
+        name: '다른 BP 장비',
+        facilityStatusCode: 'OPERATING',
+        facilityGroupCode: 'STORE_EQUIPMENT',
+        facilityCategoryCode: 'GRINDER',
+        createdBy: adminIds[0],
+      },
+    });
+    const id = foreign.facilityId;
+    await call('get', `/facilities/${id}`).expect(404);
+    await call('put', `/facilities/${id}`)
+      .send({
+        ...base(),
+        storeId: undefined,
+        updatedAt: foreign.updatedAt.toISOString(),
+      })
+      .expect(404);
+    await call('delete', `/facilities/${id}`).expect(404);
+    await call('put', `/facilities/${id}/documents/USER_MANUAL`)
+      .attach('file', PDF, 'm.pdf')
+      .expect(404);
+    await call('delete', `/facilities/${id}/documents/USER_MANUAL`).expect(404);
+
+    // 키워드 없이 · 그 점포를 골라도 목록에 없다
+    const all = (await call('get', '/facilities?pageSize=100').expect(200))
+      .body as FacilityListResponseDto;
+    expect(all.items.map((i) => i.facilityId)).not.toContain(id);
+    const picked = (
+      await call('get', `/facilities?storeIds=${foreignStoreId}`).expect(200)
+    ).body as FacilityListResponseDto;
+    expect(picked).toEqual({ items: [], total: 0 });
+
+    const stores = (
+      await call('get', '/facilities/store-options?includeClosed=true').expect(
+        200,
+      )
+    ).body as { items: { storeId: number }[] };
+    expect(stores.items.map((s) => s.storeId)).not.toContain(foreignStoreId);
+    await call(
+      'get',
+      `/facilities/manager-options?storeId=${foreignStoreId}`,
+    ).expect(404);
+    await call('post', '/facilities')
+      .send({ ...base(), storeId: foreignStoreId })
+      .expect(400);
+
+    // 플랫폼 계정은 고른 BP 만 본다 — 다른 BP 를 고르면 첫 BP 의 시설물은 404
+    const mine = await create({ name: '첫 BP 장비' });
+    await call(
+      'get',
+      `/facilities/${mine.facilityId}`,
+      pmToken,
+      foreignBpCodeId,
+    ).expect(404);
+    await call('get', `/facilities/${id}`, pmToken, foreignBpCodeId).expect(
+      200,
+    );
+  });
+
+  it('플랫폼 계정의 등록 — 고른 BP 의 공통코드 행으로 분류를 본다', async () => {
+    // 플랫폼 원본에만 있는 분류(이 BP 로 복사 안 됨)는 400
+    await call('post', '/facilities', pmToken, bpCodeId)
+      .send({
+        ...base(),
+        facilityGroupCode: 'STORE_FACILITY',
+        facilityCategoryCode: 'WATER_SUPPLY',
+      })
+      .expect(400);
+    const { facilityId } = (
+      await call('post', '/facilities', pmToken, bpCodeId)
+        .send({ ...base(), name: '플랫폼이 등록' })
+        .expect(201)
+    ).body as { facilityId: number };
+    const d = await detail(facilityId);
+    expect(d.facilityCategoryLabel).toBe('원두 그라인더');
+  });
+
+  it('수정에서 지금 담당자는 그 사이 퇴직했어도 그대로 둘 수 있고, 다른 담당자에서 퇴직자로 되돌릴 수는 없다(PL-6)', async () => {
+    const leaving = await prisma.staffMember.create({
+      data: {
+        storeId,
+        name: '곧 퇴직',
+        phone: `010${randomInt(10_000_000, 99_999_999)}`,
+        jobTitle: '홀',
+        employmentType: 'PART_TIME',
+      },
+    });
+    const { facilityId } = await create({
+      name: '담당자 퇴직 장비',
+      managerStaffMemberId: leaving.staffMemberId,
+    });
+    await prisma.staffMember.update({
+      where: { staffMemberId: leaving.staffMemberId },
+      data: {
+        employmentStatus: 'RETIRED',
+        retiredDate: new Date('2026-11-01'),
+      },
+    });
+    const d = await detail(facilityId);
+    expect(d.manager).toEqual({
+      staffMemberId: leaving.staffMemberId,
+      name: '곧 퇴직',
+    });
+    await call('put', `/facilities/${facilityId}`)
+      .send({ ...formOf(d), name: '이름만 바꿈' })
+      .expect(200);
+    await call('put', `/facilities/${facilityId}`)
+      .send({
+        ...formOf(await detail(facilityId)),
+        managerStaffMemberId: staffMemberId,
+      })
+      .expect(200);
+    await call('put', `/facilities/${facilityId}`)
+      .send({
+        ...formOf(await detail(facilityId)),
+        managerStaffMemberId: leaving.staffMemberId,
+      })
+      .expect(400);
+    // 담당자를 비워도 되고, 담당자 없이 전화번호만 둘 수도 있다(2026-11-11 사용자 결정)
+    await call('put', `/facilities/${facilityId}`)
+      .send({
+        ...formOf(await detail(facilityId)),
+        managerStaffMemberId: null,
+        managerPhone: '0212345678',
+      })
+      .expect(200);
+    expect(await detail(facilityId)).toMatchObject({
+      manager: null,
+      managerPhone: '0212345678',
+    });
+  });
+
+  it('일부 점포만 맡은 관리자 — 범위 밖 시설물의 수정 · 삭제 · 문서는 404, 점포 선택지는 맡은 점포만', async () => {
+    const other = await create({ name: 'BA 범위 밖', storeId: otherStoreId });
+    const d = await detail(other.facilityId);
+    await call('put', `/facilities/${other.facilityId}`, baToken)
+      .send(formOf(d))
+      .expect(404);
+    await call('delete', `/facilities/${other.facilityId}`, baToken).expect(
+      404,
+    );
+    await call(
+      'put',
+      `/facilities/${other.facilityId}/documents/USER_MANUAL`,
+      baToken,
+    )
+      .attach('file', PDF, 'm.pdf')
+      .expect(404);
+    await call(
+      'delete',
+      `/facilities/${other.facilityId}/documents/USER_MANUAL`,
+      baToken,
+    ).expect(404);
+    const options = (
+      await call(
+        'get',
+        '/facilities/store-options?includeClosed=true',
+        baToken,
+      ).expect(200)
+    ).body as { items: { storeId: number }[] };
+    expect(options.items.map((s) => s.storeId)).toEqual([storeId]);
   });
 
   it('범위 밖 id 는 DB 에 묻지 않고 404', async () => {

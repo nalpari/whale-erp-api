@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { AttachmentFileType, FacilityDocumentKind } from '@prisma/client';
+import { FACILITY_GROUPS, type FacilityGroup } from '../facility-format';
 
 /** 목록 한 줄 */
 export class FacilityListItemDto {
@@ -13,8 +14,9 @@ export class FacilityListItemDto {
   facilityStatusCode: string;
   /** 운영상태 한글 — 운영 · 보관 · 폐기 */
   facilityStatusLabel: string;
-  /** 그룹 — STORE_FACILITY · STORE_EQUIPMENT */
-  facilityGroupCode: string;
+  /** 그룹 — STORE_FACILITY(점포 시설물) · STORE_EQUIPMENT(점포 장비) */
+  @ApiProperty({ enum: FACILITY_GROUPS, enumName: 'FacilityGroup' })
+  facilityGroupCode: FacilityGroup;
   /** 그룹 한글 — 공통코드 그룹명(점포 시설물 · 점포 장비) */
   facilityGroupLabel: string;
   facilityCategoryCode: string;
@@ -51,7 +53,7 @@ export class FacilityDocumentDto {
   sizeBytes: number;
   /** 내려받기 주소 — 5분 동안 쓸 수 있다. 저장소가 없거나 서명에 실패하면 null */
   downloadUrl: string | null;
-  /** 64px 썸네일 주소 — 그림(JPG · PNG)만, PDF 면 null */
+  /** 썸네일 주소(긴 변 320px JPEG, 5분 동안 유효) — 그림(JPG · PNG)만, PDF 면 null. 저장소가 없거나 서명에 실패해도 null */
   thumbnailUrl: string | null;
 }
 
@@ -62,7 +64,9 @@ export class FacilityDetailResponseDto {
   name: string;
   facilityStatusCode: string;
   facilityStatusLabel: string;
-  facilityGroupCode: string;
+  /** 그룹 — STORE_FACILITY(점포 시설물) · STORE_EQUIPMENT(점포 장비) */
+  @ApiProperty({ enum: FACILITY_GROUPS, enumName: 'FacilityGroup' })
+  facilityGroupCode: FacilityGroup;
   facilityGroupLabel: string;
   facilityCategoryCode: string;
   facilityCategoryLabel: string;
@@ -75,8 +79,8 @@ export class FacilityDetailResponseDto {
   installationLocation: string | null;
   vendorName: string | null;
   vendorPhone: string | null;
-  salesRepName: string | null;
-  salesRepPhone: string | null;
+  salesRepresentativeName: string | null;
+  salesRepresentativePhone: string | null;
   unitPriceAmount: number | null;
   quantity: number;
   /** 단가 × 수량 — 단가가 없으면 null */

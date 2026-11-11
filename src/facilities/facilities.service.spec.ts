@@ -51,7 +51,11 @@ describe('FacilitiesService', () => {
   let tx: {
     $queryRaw: jest.Mock;
     facilityDocument: { updateMany: jest.Mock; create: jest.Mock };
-    facility: { updateMany: jest.Mock; findUniqueOrThrow: jest.Mock };
+    facility: {
+      updateMany: jest.Mock;
+      update: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
+    };
   };
   let prisma: {
     adminAccount: { findFirst: jest.Mock; findMany: jest.Mock };
@@ -83,7 +87,11 @@ describe('FacilitiesService', () => {
       thumbnailUrl: jest.fn().mockResolvedValue('https://thumb/x'),
     };
     tx = {
-      $queryRaw: jest.fn().mockResolvedValue([{ is_deleted: false }]),
+      $queryRaw: jest
+        .fn()
+        .mockResolvedValue([
+          { is_deleted: false, store_status_code: 'OPERATING' },
+        ]),
       facilityDocument: {
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
         create: jest.fn().mockResolvedValue({
@@ -97,6 +105,7 @@ describe('FacilitiesService', () => {
       },
       facility: {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn().mockResolvedValue({}),
         findUniqueOrThrow: jest
           .fn()
           .mockResolvedValue({ facilityId: 11, updatedAt: new Date() }),
@@ -176,7 +185,7 @@ describe('FacilitiesService', () => {
         .mockResolvedValueOnce(0); // 분류
       await expect(
         service.update(9, BP, 11, form({ facilityCategoryCode: 'GRINDER' })),
-      ).rejects.toThrow('분류를 선택해 주세요.');
+      ).rejects.toThrow('쓸 수 없는 분류입니다. 다시 선택해 주세요.');
       expect(prisma.codeItem.count).toHaveBeenNthCalledWith(2, {
         where: expect.objectContaining({
           groupCode: 'STORE_EQUIPMENT',
@@ -190,8 +199,52 @@ describe('FacilitiesService', () => {
     it('그 사이 누가 고쳤으면(updatedAt 불일치) 409', async () => {
       tx.facility.updateMany.mockResolvedValue({ count: 0 });
       await expect(service.update(9, BP, 11, form())).rejects.toThrow(
-        ConflictException,
+        '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.',
       );
+    });
+
+    it('그 사이 누가 지웠으면 「먼저 수정했습니다」가 아니라 404 — 다시 불러와도 없다', async () => {
+      tx.$queryRaw.mockResolvedValue([
+        { is_deleted: true, store_status_code: 'OPERATING' },
+      ]);
+      await expect(service.update(9, BP, 11, form())).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(tx.facility.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('검사 뒤 저장 전에 점포가 폐점했으면 409(조회만)', async () => {
+      tx.$queryRaw.mockResolvedValue([
+        { is_deleted: false, store_status_code: 'CLOSED' },
+      ]);
+      await expect(service.update(9, BP, 11, form())).rejects.toThrow(
+        '폐점 점포의 시설물·장비는 조회만 할 수 있습니다.',
+      );
+      expect(tx.facility.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('수정에서 지금 담당자는 그 사이 퇴직했어도 재직 여부를 묻지 않고 둔다(PL-6)', async () => {
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({ managerStaffMemberId: 21 }),
+      );
+      prisma.staffMember.count.mockResolvedValue(0); // 퇴직
+      await service.update(9, BP, 11, form({ managerStaffMemberId: 21 }));
+      expect(prisma.staffMember.count).not.toHaveBeenCalled();
+    });
+
+    it('다른 담당자로 바꾸면 그 점포의 재직 직원이어야 한다', async () => {
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({ managerStaffMemberId: 21 }),
+      );
+      prisma.staffMember.count.mockResolvedValue(0);
+      await expect(
+        service.update(9, BP, 11, form({ managerStaffMemberId: 22 })),
+      ).rejects.toThrow(
+        '관리 담당자는 그 점포의 재직 직원만 고를 수 있습니다.',
+      );
+      expect(prisma.staffMember.count).toHaveBeenCalledWith({
+        where: { staffMemberId: 22, storeId: 3, employmentStatus: 'EMPLOYED' },
+      });
     });
 
     it('폐점 점포의 것은 409 — 검증 전에 막는다', async () => {
@@ -204,6 +257,27 @@ describe('FacilitiesService', () => {
         '폐점 점포의 시설물·장비는 조회만 할 수 있습니다.',
       );
       expect(prisma.codeItem.count).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('삭제', () => {
+    it('검사 뒤 점포가 폐점했으면 409 — 지우지 않는다', async () => {
+      tx.$queryRaw.mockResolvedValue([
+        { is_deleted: false, store_status_code: 'CLOSED' },
+      ]);
+      await expect(service.remove(9, BP, 11)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(tx.facility.update).not.toHaveBeenCalled();
+    });
+
+    it('그 사이 다른 요청이 지웠으면 404', async () => {
+      tx.$queryRaw.mockResolvedValue([
+        { is_deleted: true, store_status_code: 'OPERATING' },
+      ]);
+      await expect(service.remove(9, BP, 11)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -263,6 +337,27 @@ describe('FacilitiesService', () => {
       ).rejects.toThrow(NotFoundException);
       expect(tx.facilityDocument.create).not.toHaveBeenCalled();
       expect(storage.delete).toHaveBeenCalled();
+    });
+
+    it('올리는 동안 점포가 폐점했으면 409 이고 올린 파일을 지운다', async () => {
+      tx.$queryRaw.mockResolvedValue([
+        { is_deleted: false, store_status_code: 'CLOSED' },
+      ]);
+      await expect(
+        service.putDocument(9, BP, 11, 'USER_MANUAL', upload),
+      ).rejects.toThrow(ConflictException);
+      expect(tx.facilityDocument.create).not.toHaveBeenCalled();
+      expect(storage.delete).toHaveBeenCalled();
+    });
+
+    it('문서 빼기도 같은 행 잠금으로 줄을 선다 — 잠근 뒤 폐점이면 409', async () => {
+      tx.$queryRaw.mockResolvedValue([
+        { is_deleted: false, store_status_code: 'CLOSED' },
+      ]);
+      await expect(
+        service.removeDocument(9, BP, 11, 'WARRANTY'),
+      ).rejects.toThrow(ConflictException);
+      expect(tx.facilityDocument.updateMany).not.toHaveBeenCalled();
     });
 
     it('같은 종류의 옛 문서를 지움 표시한 뒤 새 행을 넣는다 — PDF 는 썸네일 주소가 없다', async () => {

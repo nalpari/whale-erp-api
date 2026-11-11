@@ -3272,7 +3272,7 @@ model ExcelDownloadLog {
 }
 
 /// 시설물·장비 — 20261111153316_team1_facilities. 손으로 맞춘 모델이다(1팀 ERD 생성기에 아직 없다).
-/// CHECK 14 · 외래키 manager_staff_member_id(3팀 staff_members) · created_by · updated_by 는 마이그레이션 SQL 에만 있다 —
+/// 이 표의 CHECK 14 · 외래키 manager_staff_member_id(3팀 staff_members) · created_by · updated_by 는 마이그레이션 SQL 에만 있다 —
 /// 관리자 · 직원은 정수 칸으로만 둔다(참조되는 모델에 역관계 칸을 두지 않으려고).
 model Facility {
   /// 시설물·장비 ID
@@ -3281,7 +3281,7 @@ model Facility {
   storeId                     Int                @map("store_id")
   /// 시설물/장비명 — 1~100자
   name                        String
-  /// 운영상태 — 공통코드 FACILITY_STATUS(플랫폼고정: 운영 · 보관 · 폐기). 운영만 수리 · 점검 대상
+  /// 운영상태 — 공통코드 FACILITY_STATUS(플랫폼고정: 운영 · 보관 · 폐기). 수리 이력 · 점검표가 생기면 운영인 것만 그 대상으로 고른다
   facilityStatusCode          String             @map("facility_status_code")
   /// 그룹 — 공통코드 그룹 STORE_FACILITY(점포 시설물) · STORE_EQUIPMENT(점포 장비)
   facilityGroupCode           String             @map("facility_group_code")
@@ -3302,9 +3302,9 @@ model Facility {
   /// 구매처 전화번호 — 숫자 9~12자리
   vendorPhone                 String?            @map("vendor_phone")
   /// 영업사원
-  salesRepName                String?            @map("sales_rep_name")
+  salesRepresentativeName     String?            @map("sales_representative_name")
   /// 영업사원 전화번호 — 숫자 9~12자리
-  salesRepPhone               String?            @map("sales_rep_phone")
+  salesRepresentativePhone    String?            @map("sales_representative_phone")
   /// 단가 — 원, 숫자 10자리까지
   unitPriceAmount             Decimal?           @map("unit_price_amount") @db.Decimal(10, 0)
   /// 수량 — 1~9,999, 기본 1
@@ -3337,7 +3337,7 @@ model Facility {
   serviceCenterAddressDetail  String?            @map("service_center_address_detail")
   /// A/S센터 전화번호 — 숫자 9~12자리
   serviceCenterPhone          String?            @map("service_center_phone")
-  /// 삭제 여부 — 수리 이력 · 점검 결과가 있으면 지우지 않고 폐기로 바꾼다
+  /// 삭제 여부 — 잘못 등록한 것을 지운다. 수리 이력 · 점검 결과가 생기면 그것이 있는 행은 폐기로 바꾸게 한다(정책서 PL-4, 미구현)
   isDeleted                   Boolean            @default(false) @map("is_deleted")
   /// 등록 일시
   createdAt                   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -3355,7 +3355,8 @@ model Facility {
   @@map("facilities")
 }
 
-/// 시설물·장비 문서 — 종류마다 지우지 않은 행 하나(부분 고유 인덱스, 마이그레이션 SQL 에만 있다).
+/// 시설물·장비 문서 — 종류마다 지우지 않은 행 하나(부분 고유 인덱스) · CHECK 2(크기 10MB · 이름 255자) · 외래키 created_by 는
+/// 마이그레이션 SQL 에만 있다.
 model FacilityDocument {
   /// 문서 ID
   facilityDocumentId Int                  @id @default(autoincrement()) @map("facility_document_id")
@@ -3380,6 +3381,7 @@ model FacilityDocument {
 
   facility Facility @relation("FacilityDocumentsFacility", fields: [facilityId], references: [facilityId], onDelete: Restrict, onUpdate: NoAction, map: "facility_documents_facility_id_fkey")
 
+  @@unique([storageKey], map: "facility_documents_storage_key_key")
   @@map("facility_documents")
 }
 

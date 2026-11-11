@@ -11,6 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { CODE_PATTERN } from '../../code-groups/code-format';
 import { NO_NUL } from '../../common/no-nul';
 import {
   INT4_MAX,
@@ -22,8 +23,6 @@ import {
   type FacilityGroup,
   type FacilityPageSize,
 } from '../facility-format';
-
-const CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,19}$/;
 
 /** `a=1&a=2` 와 `a=1,2` 를 같은 숫자 배열로 받는다. */
 const splitNumbers = ({ value }: { value: unknown }): unknown => {

@@ -8,8 +8,6 @@ export type FacilityGroup = (typeof FACILITY_GROUPS)[number];
 export const FACILITY_STATUS_GROUP = 'FACILITY_STATUS';
 /** 점검 주기 공통코드 그룹 — 플랫폼제공. 그룹 코드는 20자까지라 제안 이름(FACILITY_INSPECTION_CYCLE)을 줄였다. */
 export const INSPECTION_CYCLE_GROUP = 'INSPECTION_CYCLE';
-/** 「운영」 — 수리 이력 · 점검표 대상은 이 코드값 하나로 가른다(PL-2). */
-export const OPERATING_STATUS = 'OPERATING';
 
 /** 목록 한 쪽 건수 — 50 · 100, 기본 50. */
 export const FACILITY_PAGE_SIZES = [50, 100] as const;

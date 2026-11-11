@@ -59,7 +59,7 @@ describe('SaveFacilityDto', () => {
 
   it.each([
     ['vendorPhone', '구매처 전화번호는 숫자 9~12자리입니다.'],
-    ['salesRepPhone', '영업사원 전화번호는 숫자 9~12자리입니다.'],
+    ['salesRepresentativePhone', '영업사원 전화번호는 숫자 9~12자리입니다.'],
     ['managerPhone', '관리 담당자 전화번호는 숫자 9~12자리입니다.'],
     ['serviceCenterPhone', 'A/S센터 전화번호는 숫자 9~12자리입니다.'],
   ])('%s 가 9~12자리가 아니면 「%s」', (field, message) => {
