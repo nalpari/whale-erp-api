@@ -164,11 +164,11 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
 - **시설물·장비 `facilities` · `facility_documents`** (`20261111153316_team1_facilities`,
   [Facilities](/api/facilities.md)) — written here first, **not yet in 1팀's ERD generator** in
   front, and `schema.prisma` was edited by hand to match. Seventeen SQL-only constraints: sixteen
-  CHECKs (name 1–100, the two groups, text lengths, every phone `^[0-9]{9,12}$`, quantity 1–9,999,
-  **총금액 = 단가 × 수량 or both null**, 설치일 ≥ 구매일, A/S센터 우편번호 and 기본주소 together with
+  CHECKs (name 1–100, the two groups, text lengths, every phone `^[0-9]{9,12}$`, unit price ≥ 0, quantity 1–9,999,
+  **총금액 = 단가 × 수량 or both null**, 설치일 ≥ 구매일, A/S센터 우편번호 5 digits, 우편번호 and 기본주소 together with
   상세주소 only beside them, document size ≤ 10MB and name ≤ 255) and the partial unique index
   `facility_documents_facility_id_document_kind_key (facility_id, document_kind) WHERE NOT
-  is_deleted` (one live document per kind). Four foreign keys are SQL-only — `manager_staff_member_id`
+  is_deleted` (one live document per kind). The full unique index on `facility_documents.storage_key` (one row per stored file) is in Prisma as `@@unique`. Four foreign keys are SQL-only — `manager_staff_member_id`
   into 3팀 `staff_members` and the three `*_by` into `admin_accounts` stay plain `Int`; only the
   store and document relations are in Prisma. Amounts are `NUMERIC(10,0)` / `NUMERIC(14,0)`
   (Prisma `Decimal`), not `bigint`. The migration also adds the enum `facility_document_kind`

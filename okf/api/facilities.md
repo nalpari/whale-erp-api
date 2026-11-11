@@ -4,28 +4,28 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-11T06:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-11T07:30:00Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
     title: FacilitiesService — 범위 · 공통코드 · 담당자 · 폐점 조회만 · 문서
-    last_modified: 2026-11-11T06:30:00Z
+    last_modified: 2026-11-11T07:30:00Z
   - id: facilities-controller
     resource: ../../src/facilities/facilities.controller.ts
     title: /facilities 경로와 메뉴 권한
-    last_modified: 2026-11-11T06:30:00Z
+    last_modified: 2026-11-11T07:30:00Z
   - id: facility-format
     resource: ../../src/facilities/facility-format.ts
     title: 그룹 · 공통코드 그룹 이름 · 쪽 크기 · 총금액 · 이름표 고르기
-    last_modified: 2026-11-11T06:30:00Z
+    last_modified: 2026-11-11T07:30:00Z
   - id: save-facility-dto
     resource: ../../src/facilities/dto/save-facility.dto.ts
     title: 등록 · 수정 입력 검증
-    last_modified: 2026-11-11T06:30:00Z
+    last_modified: 2026-11-11T07:30:00Z
   - id: facilities-migration
     resource: ../../prisma/migrations/20261111153316_team1_facilities/migration.sql
     title: facilities · facility_documents · 공통코드 4그룹 13 · 메뉴 /facilities 사용 · 고정 권한 그룹
-    last_modified: 2026-11-11T06:30:00Z
+    last_modified: 2026-11-11T07:30:00Z
   - id: facilities-policy
     resource: https://claude.ai/artifact/Mo31QtdCL8fmcvFwphQGQo
     title: 「시설물·장비 관리 정책서」 · 「시설물·장비 수리 이력 정책서」(claude.ai 문서, 2026-11-10)
@@ -98,19 +98,34 @@ actions (PM000001 already had them). Other BP role groups get nothing until thei
   for the repository rule that `BigInt` must not appear.
 - **Update replaces the whole form**: omitted or empty optional fields become null (관리 정보 is
   cleared by emptying fields, PL-4). Optimistic lock on `updatedAt`, as in store management.
+- **Every write re-checks under a lock.** Update, delete and both document routes start their
+  transaction with `lockEditable`: the facility row `FOR UPDATE`, the store row `FOR SHARE`. A delete
+  that won the race is 404 (not 409 「다른 관리자가 먼저 수정했습니다」 — reloading would only find
+  nothing), a store closed in between is 409 「조회만」, and only then is a zero-row `UPDATE` a
+  concurrent edit. The shared lock on the store also queues the write behind a closing, which takes the
+  store row `FOR NO KEY UPDATE`. Document replace and remove take the same facility lock, so they
+  serialize and the last request wins.
+- **관리 담당자 전화번호 may stand alone** — saved without a 관리 담당자 (an outside contact, user decision
+  2026-11-11); there is no CHECK tying the two.
+- **A code that went unused while the form was open** answers 「쓸 수 없는 분류입니다. 다시 선택해
+  주세요.」 / 「운영상태를 다시 선택해 주세요.」 / 「점검 주기를 다시 선택해 주세요.」 — the user did pick
+  one, so 「선택해 주세요」 alone would not explain the 400.
 - **Phones** are digits 9–12 after stripping `-` and spaces; the messages name the field
   (「구매처 전화번호는 숫자 9~12자리입니다.」).
 - **A/S센터 주소**: 우편번호 and 기본주소 come together, 상세주소 only with an address — 400 otherwise,
   and a CHECK backs it.
-- **Documents**: one live row per kind (partial unique index). Replacing locks the facility row,
-  re-reads `is_deleted` under the lock (404 if a delete won the race), marks the old row deleted and
-  inserts the new one; files are never deleted, matching store images. If the insert fails, the
-  uploaded file is removed only when no row points at it (the COMMIT may have landed before the
-  connection dropped). Images get a thumbnail (`thumbnailUrl`), PDFs `null`.
+- **Documents**: one live row per kind (partial unique index), one row per stored file
+  (`facility_documents_storage_key_key`). Replacing re-checks under the lock above (the upload's
+  storage round trip is the widest window), marks the old row deleted and inserts the new one;
+  files are never deleted, matching store images. If the insert fails — including a 404 · 409 from the
+  re-check — the uploaded file is removed only when no row points at it (the COMMIT may have landed
+  before the connection dropped). Images get a thumbnail (`thumbnailUrl`, long side 320px), PDFs
+  `null`.
 - **`manager-options` returns 직원 휴대폰** to anyone with 조회 on this menu, for the stores in scope —
   PL-6 pre-fills the 관리 담당자 phone from it. No 직원 정보 관리 permission is required.
-- **Validation runs outside the write transaction.** A store closed, or a manager retired, between
-  the check and the `UPDATE` is not caught; the window is one request long and was left as is.
+- **Code and manager validation runs outside the write transaction.** A 분류 set 미사용, or a manager
+  retired, between the check and the `UPDATE` is not caught; the window is one request long and was
+  left as is (deletion and closing are re-checked, above).
 
 # Not yet
 
@@ -124,5 +139,7 @@ actions (PM000001 already had them). Other BP role groups get nothing until thei
   store deletion should be blocked by facilities or mark them deleted is a policy question not yet
   asked.
 - **1팀 ERD**: the tables are not in front's `docs/erd/team1` generator yet; the migration came first.
-- **Names**: `facility` and its columns are not yet in the shared naming glossary
-  ([Naming conventions](/conventions/naming.md) is a 기획 세션 source edited in place).
+- **Names**: the rows are in [Naming conventions](/conventions/naming.md) and its source
+  `docs/raw/2026-09-30-네이밍-규칙.md` here only; the front and staff copies of that file still need
+  the same 「고침」 line. `sales_representative_*` is spelled out (no `rep`); `is_vat_included` keeps
+  `vat` by the user's choice, pending the 기획 세션.
