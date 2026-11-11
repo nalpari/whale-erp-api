@@ -3,7 +3,7 @@
   "area": "시스템관리",
   "screens": [
     {
-      "id": "SCR-ADM-046",
+      "id": "SCR-ADM-047",
       "name": "플랫폼 관리자 관리",
       "menuCode": "MN000213",
       "route": "/platform-admins",
@@ -11,7 +11,7 @@
         "file": "system/admins.html"
       },
       "images": [
-        "SCR-ADM-046.jpg"
+        "SCR-ADM-047.jpg"
       ],
       "rows": [
         {
@@ -43,7 +43,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-047",
+      "id": "SCR-ADM-048",
       "name": "플랫폼 권한 관리",
       "menuCode": "MN000214",
       "route": "/platform-role-groups",
@@ -51,7 +51,7 @@
         "file": "system/roles-master.html"
       },
       "images": [
-        "SCR-ADM-047.jpg"
+        "SCR-ADM-048.jpg"
       ],
       "rows": [
         {
@@ -87,7 +87,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-048",
+      "id": "SCR-ADM-049",
       "name": "플랫폼 메뉴 관리",
       "menuCode": "MN000215",
       "route": "/platform-menus",
@@ -95,7 +95,7 @@
         "file": "system/menus-master.html"
       },
       "images": [
-        "SCR-ADM-048.jpg"
+        "SCR-ADM-049.jpg"
       ],
       "rows": [
         {
@@ -125,7 +125,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-049",
+      "id": "SCR-ADM-050",
       "name": "플랫폼 공통코드 관리",
       "menuCode": "MN000216",
       "route": "/code-groups",
@@ -133,7 +133,7 @@
         "file": "system/codes.html"
       },
       "images": [
-        "SCR-ADM-049.jpg"
+        "SCR-ADM-050.jpg"
       ],
       "rows": [
         {
@@ -163,7 +163,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-050",
+      "id": "SCR-ADM-051",
       "name": "플랫폼 휴일 관리",
       "menuCode": "MN000217",
       "route": "/public-holidays",
@@ -171,7 +171,7 @@
         "file": "system/holidays.html"
       },
       "images": [
-        "SCR-ADM-050.jpg"
+        "SCR-ADM-051.jpg"
       ],
       "rows": [
         {

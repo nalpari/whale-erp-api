@@ -3,7 +3,7 @@
   "area": "알림 템플릿 관리(메뉴 밖)",
   "screens": [
     {
-      "id": "SCR-ADM-059",
+      "id": "SCR-ADM-060",
       "name": "알림 템플릿 관리",
       "menu": "메뉴 밖 > 플랫폼 관리",
       "route": "/platform/notification-templates",
@@ -11,7 +11,7 @@
         "file": "notify/templates.html"
       },
       "images": [
-        "SCR-ADM-059.jpg"
+        "SCR-ADM-060.jpg"
       ],
       "rows": [
         {
@@ -57,7 +57,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-060",
+      "id": "SCR-ADM-061",
       "name": "알림 템플릿 등록",
       "menu": "메뉴 밖 > 플랫폼 관리",
       "route": "/platform/notification-templates/new",
@@ -65,7 +65,7 @@
         "file": "notify/templates-new.html"
       },
       "images": [
-        "SCR-ADM-060.jpg"
+        "SCR-ADM-061.jpg"
       ],
       "rows": [
         {
@@ -117,7 +117,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-061",
+      "id": "SCR-ADM-062",
       "name": "알림 템플릿 수정",
       "menu": "메뉴 밖 > 플랫폼 관리",
       "route": "/platform/notification-templates/[id]",
@@ -125,7 +125,7 @@
         "file": "notify/templates-edit.html"
       },
       "images": [
-        "SCR-ADM-061.jpg"
+        "SCR-ADM-062.jpg"
       ],
       "rows": [
         {

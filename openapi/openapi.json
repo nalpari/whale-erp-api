@@ -26259,7 +26259,7 @@
           },
           "baseHours": {
             "type": "number",
-            "description": "월 기본시간 — 시간, 30분 단위"
+            "description": "월 기본시간 — 시간, 30분 단위, 1 이상. 정직원은 필수다(임시저장은 비워도 된다). 보낸 값은 고용 형태와 상관없이 1 이상이어야 한다"
           },
           "monthlyOvertimeHours": {
             "type": "number",

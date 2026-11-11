@@ -1,15 +1,29 @@
 {
   "admin": {
     "repo": "whale-erp-front",
-    "ref": "origin/main",
+    "ref": "51b51974",
     "commit": "51b51974515a56a1973a264a447741429274e426",
-    "committedAt": "2026-11-10T14:53:10+09:00"
+    "committedAt": "2026-11-10T14:53:10+09:00",
+    "overlay": {
+      "commit": "127fbcf21dc381a9f097b4133b2519ff4b4f9a27",
+      "committedAt": "2026-11-11T11:00:52+09:00",
+      "files": [
+        "src/pages/staff/attendance-period.mjs",
+        "src/pages/staff/export.mjs",
+        "src/pages/staff/payrolls-detail.mjs",
+        "src/staff-sections.mjs",
+        "staff/attendance-period.html",
+        "staff/attendance.html",
+        "staff/export.html",
+        "staff/payrolls-detail.html"
+      ]
+    }
   },
   "staff": {
     "repo": "whale-erp-staff",
-    "ref": "origin/main",
-    "commit": "1d560ba52631db01e9a3fb20191fae53de86ff8c",
-    "committedAt": "2026-11-10T10:07:20+09:00"
+    "ref": "25b25eb5",
+    "commit": "25b25eb54b4bb7ddd86a9b39000d08132961e73d",
+    "committedAt": "2026-11-11T10:58:19+09:00"
   },
   "viewport": {
     "admin": [
