@@ -103,6 +103,7 @@ describe('HomeService', () => {
                   storeId: r.storeId,
                   name: r.name,
                   storeTypeCode: r.storeTypeCode,
+                  storeStatusCode: r.status,
                 })),
             ),
         ),
@@ -172,7 +173,7 @@ describe('HomeService', () => {
       });
     });
 
-    it('폐점 점포는 모든 집계에서 빠진다 — 카드 · 표 · 처리 대기 · 경고 밴드가 같은 점포를 센다', async () => {
+    it('폐점 점포는 모든 집계에서 빠진다 — 카드 · 표 · 확인 필요가 같은 점포를 센다', async () => {
       storeRows[1].status = 'CLOSED';
       await service.summary(9, undefined, NOW);
       await service.pending(9, undefined, NOW);
@@ -211,7 +212,6 @@ describe('HomeService', () => {
       await expect(service.pending(9, undefined, NOW)).resolves.toEqual({
         asOf: NOW,
         platform: true,
-        renewals: null,
         items: [],
       });
       expect(scope.getManageableStores).not.toHaveBeenCalled();
@@ -247,9 +247,35 @@ describe('HomeService', () => {
       expect(res.storeTable.items.map((r) => r.staffCount)).toEqual([5, 4]);
     });
 
-    it('운영 점포 — 폐점이 아닌 점포를 직영 · 가맹으로', async () => {
+    it('운영 점포 — 운영 상태 점포를 직영 · 가맹으로, 미운영은 수만(운영 정책 HOM-10)', async () => {
       const res = await service.summary(9, undefined, NOW);
-      expect(res.cards!.stores).toEqual({ total: 2, direct: 1, franchise: 1 });
+      expect(res.cards!.stores).toEqual({
+        total: 2,
+        direct: 1,
+        franchise: 1,
+        notOperating: 0,
+      });
+    });
+
+    it('미운영 점포는 카드 · 표 집계에서 빠지고 수만 센다 — 확인 필요(pending)는 미운영 건까지 센다(HOM-06 · HOM-07)', async () => {
+      storeRows[1].status = 'NOT_OPERATING';
+      const res = await service.summary(9, undefined, NOW);
+      expect(res.cards!.stores).toEqual({
+        total: 1,
+        direct: 1,
+        franchise: 0,
+        notOperating: 1,
+      });
+      expect(res.storeTable.items.map((r) => r.storeId)).toEqual([1]);
+      const only1 = { storeId: { in: [1] } };
+      expect(firstArg(prisma.staffMember.groupBy).where).toMatchObject(only1);
+      for (const call of prisma.todo.findMany.mock.calls)
+        expect((call as [Record<string, any>])[0].where).toMatchObject(only1);
+      prisma.todo.findMany.mockClear();
+      await service.pending(9, undefined, NOW);
+      expect(firstArg(prisma.todo.findMany).where).toMatchObject({
+        storeId: { in: [1, 2] },
+      });
     });
 
     /** 오늘 근무스케줄 한 줄(직원 레코드의 계정 동의를 함께 읽는다) */
@@ -329,6 +355,13 @@ describe('HomeService', () => {
       });
       const store1 = res.storeTable.items.find((r) => r.storeId === 1)!;
       expect([store1.checkedInCount, store1.scheduledCount]).toEqual([1, 2]);
+      // 점포별 미출근을 더하면 카드와 같다
+      expect(
+        res.storeTable.items.map((r) => [r.storeId, r.notCheckedInCount]),
+      ).toEqual([
+        [1, 0],
+        [2, 2],
+      ]);
     });
 
     it('오늘 출근 — 본사 역할에게 출근 · 미출근은 동의한 직원만, 근무 예정은 그대로 센다(운영 정책 ATT-30 v217)', async () => {
@@ -369,7 +402,21 @@ describe('HomeService', () => {
       expect(res.cards!.myInquiries).toEqual({ waiting: 3, answered: 4 });
     });
 
-    it('미조치 — 서명 대기 + 수정 요청 + 소속 확인 거절 + 긴급 TO-DO 미완료(배정 그룹은 한 줄). 발송 대기는 미체결에만', async () => {
+    it('점포별 확인 필요 — 갱신 예정 + 서명 대기 + 수정 요청 + 소속 확인 거절 + 긴급 TO-DO(배정 그룹은 한 줄). 발송 대기는 미체결에만(HOM-03)', async () => {
+      // 갱신 예정 — 종료 30일 안 · 새 계약 없음
+      prisma.contract.findMany.mockResolvedValue([
+        {
+          contractId: 5,
+          storeId: 1,
+          endDate: date('2026-11-20'),
+          staffMember: {
+            name: '서지안',
+            retiredDate: null,
+            account: null,
+            contracts: [],
+          },
+        },
+      ]);
       prisma.contract.groupBy.mockResolvedValue([
         { storeId: 1, status: 'PENDING_SEND', _count: { _all: 5 } },
         { storeId: 1, status: 'PENDING_SIGNATURE', _count: { _all: 2 } },
@@ -388,7 +435,7 @@ describe('HomeService', () => {
       const byId = new Map(res.storeTable.items.map((r) => [r.storeId, r]));
       expect(byId.get(1)).toMatchObject({
         unsignedContractCount: 7,
-        pendingActionCount: 2,
+        pendingActionCount: 2 + 1,
       });
       expect(byId.get(2)).toMatchObject({
         unsignedContractCount: 1,
@@ -396,7 +443,7 @@ describe('HomeService', () => {
       });
     });
 
-    it('표 — 미조치 많은 순, 같으면 점포명. 일곱 곳과 전체 수', async () => {
+    it('표 — 확인 필요 많은 순, 같으면 점포명. 운영 점포 모두(HOM-06)', async () => {
       const ids = [1, 2, 3, 4, 5, 6, 7, 8, 9];
       scope.getManageableStores.mockResolvedValue({
         roleTypeCode: 'BM',
@@ -408,6 +455,7 @@ describe('HomeService', () => {
           storeId,
           name: names[i],
           storeTypeCode: 'DIRECT',
+          storeStatusCode: 'OPERATING',
         })),
       );
       prisma.contract.groupBy.mockResolvedValue([
@@ -424,7 +472,37 @@ describe('HomeService', () => {
         '다',
         '마',
         '바',
+        '사',
+        '아',
       ]);
+    });
+
+    it('오늘 TO-DO — 수행 날짜가 오늘인 것. 배정 그룹은 한 건이고 모두 완료여야 완료다(HOM-10)', async () => {
+      // 첫 호출은 긴급 TO-DO(없음), 둘째가 오늘 TO-DO
+      prisma.todo.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
+        { todoId: 1, assignmentGroupId: 7, storeId: 1, status: 'DONE' },
+        { todoId: 2, assignmentGroupId: 7, storeId: 1, status: 'PENDING' },
+        { todoId: 3, assignmentGroupId: 8, storeId: 1, status: 'DONE' },
+        { todoId: 4, assignmentGroupId: 8, storeId: 1, status: 'DONE' },
+        {
+          todoId: 5,
+          assignmentGroupId: null,
+          storeId: 2,
+          status: 'IN_PROGRESS',
+        },
+      ]);
+      const res = await service.summary(9, undefined, NOW);
+      expect(
+        (prisma.todo.findMany.mock.calls[1] as [Record<string, any>])[0].where,
+      ).toEqual({
+        storeId: { in: [1, 2] },
+        isDeleted: false,
+        dueDate: TODAY,
+      });
+      expect(res.cards!.todayTodo).toEqual({ done: 1, total: 3 });
+      const byId = new Map(res.storeTable.items.map((r) => [r.storeId, r]));
+      expect(byId.get(1)!.todayTodo).toEqual({ done: 1, total: 2 });
+      expect(byId.get(2)!.todayTodo).toEqual({ done: 0, total: 1 });
     });
 
     it('권한이 없는 영역은 null, 미조치에서도 뺀다', async () => {
@@ -445,29 +523,31 @@ describe('HomeService', () => {
         todayAttendance: null,
         myInquiries: null,
       });
+      expect(res.cards!.todayTodo).not.toBeNull();
       expect(res.cards!.staff).not.toBeNull();
       expect(res.storeTable.items[0]).toMatchObject({
         storeId: 1,
         unsignedContractCount: null,
         checkedInCount: null,
         scheduledCount: null,
+        notCheckedInCount: null,
         pendingActionCount: 1,
       });
       expect(prisma.contract.groupBy).not.toHaveBeenCalled();
+      expect(prisma.contract.findMany).not.toHaveBeenCalled();
       expect(prisma.workSchedule.findMany).not.toHaveBeenCalled();
       expect(prisma.inquiry.groupBy).not.toHaveBeenCalled();
     });
   });
 
   describe('pending', () => {
-    it('경고 밴드 — 종료일이 한국 날짜 오늘부터 7일 안인 갱신 예정(하루 배치와 같은 대상 규칙)', async () => {
+    it('계약 갱신 예정 — 종료일이 한국 날짜 오늘부터 30일 안(하루 배치와 같은 대상 규칙), 가장 이른 종료까지 D-N(HOM-04)', async () => {
       prisma.contract.findMany.mockResolvedValueOnce([
         {
           contractId: 5,
           storeId: 1,
           endDate: date('2026-11-01'),
           staffMember: {
-            staffMemberId: 50,
             name: '서지안',
             retiredDate: null,
             account: null,
@@ -480,7 +560,6 @@ describe('HomeService', () => {
           storeId: 1,
           endDate: date('2026-11-02'),
           staffMember: {
-            staffMemberId: 60,
             name: '문태경',
             retiredDate: null,
             account: null,
@@ -495,27 +574,18 @@ describe('HomeService', () => {
         AND: [
           {
             status: 'SIGNED',
-            endDate: { gte: TODAY, lte: date('2026-11-03') },
+            endDate: { gte: TODAY, lte: date('2026-11-26') },
             staffMember: { employmentStatus: 'EMPLOYED' },
           },
           { storeId: { in: [1, 2] } },
         ],
       });
-      expect(res.renewals).toEqual([
-        {
-          contractId: 5,
-          staffMemberId: 50,
-          name: '서지안',
-          isMasked: false,
-          storeId: 1,
-          storeName: '성수점',
-          endDate: '2026-11-01',
-        },
-      ]);
       expect(res.items[0]).toMatchObject({
         type: 'CONTRACT_RENEWAL',
         count: 1,
+        firstName: '서지안',
         waitingDays: null,
+        dueInDays: 5,
         filter: { storeIds: [1], status: ['SIGNED'] },
       });
     });
@@ -565,6 +635,7 @@ describe('HomeService', () => {
         isFirstNameMasked: false,
         othersCount: 1,
         waitingDays: 6,
+        dueInDays: null,
         filter: { storeIds: [1], status: ['PENDING_SIGNATURE'] },
       });
       expect(res.items[1]).toMatchObject({
@@ -593,7 +664,7 @@ describe('HomeService', () => {
       );
     });
 
-    it('본사 역할 — summary 의 미체결 · 미조치 · 정직원/파트 나눔도 같은 조건이고, 재직 직원 총수는 그대로 센다(운영 정책 ATT-30)', async () => {
+    it('본사 역할 — summary 의 미체결 · 점포별 확인 필요 · 정직원/파트 나눔도 같은 조건이고, 재직 직원 총수는 그대로 센다(운영 정책 ATT-30)', async () => {
       scope.getManageableStores.mockResolvedValue({
         roleTypeCode: 'BA',
         stores: [
@@ -641,12 +712,13 @@ describe('HomeService', () => {
           isFirstNameMasked: false,
           othersCount: 0,
           waitingDays: 7,
+          dueInDays: null,
           filter: { storeIds: [], status: ['ANSWERED'] },
         },
       ]);
     });
 
-    it('권한이 없는 영역은 처리 대기에서 빠지고 경고 밴드는 null', async () => {
+    it('권한이 없는 영역은 확인 필요에서 빠진다', async () => {
       denied = new Set(['/contracts', '/staff-members', '/todos']);
       prisma.todo.findMany.mockResolvedValue([
         { todoId: 1, assignmentGroupId: null, storeId: 1, title: 'a' },
@@ -655,7 +727,6 @@ describe('HomeService', () => {
       expect(res).toEqual({
         asOf: NOW,
         platform: false,
-        renewals: null,
         items: [],
       });
       expect(prisma.contract.findMany).not.toHaveBeenCalled();
