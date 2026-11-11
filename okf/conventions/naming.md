@@ -4,13 +4,13 @@ title: Naming conventions
 description: One Korean term maps to one English identifier across the three repositories; per-layer casing follows from that.
 tags: [naming, conventions, database, api, glossary]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-11-03T08:51:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-11T07:30:00Z }
 verified: { by: human:jaeyoung, at: 2026-10-02T05:18:35Z }
 sources:
   - id: naming-raw
     resource: ../../docs/raw/2026-09-30-네이밍-규칙.md
-    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-23 고침)
-    last_modified: 2026-10-23T04:20:12Z
+    title: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-11-11 고침)
+    last_modified: 2026-11-11T07:30:00Z
 ---
 
 # Status
@@ -425,6 +425,20 @@ match another.
 | 점포 대표 이미지 | `store_image_file` | |
 | 점포 사업자정보 | `store_business_profile` | 테이블 이름은 `info` 로 줄이지 않는다. 컬럼은 BP 사업자정보와 같은 `biz_` 접두 |
 | 점포 변경 이력 | `store_change_history` | 보존 5년 |
+| 시설물·장비 | `facility` · 테이블 `facilities` | 점포 하나에 속한다(`store_id`, 등록 뒤 변경 불가). 기본 정보와 관리 정보(제품 · 구매 · 기한 · 관리 · A/S)를 한 행에 둔다. 논리 삭제 |
+| 시설물 운영상태 | `facility_status_code` | 공통코드 `FACILITY_STATUS`(플랫폼고정: `OPERATING` 운영 · `STORED` 보관 · `DISPOSED` 폐기) |
+| 시설물 그룹 · 분류 | `facility_group_code` · `facility_category_code` | 그룹은 공통코드 그룹 `STORE_FACILITY`(점포 시설물) · `STORE_EQUIPMENT`(점포 장비), 분류는 고른 그룹의 상세 코드(플랫폼제공) |
+| 시설물 점검 주기 | `inspection_cycle_code` | 공통코드 `INSPECTION_CYCLE`(플랫폼제공: `DAILY` 매일 · `WEEKLY` 매주 · `MONTHLY` 매월 · `AS_NEEDED` 수시). 제안 `FACILITY_INSPECTION_CYCLE` 은 25자라 그룹 코드 20자 제약에 걸린다 |
+| 관리 담당자 | `manager_staff_member_id` · `manager_phone` | 그 점포의 재직 직원. 전화번호는 담당자 없이도 둘 수 있다 |
+| 구매처 · 영업사원 | `vendor_name` · `sales_representative_name` | 전화번호는 `_phone`. `rep` 으로 줄이지 않는다 |
+| 단가 · 수량 · 총금액 · 부가세 포함 | `unit_price_amount` · `quantity` · `total_amount` · `is_vat_included` | 총금액 = 단가 × 수량(서버 계산) |
+| 구매일 · 설치일 · 사용 유효기한 · 품질 보증기한 | `purchase_date` · `installation_date` · `usage_expiry_date` · `warranty_expiry_date` | 설치일은 구매일보다 앞서지 않는다 |
+| A/S센터 | `service_center_` 접두 | `service_center_zip_code` · `service_center_address` · `service_center_address_detail` · `service_center_phone` |
+| 시설물 문서 · 문서 종류 | `facility_document` · `document_kind` | enum `facility_document_kind`(`USER_MANUAL` 사용 매뉴얼 · `PRECAUTION` 주의사항 · `WARRANTY` 제품 보증서), 종류마다 1개 |
+
+`is_vat_included` keeps `vat`, which is outside the closed abbreviation list above — it is a
+common abbreviation and the user chose to keep it (2026-11-11); whether to add it to the list is
+for the 기획 세션 to confirm.
 
 ## 설정 · 시스템관리
 
@@ -461,4 +475,4 @@ Because the file keeps its name, a concept that has not been re-ingested looks
 current from the file listing alone. Compare the source's 「고침」 lines with
 `okf/log.md` rather than trusting that the filename is the latest.
 
-[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-10-15 고침)
+[^naming-raw]: 네이밍 규칙 원자료 (3팀 기획 세션, 2026-11-11 고침)

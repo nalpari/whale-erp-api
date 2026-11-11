@@ -32,6 +32,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { StaffMembersModule } from './staff-members/staff-members.module';
 import { StaffSignupModule } from './staff-signup/staff-signup.module';
 import { StoresModule } from './stores/stores.module';
+import { FacilitiesModule } from './facilities/facilities.module';
 import { TodosModule } from './todos/todos.module';
 import { WorkSchedulesModule } from './work-schedules/work-schedules.module';
 import { AttendanceModule } from './attendance/attendance.module';
@@ -70,6 +71,7 @@ import { HomeModule } from './home/home.module';
     PayslipsModule,
     ContractsModule,
     StoresModule,
+    FacilitiesModule,
     PostsModule,
     NotificationsModule,
     NotificationTemplatesModule,
