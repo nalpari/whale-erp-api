@@ -2647,6 +2647,7 @@ model Store {
   adminMappings     AdminStoreMapping[]    @relation("AdminStoreMappingsStore")
   holidayMappings   HolidayStoreMapping[]  @relation("HolidayStoreMappingsStore")
   holidayExclusions HolidayExcludedStore[] @relation("HolidayExcludedStoresStore")
+  facilities        Facility[]             @relation("FacilitiesStore")
 
   @@unique([storeCode], map: "stores_store_code_key")
   @@index([bpCodeId], map: "stores_bp_code_id_idx")
@@ -3268,4 +3269,125 @@ model ExcelDownloadLog {
   @@index([requestedBy, menuId, requestedAt], map: "excel_download_logs_requested_by_menu_id_requested_at_idx")
   @@index([status, requestedAt], map: "excel_download_logs_status_requested_at_idx")
   @@map("excel_download_logs")
+}
+
+/// 시설물·장비 — 20261111153316_team1_facilities. 손으로 맞춘 모델이다(1팀 ERD 생성기에 아직 없다).
+/// CHECK 14 · 외래키 manager_staff_member_id(3팀 staff_members) · created_by · updated_by 는 마이그레이션 SQL 에만 있다 —
+/// 관리자 · 직원은 정수 칸으로만 둔다(참조되는 모델에 역관계 칸을 두지 않으려고).
+model Facility {
+  /// 시설물·장비 ID
+  facilityId                  Int                @id @default(autoincrement()) @map("facility_id")
+  /// 점포 — stores FK. 등록 뒤 바꾸지 않는다(정책서 PL-1)
+  storeId                     Int                @map("store_id")
+  /// 시설물/장비명 — 1~100자
+  name                        String
+  /// 운영상태 — 공통코드 FACILITY_STATUS(플랫폼고정: 운영 · 보관 · 폐기). 운영만 수리 · 점검 대상
+  facilityStatusCode          String             @map("facility_status_code")
+  /// 그룹 — 공통코드 그룹 STORE_FACILITY(점포 시설물) · STORE_EQUIPMENT(점포 장비)
+  facilityGroupCode           String             @map("facility_group_code")
+  /// 분류 — 그룹(facility_group_code)의 상세 코드. 점포 BP 의 행
+  facilityCategoryCode        String             @map("facility_category_code")
+  /// 메모 — 200자
+  memo                        String?
+  /// 브랜드
+  brand                       String?
+  /// 제조사
+  manufacturer                String?
+  /// Serial number
+  serialNumber                String?            @map("serial_number")
+  /// 설치 위치
+  installationLocation        String?            @map("installation_location")
+  /// 구매처
+  vendorName                  String?            @map("vendor_name")
+  /// 구매처 전화번호 — 숫자 9~12자리
+  vendorPhone                 String?            @map("vendor_phone")
+  /// 영업사원
+  salesRepName                String?            @map("sales_rep_name")
+  /// 영업사원 전화번호 — 숫자 9~12자리
+  salesRepPhone               String?            @map("sales_rep_phone")
+  /// 단가 — 원, 숫자 10자리까지
+  unitPriceAmount             Decimal?           @map("unit_price_amount") @db.Decimal(10, 0)
+  /// 수량 — 1~9,999, 기본 1
+  quantity                    Int                @default(1)
+  /// 총금액 — 단가 × 수량, 서버가 계산. 단가가 없으면 비움
+  totalAmount                 Decimal?           @map("total_amount") @db.Decimal(14, 0)
+  /// 부가세 포함 — 단가 · 총금액이 부가세 포함 금액인가. 기본 포함
+  isVatIncluded               Boolean            @default(true) @map("is_vat_included")
+  /// 구매일
+  purchaseDate                DateTime?          @map("purchase_date") @db.Date
+  /// 설치일 — 구매일보다 앞서지 않는다
+  installationDate            DateTime?          @map("installation_date") @db.Date
+  /// 사용 유효기한
+  usageExpiryDate             DateTime?          @map("usage_expiry_date") @db.Date
+  /// 품질 보증기한
+  warrantyExpiryDate          DateTime?          @map("warranty_expiry_date") @db.Date
+  /// 관리 담당자 — staff_members FK. 고를 때 그 점포의 재직 직원
+  managerStaffMemberId        Int?               @map("manager_staff_member_id")
+  /// 관리 담당자 전화번호 — 숫자 9~12자리. 담당자 휴대폰으로 미리 채우고 고칠 수 있다
+  managerPhone                String?            @map("manager_phone")
+  /// 점검 주기 — 공통코드 INSPECTION_CYCLE(플랫폼제공). 점포 BP 의 행
+  inspectionCycleCode         String?            @map("inspection_cycle_code")
+  /// 점검 비고 — 200자
+  inspectionNote              String?            @map("inspection_note")
+  /// A/S센터 우편번호 — 5자리, 주소 검색으로만 채움
+  serviceCenterZipCode        String?            @map("service_center_zip_code")
+  /// A/S센터 기본주소(도로명)
+  serviceCenterAddress        String?            @map("service_center_address")
+  /// A/S센터 상세주소 — 100자
+  serviceCenterAddressDetail  String?            @map("service_center_address_detail")
+  /// A/S센터 전화번호 — 숫자 9~12자리
+  serviceCenterPhone          String?            @map("service_center_phone")
+  /// 삭제 여부 — 수리 이력 · 점검 결과가 있으면 지우지 않고 폐기로 바꾼다
+  isDeleted                   Boolean            @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt                   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 등록자 — admin_accounts FK
+  createdBy                   Int                @map("created_by")
+  /// 최근 수정 일시
+  updatedAt                   DateTime           @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 수정자 — admin_accounts FK
+  updatedBy                   Int?               @map("updated_by")
+
+  store     Store              @relation("FacilitiesStore", fields: [storeId], references: [storeId], onDelete: Restrict, onUpdate: NoAction, map: "facilities_store_id_fkey")
+  documents FacilityDocument[] @relation("FacilityDocumentsFacility")
+
+  @@index([storeId], map: "facilities_store_id_idx")
+  @@map("facilities")
+}
+
+/// 시설물·장비 문서 — 종류마다 지우지 않은 행 하나(부분 고유 인덱스, 마이그레이션 SQL 에만 있다).
+model FacilityDocument {
+  /// 문서 ID
+  facilityDocumentId Int                  @id @default(autoincrement()) @map("facility_document_id")
+  /// 시설물·장비 — facilities FK
+  facilityId         Int                  @map("facility_id")
+  /// 문서 종류 — 사용 매뉴얼 · 주의사항 · 제품 보증서
+  documentKind       FacilityDocumentKind @map("document_kind")
+  /// 파일 이름
+  fileName           String               @map("file_name")
+  /// 파일 종류 — JPG · PNG · PDF, 파일 내용으로 확인
+  fileType           AttachmentFileType   @map("file_type")
+  /// 파일 크기 — 10MB 이하
+  sizeBytes          Int                  @map("size_bytes")
+  /// 저장 위치 — 공개 주소 아님 — 저장소 키(facilities/{facility_id}/…)
+  storageKey         String               @map("storage_key")
+  /// 삭제 여부 — 바꾸거나 빼면 지움 표시, 파일은 남긴다
+  isDeleted          Boolean              @default(false) @map("is_deleted")
+  /// 등록 일시
+  createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// 올린 관리자 — admin_accounts FK
+  createdBy          Int                  @map("created_by")
+
+  facility Facility @relation("FacilityDocumentsFacility", fields: [facilityId], references: [facilityId], onDelete: Restrict, onUpdate: NoAction, map: "facility_documents_facility_id_fkey")
+
+  @@map("facility_documents")
+}
+
+/// 사용 매뉴얼 · 주의사항 · 제품 보증서
+enum FacilityDocumentKind {
+  USER_MANUAL
+  PRECAUTION
+  WARRANTY
+
+  @@map("facility_document_kind")
 }

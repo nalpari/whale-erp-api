@@ -353,8 +353,20 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
         { value: 'DIRECT', label: '직영점포', order: 1 },
         { value: 'FRANCHISE', label: '가맹점포', order: 2 },
       ]);
-      // 초기 데이터의 그룹(1팀 12 · 3팀 5)과 최저임금(MINIMUM_WAGE, WHALEERP-595).
-      expect(Object.keys(codes)).toHaveLength(18);
+      // 초기 데이터의 그룹(1팀 12 · 3팀 5)과 최저임금(MINIMUM_WAGE, WHALEERP-595), 시설물 4(20261111153316).
+      expect(Object.keys(codes)).toHaveLength(22);
+      // 시설물 그룹은 지금 있는 그룹 뒤에 붙는다 — 먼저 보이지 않는다.
+      expect(Object.keys(codes).slice(-4)).toEqual([
+        'FACILITY_STATUS',
+        'STORE_FACILITY',
+        'STORE_EQUIPMENT',
+        'INSPECTION_CYCLE',
+      ]);
+      expect(codes.FACILITY_STATUS).toEqual([
+        { value: 'OPERATING', label: '운영', order: 1 },
+        { value: 'STORED', label: '보관', order: 2 },
+        { value: 'DISPOSED', label: '폐기', order: 3 },
+      ]);
       expect(codes.MINIMUM_WAGE).toEqual([
         { value: 'HOURLY', label: '10320', order: 1 },
       ]);

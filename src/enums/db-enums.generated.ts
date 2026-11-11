@@ -100,6 +100,11 @@ export const DB_ENUMS: EnumSource = {
     ['SUCCEEDED', '완료'],
     ['FAILED', '실패'],
   ],
+  FacilityDocumentKind: [
+    ['USER_MANUAL', '사용 매뉴얼'],
+    ['PRECAUTION', '주의사항'],
+    ['WARRANTY', '제품 보증서'],
+  ],
   Gender: [
     ['MALE', '남'],
     ['FEMALE', '여'],
