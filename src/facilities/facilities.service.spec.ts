@@ -21,7 +21,10 @@ const bmAdmin = {
   bpCode: { isPlatform: false, bpCode: 'BP000007' },
 };
 
-/** 범위 안 시설물 한 행(상세 조회 결과 모양) */
+/** 수정 화면이 상세에서 받은 updatedAt — 아래 행의 updatedAt 과 같다 */
+const UPDATED_AT = '2026-11-11T01:02:03.004Z';
+
+/** 범위 안 시설물 한 행(상세 조회 결과 모양) — 가맹 점포 */
 const facilityRow = (over: Record<string, unknown> = {}) => ({
   facilityId: 11,
   storeId: 3,
@@ -31,9 +34,12 @@ const facilityRow = (over: Record<string, unknown> = {}) => ({
   facilityCategoryCode: 'ICE_MAKER',
   inspectionCycleCode: null,
   managerStaffMemberId: null,
+  managerPhone: null,
+  updatedAt: new Date(UPDATED_AT),
   store: {
     storeCode: 'ST000003',
     name: '성수점',
+    storeTypeCode: 'FRANCHISE',
     storeStatusCode: 'OPERATING',
   },
   documents: [],
@@ -64,7 +70,7 @@ describe('FacilitiesService', () => {
     facility: { findFirst: jest.Mock };
     facilityDocument: { count: jest.Mock };
     codeItem: { count: jest.Mock };
-    staffMember: { count: jest.Mock };
+    staffMember: { count: jest.Mock; findUnique: jest.Mock };
     $transaction: jest.Mock;
   };
 
@@ -121,7 +127,17 @@ describe('FacilitiesService', () => {
       facility: { findFirst: jest.fn().mockResolvedValue(facilityRow()) },
       facilityDocument: { count: jest.fn().mockResolvedValue(0) },
       codeItem: { count: jest.fn().mockResolvedValue(1) },
-      staffMember: { count: jest.fn().mockResolvedValue(1) },
+      staffMember: {
+        count: jest.fn().mockResolvedValue(1),
+        // 담당자 표시 — 본사 제공 동의한 직원(가리지 않음)
+        findUnique: jest.fn().mockResolvedValue({
+          name: '정하윤',
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: 'v1.0',
+          },
+        }),
+      },
       $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
     };
     await build();
@@ -164,29 +180,53 @@ describe('FacilitiesService', () => {
       facilityCategoryCode: 'ICE_MAKER',
       quantity: 1,
       isVatIncluded: true,
-      updatedAt: '2026-11-11T01:02:03.004Z',
+      updatedAt: UPDATED_AT,
       ...over,
     });
 
-    it('지금 분류와 같으면 미사용이어도 사용 여부를 묻지 않고 저장한다(PL-3)', async () => {
+    it('지금 운영상태 · 분류와 같으면 미사용이어도 사용 여부를 묻지 않고 저장한다(PL-2 · PL-3)', async () => {
+      prisma.codeItem.count.mockResolvedValue(0); // 둘 다 미사용이 됐다
       await service.update(9, BP, 11, form());
-      // 운영상태 하나만 물었다 — 분류는 지금 값이라 건너뛴다.
-      expect(prisma.codeItem.count).toHaveBeenCalledTimes(1);
+      expect(prisma.codeItem.count).not.toHaveBeenCalled();
+      expect(tx.facility.updateMany).toHaveBeenCalled();
+    });
+
+    it('다른 운영상태로 바꾸면 사용 중인 플랫폼 코드여야 한다', async () => {
+      prisma.codeItem.count.mockResolvedValue(0);
+      await expect(
+        service.update(9, BP, 11, form({ facilityStatusCode: 'STORED' })),
+      ).rejects.toThrow('운영상태를 다시 선택해 주세요.');
       expect(prisma.codeItem.count).toHaveBeenCalledWith({
         where: expect.objectContaining({
           groupCode: 'FACILITY_STATUS',
+          itemCode: 'STORED',
+          bpCode: 'BP000000',
         }) as Record<string, unknown>,
       });
     });
 
+    it('받은 updatedAt 이 이미 지금과 다르면 검증 전에 409 — 「다시 선택해 주세요」 400 이 먼저 나가지 않는다', async () => {
+      prisma.codeItem.count.mockResolvedValue(0);
+      await expect(
+        service.update(
+          9,
+          BP,
+          11,
+          form({
+            facilityCategoryCode: 'GRINDER',
+            updatedAt: '2026-11-10T00:00:00.000Z',
+          }),
+        ),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.codeItem.count).not.toHaveBeenCalled();
+    });
+
     it('다른 분류로 바꾸면 그 BP 의 사용 중인 코드여야 한다', async () => {
-      prisma.codeItem.count
-        .mockResolvedValueOnce(1) // 운영상태
-        .mockResolvedValueOnce(0); // 분류
+      prisma.codeItem.count.mockResolvedValueOnce(0); // 분류(운영상태는 지금 값)
       await expect(
         service.update(9, BP, 11, form({ facilityCategoryCode: 'GRINDER' })),
       ).rejects.toThrow('쓸 수 없는 분류입니다. 다시 선택해 주세요.');
-      expect(prisma.codeItem.count).toHaveBeenNthCalledWith(2, {
+      expect(prisma.codeItem.count).toHaveBeenNthCalledWith(1, {
         where: expect.objectContaining({
           groupCode: 'STORE_EQUIPMENT',
           itemCode: 'GRINDER',
@@ -242,9 +282,44 @@ describe('FacilitiesService', () => {
       ).rejects.toThrow(
         '관리 담당자는 그 점포의 재직 직원만 고를 수 있습니다.',
       );
+      // 가입 완료 · 재직 · 그 점포, 그리고 본사 역할(BM) · 가맹 점포라 본사 제공 동의 조건까지
       expect(prisma.staffMember.count).toHaveBeenCalledWith({
-        where: { staffMemberId: 22, storeId: 3, employmentStatus: 'EMPLOYED' },
+        where: {
+          AND: [
+            expect.objectContaining({
+              storeId: 3,
+              employmentStatus: 'EMPLOYED',
+              joinStatus: 'JOINED',
+              account: expect.anything() as unknown,
+            }) as Record<string, unknown>,
+            { staffMemberId: 22 },
+          ],
+        },
       });
+    });
+
+    it('가려진 담당자(본사 · 미동의 가맹 직원)를 그대로 두면 화면이 비워 보낸 번호 대신 저장된 번호를 지킨다', async () => {
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({ managerStaffMemberId: 21, managerPhone: '01012345678' }),
+      );
+      prisma.staffMember.findUnique.mockResolvedValue({
+        name: '미동의',
+        account: { isHqSharingConsented: false, hqSharingConsentVersion: null },
+      });
+      await service.update(
+        9,
+        BP,
+        11,
+        form({ managerStaffMemberId: 21, managerPhone: null }),
+      );
+      expect(tx.facility.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            managerStaffMemberId: 21,
+            managerPhone: '01012345678',
+          }) as Record<string, unknown>,
+        }),
+      );
     });
 
     it('폐점 점포의 것은 409 — 검증 전에 막는다', async () => {
@@ -408,6 +483,86 @@ describe('FacilitiesService', () => {
       expect(d.documents).toEqual([
         expect.objectContaining({ downloadUrl: null, thumbnailUrl: null }),
       ]);
+    });
+
+    const detailWithManager = async (consented: boolean, role = 'BM') => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        ...bmAdmin,
+        roleTypeCode: role,
+      });
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({
+          managerStaffMemberId: 21,
+          managerPhone: '01012345678',
+          createdBy: 5,
+          updatedBy: null,
+        }),
+      );
+      prisma.staffMember.findUnique.mockResolvedValue({
+        name: '가맹 직원',
+        account: {
+          isHqSharingConsented: consented,
+          hqSharingConsentVersion: consented ? 'v1.0' : null,
+        },
+      });
+      Object.assign(prisma, {
+        codeGroup: { findMany: jest.fn().mockResolvedValue([]) },
+      });
+      Object.assign(prisma.codeItem, {
+        findMany: jest.fn().mockResolvedValue([]),
+      });
+      return service.detail(9, BP, 11);
+    };
+
+    it('본사 역할에게 가맹 점포의 미동의 담당자는 이름 · 번호를 가린다(ATT-30)', async () => {
+      const d = await detailWithManager(false);
+      expect(d).toMatchObject({
+        manager: { staffMemberId: 21, name: null },
+        managerPhone: null,
+        isManagerHidden: true,
+      });
+    });
+
+    it('동의한 담당자 · 가맹 역할에게는 그대로 보인다', async () => {
+      expect(await detailWithManager(true)).toMatchObject({
+        manager: { staffMemberId: 21, name: '가맹 직원' },
+        managerPhone: '01012345678',
+        isManagerHidden: false,
+      });
+      expect(await detailWithManager(false, 'FM')).toMatchObject({
+        manager: { name: '가맹 직원' },
+        isManagerHidden: false,
+      });
+    });
+  });
+
+  describe('등록', () => {
+    const body = {
+      storeId: 3,
+      name: '그라인더',
+      facilityStatusCode: 'OPERATING',
+      facilityGroupCode: 'STORE_EQUIPMENT' as const,
+      facilityCategoryCode: 'GRINDER',
+      quantity: 1,
+      isVatIncluded: true,
+    };
+
+    it('검사 뒤 넣기 전에 점포가 폐점했으면 400 — 점포 행을 공유 잠금으로 다시 본다', async () => {
+      prisma.store.findFirst.mockResolvedValue({
+        storeId: 3,
+        storeTypeCode: 'DIRECT',
+        storeStatusCode: 'OPERATING',
+      });
+      tx.$queryRaw.mockResolvedValue([
+        { store_status_code: 'CLOSED', is_deleted: false },
+      ]);
+      Object.assign(tx.facility, { create: jest.fn() });
+      await expect(service.create(9, BP, body)).rejects.toThrow(
+        '폐점 점포에는 등록할 수 없습니다.',
+      );
+      expect(
+        (tx.facility as unknown as { create: jest.Mock }).create,
+      ).not.toHaveBeenCalled();
     });
   });
 });

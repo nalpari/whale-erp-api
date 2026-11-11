@@ -15,13 +15,22 @@ import {
   type FacilityDocumentKind,
   Prisma,
 } from '@prisma/client';
-import { isPlatformRole } from '../admin-scope/admin-scope.service';
+import {
+  hiddenStoreStaffWhere,
+  hidesPersonalData,
+  isPlatformRole,
+  type MaskingStore,
+} from '../admin-scope/admin-scope.service';
+import {
+  HQ_SHARING_SELECT,
+  hqSharingConsentedOf,
+} from '../admin-scope/hq-sharing';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { PLATFORM_BP_CODE } from '../codes/codes.service';
 import { containsText } from '../common/contains-text';
 import { dateOnly } from '../common/date-only';
-import { sameMillisecond } from '../common/updated-at';
+import { isSameMillisecond, sameMillisecond } from '../common/updated-at';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseDateOnly } from '../staff-members/kst-date';
 import {
@@ -67,6 +76,8 @@ type Db = Prisma.TransactionClient | PrismaService;
 
 const NOT_FOUND = '시설물·장비를 찾을 수 없습니다';
 const STORE_NOT_FOUND = '점포를 찾을 수 없습니다';
+const STORE_UNAVAILABLE = '고를 수 없는 점포입니다.';
+const CLOSED_STORE_CREATE = '폐점 점포에는 등록할 수 없습니다.';
 const READ_ONLY = '폐점 점포의 시설물·장비는 조회만 할 수 있습니다.';
 const CHANGED_MEANWHILE =
   '다른 관리자가 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.';
@@ -85,6 +96,8 @@ export type FacilityDocumentUpload = {
  */
 type FacilityCaller = {
   adminAccountId: number;
+  /** 권한 유형(공통코드 ROLE_TYPE) — 본사 역할(BM · BA)의 가맹 직원 개인정보 가림(ATT-30)에 쓴다 */
+  roleTypeCode: string;
   isPlatform: boolean;
   isAllStores: boolean;
   /** 다루는 BP — 플랫폼 계정은 X-Bp-Code-Id 의 고객 BP, 그 밖의 계정은 소속 BP */
@@ -108,6 +121,7 @@ type DocumentRow = Prisma.FacilityDocumentGetPayload<{
 const STORE_SELECT = {
   storeCode: true,
   name: true,
+  storeTypeCode: true,
   storeStatusCode: true,
 } as const;
 
@@ -117,10 +131,10 @@ const DETAIL_INCLUDE = {
 } as const;
 type DetailRow = Prisma.FacilityGetPayload<{ include: typeof DETAIL_INCLUDE }>;
 
-/** 수정 전 값 — 미사용 분류 · 점검 주기 · 퇴직한 담당자를 그대로 둘 수 있는지 가른다. */
+/** 수정 전 값 — 미사용 운영상태 · 분류 · 점검 주기 · 퇴직한 담당자를 그대로 둘 수 있는지 가른다. */
 type Current = Pick<
   DetailRow,
-  | 'storeId'
+  | 'facilityStatusCode'
   | 'facilityGroupCode'
   | 'facilityCategoryCode'
   | 'inspectionCycleCode'
@@ -133,8 +147,9 @@ type Current = Pick<
  * - 시설물·장비는 점포 하나에 속하고, 점포는 등록 뒤 바꿀 수 없다. 폐점 점포에는 등록하지 못하고, 이미 있는 것은 조회만
  *   된다(수정 · 삭제 · 문서 409).
  * - 운영상태는 플랫폼고정 FACILITY_STATUS, 분류는 고른 그룹(STORE_FACILITY · STORE_EQUIPMENT)의, 점검 주기는
- *   INSPECTION_CYCLE 의 점포 BP 행이다. 새로 고르는 값은 사용 중이어야 하고, 수정에서 지금 값은 미사용이어도 둘 수 있다.
- * - 관리 담당자는 그 점포의 재직 직원이다. 수정에서 지금 담당자는 그 뒤 퇴직했어도 그대로 둘 수 있다.
+ *   INSPECTION_CYCLE 의 점포 BP 행이다. 새로 고르는 값은 사용 중이어야 하고, 수정에서 지금 값(운영상태 포함)은 미사용이어도 둘 수 있다.
+ * - 관리 담당자는 그 점포의 가입 완료 · 재직 직원이고, 본사 역할이 가맹 점포에서 보면 본사 제공 동의한 직원만이다(ATT-30).
+ *   수정에서 지금 담당자는 그 뒤 퇴직했어도 그대로 둘 수 있고, 가려진 담당자는 이름 · 번호를 응답에서 가린다.
  * - 삭제는 논리 삭제이고 문서도 함께 지움 표시한다. 수리 이력 · 점검 결과가 있으면 막아야 하는데(PL-4) 두 표가 아직 없다
  *   — 수리 이력을 만들 때 여기에 검사를 더한다.
  */
@@ -236,12 +251,7 @@ export class FacilitiesService implements OnModuleInit {
     const [labels, active, manager, names, documents] = await Promise.all([
       this.labels(caller.targetBpCode),
       this.activeCodes(caller.targetBpCode),
-      row.managerStaffMemberId === null
-        ? null
-        : this.prisma.staffMember.findUnique({
-            where: { staffMemberId: row.managerStaffMemberId },
-            select: { staffMemberId: true, name: true },
-          }),
+      this.managerOf(caller, row.store, row.managerStaffMemberId),
       this.adminNames([row.createdBy, row.updatedBy]),
       this.documentsOf(row.documents),
     ]);
@@ -256,6 +266,9 @@ export class FacilitiesService implements OnModuleInit {
       name: row.name,
       facilityStatusCode: row.facilityStatusCode,
       facilityStatusLabel: labels.status(row.facilityStatusCode),
+      isFacilityStatusActive: active.has(
+        codeKey(FACILITY_STATUS_GROUP, row.facilityStatusCode),
+      ),
       facilityGroupCode: row.facilityGroupCode as FacilityGroup,
       facilityGroupLabel: labels.group(row.facilityGroupCode),
       facilityCategoryCode: row.facilityCategoryCode,
@@ -283,8 +296,13 @@ export class FacilitiesService implements OnModuleInit {
       installationDate: dateOnly(row.installationDate),
       usageExpiryDate: dateOnly(row.usageExpiryDate),
       warrantyExpiryDate: dateOnly(row.warrantyExpiryDate),
-      manager,
-      managerPhone: row.managerPhone,
+      manager: manager && {
+        staffMemberId: manager.staffMemberId,
+        name: manager.name,
+      },
+      // 가려진 담당자의 번호는 그 직원 휴대폰으로 채운 값이라 함께 가린다(ATT-30).
+      managerPhone: manager?.isHidden ? null : row.managerPhone,
+      isManagerHidden: manager?.isHidden ?? false,
       inspectionCycleCode: row.inspectionCycleCode,
       inspectionCycleLabel:
         row.inspectionCycleCode === null
@@ -318,17 +336,32 @@ export class FacilitiesService implements OnModuleInit {
     const caller = await this.loadCaller(callerId, bp);
     const store = await this.prisma.store.findFirst({
       where: { AND: [storeScope(caller), { storeId: dto.storeId }] },
-      select: { storeStatusCode: true },
+      select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
     });
-    if (!store) throw new BadRequestException('고를 수 없는 점포입니다.');
+    if (!store) throw new BadRequestException(STORE_UNAVAILABLE);
     if (store.storeStatusCode === 'CLOSED')
-      throw new BadRequestException('폐점 점포에는 등록할 수 없습니다.');
-    const data = await this.validated(caller, dto, dto.storeId, null);
-    const created = await this.prisma.facility.create({
-      data: { ...data, storeId: dto.storeId, createdBy: caller.adminAccountId },
-      select: { facilityId: true },
+      throw new BadRequestException(CLOSED_STORE_CREATE);
+    const data = await this.validated(caller, dto, store, null);
+    return this.prisma.$transaction(async (tx) => {
+      // 점포 행을 공유 잠금으로 다시 본다 — 위 검사 뒤 폐점 · 삭제가 커밋됐으면 막는다. 폐점(점포 행 FOR NO KEY UPDATE)과
+      // 줄을 서므로, 외래키 검사(FOR KEY SHARE)만으로는 지나가던 틈이 닫힌다.
+      const [locked] = await tx.$queryRaw<
+        { store_status_code: string; is_deleted: boolean }[]
+      >`SELECT "store_status_code", "is_deleted" FROM "stores" WHERE "store_id" = ${store.storeId} FOR SHARE`;
+      if (!locked || locked.is_deleted)
+        throw new BadRequestException(STORE_UNAVAILABLE);
+      if (locked.store_status_code === 'CLOSED')
+        throw new BadRequestException(CLOSED_STORE_CREATE);
+      const created = await tx.facility.create({
+        data: {
+          ...data,
+          storeId: store.storeId,
+          createdBy: caller.adminAccountId,
+        },
+        select: { facilityId: true },
+      });
+      return { facilityId: created.facilityId };
     });
-    return { facilityId: created.facilityId };
   }
 
   async update(
@@ -340,7 +373,24 @@ export class FacilitiesService implements OnModuleInit {
     const caller = await this.loadCaller(callerId, bp);
     const current = await this.findFacility(this.prisma, caller, facilityId);
     assertEditable(current);
-    const data = await this.validated(caller, dto, current.storeId, current);
+    // 받은 updatedAt 이 이미 지금과 다르면 검증 전에 409 — 「지금 값 유지」를 다른 사람이 고친 값과 견주면, 새로고침해야 할
+    // 사람이 「다시 선택해 주세요」 400 을 받는다. 저장 직전의 같은 조건(아래 updateMany)은 그 뒤 끼어든 수정을 잡는다.
+    if (!isSameMillisecond(current.updatedAt, dto.updatedAt))
+      throw new ConflictException(CHANGED_MEANWHILE);
+    const store = { storeId: current.storeId, ...current.store };
+    const data = await this.validated(caller, dto, store, current);
+    // 가려진 담당자(본사 역할 · 미동의 가맹 직원)를 그대로 두면 화면은 번호를 받지 못해 비워 보낸다 — 저장된 번호를 지키다.
+    const manager = await this.managerOf(
+      caller,
+      current.store,
+      current.managerStaffMemberId,
+    );
+    if (
+      manager?.isHidden &&
+      data.managerStaffMemberId === current.managerStaffMemberId &&
+      data.managerPhone === null
+    )
+      data.managerPhone = current.managerPhone;
     return this.prisma.$transaction(async (tx) => {
       // 잠근 뒤 지움 · 폐점을 다시 본다 — 그 사이 지웠으면 404, 폐점했으면 409(조회만). 남은 0건은 동시 수정이다.
       await lockEditable(tx, facilityId);
@@ -410,12 +460,13 @@ export class FacilitiesService implements OnModuleInit {
     query: FacilityManagerOptionsQueryDto,
   ): Promise<FacilityManagerOptionListResponseDto> {
     const caller = await this.loadCaller(callerId, bp);
-    const store = await this.prisma.store.count({
+    const store = await this.prisma.store.findFirst({
       where: { AND: [storeScope(caller), { storeId: query.storeId }] },
+      select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
     });
-    if (store === 0) throw new NotFoundException(STORE_NOT_FOUND);
+    if (!store) throw new NotFoundException(STORE_NOT_FOUND);
     const items = await this.prisma.staffMember.findMany({
-      where: { storeId: query.storeId, employmentStatus: 'EMPLOYED' },
+      where: managerCandidateWhere(caller, store),
       select: { staffMemberId: true, name: true, phone: true },
       orderBy: [{ name: 'asc' }, { staffMemberId: 'asc' }],
     });
@@ -535,12 +586,12 @@ export class FacilitiesService implements OnModuleInit {
 
   /**
    * 저장할 값. 공통코드 · 날짜 앞뒤 · 주소 짝 · 관리 담당자를 보고, 총금액을 계산한다. current 는 수정 전 값(등록이면
-   * null) — 지금 값과 같은 분류 · 점검 주기 · 담당자는 그 사이 미사용 · 퇴직이 됐어도 그대로 둔다(PL-3 · PL-6).
+   * null) — 지금 값과 같은 운영상태 · 분류 · 점검 주기 · 담당자는 그 사이 미사용 · 퇴직이 됐어도 그대로 둔다(PL-3 · PL-6).
    */
   private async validated(
     caller: FacilityCaller,
     dto: SaveFacilityDto,
-    storeId: number,
+    store: { storeId: number } & MaskingStore,
     current: Current | null,
   ) {
     const purchaseDate = dateOrNull(dto.purchaseDate);
@@ -559,6 +610,7 @@ export class FacilitiesService implements OnModuleInit {
       );
 
     if (
+      current?.facilityStatusCode !== dto.facilityStatusCode &&
       !(await this.isActiveCode(
         FACILITY_STATUS_GROUP,
         dto.facilityStatusCode,
@@ -593,14 +645,16 @@ export class FacilitiesService implements OnModuleInit {
       throw new BadRequestException('점검 주기를 다시 선택해 주세요.');
     const manager = dto.managerStaffMemberId ?? null;
     if (manager !== null && current?.managerStaffMemberId !== manager) {
-      const employed = await this.prisma.staffMember.count({
+      // 선택지와 같은 조건 — 가입 완료 · 재직이고, 본사 역할이 가맹 점포에서 고르면 본사 제공 동의한 직원만.
+      const candidate = await this.prisma.staffMember.count({
         where: {
-          staffMemberId: manager,
-          storeId,
-          employmentStatus: 'EMPLOYED',
+          AND: [
+            managerCandidateWhere(caller, store),
+            { staffMemberId: manager },
+          ],
         },
       });
-      if (employed === 0)
+      if (candidate === 0)
         throw new BadRequestException(
           '관리 담당자는 그 점포의 재직 직원만 고를 수 있습니다.',
         );
@@ -662,12 +716,20 @@ export class FacilitiesService implements OnModuleInit {
     return n > 0;
   }
 
-  /** 그 BP 에서 지금 사용 중인 분류 · 점검 주기(`그룹:코드`) — 상세의 「미사용」 표시에 쓴다. */
+  /**
+   * 지금 사용 중인 코드(`그룹:코드`) — 상세의 「미사용」 표시에 쓴다. 운영상태는 플랫폼 원본, 분류 · 점검 주기는 그 BP 의
+   * 행이다(플랫폼 원본만 사용 중이고 BP 로 복사되지 않은 분류는 쓸 수 없으므로 사용 중이 아니다).
+   */
   private async activeCodes(bpCode: string): Promise<Set<string>> {
     const rows = await this.prisma.codeItem.findMany({
       where: {
-        groupCode: { in: [...FACILITY_GROUPS, INSPECTION_CYCLE_GROUP] },
-        bpCode,
+        OR: [
+          {
+            groupCode: { in: [...FACILITY_GROUPS, INSPECTION_CYCLE_GROUP] },
+            bpCode,
+          },
+          { groupCode: FACILITY_STATUS_GROUP, bpCode: PLATFORM_BP_CODE },
+        ],
         status: 'ACTIVE',
         isDeleted: false,
         codeGroup: { status: 'ACTIVE', isDeleted: false },
@@ -675,6 +737,34 @@ export class FacilitiesService implements OnModuleInit {
       select: { groupCode: true, itemCode: true },
     });
     return new Set(rows.map((r) => codeKey(r.groupCode, r.itemCode)));
+  }
+
+  /**
+   * 관리 담당자 표시 — 본사 역할(BM · BA)에게 가맹 점포의 본사 제공 미동의 직원(폐점한 가맹 점포면 누구든)은 이름을
+   * 가린다(ATT-30, hidesPersonalData). 직원 정보 관리에서 가려지는 사람이 여기로 새지 않게. 담당자가 없으면 null.
+   */
+  private async managerOf(
+    caller: FacilityCaller,
+    store: MaskingStore,
+    staffMemberId: number | null,
+  ): Promise<{
+    staffMemberId: number;
+    name: string | null;
+    isHidden: boolean;
+  } | null> {
+    if (staffMemberId === null) return null;
+    const staff = await this.prisma.staffMember.findUnique({
+      where: { staffMemberId },
+      select: { name: true, ...HQ_SHARING_SELECT },
+    });
+    const isHidden =
+      !staff ||
+      hidesPersonalData(
+        caller.roleTypeCode,
+        store,
+        hqSharingConsentedOf(staff),
+      );
+    return { staffMemberId, name: isHidden ? null : staff.name, isHidden };
   }
 
   /**
@@ -817,6 +907,7 @@ export class FacilitiesService implements OnModuleInit {
       : admin.bpCode.bpCode;
     return {
       adminAccountId: callerId,
+      roleTypeCode: admin.roleTypeCode,
       isPlatform,
       isAllStores: admin.isAllStores,
       targetBpCodeId,
@@ -850,6 +941,24 @@ function storeScope(caller: FacilityCaller): Prisma.StoreWhereInput {
           some: { adminAccountId: caller.adminAccountId, isDeleted: false },
         },
       }),
+  };
+}
+
+/**
+ * 그 점포에서 관리 담당자로 보이고 고를 수 있는 직원 — 재직 · 가입 완료. 가입 전 레코드는 계약 삭제 · 대체가 물리 삭제하므로
+ * (contracts.service 임시저장 삭제, contract-duplicates dropOrphanRecords) 담당자 외래키(RESTRICT)가 그 삭제를 막지 않게 뺀다.
+ * 본사 역할이 가맹 점포에서 보면 본사 제공 동의한 직원만이다(폐점한 가맹 점포면 아무도 — ATT-30, hiddenStoreStaffWhere).
+ */
+function managerCandidateWhere(
+  caller: FacilityCaller,
+  store: { storeId: number } & MaskingStore,
+): Prisma.StaffMemberWhereInput {
+  return {
+    storeId: store.storeId,
+    employmentStatus: 'EMPLOYED',
+    joinStatus: 'JOINED',
+    ...(hidesPersonalData(caller.roleTypeCode, store, false) &&
+      hiddenStoreStaffWhere(caller.roleTypeCode, store)),
   };
 }
 

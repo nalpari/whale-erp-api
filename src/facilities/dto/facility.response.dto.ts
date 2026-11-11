@@ -40,7 +40,8 @@ export class FacilityStoreDto {
 
 export class FacilityManagerDto {
   staffMemberId: number;
-  name: string;
+  /** 이름 — 본사 역할(BM · BA)에게 가맹 점포의 본사 제공 미동의 직원이면 null(ATT-30 가림) */
+  name: string | null;
 }
 
 export class FacilityDocumentDto {
@@ -64,6 +65,8 @@ export class FacilityDetailResponseDto {
   name: string;
   facilityStatusCode: string;
   facilityStatusLabel: string;
+  /** 운영상태가 지금 사용 중인가 — false 면 수정 화면이 지금 값을 「(미사용)」으로 둔다(다른 값으로 바꾸면 되돌릴 수 없다) */
+  isFacilityStatusActive: boolean;
   /** 그룹 — STORE_FACILITY(점포 시설물) · STORE_EQUIPMENT(점포 장비) */
   @ApiProperty({ enum: FACILITY_GROUPS, enumName: 'FacilityGroup' })
   facilityGroupCode: FacilityGroup;
@@ -93,7 +96,10 @@ export class FacilityDetailResponseDto {
   warrantyExpiryDate: string | null;
   /** 관리 담당자 — 고른 직원. 그 뒤 퇴직했어도 그대로 보인다 */
   manager: FacilityManagerDto | null;
+  /** 관리 담당자 전화번호 — 담당자가 가려졌으면(isManagerHidden) null. 그대로 두고 수정하면 서버가 저장된 번호를 지킨다 */
   managerPhone: string | null;
+  /** 관리 담당자가 본사 가림(ATT-30)으로 가려졌는가 — 화면은 이름 · 번호 대신 가림 표시를 한다 */
+  isManagerHidden: boolean;
   inspectionCycleCode: string | null;
   inspectionCycleLabel: string | null;
   /** 점검 주기가 지금 사용 중인가 — 분류와 같이 다룬다. 점검 주기가 없으면 null */

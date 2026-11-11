@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminLoginResponseDto } from '../src/auth/dto/admin-login.response.dto';
+import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 import { hashPassword } from '../src/auth/password';
 import type {
   FacilityDetailResponseDto,
@@ -36,6 +37,55 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
   let closedStoreId: number;
   let staffMemberId: number;
   let retiredStaffMemberId: number;
+  let draftStaffMemberId: number;
+  let franchiseStoreId: number;
+  let consentedStaffMemberId: number;
+  let unconsentedStaffMemberId: number;
+  const accountIds: number[] = [];
+
+  /** 가입 완료 직원 — 계정과 함께 만든다. consented 면 본사 제공 동의(지금 버전) */
+  const joinedStaff = async (
+    store: number,
+    name: string,
+    {
+      employmentStatus = 'EMPLOYED',
+      consented = false,
+    }: { employmentStatus?: 'EMPLOYED' | 'RETIRED'; consented?: boolean } = {},
+  ) => {
+    const n = randomInt(10_000_000, 99_999_999);
+    const { accountId } = await prisma.account.create({
+      data: {
+        email: `fac-${n}@test.invalid`,
+        passwordHash: '!',
+        realName: name,
+        birthDate: new Date('1990-01-01'),
+        phone: `010${n}`,
+        status: 'JOINED',
+        ...(consented && {
+          isHqSharingConsented: true,
+          hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          hqSharingAgreedAt: new Date(),
+        }),
+      },
+    });
+    accountIds.push(accountId);
+    return prisma.staffMember.create({
+      data: {
+        storeId: store,
+        accountId,
+        name,
+        phone: `010${n}`,
+        jobTitle: '홀',
+        employmentType: 'PART_TIME',
+        joinStatus: 'JOINED',
+        employmentStatus,
+        // 퇴직이면 퇴직일이 있어야 한다(staff_members_retired_date_required)
+        ...(employmentStatus === 'RETIRED' && {
+          retiredDate: new Date('2026-10-31'),
+        }),
+      },
+    });
+  };
   let emptyRoleGroupId: number;
   const adminIds: number[] = [];
   let bmToken: string;
@@ -153,7 +203,7 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
           },
         })
       ).storeId;
-    const s = randomInt(100_000, 999_996);
+    const s = randomInt(100_000, 999_995);
     storeId = await makeStore(`ST${s}`);
     otherStoreId = await makeStore(`ST${s + 1}`);
     closedStoreId = await makeStore(`ST${s + 2}`, 'CLOSED');
@@ -185,25 +235,40 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
         storeStatusCode: 'OPERATING',
       },
     }));
-    const staff = (name: string, employmentStatus: 'EMPLOYED' | 'RETIRED') =>
-      prisma.staffMember.create({
-        data: {
-          storeId,
-          name,
-          phone: `010${randomInt(10_000_000, 99_999_999)}`,
-          jobTitle: '홀',
-          employmentType: 'PART_TIME',
-          employmentStatus,
-          // 퇴직이면 퇴직일이 있어야 한다(staff_members_retired_date_required)
-          ...(employmentStatus === 'RETIRED' && {
-            retiredDate: new Date('2026-10-31'),
-          }),
-        },
-      });
-    ({ staffMemberId } = await staff('정하윤', 'EMPLOYED'));
-    ({ staffMemberId: retiredStaffMemberId } = await staff(
+    ({ staffMemberId } = await joinedStaff(storeId, '정하윤'));
+    ({ staffMemberId: retiredStaffMemberId } = await joinedStaff(
+      storeId,
       '퇴직자',
-      'RETIRED',
+      { employmentStatus: 'RETIRED' },
+    ));
+    // 가입 전(초안) 직원 — 계약 삭제 · 대체가 물리 삭제하는 레코드라 담당자로 고를 수 없다
+    ({ staffMemberId: draftStaffMemberId } = await prisma.staffMember.create({
+      data: {
+        storeId,
+        name: '가입 전',
+        phone: `010${randomInt(10_000_000, 99_999_999)}`,
+        jobTitle: '홀',
+        employmentType: 'PART_TIME',
+      },
+    }));
+    // 가맹 점포 — 본사 역할(BM · BA)에게 본사 제공 미동의 직원은 가려진다(ATT-30)
+    ({ storeId: franchiseStoreId } = await prisma.store.create({
+      data: {
+        storeCode: `ST${s + 4}`,
+        bpCodeId,
+        storeTypeCode: 'FRANCHISE',
+        name: '가맹 점포',
+        storeStatusCode: 'OPERATING',
+      },
+    }));
+    ({ staffMemberId: consentedStaffMemberId } = await joinedStaff(
+      franchiseStoreId,
+      '동의 직원',
+      { consented: true },
+    ));
+    ({ staffMemberId: unconsentedStaffMemberId } = await joinedStaff(
+      franchiseStoreId,
+      '미동의 직원',
     ));
 
     ({ roleGroupId: emptyRoleGroupId } = await prisma.roleGroup.create({
@@ -284,6 +349,9 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
       });
       await prisma.facility.deleteMany({ where: byStore });
       await prisma.staffMember.deleteMany({ where: byStore });
+      await prisma.account.deleteMany({
+        where: { accountId: { in: accountIds } },
+      });
       await prisma.adminStoreMapping.deleteMany({ where: byStore });
       await prisma.store.deleteMany({ where: byStore });
       await prisma.codeItem.deleteMany({
@@ -800,15 +868,7 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
   });
 
   it('수정에서 지금 담당자는 그 사이 퇴직했어도 그대로 둘 수 있고, 다른 담당자에서 퇴직자로 되돌릴 수는 없다(PL-6)', async () => {
-    const leaving = await prisma.staffMember.create({
-      data: {
-        storeId,
-        name: '곧 퇴직',
-        phone: `010${randomInt(10_000_000, 99_999_999)}`,
-        jobTitle: '홀',
-        employmentType: 'PART_TIME',
-      },
-    });
+    const leaving = await joinedStaff(storeId, '곧 퇴직');
     const { facilityId } = await create({
       name: '담당자 퇴직 장비',
       managerStaffMemberId: leaving.staffMemberId,
@@ -883,6 +943,139 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
       ).expect(200)
     ).body as { items: { storeId: number }[] };
     expect(options.items.map((s) => s.storeId)).toEqual([storeId]);
+  });
+
+  it('가입 전 직원은 담당자로 고를 수 없다 — 계약 삭제가 지우는 레코드라 담당자 외래키가 그 삭제를 막지 않게', async () => {
+    const options = (
+      await call(
+        'get',
+        `/facilities/manager-options?storeId=${storeId}`,
+      ).expect(200)
+    ).body as { items: { staffMemberId: number }[] };
+    expect(options.items.map((i) => i.staffMemberId)).not.toContain(
+      draftStaffMemberId,
+    );
+    await call('post', '/facilities')
+      .send({ ...base(), managerStaffMemberId: draftStaffMemberId })
+      .expect(400);
+    // 시설물이 가리키지 않으므로 계약 삭제 경로의 물리 삭제가 외래키에 막히지 않는다
+    await expect(
+      prisma.staffMember.delete({
+        where: { staffMemberId: draftStaffMemberId },
+      }),
+    ).resolves.toBeDefined();
+  });
+
+  it('본사 역할(BM)에게 가맹 점포의 본사 제공 미동의 직원은 가려진다 — 선택지 · 등록 · 상세(ATT-30)', async () => {
+    const forBm = (
+      await call(
+        'get',
+        `/facilities/manager-options?storeId=${franchiseStoreId}`,
+      ).expect(200)
+    ).body as { items: { staffMemberId: number }[] };
+    expect(forBm.items.map((i) => i.staffMemberId)).toEqual([
+      consentedStaffMemberId,
+    ]);
+    // 가맹 마스터는 자기 직원이라 모두 본다
+    const forFm = (
+      await call(
+        'get',
+        `/facilities/manager-options?storeId=${franchiseStoreId}`,
+        fmToken,
+      ).expect(200)
+    ).body as { items: { staffMemberId: number }[] };
+    expect(
+      forFm.items.map((i) => i.staffMemberId).sort((a, b) => a - b),
+    ).toEqual(
+      [consentedStaffMemberId, unconsentedStaffMemberId].sort((a, b) => a - b),
+    );
+
+    const franchiseBase = {
+      ...base(),
+      storeId: franchiseStoreId,
+      name: '가맹 점포 장비',
+    };
+    await call('post', '/facilities')
+      .send({
+        ...franchiseBase,
+        managerStaffMemberId: unconsentedStaffMemberId,
+      })
+      .expect(400);
+
+    // 가맹 마스터가 미동의 직원을 담당자로 등록하면, 본사에게는 이름 · 번호가 가려진다
+    const { facilityId } = (
+      await call('post', '/facilities', fmToken)
+        .send({
+          ...franchiseBase,
+          managerStaffMemberId: unconsentedStaffMemberId,
+          managerPhone: '01099998888',
+        })
+        .expect(201)
+    ).body as { facilityId: number };
+    const hidden = await detail(facilityId);
+    expect(hidden).toMatchObject({
+      manager: { staffMemberId: unconsentedStaffMemberId, name: null },
+      managerPhone: null,
+      isManagerHidden: true,
+    });
+    expect(await detail(facilityId, fmToken)).toMatchObject({
+      manager: { name: '미동의 직원' },
+      managerPhone: '01099998888',
+      isManagerHidden: false,
+    });
+
+    // 본사가 담당자를 그대로 두고 다른 칸만 고치면 — 화면은 번호를 받지 못해 비워 보낸다 — 저장된 번호를 지킨다
+    await call('put', `/facilities/${facilityId}`)
+      .send({
+        ...formOf(hidden),
+        name: '본사가 이름만 고침',
+        managerPhone: null,
+      })
+      .expect(200);
+    expect(await detail(facilityId, fmToken)).toMatchObject({
+      name: '본사가 이름만 고침',
+      manager: { staffMemberId: unconsentedStaffMemberId },
+      managerPhone: '01099998888',
+    });
+  });
+
+  it('미사용이 된 운영상태도 지금 값이면 수정에서 그대로 둘 수 있다', async () => {
+    const { facilityId } = await create({
+      name: '보관 장비',
+      facilityStatusCode: 'STORED',
+    });
+    await prisma.codeItem.update({
+      where: {
+        groupCode_itemCode_bpCode: {
+          groupCode: 'FACILITY_STATUS',
+          itemCode: 'STORED',
+          bpCode: 'BP000000',
+        },
+      },
+      data: { status: 'INACTIVE' },
+    });
+    try {
+      const d = await detail(facilityId);
+      expect(d.isFacilityStatusActive).toBe(false);
+      await call('put', `/facilities/${facilityId}`)
+        .send({ ...formOf(d), name: '메모만 고침' })
+        .expect(200);
+      // 다른 값에서 미사용 값으로는 못 돌아간다
+      await call('post', '/facilities')
+        .send({ ...base(), facilityStatusCode: 'STORED' })
+        .expect(400);
+    } finally {
+      await prisma.codeItem.update({
+        where: {
+          groupCode_itemCode_bpCode: {
+            groupCode: 'FACILITY_STATUS',
+            itemCode: 'STORED',
+            bpCode: 'BP000000',
+          },
+        },
+        data: { status: 'ACTIVE' },
+      });
+    }
   });
 
   it('범위 밖 id 는 DB 에 묻지 않고 404', async () => {
