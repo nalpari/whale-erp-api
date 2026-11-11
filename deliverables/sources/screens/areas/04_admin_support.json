@@ -3,7 +3,7 @@
   "area": "고객지원",
   "screens": [
     {
-      "id": "SCR-ADM-026",
+      "id": "SCR-ADM-027",
       "name": "공지사항",
       "menuCode": "MN000035",
       "route": "/support-notices",
@@ -11,7 +11,7 @@
         "file": "support/notices.html"
       },
       "images": [
-        "SCR-ADM-026.jpg"
+        "SCR-ADM-027.jpg"
       ],
       "rows": [
         {
@@ -47,7 +47,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-027",
+      "id": "SCR-ADM-028",
       "name": "공지사항 상세",
       "menuCode": "MN000035",
       "route": "/support-notices/[id]",
@@ -55,7 +55,7 @@
         "file": "support/notice-detail.html"
       },
       "images": [
-        "SCR-ADM-027.jpg"
+        "SCR-ADM-028.jpg"
       ],
       "rows": [
         {
@@ -89,7 +89,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-028",
+      "id": "SCR-ADM-029",
       "name": "FAQ",
       "menuCode": "MN000043",
       "route": "/support-faqs",
@@ -97,7 +97,7 @@
         "file": "support/faq.html"
       },
       "images": [
-        "SCR-ADM-028.jpg"
+        "SCR-ADM-029.jpg"
       ],
       "rows": [
         {
@@ -127,7 +127,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-029",
+      "id": "SCR-ADM-030",
       "name": "문의하기",
       "menuCode": "MN000036",
       "route": "/support-inquiries",
@@ -135,7 +135,7 @@
         "file": "support/inquiries.html"
       },
       "images": [
-        "SCR-ADM-029.jpg"
+        "SCR-ADM-030.jpg"
       ],
       "rows": [
         {
@@ -182,7 +182,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-030",
+      "id": "SCR-ADM-031",
       "name": "문의 상세",
       "menuCode": "MN000036",
       "route": "/support-inquiries/[id]",
@@ -190,7 +190,7 @@
         "file": "support/inquiry-mine.html"
       },
       "images": [
-        "SCR-ADM-030.jpg"
+        "SCR-ADM-031.jpg"
       ],
       "rows": [
         {

@@ -163,32 +163,32 @@
       "rows": [
         {
           "zone": "안내",
-          "element": "탈퇴 전 내려받기 안내",
-          "action": "BP가 탈퇴하면 자료를 볼 수 없으니 미리 받으라고 안내한다. 평소에도 받을 수 있다.",
+          "element": "탈퇴 전 저장 안내",
+          "action": "회원 탈퇴 시 관리자 계정이 모두 미사용 처리되어 자료에 접근할 수 없으니 탈퇴 전에 미리 저장하라고 안내한다. 탈퇴 전까지는 언제든 다운로드할 수 있다.",
           "policies": [
             "RET-09"
           ]
         },
         {
-          "zone": "담기는 자료",
+          "zone": "저장되는 자료",
           "element": "근로계약서 · 출퇴근 기록 · 급여명세서 · 근무스케줄",
-          "action": "자료별로 담기는 내용과 형식을 보인다. 네 가지를 ZIP 파일 한 개로 받는다.",
+          "action": "자료별로 포함 내용과 파일 형식을 보인다. 네 가지를 ZIP 파일 1개로 받는다.",
           "policies": [
             "RET-09"
           ]
         },
         {
-          "zone": "새로 요청",
-          "element": "업무 범위 · 대상 직원 · 파일 형식 · 일괄 저장 요청",
-          "action": "업무 범위 안 대상 직원 수를 보이고, 버튼을 누르면 파일 만들기를 요청한다.",
+          "zone": "새 요청",
+          "element": "대상 점포 · 대상 직원 · 파일 형식 · 일괄 저장 요청",
+          "action": "대상 점포 안 대상 직원 수를 보이고, 버튼을 누르면 파일 생성을 요청한다.",
           "policies": [
             "RET-09"
           ]
         },
         {
-          "zone": "지난 요청",
-          "element": "요청 일시 · 요청자 · 대상 · 상태 · 내려받기",
-          "action": "요청별 상태를 보인다. 파일은 다 만들어진 때부터 7일 동안 내려받는다.",
+          "zone": "요청 내역",
+          "element": "요청 일시 · 요청자 · 대상 직원 · 상태 · 파일",
+          "action": "요청별 상태를 보인다. 파일은 다 만들어진 때부터 7일 동안 다운로드한다.",
           "policies": [
             "RET-09"
           ]
@@ -202,7 +202,7 @@
         {
           "zone": "받은 뒤",
           "element": "보관 책임 안내",
-          "action": "내려받은 파일의 보관 책임이 BP에 있음을 알린다.",
+          "action": "다운로드한 파일의 보관 책임이 사업자에게 있음을 알린다.",
           "policies": []
         }
       ]
@@ -569,7 +569,7 @@
         {
           "zone": "경고",
           "element": "검토 대기 안내 · 출퇴근 기록 확인",
-          "action": "검토 대기로 분류된 까닭을 보이고, 누르면 출퇴근 현황의 보정이 필요한 기록으로 간다.",
+          "action": "검토 대기로 분류된 까닭을 보이고, 누르면 출·퇴근 현황 조회의 기간 출·퇴근 기록으로 간다.",
           "policies": [
             "PAY-06"
           ]
@@ -780,6 +780,54 @@
     },
     {
       "id": "SCR-ADM-022",
+      "name": "기간 출·퇴근 기록",
+      "menuCode": "MN000025",
+      "route": "/attendance-records",
+      "demo": {
+        "file": "staff/attendance-period.html"
+      },
+      "images": [
+        "SCR-ADM-022.jpg"
+      ],
+      "rows": [
+        {
+          "zone": "진입",
+          "element": "급여명세서 검토의 출퇴근 기록 확인 · 출퇴근 기록 보기",
+          "action": "그 명세서의 점포 · 직원 · 급여 기간으로 출·퇴근 현황 조회를 연다.",
+          "policies": [
+            "PAY-06"
+          ]
+        },
+        {
+          "zone": "기간 출·퇴근 기록",
+          "element": "기간 · 직원 · 날짜 · 출근 · 퇴근 · 사유",
+          "action": "그 직원의 기간 기록을 보정 대상이 아닌 것까지 모두 보인다. 기간은 급여 기간 첫 주의 월요일부터라 달을 걸친 첫 주의 앞 달 날도 함께 보인다. 결근한 날에는 결근을 붙인다.",
+          "policies": [
+            "PAY-06",
+            "ATT-34"
+          ]
+        },
+        {
+          "zone": "기간 출·퇴근 기록",
+          "element": "보정 · 이상 없음 · 이력",
+          "action": "보정이 필요한 기록과 같은 방법으로 고치고 검토한다.",
+          "policies": [
+            "ATT-11",
+            "ATT-19"
+          ]
+        },
+        {
+          "zone": "안내",
+          "element": "목록에 나오지 않는 날 안내",
+          "action": "근무스케줄과 출퇴근 기록이 모두 없는 근로계약 근무 요일은 목록에 나오지 않는다고 알린다.",
+          "policies": [
+            "PAY-06"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "SCR-ADM-023",
       "name": "TO-DO 리스트 관리",
       "menuCode": "MN000026",
       "route": "/todos",
@@ -787,7 +835,7 @@
         "file": "staff/todos.html"
       },
       "images": [
-        "SCR-ADM-022.jpg"
+        "SCR-ADM-023.jpg"
       ],
       "rows": [
         {
@@ -837,7 +885,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-023",
+      "id": "SCR-ADM-024",
       "name": "TO-DO 등록",
       "menuCode": "MN000026",
       "route": "/todos/new",
@@ -845,7 +893,7 @@
         "file": "staff/todos-new.html"
       },
       "images": [
-        "SCR-ADM-023.jpg"
+        "SCR-ADM-024.jpg"
       ],
       "rows": [
         {
@@ -907,7 +955,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-024",
+      "id": "SCR-ADM-025",
       "name": "TO-DO 상세",
       "menuCode": "MN000026",
       "route": "/todos/[id]",
@@ -915,7 +963,7 @@
         "file": "staff/todos-detail.html"
       },
       "images": [
-        "SCR-ADM-024.jpg"
+        "SCR-ADM-025.jpg"
       ],
       "rows": [
         {
@@ -967,7 +1015,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-025",
+      "id": "SCR-ADM-026",
       "name": "TO-DO 수정",
       "menuCode": "MN000026",
       "route": "/todos/[id]/edit",
@@ -975,7 +1023,7 @@
         "file": "staff/todos-edit.html"
       },
       "images": [
-        "SCR-ADM-025.jpg"
+        "SCR-ADM-026.jpg"
       ],
       "rows": [
         {

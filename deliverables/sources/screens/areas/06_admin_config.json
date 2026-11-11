@@ -3,7 +3,7 @@
   "area": "환경설정",
   "screens": [
     {
-      "id": "SCR-ADM-032",
+      "id": "SCR-ADM-033",
       "name": "BP 관리자 관리",
       "menuCode": "MN000012",
       "route": "/bp-admins",
@@ -11,7 +11,7 @@
         "file": "config/admins.html"
       },
       "images": [
-        "SCR-ADM-032.jpg"
+        "SCR-ADM-033.jpg"
       ],
       "rows": [
         {
@@ -49,7 +49,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-033",
+      "id": "SCR-ADM-034",
       "name": "BP 관리자 등록",
       "menuCode": "MN000012",
       "route": "/bp-admins",
@@ -58,7 +58,7 @@
         "file": "config/admins-new.html"
       },
       "images": [
-        "SCR-ADM-033.jpg"
+        "SCR-ADM-034.jpg"
       ],
       "rows": [
         {
@@ -94,7 +94,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-034",
+      "id": "SCR-ADM-035",
       "name": "BP 관리자 상세",
       "menuCode": "MN000012",
       "route": "/bp-admins",
@@ -103,7 +103,7 @@
         "file": "config/admins-detail.html"
       },
       "images": [
-        "SCR-ADM-034.jpg"
+        "SCR-ADM-035.jpg"
       ],
       "rows": [
         {
@@ -139,7 +139,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-035",
+      "id": "SCR-ADM-036",
       "name": "BP 관리자 수정",
       "menuCode": "MN000012",
       "route": "/bp-admins",
@@ -148,7 +148,7 @@
         "file": "config/admins-edit.html"
       },
       "images": [
-        "SCR-ADM-035.jpg"
+        "SCR-ADM-036.jpg"
       ],
       "rows": [
         {
@@ -184,7 +184,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-036",
+      "id": "SCR-ADM-037",
       "name": "BP 권한 그룹 관리",
       "menuCode": "MN000013",
       "route": "/bp-role-groups",
@@ -192,7 +192,7 @@
         "file": "config/roles.html"
       },
       "images": [
-        "SCR-ADM-036.jpg"
+        "SCR-ADM-037.jpg"
       ],
       "rows": [
         {
@@ -228,7 +228,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-037",
+      "id": "SCR-ADM-038",
       "name": "BP 공통코드 관리",
       "menuCode": "MN000014",
       "route": "/bp-code-groups",
@@ -236,7 +236,7 @@
         "file": "config/codes.html"
       },
       "images": [
-        "SCR-ADM-037.jpg"
+        "SCR-ADM-038.jpg"
       ],
       "rows": [
         {
@@ -272,7 +272,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-038",
+      "id": "SCR-ADM-039",
       "name": "BP 휴일 관리",
       "menuCode": "MN000015",
       "route": "/bp-holidays",
@@ -280,7 +280,7 @@
         "file": "config/holidays.html"
       },
       "images": [
-        "SCR-ADM-038.jpg"
+        "SCR-ADM-039.jpg"
       ],
       "rows": [
         {
@@ -310,7 +310,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-039",
+      "id": "SCR-ADM-040",
       "name": "BP 휴일 등록",
       "menuCode": "MN000015",
       "route": "/bp-holidays",
@@ -319,7 +319,7 @@
         "file": "config/holidays-new.html"
       },
       "images": [
-        "SCR-ADM-039.jpg"
+        "SCR-ADM-040.jpg"
       ],
       "rows": [
         {
@@ -355,7 +355,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-040",
+      "id": "SCR-ADM-041",
       "name": "BP 휴일 상세",
       "menuCode": "MN000015",
       "route": "/bp-holidays",
@@ -364,7 +364,7 @@
         "file": "config/holidays-detail.html"
       },
       "images": [
-        "SCR-ADM-040.jpg"
+        "SCR-ADM-041.jpg"
       ],
       "rows": [
         {
@@ -400,7 +400,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-041",
+      "id": "SCR-ADM-042",
       "name": "BP 휴일 수정",
       "menuCode": "MN000015",
       "route": "/bp-holidays",
@@ -409,7 +409,7 @@
         "file": "config/holidays-edit.html"
       },
       "images": [
-        "SCR-ADM-041.jpg"
+        "SCR-ADM-042.jpg"
       ],
       "rows": [
         {

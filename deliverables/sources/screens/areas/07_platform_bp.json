@@ -3,7 +3,7 @@
   "area": "BP 마스터 계정 관리",
   "screens": [
     {
-      "id": "SCR-ADM-042",
+      "id": "SCR-ADM-043",
       "name": "BP 마스터 계정 관리",
       "menuCode": "MN000203",
       "route": "/bp-masters",
@@ -11,7 +11,7 @@
         "file": "bp/index.html"
       },
       "images": [
-        "SCR-ADM-042.jpg"
+        "SCR-ADM-043.jpg"
       ],
       "rows": [
         {
@@ -49,7 +49,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-043",
+      "id": "SCR-ADM-044",
       "name": "BP 마스터 계정 등록",
       "menuCode": "MN000203",
       "route": "/bp-masters",
@@ -58,7 +58,7 @@
         "file": "bp/new.html"
       },
       "images": [
-        "SCR-ADM-043.jpg"
+        "SCR-ADM-044.jpg"
       ],
       "rows": [
         {
@@ -94,7 +94,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-044",
+      "id": "SCR-ADM-045",
       "name": "BP 마스터 계정 상세",
       "menuCode": "MN000203",
       "route": "/bp-masters",
@@ -103,7 +103,7 @@
         "file": "bp/detail.html"
       },
       "images": [
-        "SCR-ADM-044.jpg"
+        "SCR-ADM-045.jpg"
       ],
       "rows": [
         {
@@ -145,7 +145,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-045",
+      "id": "SCR-ADM-046",
       "name": "BP 마스터 계정 수정",
       "menuCode": "MN000203",
       "route": "/bp-masters",
@@ -154,7 +154,7 @@
         "file": "bp/edit.html"
       },
       "images": [
-        "SCR-ADM-045.jpg"
+        "SCR-ADM-046.jpg"
       ],
       "rows": [
         {
