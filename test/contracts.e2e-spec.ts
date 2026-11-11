@@ -630,6 +630,7 @@ describe('근로계약 목록 (e2e)', () => {
       contractMethod: 'ELECTRONIC',
       startDate: '2026-09-14',
       wageAmount: 12000,
+      baseHours: 209,
       workDays: [
         {
           weekday: 'MON',
@@ -699,6 +700,44 @@ describe('근로계약 목록 (e2e)', () => {
       };
       // 계약 방식도 임시저장이면 비워 둘 수 있다
       await post(partial).expect(201);
+    });
+
+    it('정직원 임시저장은 월 기본시간을 비워도(null 도) 201', async () => {
+      await post({
+        ...body,
+        baseHours: undefined,
+        isTemporarySave: true,
+      }).expect(201);
+      await post({ ...body, baseHours: null, isTemporarySave: true }).expect(
+        201,
+      );
+      // 비운 값은 0 이 아니라 NULL 로 남는다
+      for (const [args] of prisma.staffMember.create.mock.calls) {
+        expect(args.data.contracts).toMatchObject({
+          create: { status: 'DRAFT', baseHours: null },
+        });
+      }
+      expect(prisma.staffMember.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('파트타이머는 월 기본시간을 비워도 되지만, 보낸 값은 1 이상이어야 한다', async () => {
+      const partTime = { ...body, employmentType: 'PART_TIME' };
+      await post({ ...partTime, baseHours: undefined }).expect(201);
+      const res = await post({ ...partTime, baseHours: 0.5 }).expect(400);
+      expect((res.body as { message: string[] }).message).toEqual([
+        '월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.',
+      ]);
+    });
+
+    it('월 기본시간은 1 부터 받는다', async () => {
+      await post({ ...body, baseHours: 1 }).expect(201);
+    });
+
+    it('정직원 월 기본시간이 없으면 한글 문구 하나로 400', async () => {
+      const res = await post({ ...body, baseHours: null }).expect(400);
+      expect((res.body as { message: string[] }).message).toEqual([
+        '월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.',
+      ]);
     });
 
     it('api #12 칸(수당 · 월 근로시간 · 조항)을 받아 계약에 넣는다', async () => {
@@ -783,6 +822,9 @@ describe('근로계약 목록 (e2e)', () => {
       ['근무지 id 가 integer 를 넘음', { storeId: 3_000_000_000 }],
       ['수당이 음수', { carAllowanceAmount: -1 }],
       ['근로시간이 30분 단위가 아님', { baseHours: 1.3 }],
+      ['정직원인데 월 기본시간이 없음', { baseHours: undefined }],
+      ['월 기본시간이 1 미만', { baseHours: 0.5 }],
+      ['임시저장인데 월 기본시간이 0', { isTemporarySave: true, baseHours: 0 }],
       ['근로시간이 numeric(5,1) 을 넘음', { monthlyOvertimeHours: 10000 }],
       ['조항이 1000자를 넘음', { severancePayTerms: 'x'.repeat(1001) }],
       ['대체할 계약 id 가 숫자가 아님', { replaceContractIds: ['a'] }],
@@ -1128,6 +1170,17 @@ describe('근로계약 목록 (e2e)', () => {
       expect(res.status).toBe(400);
     });
 
+    it('정직원 종이 계약도 월 기본시간이 없으면 400 — 파일을 올리지 않는다', async () => {
+      const res = await paper()
+        .field('data', JSON.stringify({ ...data, employmentType: 'FULL_TIME' }))
+        .attach('employmentContract', PDF, 'a.pdf');
+      expect(res.status).toBe(400);
+      expect((res.body as { message: string[] }).message).toEqual([
+        '월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.',
+      ]);
+      expect(storage.put).not.toHaveBeenCalled();
+    });
+
     it('파일 종류는 내용으로 본다 — 확장자만 pdf 인 글자 파일은 400', async () => {
       const res = await paper()
         .field('data', JSON.stringify(data))
@@ -1259,6 +1312,37 @@ describe('근로계약 목록 (e2e)', () => {
         status: 'DRAFT',
         draftAction: null,
       });
+    });
+
+    it('정직원 임시저장을 다 써서 저장할 때 월 기본시간이 없으면 400', async () => {
+      // 나머지 칸은 다 채워 월 기본시간만 빠진 요청 — 문구가 그것 하나여야 한다
+      const complete = {
+        ...draft,
+        birthDate: '1998-07-12',
+        gender: 'MALE',
+        employmentType: 'FULL_TIME',
+        startDate: '2026-09-14',
+        wageAmount: 12000,
+        workDays: [
+          {
+            weekday: 'MON',
+            startTime: '09:00',
+            endTime: '18:00',
+            breakStartTime: '12:00',
+            breakEndTime: '13:00',
+          },
+        ],
+        payMonth: 'NEXT_MONTH',
+        payDay: 10,
+        payMethod: 'ACCOUNT',
+        isHealthPensionInsured: true,
+        isEmploymentInjuryInsured: false,
+        isTemporarySave: false,
+      };
+      const res = await put('/contracts/7', complete).expect(400);
+      expect((res.body as { message: string[] }).message).toEqual([
+        '월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.',
+      ]);
     });
 
     // api #49 4차 리뷰 — 동의로만 보이는 관리자(본사 역할)가 번호를 바꿔 보내면 그 번호의 같은 점포 계약이
