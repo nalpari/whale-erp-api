@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-11
+* **Update**: [Employment contract batch](/api/employment-contract-batch.md) — 로그인 후 홈 개편(WHALEERP-665, 운영 정책 v278 HOM-03~10): `GET /home/summary` 는 운영 점포만 세고(미운영은 운영 점포 카드의 `notOperating` 수로만), 점포별 현황 표는 일곱 곳 제한 없이 운영 점포 모두를 확인 필요 많은 순으로 준다. 점포별 `notCheckedInCount`(미출근) · `todayTodo`(오늘 TO-DO 완료 / 전체, 배정 그룹은 한 건이고 모두 완료여야 완료)와 카드 `todayTodo` 를 더했다. 점포별 확인 필요(`pendingActionCount`)에 계약 갱신 예정을 더했다. `GET /home/pending` 의 계약 갱신 예정은 종료 30일 안(`RENEWAL_NOTICE_DAYS`)으로 넓히고 가장 이른 종료까지 `dueInDays`(D-N)를 준다. 경고 밴드용 `renewals` 는 없앴다. TO-DO 는 본사 역할에게도 TO-DO 목록처럼 가리지 않고 센다. openapi.json 다시 생성.
+
 ## 2026-11-10
 * **Update**: [Payslips](/api/payslips.md) · [Attendance](/api/attendance.md) — 검토 사유 상세 문장을 「급여명세서 관리 수정 요청.xlsx」대로 바꿨다(사용자 지정): 출퇴근 누락 「출퇴근 기록이 등록되지 않은 날이 N일 있습니다(10월 9일 출근·퇴근 미등록, …).」 · 기록 없음 「이번 급여 기간에 등록된 출퇴근 기록이 없습니다.」, 계약 만료 후 「근로계약 종료일(2026년 10월 15일) 이후의 출퇴근 기록이 N일 있습니다(…).」, 기간 중 계약 변경 「급여 기간 중 적용된 근로계약이 N건이어서, …」 · 고용형태 섞임 「…정직원 계약과 파트타이머 계약이 함께 있어 … 금액을 직접 입력해 주세요.」, 확인 필요 「확인 필요로 표시된 출퇴근 기록이 N건 있습니다(근무지 반경 밖 퇴근, 위치 조작 감지 등).」. 날짜는 「M월 D일」. 상세는 만들 때 저장되므로 이미 만든 명세서는 다시 계산하기 전까지 옛 문장이다(api ditto).
 * **Update**: [Contracts API](/api/contracts-api.md) — 근로계약 작성 · 수정의 월 기본시간(`baseHours`): 정직원은 임시저장이 아니면 필수, 보낸 값은 고용 형태와 상관없이 1 이상 · 30분 단위다. 빠지거나 틀리면 400 문구 하나 「월 기본시간은 1 이상, 30분(0.5시간) 단위의 시간입니다.」(2026-11-10 사용자 지정, 관리자 웹은 209 를 기본으로 채운다). 이미 값 없이 저장된 정직원 계약의 재발송은 검사하지 않는다. openapi.json 다시 생성.

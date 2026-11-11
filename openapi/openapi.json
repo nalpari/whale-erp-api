@@ -35225,12 +35225,17 @@
           },
           "franchise": {
             "type": "number"
+          },
+          "notOperating": {
+            "type": "number",
+            "description": "업무 범위 안 미운영 점포 수 — 카드 · 표에는 세지 않고 아랫줄에만 적는다(폐점은 넣지 않는다)"
           }
         },
         "required": [
           "total",
           "direct",
-          "franchise"
+          "franchise",
+          "notOperating"
         ]
       },
       "HomeAttendanceCardDto": {
@@ -35270,6 +35275,21 @@
         "required": [
           "waiting",
           "answered"
+        ]
+      },
+      "HomeTodoCountDto": {
+        "type": "object",
+        "properties": {
+          "done": {
+            "type": "number"
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "done",
+          "total"
         ]
       },
       "HomeCardsDto": {
@@ -35312,6 +35332,16 @@
                 "$ref": "#/components/schemas/HomeInquiryCardDto"
               }
             ]
+          },
+          "todayTodo": {
+            "nullable": true,
+            "description": "오늘 TO-DO. TO-DO 리스트 관리 조회 권한. 본사 역할에게도 TO-DO 목록처럼 가리지 않고 센다(HOM-10 v278)",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HomeTodoCountDto"
+              }
+            ]
           }
         },
         "required": [
@@ -35319,7 +35349,8 @@
           "unsignedContractCount",
           "stores",
           "todayAttendance",
-          "myInquiries"
+          "myInquiries",
+          "todayTodo"
         ]
       },
       "HomeStoreRowDto": {
@@ -35353,9 +35384,24 @@
             "nullable": true,
             "description": "오늘 근무 예정 — 가림 없이"
           },
+          "notCheckedInCount": {
+            "type": "number",
+            "nullable": true,
+            "description": "미출근 — 카드의 notCheckedIn 과 같은 판정 · 가림"
+          },
+          "todayTodo": {
+            "nullable": true,
+            "description": "오늘 TO-DO — 카드의 todayTodo 와 같은 기준. 점포별 값을 더하면 카드와 같다",
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/HomeTodoCountDto"
+              }
+            ]
+          },
           "pendingActionCount": {
             "type": "number",
-            "description": "미조치 — 서명 대기 + 근로계약 수정 요청 + 소속 확인 거절 + 긴급 TO-DO 미완료. 볼 수 있는 영역의 건수만 더한다"
+            "description": "점포별 확인 필요(예전 이름 미조치, 운영 정책 HOM-03) — 계약 갱신 예정 + 직원 서명 대기 + 직원 수정 요청 + 소속 확인 거절 +\n긴급 TO-DO(대기 · 진행 중). 볼 수 있는 영역의 건수만 더한다"
           }
         },
         "required": [
@@ -35366,6 +35412,8 @@
           "unsignedContractCount",
           "checkedInCount",
           "scheduledCount",
+          "notCheckedInCount",
+          "todayTodo",
           "pendingActionCount"
         ]
       },
@@ -35377,7 +35425,7 @@
             "description": "운영 점포 전체 수"
           },
           "items": {
-            "description": "미조치 많은 순(같으면 점포명) 일곱 곳",
+            "description": "운영 점포 모두 — 확인 필요 많은 순, 같으면 점포명(HOM-06)",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/HomeStoreRowDto"
@@ -35421,46 +35469,6 @@
           "storeTable"
         ]
       },
-      "HomeRenewalDto": {
-        "type": "object",
-        "properties": {
-          "contractId": {
-            "type": "number"
-          },
-          "staffMemberId": {
-            "type": "number",
-            "nullable": true,
-            "description": "가려지는 직원(본사 제공 동의가 없는 가맹 점포 직원)이면 null"
-          },
-          "name": {
-            "type": "string",
-            "nullable": true,
-            "description": "가려지는 직원이면 null"
-          },
-          "isMasked": {
-            "type": "boolean"
-          },
-          "storeId": {
-            "type": "number"
-          },
-          "storeName": {
-            "type": "string"
-          },
-          "endDate": {
-            "type": "string",
-            "description": "계약 종료일(YYYY-MM-DD)"
-          }
-        },
-        "required": [
-          "contractId",
-          "staffMemberId",
-          "name",
-          "isMasked",
-          "storeId",
-          "storeName",
-          "endDate"
-        ]
-      },
       "HomePendingType": {
         "type": "string",
         "enum": [
@@ -35471,7 +35479,7 @@
           "INQUIRY_ANSWERED",
           "URGENT_TODO"
         ],
-        "description": "계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO 미완료"
+        "description": "계약 갱신 예정(종료 30일 안) · 직원 서명 대기 · 직원 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO(대기 · 진행 중)"
       },
       "HomePendingFilterDto": {
         "type": "object",
@@ -35500,7 +35508,7 @@
         "type": "object",
         "properties": {
           "type": {
-            "description": "계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO 미완료",
+            "description": "계약 갱신 예정(종료 30일 안) · 직원 서명 대기 · 직원 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO(대기 · 진행 중)",
             "allOf": [
               {
                 "$ref": "#/components/schemas/HomePendingType"
@@ -35527,6 +35535,11 @@
             "nullable": true,
             "description": "가장 오래 기다린 일수(한국 날짜) — 서명 대기는 발송 뒤, 수정 요청은 요청 뒤, 소속 확인 거절은 거절 뒤, 문의는 마지막 답변 뒤, TO-DO 는 등록 뒤. 갱신 예정은 null"
           },
+          "dueInDays": {
+            "type": "number",
+            "nullable": true,
+            "description": "계약 갱신 예정만 — 종료가 가장 이른 계약의 종료까지 남은 날(한국 날짜, D-N). 다른 유형은 null"
+          },
           "filter": {
             "$ref": "#/components/schemas/HomePendingFilterDto"
           }
@@ -35538,6 +35551,7 @@
           "isFirstNameMasked",
           "othersCount",
           "waitingDays",
+          "dueInDays",
           "filter"
         ]
       },
@@ -35550,15 +35564,7 @@
           },
           "platform": {
             "type": "boolean",
-            "description": "플랫폼 계정이면 true — renewals 는 null, items 는 빈 배열"
-          },
-          "renewals": {
-            "nullable": true,
-            "description": "경고 밴드. 근로계약 관리 조회 권한이 없으면 null",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/HomeRenewalDto"
-            }
+            "description": "플랫폼 계정이면 true — items 는 빈 배열"
           },
           "items": {
             "description": "건수가 0인 유형과 권한이 없는 유형은 뺀다. 순서는 갱신 예정 → 계약 → 직원 → 문의 → TO-DO",
@@ -35571,7 +35577,6 @@
         "required": [
           "asOf",
           "platform",
-          "renewals",
           "items"
         ]
       }

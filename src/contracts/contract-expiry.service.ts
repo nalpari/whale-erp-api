@@ -26,7 +26,7 @@ export type ContractDailyResult = {
 
 /**
  * 갱신 예정 후보 — 종료일이 from ~ to(둘 다 포함)인 재직 직원의 체결 완료 계약. 고른 뒤 needsRenewal 로 거른다. 하루 배치와
- * 로그인 후 홈의 경고 밴드(종료일 7일 안)가 같이 쓴다 — 배치는 아직 알리지 않은 것만 더 거른다.
+ * 로그인 후 홈의 계약 갱신 예정(종료일 30일 안)이 같이 쓴다 — 배치는 아직 알리지 않은 것만 더 거른다.
  */
 export const renewalCandidateWhere = (from: Date, to: Date) =>
   ({
