@@ -29,7 +29,6 @@ describe('로그인 후 홈 (e2e, DB)', () => {
   let baId: number; // BP 관리자 — 문의사항 조회가 없다. 가맹 점포 직원은 동의한 사람만 개인 단위로 본다
   let pmId: number; // 플랫폼 마스터(플랫폼 BP · 고정 그룹)
   let roleGroupId: number;
-  let renewalContractId: number;
   const staffIds: number[] = [];
   const accountIds: number[] = [];
   const today = kstToday();
@@ -179,19 +178,17 @@ describe('로그인 후 홈 (e2e, DB)', () => {
     const hidden = await staff(franchiseStoreId, '미동의', 'PART_TIME', null);
     const shown = await staff(franchiseStoreId, '동의', 'PART_TIME', true);
 
-    // 지안: 종료일 3일 뒤인 체결 완료(경고 밴드). 가맹 두 사람: 서명 대기
-    renewalContractId = (
-      await prisma.contract.create({
-        data: {
-          staffMemberId: jian,
-          storeId: directStoreId,
-          createdBy: baId,
-          status: 'SIGNED',
-          startDate: addDays(today, -300),
-          endDate: addDays(today, 3),
-        },
-      })
-    ).contractId;
+    // 지안: 종료일 3일 뒤인 체결 완료(계약 갱신 예정). 가맹 두 사람: 서명 대기
+    await prisma.contract.create({
+      data: {
+        staffMemberId: jian,
+        storeId: directStoreId,
+        createdBy: baId,
+        status: 'SIGNED',
+        startDate: addDays(today, -300),
+        endDate: addDays(today, 3),
+      },
+    });
     for (const staffMemberId of [hidden, shown])
       await prisma.contract.create({
         data: {
@@ -204,7 +201,7 @@ describe('로그인 후 홈 (e2e, DB)', () => {
         },
       });
 
-    // 재직 직원 하나 더 — 체결 완료(종료일 없음, 경고 밴드에 안 든다)나 지정한 상태의 근로계약 하나를 함께 만든다
+    // 재직 직원 하나 더 — 체결 완료(종료일 없음, 갱신 예정에 안 든다)나 지정한 상태의 근로계약 하나를 함께 만든다
     const employed = async (
       storeId: number,
       name: string,
@@ -444,12 +441,14 @@ describe('로그인 후 홈 (e2e, DB)', () => {
       staff: { total: 10, fullTime: 7, partTime: 1 },
       // 서명 대기 둘 중 미동의 직원 것은 세지 않는다. 거부 · 임시저장 · 체결 완료는 미체결이 아니다
       unsignedContractCount: 1,
-      stores: { total: 2, direct: 1, franchise: 1 },
+      stores: { total: 2, direct: 1, franchise: 1, notOperating: 0 },
       // 근무 예정은 그대로(5명). 오늘 출근은 동의 직원 하나 — 미동의 직원의 출근 기록은 가려진다. 미출근은 지안 · 밤샘 —
       // 퇴근만(출근 없는 퇴근)은 출근 미등록이고, 미동의 직원은 세지 않는다
       todayAttendance: { scheduled: 5, checkedIn: 1, notCheckedIn: 2 },
       // 문의사항 조회 권한이 없다
       myInquiries: null,
+      // 수행 날짜가 오늘인 TO-DO 여섯 줄(삭제 빼고, 그룹은 한 줄) 중 완료는 「긴급 완료」 하나 — 그룹은 미완료 행이 있어 완료가 아니다
+      todayTodo: { done: 1, total: 6 },
     });
     const row = (storeId: number) =>
       body.storeTable.items.find((r) => r.storeId === storeId);
@@ -459,6 +458,9 @@ describe('로그인 후 홈 (e2e, DB)', () => {
       // 가맹 점포의 근무 예정은 동의 · 미동의 두 명 — 가림 없이 든다. 출근은 동의 직원만
       scheduledCount: 2,
       checkedInCount: 1,
+      // 미동의 직원은 세지 않고 동의 직원은 출근했다
+      notCheckedInCount: 0,
+      todayTodo: { done: 0, total: 1 },
       // 동의 직원의 서명 대기 + 긴급 TO-DO 하나. 미동의 직원의 거절은 가려진다
       pendingActionCount: 2,
     });
@@ -467,42 +469,42 @@ describe('로그인 후 홈 (e2e, DB)', () => {
       unsignedContractCount: 0,
       scheduledCount: 3,
       checkedInCount: 0,
-      // 열린 거절 둘 + 긴급 TO-DO 미완료 세 줄(그룹 · 대기 · 진행 중)
-      pendingActionCount: 5,
+      // 지안 · 밤샘
+      notCheckedInCount: 2,
+      todayTodo: { done: 1, total: 5 },
+      // 계약 갱신 예정(지안) + 열린 거절 둘 + 긴급 TO-DO 대기 · 진행 중 세 줄(그룹 · 대기 · 진행 중)
+      pendingActionCount: 6,
     });
-    // 미조치가 많은 점포가 앞이다
+    // 확인 필요가 많은 점포가 앞이다
     expect(body.storeTable.items.map((r) => r.storeId)).toEqual([
       directStoreId,
       franchiseStoreId,
     ]);
   });
 
-  it('GET /home/pending — 플랫폼 계정은 빈 결과, BP 관리자는 경고 밴드 · 동의한 직원의 서명 대기 · 열린 소속 확인 거절 · 긴급 TO-DO', async () => {
+  it('GET /home/pending — 플랫폼 계정은 빈 결과, BP 관리자는 계약 갱신 예정(D-N) · 동의한 직원의 서명 대기 · 열린 소속 확인 거절 · 긴급 TO-DO', async () => {
     const platform = await get(`/home/pending`, pmId);
     expect(platform.status).toBe(200);
     expect(platform.body).toMatchObject({
       platform: true,
-      renewals: null,
       items: [],
     });
 
     const res = await get(`/home/pending?${scope()}`, baId);
     expect(res.status).toBe(200);
     const body = res.body as HomePendingResponseDto;
-    expect(body.renewals).toEqual([
-      expect.objectContaining({
-        contractId: renewalContractId,
-        name: '서지안',
-        storeId: directStoreId,
-        endDate: addDays(today, 3).toISOString().slice(0, 10),
-      }),
-    ]);
     expect(body.items.map((i) => i.type)).toEqual([
       'CONTRACT_RENEWAL',
       'CONTRACT_PENDING_SIGNATURE',
       'AFFILIATION_REJECTED',
       'URGENT_TODO',
     ]);
+    expect(body.items[0]).toMatchObject({
+      count: 1,
+      firstName: '서지안',
+      dueInDays: 3,
+      filter: { storeIds: [directStoreId], status: ['SIGNED'] },
+    });
     expect(body.items[1]).toMatchObject({
       count: 1,
       firstName: '동의',
@@ -518,6 +520,7 @@ describe('로그인 후 홈 (e2e, DB)', () => {
       isFirstNameMasked: false,
       othersCount: 1,
       waitingDays: 3,
+      dueInDays: null,
       filter: { storeIds: [directStoreId], status: ['REJECTED'] },
     });
     // 긴급 TO-DO 미완료 네 줄 — 그룹(미완료 행 둘이 한 줄) · 대기 · 진행 중 · 가맹. 등록이 이른 것이 앞이다
@@ -528,6 +531,7 @@ describe('로그인 후 홈 (e2e, DB)', () => {
       isFirstNameMasked: false,
       othersCount: 3,
       waitingDays: 3,
+      dueInDays: null,
       filter: {
         storeIds: [directStoreId, franchiseStoreId].sort((a, b) => a - b),
         status: ['PENDING', 'IN_PROGRESS'],
