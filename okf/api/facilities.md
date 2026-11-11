@@ -4,28 +4,28 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-11T07:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-11T08:30:00Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
     title: FacilitiesService — 범위 · 공통코드 · 담당자 · 폐점 조회만 · 문서
-    last_modified: 2026-11-11T07:30:00Z
+    last_modified: 2026-11-11T08:30:00Z
   - id: facilities-controller
     resource: ../../src/facilities/facilities.controller.ts
     title: /facilities 경로와 메뉴 권한
-    last_modified: 2026-11-11T07:30:00Z
+    last_modified: 2026-11-11T08:30:00Z
   - id: facility-format
     resource: ../../src/facilities/facility-format.ts
     title: 그룹 · 공통코드 그룹 이름 · 쪽 크기 · 총금액 · 이름표 고르기
-    last_modified: 2026-11-11T07:30:00Z
+    last_modified: 2026-11-11T08:30:00Z
   - id: save-facility-dto
     resource: ../../src/facilities/dto/save-facility.dto.ts
     title: 등록 · 수정 입력 검증
-    last_modified: 2026-11-11T07:30:00Z
+    last_modified: 2026-11-11T08:30:00Z
   - id: facilities-migration
     resource: ../../prisma/migrations/20261111153316_team1_facilities/migration.sql
     title: facilities · facility_documents · 공통코드 4그룹 13 · 메뉴 /facilities 사용 · 고정 권한 그룹
-    last_modified: 2026-11-11T07:30:00Z
+    last_modified: 2026-11-11T08:30:00Z
   - id: facilities-policy
     resource: https://claude.ai/artifact/Mo31QtdCL8fmcvFwphQGQo
     title: 「시설물·장비 관리 정책서」 · 「시설물·장비 수리 이력 정책서」(claude.ai 문서, 2026-11-10)
@@ -85,10 +85,16 @@ actions (PM000001 already had them). Other BP role groups get nothing until thei
   anything, since 분류 is required, although the menu is already open to BM · FM. BPs that sign up or
   are registered later receive every 플랫폼제공 group at signup regardless of the flag
   (`providedOriginals` in `src/code-groups/provided-code-copy.ts`).
-- **Keeping an unused value** (PL-3 · PL-6): on update, a 분류 · 점검 주기 equal to the current one
-  is accepted even if the BP has since set it 미사용, and so is the current 관리 담당자 after
-  retirement. Any other value must be active / employed, so once changed it cannot be set back.
-  The detail's `isFacilityCategoryActive` · `isInspectionCycleActive` tell the screen to show 「(미사용)」.
+- **Keeping an unused value** (PL-2 · PL-3 · PL-6): on update, a 운영상태 · 분류 · 점검 주기 equal to
+  the current one is accepted even if it has since been set 미사용 (운영상태 by the platform), and so is
+  the current 관리 담당자 after retirement. Any other value must be active / a candidate, so once
+  changed it cannot be set back. The detail's `isFacilityStatusActive` · `isFacilityCategoryActive` ·
+  `isInspectionCycleActive` tell the screen to show 「(미사용)」. Without the 운영상태 exception, turning
+  off one status would make every facility in it unsavable.
+- **A stale `updatedAt` is 409 before validation.** The "keep the current value" checks compare with
+  the row as it is now; if someone else changed it after the form was loaded, comparing would answer
+  「다시 선택해 주세요」 400 to a user who only needs to reload. The same condition on the `UPDATE`
+  still catches an edit that lands after this check.
 - **Labels never disappear**: list and detail labels read code rows regardless of status or
   deletion — the BP's renamed row first, else the platform row, else the code itself.
 - **총금액 is computed on save** (`unit_price × quantity`, null without a unit price) and a CHECK
@@ -104,7 +110,10 @@ actions (PM000001 already had them). Other BP role groups get nothing until thei
   nothing), a store closed in between is 409 「조회만」, and only then is a zero-row `UPDATE` a
   concurrent edit. The shared lock on the store also queues the write behind a closing, which takes the
   store row `FOR NO KEY UPDATE`. Document replace and remove take the same facility lock, so they
-  serialize and the last request wins.
+  serialize and the last request wins. **Create does the same with the store alone**: it re-reads the
+  store `FOR SHARE` in the insert's transaction, since the insert's foreign-key check takes only
+  `FOR KEY SHARE`, which does not conflict with a closing's `FOR NO KEY UPDATE` and would let a facility
+  land in a store closed a moment earlier.
 - **관리 담당자 전화번호 may stand alone** — saved without a 관리 담당자 (an outside contact, user decision
   2026-11-11); there is no CHECK tying the two.
 - **A code that went unused while the form was open** answers 「쓸 수 없는 분류입니다. 다시 선택해
@@ -121,7 +130,18 @@ actions (PM000001 already had them). Other BP role groups get nothing until thei
   re-check — the uploaded file is removed only when no row points at it (the COMMIT may have landed
   before the connection dropped). Images get a thumbnail (`thumbnailUrl`, long side 320px), PDFs
   `null`.
-- **`manager-options` returns 직원 휴대폰** to anyone with 조회 on this menu, for the stores in scope —
+- **관리 담당자 candidates are 재직 · 가입 완료 (`JOINED`) staff of that store** — options and the save
+  check share `managerCandidateWhere`. Records before signup are excluded because the contract code
+  physically deletes them (deleting a 임시저장 contract, `dropOrphanRecords` on replacement); the
+  manager foreign key is `RESTRICT`, so a draft record chosen as manager would turn those deletions
+  into a 500.
+- **본사 역할 masking (ATT-30) applies here.** For BM · BA in a franchise store, candidates are only
+  staff with 본사 제공 동의 (none if the franchise store is closed) — the same `hiddenStoreStaffWhere`
+  as 직원 정보 관리 — so the phone list cannot leak people that screen hides. A manager someone else
+  chose (a 가맹 계정 may pick anyone) shows to 본사 as `manager.name = null`, `managerPhone = null`,
+  `isManagerHidden = true`; when 본사 then saves the form with that manager unchanged and the phone
+  empty (it never saw it), the stored phone is kept.
+- **`manager-options` returns 직원 휴대폰** to anyone with 조회 on this menu, for the candidates above —
   PL-6 pre-fills the 관리 담당자 phone from it. No 직원 정보 관리 permission is required.
 - **Code and manager validation runs outside the write transaction.** A 분류 set 미사용, or a manager
   retired, between the check and the `UPDATE` is not caught; the window is one request long and was
