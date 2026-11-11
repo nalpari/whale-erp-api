@@ -209,15 +209,30 @@ def key_of(s):
 
 # ── 캡처 ──
 
-def _export(repo, dst):
-    """origin/main 의 docs/demo 를 임시 폴더에 푼다. 체크아웃은 건드리지 않는다. (커밋, 커밋 시각)"""
+def _git(root, *args):
+    return subprocess.check_output(["git", "-C", root, *args], text=True).strip()
+
+
+def _export(repo, dst, ref="origin/main", paths=("docs/demo",)):
+    """ref 의 docs/demo(또는 paths)를 임시 폴더에 푼다. 체크아웃은 건드리지 않는다. (커밋, 커밋 시각)"""
     root = os.path.join(V2, repo)
-    commit = subprocess.check_output(["git", "-C", root, "rev-parse", "origin/main"], text=True).strip()
-    date = subprocess.check_output(["git", "-C", root, "log", "-1", "--format=%cI", commit], text=True).strip()
-    data = subprocess.check_output(["git", "-C", root, "archive", commit, "docs/demo"])
+    commit = _git(root, "rev-parse", f"{ref}^{{commit}}")
+    date = _git(root, "log", "-1", "--format=%cI", commit)
+    data = subprocess.check_output(["git", "-C", root, "archive", commit, *paths])
     with tarfile.open(fileobj=BytesIO(data)) as tar:
         tar.extractall(dst, filter="data")
     return commit, date
+
+
+def _overlay(repo, dst, ref):
+    """ref 커밋이 바꾼 데모 파일(첫 부모와 비교)만 dst 위에 덮는다. 바뀐 화면만 그 커밋으로 찍을 때 쓴다(계획 문서)."""
+    root = os.path.join(V2, repo)
+    commit = _git(root, "rev-parse", f"{ref}^{{commit}}")
+    files = _git(root, "diff", "--name-only", "--diff-filter=AM", f"{commit}^1", commit, "--", "docs/demo").split()
+    if not files:
+        raise SystemExit(f"{ref}: 바꾼 데모 파일이 없습니다")
+    _, date = _export(repo, dst, commit, files)
+    return {"commit": commit, "committedAt": date, "files": [f.removeprefix("docs/demo/") for f in files]}
 
 
 _TEXTS = """() => {
@@ -343,8 +358,10 @@ def _check_pages(all_demo, used_keys):
         raise SystemExit(f"화면이나 제외 목록에 없는 데모: {missing}\n화면과 제외 목록에 다 있는 데모: {extra}")
 
 
-def capture():
+def capture(refs=None, overlay=None):
+    """refs: 저장소별 기준 커밋(없으면 origin/main). overlay: 관리자 웹 기준 위에 덮을 커밋."""
     from playwright.sync_api import sync_playwright
+    refs = refs or {}
     shutil.rmtree(IMG, ignore_errors=True)
     os.makedirs(IMG)
     source, visible, all_demo, used, hidden = {}, {}, [], set(), set()
@@ -357,8 +374,11 @@ def capture():
         for client, repo in REPOS.items():
             dst = os.path.join(tmp, client)
             os.makedirs(dst)
-            commit, date = _export(repo, dst)
-            source[client] = {"repo": repo, "ref": "origin/main", "commit": commit, "committedAt": date}
+            ref = refs.get(client, "origin/main")
+            commit, date = _export(repo, dst, ref)
+            source[client] = {"repo": repo, "ref": ref, "commit": commit, "committedAt": date}
+            if client == "admin" and overlay:
+                source[client]["overlay"] = _overlay(repo, dst, overlay)
             roots[client] = os.path.join(dst, "docs", "demo")
         for pat in glob.glob("**/*.html", root_dir=roots["admin"], recursive=True):
             if not pat.startswith(("_check/", "src/", "kit")) and pat != "index.html":
@@ -546,12 +566,19 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--version")
     ap.add_argument("--capture", action="store_true")
+    ap.add_argument("--ref", action="append", default=[], metavar="저장소=커밋", help="찍을 기준 커밋(admin · staff). 없으면 origin/main")
+    ap.add_argument("--overlay", metavar="커밋", help="이 커밋이 바꾼 관리자 웹 데모 파일만 기준 위에 덮어 찍는다")
     ap.add_argument("--draft", action="store_true", help="설명 표가 빈 화면을 허용한다(1단계)")
     a = ap.parse_args()
     if a.capture:
-        source, images, widened = capture()
+        refs = dict(r.split("=", 1) for r in a.ref)
+        if set(refs) - set(REPOS):
+            ap.error(f"--ref 는 {list(REPOS)} 만 받습니다")
+        source, images, widened = capture(refs, a.overlay)
         for k in REPOS:
             print(f"{k}: {source[k]['repo']} {source[k]['commit']}")
+        if "overlay" in source["admin"]:
+            print(f"덮은 커밋 {source['admin']['overlay']['commit']}: {source['admin']['overlay']['files']}")
         size = sum(os.path.getsize(os.path.join(IMG, f)) for f in os.listdir(IMG))
         print(f"화면 {len(screens())} · 이미지 {images} · 합계 {size / 1024 / 1024:.1f}MB")
         print(f"표가 넘쳐 폭을 늘린 화면: {widened}")

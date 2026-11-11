@@ -3,7 +3,7 @@
   "area": "운영 알림",
   "screens": [
     {
-      "id": "SCR-ADM-031",
+      "id": "SCR-ADM-032",
       "name": "운영 알림함",
       "menuCode": "MN000042",
       "route": "/notifications",
@@ -11,7 +11,7 @@
         "file": "notify/index.html"
       },
       "images": [
-        "SCR-ADM-031.jpg"
+        "SCR-ADM-032.jpg"
       ],
       "rows": [
         {

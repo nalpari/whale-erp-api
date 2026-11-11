@@ -49,7 +49,7 @@
           "scope",
           "nope"
         ],
-        "note": "범위는 데이터만 가른다. 바꾸면 보던 화면에 남지 않고 홈으로 돌아간다."
+        "note": "범위는 데이터만 가른다. 바꾸면 지금 보고 있는 메뉴의 목록으로 간다. 메뉴가 아닌 화면에서는 이동하지 않고 범위만 바꾼다."
       }
     ],
     "viewBox": [
@@ -101,7 +101,7 @@
     },
     {
       "id": "g2",
-      "label": "HOME-4 · STAFF-12 · 늘 전체 · 바꾸면 홈으로",
+      "label": "HOME-4 · STAFF-12 · 늘 전체 · 바꾸면 메뉴 목록으로",
       "lane": "sel",
       "fromCol": 4,
       "toCol": 5,
@@ -244,9 +244,9 @@
     {
       "id": "e8",
       "from": "scope",
-      "to": "home",
+      "to": "work",
       "variant": "dashed",
-      "label": "홈으로 돌아간다",
+      "label": "메뉴 목록으로",
       "role": "return"
     },
     {

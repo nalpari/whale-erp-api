@@ -3,7 +3,7 @@
   "area": "커뮤니티관리",
   "screens": [
     {
-      "id": "SCR-ADM-051",
+      "id": "SCR-ADM-052",
       "name": "공지사항",
       "menuCode": "MN000219",
       "route": "/platform-notices",
@@ -11,7 +11,7 @@
         "file": "support/community-notices.html"
       },
       "images": [
-        "SCR-ADM-051.jpg"
+        "SCR-ADM-052.jpg"
       ],
       "rows": [
         {
@@ -50,7 +50,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-052",
+      "id": "SCR-ADM-053",
       "name": "공지사항 수정",
       "menuCode": "MN000219",
       "route": "/platform-notices/[id]",
@@ -58,7 +58,7 @@
         "file": "support/notice-edit.html"
       },
       "images": [
-        "SCR-ADM-052.jpg"
+        "SCR-ADM-053.jpg"
       ],
       "rows": [
         {
@@ -115,7 +115,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-053",
+      "id": "SCR-ADM-054",
       "name": "FAQ",
       "menuCode": "MN000220",
       "route": "/platform-faqs",
@@ -123,7 +123,7 @@
         "file": "support/community-faq.html"
       },
       "images": [
-        "SCR-ADM-053.jpg"
+        "SCR-ADM-054.jpg"
       ],
       "rows": [
         {
@@ -154,7 +154,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-054",
+      "id": "SCR-ADM-055",
       "name": "FAQ 수정",
       "menuCode": "MN000220",
       "route": "/platform-faqs/[id]",
@@ -162,7 +162,7 @@
         "file": "support/faq-edit.html"
       },
       "images": [
-        "SCR-ADM-054.jpg"
+        "SCR-ADM-055.jpg"
       ],
       "rows": [
         {
@@ -210,7 +210,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-055",
+      "id": "SCR-ADM-056",
       "name": "문의사항",
       "menuCode": "MN000221",
       "route": "/platform-inquiries",
@@ -218,7 +218,7 @@
         "file": "support/community-asks.html"
       },
       "images": [
-        "SCR-ADM-055.jpg"
+        "SCR-ADM-056.jpg"
       ],
       "rows": [
         {
@@ -244,7 +244,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-056",
+      "id": "SCR-ADM-057",
       "name": "문의사항 상세",
       "menuCode": "MN000221",
       "route": "/platform-inquiries/[id]",
@@ -252,7 +252,7 @@
         "file": "support/inquiry-detail.html"
       },
       "images": [
-        "SCR-ADM-056.jpg"
+        "SCR-ADM-057.jpg"
       ],
       "rows": [
         {
@@ -308,7 +308,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-057",
+      "id": "SCR-ADM-058",
       "name": "도입문의",
       "menuCode": "MN000222",
       "route": "/platform-leads",
@@ -316,7 +316,7 @@
         "file": "support/community-leads.html"
       },
       "images": [
-        "SCR-ADM-057.jpg"
+        "SCR-ADM-058.jpg"
       ],
       "rows": [
         {
@@ -344,7 +344,7 @@
       ]
     },
     {
-      "id": "SCR-ADM-058",
+      "id": "SCR-ADM-059",
       "name": "도입문의 상세",
       "menuCode": "MN000222",
       "route": "/platform-leads/[id]",
@@ -352,7 +352,7 @@
         "file": "support/lead-detail.html"
       },
       "images": [
-        "SCR-ADM-058.jpg"
+        "SCR-ADM-059.jpg"
       ],
       "rows": [
         {
