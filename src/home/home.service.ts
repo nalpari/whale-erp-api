@@ -15,12 +15,13 @@ import {
   adminHasMenuAction,
   reportMissingMenu,
 } from '../auth/menu-permission.guard';
-import { dateOnly } from '../common/date-only';
 import {
   needsRenewal,
   RENEWAL_CANDIDATE_SELECT,
   renewalCandidateWhere,
 } from '../contracts/contract-expiry.service';
+import { RENEWAL_NOTICE_DAYS } from '../contracts/contract-renewal';
+import { groupStatus } from '../todos/todo-rules';
 import {
   attendanceDayStatus,
   type DayPair,
@@ -70,17 +71,20 @@ const EMPLOYED_STAFF = {
   contracts: { some: { status: { not: 'DRAFT' } } },
 } as const satisfies Prisma.StaffMemberWhereInput;
 
-/** 경고 밴드 — 종료일이 오늘부터 며칠 안인가(운영 정책 HOM-04) */
-const BAND_DAYS = 7;
-/** 처리 대기 문의 — 최근 며칠 안에 답변완료된 것 */
+/** 확인 필요 문의 — 최근 며칠 안에 답변완료된 것 */
 const INQUIRY_RECENT_DAYS = 7;
-/** 점포별 현황 표의 줄 수(운영 정책 HOM-06) */
-const TABLE_ROWS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** 한국 날짜로 며칠 지났는가 */
 const daysSince = (at: Date, now: Date) =>
   Math.round((kstToday(now).getTime() - kstToday(at).getTime()) / DAY_MS);
+
+/** TO-DO 행을 목록 한 줄(배정 그룹은 하나)로 묶는다 — TO-DO 목록과 같은 열쇠 */
+const todoLineKey = (r: {
+  todoId: number;
+  assignmentGroupId: number | null;
+}) =>
+  r.assignmentGroupId === null ? `t${r.todoId}` : `g${r.assignmentGroupId}`;
 
 type RejectionSource = {
   retiredDate: Date | null;
@@ -131,6 +135,7 @@ const pendingItemOf = (
   if (!first) return null;
   return {
     type,
+    dueInDays: null,
     count: entries.length,
     firstName: first.name,
     isFirstNameMasked: first.name === null,
@@ -148,17 +153,20 @@ const pendingItemOf = (
 };
 
 /**
- * 관리자 웹 로그인 후 홈의 집계(WHALEERP-305 · 306) — 수치 카드 · 점포별 현황 표(summary)와 처리 대기 · 경고 밴드(pending).
- * 둘을 나눠 한쪽이 실패해도 다른 쪽은 보인다. 저장하지 않고 부를 때마다 센다.
+ * 관리자 웹 로그인 후 홈의 집계(WHALEERP-305 · 306 · 665) — 수치 카드 · 점포별 현황 표(summary)와 확인 필요(pending).
+ * 둘을 나눠 한쪽이 실패해도 다른 쪽은 보인다. 저장하지 않고 부를 때마다 센다. 「확인 필요」는 홈 영역 이름이다 — 출퇴근 기록
+ * 꼬리표(ATT-19)와 다른 뜻이다.
  *
  * - 업무 범위: 관리 범위(getManageableStores) 안에서 고른 점포(storeIds). 범위 밖 ID 는 조용히 빠진다.
  * - 권한: 홈은 메뉴가 아니다. 영역마다 그 메뉴의 조회 권한이 있을 때만 채우고, 없으면 그 영역은 null 이다 — 403 으로 홈 전체를
- *   막지 않는다(직원 상세 요약과 같은 생각). 미조치는 볼 수 있는 영역의 건수만 더한다.
+ *   막지 않는다(직원 상세 요약과 같은 생각). 점포별 확인 필요는 볼 수 있는 영역의 건수만 더한다.
  * - 플랫폼 계정(플랫폼 BP 의 PM · PA)은 현황 없이 안내만 보므로 platform: true 인 빈 결과다.
- * - 업무 범위의 폐점 점포는 모든 집계에서 뺀다 — 카드 · 표 · 처리 대기 · 경고 밴드가 같은 점포를 센다.
+ * - 폐점 점포는 모든 집계에서 뺀다. 카드 · 표(summary)는 운영 점포만 세고(운영 정책 HOM-06 · HOM-10 — 열을 더하면 카드와 같다),
+ *   확인 필요(pending)는 미운영 점포 건까지 센다(HOM-07).
  * - 본사 역할의 가림(운영 정책 ATT-30 v216, 2026-10-27 재영): 가려지는 점포(직영이 아닌 점포)에서는 계약 집계(미체결 · 서명
  *   대기 · 수정 요청과 경과 일수) · 갱신 예정 · 소속 확인 거절 · 정직원/파트 나눔을 본사 제공 동의한 직원 것만 센다 — 근로계약
- *   목록과 같은 조건이다. 미조치 · 점포별 표도 같은 집계에서 나와 합계가 맞는다. 재직 직원 총수만 그대로 센다(점포별 숫자).
+ *   목록과 같은 조건이다. 점포별 확인 필요도 같은 집계에서 나와 합계가 맞는다. 재직 직원 총수만 그대로 센다(점포별 숫자).
+ *   TO-DO(오늘 TO-DO · 긴급)는 TO-DO 목록처럼 가리지 않고 줄로 센다(HOM-10 v278, 2026-11-11 재영).
  * - 쿼리 수는 점포 수와 상관없이 일정하다 — 점포 단위로 묶어 세고 읽은 뒤 나눈다. 차례로 읽는다(동시에 읽으면 e2e 의 PGlite
  *   소켓 서버에서 깨진다 — 고객지원 문의와 같다).
  */
@@ -176,14 +184,19 @@ export class HomeService {
     storeIds?: number[],
     now: Date = new Date(),
   ): Promise<HomeSummaryResponseDto> {
-    const ctx = await this.contextOf(adminAccountId, storeIds, [
-      'staff',
-      'contracts',
-      'attendance',
-      'workSchedules',
-      'inquiries',
-      'todos',
-    ]);
+    const ctx = await this.contextOf(
+      adminAccountId,
+      storeIds,
+      [
+        'staff',
+        'contracts',
+        'attendance',
+        'workSchedules',
+        'inquiries',
+        'todos',
+      ],
+      true,
+    );
     if (!ctx)
       return {
         asOf: now,
@@ -191,7 +204,7 @@ export class HomeService {
         cards: null,
         storeTable: { total: 0, items: [] },
       };
-    const { ids, stores, can, shown, hides } = ctx;
+    const { ids, stores, notOperating, can, shown, hides } = ctx;
     const today = kstToday(now);
 
     const staffByStore = new Map<number, number>();
@@ -219,7 +232,7 @@ export class HomeService {
         else staff.partTime += g._count._all;
     }
 
-    // 미조치는 점포마다 더해 간다
+    // 점포별 확인 필요는 점포마다 더해 간다(운영 정책 HOM-03)
     const pending = new Map<number, number>();
     const addPending = (storeId: number, n = 1) =>
       pending.set(storeId, (pending.get(storeId) ?? 0) + n);
@@ -242,6 +255,8 @@ export class HomeService {
         );
         if (g.status !== 'PENDING_SEND') addPending(g.storeId, n);
       }
+      for (const r of await this.renewals(shown.contract, today))
+        addPending(r.storeId);
     }
     if (can('staff'))
       for (const r of await this.openRejections(shown.staff))
@@ -252,6 +267,7 @@ export class HomeService {
     let todayAttendance: HomeCardsDto['todayAttendance'] = null;
     const scheduledByStore = new Map<number, number>();
     const checkedInByStore = new Map<number, number>();
+    const absentByStore = new Map<number, number>();
     const showsAttendance = can('attendance') && can('workSchedules');
     if (showsAttendance) {
       const day = {
@@ -320,21 +336,53 @@ export class HomeService {
         );
       for (const storeId of checkedIn.values())
         checkedInByStore.set(storeId, (checkedInByStore.get(storeId) ?? 0) + 1);
+      // scheduled 는 직원마다 그날 첫 근무 하나라 시작 시각 하나로 넘긴다(판정은 가장 이른 시작만 본다)
+      const absent = scheduled.filter(
+        (s) =>
+          !hides(s.storeId, s.staffMember) &&
+          attendanceDayStatus(
+            [s.startAt],
+            pairsOf.get(s.staffMemberId) ?? [],
+            false,
+            now,
+          ) === 'ABSENT',
+      );
+      for (const s of absent)
+        absentByStore.set(s.storeId, (absentByStore.get(s.storeId) ?? 0) + 1);
       todayAttendance = {
         scheduled: scheduled.length,
         checkedIn: checkedIn.size,
-        // scheduled 는 직원마다 그날 첫 근무 하나라 시작 시각 하나로 넘긴다(판정은 가장 이른 시작만 본다)
-        notCheckedIn: scheduled.filter(
-          (s) =>
-            !hides(s.storeId, s.staffMember) &&
-            attendanceDayStatus(
-              [s.startAt],
-              pairsOf.get(s.staffMemberId) ?? [],
-              false,
-              now,
-            ) === 'ABSENT',
-        ).length,
+        notCheckedIn: absent.length,
       };
+    }
+
+    // 오늘 TO-DO — 수행 날짜가 오늘인 것. 배정 그룹은 한 건이고 그룹의 행이 모두 완료여야 완료다(HOM-10)
+    let todayTodo: HomeCardsDto['todayTodo'] = null;
+    const todoByStore = new Map<number, { done: number; total: number }>();
+    if (can('todos')) {
+      const rows = await this.prisma.todo.findMany({
+        where: { storeId: { in: ids }, isDeleted: false, dueDate: today },
+        select: {
+          todoId: true,
+          assignmentGroupId: true,
+          storeId: true,
+          status: true,
+        },
+      });
+      const lines = new Map<string, typeof rows>();
+      for (const r of rows)
+        lines.set(todoLineKey(r), [...(lines.get(todoLineKey(r)) ?? []), r]);
+      todayTodo = { done: 0, total: 0 };
+      for (const line of lines.values()) {
+        const done = groupStatus(line.map((r) => r.status)) === 'DONE' ? 1 : 0;
+        const s = todoByStore.get(line[0].storeId) ?? { done: 0, total: 0 };
+        todoByStore.set(line[0].storeId, {
+          done: s.done + done,
+          total: s.total + 1,
+        });
+        todayTodo.done += done;
+        todayTodo.total += 1;
+      }
     }
 
     let myInquiries: HomeCardsDto['myInquiries'] = null;
@@ -365,6 +413,12 @@ export class HomeService {
       scheduledCount: showsAttendance
         ? (scheduledByStore.get(s.storeId) ?? 0)
         : null,
+      notCheckedInCount: showsAttendance
+        ? (absentByStore.get(s.storeId) ?? 0)
+        : null,
+      todayTodo: todayTodo
+        ? (todoByStore.get(s.storeId) ?? { done: 0, total: 0 })
+        : null,
       pendingActionCount: pending.get(s.storeId) ?? 0,
     }));
     rows.sort(
@@ -384,11 +438,13 @@ export class HomeService {
           total: stores.length,
           direct,
           franchise: stores.length - direct,
+          notOperating,
         },
         todayAttendance,
         myInquiries,
+        todayTodo,
       },
-      storeTable: { total: rows.length, items: rows.slice(0, TABLE_ROWS) },
+      storeTable: { total: rows.length, items: rows },
     };
   }
 
@@ -403,60 +459,29 @@ export class HomeService {
       'inquiries',
       'todos',
     ]);
-    if (!ctx) return { asOf: now, platform: true, renewals: null, items: [] };
-    const { ids, stores, can, shown, nameOf } = ctx;
+    if (!ctx) return { asOf: now, platform: true, items: [] };
+    const { ids, can, shown, nameOf } = ctx;
     const today = kstToday(now);
     const items: (HomePendingItemDto | null)[] = [];
-    let renewals: HomePendingResponseDto['renewals'] = null;
 
     if (can('contracts')) {
-      const storeNames = new Map(stores.map((s) => [s.storeId, s.name]));
-      // 갱신 예정의 대상 규칙은 하루 배치와 같다(renewalCandidateWhere · needsRenewal)
-      const candidates = await this.prisma.contract.findMany({
-        where: {
-          AND: [
-            renewalCandidateWhere(today, addDays(today, BAND_DAYS)),
-            shown.contract,
-          ],
-        },
-        select: {
-          ...RENEWAL_CANDIDATE_SELECT,
-          storeId: true,
-          staffMember: {
-            select: {
-              ...RENEWAL_CANDIDATE_SELECT.staffMember.select,
-              staffMemberId: true,
-              name: true,
-              ...HQ_SHARING_SELECT,
-            },
-          },
-        },
-        orderBy: [{ endDate: 'asc' }, { contractId: 'asc' }],
-      });
-      renewals = candidates.filter(needsRenewal).map((c) => {
-        const name = nameOf(c.storeId, c.staffMember);
-        return {
-          contractId: c.contractId,
-          staffMemberId: name === null ? null : c.staffMember.staffMemberId,
-          name,
-          isMasked: name === null,
+      // 종료가 가장 이른 계약이 대표다 — 그 계약의 종료까지 남은 날을 D-N 으로 보인다(HOM-04)
+      const renewals = await this.renewals(shown.contract, today);
+      const renewal = pendingItemOf(
+        'CONTRACT_RENEWAL',
+        renewals.map((c) => ({
+          name: nameOf(c.storeId, c.staffMember),
           storeId: c.storeId,
-          storeName: storeNames.get(c.storeId) ?? '',
-          endDate: dateOnly(c.endDate!),
-        };
-      });
-      items.push(
-        pendingItemOf(
-          'CONTRACT_RENEWAL',
-          renewals.map((r) => ({
-            name: r.name,
-            storeId: r.storeId,
-            since: null,
-          })),
-          ['SIGNED'],
-          now,
-        ),
+          since: null,
+        })),
+        ['SIGNED'],
+        now,
       );
+      if (renewal)
+        renewal.dueInDays = Math.round(
+          (renewals[0].endDate!.getTime() - today.getTime()) / DAY_MS,
+        );
+      items.push(renewal);
 
       const waiting = await this.prisma.contract.findMany({
         where: {
@@ -578,20 +603,52 @@ export class HomeService {
     return {
       asOf: now,
       platform: false,
-      renewals,
       items: items.filter((i): i is HomePendingItemDto => i !== null),
     };
   }
 
   /**
+   * 계약 갱신 예정 — 종료일이 오늘부터 30일(RENEWAL_NOTICE_DAYS) 안이고 새 계약이 없는 것(HOM-03 · HOM-04). 대상 규칙은 하루
+   * 배치와 같다(renewalCandidateWhere · needsRenewal). 종료가 이른 것이 앞이다.
+   */
+  private async renewals(
+    shownContract: Prisma.ContractWhereInput,
+    today: Date,
+  ) {
+    const candidates = await this.prisma.contract.findMany({
+      where: {
+        AND: [
+          renewalCandidateWhere(today, addDays(today, RENEWAL_NOTICE_DAYS)),
+          shownContract,
+        ],
+      },
+      select: {
+        ...RENEWAL_CANDIDATE_SELECT,
+        storeId: true,
+        staffMember: {
+          select: {
+            ...RENEWAL_CANDIDATE_SELECT.staffMember.select,
+            name: true,
+            ...HQ_SHARING_SELECT,
+          },
+        },
+      },
+      orderBy: [{ endDate: 'asc' }, { contractId: 'asc' }],
+    });
+    return candidates.filter(needsRenewal);
+  }
+
+  /**
    * 업무 범위와 영역 권한. 플랫폼 계정이면 null. 사용 중인 관리자 계정이 아니면 403(TO-DO 목록과 같다). 고른 점포는 관리 범위
-   * 안에서만 남고, 폐점 점포는 여기서 빠져 모든 집계가 같은 ids 를 쓴다. `shown` 은 개인 단위로 세는 집계에 거는 조건이다 —
-   * 가려지는 점포는 본사 제공 동의한 직원 것만(hqVisibleWhere — 근로계약 목록과 같은 함수).
+   * 안에서만 남고, 폐점 점포는 여기서 빠진다. `operatingOnly` 면 미운영 점포도 빠지고 그 수를 `notOperating` 으로 준다 — 그 영역의
+   * 모든 집계가 같은 ids 를 쓴다. `shown` 은 개인 단위로 세는 집계에 거는 조건이다 — 가려지는 점포는 본사 제공 동의한 직원
+   * 것만(hqVisibleWhere — 근로계약 목록과 같은 함수).
    */
   private async contextOf(
     adminAccountId: number,
     storeIds: number[] | undefined,
     areas: Area[],
+    operatingOnly = false,
   ) {
     const access = await this.scope.platformAdminAccess(adminAccountId);
     if (access === 'unavailable')
@@ -605,13 +662,21 @@ export class HomeService {
         .filter((s) => !picked || picked.has(s.storeId))
         .map((s) => [s.storeId, s]),
     );
-    const stores = await this.prisma.store.findMany({
+    const live = await this.prisma.store.findMany({
       where: {
         storeId: { in: [...storeOf.keys()] },
         storeStatusCode: { not: 'CLOSED' },
       },
-      select: { storeId: true, name: true, storeTypeCode: true },
+      select: {
+        storeId: true,
+        name: true,
+        storeTypeCode: true,
+        storeStatusCode: true,
+      },
     });
+    const stores = operatingOnly
+      ? live.filter((s) => s.storeStatusCode === 'OPERATING')
+      : live;
     const ids = stores.map((s) => s.storeId);
     const shown = hqVisibleWhere(manageable.roleTypeCode, ids, storeOf);
     /** 이 직원의 개인 단위 자료를 가리는가 — shown 과 같은 판정을 읽은 행에 한다 */
@@ -628,10 +693,11 @@ export class HomeService {
     return {
       ids,
       stores,
+      notOperating: live.length - stores.length,
       shown,
       can: (area: Area) => readable.has(area),
-      /** 처리 대기 · 경고 밴드의 직원 이름 — 가려지면 null(hidesPersonalData). shown 이 동의한 직원만 남겨 지금은 늘 이름이지만, 두 판정이 어긋나도 이름이 새지 않게 둔다 */
       hides,
+      /** 확인 필요의 직원 이름 — 가려지면 null(hidesPersonalData). shown 이 동의한 직원만 남겨 지금은 늘 이름이지만, 두 판정이 어긋나도 이름이 새지 않게 둔다 */
       nameOf: (storeId: number, staff: { name: string } & HqSharingSource) =>
         hides(storeId, staff) ? null : staff.name,
     };
@@ -718,13 +784,8 @@ export class HomeService {
       orderBy: [{ createdAt: 'asc' }, { todoId: 'asc' }],
     });
     const lines = new Map<string, (typeof rows)[number]>();
-    for (const r of rows) {
-      const key =
-        r.assignmentGroupId === null
-          ? `t${r.todoId}`
-          : `g${r.assignmentGroupId}`;
-      if (!lines.has(key)) lines.set(key, r);
-    }
+    for (const r of rows)
+      if (!lines.has(todoLineKey(r))) lines.set(todoLineKey(r), r);
     return [...lines.values()];
   }
 }

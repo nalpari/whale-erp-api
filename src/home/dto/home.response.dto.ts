@@ -10,11 +10,19 @@ export class HomeStaffCardDto {
   partTime: number;
 }
 
-/** 운영 점포 — 업무 범위 안 폐점이 아닌 점포. 다른 카드 · 표 · 처리 대기도 이 점포들만 센다 */
+/** 운영 점포 — 업무 범위 안 운영 상태 점포(운영 정책 HOM-10). 다른 카드 · 표도 이 점포들만 센다 */
 export class HomeStoreCardDto {
   total: number;
   direct: number;
   franchise: number;
+  /** 업무 범위 안 미운영 점포 수 — 카드 · 표에는 세지 않고 아랫줄에만 적는다(폐점은 넣지 않는다) */
+  notOperating: number;
+}
+
+/** 오늘 TO-DO — 수행 날짜가 오늘(한국 날짜)인 TO-DO. 배정 그룹은 한 건이고 그룹의 행이 모두 완료여야 완료다(HOM-10) */
+export class HomeTodoCountDto {
+  done: number;
+  total: number;
 }
 
 /** 오늘 출근(한국 날짜) */
@@ -49,6 +57,8 @@ export class HomeCardsDto {
   todayAttendance: HomeAttendanceCardDto | null;
   /** 문의사항 조회 권한 */
   myInquiries: HomeInquiryCardDto | null;
+  /** 오늘 TO-DO. TO-DO 리스트 관리 조회 권한. 본사 역할에게도 TO-DO 목록처럼 가리지 않고 센다(HOM-10 v278) */
+  todayTodo: HomeTodoCountDto | null;
 }
 
 /** 점포별 현황 표 한 줄. 권한이 없는 칸은 null(카드와 같은 권한) */
@@ -63,14 +73,21 @@ export class HomeStoreRowDto {
   checkedInCount: number | null;
   /** 오늘 근무 예정 — 가림 없이 */
   scheduledCount: number | null;
-  /** 미조치 — 서명 대기 + 근로계약 수정 요청 + 소속 확인 거절 + 긴급 TO-DO 미완료. 볼 수 있는 영역의 건수만 더한다 */
+  /** 미출근 — 카드의 notCheckedIn 과 같은 판정 · 가림 */
+  notCheckedInCount: number | null;
+  /** 오늘 TO-DO — 카드의 todayTodo 와 같은 기준. 점포별 값을 더하면 카드와 같다 */
+  todayTodo: HomeTodoCountDto | null;
+  /**
+   * 점포별 확인 필요(예전 이름 미조치, 운영 정책 HOM-03) — 계약 갱신 예정 + 직원 서명 대기 + 직원 수정 요청 + 소속 확인 거절 +
+   * 긴급 TO-DO(대기 · 진행 중). 볼 수 있는 영역의 건수만 더한다
+   */
   pendingActionCount: number;
 }
 
 export class HomeStoreTableDto {
   /** 운영 점포 전체 수 */
   total: number;
-  /** 미조치 많은 순(같으면 점포명) 일곱 곳 */
+  /** 운영 점포 모두 — 확인 필요 많은 순, 같으면 점포명(HOM-06) */
   items: HomeStoreRowDto[];
 }
 
@@ -83,20 +100,6 @@ export class HomeSummaryResponseDto {
   storeTable: HomeStoreTableDto;
 }
 
-/** 경고 밴드 — 갱신 예정 계약 중 종료일이 오늘부터 7일 안인 것 */
-export class HomeRenewalDto {
-  contractId: number;
-  /** 가려지는 직원(본사 제공 동의가 없는 가맹 점포 직원)이면 null */
-  staffMemberId: number | null;
-  /** 가려지는 직원이면 null */
-  name: string | null;
-  isMasked: boolean;
-  storeId: number;
-  storeName: string;
-  /** 계약 종료일(YYYY-MM-DD) */
-  endDate: string;
-}
-
 export const HOME_PENDING_TYPES = [
   'CONTRACT_RENEWAL',
   'CONTRACT_PENDING_SIGNATURE',
@@ -107,7 +110,7 @@ export const HOME_PENDING_TYPES = [
 ] as const;
 export type HomePendingType = (typeof HOME_PENDING_TYPES)[number];
 
-/** 처리 대기 항목이 이동할 화면의 조건 */
+/** 확인 필요 항목이 이동할 화면의 조건 */
 export class HomePendingFilterDto {
   /** 점포. 문의는 점포로 거르지 않아 빈 배열 */
   storeIds: number[];
@@ -115,10 +118,10 @@ export class HomePendingFilterDto {
   status: string[];
 }
 
-/** 처리 대기 한 유형 */
+/** 확인 필요(홈) 한 유형 — 출퇴근 기록 꼬리표 「확인 필요」와 다른 뜻이다 */
 export class HomePendingItemDto {
   /**
-   * 계약 갱신 예정 · 근로계약 서명 대기 · 근로계약 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO 미완료
+   * 계약 갱신 예정(종료 30일 안) · 직원 서명 대기 · 직원 수정 요청 · 소속 확인 거절 · 문의 답변완료(마지막 답변이 최근 7일 안) · 긴급 TO-DO(대기 · 진행 중)
    */
   @ApiProperty({ enum: HOME_PENDING_TYPES, enumName: 'HomePendingType' })
   type: HomePendingType;
@@ -130,15 +133,15 @@ export class HomePendingItemDto {
   othersCount: number;
   /** 가장 오래 기다린 일수(한국 날짜) — 서명 대기는 발송 뒤, 수정 요청은 요청 뒤, 소속 확인 거절은 거절 뒤, 문의는 마지막 답변 뒤, TO-DO 는 등록 뒤. 갱신 예정은 null */
   waitingDays: number | null;
+  /** 계약 갱신 예정만 — 종료가 가장 이른 계약의 종료까지 남은 날(한국 날짜, D-N). 다른 유형은 null */
+  dueInDays: number | null;
   filter: HomePendingFilterDto;
 }
 
 export class HomePendingResponseDto {
   asOf: Date;
-  /** 플랫폼 계정이면 true — renewals 는 null, items 는 빈 배열 */
+  /** 플랫폼 계정이면 true — items 는 빈 배열 */
   platform: boolean;
-  /** 경고 밴드. 근로계약 관리 조회 권한이 없으면 null */
-  renewals: HomeRenewalDto[] | null;
   /** 건수가 0인 유형과 권한이 없는 유형은 뺀다. 순서는 갱신 예정 → 계약 → 직원 → 문의 → TO-DO */
   items: HomePendingItemDto[];
 }
