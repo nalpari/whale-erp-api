@@ -48,5 +48,5 @@ front #247 로 급여명세서 경고 띠 버튼이 [출퇴근 보정]에서 [�
 옛 SCP-06 문장이 두 문서에 남아 있어 함께 맞춘다.
 
 - 요구사항정의서: Manyfast 스냅숏을 새로 받는다. 지난 스냅숏(2026-11-05)과 달라진 곳은 「로그인 후 개인화 홈」의 동작 · 비즈니스 규칙 두 칸뿐임을 재생성 전에 확인했다.
-- 유저플로우: front `docs/flow/entry-home` 을 PR로 고쳐 머지한 뒤 `build_userflow.py --snapshot` 으로 사본을 뜬다.
+- 유저플로우: front `docs/flow/entry-home` 을 PR로 고쳐 머지한 뒤 `build_userflow.py --snapshot` 으로 사본을 뜬다. 2026-11-11 front 1447f25b · staff 7c4fc413 에서 떴고, 바뀐 파일은 entry-home 둘뿐이다. staff 는 커밋만 앞으로 갔고 흐름 파일은 같다.
 - 완료보고서는 기준 칸이 바뀌어 마지막에 다시 낸다. 화면설계서는 front 다음 변경이 머지될 때까지 다시 내지 않는다.
