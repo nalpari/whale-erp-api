@@ -342,7 +342,7 @@ as the fields a 임시저장 needs, since 고용 형태 is a value of the 직원
 the save creates. The list response types the
 contract fields as nullable for the same reason. `workLocation` (근무 장소,
 ≤ 200 chars — 관리자 웹 fills it with the 근무지명 when a 근무지 is picked and the
-관리자 may edit it; empty means that day's 점포명 at 발송 · 날인, front #250) is optional on both, and so are the api #12 칸 — 식대 ·
+관리자 may edit it; omitted (null) means that day's 점포명 at 발송 · 날인 — an empty string is kept as is, front #250) is optional on both, and so are the api #12 칸 — 식대 ·
 자가운전보조금 · 육아수당 (원, 0 이상), 월 기본시간 · 월간 연장근무 · 기본시간 중 야간 ·
 휴일근무 · 월간 추가 휴일근무 (시간, 0.5 단위, ≤ 9999.5 for `numeric(5,1)`;
 the two 휴일근무 칸: 화면(front #15)에서는 받지 않는다. 칸은 남아 있다 —

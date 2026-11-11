@@ -7,7 +7,7 @@ status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-11-10T09:10:00Z }
 sources:
   - id: contract-work-location-comment
-    resource: ../../prisma/migrations/20261110090116_team3_contract_work_location_comment/migration.sql
+    resource: ../../prisma/migrations/20261111091227_team3_contract_work_location_comment/migration.sql
     title: 근무 장소 work_location 설명 — 소속 근무지를 고르면 근무지명으로 채움 (front #250)
     last_modified: 2026-11-10T09:10:00Z
   - id: contract-correction-reason
@@ -336,9 +336,10 @@ table document:
   `20261008000500_team3_contract_work_location`). It is the text of the
   contract's 근무 장소 clause. It started as an address typed by the 관리자,
   separate from 근무지 `store_id`; since 2026-11-10 (front #250) 관리자 웹 fills it
-  with the 근무지명 when a 근무지 is picked and the 관리자 may edit it, and an
-  empty value still becomes that day's 점포명 at 발송 · 날인. The column comment
-  was rewritten to match by `20261110090116_team3_contract_work_location_comment`
+  with the 근무지명 when a 근무지 is picked and the 관리자 may edit it, and a
+  missing (null) value still becomes that day's 점포명 at 발송 · 날인 — an empty
+  string does not (`?? storeName`), so 관리자 웹 omits a blank field. The column comment
+  was rewritten to match by `20261111091227_team3_contract_work_location_comment`
   (comment only). The naming table has no row for 근무 장소 yet; the source
   belongs to the 기획 세션.
 - **임금 · 근로시간 · 연차휴가 · 퇴직금 clauses are columns on `contracts`**
