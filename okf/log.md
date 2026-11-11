@@ -1,5 +1,10 @@
 # Directory Update Log
 
+## 2026-11-11
+* **New**: [Facilities](/api/facilities.md) — 시설물 및 장비 관리 API(「시설물·장비 관리 정책서」 2026-11-10 PL-1 ~ PL-6, 사용자 지정). `20261111153316_team1_facilities`: `facilities`(기본 · 제품 · 구매 · 기한 · 관리 · A/S 한 행) · `facility_documents`(문서 3종, 종류마다 지우지 않은 행 하나) · enum `facility_document_kind`(`db-enums.generated.ts` 재생성), 공통코드 4그룹 13건(FACILITY_STATUS 플랫폼고정 · STORE_FACILITY · STORE_EQUIPMENT · INSPECTION_CYCLE 플랫폼제공, BP 적용 꺼 둠), 메뉴 MN000022 url `/stores/facilities` → `/facilities` · 사용, 고정 권한 그룹 BM000001 · FM000001 에 조회 · 등록 · 수정 · 삭제. 점검 주기 그룹은 제안 `FACILITY_INSPECTION_CYCLE`(25자)이 그룹 코드 20자 제약에 걸려 `INSPECTION_CYCLE` 로 줄였다. 수리 이력 · 일괄 등록(PL-7)은 다음 작업(사용자 결정). openapi.json 다시 생성(api marowak).
+* **Update**: [Facilities](/api/facilities.md) — 리뷰 반영(적용 전이라 같은 마이그레이션을 고침): 폴더 이름을 한국 시각으로(Git Bash 의 `TZ=Asia/Seoul date` 가 UTC 를 내 처음 이름이 UTC 였다), 총금액 CHECK 를 `IS NOT DISTINCT FROM` 으로(한쪽만 NULL 인 행이 통과하던 구멍), 확인 블록의 권한 검사를 넣은 BM · FM 만으로. 문서 교체가 잠근 뒤 삭제 여부를 다시 본다(404). 기존 BP 는 BP 적용 전까지 분류가 없어 등록할 수 없고 새 BP 는 가입 때 받는다는 것, 담당자 선택지의 휴대폰, 점포 삭제 뒤 남는 시설물을 적었다. 서비스 단위 테스트(저장소 · DB 실패 정리 · 지금 값 유지 · 서명 실패)를 더했다.
+* **Update**: [Team 1 physical schema](/domain/team1-physical-schema.md) — 1팀 모델 28 → 30(시설물 2표). SQL 에만 있는 제약에 시설물 CHECK 16 · 부분 고유 인덱스 1 을 더했다(외래키 4 도 SQL 에만 — 직원 · 관리자는 정수 칸).
+
 ## 2026-11-10
 * **Update**: [Payslips](/api/payslips.md) · [Attendance](/api/attendance.md) — 검토 사유 상세 문장을 「급여명세서 관리 수정 요청.xlsx」대로 바꿨다(사용자 지정): 출퇴근 누락 「출퇴근 기록이 등록되지 않은 날이 N일 있습니다(10월 9일 출근·퇴근 미등록, …).」 · 기록 없음 「이번 급여 기간에 등록된 출퇴근 기록이 없습니다.」, 계약 만료 후 「근로계약 종료일(2026년 10월 15일) 이후의 출퇴근 기록이 N일 있습니다(…).」, 기간 중 계약 변경 「급여 기간 중 적용된 근로계약이 N건이어서, …」 · 고용형태 섞임 「…정직원 계약과 파트타이머 계약이 함께 있어 … 금액을 직접 입력해 주세요.」, 확인 필요 「확인 필요로 표시된 출퇴근 기록이 N건 있습니다(근무지 반경 밖 퇴근, 위치 조작 감지 등).」. 날짜는 「M월 D일」. 상세는 만들 때 저장되므로 이미 만든 명세서는 다시 계산하기 전까지 옛 문장이다(api ditto).
 
