@@ -4,28 +4,28 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-11T08:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-11T09:30:00Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
     title: FacilitiesService — 범위 · 공통코드 · 담당자 · 폐점 조회만 · 문서
-    last_modified: 2026-11-11T08:30:00Z
+    last_modified: 2026-11-11T09:30:00Z
   - id: facilities-controller
     resource: ../../src/facilities/facilities.controller.ts
     title: /facilities 경로와 메뉴 권한
-    last_modified: 2026-11-11T08:30:00Z
+    last_modified: 2026-11-11T09:30:00Z
   - id: facility-format
     resource: ../../src/facilities/facility-format.ts
     title: 그룹 · 공통코드 그룹 이름 · 쪽 크기 · 총금액 · 이름표 고르기
-    last_modified: 2026-11-11T08:30:00Z
+    last_modified: 2026-11-11T09:30:00Z
   - id: save-facility-dto
     resource: ../../src/facilities/dto/save-facility.dto.ts
     title: 등록 · 수정 입력 검증
-    last_modified: 2026-11-11T08:30:00Z
+    last_modified: 2026-11-11T09:30:00Z
   - id: facilities-migration
     resource: ../../prisma/migrations/20261111153316_team1_facilities/migration.sql
     title: facilities · facility_documents · 공통코드 4그룹 13 · 메뉴 /facilities 사용 · 고정 권한 그룹
-    last_modified: 2026-11-11T08:30:00Z
+    last_modified: 2026-11-11T09:30:00Z
   - id: facilities-policy
     resource: https://claude.ai/artifact/Mo31QtdCL8fmcvFwphQGQo
     title: 「시설물·장비 관리 정책서」 · 「시설물·장비 수리 이력 정책서」(claude.ai 문서, 2026-11-10)
@@ -53,7 +53,7 @@ the guard's target BP: BP · 가맹 계정 their own, a platform account must se
 | `POST /facilities` | 등록 | `storeId` 필수 |
 | `PUT /facilities/:id` | 수정 | 화면 전체 + `updatedAt`. `storeId` 를 보내면 400 |
 | `DELETE /facilities/:id` | 삭제 | 논리 삭제, 문서도 함께 |
-| `PUT /facilities/:id/documents/:kind` | 등록 또는 수정 | multipart `file`, JPG · PNG · PDF 10MB. 등록 화면은 등록한 뒤 올린다 |
+| `PUT /facilities/:id/documents/:kind` | 등록 또는 수정 | multipart `file`, JPG · PNG · PDF 10MB. 등록 화면은 등록한 뒤 올린다. 등록 권한만이면 직접 등록한 시설물에 처음 올리는 문서만(교체 · 남의 시설물은 403) |
 | `DELETE /facilities/:id/documents/:kind` | 수정 | 없어도 204 |
 
 `kind` is `USER_MANUAL` · `PRECAUTION` · `WARRANTY` (사용 매뉴얼 · 주의사항 · 제품 보증서); any
@@ -123,6 +123,13 @@ actions (PM000001 already had them). Other BP role groups get nothing until thei
   (「구매처 전화번호는 숫자 9~12자리입니다.」).
 - **A/S센터 주소**: 우편번호 and 기본주소 come together, 상세주소 only with an address — 400 otherwise,
   and a CHECK backs it.
+- **Who may upload.** The guard admits 등록 or 수정 because the 등록 화면 uploads right after
+  creating. The service narrows it (`assertDocumentWritable`, the contract-continuation pattern of
+  WHALEERP-592): with 수정 permission anything goes; with only 등록 permission, only the first document
+  of a kind on a facility the caller registered (`created_by`). Replacing an existing document or
+  uploading to someone else's facility changes an existing facility and is 403 — otherwise a role
+  barred from removing a document (`DELETE` needs 수정) could still overwrite it. The screen never
+  offers it; the check is for direct API calls.
 - **Documents**: one live row per kind (partial unique index), one row per stored file
   (`facility_documents_storage_key_key`). Replacing re-checks under the lock above (the upload's
   storage round trip is the widest window), marks the old row deleted and inserts the new one;
