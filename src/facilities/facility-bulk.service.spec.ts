@@ -2,8 +2,16 @@ import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import ExcelJS from 'exceljs';
 import { PrismaService } from '../prisma/prisma.service';
-import { BULK_HAS_ERRORS, BULK_HEADERS } from './facility-bulk';
-import { FacilityBulkService } from './facility-bulk.service';
+import {
+  BULK_HAS_ERRORS,
+  BULK_HEADERS,
+  BULK_NO_ERRORS,
+  BULK_STORE_CHANGED,
+} from './facility-bulk';
+import {
+  BULK_CODES_MISSING,
+  FacilityBulkService,
+} from './facility-bulk.service';
 
 const BP = { bpCodeId: 7, isPlatformCaller: false };
 const LABELS: string[] = BULK_HEADERS.map((h) => h.label);
@@ -242,18 +250,71 @@ describe('FacilityBulkService', () => {
     expect(data[1]).toMatchObject({ storeId: 1, createdBy: 168 });
   });
 
-  it('등록 — 그 사이 점포가 폐점 · 삭제됐으면 400(미리보기를 다시 받게)', async () => {
+  it('등록 — 검사 뒤 잠금에서 점포가 폐점 · 삭제로 보이면 점포 변경 문구로 400(줄 오류 문구가 아니다)', async () => {
     tx.$queryRaw.mockResolvedValue([
       { store_id: 1, store_status_code: 'CLOSED', is_deleted: false },
     ]);
     await expect(
       service.register(168, BP, await upload([row()])),
-    ).rejects.toThrow(new BadRequestException(BULK_HAS_ERRORS));
+    ).rejects.toThrow(new BadRequestException(BULK_STORE_CHANGED));
     tx.$queryRaw.mockResolvedValue([]);
     await expect(
       service.register(168, BP, await upload([row()])),
-    ).rejects.toThrow(new BadRequestException(BULK_HAS_ERRORS));
+    ).rejects.toThrow(new BadRequestException(BULK_STORE_CHANGED));
     expect(tx.facility.createMany).not.toHaveBeenCalled();
+  });
+
+  it('공통코드 누락 — 운영상태가 없거나 두 그룹 모두 분류가 없으면 경고 로그와 400(양식 · 미리보기 · 등록)', async () => {
+    const warn = jest
+      .spyOn(
+        (service as unknown as { logger: { warn: () => void } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+    // 분류 없음(그 BP 에 BP 적용 전)
+    prisma.codeItem.findMany.mockResolvedValue(
+      CODES.filter((c) => c.groupCode === 'FACILITY_STATUS'),
+    );
+    await expect(service.template(168, BP)).rejects.toThrow(
+      new BadRequestException(BULK_CODES_MISSING),
+    );
+    await expect(
+      service.preview(168, BP, await upload([row()])),
+    ).rejects.toThrow(new BadRequestException(BULK_CODES_MISSING));
+    // 운영상태 없음
+    prisma.codeItem.findMany.mockResolvedValue(
+      CODES.filter((c) => c.groupCode !== 'FACILITY_STATUS'),
+    );
+    await expect(
+      service.register(168, BP, await upload([row()])),
+    ).rejects.toThrow(new BadRequestException(BULK_CODES_MISSING));
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('bp=BP000007'));
+  });
+
+  it('공통코드 그룹이 미사용이면 그 그룹은 고를 수 없다 — 다른 그룹만 있으면 그 그룹으로만 등록한다', async () => {
+    prisma.codeGroup.findMany.mockResolvedValue(
+      GROUPS.filter((g) => g.groupCode === 'STORE_FACILITY'),
+    );
+    const where = () =>
+      (prisma.codeGroup.findMany.mock.calls as [{ where: unknown }][])[0][0]
+        .where;
+    const result = await service.preview(
+      168,
+      BP,
+      await upload([row(), row({ '그룹*': '점포 시설물', '분류*': '냉난방' })]),
+    );
+    expect(where()).toMatchObject({ status: 'ACTIVE', isDeleted: false });
+    expect(result.rows.map((r) => r.errors)).toEqual([
+      ['그룹: 목록에 있는 값을 골라 주세요.'],
+      [],
+    ]);
+  });
+
+  it('오류 파일 — 오류 줄이 하나도 없으면 400', async () => {
+    await expect(
+      service.errorFile(168, BP, await upload([row()])),
+    ).rejects.toThrow(new BadRequestException(BULK_NO_ERRORS));
   });
 
   it('양식 — 범위 안 열린 점포만 둘째 시트에 넣는다', async () => {

@@ -68,11 +68,22 @@ import {
   type FacilityDocumentUpload,
 } from './facilities.service';
 import {
+  BULK_EMPTY,
   BULK_HAS_ERRORS,
   BULK_MAX_BYTES,
+  BULK_NO_ERRORS,
+  BULK_STORE_CHANGED,
   BULK_TEMPLATE_FILE_NAME,
+  BULK_TEMPLATE_ONLY,
+  BULK_TOO_LARGE,
+  BULK_TOO_MANY,
+  BULK_UNREADABLE,
 } from './facility-bulk';
-import { type BulkUpload, FacilityBulkService } from './facility-bulk.service';
+import {
+  BULK_CODES_MISSING,
+  type BulkUpload,
+  FacilityBulkService,
+} from './facility-bulk.service';
 import { FACILITY_DOCUMENT_MAX_BYTES } from './facility-format';
 
 const BP_NOT_FOUND_DESCRIPTION =
@@ -97,7 +108,16 @@ const BULK_FILE_BODY: ApiBodyOptions = {
     properties: { file: { type: 'string', format: 'binary' } },
   },
 };
-const BULK_FILE_ERRORS = `파일 없음 · 5MB 초과 · 파일 2개 이상 · 양식이 아님(「내려받은 양식으로 작성한 파일만 올릴 수 있습니다.」) · 500줄 초과 · 내용 없음 · ${BP_MISSING_DESCRIPTION}`;
+const BULK_FILE_ERRORS = [
+  '파일 없음 · 5MB 초과 · 파일 2개 이상(업로드 문구)',
+  `zip · xlsx 가 아니거나 첫 시트 머리글이 양식과 다름(「${BULK_TEMPLATE_ONLY}」)`,
+  `압축을 푼 크기가 4MB 를 넘음(「${BULK_TOO_LARGE}」)`,
+  `exceljs 가 읽지 못함 — 표 · 차트 등(「${BULK_UNREADABLE}」)`,
+  `500줄 초과(「${BULK_TOO_MANY}」)`,
+  `내용 없음(「${BULK_EMPTY}」)`,
+  `그 BP 의 시설물 공통코드가 없음(「${BULK_CODES_MISSING}」)`,
+  BP_MISSING_DESCRIPTION,
+].join(' · ');
 const XLSX_FILE_RESPONSE: ApiResponseOptions = {
   description: '.xlsx 파일(Content-Disposition 에 파일 이름)',
   schema: { type: 'string', format: 'binary' },
@@ -171,6 +191,9 @@ export class FacilitiesController {
   @MenuPermission('create')
   @ApiProduces(XLSX_CONTENT_TYPE)
   @ApiOkResponse(XLSX_FILE_RESPONSE)
+  @ApiBadRequestResponse({
+    description: `그 BP 의 시설물 공통코드가 없음(「${BULK_CODES_MISSING}」) · ${BP_MISSING_DESCRIPTION}`,
+  })
   @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   async bulkTemplate(
     @CurrentUser() user: AuthUser,
@@ -200,7 +223,7 @@ export class FacilitiesController {
     return this.bulk.preview(user.id, bp, files?.[0]);
   }
 
-  /** 일괄 등록 오류 파일 — 올린 파일 끝에 「오류 사유」 열을 더해 돌려준다(이름 「올린파일이름_오류.xlsx」). */
+  /** 일괄 등록 오류 파일 — 올린 파일 끝에 「오류 사유」 열을 더해 돌려준다(이름 「올린파일이름_오류.xlsx」). 오류 줄이 없으면 400. */
   @Post('bulk-error-file')
   @MenuPermission('create')
   @HttpCode(HttpStatus.OK)
@@ -209,7 +232,9 @@ export class FacilitiesController {
   @ApiBody(BULK_FILE_BODY)
   @ApiProduces(XLSX_CONTENT_TYPE)
   @ApiOkResponse(XLSX_FILE_RESPONSE)
-  @ApiBadRequestResponse({ description: BULK_FILE_ERRORS })
+  @ApiBadRequestResponse({
+    description: `${BULK_FILE_ERRORS} · 오류가 있는 줄이 없음(「${BULK_NO_ERRORS}」)`,
+  })
   @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   async bulkErrorFile(
     @CurrentUser() user: AuthUser,
@@ -226,7 +251,8 @@ export class FacilitiesController {
 
   /**
    * 일괄 등록 — 같은 검사를 다시 하고, 오류가 한 줄이라도 있으면 하나도 저장하지 않고 400. 모두 정상이면 한 트랜잭션.
-   * 미리보기 뒤 점포가 폐점 · 삭제되거나 공통코드가 미사용이 됐어도 400 이다 — 화면은 미리보기를 다시 받는다.
+   * 미리보기 뒤 등록 요청 전에 점포가 폐점 · 삭제되거나 공통코드가 미사용이 됐으면 줄 오류로 400, 검사 뒤 넣기 직전에
+   * 점포가 폐점 · 삭제됐으면 점포 변경 문구로 400 이다 — 화면은 미리보기를 다시 받는다.
    */
   @Post('bulk')
   @MenuPermission('create')
@@ -235,7 +261,7 @@ export class FacilitiesController {
   @ApiBody(BULK_FILE_BODY)
   @ApiCreatedResponse({ type: BulkCreateResponseDto })
   @ApiBadRequestResponse({
-    description: `${BULK_FILE_ERRORS} · 오류가 있는 줄이 있음(「${BULK_HAS_ERRORS}」)`,
+    description: `${BULK_FILE_ERRORS} · 오류가 있는 줄이 있음(「${BULK_HAS_ERRORS}」) · 검사 뒤 점포가 폐점 · 삭제됨(「${BULK_STORE_CHANGED}」)`,
   })
   @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   bulkRegister(

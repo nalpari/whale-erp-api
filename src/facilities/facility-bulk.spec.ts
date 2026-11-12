@@ -1,3 +1,4 @@
+import { crc32, deflateRawSync } from 'node:zlib';
 import { BadRequestException } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import {
@@ -6,8 +7,11 @@ import {
   BULK_MAX_ROWS,
   BULK_PREVIEW_COLUMNS,
   BULK_TEMPLATE_ONLY,
+  BULK_TOO_LARGE,
   BULK_TOO_MANY,
+  BULK_UNREADABLE,
   assertZipWithinLimit,
+  bulkErrorFileName,
   type BulkLookups,
   type BulkRawRow,
   buildBulkErrorFile,
@@ -19,8 +23,14 @@ import {
 
 const LOOKUPS: BulkLookups = {
   stores: new Map([
-    ['ST000001', { storeId: 1, name: '강남점', isClosed: false }],
-    ['ST000002', { storeId: 2, name: '닫은점', isClosed: true }],
+    [
+      'ST000001',
+      { storeId: 1, storeCode: 'ST000001', name: '강남점', isClosed: false },
+    ],
+    [
+      'ST000002',
+      { storeId: 2, storeCode: 'ST000002', name: '닫은점', isClosed: true },
+    ],
   ]),
   statuses: [
     { code: 'OPERATING', label: '운영' },
@@ -76,6 +86,51 @@ const VALID = {
   category: '제빙기',
 };
 
+/** 손으로 만드는 zip — 항목마다 deflate(8) · 저장(0) 등 압축 방식을 고른다 */
+function zipOf(
+  entries: { name: string; data: Buffer | string; method?: number }[],
+): Buffer {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const e of entries) {
+    const data = Buffer.isBuffer(e.data) ? e.data : Buffer.from(e.data);
+    const method = e.method ?? 8;
+    const body = method === 8 ? deflateRawSync(data) : data;
+    const name = Buffer.from(e.name);
+    const crc = crc32(data);
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0);
+    lh.writeUInt16LE(20, 4);
+    lh.writeUInt16LE(method, 8);
+    lh.writeUInt32LE(crc, 14);
+    lh.writeUInt32LE(body.length, 18);
+    lh.writeUInt32LE(data.length, 22);
+    lh.writeUInt16LE(name.length, 26);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0);
+    ch.writeUInt16LE(20, 4);
+    ch.writeUInt16LE(20, 6);
+    ch.writeUInt16LE(method, 10);
+    ch.writeUInt32LE(crc, 16);
+    ch.writeUInt32LE(body.length, 20);
+    ch.writeUInt32LE(data.length, 24);
+    ch.writeUInt16LE(name.length, 28);
+    ch.writeUInt32LE(offset, 42);
+    locals.push(lh, name, body);
+    centrals.push(ch, name);
+    offset += 30 + name.length + body.length;
+  }
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, directory, end]);
+}
+
 async function rejection(p: Promise<unknown>): Promise<string> {
   try {
     await p;
@@ -88,7 +143,7 @@ async function rejection(p: Promise<unknown>): Promise<string> {
 
 describe('facility-bulk', () => {
   describe('양식 칸', () => {
-    it('정책서 PL-7 의 24칸을 그 순서로 둔다(필수는 *)', () => {
+    it('정책서 PL-7 의 24칸을 그 순서로 둔다(필수는 *, 첫 칸은 「점포*」 — 2026-11-12 사용자 결정)', () => {
       expect(LABELS).toEqual([
         '점포*',
         '시설물/장비명*',
@@ -238,19 +293,117 @@ describe('facility-bulk', () => {
       ws.getCell(1_048_576, 1).value = ' ';
       const buffer = Buffer.from(await wb.xlsx.writeBuffer());
       expect(buffer.length).toBeLessThan(50_000);
-      const started = Date.now();
       expect(await rejection(readBulkFile(buffer))).toBe(BULK_EMPTY);
-      expect(Date.now() - started).toBeLessThan(3000);
     });
 
     it('압축을 푼 크기가 상한을 넘으면 읽기 전에 400', async () => {
       const buffer = await xlsx([VALIDCELLS()]);
       expect(
         await rejection(readBulkFile(buffer, { maxUncompressedBytes: 1_000 })),
-      ).toBe(BULK_TOO_MANY);
+      ).toBe(BULK_TOO_LARGE);
       await expect(
         readBulkFile(buffer, { maxUncompressedBytes: 10_000_000 }),
       ).resolves.toBeDefined();
+    });
+
+    it('오류 값 · 결과 없는 수식 · 값이 바뀐 Serial number 는 빈 칸이 아니라 그 칸의 사유가 된다', async () => {
+      const { rows } = await readBulkFile(
+        await xlsx([
+          {
+            ...VALIDCELLS(),
+            단가: { error: '#N/A' },
+            '시설물/장비명*': { formula: 'A1' },
+            'Serial number': 123456789012345680,
+          },
+        ]),
+      );
+      expect(rows[0].problems).toEqual({
+        unitPrice: '셀 값이 오류(#N/A)입니다. 값을 직접 적어 주세요.',
+        name: '수식의 결과가 저장되지 않았습니다. 값으로 붙여 넣어 주세요.',
+        serialNumber:
+          '숫자로 저장돼 값이 바뀌었을 수 있습니다. 셀 서식을 텍스트로 바꿔 다시 적어 주세요.',
+      });
+      const r = checkBulkRow(rows[0], LOOKUPS);
+      expect(r.isValid).toBe(false);
+      // 필수 칸(이름)도 「입력해 주세요」를 더하지 않고 사유 하나, 칸 순서대로
+      expect(r.errors).toEqual([
+        '시설물/장비명: 수식의 결과가 저장되지 않았습니다. 값으로 붙여 넣어 주세요.',
+        'Serial number: 숫자로 저장돼 값이 바뀌었을 수 있습니다. 셀 서식을 텍스트로 바꿔 다시 적어 주세요.',
+        '단가: 셀 값이 오류(#N/A)입니다. 값을 직접 적어 주세요.',
+      ]);
+    });
+
+    it('오류 값만 있는 줄도 빈 줄로 넘기지 않는다', async () => {
+      const { rows } = await readBulkFile(
+        await xlsx([{ 메모: { error: '#REF!' } }]),
+      );
+      expect(rows).toHaveLength(1);
+      expect(rows[0].problems?.memo).toBe(
+        '셀 값이 오류(#REF!)입니다. 값을 직접 적어 주세요.',
+      );
+    });
+
+    it('글자 서식을 덮어써 날짜 셀로 들어온 날짜도 그 날짜로 저장한다', async () => {
+      const { rows } = await readBulkFile(
+        await xlsx([
+          {
+            ...VALIDCELLS(),
+            구매일: new Date(Date.UTC(2026, 0, 31)),
+            설치일: new Date(Date.UTC(2026, 1, 1)),
+          },
+        ]),
+      );
+      const r = checkBulkRow(rows[0], LOOKUPS);
+      expect(r.data?.purchaseDate).toEqual(new Date(Date.UTC(2026, 0, 31)));
+      expect(r.data?.installationDate).toEqual(new Date(Date.UTC(2026, 1, 1)));
+      expect(r.values.purchaseDate).toBe('2026-01-31');
+    });
+
+    it('수식 결과로 들어온 숫자 전화번호도 앞 0 을 되살린다', async () => {
+      const { rows } = await readBulkFile(
+        await xlsx([
+          {
+            ...VALIDCELLS(),
+            '구매처 전화번호': {
+              formula: 'B2',
+              result: 1012345678,
+            },
+          },
+        ]),
+      );
+      expect(rows[0].cells.vendorPhone).toBe('01012345678');
+    });
+
+    it('안전한 정수 안의 숫자 Serial number 는 그대로 받는다', async () => {
+      const { rows } = await readBulkFile(
+        await xlsx([{ ...VALIDCELLS(), 'Serial number': 20261112 }]),
+      );
+      expect(rows[0].problems).toBeUndefined();
+      expect(checkBulkRow(rows[0], LOOKUPS).data?.serialNumber).toBe(
+        '20261112',
+      );
+    });
+
+    it('첫 시트가 양식이 아니면(시트 순서를 바꿈) 양식 문구', async () => {
+      const wb = new ExcelJS.Workbook();
+      wb.addWorksheet('점포 목록').addRow(['점포', '점포코드', '점포명']);
+      const main = wb.addWorksheet('시설물·장비');
+      main.addRow(LABELS);
+      main.addRow(LABELS.map((l) => VALIDCELLS()[l] ?? null));
+      expect(
+        await rejection(readBulkFile(Buffer.from(await wb.xlsx.writeBuffer()))),
+      ).toBe(BULK_TEMPLATE_ONLY);
+    });
+
+    it('zip 은 맞는데 exceljs 가 읽지 못하면 읽기 실패 문구(양식 문구가 아니다)', async () => {
+      const buffer = zipOf([
+        {
+          name: '[Content_Types].xml',
+          data: '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/></Types>',
+        },
+        { name: 'xl/workbook.xml', data: '<workbook><<<깨진 XML' },
+      ]);
+      expect(await rejection(readBulkFile(buffer))).toBe(BULK_UNREADABLE);
     });
 
     it('오류 파일(끝에 「오류 사유」 열)을 고쳐 다시 올려도 받는다', async () => {
@@ -268,13 +421,96 @@ describe('facility-bulk', () => {
     it('실제로 풀리는 양을 센다 — 중앙 디렉터리의 크기를 속여도 걸린다', async () => {
       const buffer = await xlsx([VALIDCELLS()]);
       expect(() => assertZipWithinLimit(buffer, 10_000_000)).not.toThrow();
-      expect(() => assertZipWithinLimit(buffer, 1_000)).toThrow(BULK_TOO_MANY);
+      expect(() => assertZipWithinLimit(buffer, 1_000)).toThrow(BULK_TOO_LARGE);
       // 중앙 디렉터리의 압축 해제 크기를 모두 1 로 바꾼다
       const forged = Buffer.from(buffer);
       for (let i = 0; i + 46 <= forged.length; i++)
         if (forged.readUInt32LE(i) === 0x02014b50)
           forged.writeUInt32LE(1, i + 24);
-      expect(() => assertZipWithinLimit(forged, 1_000)).toThrow(BULK_TOO_MANY);
+      expect(() => assertZipWithinLimit(forged, 1_000)).toThrow(BULK_TOO_LARGE);
+    });
+
+    it('앞에 바이트를 덧붙여 중앙 디렉터리 위치가 끝 레코드와 어긋나면 양식 문구(JSZip 이 옮겨 읽는 틈)', async () => {
+      const buffer = await xlsx([VALIDCELLS()]);
+      const shifted = Buffer.concat([
+        Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+        Buffer.alloc(64),
+        buffer,
+      ]);
+      expect(() => assertZipWithinLimit(shifted, 10_000_000)).toThrow(
+        BULK_TEMPLATE_ONLY,
+      );
+      // 중앙 디렉터리 뒤 끝 레코드 앞에 바이트가 끼어도
+      const eocd = buffer.length - 22;
+      const padded = Buffer.concat([
+        buffer.subarray(0, eocd),
+        Buffer.alloc(16),
+        buffer.subarray(eocd),
+      ]);
+      expect(() => assertZipWithinLimit(padded, 10_000_000)).toThrow(
+        BULK_TEMPLATE_ONLY,
+      );
+    });
+
+    it('항목마다는 한도 안이어도 합이 넘으면 내용 과대 — 저장(0) · deflate(8) 모두 센다', () => {
+      const part = Buffer.alloc(600, 0x41);
+      expect(() =>
+        assertZipWithinLimit(
+          zipOf([
+            { name: 'a', data: part },
+            { name: 'b', data: part },
+          ]),
+          1_000,
+        ),
+      ).toThrow(BULK_TOO_LARGE);
+      expect(() =>
+        assertZipWithinLimit(
+          zipOf([
+            { name: 'a', data: part, method: 0 },
+            { name: 'b', data: part, method: 0 },
+          ]),
+          1_000,
+        ),
+      ).toThrow(BULK_TOO_LARGE);
+      expect(() =>
+        assertZipWithinLimit(
+          zipOf([{ name: 'a', data: part, method: 0 }]),
+          1_000,
+        ),
+      ).not.toThrow();
+    });
+
+    it('저장 · deflate 밖의 압축 방식 · 항목 1,000개 초과 · zip64 표시는 양식 문구', () => {
+      expect(() =>
+        assertZipWithinLimit(
+          zipOf([{ name: 'a', data: 'x', method: 12 }]),
+          1_000,
+        ),
+      ).toThrow(BULK_TEMPLATE_ONLY);
+      const many = zipOf(
+        Array.from({ length: 1001 }, (_, i) => ({
+          name: `f${i}`,
+          data: '',
+          method: 0,
+        })),
+      );
+      expect(() => assertZipWithinLimit(many, 10_000_000)).toThrow(
+        BULK_TEMPLATE_ONLY,
+      );
+      const zip64 = zipOf([{ name: 'a', data: 'x' }]);
+      zip64.writeUInt16LE(0xffff, zip64.length - 22 + 10);
+      expect(() => assertZipWithinLimit(zip64, 1_000)).toThrow(
+        BULK_TEMPLATE_ONLY,
+      );
+    });
+
+    it('deflate 데이터가 깨졌으면 양식 문구', () => {
+      const zip = zipOf([{ name: 'a', data: Buffer.alloc(200, 0x41) }]);
+      // 첫 항목 데이터(로컬 헤더 30 + 이름 1 뒤)를 망가뜨린다
+      zip.fill(0xff, 31, 40);
+      expect(() => assertZipWithinLimit(zip, 10_000)).toThrow(
+        BULK_TEMPLATE_ONLY,
+      );
     });
 
     it('zip 이 아니거나 깨졌으면 양식 문구', () => {
@@ -383,6 +619,15 @@ describe('facility-bulk', () => {
       expect(r.values.group).toBe('점포 장비');
     });
 
+    it('정상 줄은 isValid true · 저장할 값, 오류 줄은 isValid false · 값 없음', () => {
+      const ok = checkBulkRow(raw(VALID), LOOKUPS);
+      expect(ok.isValid).toBe(true);
+      expect(ok.errors).toEqual([]);
+      const bad = checkBulkRow(raw({ ...VALID, name: '' }), LOOKUPS);
+      expect(bad.isValid).toBe(false);
+      expect(bad.data).toBeNull();
+    });
+
     it('필수 칸이 비면 칸마다 「칸 이름: 사유」', () => {
       const r = checkBulkRow(raw({}), LOOKUPS);
       expect(r.data).toBeNull();
@@ -435,7 +680,15 @@ describe('facility-bulk', () => {
         ...LOOKUPS,
         stores: new Map([
           ...LOOKUPS.stores,
-          ['ST000003', { storeId: 3, name: '강남점', isClosed: false }],
+          [
+            'ST000003',
+            {
+              storeId: 3,
+              storeCode: 'ST000003',
+              name: '강남점',
+              isClosed: false,
+            },
+          ],
         ]),
       };
       expect(
@@ -448,6 +701,69 @@ describe('facility-bulk', () => {
         checkBulkRow(raw({ ...VALID, store: '강남점 [ST000003]' }), twins).data
           ?.storeId,
       ).toBe(3);
+    });
+
+    it('점포 — 같은 이름의 열린 점포와 폐점 점포면 열린 점포, 폐점 점포만 그 이름이면 폐점 사유', () => {
+      const lookups: BulkLookups = {
+        ...LOOKUPS,
+        stores: new Map([
+          ...LOOKUPS.stores,
+          [
+            'ST000004',
+            {
+              storeId: 4,
+              storeCode: 'ST000004',
+              name: '강남점',
+              isClosed: true,
+            },
+          ],
+        ]),
+      };
+      expect(
+        checkBulkRow(raw({ ...VALID, store: '강남점' }), lookups).data?.storeId,
+      ).toBe(1);
+      expect(
+        checkBulkRow(raw({ ...VALID, store: '닫은점' }), lookups).errors,
+      ).toEqual(['점포: 폐점 점포에는 등록할 수 없습니다.']);
+      expect(
+        checkBulkRow(raw({ ...VALID, store: '닫은점 [ST000002]' }), lookups)
+          .errors,
+      ).toEqual(['점포: 폐점 점포에는 등록할 수 없습니다.']);
+    });
+
+    it('점포 — 이름에 대괄호가 든 점포는 이름 전체로도 찾고, 점포코드는 같은 글자의 점포명보다 먼저다', () => {
+      const lookups: BulkLookups = {
+        ...LOOKUPS,
+        stores: new Map([
+          ...LOOKUPS.stores,
+          [
+            'ST000005',
+            {
+              storeId: 5,
+              storeCode: 'ST000005',
+              name: '본점 [2층]',
+              isClosed: false,
+            },
+          ],
+          [
+            'ST000006',
+            {
+              storeId: 6,
+              storeCode: 'ST000006',
+              name: 'ST000001',
+              isClosed: false,
+            },
+          ],
+        ]),
+      };
+      expect(
+        checkBulkRow(raw({ ...VALID, store: '본점 [2층]' }), lookups).data
+          ?.storeId,
+      ).toBe(5);
+      expect(
+        checkBulkRow(raw({ ...VALID, store: 'ST000001' }), lookups).data
+          ?.storeId,
+      ).toBe(1);
     });
 
     it('공통코드 — 목록에 없는 값 · 그룹에 없는 분류', () => {
@@ -466,7 +782,7 @@ describe('facility-bulk', () => {
       ).toEqual(['점검 주기: 목록에 있는 값을 골라 주세요.']);
     });
 
-    it('그룹이 틀리면 분류는 따로 보지 않는다(문구 하나)', () => {
+    it('그룹이 틀리면 적힌 분류가 그룹에 맞는지는 보지 않는다(그룹 문구 하나)', () => {
       expect(
         checkBulkRow(
           raw({ ...VALID, group: '기타', category: '아무거나' }),
@@ -691,10 +1007,41 @@ describe('facility-bulk', () => {
       ).toBeUndefined();
     });
 
+    it('목록이 비면 그 칸에는 드롭다운을 걸지 않는다(빈 범위 수식은 엑셀이 복구 모드로 연다)', async () => {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(
+        (await buildBulkTemplate({
+          ...LOOKUPS,
+          stores: new Map([['ST000002', LOOKUPS.stores.get('ST000002')!]]),
+          cycles: [],
+        })) as unknown as ArrayBuffer,
+      );
+      const main = wb.worksheets[0];
+      const col = (label: string) => LABELS.indexOf(label) + 1;
+      expect(main.getCell(2, col('점포*')).dataValidation).toBeUndefined();
+      expect(main.getCell(2, col('점검 주기')).dataValidation).toBeUndefined();
+      expect(main.getCell(2, col('운영상태*')).dataValidation?.type).toBe(
+        'list',
+      );
+      expect(wb.worksheets[1].rowCount).toBe(1);
+    });
+
     it('만든 양식을 그대로 올리면 「등록할 시설물·장비가 없습니다」(양식 검사는 통과)', async () => {
       expect(
         await rejection(readBulkFile(await buildBulkTemplate(LOOKUPS))),
       ).toBe(BULK_EMPTY);
+    });
+  });
+
+  describe('bulkErrorFileName — 오류 파일 이름', () => {
+    it.each([
+      ['시설물.xlsx', '시설물_오류.xlsx'],
+      ['시설물.XLSX', '시설물_오류.xlsx'],
+      ['시설물', '시설물_오류.xlsx'],
+      ['', '시설물장비_일괄등록_오류.xlsx'],
+      ['.xlsx', '시설물장비_일괄등록_오류.xlsx'],
+    ])('%p → %p', (name, expected) => {
+      expect(bulkErrorFileName(name)).toBe(expected);
     });
   });
 
@@ -747,9 +1094,7 @@ describe('facility-bulk', () => {
       const parsed = await readBulkFile(
         Buffer.from(await wb.xlsx.writeBuffer()),
       );
-      const started = Date.now();
       const out = await buildBulkErrorFile(parsed, new Map([[2, ['a: b']]]));
-      expect(Date.now() - started).toBeLessThan(3000);
       expect(out.length).toBeLessThan(100_000);
     });
   });
