@@ -7,6 +7,7 @@ import {
   BULK_MAX_ROWS,
   BULK_PREVIEW_COLUMNS,
   BULK_TEMPLATE_ONLY,
+  BULK_RANGE_TOO_LARGE,
   BULK_TOO_LARGE,
   BULK_TOO_MANY,
   BULK_UNREADABLE,
@@ -229,6 +230,22 @@ describe('facility-bulk', () => {
       expect(await rejection(readBulkFile(await xlsx([])))).toBe(BULK_EMPTY);
       expect(
         await rejection(readBulkFile(await xlsx([{}, { '점포*': '   ' }, {}]))),
+      ).toBe(BULK_EMPTY);
+    });
+
+    it('공백만 있는 줄도 방문한 행 수에 상한이 있다 — 1,000행을 넘으면 칸을 만들기 전에 500건 문구', async () => {
+      // 빈 줄은 500줄에 세지 않지만 eachRow 는 방문한다 — 상한이 없으면 수만 줄 × 24칸 셀이 만들어진다(리뷰 실측 6만 줄 321MB)
+      const blank = { '점포*': ' ' };
+      expect(
+        await rejection(
+          readBulkFile(await xlsx(Array.from({ length: 1001 }, () => blank))),
+        ),
+      ).toBe(BULK_TOO_MANY);
+      // 1,000행까지는 빈 줄로 넘긴다
+      expect(
+        await rejection(
+          readBulkFile(await xlsx(Array.from({ length: 1000 }, () => blank))),
+        ),
       ).toBe(BULK_EMPTY);
     });
 
@@ -511,6 +528,66 @@ describe('facility-bulk', () => {
       expect(() => assertZipWithinLimit(zip, 10_000)).toThrow(
         BULK_TEMPLATE_ONLY,
       );
+    });
+
+    it('워크시트의 병합 셀 · 데이터 유효성 검사 범위가 넓으면 exceljs 가 칸마다 펼치기 전에 400', () => {
+      const sheet = (body: string) =>
+        zipOf([
+          {
+            name: 'xl/worksheets/sheet1.xml',
+            data: `<?xml version="1.0"?><worksheet>${body}</worksheet>`,
+          },
+        ]);
+      // 6KB 파일이 heap 292MB 를 썼다(리뷰 실측)
+      expect(() =>
+        assertZipWithinLimit(
+          sheet(
+            '<mergeCells count="1"><mergeCell ref="A2:J100000"/></mergeCells>',
+          ),
+          4_000_000,
+        ),
+      ).toThrow(BULK_RANGE_TOO_LARGE);
+      // 엑셀에서 열 전체에 유효성 검사를 걸면 이렇게 저장된다
+      expect(() =>
+        assertZipWithinLimit(
+          sheet(
+            '<dataValidations count="1"><dataValidation type="list" sqref="A1:X1048576"><formula1>A</formula1></dataValidation></dataValidations>',
+          ),
+          4_000_000,
+        ),
+      ).toThrow(BULK_RANGE_TOO_LARGE);
+      // 열 · 행 전체 표기, 여러 범위의 합, 작은따옴표 · $ 표기
+      expect(() =>
+        assertZipWithinLimit(sheet("<mergeCell ref='$A:$A'/>"), 4_000_000),
+      ).toThrow(BULK_RANGE_TOO_LARGE);
+      expect(() =>
+        assertZipWithinLimit(
+          sheet(
+            '<dataValidation sqref="A2:A30000 B2:B30000"></dataValidation>',
+          ),
+          4_000_000,
+        ),
+      ).toThrow(BULK_RANGE_TOO_LARGE);
+      // 양식 크기(6열 × 500행)는 받는다 — 워크시트가 아닌 항목은 보지 않는다
+      expect(() =>
+        assertZipWithinLimit(
+          sheet(
+            '<mergeCell ref="A2:B3"/><dataValidation sqref="C2:C501 D2:D501 E2:E501 V2:V501 P2:P501 A2:A501"></dataValidation>',
+          ),
+          4_000_000,
+        ),
+      ).not.toThrow();
+      expect(() =>
+        assertZipWithinLimit(
+          zipOf([
+            {
+              name: 'xl/sharedStrings.xml',
+              data: '<mergeCell ref="A1:XFD1048576"/>',
+            },
+          ]),
+          4_000_000,
+        ),
+      ).not.toThrow();
     });
 
     it('zip 이 아니거나 깨졌으면 양식 문구', () => {

@@ -33,6 +33,18 @@ export const BULK_MAX_BYTES = 5 * 1024 * 1024;
 export const BULK_MAX_UNCOMPRESSED_BYTES = 4 * 1024 * 1024;
 /** zip 항목 수 상한 — 양식은 항목 십여 개다 */
 const MAX_ZIP_ENTRIES = 1000;
+/**
+ * 한 시트의 병합 셀 · 데이터 유효성 검사 범위 칸 수 합의 상한 — exceljs 가 읽으며 칸마다 펼친다(assertSheetRanges).
+ * 양식은 드롭다운 6열 × 500행 = 3,000칸이다.
+ */
+const MAX_SHEET_RANGE_CELLS = 50_000;
+/**
+ * eachRow 가 방문하는 행 수 상한(머리글 제외) — 공백만 있는 줄은 500줄에 세지 않지만 방문하면 24칸 셀을 만든다(6만 줄에
+ * heap 321MB, PR #276 리뷰). 500줄 + 여유분을 넘으면 칸을 만들기 전에 줄 수 초과로 막는다.
+ */
+const MAX_VISITED_ROWS = BULK_MAX_ROWS * 2;
+const EXCEL_MAX_ROWS = 1_048_576;
+const EXCEL_MAX_COLUMNS = 16_384;
 
 export const BULK_TEMPLATE_ONLY =
   '내려받은 양식으로 작성한 파일만 올릴 수 있습니다.';
@@ -46,6 +58,8 @@ export const BULK_HAS_ERRORS = '오류를 고친 파일을 다시 올려 주세�
 export const BULK_STORE_CHANGED =
   '미리보기 뒤 폐점되거나 삭제된 점포가 있습니다. 파일을 다시 올려 미리보기를 확인해 주세요.';
 export const BULK_NO_ERRORS = '오류가 있는 줄이 없습니다.';
+export const BULK_RANGE_TOO_LARGE =
+  '병합한 셀이나 데이터 유효성 검사 범위가 너무 넓습니다. 셀 병합 · 열 전체 유효성 검사 없이 내려받은 양식에 값만 적어 다시 올려 주세요.';
 
 export const BULK_TEMPLATE_FILE_NAME = '시설물장비_일괄등록_양식.xlsx';
 /** 오류 파일 이름 — 「올린파일이름_오류.xlsx」(확장자는 대소문자 없이 뗀다, 이름이 없으면 기본 이름) */
@@ -308,6 +322,59 @@ function readIdentifier(value: ExcelJS.CellValue | undefined): CellRead {
   return readCell(value);
 }
 
+/** zip 안의 워크시트 항목 — exceljs 는 모든 시트를 읽는다 */
+const WORKSHEET_ENTRY = /^xl\/worksheets\/[^/]+\.xml$/i;
+
+/** 엑셀 범위의 칸 수 — 「A2:J100000」 · 「A1」 · 열 전체 「$A:$A」 · 행 전체 「1:3」. 읽을 수 없는 표기는 0(exceljs 가 판단한다) */
+export function rangeCellCount(ref: string): number {
+  const end = (part: string) => {
+    const m = /^\$?([A-Za-z]{0,3})\$?(\d*)$/.exec(part.trim());
+    if (!m || (!m[1] && !m[2])) return null;
+    const col = m[1]
+      ? [...m[1].toUpperCase()].reduce(
+          (n, ch) => n * 26 + ch.charCodeAt(0) - 64,
+          0,
+        )
+      : null;
+    return { col, row: m[2] ? Number(m[2]) : null };
+  };
+  const [first, second = first] = ref.split(':');
+  const a = end(first);
+  const b = end(second);
+  if (!a || !b) return 0;
+  const cols =
+    a.col === null || b.col === null
+      ? EXCEL_MAX_COLUMNS
+      : Math.abs(b.col - a.col) + 1;
+  const rows =
+    a.row === null || b.row === null
+      ? EXCEL_MAX_ROWS
+      : Math.abs(b.row - a.row) + 1;
+  return cols * rows;
+}
+
+/**
+ * 워크시트 XML 의 병합 셀(mergeCell ref)과 데이터 유효성 검사(dataValidation sqref) 범위의 칸 수 합이 상한을 넘으면 400.
+ * exceljs 는 읽는 순간 병합 범위의 모든 칸에 셀 객체를, 유효성 검사 범위의 모든 주소에 항목을 만든다 — 몇 KB 짜리
+ * 「A2:J100000」 한 줄이 heap 292MB, 엑셀에서 열 전체에 건 유효성 검사(「A1:X1048576」)는 수천만 칸이라 프로세스가 죽는다
+ * (2026-11-12 PR #276 리뷰). 압축 해제 상한은 이 확대를 막지 못한다. 조건부 서식 범위는 글자로만 들고 있어 보지 않는다.
+ */
+export function assertSheetRanges(xml: string): void {
+  let cells = 0;
+  const add = (refs: string) => {
+    for (const ref of refs.trim().split(/\s+/))
+      if (ref) cells += rangeCellCount(ref);
+  };
+  for (const m of xml.matchAll(/<mergeCell\b[^>]*?\sref=(["'])([^"']*)\1/g))
+    add(m[2]);
+  for (const m of xml.matchAll(
+    /<dataValidation\b[^>]*?\ssqref=(["'])([^"']*)\1/g,
+  ))
+    add(m[2]);
+  if (cells > MAX_SHEET_RANGE_CELLS)
+    throw new BadRequestException(BULK_RANGE_TOO_LARGE);
+}
+
 /** xlsx(zip) 서명 — 확장자는 믿지 않는다 */
 const isZip = (buffer: Buffer) =>
   buffer.length >= 4 &&
@@ -356,10 +423,13 @@ export function assertZipWithinLimit(buffer: Buffer, maxBytes: number): void {
     if (p + 46 > eocd || buffer.readUInt32LE(p) !== 0x02014b50) throw broken();
     const method = buffer.readUInt16LE(p + 10);
     const compressed = buffer.readUInt32LE(p + 20);
+    const nameLength = buffer.readUInt16LE(p + 28);
     const local = buffer.readUInt32LE(p + 42);
+    if (p + 46 + nameLength > eocd) throw broken();
+    const name = buffer.toString('utf8', p + 46, p + 46 + nameLength);
     p +=
       46 +
-      buffer.readUInt16LE(p + 28) +
+      nameLength +
       buffer.readUInt16LE(p + 30) +
       buffer.readUInt16LE(p + 32);
     if (local + 30 > directory || buffer.readUInt32LE(local) !== 0x04034b50)
@@ -370,12 +440,13 @@ export function assertZipWithinLimit(buffer: Buffer, maxBytes: number): void {
       buffer.readUInt16LE(local + 26) +
       buffer.readUInt16LE(local + 28);
     if (start + compressed > directory) throw broken();
-    if (method === 0) total += compressed;
+    let content: Buffer;
+    if (method === 0) content = buffer.subarray(start, start + compressed);
     else if (method === 8) {
       try {
-        total += inflateRawSync(buffer.subarray(start, start + compressed), {
+        content = inflateRawSync(buffer.subarray(start, start + compressed), {
           maxOutputLength: maxBytes - total + 1,
-        }).length;
+        });
       } catch (error) {
         // 코드로 본다 — 테스트 실행 환경(vm)에선 Node 오류에 instanceof 가 맞지 않는다
         const code = (error as { code?: unknown }).code;
@@ -384,7 +455,10 @@ export function assertZipWithinLimit(buffer: Buffer, maxBytes: number): void {
         throw error;
       }
     } else throw broken();
+    total += content.length;
     if (total > maxBytes) throw tooBig();
+    // 워크시트는 exceljs 가 읽으며 범위를 칸마다 펼치는 곳이 있다 — 읽기 전에 그 넓이를 본다
+    if (WORKSHEET_ENTRY.test(name)) assertSheetRanges(content.toString('utf8'));
   }
   if (p !== eocd) throw broken();
 }
@@ -460,8 +534,14 @@ export async function readBulkFile(
   );
   const rows: BulkRawRow[] = [];
   let tooMany = false;
+  let visited = 0;
   sheet.eachRow((row, n) => {
     if (n === 1 || tooMany) return;
+    // 빈 줄도 방문 수에 센다 — 칸(셀 객체)을 만들기 전에 막는다
+    if (++visited > MAX_VISITED_ROWS) {
+      tooMany = true;
+      return;
+    }
     const cells = {} as Record<BulkField, string>;
     const problems: Partial<Record<BulkField, string>> = {};
     BULK_HEADERS.forEach((h, i) => {
