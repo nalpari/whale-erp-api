@@ -488,7 +488,9 @@ export const codeChoice = (label: string, code: string) => `${label} [${code}]`;
 
 /**
  * 공통코드 칸의 글자로 코드를 고른다.
- * 1. 끝에 [코드값] 이 있고 그 코드가 목록에 있으면 그 코드(앞 이름은 보지 않는다).
+ * 1. 끝에 [코드값] 이 있고, 목록에 그 코드값이면서 앞 글자가 그 코드명인 코드가 있으면 그 코드. 앞 이름도 맞춰 보는
+ *    것은 코드값이 그룹마다 따로이기 때문이다 — 분류 드롭다운은 두 그룹을 합친 목록이라, 코드값만 보면 다른 그룹의
+ *    「기타 장비 [ETC]」가 이 그룹의 「기타 시설 [ETC]」로 말없이 바뀐다(맞지 않으면 아래로 넘어가 결국 목록 오류).
  * 2. 글자 전체가 코드명이면: 하나면 그 코드, 여럿이면 'ambiguous' — 첫 번째로 고르면 다른 코드로 말없이 저장된다.
  *    이름이 먼저다(어떤 이름이 다른 항목의 코드값과 같아도 화면에 보이는 이름을 따른다). 이름에 대괄호가 든 코드도
  *    2번으로 찾는다.
@@ -498,9 +500,11 @@ function pick<T extends { code: string; label: string }>(
   list: readonly T[],
   text: string,
 ): T | 'ambiguous' | null {
-  const bracket = /\[([^[\]]+)\]$/.exec(text);
+  const bracket = /^(.*)\[([^[\]]+)\]$/.exec(text);
   const byBracket = bracket
-    ? list.find((c) => c.code === bracket[1].trim())
+    ? list.find(
+        (c) => c.code === bracket[2].trim() && c.label === bracket[1].trim(),
+      )
     : undefined;
   if (byBracket) return byBracket;
   const byLabel = list.filter((c) => c.label === text);

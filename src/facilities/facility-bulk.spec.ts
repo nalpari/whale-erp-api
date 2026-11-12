@@ -1033,6 +1033,57 @@ describe('facility-bulk', () => {
       ).toBe('FRIDGE_B');
     });
 
+    // 코드값은 그룹마다 따로다 — 대괄호 코드만 보면 다른 그룹 항목이 이 그룹의 같은 코드값으로 말없이 바뀐다(PR #276 6차 리뷰)
+    it('공통코드 — 대괄호 코드는 앞 코드명이 그 코드의 이름과 같을 때만 쓴다(다른 그룹의 같은 코드값은 오류)', () => {
+      const lookups: BulkLookups = {
+        ...LOOKUPS,
+        categories: {
+          STORE_FACILITY: [{ code: 'ETC', label: '기타 시설' }],
+          STORE_EQUIPMENT: [{ code: 'ETC', label: '기타 장비' }],
+        },
+      };
+      expect(
+        checkBulkRow(
+          raw({
+            ...VALID,
+            group: '점포 시설물 [STORE_FACILITY]',
+            category: '기타 장비 [ETC]',
+          }),
+          lookups,
+        ).errors,
+      ).toEqual(['분류: 「점포 시설물」에 없는 분류입니다.']);
+      expect(
+        checkBulkRow(
+          raw({
+            ...VALID,
+            group: '점포 시설물 [STORE_FACILITY]',
+            category: '기타 시설 [ETC]',
+          }),
+          lookups,
+        ).data?.facilityCategoryCode,
+      ).toBe('ETC');
+    });
+
+    it('공통코드 — 이름에 대괄호가 든 코드는 이름 전체로 찾는다(대괄호 안 글자가 다른 코드값이어도)', () => {
+      const lookups: BulkLookups = {
+        ...LOOKUPS,
+        cycles: [
+          { code: 'A', label: '에이' },
+          { code: 'X', label: '냉장 [A]' },
+        ],
+      };
+      expect(
+        checkBulkRow(raw({ ...VALID, inspectionCycle: '냉장 [A]' }), lookups)
+          .data?.inspectionCycleCode,
+      ).toBe('X');
+      expect(
+        checkBulkRow(
+          raw({ ...VALID, inspectionCycle: '냉장 [A] [X]' }),
+          lookups,
+        ).data?.inspectionCycleCode,
+      ).toBe('X');
+    });
+
     it('공통코드 — 대괄호 안 코드가 목록에 없으면 목록 문구(앞 이름으로 찾지 않는다)', () => {
       expect(
         checkBulkRow(raw({ ...VALID, status: '운영 [NOPE]' }), LOOKUPS).errors,

@@ -4,7 +4,7 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개), 엑셀 일괄 등록(PL-7 — 양식 · 미리보기 · 오류 파일 · 등록, 오류가 있으면 전부 막기 · 500줄). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-12T06:00:44Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-12T07:23:22Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: facility-bulk
     resource: ../../src/facilities/facility-bulk.ts
     title: 일괄 등록 양식 · 파일 읽기 · 줄 검사 · 오류 파일
-    last_modified: 2026-11-12T06:00:44Z
+    last_modified: 2026-11-12T07:23:22Z
   - id: facility-bulk-reader
     resource: ../../src/facilities/facility-bulk-reader.ts
     title: 올린 xlsx 를 메모리 · 시간 상한이 걸린 worker 에서 읽고 쓰기
@@ -304,10 +304,15 @@ first in front's generated types.
   database and not in the code-group services — so two codes of one group can share a name, and the
   old dropdown of names (deduplicated with `Set`) plus a first-match lookup stored every such row
   as the first code without a word. The row check (`pick`) now takes: the code in a trailing `[…]`
-  when it is in the list; a name — one code of that name is taken, two or more answer 「이름이 같은 값이
+  when the list has that code **and** the text before the brackets is that code's name; a name — one code of that name is taken, two or more answer 「이름이 같은 값이
   여럿입니다. 목록에서 「코드명 [코드값]」으로 골라 주세요.」 (a name still wins over a code spelled the
   same, and a name containing brackets is found here); a bare code. The preview shows the name only.
-  The 화면 등록 takes code values and never had the problem.
+  The 화면 등록 takes code values and never had the problem. The name check on the bracket is what
+  keeps groups apart (sixth review): `item_code` is unique only per group and the 분류 dropdown merges
+  both groups, so a code-only match turned 「기타 장비 [ETC]」 under 점포 시설물 into that group's own
+  `ETC` (「기타 시설」) without a word — it now falls through to 「「점포 시설물」에 없는 분류입니다.」. The
+  cost: a code renamed after the template was downloaded no longer matches its old 「코드명 [코드값]」
+  and answers the list reason until the user picks again from a fresh template.
 - **The template**: sheet 1 has the 24 columns and list validations on rows 2–501 for 운영상태 ·
   그룹 · 분류 · 점검 주기 · 부가세 and 점포 — 점포 has no error alert, so a bare code or name can be
   typed without any prompt. Sheet 2 「점포 목록」 lists open stores in scope by name — 점포(the dropdown
