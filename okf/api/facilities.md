@@ -4,7 +4,7 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개), 엑셀 일괄 등록(PL-7 — 양식 · 미리보기 · 오류 파일 · 등록, 오류가 있으면 전부 막기 · 500줄). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-12T05:06:09Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-12T05:26:40Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: facilities-controller
     resource: ../../src/facilities/facilities.controller.ts
     title: /facilities 경로와 메뉴 권한
-    last_modified: 2026-11-12T05:06:09Z
+    last_modified: 2026-11-12T05:26:40Z
   - id: facility-caller
     resource: ../../src/facilities/facility-caller.ts
     title: 다루는 관리자 · BP 와 점포 범위(화면 경로 · 일괄 등록 공용)
@@ -21,11 +21,11 @@ sources:
   - id: facility-bulk
     resource: ../../src/facilities/facility-bulk.ts
     title: 일괄 등록 양식 · 파일 읽기 · 줄 검사 · 오류 파일
-    last_modified: 2026-11-12T05:06:09Z
+    last_modified: 2026-11-12T05:26:40Z
   - id: facility-bulk-reader
     resource: ../../src/facilities/facility-bulk-reader.ts
     title: 올린 xlsx 를 메모리 · 시간 상한이 걸린 worker 에서 읽고 쓰기
-    last_modified: 2026-11-12T05:06:09Z
+    last_modified: 2026-11-12T05:26:40Z
   - id: facility-bulk-service
     resource: ../../src/facilities/facility-bulk.service.ts
     title: FacilityBulkService — 점포 · 공통코드 조회와 한 번에 넣기
@@ -228,9 +228,20 @@ first in front's generated types.
     `worker_threads` worker with `maxOldGenerationSizeMb` 192 and a 15 s timeout; out of memory or
     time is logged and answers 400 「파일을 읽는 데 자원이 너무 많이 듭니다. …」, and the API process
     keeps serving. A load error is logged and answers 「파일을 읽지 못했습니다. …」; a crash inside the
-    worker is a 500. At most two workers run at once and the rest wait, which bounds the memory all
-    uploads can take together. The worker returns the header and the visited rows' cell values; the
-    row checks run in the API process as before;
+    worker is a 500. The row checks run in the API process as before;
+  - **what the worker sends back is bounded too** (third review). Cells pointing at one shared string
+    are a single string inside the worker but a copy per cell after structured clone — an 11KB file
+    put 2.4GB on the API heap, outside the worker's cap. So the worker reduces each cell to text,
+    number, boolean, date, `{ error }` or `{ formula, result }` (rich text and hyperlinks joined to
+    text), sends `{ tooLong }` instead of any cell over 1,000 characters (that column's reason
+    becomes 「글자가 너무 깁니다(1,000자 초과). …」), answers `too-large` (400 「파일 내용이 너무 큽니다.
+    …」) when the text it would send passes 4,000,000 characters, and sends no rows at all when the
+    visited rows overflow;
+  - **worker slots** (`WorkerSlots`): two run at once, up to eight wait, a wait longer than 30 s or a
+    full queue is 503 「일괄 등록 파일을 읽는 요청이 몰려 있습니다. 잠시 뒤 다시 시도해 주세요.」 — every
+    waiting request holds its upload (up to 5MB) in the API process, so the queue cannot be endless.
+    A slot is returned on the worker's `exit`, not when its answer arrives, so a terminated worker
+    still freeing 192MB does not overlap a new one;
   - the worker is source text with `eval: true` and loads exceljs by its resolved path, so the same
     code runs from `dist` and under ts-jest. Each read costs about a second to start the worker (more
     when the whole unit suite runs in parallel — the two bulk specs set `jest.setTimeout(60_000)`).
@@ -242,10 +253,10 @@ first in front's generated types.
     itself too big. It also requires the central directory to end exactly at the end record (JSZip
     shifts offsets by any bytes before it) and treats zip64, more than 1,000 entries, a method other
     than stored (0) or deflate (8), or a zlib data error (`Z_*`) as the template message;
-  - `assertSheetRanges` (merged and validation ranges over 50,000 cells in a worksheet entry → 「병합한
-    셀이나 데이터 유효성 검사 범위가 너무 넓습니다. …」) is kept only to give that common mistake — a
-    validation laid on whole columns in Excel — a message the user can act on. It is not a security
-    boundary; the worker is.
+  - nothing scans the XML on the API thread. A regular-expression pre-check of merged and
+    validation ranges was tried and removed: it was bypassed, and its `[^>]*?` was quadratic — a
+    2.4KB upload of unclosed `<mergeCell ` tags froze the event loop for 16.5 s (third review). A
+    validation laid on whole columns now ends in the worker's resource message, which names it.
 
   Rows are walked with `eachRow`, never `1..rowCount`: `rowCount` is the last row number ever
   written, so one space in row 1,048,576 of a 6KB file made the old loop build a million rows.
