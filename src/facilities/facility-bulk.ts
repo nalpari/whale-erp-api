@@ -483,17 +483,33 @@ export async function readBulkFile(
   return { rows, source: buffer };
 }
 
-/** 한글 이름이나 코드로 고른 값 — 이름이 먼저다(어떤 이름이 다른 항목의 코드와 같아도 화면에 보이는 이름을 따른다) */
+/** 공통코드 드롭다운 값 — 「코드명 [코드값]」. 코드명은 그룹 안에서도 고유하지 않아 코드값으로 가른다 */
+export const codeChoice = (label: string, code: string) => `${label} [${code}]`;
+
+/**
+ * 공통코드 칸의 글자로 코드를 고른다.
+ * 1. 끝에 [코드값] 이 있고 그 코드가 목록에 있으면 그 코드(앞 이름은 보지 않는다).
+ * 2. 글자 전체가 코드명이면: 하나면 그 코드, 여럿이면 'ambiguous' — 첫 번째로 고르면 다른 코드로 말없이 저장된다.
+ *    이름이 먼저다(어떤 이름이 다른 항목의 코드값과 같아도 화면에 보이는 이름을 따른다). 이름에 대괄호가 든 코드도
+ *    2번으로 찾는다.
+ * 3. 글자 전체가 코드값이면 그 코드. 못 찾으면 null.
+ */
 function pick<T extends { code: string; label: string }>(
   list: readonly T[],
   text: string,
-): T | null {
-  return (
-    list.find((c) => c.label === text) ??
-    list.find((c) => c.code === text) ??
-    null
-  );
+): T | 'ambiguous' | null {
+  const bracket = /\[([^[\]]+)\]$/.exec(text);
+  const byBracket = bracket
+    ? list.find((c) => c.code === bracket[1].trim())
+    : undefined;
+  if (byBracket) return byBracket;
+  const byLabel = list.filter((c) => c.label === text);
+  if (byLabel.length > 1) return 'ambiguous';
+  return byLabel[0] ?? list.find((c) => c.code === text) ?? null;
 }
+
+const CODE_AMBIGUOUS =
+  '이름이 같은 값이 여럿입니다. 목록에서 「코드명 [코드값]」으로 골라 주세요.';
 
 /** 점포 드롭다운 값 — 「점포명 [점포코드]」. 이름이 같은 점포도 코드로 갈린다 */
 export const storeChoice = (name: string, code: string) => `${name} [${code}]`;
@@ -617,23 +633,29 @@ export function checkBulkRow(
   if (!nameText) fail('name', '입력해 주세요.');
   else name = text('name');
 
-  // 운영상태 · 그룹 · 분류 — 한글 이름이나 코드
+  // 운영상태 · 그룹 · 분류 — 「코드명 [코드값]」(드롭다운 값) · 하나뿐인 코드명 · 코드값
   const statusText = trimmed('status');
-  const status = statusText ? pick(lookups.statuses, statusText) : null;
+  const statusPick = statusText ? pick(lookups.statuses, statusText) : null;
+  const status = statusPick === 'ambiguous' ? null : statusPick;
   if (!statusText) fail('status', '선택해 주세요.');
+  else if (statusPick === 'ambiguous') fail('status', CODE_AMBIGUOUS);
   else if (!status) fail('status', '목록에 있는 값을 골라 주세요.');
 
   const groupText = trimmed('group');
-  const group = groupText ? pick(lookups.groups, groupText) : null;
+  const groupPick = groupText ? pick(lookups.groups, groupText) : null;
+  const group = groupPick === 'ambiguous' ? null : groupPick;
   if (!groupText) fail('group', '선택해 주세요.');
+  else if (groupPick === 'ambiguous') fail('group', CODE_AMBIGUOUS);
   else if (!group) fail('group', '목록에 있는 값을 골라 주세요.');
 
   const categoryText = trimmed('category');
-  const category =
+  const categoryPick =
     group && categoryText
       ? pick(lookups.categories[group.code], categoryText)
       : null;
+  const category = categoryPick === 'ambiguous' ? null : categoryPick;
   if (!categoryText) fail('category', '선택해 주세요.');
+  else if (categoryPick === 'ambiguous') fail('category', CODE_AMBIGUOUS);
   // 그룹이 틀렸으면 적힌 분류가 그룹에 맞는지는 보지 않는다 — 고칠 곳은 그룹이다(비어 있으면 필수 오류는 낸다)
   else if (group && !category)
     fail('category', `「${group.label}」에 없는 분류입니다.`);
@@ -696,8 +718,10 @@ export function checkBulkRow(
   const warrantyExpiryDate = date('warrantyExpiryDate');
 
   const cycleText = trimmed('inspectionCycle');
-  const cycle = cycleText ? pick(lookups.cycles, cycleText) : null;
-  if (cycleText && !cycle)
+  const cyclePick = cycleText ? pick(lookups.cycles, cycleText) : null;
+  const cycle = cyclePick === 'ambiguous' ? null : cyclePick;
+  if (cyclePick === 'ambiguous') fail('inspectionCycle', CODE_AMBIGUOUS);
+  else if (cycleText && !cycle)
     fail('inspectionCycle', '목록에 있는 값을 골라 주세요.');
 
   const inspectionNote = text('inspectionNote');
@@ -818,20 +842,21 @@ export async function buildBulkTemplate(lookups: BulkLookups): Promise<Buffer> {
     {
       field: 'status',
       title: '운영상태',
-      items: lookups.statuses.map((c) => c.label),
+      items: lookups.statuses.map((c) => codeChoice(c.label, c.code)),
     },
     {
       field: 'group',
       title: '그룹',
-      items: lookups.groups.map((g) => g.label),
+      items: lookups.groups.map((g) => codeChoice(g.label, g.code)),
     },
     {
       field: 'category',
       title: '분류',
+      // 두 그룹에 같은 코드값 · 같은 코드명이 있으면 한 줄로 합친다 — 그룹에 맞는지는 올릴 때 본다
       items: [
         ...new Set(
           lookups.groups.flatMap((g) =>
-            lookups.categories[g.code].map((c) => c.label),
+            lookups.categories[g.code].map((c) => codeChoice(c.label, c.code)),
           ),
         ),
       ],
@@ -839,7 +864,7 @@ export async function buildBulkTemplate(lookups: BulkLookups): Promise<Buffer> {
     {
       field: 'inspectionCycle',
       title: '점검 주기',
-      items: lookups.cycles.map((c) => c.label),
+      items: lookups.cycles.map((c) => codeChoice(c.label, c.code)),
     },
     { field: 'vatIncluded', title: '부가세 포함', items: ['Y', 'N'] },
   ];

@@ -1245,7 +1245,12 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
       expect(codes).not.toContain(await codeOf(foreignStoreId));
       const choices = wb.worksheets[2];
       expect(choices.state).toBe('hidden');
-      const categories = choices.getColumn(3).values.slice(2);
+      // 드롭다운 값은 「코드명 [코드값]」 — 코드명만 떼어 본다
+      const categoryValues = choices.getColumn(3).values.slice(2).map(String);
+      for (const v of categoryValues) expect(v).toMatch(/ \[[A-Z0-9_]+\]$/);
+      const categories = categoryValues.map((v) =>
+        v.replace(/ \[[A-Z0-9_]+\]$/, ''),
+      );
       expect(categories).toEqual(
         expect.arrayContaining(['원두 그라인더', '커피머신', '냉난방']),
       );

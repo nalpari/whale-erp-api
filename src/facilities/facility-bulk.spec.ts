@@ -984,6 +984,61 @@ describe('facility-bulk', () => {
       ).toEqual(['점검 주기: 목록에 있는 값을 골라 주세요.']);
     });
 
+    it('공통코드 — 드롭다운 값 「코드명 [코드값]」은 대괄호 안 코드로 찾는다(네 칸 모두)', () => {
+      const result = checkBulkRow(
+        raw({
+          ...VALID,
+          status: '보관 [STORED]',
+          group: '점포 장비 [STORE_EQUIPMENT]',
+          category: '제빙기 [ICE_MAKER]',
+          inspectionCycle: '매월 [MONTHLY]',
+        }),
+        LOOKUPS,
+      );
+      expect(result.errors).toEqual([]);
+      expect(result.data).toMatchObject({
+        facilityStatusCode: 'STORED',
+        facilityGroupCode: 'STORE_EQUIPMENT',
+        facilityCategoryCode: 'ICE_MAKER',
+        inspectionCycleCode: 'MONTHLY',
+      });
+      // 미리보기에는 코드명만 보인다
+      expect(result.values.category).toBe('제빙기');
+    });
+
+    // 코드명은 그룹 안에서 고유하지 않다 — 이름만으로 첫 번째 코드를 고르면 다른 코드로 말없이 저장된다(PR #276 5차 리뷰)
+    it('공통코드 — 이름이 같은 코드가 여럿이면 이름만으로는 고르지 않고, 「코드명 [코드값]」 · 코드값으로는 고른다', () => {
+      const lookups: BulkLookups = {
+        ...LOOKUPS,
+        categories: {
+          ...LOOKUPS.categories,
+          STORE_EQUIPMENT: [
+            { code: 'FRIDGE_A', label: '냉장고' },
+            { code: 'FRIDGE_B', label: '냉장고' },
+          ],
+        },
+      };
+      expect(
+        checkBulkRow(raw({ ...VALID, category: '냉장고' }), lookups).errors,
+      ).toEqual([
+        '분류: 이름이 같은 값이 여럿입니다. 목록에서 「코드명 [코드값]」으로 골라 주세요.',
+      ]);
+      expect(
+        checkBulkRow(raw({ ...VALID, category: '냉장고 [FRIDGE_B]' }), lookups)
+          .data?.facilityCategoryCode,
+      ).toBe('FRIDGE_B');
+      expect(
+        checkBulkRow(raw({ ...VALID, category: 'FRIDGE_B' }), lookups).data
+          ?.facilityCategoryCode,
+      ).toBe('FRIDGE_B');
+    });
+
+    it('공통코드 — 대괄호 안 코드가 목록에 없으면 목록 문구(앞 이름으로 찾지 않는다)', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, status: '운영 [NOPE]' }), LOOKUPS).errors,
+      ).toEqual(['운영상태: 목록에 있는 값을 골라 주세요.']);
+    });
+
     it('그룹이 틀리면 적힌 분류가 그룹에 맞는지는 보지 않는다(그룹 문구 하나)', () => {
       expect(
         checkBulkRow(
@@ -1178,6 +1233,35 @@ describe('facility-bulk', () => {
       ]);
       expect(stores.rowCount).toBe(2);
       expect(choices.state).toBe('hidden');
+    });
+
+    it('선택값 시트의 공통코드 목록은 「코드명 [코드값]」 — 이름이 같은 코드도 갈린다', async () => {
+      const wb = await load(await buildBulkTemplate(LOOKUPS));
+      const choices = wb.worksheets[2];
+      const column = (n: number) =>
+        (choices.getColumn(n).values as unknown[]).slice(1).filter(Boolean);
+      expect(column(1)).toEqual([
+        '운영상태',
+        '운영 [OPERATING]',
+        '보관 [STORED]',
+        '폐기 [DISPOSED]',
+      ]);
+      expect(column(2)).toEqual([
+        '그룹',
+        '점포 시설물 [STORE_FACILITY]',
+        '점포 장비 [STORE_EQUIPMENT]',
+      ]);
+      expect(column(3)).toEqual([
+        '분류',
+        '냉난방 [HVAC]',
+        '그라인더 [GRINDER]',
+        '제빙기 [ICE_MAKER]',
+      ]);
+      expect(column(4)).toEqual([
+        '점검 주기',
+        '매일 [DAILY]',
+        '매월 [MONTHLY]',
+      ]);
     });
 
     it('점포 드롭다운은 점포 목록 시트의 「점포명 [점포코드]」 열을 가리킨다', async () => {
