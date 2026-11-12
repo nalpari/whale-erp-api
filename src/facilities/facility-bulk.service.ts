@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import type {
   BulkCreateResponseDto,
   BulkPreviewResponseDto,
-} from './dto/facility-bulk.response.dto';
+} from '../common/bulk-upload.response.dto';
 import {
   BULK_HAS_ERRORS,
   BULK_PREVIEW_COLUMNS,

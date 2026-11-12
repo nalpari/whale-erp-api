@@ -53,7 +53,7 @@ import { CreateFacilityDto, UpdateFacilityDto } from './dto/save-facility.dto';
 import {
   BulkCreateResponseDto,
   BulkPreviewResponseDto,
-} from './dto/facility-bulk.response.dto';
+} from '../common/bulk-upload.response.dto';
 import {
   CreateFacilityResponseDto,
   FacilityDetailResponseDto,
