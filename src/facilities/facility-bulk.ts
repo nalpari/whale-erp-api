@@ -319,13 +319,13 @@ function readPhone(value: AnyCellValue): CellRead {
   return readCell(value);
 }
 
-/** 식별자 칸 — 숫자로 들어와 정밀도를 잃었거나(안전한 정수 밖) 지수 표기가 된 값은 사유로 돌려준다 */
+/**
+ * 식별자 칸 — 숫자로 들어와 정밀도를 잃었을 수 있거나 지수 표기가 된 값은 사유로 돌려준다.
+ * Excel 은 숫자를 유효숫자 15자리까지만 저장하므로 경계는 2^53 이 아니라 16자리(1e15)다.
+ */
 function readIdentifier(value: AnyCellValue): CellRead {
   const v = resultOf(value);
-  if (
-    typeof v === 'number' &&
-    (Math.abs(v) > Number.MAX_SAFE_INTEGER || /e/i.test(String(v)))
-  )
+  if (typeof v === 'number' && (Math.abs(v) >= 1e15 || /e/i.test(String(v))))
     return {
       text: '',
       problem:

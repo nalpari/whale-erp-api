@@ -435,6 +435,24 @@ describe('facility-bulk', () => {
       );
     });
 
+    // Excel 은 숫자를 유효숫자 15자리까지만 저장한다 — 16자리부터는 2^53 안이어도 끝자리가 이미 바뀌었을 수 있다(PR #276 4차 리뷰)
+    it('15자리 숫자 Serial number 는 받고, 16자리부터는 2^53 안이어도 사유가 된다', async () => {
+      const { rows } = await readBulkFile(
+        await xlsx([
+          { ...VALIDCELLS(), 'Serial number': 999999999999999 },
+          { ...VALIDCELLS(), 'Serial number': 1234567890123450 },
+        ]),
+      );
+      expect(rows[0].problems).toBeUndefined();
+      expect(checkBulkRow(rows[0], LOOKUPS).data?.serialNumber).toBe(
+        '999999999999999',
+      );
+      expect(rows[1].problems).toEqual({
+        serialNumber:
+          '숫자로 저장돼 값이 바뀌었을 수 있습니다. 셀 서식을 텍스트로 바꿔 다시 적어 주세요.',
+      });
+    });
+
     it('첫 시트가 양식이 아니면(시트 순서를 바꿈) 양식 문구', async () => {
       const wb = new ExcelJS.Workbook();
       wb.addWorksheet('점포 목록').addRow(['점포', '점포코드', '점포명']);

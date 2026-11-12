@@ -4,7 +4,7 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개), 엑셀 일괄 등록(PL-7 — 양식 · 미리보기 · 오류 파일 · 등록, 오류가 있으면 전부 막기 · 500줄). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-12T05:26:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-12T05:39:15Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: facility-bulk
     resource: ../../src/facilities/facility-bulk.ts
     title: 일괄 등록 양식 · 파일 읽기 · 줄 검사 · 오류 파일
-    last_modified: 2026-11-12T05:26:40Z
+    last_modified: 2026-11-12T05:39:15Z
   - id: facility-bulk-reader
     resource: ../../src/facilities/facility-bulk-reader.ts
     title: 올린 xlsx 를 메모리 · 시간 상한이 걸린 worker 에서 읽고 쓰기
@@ -278,8 +278,10 @@ first in front's generated types.
   joined. An error value (`#N/A`), a formula with no cached result (a file saved by a library, not
   Excel) or an unknown cell shape becomes that column's only reason (「셀 값이 오류(#N/A)입니다. …」,
   「수식의 결과가 저장되지 않았습니다. …」) — left blank, an optional 단가 would have been stored as
-  null without a word. A Serial number that arrives as a number beyond the safe integer range or in
-  exponent form is refused the same way (its digits are already lost). A phone that arrives as a
+  null without a word. A Serial number that arrives as a number of 16 digits or more (`>= 1e15`) or in
+  exponent form is refused the same way — Excel keeps only 15 significant digits, so a 16-digit
+  number is stored with its last digit already changed even though it is far inside JavaScript's safe
+  integer range (2^53 was the first boundary and let 16-digit numbers through, fourth review). A phone that arrives as a
   number — directly or as a formula result — has lost its leading 0, which is put back only when that
   makes a Korean number: 9–11 digits, or 8 starting with 2 (서울); a 대표번호 such as 15881234 is left
   as is and fails the length check instead of being stored wrong. The template sets every input cell
