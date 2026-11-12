@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import ExcelJS from 'exceljs';
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ThrottlerGuard } from '@nestjs/throttler';
@@ -12,6 +13,7 @@ import type {
   FacilityDetailResponseDto,
   FacilityListResponseDto,
 } from '../src/facilities/dto/facility.response.dto';
+import { BULK_HEADERS } from '../src/facilities/facility-bulk';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STORAGE } from '../src/storage/storage.module';
 
@@ -1161,5 +1163,483 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
   it('범위 밖 id 는 DB 에 묻지 않고 404', async () => {
     await call('get', '/facilities/2147483648').expect(404);
     await call('get', '/facilities/abc').expect(404);
+  });
+
+  describe('엑셀 일괄 등록(PL-7)', () => {
+    const LABELS: string[] = BULK_HEADERS.map((h) => h.label);
+    const codeOf = async (id: number) =>
+      (
+        await prisma.store.findUniqueOrThrow({
+          where: { storeId: id },
+          select: { storeCode: true },
+        })
+      ).storeCode;
+    const sheet = async (rows: Record<string, string>[]) => {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('시설물·장비');
+      ws.addRow(LABELS);
+      for (const r of rows) ws.addRow(LABELS.map((l) => r[l] ?? null));
+      return Buffer.from(await wb.xlsx.writeBuffer());
+    };
+    const binary = (req: request.Test) =>
+      req.buffer(true).parse((r, done) => {
+        const chunks: Buffer[] = [];
+        r.on('data', (c: Buffer) => chunks.push(c));
+        r.on('end', () => done(null, Buffer.concat(chunks)));
+      });
+    const load = async (buffer: Buffer) => {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+      return wb;
+    };
+    type Preview = {
+      totalCount: number;
+      validCount: number;
+      errorCount: number;
+      columns: { key: string; label: string }[];
+      rows: {
+        rowNumber: number;
+        isValid: boolean;
+        values: Record<string, string>;
+        errors: string[];
+      }[];
+    };
+    const line = (store: string, over: Record<string, string> = {}) => ({
+      '점포*': store,
+      '시설물/장비명*': '일괄 그라인더',
+      '운영상태*': '운영',
+      '그룹*': '점포 장비',
+      '분류*': '원두 그라인더',
+      ...over,
+    });
+    const countOf = (name: string) =>
+      prisma.facility.count({ where: { name, isDeleted: false } });
+
+    it('양식 — xlsx 로 내려오고, 둘째 시트는 범위 안 열린 점포 · 분류 드롭다운은 그 BP 의 사용 중인 분류', async () => {
+      const res = await binary(call('get', '/facilities/bulk-template'));
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      expect(res.headers['content-disposition']).toContain(
+        encodeURIComponent('시설물장비_일괄등록_양식.xlsx'),
+      );
+      const wb = await load(res.body as Buffer);
+      expect((wb.worksheets[0].getRow(1).values as unknown[]).slice(1)).toEqual(
+        LABELS,
+      );
+      // 첫 열은 점포 드롭다운 값 「점포명 [점포코드]」
+      const mine = await codeOf(storeId);
+      expect(wb.worksheets[1].getColumn(1).values.slice(2)).toContain(
+        `시설 ${mine} [${mine}]`,
+      );
+      const codes = wb.worksheets[1].getColumn(2).values.slice(2);
+      expect(codes).toEqual(
+        expect.arrayContaining([
+          await codeOf(storeId),
+          await codeOf(otherStoreId),
+          await codeOf(franchiseStoreId),
+        ]),
+      );
+      expect(codes).not.toContain(await codeOf(closedStoreId));
+      expect(codes).not.toContain(await codeOf(foreignStoreId));
+      const choices = wb.worksheets[2];
+      expect(choices.state).toBe('hidden');
+      // 드롭다운 값은 「코드명 [코드값]」 — 코드명만 떼어 본다
+      const categoryValues = choices.getColumn(3).values.slice(2).map(String);
+      for (const v of categoryValues) expect(v).toMatch(/ \[[A-Z0-9_]+\]$/);
+      const categories = categoryValues.map((v) =>
+        v.replace(/ \[[A-Z0-9_]+\]$/, ''),
+      );
+      expect(categories).toEqual(
+        expect.arrayContaining(['원두 그라인더', '커피머신', '냉난방']),
+      );
+      expect(categories).not.toContain('제빙기'); // 이 BP 에서 미사용
+    });
+
+    it('미리보기 — 줄마다 결과와 「칸: 사유」, 저장하지 않는다', async () => {
+      const ok = await codeOf(storeId);
+      const res = await call('post', '/facilities/bulk-validations')
+        .attach(
+          'file',
+          await sheet([
+            line(ok, {
+              '시설물/장비명*': '미리보기만',
+              단가: '1,000',
+              수량: '2',
+            }),
+            line(await codeOf(closedStoreId)),
+            line(await codeOf(foreignStoreId)),
+            line(ok, {
+              '분류*': '제빙기',
+              설치일: '2026-01-01',
+              구매일: '2026-02-01',
+            }),
+          ]),
+          '시설물.xlsx',
+        )
+        .expect(200);
+      const body = res.body as Preview;
+      expect(body).toMatchObject({
+        totalCount: 4,
+        validCount: 1,
+        errorCount: 3,
+      });
+      expect(body.columns.map((c) => c.label)).toEqual([
+        '점포',
+        '그룹',
+        '분류',
+        '시설물/장비명',
+        '구매일',
+        '설치일',
+      ]);
+      expect(body.rows.map((r) => [r.rowNumber, r.isValid, r.errors])).toEqual([
+        [2, true, []],
+        [3, false, ['점포: 폐점 점포에는 등록할 수 없습니다.']],
+        [4, false, ['점포: 관리하는 점포가 아닙니다.']],
+        [
+          5,
+          false,
+          [
+            '분류: 「점포 장비」에 없는 분류입니다.',
+            '설치일: 구매일보다 앞설 수 없습니다.',
+          ],
+        ],
+      ]);
+      expect(body.rows[0].values).toMatchObject({
+        storeName: `시설 ${ok}`,
+        group: '점포 장비',
+        category: '원두 그라인더',
+      });
+      expect(await countOf('미리보기만')).toBe(0);
+    });
+
+    it('오류 파일 — 올린 파일 끝에 「오류 사유」, 이름은 「올린파일이름_오류.xlsx」', async () => {
+      const res = await binary(
+        call('post', '/facilities/bulk-error-file').attach(
+          'file',
+          await sheet([line(await codeOf(storeId)), line('ST000000')]),
+          '내 목록.xlsx',
+        ),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers['content-disposition']).toContain(
+        encodeURIComponent('내 목록_오류.xlsx'),
+      );
+      const ws = (await load(res.body as Buffer)).worksheets[0];
+      expect(ws.getCell(1, 25).value).toBe('오류 사유');
+      expect(ws.getCell(2, 25).value ?? null).toBeNull();
+      expect(ws.getCell(3, 25).value).toBe('점포: 관리하는 점포가 아닙니다.');
+    });
+
+    it('등록 — 오류가 한 줄이라도 있으면 하나도 넣지 않고 400', async () => {
+      await call('post', '/facilities/bulk')
+        .attach(
+          'file',
+          await sheet([
+            line(await codeOf(storeId), { '시설물/장비명*': '섞인 파일' }),
+            line(await codeOf(closedStoreId), {
+              '시설물/장비명*': '섞인 파일',
+            }),
+          ]),
+          'a.xlsx',
+        )
+        .expect(400)
+        .expect((r) =>
+          expect((r.body as { message: string }).message).toBe(
+            '오류를 고친 파일을 다시 올려 주세요.',
+          ),
+        );
+      expect(await countOf('섞인 파일')).toBe(0);
+    });
+
+    it('등록 — 모두 정상이면 201 · 건수, 목록 · 상세에 보이고 등록자와 총금액이 남는다', async () => {
+      const res = await call('post', '/facilities/bulk')
+        .attach(
+          'file',
+          await sheet([
+            line(await codeOf(storeId), {
+              '시설물/장비명*': '일괄 등록 A',
+              단가: '1500000',
+              수량: '3',
+              '부가세 포함(Y/N)': 'N',
+              '점검 주기': '매일',
+              '구매처 전화번호': '02-123-4567',
+              메모: '첫 줄\n둘째 줄',
+            }),
+            // 드롭다운 값 「점포명 [점포코드]」 그대로
+            line(`가맹 점포 [${await codeOf(franchiseStoreId)}]`, {
+              '시설물/장비명*': '일괄 등록 B',
+              '그룹*': '점포 시설물',
+              '분류*': '냉난방',
+              '운영상태*': '보관',
+            }),
+          ]),
+          'ok.xlsx',
+        )
+        .expect(201);
+      expect(res.body).toEqual({ createdCount: 2 });
+      const [a] = await prisma.facility.findMany({
+        where: { name: '일괄 등록 A' },
+      });
+      const d = await detail(a.facilityId);
+      expect(d).toMatchObject({
+        facilityGroupCode: 'STORE_EQUIPMENT',
+        facilityCategoryCode: 'GRINDER',
+        unitPriceAmount: 1_500_000,
+        quantity: 3,
+        totalAmount: 4_500_000,
+        isVatIncluded: false,
+        inspectionCycleCode: 'DAILY',
+        vendorPhone: '021234567',
+        memo: '첫 줄\n둘째 줄',
+        manager: null,
+      });
+      expect(d.createdByName).toBe('정하윤');
+      const b = await prisma.facility.findFirstOrThrow({
+        where: { name: '일괄 등록 B' },
+      });
+      expect(b).toMatchObject({
+        storeId: franchiseStoreId,
+        facilityStatusCode: 'STORED',
+        facilityCategoryCode: 'HVAC',
+        quantity: 1,
+        isVatIncluded: true,
+      });
+    });
+
+    it('파일 검사 — 양식이 아니면 · 내용이 없으면 · 파일이 없으면 400', async () => {
+      const message = async (req: request.Test) =>
+        ((await req.expect(400)).body as { message: string }).message;
+      expect(
+        await message(
+          call('post', '/facilities/bulk-validations').attach(
+            'file',
+            PDF,
+            'a.xlsx',
+          ),
+        ),
+      ).toBe('내려받은 양식으로 작성한 파일만 올릴 수 있습니다.');
+      expect(
+        await message(
+          call('post', '/facilities/bulk-validations').attach(
+            'file',
+            await sheet([]),
+            'a.xlsx',
+          ),
+        ),
+      ).toBe('등록할 시설물·장비가 없습니다.');
+      expect(await message(call('post', '/facilities/bulk-validations'))).toBe(
+        '올릴 파일을 선택해 주세요.',
+      );
+    });
+
+    it('권한 · 범위 — 메뉴 권한 없으면 403, 플랫폼은 BP 를 골라야(400), 일부 점포만 맡으면 다른 점포는 범위 밖', async () => {
+      const file = await sheet([line(await codeOf(otherStoreId))]);
+      await call('get', '/facilities/bulk-template', noMenuToken).expect(403);
+      await call('post', '/facilities/bulk', noMenuToken)
+        .attach('file', file, 'a.xlsx')
+        .expect(403);
+      await call('get', '/facilities/bulk-template', pmToken).expect(400);
+      await binary(
+        call('get', '/facilities/bulk-template', pmToken, bpCodeId),
+      ).expect(200);
+      const res = await call('post', '/facilities/bulk-validations', baToken)
+        .attach('file', file, 'a.xlsx')
+        .expect(200);
+      expect((res.body as Preview).rows[0].errors).toEqual([
+        '점포: 관리하는 점포가 아닙니다.',
+      ]);
+      // 등록 권한만 있어도 일괄 등록은 된다
+      await call('post', '/facilities/bulk', createOnlyToken)
+        .attach(
+          'file',
+          await sheet([
+            line(await codeOf(storeId), { '시설물/장비명*': '등록 권한만' }),
+          ]),
+          'a.xlsx',
+        )
+        .expect(201);
+    });
+
+    it('날짜 4종과 경계값(단가 10자리 × 수량 9,999 · 이모지 100자 · 메모 200자 · 전화 12자리)이 DB 에 그대로 저장된다', async () => {
+      const name = '🧊'.repeat(100);
+      const memo = `첫 줄\n${'가'.repeat(196)}`;
+      await call('post', '/facilities/bulk')
+        .attach(
+          'file',
+          await sheet([
+            line(await codeOf(storeId), {
+              '시설물/장비명*': name,
+              단가: '9,999,999,999',
+              수량: '9,999',
+              구매일: '2026-01-31',
+              설치일: '2026-02-01',
+              '사용 유효기한': '2030-12-31',
+              '품질 보증기한': '2028-02-29',
+              메모: memo,
+              영업사원: '영'.repeat(50),
+              '영업사원 전화번호': '0505-1234-5678',
+              'A/S센터 전화번호': '050512345678',
+            }),
+          ]),
+          'edge.xlsx',
+        )
+        .expect(201);
+      const row = await prisma.facility.findFirstOrThrow({ where: { name } });
+      const d = await detail(row.facilityId);
+      expect(d).toMatchObject({
+        name,
+        memo,
+        unitPriceAmount: 9_999_999_999,
+        quantity: 9_999,
+        totalAmount: 9_999_999_999 * 9_999,
+        purchaseDate: '2026-01-31',
+        installationDate: '2026-02-01',
+        usageExpiryDate: '2030-12-31',
+        warrantyExpiryDate: '2028-02-29',
+        salesRepresentativeName: '영'.repeat(50),
+        salesRepresentativePhone: '050512345678',
+        serviceCenterPhone: '050512345678',
+      });
+    });
+
+    it('미리보기 뒤 점포가 폐점 · 삭제되면 등록은 400 이고 아무것도 넣지 않는다', async () => {
+      const code = `ST${randomInt(100_000, 999_999)}`;
+      const { storeId: tempStoreId } = await prisma.store.create({
+        data: {
+          storeCode: code,
+          bpCodeId,
+          storeTypeCode: 'DIRECT',
+          name: '곧 닫을 점포',
+          storeStatusCode: 'OPERATING',
+        },
+      });
+      const file = await sheet([
+        line(`곧 닫을 점포 [${code}]`, { '시설물/장비명*': '폐점 경쟁' }),
+      ]);
+      const preview = await call('post', '/facilities/bulk-validations')
+        .attach('file', file, 'a.xlsx')
+        .expect(200);
+      expect((preview.body as Preview).validCount).toBe(1);
+      await prisma.store.update({
+        where: { storeId: tempStoreId },
+        data: { storeStatusCode: 'CLOSED' },
+      });
+      await call('post', '/facilities/bulk')
+        .attach('file', file, 'a.xlsx')
+        .expect(400)
+        .expect((r) =>
+          expect((r.body as { message: string }).message).toBe(
+            '오류를 고친 파일을 다시 올려 주세요.',
+          ),
+        );
+      await prisma.store.update({
+        where: { storeId: tempStoreId },
+        data: { storeStatusCode: 'OPERATING', isDeleted: true },
+      });
+      await call('post', '/facilities/bulk')
+        .attach('file', file, 'a.xlsx')
+        .expect(400);
+      expect(await countOf('폐점 경쟁')).toBe(0);
+    });
+
+    it('미리보기 뒤 분류가 미사용이 되면 등록은 400', async () => {
+      const file = await sheet([
+        line(await codeOf(storeId), {
+          '시설물/장비명*': '미사용 경쟁',
+          '분류*': '커피머신',
+        }),
+      ]);
+      await call('post', '/facilities/bulk-validations')
+        .attach('file', file, 'a.xlsx')
+        .expect(200)
+        .expect((r) => expect((r.body as Preview).validCount).toBe(1));
+      const coffee = {
+        groupCode: 'STORE_EQUIPMENT',
+        itemCode: 'COFFEE_MACHINE',
+        bpCode,
+      };
+      await prisma.codeItem.update({
+        where: { groupCode_itemCode_bpCode: coffee },
+        data: { status: 'INACTIVE' },
+      });
+      try {
+        await call('post', '/facilities/bulk')
+          .attach('file', file, 'a.xlsx')
+          .expect(400);
+        expect(await countOf('미사용 경쟁')).toBe(0);
+      } finally {
+        await prisma.codeItem.update({
+          where: { groupCode_itemCode_bpCode: coffee },
+          data: { status: 'ACTIVE' },
+        });
+      }
+    });
+
+    it('플랫폼 계정 — 고른 BP 의 점포 · 공통코드로 미리보기 · 등록한다', async () => {
+      const file = await sheet([
+        line(await codeOf(storeId), { '시설물/장비명*': '플랫폼 일괄 등록' }),
+      ]);
+      await call('post', '/facilities/bulk-validations', pmToken)
+        .attach('file', file, 'a.xlsx')
+        .expect(400);
+      await call('post', '/facilities/bulk-validations', pmToken, bpCodeId)
+        .attach('file', file, 'a.xlsx')
+        .expect(200)
+        .expect((r) => expect((r.body as Preview).validCount).toBe(1));
+      await call('post', '/facilities/bulk', pmToken, bpCodeId)
+        .attach('file', file, 'a.xlsx')
+        .expect(201);
+      const row = await prisma.facility.findFirstOrThrow({
+        where: { name: '플랫폼 일괄 등록' },
+      });
+      expect(row).toMatchObject({
+        storeId,
+        facilityCategoryCode: 'GRINDER',
+      });
+    });
+
+    it('업로드 계약 — 5MB 를 넘거나 파일이 둘이면 400, 오류 파일은 xlsx 로 내려오고 오류 줄이 없으면 400', async () => {
+      const message = async (req: request.Test) =>
+        ((await req.expect(400)).body as { message: string }).message;
+      expect(
+        await message(
+          call('post', '/facilities/bulk-validations').attach(
+            'file',
+            Buffer.alloc(5 * 1024 * 1024 + 1),
+            'big.xlsx',
+          ),
+        ),
+      ).toBe('파일은 5MB까지 올릴 수 있습니다.');
+      const one = await sheet([line(await codeOf(storeId))]);
+      expect(
+        await message(
+          call('post', '/facilities/bulk-validations')
+            .attach('file', one, 'a.xlsx')
+            .attach('file', one, 'b.xlsx'),
+        ),
+      ).toBe('파일은 1개까지 올릴 수 있습니다.');
+      const res = await binary(
+        call('post', '/facilities/bulk-error-file').attach(
+          'file',
+          await sheet([line('ST000000')]),
+          'e.xlsx',
+        ),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers['content-type']).toBe(
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      expect(
+        await message(
+          call('post', '/facilities/bulk-error-file').attach(
+            'file',
+            one,
+            'a.xlsx',
+          ),
+        ),
+      ).toBe('오류가 있는 줄이 없습니다.');
+    });
   });
 });
