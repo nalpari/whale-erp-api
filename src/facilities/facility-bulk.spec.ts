@@ -8,7 +8,7 @@ import {
   BULK_MAX_ROWS,
   BULK_PREVIEW_COLUMNS,
   BULK_TEMPLATE_ONLY,
-  BULK_RANGE_TOO_LARGE,
+  BULK_CELL_TOO_LONG,
   BULK_TOO_COMPLEX,
   BULK_TOO_LARGE,
   BULK_TOO_MANY,
@@ -546,6 +546,37 @@ describe('facility-bulk', () => {
       expect([BULK_TOO_COMPLEX, BULK_EMPTY]).toContain(message);
     });
 
+    it('칸 글자가 1,000자를 넘으면 worker 는 내용 대신 표시만 보내고 그 칸의 사유가 된다', async () => {
+      // 같은 공유 문자열을 여러 칸이 가리켜도 worker 안에선 하나지만, 메인으로 보내면 칸마다 복사된다(11KB 파일에 메인 heap 2.4GB)
+      const long = '가'.repeat(5_000);
+      const { rows } = await readBulkFile(
+        await xlsx([
+          { ...VALIDCELLS(), '시설물/장비명*': long, 메모: long },
+          {
+            ...VALIDCELLS(),
+            브랜드: { richText: [{ text: long }] },
+          },
+        ]),
+      );
+      expect(rows[0].problems).toEqual({
+        name: BULK_CELL_TOO_LONG,
+        memo: BULK_CELL_TOO_LONG,
+      });
+      expect(rows[0].cells.name).toBe('');
+      expect(rows[1].problems).toEqual({ brand: BULK_CELL_TOO_LONG });
+      expect(checkBulkRow(rows[0], LOOKUPS).errors).toEqual([
+        `시설물/장비명: ${BULK_CELL_TOO_LONG}`,
+        `메모: ${BULK_CELL_TOO_LONG}`,
+      ]);
+    });
+
+    it('칸마다는 1,000자 안이어도 보낼 글자가 모두 합해 너무 많으면 내용 과대로 400', async () => {
+      const cell = 'a'.repeat(900);
+      const row = Object.fromEntries(LABELS.map((l) => [l, cell]));
+      const buffer = await xlsx(Array.from({ length: 480 }, () => row));
+      expect(await rejection(readBulkFile(buffer))).toBe(BULK_TOO_LARGE);
+    });
+
     it('정상 파일은 worker 에서 읽어 행을 돌려주고, 오류 파일도 worker 에서 만든다', async () => {
       const parsed = await readBulkFile(await xlsx([VALIDCELLS()]));
       expect(parsed.rows).toHaveLength(1);
@@ -653,64 +684,17 @@ describe('facility-bulk', () => {
       );
     });
 
-    it('워크시트의 병합 셀 · 데이터 유효성 검사 범위가 넓으면 exceljs 가 칸마다 펼치기 전에 400', () => {
-      const sheet = (body: string) =>
-        zipOf([
-          {
-            name: 'xl/worksheets/sheet1.xml',
-            data: `<?xml version="1.0"?><worksheet>${body}</worksheet>`,
-          },
-        ]);
-      // 6KB 파일이 heap 292MB 를 썼다(리뷰 실측)
-      expect(() =>
-        assertZipWithinLimit(
-          sheet(
-            '<mergeCells count="1"><mergeCell ref="A2:J100000"/></mergeCells>',
-          ),
-          4_000_000,
-        ),
-      ).toThrow(BULK_RANGE_TOO_LARGE);
-      // 엑셀에서 열 전체에 유효성 검사를 걸면 이렇게 저장된다
-      expect(() =>
-        assertZipWithinLimit(
-          sheet(
-            '<dataValidations count="1"><dataValidation type="list" sqref="A1:X1048576"><formula1>A</formula1></dataValidation></dataValidations>',
-          ),
-          4_000_000,
-        ),
-      ).toThrow(BULK_RANGE_TOO_LARGE);
-      // 열 · 행 전체 표기, 여러 범위의 합, 작은따옴표 · $ 표기
-      expect(() =>
-        assertZipWithinLimit(sheet("<mergeCell ref='$A:$A'/>"), 4_000_000),
-      ).toThrow(BULK_RANGE_TOO_LARGE);
-      expect(() =>
-        assertZipWithinLimit(
-          sheet(
-            '<dataValidation sqref="A2:A30000 B2:B30000"></dataValidation>',
-          ),
-          4_000_000,
-        ),
-      ).toThrow(BULK_RANGE_TOO_LARGE);
-      // 양식 크기(6열 × 500행)는 받는다 — 워크시트가 아닌 항목은 보지 않는다
-      expect(() =>
-        assertZipWithinLimit(
-          sheet(
-            '<mergeCell ref="A2:B3"/><dataValidation sqref="C2:C501 D2:D501 E2:E501 V2:V501 P2:P501 A2:A501"></dataValidation>',
-          ),
-          4_000_000,
-        ),
-      ).not.toThrow();
-      expect(() =>
-        assertZipWithinLimit(
-          zipOf([
-            {
-              name: 'xl/sharedStrings.xml',
-              data: '<mergeCell ref="A1:XFD1048576"/>',
-            },
-          ]),
-          4_000_000,
-        ),
-      ).not.toThrow();
+    it('워크시트 XML 을 메인 스레드에서 정규식으로 훑지 않는다 — 닫히지 않은 태그 반복도 풀어 세기만 하고 바로 끝난다', () => {
+      // 이전의 범위 사전 검사 정규식은 이 입력에서 이차 시간이었다(2.4KB 업로드에 이벤트 루프 16.5초, PR #276 3차 리뷰)
+      const zip = zipOf([
+        {
+          name: 'xl/worksheets/sheet1.xml',
+          data: '<mergeCell '.repeat(100_000),
+        },
+      ]);
+      const started = Date.now();
+      expect(() => assertZipWithinLimit(zip, 16_000_000)).not.toThrow();
+      expect(Date.now() - started).toBeLessThan(2_000);
     });
 
     it('zip 이 아니거나 깨졌으면 양식 문구', () => {

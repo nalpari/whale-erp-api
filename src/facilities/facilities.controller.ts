@@ -68,11 +68,12 @@ import {
   type FacilityDocumentUpload,
 } from './facilities.service';
 import {
+  BULK_BUSY,
+  BULK_CELL_TOO_LONG,
   BULK_EMPTY,
   BULK_HAS_ERRORS,
   BULK_MAX_BYTES,
   BULK_NO_ERRORS,
-  BULK_RANGE_TOO_LARGE,
   BULK_STORE_CHANGED,
   BULK_TEMPLATE_FILE_NAME,
   BULK_TEMPLATE_ONLY,
@@ -114,14 +115,18 @@ const BULK_FILE_ERRORS = [
   '파일 없음 · 5MB 초과 · 파일 2개 이상(업로드 문구)',
   `zip · xlsx 가 아니거나 첫 시트 머리글이 양식과 다름(「${BULK_TEMPLATE_ONLY}」)`,
   `압축을 푼 크기가 16MB 를 넘음(「${BULK_TOO_LARGE}」)`,
-  `한 시트의 병합 셀 · 데이터 유효성 검사 범위가 5만 칸을 넘음(「${BULK_RANGE_TOO_LARGE}」)`,
   `exceljs 가 읽지 못함 — 표 · 차트 등(「${BULK_UNREADABLE}」)`,
   `파일을 읽는 worker 가 메모리(192MB) · 시간(15초) 상한을 넘음(「${BULK_TOO_COMPLEX}」)`,
+  `보낼 셀 글자가 모두 400만 자를 넘음(「${BULK_TOO_LARGE}」 — 칸 하나가 1,000자를 넘으면 그 칸의 사유 「${BULK_CELL_TOO_LONG}」)`,
   `500줄 초과 또는 공백뿐인 줄까지 1,000행 초과(「${BULK_TOO_MANY}」)`,
   `내용 없음(「${BULK_EMPTY}」)`,
   `그 BP 의 시설물 공통코드가 없음(「${BULK_CODES_MISSING}」)`,
   BP_MISSING_DESCRIPTION,
 ].join(' · ');
+/** 파일을 읽는 worker 자리가 없음 — 동시 2개 · 대기 8건 · 대기 30초 */
+const BULK_BUSY_RESPONSE = {
+  description: `파일을 읽는 요청이 몰림(「${BULK_BUSY}」)`,
+};
 const XLSX_FILE_RESPONSE: ApiResponseOptions = {
   description: '.xlsx 파일(Content-Disposition 에 파일 이름)',
   schema: { type: 'string', format: 'binary' },
@@ -218,6 +223,7 @@ export class FacilitiesController {
   @ApiBody(BULK_FILE_BODY)
   @ApiOkResponse({ type: BulkPreviewResponseDto })
   @ApiBadRequestResponse({ description: BULK_FILE_ERRORS })
+  @ApiServiceUnavailableResponse(BULK_BUSY_RESPONSE)
   @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   bulkValidations(
     @CurrentUser() user: AuthUser,
@@ -239,6 +245,7 @@ export class FacilitiesController {
   @ApiBadRequestResponse({
     description: `${BULK_FILE_ERRORS} · 오류가 있는 줄이 없음(「${BULK_NO_ERRORS}」)`,
   })
+  @ApiServiceUnavailableResponse(BULK_BUSY_RESPONSE)
   @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   async bulkErrorFile(
     @CurrentUser() user: AuthUser,
@@ -267,6 +274,7 @@ export class FacilitiesController {
   @ApiBadRequestResponse({
     description: `${BULK_FILE_ERRORS} · 오류가 있는 줄이 있음(「${BULK_HAS_ERRORS}」) · 검사 뒤 점포가 폐점 · 삭제됨(「${BULK_STORE_CHANGED}」)`,
   })
+  @ApiServiceUnavailableResponse(BULK_BUSY_RESPONSE)
   @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
   bulkRegister(
     @CurrentUser() user: AuthUser,

@@ -9,10 +9,12 @@ import {
 } from '../excel-exports/excel-sheet-style';
 import { parseDateOnly } from '../staff-members/kst-date';
 import {
+  BULK_BUSY,
   BULK_NOT_TEMPLATE,
   BULK_TOO_COMPLEX,
   BULK_UNREADABLE,
   readSheetInWorker,
+  type WorkerCellValue,
   writeErrorColumnInWorker,
 } from './facility-bulk-reader';
 import {
@@ -39,20 +41,20 @@ export const BULK_MAX_UNCOMPRESSED_BYTES = 16 * 1024 * 1024;
 /** zip 항목 수 상한 — 양식은 항목 십여 개다 */
 const MAX_ZIP_ENTRIES = 1000;
 /**
- * 한 시트의 병합 셀 · 데이터 유효성 검사 범위 칸 수 합의 상한 — exceljs 가 읽으며 칸마다 펼친다(assertSheetRanges).
- * 양식은 드롭다운 6열 × 500행 = 3,000칸이다.
- */
-const MAX_SHEET_RANGE_CELLS = 50_000;
-/**
  * eachRow 가 방문하는 행 수 상한(머리글 제외) — 공백만 있는 줄은 500줄에 세지 않지만 방문하면 24칸 셀을 만든다(6만 줄에
  * heap 321MB, PR #276 리뷰). 500줄 + 여유분을 넘으면 칸을 만들기 전에 줄 수 초과로 막는다.
  */
 const MAX_VISITED_ROWS = BULK_MAX_ROWS * 2;
-const EXCEL_MAX_ROWS = 1_048_576;
-const EXCEL_MAX_COLUMNS = 16_384;
+/**
+ * worker 가 메인으로 보내는 칸 하나의 글자 수 상한 — 가장 긴 칸(메모 · 점검 비고 200자)의 다섯 배. 넘으면 내용 대신 표시만
+ * 온다. 같은 공유 문자열을 여러 칸이 가리키면 메인에선 칸마다 복사본이 생기기 때문이다(PR #276 3차 리뷰).
+ */
+const MAX_CELL_TEXT = 1_000;
+/** worker 가 보내는 글자 전체의 상한 — 500줄을 칸마다 최대 길이로 채워도 약 75만 자다 */
+const MAX_TOTAL_TEXT = 4_000_000;
 
 export const BULK_TEMPLATE_ONLY = BULK_NOT_TEMPLATE;
-export { BULK_TOO_COMPLEX, BULK_UNREADABLE };
+export { BULK_BUSY, BULK_TOO_COMPLEX, BULK_UNREADABLE };
 export const BULK_TOO_MANY = `한 번에 ${BULK_MAX_ROWS}건까지 등록할 수 있습니다. 파일을 나눠 올려 주세요.`;
 export const BULK_TOO_LARGE =
   '파일 내용이 너무 큽니다. 그림 · 다른 시트 없이 내려받은 양식에 값만 적어 다시 올려 주세요.';
@@ -61,8 +63,7 @@ export const BULK_HAS_ERRORS = '오류를 고친 파일을 다시 올려 주세�
 export const BULK_STORE_CHANGED =
   '미리보기 뒤 폐점되거나 삭제된 점포가 있습니다. 파일을 다시 올려 미리보기를 확인해 주세요.';
 export const BULK_NO_ERRORS = '오류가 있는 줄이 없습니다.';
-export const BULK_RANGE_TOO_LARGE =
-  '병합한 셀이나 데이터 유효성 검사 범위가 너무 넓습니다. 셀 병합 · 열 전체 유효성 검사 없이 내려받은 양식에 값만 적어 다시 올려 주세요.';
+export const BULK_CELL_TOO_LONG = `글자가 너무 깁니다(${MAX_CELL_TEXT.toLocaleString('ko-KR')}자 초과). 값을 줄여 다시 적어 주세요.`;
 
 export const BULK_TEMPLATE_FILE_NAME = '시설물장비_일괄등록_양식.xlsx';
 /** 오류 파일 이름 — 「올린파일이름_오류.xlsx」(확장자는 대소문자 없이 뗀다, 이름이 없으면 기본 이름) */
@@ -239,12 +240,17 @@ interface CellRead {
   problem?: string;
 }
 
+/** 셀 값 — worker 가 단순하게 바꿔 보낸 꼴(WorkerCellValue)이거나 exceljs 값 그대로 */
+type AnyCellValue = ExcelJS.CellValue | WorkerCellValue | undefined;
+
 /**
  * 셀 값을 읽는다 — 엑셀은 숫자 · 날짜 · 서식 있는 글자 · 수식으로 줄 수 있다. 날짜는 YYYY-MM-DD(exceljs 는 엑셀 날짜를
  * UTC 자정으로 준다), 수식은 계산 결과. 오류 값(#N/A 등) · 저장된 결과가 없는 수식(엑셀이 아닌 도구로 만든 파일) · 모르는
- * 셀 모양은 빈 칸이 아니라 사유를 돌려준다 — 빈 칸으로 두면 선택 칸의 값이 말없이 사라진다.
+ * 셀 모양 · worker 가 길이 상한으로 내용을 뺀 칸은 빈 칸이 아니라 사유를 돌려준다 — 빈 칸으로 두면 선택 칸의 값이 말없이
+ * 사라진다.
  */
-function readCell(value: ExcelJS.CellValue | undefined): CellRead {
+function readCell(input: AnyCellValue): CellRead {
+  const value = input as ExcelJS.CellValue | undefined;
   if (value === null || value === undefined) return { text: '' };
   if (typeof value === 'string') return { text: value };
   if (typeof value === 'number') return { text: String(value) };
@@ -257,6 +263,7 @@ function readCell(value: ExcelJS.CellValue | undefined): CellRead {
           problem: '날짜를 읽지 못했습니다. YYYY-MM-DD 로 적어 주세요.',
         }
       : { text: value.toISOString().slice(0, 10) };
+  if ('tooLong' in value) return { text: '', problem: BULK_CELL_TOO_LONG };
   if ('richText' in value)
     return { text: value.richText.map((r) => r.text).join('') };
   if ('error' in value)
@@ -281,18 +288,16 @@ function readCell(value: ExcelJS.CellValue | undefined): CellRead {
 }
 
 /** 셀 값을 글자로 — 읽을 수 없는 셀은 '' (머리글 검사 등 사유가 필요 없는 곳) */
-export function cellText(value: ExcelJS.CellValue | undefined): string {
+export function cellText(value: AnyCellValue): string {
   return readCell(value).text;
 }
 
 /** 수식이면 계산 결과, 아니면 그 값 */
-function resultOf(
-  value: ExcelJS.CellValue | undefined,
-): ExcelJS.CellValue | undefined {
+function resultOf(value: AnyCellValue): AnyCellValue {
   return value !== null &&
     typeof value === 'object' &&
     ('formula' in value || 'sharedFormula' in value)
-    ? (value as { result?: ExcelJS.CellValue }).result
+    ? (value as { result?: AnyCellValue }).result
     : value;
 }
 
@@ -301,7 +306,7 @@ function resultOf(
  * 붙여 그 꼴이 될 때만 붙인다: 0 을 뺀 9~11자리, 또는 8자리면 서울(2로 시작) 번호. 대표번호(15881234 같은 8자리)에
  * 붙이면 틀린 9자리 번호가 통과하므로 그대로 둬 길이 검사에 걸리게 한다.
  */
-function readPhone(value: ExcelJS.CellValue | undefined): CellRead {
+function readPhone(value: AnyCellValue): CellRead {
   const v = resultOf(value);
   if (typeof v === 'number' && Number.isInteger(v) && v > 0) {
     const d = String(v);
@@ -315,7 +320,7 @@ function readPhone(value: ExcelJS.CellValue | undefined): CellRead {
 }
 
 /** 식별자 칸 — 숫자로 들어와 정밀도를 잃었거나(안전한 정수 밖) 지수 표기가 된 값은 사유로 돌려준다 */
-function readIdentifier(value: ExcelJS.CellValue | undefined): CellRead {
+function readIdentifier(value: AnyCellValue): CellRead {
   const v = resultOf(value);
   if (
     typeof v === 'number' &&
@@ -327,60 +332,6 @@ function readIdentifier(value: ExcelJS.CellValue | undefined): CellRead {
         '숫자로 저장돼 값이 바뀌었을 수 있습니다. 셀 서식을 텍스트로 바꿔 다시 적어 주세요.',
     };
   return readCell(value);
-}
-
-/** zip 안의 워크시트 항목 — exceljs 는 모든 시트를 읽는다 */
-const WORKSHEET_ENTRY = /^xl\/worksheets\/[^/]+\.xml$/i;
-
-/** 엑셀 범위의 칸 수 — 「A2:J100000」 · 「A1」 · 열 전체 「$A:$A」 · 행 전체 「1:3」. 읽을 수 없는 표기는 0(exceljs 가 판단한다) */
-export function rangeCellCount(ref: string): number {
-  const end = (part: string) => {
-    const m = /^\$?([A-Za-z]{0,3})\$?(\d*)$/.exec(part.trim());
-    if (!m || (!m[1] && !m[2])) return null;
-    const col = m[1]
-      ? [...m[1].toUpperCase()].reduce(
-          (n, ch) => n * 26 + ch.charCodeAt(0) - 64,
-          0,
-        )
-      : null;
-    return { col, row: m[2] ? Number(m[2]) : null };
-  };
-  const [first, second = first] = ref.split(':');
-  const a = end(first);
-  const b = end(second);
-  if (!a || !b) return 0;
-  const cols =
-    a.col === null || b.col === null
-      ? EXCEL_MAX_COLUMNS
-      : Math.abs(b.col - a.col) + 1;
-  const rows =
-    a.row === null || b.row === null
-      ? EXCEL_MAX_ROWS
-      : Math.abs(b.row - a.row) + 1;
-  return cols * rows;
-}
-
-/**
- * 워크시트 XML 의 병합 셀(mergeCell ref)과 데이터 유효성 검사(dataValidation sqref) 범위의 칸 수 합이 상한을 넘으면 400.
- * exceljs 는 읽는 순간 병합 범위의 모든 칸에 셀 객체를, 유효성 검사 범위의 모든 주소에 항목을 만든다 — 몇 KB 짜리
- * 「A2:J100000」 한 줄이 heap 292MB, 엑셀에서 열 전체에 건 유효성 검사(「A1:X1048576」)는 수천만 칸이다(2026-11-12 PR #276
- * 리뷰). 이 검사는 흔한 실수에 알아볼 문구를 먼저 주려는 것이다 — 정규식이라 항목 이름 · 문자 참조 · 공백 변형으로 피할 수
- * 있고, exceljs 가 펼치는 곳은 이 둘만이 아니다(이름 정의 · <col max> · 빈 셀). 보안 경계는 worker 의 메모리 · 시간 상한이다.
- */
-export function assertSheetRanges(xml: string): void {
-  let cells = 0;
-  const add = (refs: string) => {
-    for (const ref of refs.trim().split(/\s+/))
-      if (ref) cells += rangeCellCount(ref);
-  };
-  for (const m of xml.matchAll(/<mergeCell\b[^>]*?\sref=(["'])([^"']*)\1/g))
-    add(m[2]);
-  for (const m of xml.matchAll(
-    /<dataValidation\b[^>]*?\ssqref=(["'])([^"']*)\1/g,
-  ))
-    add(m[2]);
-  if (cells > MAX_SHEET_RANGE_CELLS)
-    throw new BadRequestException(BULK_RANGE_TOO_LARGE);
 }
 
 /** xlsx(zip) 서명 — 확장자는 믿지 않는다 */
@@ -431,13 +382,10 @@ export function assertZipWithinLimit(buffer: Buffer, maxBytes: number): void {
     if (p + 46 > eocd || buffer.readUInt32LE(p) !== 0x02014b50) throw broken();
     const method = buffer.readUInt16LE(p + 10);
     const compressed = buffer.readUInt32LE(p + 20);
-    const nameLength = buffer.readUInt16LE(p + 28);
     const local = buffer.readUInt32LE(p + 42);
-    if (p + 46 + nameLength > eocd) throw broken();
-    const name = buffer.toString('utf8', p + 46, p + 46 + nameLength);
     p +=
       46 +
-      nameLength +
+      buffer.readUInt16LE(p + 28) +
       buffer.readUInt16LE(p + 30) +
       buffer.readUInt16LE(p + 32);
     if (local + 30 > directory || buffer.readUInt32LE(local) !== 0x04034b50)
@@ -465,8 +413,6 @@ export function assertZipWithinLimit(buffer: Buffer, maxBytes: number): void {
     } else throw broken();
     total += content.length;
     if (total > maxBytes) throw tooBig();
-    // 워크시트는 exceljs 가 읽으며 범위를 칸마다 펼치는 곳이 있다 — 읽기 전에 그 넓이를 본다
-    if (WORKSHEET_ENTRY.test(name)) assertSheetRanges(content.toString('utf8'));
   }
   if (p !== eocd) throw broken();
 }
@@ -478,7 +424,7 @@ export interface ParsedBulkFile {
 }
 
 /** 머리글이 양식과 같은가 — 끝의 「오류 사유」 열(오류 파일을 고쳐 다시 올린 것)은 받는다 */
-function headerMatches(header: readonly ExcelJS.CellValue[]): boolean {
+function headerMatches(header: readonly AnyCellValue[]): boolean {
   if (!BULK_HEADERS.every((h, i) => cellText(header[i]).trim() === h.label))
     return false;
   const extra = cellText(header[BULK_HEADERS.length]).trim();
@@ -488,9 +434,9 @@ function headerMatches(header: readonly ExcelJS.CellValue[]): boolean {
 /**
  * 올린 파일을 읽는다 — 양식이 아니면 · 내용이 없으면 · 500줄을 넘으면 400. 칸이 모두 빈 글자이거나 공백뿐인 줄은 세지
  * 않는다(서식 · 드롭다운만 있는 행은 eachRow 가 애초에 건너뛴다). 행 번호는 엑셀 그대로다.
- * - exceljs 로 여는 일은 메모리 · 시간 상한이 걸린 worker 에서만 한다(facility-bulk-reader) — 이 프로세스는 셀 값만 받는다.
- *   그 전에 압축 해제 양(assertZipWithinLimit)과 흔한 범위 과대(assertSheetRanges)를 본다 — 앞의 것은 이 스레드가 푸는
- *   양을, 뒤의 것은 엑셀에서 열 전체에 건 유효성 검사 같은 흔한 실수에 알아볼 문구를 주려는 것이고, 보안 경계는 worker 다.
+ * - exceljs 로 여는 일은 메모리 · 시간 상한이 걸린 worker 에서만 한다(facility-bulk-reader) — 이 프로세스는 상한 안의 셀
+ *   값만 받는다(칸 1,000자 · 전체 400만 자). 그 전에 압축 해제 양(assertZipWithinLimit)만 본다 — 이 스레드가 푸는 양을
+ *   묶으려는 것이다. XML 을 이 스레드에서 정규식으로 훑지 않는다 — 우회되고, 이차 시간이라 그 자체로 이벤트 루프를 멈췄다.
  * - 실제 있는 행만 돈다(eachRow) — rowCount 는 마지막으로 쓰인 행 번호라 먼 셀 하나로 100만이 된다. 공백뿐인 줄도 방문
  *   수에 세어 1,000행을 넘으면 칸을 만들기 전에 멈춘다.
  */
@@ -499,11 +445,13 @@ export async function readBulkFile(
   { maxUncompressedBytes = BULK_MAX_UNCOMPRESSED_BYTES } = {},
 ): Promise<ParsedBulkFile> {
   assertZipWithinLimit(buffer, maxUncompressedBytes);
-  const sheet = await readSheetInWorker(
-    buffer,
-    BULK_HEADERS.length,
-    MAX_VISITED_ROWS,
-  );
+  const sheet = await readSheetInWorker(buffer, {
+    columns: BULK_HEADERS.length,
+    maxVisitedRows: MAX_VISITED_ROWS,
+    maxCellText: MAX_CELL_TEXT,
+    maxTotalText: MAX_TOTAL_TEXT,
+  });
+  if (sheet.tooLarge) throw new BadRequestException(BULK_TOO_LARGE);
   if (!headerMatches(sheet.header))
     throw new BadRequestException(BULK_TEMPLATE_ONLY);
   if (sheet.overflow) throw new BadRequestException(BULK_TOO_MANY);
