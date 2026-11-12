@@ -1,10 +1,10 @@
 ---
 type: API
 title: Facilities
-description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
+description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개), 엑셀 일괄 등록(PL-7 — 양식 · 미리보기 · 오류 파일 · 등록, 오류가 있으면 전부 막기 · 500줄). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-12T03:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-12T04:05:18Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: facilities-controller
     resource: ../../src/facilities/facilities.controller.ts
     title: /facilities 경로와 메뉴 권한
-    last_modified: 2026-11-12T01:24:38Z
+    last_modified: 2026-11-12T04:05:18Z
   - id: facility-caller
     resource: ../../src/facilities/facility-caller.ts
     title: 다루는 관리자 · BP 와 점포 범위(화면 경로 · 일괄 등록 공용)
@@ -21,11 +21,15 @@ sources:
   - id: facility-bulk
     resource: ../../src/facilities/facility-bulk.ts
     title: 일괄 등록 양식 · 파일 읽기 · 줄 검사 · 오류 파일
-    last_modified: 2026-11-12T03:10:00Z
+    last_modified: 2026-11-12T04:05:18Z
   - id: facility-bulk-service
     resource: ../../src/facilities/facility-bulk.service.ts
     title: FacilityBulkService — 점포 · 공통코드 조회와 한 번에 넣기
-    last_modified: 2026-11-12T03:10:00Z
+    last_modified: 2026-11-12T04:05:18Z
+  - id: bulk-upload-dto
+    resource: ../../src/common/bulk-upload.response.dto.ts
+    title: 일괄 등록 공통 응답(미리보기 · 등록 건수) — 자원마다 같은 클래스
+    last_modified: 2026-11-12T04:05:18Z
   - id: bulk-request
     resource: https://claude.ai/artifact/CwpeACBSKDVj6WPFvg9sS9
     title: 「일괄 등록 공통 API 요청 (시설물·장비 첫 적용)」(claude.ai 문서, 2026-11-12)
@@ -178,56 +182,92 @@ actions (PM000001 already had them). Other BP role groups get nothing until thei
 
 front asked for one shape for every resource — `/{자원}/bulk-template` · `bulk-validations` ·
 `bulk-error-file` · `bulk` — so a single popup can serve any screen; facilities is the first. The
-preview carries its own `columns`, and the four routes are declared before `:id`.
+preview carries its own `columns`, and the four routes are declared before `:id`. The response
+classes live in `src/common/bulk-upload.response.dto.ts`: the next resource imports them, because
+OpenAPI keys schemas by class name and a second class of the same name would silently replace the
+first in front's generated types.
 
 - **The server keeps no file.** Preview, error file and registration each receive the same upload
-  again and re-run the whole check; there is no upload table. So registration also catches a store
-  closed or a code set 미사용 after the preview — it answers 400 「오류를 고친 파일을 다시 올려
-  주세요.」 and the screen fetches the preview again.
-- **All or nothing** (PL-7 제안): one error row blocks the whole file. Before inserting, the stores are
-  locked `FOR SHARE` in id order and re-checked for 삭제 · 폐점, the same race single create closes.
-  Rows go in with one `createMany`, `created_by` the caller; 총금액 is computed as in single create.
-- **File checks are 400 with the 정책서 wording**: not an xlsx (zip signature, then exceljs must load
-  it) or a first-sheet header that differs from the template → 「내려받은 양식으로 작성한 파일만 올릴
-  수 있습니다.」; over 500 rows → 「한 번에 500건까지 …」; nothing in it → 「등록할 시설물·장비가
-  없습니다.」. A row whose cells are all blank or spaces is not counted (the template's 500 formatted
-  rows). A trailing 「오류 사유」 column is accepted, so a fixed error file can be uploaded as is.
-  The upload limit is 5MB, matching front.
-- **Parsing is bounded, because a tiny file can be huge** (code review, 2026-11-12). An xlsx is a zip,
-  and exceljs inflates all of it into memory, so before loading, `assertZipWithinLimit` inflates each
-  entry with `maxOutputLength` and stops at 20MB in total (`BULK_MAX_UNCOMPRESSED_BYTES`) — the
-  sizes in the central directory are written by the sender and are not trusted. Over the limit is
-  the 500-row message; zip64, more than 1,000 entries or a broken zip is the template message. Rows
-  are walked with `eachRow`, never `1..rowCount`: `rowCount` is the last row number ever written,
-  so one space in row 1,048,576 of a 6KB file made the old loop build a million rows (heap past 4GB).
-  The error file reuses the workbook `readBulkFile` loaded instead of inflating it again.
+  again and re-run the whole check; there is no upload table. A store closed or deleted, or a code set
+  미사용, after the preview therefore shows up at registration as a row error (400 「오류를 고친 파일을
+  다시 올려 주세요.」). Registration then locks the stores `FOR SHARE` in id order and re-checks
+  삭제 · 폐점 — a store that changed between that check and the lock is 400 「미리보기 뒤 폐점되거나
+  삭제된 점포가 있습니다. …」. Codes and admin store mappings are not locked: the one-request window
+  is left open, as in single create. The race itself is not proven by e2e — the PGlite e2e runs on a
+  single backend, so a second transaction cannot hold the store row; only the sequential cases are.
+- **All or nothing** (PL-7 제안): one error row blocks the whole file. Rows go in with one
+  `createMany` (typed `satisfies Prisma.FacilityCreateManyInput`), `created_by` the caller; 총금액 is
+  computed as in single create. A row result is a discriminated union — `isValid` true carries the
+  data, false carries the reasons — and preview and registration read the same flag.
+- **File checks are 400.** Not a zip, a broken zip, a first sheet that is not the template (wrong
+  header, or the sheets reordered) → 「내려받은 양식으로 작성한 파일만 올릴 수 있습니다.」; over 500
+  rows → 「한 번에 500건까지 …」; nothing in it → 「등록할 시설물·장비가 없습니다.」 (those three are the
+  정책서 wording). A zip that exceljs cannot read (tables, charts, broken XML) is logged as a warning
+  and answers 「파일을 읽지 못했습니다. 표 · 차트 · 그림 없이 …」. Over 5MB or two files is the upload
+  interceptor's message. A row is not counted when every cell is empty text or spaces (rows with only
+  formatting or a dropdown are skipped by `eachRow` already). A trailing 「오류 사유」 column is
+  accepted, so a fixed error file can be uploaded as is. The error file of a file with no error rows
+  is 400 「오류가 있는 줄이 없습니다.」.
+- **Missing codes are a setup problem, not a row error.** If the platform's 운영상태 rows are gone, or
+  neither group has an active 분류 in the caller's BP (BP 적용 not done, group 미사용), every route
+  logs a warning with the BP code and answers 400 「시설물 공통코드(운영상태 · 분류)가 설정되지 않아 …
+  플랫폼 관리자에게 문의해 주세요.」 instead of failing every row. A group that is 미사용 or deleted is
+  dropped from the template and cannot be chosen; its rows say 「그룹: 목록에 있는 값을 골라 주세요.」.
+- **Parsing is bounded, because a tiny file can be huge** (code review, 2026-11-12). An xlsx is a zip
+  and exceljs inflates all of it into memory, so before loading, `assertZipWithinLimit`:
+  - inflates each entry with `maxOutputLength` and stops at 4MB in total
+    (`BULK_MAX_UNCOMPRESSED_BYTES`; a 500-row file with every cell at its maximum inflates to about
+    1MB, while a 20MB sheet of value cells took 220MB of heap) — the sizes in the central directory
+    are written by the sender and are not trusted. Over the limit is 「파일 내용이 너무 큽니다. …」;
+  - requires the central directory to end exactly at the end record (offset + size = end record,
+    and the walk lands on it). JSZip shifts every offset by any bytes found before that point, so a
+    gap would let a second, hidden directory be the one that is inflated;
+  - treats zip64, more than 1,000 entries, a method other than stored (0) or deflate (8), or a zlib
+    data error (`Z_*`) as the template message; any other exception is rethrown (500).
+
+  Rows are walked with `eachRow`, never `1..rowCount`: `rowCount` is the last row number ever
+  written, so one space in row 1,048,576 of a 6KB file made the old loop build a million rows and the
+  heap grew by gigabytes until the process died. The error file reuses the workbook `readBulkFile`
+  loaded (and changes it in place) instead of inflating it again.
 - **Row checks mirror `POST /facilities`** (`SaveFacilityDto` lengths, phone 9–12 digits after
-  dropping `-` and spaces, 단가 10 digits with thousands commas allowed, 수량 1–9,999, Y/N, real
+  dropping `-` and spaces, 단가 10 digits and 수량 1–9,999 both with thousands commas, Y/N, real
   `YYYY-MM-DD`, 설치일 ≥ 구매일, store in scope and not closed, 분류 an active code of the chosen
   group in the caller's BP), but every message is 「칸 이름: 사유」 and all of a row's errors are
-  listed. Lengths count code points, as `MaxLength` and `char_length` do (an emoji is one). 운영상태 ·
-  그룹 · 분류 · 점검 주기 accept the Korean label or the code — the label wins when a label equals
-  another item's code. 단가 and 수량 accept thousands commas. Defaults: 수량 1, 부가세 Y, 점검 주기 none. Duplicate rows in one file are not errors (PL-7 제안 — a store may own
-  several identical machines).
-- **Excel rewrites values.** Cells are read as text whatever their type — dates as `YYYY-MM-DD`,
-  formulas by their result, rich text joined; a formula with no cached result (a file saved by a
-  library, not Excel) reads as empty. A phone that arrives as a number has lost its leading 0, which
-  is put back only when that makes a Korean number — 9–11 digits, or 8 starting with 2 (서울) — so a
-  대표번호 such as 15881234 is left as is and fails the length check instead of being stored wrong.
-  The template sets every input cell to text format (`@`) so this rarely happens.
+  listed in column order. Lengths count code points as `char_length` does (an astral character such
+  as 🧊 is one); class-validator's `MaxLength` also drops variation selectors, so for a character
+  like ❤️ bulk is one stricter than the screen. 운영상태 · 그룹 · 분류 · 점검 주기 accept the Korean
+  label or the code — the label wins when a label equals another item's code. If the group is wrong,
+  a written 분류 is not checked against it (an empty 분류 still gets its required error). Defaults:
+  수량 1, 부가세 Y, 점검 주기 none. Duplicate rows in one file are not errors (PL-7 제안 — a store may
+  own several identical machines).
+- **Excel rewrites values, and a cell that cannot be read is an error, not a blank.** Cells are read
+  as text whatever their type — dates as `YYYY-MM-DD`, formulas by their cached result, rich text
+  joined. An error value (`#N/A`), a formula with no cached result (a file saved by a library, not
+  Excel) or an unknown cell shape becomes that column's only reason (「셀 값이 오류(#N/A)입니다. …」,
+  「수식의 결과가 저장되지 않았습니다. …」) — left blank, an optional 단가 would have been stored as
+  null without a word. A Serial number that arrives as a number beyond the safe integer range or in
+  exponent form is refused the same way (its digits are already lost). A phone that arrives as a
+  number — directly or as a formula result — has lost its leading 0, which is put back only when that
+  makes a Korean number: 9–11 digits, or 8 starting with 2 (서울); a 대표번호 such as 15881234 is left
+  as is and fails the length check instead of being stored wrong. The template sets every input cell
+  to text format (`@`) so this rarely happens.
 - **The store column shows 「점포명 [점포코드]」** (user's choice, 2026-11-12). A dropdown cell stores
   exactly the text picked, so Excel cannot show a name and keep a code; the header is 「점포*」 and the
-  dropdown value carries both. The row check takes the code in the trailing `[…]` (the name in front
-  is ignored), else a bare store code, else a store name that is unique in scope — two stores of one
-  name answer 「이름이 같은 점포가 여럿입니다. 목록에서 「점포명 [점포코드]」로 골라 주세요.」. Out of
-  scope or not found is 「점포: 관리하는 점포가 아닙니다.」. The 정책서 lists the column as 점포코드; front's
-  request doc and 정책서 need the new header.
+  dropdown value carries both. The row check takes, in order: the code in a trailing `[…]` when it
+  is a store in scope (the name in front is ignored); a bare store code (a code wins over a store
+  named the same text); a store name — one open store of that name is taken, two open stores answer
+  「이름이 같은 점포가 여럿입니다. 목록에서 「점포명 [점포코드]」로 골라 주세요.」, only closed ones answer
+  the closed-store reason. A name that itself contains brackets is found by that last step. Not found
+  is 「점포: 관리하는 점포가 아닙니다.」. The 정책서 lists the column as 점포코드; front's request doc and
+  정책서 need the new header.
 - **The template**: sheet 1 has the 24 columns and list validations on rows 2–501 for 운영상태 ·
-  그룹 · 분류 · 점검 주기 · 부가세 and 점포 (점포 only warns, so a bare code or name can be typed);
-  sheet 2 「점포 목록」 lists open stores in scope by name — 점포(the dropdown value) · 점포코드 · 점포명; the lists live in a hidden sheet 「선택값」 because an inline list is capped at 255
-  characters. The 분류 list is both groups' categories together — Excel cannot narrow it by group, so
-  the row check does. 관리 담당자 · A/S센터 주소 · 문서 are not in the template (PL-7); they are
-  added on the edit screen.
+  그룹 · 분류 · 점검 주기 · 부가세 and 점포 — 점포 has no error alert, so a bare code or name can be
+  typed without any prompt. Sheet 2 「점포 목록」 lists open stores in scope by name — 점포(the dropdown
+  value) · 점포코드 · 점포명. The lists live in a hidden sheet 「선택값」 because an inline list is capped
+  at 255 characters; an empty list gets no validation (an empty range makes Excel repair the file).
+  The 분류 list is both groups' categories together — Excel cannot narrow it by group, so the row
+  check does. 관리 담당자 · A/S센터 주소 · 문서 are not in the template (PL-7); they are added on the
+  edit screen.
 - **The caller and scope code moved to `facility-caller.ts`** so the bulk service needs no storage
   dependency; `FacilitiesService` delegates to it unchanged.
 
