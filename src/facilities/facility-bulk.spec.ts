@@ -1,0 +1,766 @@
+import { BadRequestException } from '@nestjs/common';
+import ExcelJS from 'exceljs';
+import {
+  BULK_EMPTY,
+  BULK_HEADERS,
+  BULK_MAX_ROWS,
+  BULK_PREVIEW_COLUMNS,
+  BULK_TEMPLATE_ONLY,
+  BULK_TOO_MANY,
+  assertZipWithinLimit,
+  type BulkLookups,
+  type BulkRawRow,
+  buildBulkErrorFile,
+  buildBulkTemplate,
+  cellText,
+  checkBulkRow,
+  readBulkFile,
+} from './facility-bulk';
+
+const LOOKUPS: BulkLookups = {
+  stores: new Map([
+    ['ST000001', { storeId: 1, name: '강남점', isClosed: false }],
+    ['ST000002', { storeId: 2, name: '닫은점', isClosed: true }],
+  ]),
+  statuses: [
+    { code: 'OPERATING', label: '운영' },
+    { code: 'STORED', label: '보관' },
+    { code: 'DISPOSED', label: '폐기' },
+  ],
+  groups: [
+    { code: 'STORE_FACILITY', label: '점포 시설물' },
+    { code: 'STORE_EQUIPMENT', label: '점포 장비' },
+  ],
+  categories: {
+    STORE_FACILITY: [{ code: 'HVAC', label: '냉난방' }],
+    STORE_EQUIPMENT: [
+      { code: 'GRINDER', label: '그라인더' },
+      { code: 'ICE_MAKER', label: '제빙기' },
+    ],
+  },
+  cycles: [
+    { code: 'DAILY', label: '매일' },
+    { code: 'MONTHLY', label: '매월' },
+  ],
+};
+
+const LABELS: string[] = BULK_HEADERS.map((h) => h.label);
+
+/** 양식 머리글 + 줄들로 xlsx 를 만든다. 줄은 칸 이름 → 값(엑셀 셀 값 그대로) */
+async function xlsx(
+  rows: Record<string, ExcelJS.CellValue>[],
+  header: string[] = LABELS,
+): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('시설물·장비');
+  ws.addRow(header);
+  for (const r of rows) ws.addRow(header.map((label) => r[label] ?? null));
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+function raw(
+  cells: Partial<Record<string, string>>,
+  rowNumber = 2,
+): BulkRawRow {
+  const all = Object.fromEntries(
+    BULK_HEADERS.map((h) => [h.key, cells[h.key] ?? '']),
+  ) as BulkRawRow['cells'];
+  return { rowNumber, cells: all };
+}
+
+const VALID = {
+  store: 'ST000001',
+  name: '제빙기 1호',
+  status: '운영',
+  group: '점포 장비',
+  category: '제빙기',
+};
+
+async function rejection(p: Promise<unknown>): Promise<string> {
+  try {
+    await p;
+  } catch (e) {
+    expect(e).toBeInstanceOf(BadRequestException);
+    return (e as BadRequestException).message;
+  }
+  throw new Error('거절되지 않았다');
+}
+
+describe('facility-bulk', () => {
+  describe('양식 칸', () => {
+    it('정책서 PL-7 의 24칸을 그 순서로 둔다(필수는 *)', () => {
+      expect(LABELS).toEqual([
+        '점포*',
+        '시설물/장비명*',
+        '운영상태*',
+        '그룹*',
+        '분류*',
+        '브랜드',
+        '제조사',
+        'Serial number',
+        '설치 위치',
+        '구매처',
+        '구매처 전화번호',
+        '영업사원',
+        '영업사원 전화번호',
+        '단가',
+        '수량',
+        '부가세 포함(Y/N)',
+        '구매일',
+        '설치일',
+        '메모',
+        '사용 유효기한',
+        '품질 보증기한',
+        '점검 주기',
+        '점검 비고',
+        'A/S센터 전화번호',
+      ]);
+    });
+
+    it('미리보기 열은 점포 · 그룹 · 분류 · 시설물/장비명 · 구매일 · 설치일', () => {
+      expect(BULK_PREVIEW_COLUMNS.map((c) => c.label)).toEqual([
+        '점포',
+        '그룹',
+        '분류',
+        '시설물/장비명',
+        '구매일',
+        '설치일',
+      ]);
+    });
+  });
+
+  describe('cellText — 셀 값을 글자로', () => {
+    it.each<[ExcelJS.CellValue, string]>([
+      [null, ''],
+      [undefined, ''],
+      ['  가나 ', '  가나 '],
+      [1500000, '1500000'],
+      [true, 'TRUE'],
+      [new Date(Date.UTC(2026, 10, 12)), '2026-11-12'],
+      [{ richText: [{ text: '제빙' }, { text: '기' }] }, '제빙기'],
+      [{ formula: 'A1', result: 3 }, '3'],
+      [{ text: '링크', hyperlink: 'https://x' }, '링크'],
+      [{ error: '#N/A' }, ''],
+    ])('%p → %p', (value, text) => {
+      expect(cellText(value)).toBe(text);
+    });
+  });
+
+  describe('readBulkFile — 파일 검사', () => {
+    it('xlsx 가 아니면 양식 문구로 400', async () => {
+      expect(await rejection(readBulkFile(Buffer.from('a,b,c')))).toBe(
+        BULK_TEMPLATE_ONLY,
+      );
+      // zip 서명만 있고 xlsx 가 아닌 것
+      expect(
+        await rejection(
+          readBulkFile(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0])),
+        ),
+      ).toBe(BULK_TEMPLATE_ONLY);
+    });
+
+    it('머리글이 양식과 다르면 400', async () => {
+      const wrong = [...LABELS];
+      wrong[1] = '이름';
+      expect(await rejection(readBulkFile(await xlsx([VALID], wrong)))).toBe(
+        BULK_TEMPLATE_ONLY,
+      );
+      expect(
+        await rejection(readBulkFile(await xlsx([], LABELS.slice(0, 23)))),
+      ).toBe(BULK_TEMPLATE_ONLY);
+    });
+
+    it('내용이 한 줄도 없으면 400 — 빈 줄 · 공백만 있는 줄은 세지 않는다', async () => {
+      expect(await rejection(readBulkFile(await xlsx([])))).toBe(BULK_EMPTY);
+      expect(
+        await rejection(readBulkFile(await xlsx([{}, { '점포*': '   ' }, {}]))),
+      ).toBe(BULK_EMPTY);
+    });
+
+    it(`${BULK_MAX_ROWS}줄까지 받고 넘으면 400`, async () => {
+      const row = { '점포*': 'ST000001', '시설물/장비명*': 'a' };
+      const ok = await readBulkFile(
+        await xlsx(Array.from({ length: BULK_MAX_ROWS }, () => row)),
+      );
+      expect(ok.rows).toHaveLength(BULK_MAX_ROWS);
+      expect(
+        await rejection(
+          readBulkFile(
+            await xlsx(Array.from({ length: BULK_MAX_ROWS + 1 }, () => row)),
+          ),
+        ),
+      ).toBe(BULK_TOO_MANY);
+    });
+
+    it('줄마다 엑셀 행 번호와 칸 글자를 준다 — 빈 줄은 건너뛰고 번호는 엑셀 그대로', async () => {
+      const { rows } = await readBulkFile(
+        await xlsx([
+          { '점포*': ' ST000001 ', '시설물/장비명*': '제빙기' },
+          {},
+          { '점포*': 'ST000002', 단가: 1500000 },
+        ]),
+      );
+      expect(rows.map((r) => r.rowNumber)).toEqual([2, 4]);
+      expect(rows[0].cells.store).toBe(' ST000001 ');
+      expect(rows[0].cells.name).toBe('제빙기');
+      expect(rows[1].cells.unitPrice).toBe('1500000');
+      expect(rows[1].cells.memo).toBe('');
+    });
+
+    it('숫자로 들어온 전화번호는 엑셀이 지운 앞 0 을 되살린다 — 0 을 붙여 국내 번호 꼴이 될 때만', async () => {
+      const { rows } = await readBulkFile(
+        await xlsx([
+          {
+            '점포*': 'ST000001',
+            '구매처 전화번호': 1012345678,
+            '영업사원 전화번호': '010-1234-5678',
+            'A/S센터 전화번호': 21234567,
+          },
+          {
+            '점포*': 'ST000001',
+            // 대표번호 1588-1234 를 숫자로 — 0 을 붙이면 9자리가 돼 틀린 번호로 통과하므로 그대로 둔다
+            '구매처 전화번호': 15881234,
+            'A/S센터 전화번호': 212345678,
+          },
+        ]),
+      );
+      expect(rows[0].cells.vendorPhone).toBe('01012345678');
+      expect(rows[0].cells.salesRepresentativePhone).toBe('010-1234-5678');
+      expect(rows[0].cells.serviceCenterPhone).toBe('021234567');
+      expect(rows[1].cells.vendorPhone).toBe('15881234');
+      expect(rows[1].cells.serviceCenterPhone).toBe('0212345678');
+    });
+
+    it('먼 행에 공백 한 칸만 있는 작은 파일 — 빈 행을 만들며 돌지 않고 바로 「내용 없음」', async () => {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('시설물·장비');
+      ws.addRow(LABELS);
+      ws.getCell(1_048_576, 1).value = ' ';
+      const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+      expect(buffer.length).toBeLessThan(50_000);
+      const started = Date.now();
+      expect(await rejection(readBulkFile(buffer))).toBe(BULK_EMPTY);
+      expect(Date.now() - started).toBeLessThan(3000);
+    });
+
+    it('압축을 푼 크기가 상한을 넘으면 읽기 전에 400', async () => {
+      const buffer = await xlsx([VALIDCELLS()]);
+      expect(
+        await rejection(readBulkFile(buffer, { maxUncompressedBytes: 1_000 })),
+      ).toBe(BULK_TOO_MANY);
+      await expect(
+        readBulkFile(buffer, { maxUncompressedBytes: 10_000_000 }),
+      ).resolves.toBeDefined();
+    });
+
+    it('오류 파일(끝에 「오류 사유」 열)을 고쳐 다시 올려도 받는다', async () => {
+      const { rows } = await readBulkFile(
+        await xlsx(
+          [{ '점포*': 'ST000001', '오류 사유': '점포: …' }],
+          [...LABELS, '오류 사유'],
+        ),
+      );
+      expect(rows).toHaveLength(1);
+    });
+  });
+
+  describe('assertZipWithinLimit — 압축 해제 상한', () => {
+    it('실제로 풀리는 양을 센다 — 중앙 디렉터리의 크기를 속여도 걸린다', async () => {
+      const buffer = await xlsx([VALIDCELLS()]);
+      expect(() => assertZipWithinLimit(buffer, 10_000_000)).not.toThrow();
+      expect(() => assertZipWithinLimit(buffer, 1_000)).toThrow(BULK_TOO_MANY);
+      // 중앙 디렉터리의 압축 해제 크기를 모두 1 로 바꾼다
+      const forged = Buffer.from(buffer);
+      for (let i = 0; i + 46 <= forged.length; i++)
+        if (forged.readUInt32LE(i) === 0x02014b50)
+          forged.writeUInt32LE(1, i + 24);
+      expect(() => assertZipWithinLimit(forged, 1_000)).toThrow(BULK_TOO_MANY);
+    });
+
+    it('zip 이 아니거나 깨졌으면 양식 문구', () => {
+      expect(() => assertZipWithinLimit(Buffer.from('abc'), 1_000)).toThrow(
+        BULK_TEMPLATE_ONLY,
+      );
+      expect(() =>
+        assertZipWithinLimit(
+          Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0, 0, 0]),
+          1_000,
+        ),
+      ).toThrow(BULK_TEMPLATE_ONLY);
+    });
+  });
+
+  describe('checkBulkRow — 줄 검사', () => {
+    it('필수 다섯 칸이 맞으면 오류 없이 저장할 값을 준다(처음 값: 수량 1 · 부가세 포함 · 점검 주기 없음)', () => {
+      const r = checkBulkRow(raw(VALID), LOOKUPS);
+      expect(r.errors).toEqual([]);
+      expect(r.data).toEqual({
+        storeId: 1,
+        name: '제빙기 1호',
+        facilityStatusCode: 'OPERATING',
+        facilityGroupCode: 'STORE_EQUIPMENT',
+        facilityCategoryCode: 'ICE_MAKER',
+        memo: null,
+        brand: null,
+        manufacturer: null,
+        serialNumber: null,
+        installationLocation: null,
+        vendorName: null,
+        vendorPhone: null,
+        salesRepresentativeName: null,
+        salesRepresentativePhone: null,
+        unitPriceAmount: null,
+        quantity: 1,
+        totalAmount: null,
+        isVatIncluded: true,
+        purchaseDate: null,
+        installationDate: null,
+        usageExpiryDate: null,
+        warrantyExpiryDate: null,
+        inspectionCycleCode: null,
+        inspectionNote: null,
+        serviceCenterPhone: null,
+      });
+      expect(r.values).toEqual({
+        storeName: '강남점',
+        group: '점포 장비',
+        category: '제빙기',
+        name: '제빙기 1호',
+        purchaseDate: '',
+        installationDate: '',
+      });
+    });
+
+    it('모든 칸을 채우면 코드 · 숫자 · 날짜로 바꾸고 총금액을 계산한다', () => {
+      const r = checkBulkRow(
+        raw({
+          ...VALID,
+          store: ' ST000001 ',
+          status: 'STORED',
+          group: 'STORE_EQUIPMENT',
+          category: 'GRINDER',
+          brand: ' 브랜드 ',
+          manufacturer: '제조사',
+          serialNumber: 'SN-1',
+          installationLocation: '주방',
+          vendorName: '상사',
+          vendorPhone: '02-123-4567',
+          salesRepresentativeName: '김영업',
+          salesRepresentativePhone: '010 1234 5678',
+          unitPrice: '1,500,000',
+          quantity: '3',
+          vatIncluded: 'n',
+          purchaseDate: '2026-11-10',
+          installationDate: '2026-11-10',
+          memo: ' 메모\n둘째 줄 ',
+          usageExpiryDate: '2030-12-31',
+          warrantyExpiryDate: '2028-11-11',
+          inspectionCycle: '매월',
+          inspectionNote: '필터 교체',
+          serviceCenterPhone: '0311234567',
+        }),
+        LOOKUPS,
+      );
+      expect(r.errors).toEqual([]);
+      expect(r.data).toMatchObject({
+        storeId: 1,
+        facilityStatusCode: 'STORED',
+        facilityCategoryCode: 'GRINDER',
+        brand: '브랜드',
+        vendorPhone: '021234567',
+        salesRepresentativePhone: '01012345678',
+        unitPriceAmount: 1_500_000,
+        quantity: 3,
+        totalAmount: 4_500_000,
+        isVatIncluded: false,
+        purchaseDate: new Date(Date.UTC(2026, 10, 10)),
+        installationDate: new Date(Date.UTC(2026, 10, 10)),
+        memo: ' 메모\n둘째 줄 ',
+        inspectionCycleCode: 'MONTHLY',
+        serviceCenterPhone: '0311234567',
+      });
+      expect(r.values.category).toBe('그라인더');
+      expect(r.values.group).toBe('점포 장비');
+    });
+
+    it('필수 칸이 비면 칸마다 「칸 이름: 사유」', () => {
+      const r = checkBulkRow(raw({}), LOOKUPS);
+      expect(r.data).toBeNull();
+      expect(r.errors).toEqual([
+        '점포: 입력해 주세요.',
+        '시설물/장비명: 입력해 주세요.',
+        '운영상태: 선택해 주세요.',
+        '그룹: 선택해 주세요.',
+        '분류: 선택해 주세요.',
+      ]);
+    });
+
+    it('점포 — 범위에 없으면 · 폐점이면 오류, 미리보기에는 적은 코드를 보인다', () => {
+      const none = checkBulkRow(raw({ ...VALID, store: 'ST999999' }), LOOKUPS);
+      expect(none.errors).toEqual(['점포: 관리하는 점포가 아닙니다.']);
+      expect(none.values.storeName).toBe('ST999999');
+      const closed = checkBulkRow(
+        raw({ ...VALID, store: 'ST000002' }),
+        LOOKUPS,
+      );
+      expect(closed.errors).toEqual([
+        '점포: 폐점 점포에는 등록할 수 없습니다.',
+      ]);
+      expect(closed.values.storeName).toBe('닫은점');
+    });
+
+    it('점포 — 드롭다운 값 「점포명 [점포코드]」는 괄호 안 코드로 찾는다(이름을 고쳐 적어도 코드가 먼저)', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, store: '강남점 [ST000001]' }), LOOKUPS)
+          .data?.storeId,
+      ).toBe(1);
+      expect(
+        checkBulkRow(raw({ ...VALID, store: '아무 이름 [ST000001] ' }), LOOKUPS)
+          .data?.storeId,
+      ).toBe(1);
+      const none = checkBulkRow(
+        raw({ ...VALID, store: '강남점 [ST999999]' }),
+        LOOKUPS,
+      );
+      expect(none.errors).toEqual(['점포: 관리하는 점포가 아닙니다.']);
+      expect(none.values.storeName).toBe('강남점 [ST999999]');
+    });
+
+    it('점포 — 점포명만 적어도 범위 안에 그 이름이 하나면 받고, 여럿이면 목록에서 고르게 한다', () => {
+      const r = checkBulkRow(raw({ ...VALID, store: ' 강남점 ' }), LOOKUPS);
+      expect(r.errors).toEqual([]);
+      expect(r.data?.storeId).toBe(1);
+      expect(r.values.storeName).toBe('강남점');
+      const twins: BulkLookups = {
+        ...LOOKUPS,
+        stores: new Map([
+          ...LOOKUPS.stores,
+          ['ST000003', { storeId: 3, name: '강남점', isClosed: false }],
+        ]),
+      };
+      expect(
+        checkBulkRow(raw({ ...VALID, store: '강남점' }), twins).errors,
+      ).toEqual([
+        '점포: 이름이 같은 점포가 여럿입니다. 목록에서 「점포명 [점포코드]」로 골라 주세요.',
+      ]);
+      // 코드로 적으면 이름이 겹쳐도 된다
+      expect(
+        checkBulkRow(raw({ ...VALID, store: '강남점 [ST000003]' }), twins).data
+          ?.storeId,
+      ).toBe(3);
+    });
+
+    it('공통코드 — 목록에 없는 값 · 그룹에 없는 분류', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, status: '수리중' }), LOOKUPS).errors,
+      ).toEqual(['운영상태: 목록에 있는 값을 골라 주세요.']);
+      expect(
+        checkBulkRow(raw({ ...VALID, group: '기타' }), LOOKUPS).errors,
+      ).toEqual(['그룹: 목록에 있는 값을 골라 주세요.']);
+      expect(
+        checkBulkRow(raw({ ...VALID, category: '냉난방' }), LOOKUPS).errors,
+      ).toEqual(['분류: 「점포 장비」에 없는 분류입니다.']);
+      expect(
+        checkBulkRow(raw({ ...VALID, inspectionCycle: '매년' }), LOOKUPS)
+          .errors,
+      ).toEqual(['점검 주기: 목록에 있는 값을 골라 주세요.']);
+    });
+
+    it('그룹이 틀리면 분류는 따로 보지 않는다(문구 하나)', () => {
+      expect(
+        checkBulkRow(
+          raw({ ...VALID, group: '기타', category: '아무거나' }),
+          LOOKUPS,
+        ).errors,
+      ).toEqual(['그룹: 목록에 있는 값을 골라 주세요.']);
+    });
+
+    it('글자 수 · 쓸 수 없는 문자', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, name: 'a'.repeat(101) }), LOOKUPS).errors,
+      ).toEqual(['시설물/장비명: 100자까지 입력할 수 있습니다.']);
+      expect(
+        checkBulkRow(
+          raw({ ...VALID, salesRepresentativeName: 'a'.repeat(51) }),
+          LOOKUPS,
+        ).errors,
+      ).toEqual(['영업사원: 50자까지 입력할 수 있습니다.']);
+      expect(
+        checkBulkRow(raw({ ...VALID, memo: 'a'.repeat(201) }), LOOKUPS).errors,
+      ).toEqual(['메모: 200자까지 입력할 수 있습니다.']);
+      expect(
+        checkBulkRow(
+          raw({ ...VALID, inspectionNote: 'a'.repeat(201) }),
+          LOOKUPS,
+        ).errors,
+      ).toEqual(['점검 비고: 200자까지 입력할 수 있습니다.']);
+      expect(
+        checkBulkRow(raw({ ...VALID, brand: 'a\u0000b' }), LOOKUPS).errors,
+      ).toEqual(['브랜드: 쓸 수 없는 문자가 있습니다.']);
+    });
+
+    it('글자 수는 등록 화면 · DB 처럼 코드 포인트로 센다(이모지 하나 = 1자)', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, name: '🧊'.repeat(100) }), LOOKUPS).errors,
+      ).toEqual([]);
+      expect(
+        checkBulkRow(raw({ ...VALID, name: '🧊'.repeat(101) }), LOOKUPS).errors,
+      ).toEqual(['시설물/장비명: 100자까지 입력할 수 있습니다.']);
+      expect(
+        checkBulkRow(raw({ ...VALID, memo: '🧊'.repeat(200) }), LOOKUPS).errors,
+      ).toEqual([]);
+    });
+
+    it('수량도 단가처럼 천 단위 쉼표를 받는다', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, quantity: '1,000' }), LOOKUPS).data
+          ?.quantity,
+      ).toBe(1000);
+    });
+
+    it('한글 이름이 다른 항목의 코드와 같으면 이름이 먼저다', () => {
+      const lookups: BulkLookups = {
+        ...LOOKUPS,
+        cycles: [
+          { code: 'DAILY', label: 'MONTHLY' },
+          { code: 'MONTHLY', label: '매월' },
+        ],
+      };
+      expect(
+        checkBulkRow(raw({ ...VALID, inspectionCycle: 'MONTHLY' }), lookups)
+          .data?.inspectionCycleCode,
+      ).toBe('DAILY');
+    });
+
+    it('메모는 공백만이면 비운 것으로 본다', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, memo: '   ' }), LOOKUPS).data?.memo,
+      ).toBeNull();
+    });
+
+    it('전화번호 — 하이픈 · 공백을 떼고 숫자 9~12자리', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, vendorPhone: '1588-1234' }), LOOKUPS)
+          .errors,
+      ).toEqual(['구매처 전화번호: 숫자 9~12자리로 적어 주세요.']);
+      expect(
+        checkBulkRow(
+          raw({ ...VALID, serviceCenterPhone: '02-12a-4567' }),
+          LOOKUPS,
+        ).errors,
+      ).toEqual(['A/S센터 전화번호: 숫자 9~12자리로 적어 주세요.']);
+      expect(
+        checkBulkRow(
+          raw({ ...VALID, salesRepresentativePhone: '0505-1234-5678' }),
+          LOOKUPS,
+        ).errors,
+      ).toEqual([]);
+    });
+
+    it.each(['-1', '1.5', '12345678901', '만원', '1,5'])(
+      '단가 %p 는 오류',
+      (unitPrice) => {
+        expect(
+          checkBulkRow(raw({ ...VALID, unitPrice }), LOOKUPS).errors,
+        ).toEqual(['단가: 0 이상 숫자 10자리까지 적어 주세요.']);
+      },
+    );
+
+    it('단가 0 · 10자리는 받는다', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, unitPrice: '0' }), LOOKUPS).data
+          ?.totalAmount,
+      ).toBe(0);
+      expect(
+        checkBulkRow(
+          raw({ ...VALID, unitPrice: '9999999999', quantity: '9999' }),
+          LOOKUPS,
+        ).data?.totalAmount,
+      ).toBe(9_999_999_999 * 9_999);
+    });
+
+    it.each(['0', '10000', '1.5', '-1', '하나'])(
+      '수량 %p 는 오류',
+      (quantity) => {
+        expect(
+          checkBulkRow(raw({ ...VALID, quantity }), LOOKUPS).errors,
+        ).toEqual(['수량: 1 ~ 9,999 사이로 적어 주세요.']);
+      },
+    );
+
+    it('부가세 포함 — Y · N(대소문자 무관), 그 밖은 오류', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, vatIncluded: 'y' }), LOOKUPS).data
+          ?.isVatIncluded,
+      ).toBe(true);
+      expect(
+        checkBulkRow(raw({ ...VALID, vatIncluded: '예' }), LOOKUPS).errors,
+      ).toEqual(['부가세 포함: Y 또는 N 으로 적어 주세요.']);
+    });
+
+    it('날짜 — YYYY-MM-DD 이고 있는 날짜, 설치일 ≥ 구매일', () => {
+      expect(
+        checkBulkRow(raw({ ...VALID, purchaseDate: '2026/11/10' }), LOOKUPS)
+          .errors,
+      ).toEqual(['구매일: YYYY-MM-DD 로 적어 주세요.']);
+      expect(
+        checkBulkRow(
+          raw({ ...VALID, warrantyExpiryDate: '2026-02-30' }),
+          LOOKUPS,
+        ).errors,
+      ).toEqual(['품질 보증기한: YYYY-MM-DD 로 적어 주세요.']);
+      expect(
+        checkBulkRow(
+          raw({
+            ...VALID,
+            purchaseDate: '2026-11-10',
+            installationDate: '2026-11-01',
+          }),
+          LOOKUPS,
+        ).errors,
+      ).toEqual(['설치일: 구매일보다 앞설 수 없습니다.']);
+    });
+
+    it('한 줄의 오류는 모두 적는다(칸 순서)', () => {
+      const r = checkBulkRow(
+        raw({ ...VALID, name: '', quantity: '0', installationDate: '어제' }),
+        LOOKUPS,
+      );
+      expect(r.errors).toEqual([
+        '시설물/장비명: 입력해 주세요.',
+        '수량: 1 ~ 9,999 사이로 적어 주세요.',
+        '설치일: YYYY-MM-DD 로 적어 주세요.',
+      ]);
+    });
+  });
+
+  describe('buildBulkTemplate — 양식', () => {
+    async function load(buffer: Buffer) {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+      return wb;
+    }
+
+    it('첫 시트 머리글 · 둘째 시트 점포 목록(폐점 제외) · 숨긴 선택값 시트', async () => {
+      const wb = await load(await buildBulkTemplate(LOOKUPS));
+      const [main, stores, choices] = wb.worksheets;
+      expect(main.name).toBe('시설물·장비');
+      expect((main.getRow(1).values as unknown[]).slice(1)).toEqual(LABELS);
+      expect(stores.name).toBe('점포 목록');
+      // 첫 열이 점포 드롭다운 값 「점포명 [점포코드]」
+      expect((stores.getRow(1).values as unknown[]).slice(1)).toEqual([
+        '점포',
+        '점포코드',
+        '점포명',
+      ]);
+      expect((stores.getRow(2).values as unknown[]).slice(1)).toEqual([
+        '강남점 [ST000001]',
+        'ST000001',
+        '강남점',
+      ]);
+      expect(stores.rowCount).toBe(2);
+      expect(choices.state).toBe('hidden');
+    });
+
+    it('점포 드롭다운은 점포 목록 시트의 「점포명 [점포코드]」 열을 가리킨다', async () => {
+      const wb = await load(await buildBulkTemplate(LOOKUPS));
+      const v = wb.worksheets[0].getCell(2, 1).dataValidation;
+      expect(v?.formulae).toEqual(["'점포 목록'!$A$2:$A$2"]);
+    });
+
+    it('글자 서식 · 드롭다운(운영상태 · 그룹 · 분류 · 점검 주기 · 부가세 · 점포)', async () => {
+      const wb = await load(await buildBulkTemplate(LOOKUPS));
+      const main = wb.worksheets[0];
+      const col = (label: string) => LABELS.indexOf(label) + 1;
+      expect(main.getCell(2, col('구매처 전화번호')).numFmt).toBe('@');
+      expect(main.getCell(501, col('구매일')).numFmt).toBe('@');
+      for (const label of [
+        '운영상태*',
+        '그룹*',
+        '분류*',
+        '점검 주기',
+        '부가세 포함(Y/N)',
+        '점포*',
+      ]) {
+        const v = main.getCell(2, col(label)).dataValidation;
+        expect(v?.type).toBe('list');
+        expect(main.getCell(501, col(label)).dataValidation?.type).toBe('list');
+      }
+      expect(
+        main.getCell(502, col('운영상태*')).dataValidation,
+      ).toBeUndefined();
+    });
+
+    it('만든 양식을 그대로 올리면 「등록할 시설물·장비가 없습니다」(양식 검사는 통과)', async () => {
+      expect(
+        await rejection(readBulkFile(await buildBulkTemplate(LOOKUPS))),
+      ).toBe(BULK_EMPTY);
+    });
+  });
+
+  describe('buildBulkErrorFile — 오류 파일', () => {
+    it('올린 파일 끝에 「오류 사유」 열을 더하고 오류 줄에만 사유를 적는다', async () => {
+      const buffer = await xlsx([VALIDCELLS(), { '점포*': 'ST9' }]);
+      const out = await buildBulkErrorFile(
+        await readBulkFile(buffer),
+        new Map([
+          [
+            3,
+            [
+              '점포: 관리하는 점포가 아닙니다.',
+              '시설물/장비명: 입력해 주세요.',
+            ],
+          ],
+        ]),
+      );
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(out as unknown as ArrayBuffer);
+      const ws = wb.worksheets[0];
+      expect(ws.getCell(1, 25).value).toBe('오류 사유');
+      expect(ws.getCell(2, 25).value ?? null).toBeNull();
+      expect(ws.getCell(3, 25).value).toBe(
+        '점포: 관리하는 점포가 아닙니다.\n시설물/장비명: 입력해 주세요.',
+      );
+      expect(ws.getCell(3, 1).value).toBe('ST9');
+    });
+
+    it('오류 파일을 다시 넣으면 옛 사유를 지우고 새로 적는다', async () => {
+      const buffer = await xlsx(
+        [{ '점포*': 'ST000001', '오류 사유': '옛 사유' }],
+        [...LABELS, '오류 사유'],
+      );
+      const out = await buildBulkErrorFile(
+        await readBulkFile(buffer),
+        new Map(),
+      );
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(out as unknown as ArrayBuffer);
+      expect(wb.worksheets[0].getCell(2, 25).value ?? null).toBeNull();
+    });
+
+    it('먼 행이 있어도 실제 있는 행에만 쓴다(빈 행을 만들지 않는다)', async () => {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('시설물·장비');
+      ws.addRow(LABELS);
+      ws.addRow(LABELS.map((l) => VALIDCELLS()[l] ?? null));
+      ws.getCell(1_048_576, 1).value = ' ';
+      const parsed = await readBulkFile(
+        Buffer.from(await wb.xlsx.writeBuffer()),
+      );
+      const started = Date.now();
+      const out = await buildBulkErrorFile(parsed, new Map([[2, ['a: b']]]));
+      expect(Date.now() - started).toBeLessThan(3000);
+      expect(out.length).toBeLessThan(100_000);
+    });
+  });
+});
+
+function VALIDCELLS(): Record<string, string> {
+  return {
+    '점포*': 'ST000001',
+    '시설물/장비명*': '제빙기',
+    '운영상태*': '운영',
+    '그룹*': '점포 장비',
+    '분류*': '제빙기',
+  };
+}

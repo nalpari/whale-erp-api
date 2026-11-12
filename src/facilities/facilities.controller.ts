@@ -10,6 +10,7 @@ import {
   Post,
   Put,
   Query,
+  StreamableFile,
   UploadedFiles,
   UseInterceptors,
 } from '@nestjs/common';
@@ -19,11 +20,15 @@ import {
   ApiBody,
   ApiConflictResponse,
   ApiConsumes,
+  ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiParam,
+  ApiProduces,
+  type ApiBodyOptions,
+  type ApiResponseOptions,
   ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
 import { FacilityDocumentKind } from '@prisma/client';
@@ -36,6 +41,8 @@ import {
   type TargetBpContext,
 } from '../auth/menu-permission.guard';
 import { parseRouteId } from '../common/route-id';
+import { XLSX_CONTENT_TYPE } from '../excel-exports/excel-response';
+import { contentDisposition } from '../storage/storage.service';
 import { AttachmentsInterceptor } from '../storage/upload-check';
 import {
   FacilityManagerOptionsQueryDto,
@@ -43,6 +50,10 @@ import {
   ListFacilitiesQueryDto,
 } from './dto/list-facilities-query.dto';
 import { CreateFacilityDto, UpdateFacilityDto } from './dto/save-facility.dto';
+import {
+  BulkCreateResponseDto,
+  BulkPreviewResponseDto,
+} from './dto/facility-bulk.response.dto';
 import {
   CreateFacilityResponseDto,
   FacilityDetailResponseDto,
@@ -56,6 +67,12 @@ import {
   FacilitiesService,
   type FacilityDocumentUpload,
 } from './facilities.service';
+import {
+  BULK_HAS_ERRORS,
+  BULK_MAX_BYTES,
+  BULK_TEMPLATE_FILE_NAME,
+} from './facility-bulk';
+import { type BulkUpload, FacilityBulkService } from './facility-bulk.service';
 import { FACILITY_DOCUMENT_MAX_BYTES } from './facility-format';
 
 const BP_NOT_FOUND_DESCRIPTION =
@@ -72,6 +89,20 @@ const KIND_PARAM = {
     '문서 종류 — 사용 매뉴얼 · 주의사항 · 제품 보증서. 모르는 값이면 404',
 } as const;
 
+/** 엑셀 일괄 등록이 받는 본문 — multipart 의 file 하나(.xlsx) */
+const BULK_FILE_BODY: ApiBodyOptions = {
+  schema: {
+    type: 'object',
+    required: ['file'],
+    properties: { file: { type: 'string', format: 'binary' } },
+  },
+};
+const BULK_FILE_ERRORS = `파일 없음 · 5MB 초과 · 파일 2개 이상 · 양식이 아님(「내려받은 양식으로 작성한 파일만 올릴 수 있습니다.」) · 500줄 초과 · 내용 없음 · ${BP_MISSING_DESCRIPTION}`;
+const XLSX_FILE_RESPONSE: ApiResponseOptions = {
+  description: '.xlsx 파일(Content-Disposition 에 파일 이름)',
+  schema: { type: 'string', format: 'binary' },
+};
+
 /**
  * 시설물·장비. 관리자 웹 「시설물 및 장비 관리」(`/facilities`, MN000022)는 경로마다 메뉴 권한(조회 · 등록 · 수정 · 삭제)을
  * 가드(@MenuPermission)가 판정하고, 업무 규칙(점포 범위 · 폐점 점포 조회만 · 공통코드 · 관리 담당자)은 FacilitiesService 가
@@ -86,7 +117,10 @@ const KIND_PARAM = {
 @UserTypes('admin')
 @Controller('facilities')
 export class FacilitiesController {
-  constructor(private readonly facilities: FacilitiesService) {}
+  constructor(
+    private readonly facilities: FacilitiesService,
+    private readonly bulk: FacilityBulkService,
+  ) {}
 
   /** 목록. 등록일 최신순, 한 쪽 50 · 100건. 분류는 그룹을 고른 경우에만 — 그룹 없이 보내면 400. */
   @Get()
@@ -127,6 +161,89 @@ export class FacilitiesController {
     @Query() query: FacilityManagerOptionsQueryDto,
   ): Promise<FacilityManagerOptionListResponseDto> {
     return this.facilities.managerOptions(user.id, bp, query);
+  }
+
+  /**
+   * 엑셀 일괄 등록 양식(PL-7). 첫 시트에 24칸 · 드롭다운, 둘째 시트에 범위 안 열린 점포. 일괄 등록 네 경로는 모두 등록
+   * 권한이고 `:id` 보다 먼저 둔다. 파일은 서버에 남기지 않는다 — 미리보기 · 오류 파일 · 등록마다 같은 파일을 다시 보낸다.
+   */
+  @Get('bulk-template')
+  @MenuPermission('create')
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOkResponse(XLSX_FILE_RESPONSE)
+  @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
+  async bulkTemplate(
+    @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
+  ): Promise<StreamableFile> {
+    return xlsxFile(
+      await this.bulk.template(user.id, bp),
+      BULK_TEMPLATE_FILE_NAME,
+    );
+  }
+
+  /** 일괄 등록 미리보기 — 올린 파일을 검사해 줄마다 결과 · 보일 글자 · 오류 사유. 저장하지 않는다. */
+  @Post('bulk-validations')
+  @MenuPermission('create')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(AttachmentsInterceptor('file', 1, BULK_MAX_BYTES))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(BULK_FILE_BODY)
+  @ApiOkResponse({ type: BulkPreviewResponseDto })
+  @ApiBadRequestResponse({ description: BULK_FILE_ERRORS })
+  @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
+  bulkValidations(
+    @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
+    @UploadedFiles() files: BulkUpload[] | undefined,
+  ): Promise<BulkPreviewResponseDto> {
+    return this.bulk.preview(user.id, bp, files?.[0]);
+  }
+
+  /** 일괄 등록 오류 파일 — 올린 파일 끝에 「오류 사유」 열을 더해 돌려준다(이름 「올린파일이름_오류.xlsx」). */
+  @Post('bulk-error-file')
+  @MenuPermission('create')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(AttachmentsInterceptor('file', 1, BULK_MAX_BYTES))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(BULK_FILE_BODY)
+  @ApiProduces(XLSX_CONTENT_TYPE)
+  @ApiOkResponse(XLSX_FILE_RESPONSE)
+  @ApiBadRequestResponse({ description: BULK_FILE_ERRORS })
+  @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
+  async bulkErrorFile(
+    @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
+    @UploadedFiles() files: BulkUpload[] | undefined,
+  ): Promise<StreamableFile> {
+    const { buffer, fileName } = await this.bulk.errorFile(
+      user.id,
+      bp,
+      files?.[0],
+    );
+    return xlsxFile(buffer, fileName);
+  }
+
+  /**
+   * 일괄 등록 — 같은 검사를 다시 하고, 오류가 한 줄이라도 있으면 하나도 저장하지 않고 400. 모두 정상이면 한 트랜잭션.
+   * 미리보기 뒤 점포가 폐점 · 삭제되거나 공통코드가 미사용이 됐어도 400 이다 — 화면은 미리보기를 다시 받는다.
+   */
+  @Post('bulk')
+  @MenuPermission('create')
+  @UseInterceptors(AttachmentsInterceptor('file', 1, BULK_MAX_BYTES))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody(BULK_FILE_BODY)
+  @ApiCreatedResponse({ type: BulkCreateResponseDto })
+  @ApiBadRequestResponse({
+    description: `${BULK_FILE_ERRORS} · 오류가 있는 줄이 있음(「${BULK_HAS_ERRORS}」)`,
+  })
+  @ApiNotFoundResponse({ description: BP_NOT_FOUND_DESCRIPTION })
+  bulkRegister(
+    @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
+    @UploadedFiles() files: BulkUpload[] | undefined,
+  ): Promise<BulkCreateResponseDto> {
+    return this.bulk.register(user.id, bp, files?.[0]);
   }
 
   @Get(':id')
@@ -254,6 +371,15 @@ export class FacilitiesController {
   ): Promise<void> {
     await this.facilities.removeDocument(user.id, bp, idOf(rawId), kind);
   }
+}
+
+/** .xlsx 응답 — 엑셀 내려받기와 같은 Content-Type · Content-Disposition */
+function xlsxFile(buffer: Buffer, fileName: string): StreamableFile {
+  return new StreamableFile(buffer, {
+    type: XLSX_CONTENT_TYPE,
+    disposition: contentDisposition(fileName),
+    length: buffer.length,
+  });
 }
 
 /** 1..2147483647 밖이면 DB 에 묻지 않고 404 — Postgres 가 던지면 500 이 된다. */
