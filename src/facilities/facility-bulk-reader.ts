@@ -1,6 +1,7 @@
 import { Worker } from 'node:worker_threads';
 import {
   BadRequestException,
+  HttpStatus,
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -35,6 +36,21 @@ export const BULK_NOT_TEMPLATE =
   '내려받은 양식으로 작성한 파일만 올릴 수 있습니다.';
 export const BULK_BUSY =
   '일괄 등록 파일을 읽는 요청이 몰려 있습니다. 잠시 뒤 다시 시도해 주세요.';
+/**
+ * 「요청 몰림」 503 의 식별 code. front 는 이 code 가 있는 503 만 「저장 안 됨」으로 보고 다시 등록하게
+ * 한다 — 코드 없는 503 은 앞단 게이트웨이 · 로드밸런서가 낸 것일 수 있다(저장이 끝난 뒤일 수도).
+ * 다른 자원의 일괄 등록도 같은 값을 쓴다.
+ */
+export const BULK_BUSY_CODE = 'BULK_BUSY';
+
+function busy(): ServiceUnavailableException {
+  return new ServiceUnavailableException({
+    statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+    error: 'Service Unavailable',
+    code: BULK_BUSY_CODE,
+    message: BULK_BUSY,
+  });
+}
 
 const EXCELJS_PATH = require.resolve('exceljs');
 
@@ -205,8 +221,7 @@ export class WorkerSlots {
       this.active++;
       return Promise.resolve();
     }
-    if (this.waiting.length >= this.maxWaiting)
-      return Promise.reject(new ServiceUnavailableException(BULK_BUSY));
+    if (this.waiting.length >= this.maxWaiting) return Promise.reject(busy());
     return new Promise<void>((resolve, reject) => {
       const entry = {
         grant: () => {
@@ -218,7 +233,7 @@ export class WorkerSlots {
       const timer = setTimeout(() => {
         const at = this.waiting.indexOf(entry);
         if (at >= 0) this.waiting.splice(at, 1);
-        reject(new ServiceUnavailableException(BULK_BUSY));
+        reject(busy());
       }, this.waitMs);
       this.waiting.push(entry);
     });

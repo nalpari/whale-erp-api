@@ -4,7 +4,7 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개), 엑셀 일괄 등록(PL-7 — 양식 · 미리보기 · 오류 파일 · 등록, 오류가 있으면 전부 막기 · 500줄). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-12T05:39:15Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-12T05:44:49Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: facilities-controller
     resource: ../../src/facilities/facilities.controller.ts
     title: /facilities 경로와 메뉴 권한
-    last_modified: 2026-11-12T05:26:40Z
+    last_modified: 2026-11-12T05:44:49Z
   - id: facility-caller
     resource: ../../src/facilities/facility-caller.ts
     title: 다루는 관리자 · BP 와 점포 범위(화면 경로 · 일괄 등록 공용)
@@ -25,7 +25,7 @@ sources:
   - id: facility-bulk-reader
     resource: ../../src/facilities/facility-bulk-reader.ts
     title: 올린 xlsx 를 메모리 · 시간 상한이 걸린 worker 에서 읽고 쓰기
-    last_modified: 2026-11-12T05:26:40Z
+    last_modified: 2026-11-12T05:44:49Z
   - id: facility-bulk-service
     resource: ../../src/facilities/facility-bulk.service.ts
     title: FacilityBulkService — 점포 · 공통코드 조회와 한 번에 넣기
@@ -241,7 +241,11 @@ first in front's generated types.
     full queue is 503 「일괄 등록 파일을 읽는 요청이 몰려 있습니다. 잠시 뒤 다시 시도해 주세요.」 — every
     waiting request holds its upload (up to 5MB) in the API process, so the queue cannot be endless.
     A slot is returned on the worker's `exit`, not when its answer arrives, so a terminated worker
-    still freeing 192MB does not overlap a new one;
+    still freeing 192MB does not overlap a new one. **The 503 body carries `code: 'BULK_BUSY'`**
+    (`BULK_BUSY_CODE`, 2026-11-12 front 요청) — a gateway or load balancer in front can answer 503
+    too, possibly after the rows were saved, so front treats only a 503 with this code as 「not
+    saved, register again」 and a code-less 503 as 「check the list first」, never the wording. A bulk
+    upload added to another resource uses the same code;
   - the worker is source text with `eval: true` and loads exceljs by its resolved path, so the same
     code runs from `dist` and under ts-jest. Each read costs about a second to start the worker (more
     when the whole unit suite runs in parallel — the two bulk specs set `jest.setTimeout(60_000)`).

@@ -69,6 +69,7 @@ import {
 } from './facilities.service';
 import {
   BULK_BUSY,
+  BULK_BUSY_CODE,
   BULK_CELL_TOO_LONG,
   BULK_EMPTY,
   BULK_HAS_ERRORS,
@@ -125,7 +126,7 @@ const BULK_FILE_ERRORS = [
 ].join(' · ');
 /** 파일을 읽는 worker 자리가 없음 — 동시 2개 · 대기 8건 · 대기 30초 */
 const BULK_BUSY_RESPONSE = {
-  description: `파일을 읽는 요청이 몰림(「${BULK_BUSY}」)`,
+  description: `파일을 읽는 요청이 몰림(「${BULK_BUSY}」). \`code: ${BULK_BUSY_CODE}\` — 저장하지 않았으니 다시 등록해도 된다. code 없는 503 은 앞단(게이트웨이 · 로드밸런서)이 낸 것일 수 있다`,
 };
 const XLSX_FILE_RESPONSE: ApiResponseOptions = {
   description: '.xlsx 파일(Content-Disposition 에 파일 이름)',

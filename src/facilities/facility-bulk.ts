@@ -10,6 +10,7 @@ import {
 import { parseDateOnly } from '../staff-members/kst-date';
 import {
   BULK_BUSY,
+  BULK_BUSY_CODE,
   BULK_NOT_TEMPLATE,
   BULK_TOO_COMPLEX,
   BULK_UNREADABLE,
@@ -54,7 +55,7 @@ const MAX_CELL_TEXT = 1_000;
 const MAX_TOTAL_TEXT = 4_000_000;
 
 export const BULK_TEMPLATE_ONLY = BULK_NOT_TEMPLATE;
-export { BULK_BUSY, BULK_TOO_COMPLEX, BULK_UNREADABLE };
+export { BULK_BUSY, BULK_BUSY_CODE, BULK_TOO_COMPLEX, BULK_UNREADABLE };
 export const BULK_TOO_MANY = `한 번에 ${BULK_MAX_ROWS}건까지 등록할 수 있습니다. 파일을 나눠 올려 주세요.`;
 export const BULK_TOO_LARGE =
   '파일 내용이 너무 큽니다. 그림 · 다른 시트 없이 내려받은 양식에 값만 적어 다시 올려 주세요.';
