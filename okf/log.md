@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-12
+* **Update**: [Notices and FAQ management](/api/posts.md) — 고객지원 공지사항의 플랫폼 계정 노출 대상(WHALEERP-667, 운영 정책 HOM-07 v281 · A안): 플랫폼 계정(PM · PA)이 고객 BP 탭에서 `GET /support-notices` · 상세 · 첨부 내려받기를 부르면 그 BP 의 BP 마스터와 같은 회원 · BP 대상을 본다(`audiencesOfAdmin(…, tabBp)`, 컨트롤러가 `@TargetBp()` 를 넘긴다). 로그인 후 홈 공지 띠의 BP 대상 공지를 눌러 상세 · 목록에서도 보이게 하려는 것이다. 헤더가 없으면(소속 플랫폼 BP) 회원만, BP · 가맹 계정과 FAQ 는 그대로다.
 * **Update**: [Employment contract batch](/api/employment-contract-batch.md) — 플랫폼 계정이 고른 BP 의 로그인 후 홈(WHALEERP-667, 운영 정책 HOM-07 v280): `GET /home/summary` · `/home/pending` 이 탭 BP 헤더(`X-Bp-Code-Id`)를 받는다. 홈은 메뉴가 아니라 가드가 탭 BP 를 정하지 않아 서비스가 가드와 같은 기준으로 본다 — 플랫폼 계정이 지우지 않은 고객 BP 를 보내면 그 BP 의 점포 전체를 `getManageableStores(…, bp)` 로 받아 BP 마스터처럼 세고(본사 제공 동의 가림 없음, 내 문의 · 문의 답변완료는 로그인한 계정 것), 없는 · 지운 · 플랫폼 BP 나 형식이 틀리면 404, 헤더가 없으면 지금처럼 `platform: true` 인 빈 결과다. BP · 가맹 계정은 헤더를 보지 않는다. openapi.json 다시 생성.
 
 ## 2026-11-11
