@@ -431,6 +431,36 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     expect(keysOf(platform)).toEqual(['memberAndBp', 'memberOnly']);
   });
 
+  // WHALEERP-667(운영 정책 HOM-07 v281) — 홈 공지 띠에서 누른 BP 대상 공지가 상세 · 목록에서도 보인다
+  it('고객지원: 플랫폼 관리자가 고객 BP 탭(X-Bp-Code-Id)에서 보면 그 BP 의 BP 마스터처럼 회원 · BP 대상을 본다. FAQ 는 그대로', async () => {
+    const inBp = async (path: string) =>
+      request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${await tokenOf(platformAdminId)}`)
+        .set('X-Bp-Code-Id', String(bpCodeId));
+    const list = await inBp(`/support-notices?keyword=${n}`);
+    expect(list.status).toBe(200);
+    expect(keysOf(list)).toEqual([
+      'pinned',
+      'memberAndBp',
+      'memberOnly',
+      'bpOnly',
+    ]);
+    expect((await inBp(`/support-notices/${ids.bpOnly}`)).status).toBe(200);
+    expect(
+      (await get(`/support-notices/${ids.bpOnly}`, platformAdminId)).status,
+    ).toBe(404);
+    // 점포 대상은 BP 마스터처럼 보이지 않는다
+    expect((await inBp(`/support-notices/${ids.storeOnly}`)).status).toBe(404);
+    const faq = await inBp(`/support-faqs?keyword=${n}`);
+    const platformFaq = await get(
+      `/support-faqs?keyword=${n}`,
+      platformAdminId,
+    );
+    expect(faq.status).toBe(200);
+    expect(keysOf(faq)).toEqual(keysOf(platformFaq));
+  });
+
   it('고객지원: 사용 중이 아닌 관리자는 목록 · 상세 모두 403', async () => {
     for (const path of [
       `/support-notices?keyword=${n}`,

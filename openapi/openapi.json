@@ -17953,6 +17953,15 @@
         "operationId": "HomeController_summary",
         "parameters": [
           {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "탭 BP — 플랫폼 계정이 고른 고객 BP. 없으면 플랫폼 계정은 platform: true 인 빈 결과다. BP · 가맹 계정은 보지 않는다",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "storeIds",
             "required": false,
             "in": "query",
@@ -17984,6 +17993,9 @@
           },
           "403": {
             "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "플랫폼 계정이 보낸 탭 BP 가 없거나 지웠거나 플랫폼 BP 임"
           }
         },
         "security": [
@@ -17991,7 +18003,7 @@
             "bearer": []
           }
         ],
-        "summary": "수치 카드 넷 · 점포별 현황 표(미조치 많은 순 일곱 곳 + 전체 수)",
+        "summary": "수치 카드 · 점포별 현황 표(확인 필요 많은 순, 운영 점포 모두)",
         "tags": [
           "Home"
         ]
@@ -18001,6 +18013,15 @@
       "get": {
         "operationId": "HomeController_pending",
         "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "탭 BP — 플랫폼 계정이 고른 고객 BP. 없으면 플랫폼 계정은 platform: true 인 빈 결과다. BP · 가맹 계정은 보지 않는다",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "storeIds",
             "required": false,
@@ -18033,6 +18054,9 @@
           },
           "403": {
             "description": "직원 앱 토큰이거나 사용 중인 관리자 계정이 아님"
+          },
+          "404": {
+            "description": "플랫폼 계정이 보낸 탭 BP 가 없거나 지웠거나 플랫폼 BP 임"
           }
         },
         "security": [
@@ -18040,7 +18064,7 @@
             "bearer": []
           }
         ],
-        "summary": "경고 밴드(갱신 예정 7일 안) · 처리 대기 유형 목록",
+        "summary": "확인 필요 유형 목록",
         "tags": [
           "Home"
         ]

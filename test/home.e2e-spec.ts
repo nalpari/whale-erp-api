@@ -538,4 +538,45 @@ describe('로그인 후 홈 (e2e, DB)', () => {
       },
     });
   });
+
+  // WHALEERP-667(운영 정책 HOM-07 v280) — 플랫폼 계정이 고른 고객 BP 의 홈은 그 BP 전체 점포로 BP 마스터처럼 세고, 본사 제공 동의로 가리지 않는다
+  it('플랫폼 계정 + 탭 BP 헤더 — 그 BP 의 점포 전체를 가림 없이 센다. 없는 · 플랫폼 BP 면 404', async () => {
+    const withBp = async (path: string, bp: number | string) =>
+      request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${await tokenOf(pmId)}`)
+        .set('X-Bp-Code-Id', String(bp));
+    const summary = await withBp('/home/summary', bpCodeId);
+    expect(summary.status).toBe(200);
+    const s = summary.body as HomeSummaryResponseDto;
+    expect(s.platform).toBe(false);
+    expect(s.cards).toMatchObject({
+      // 미동의 가맹 직원도 고용 형태 나눔 · 서명 대기에 든다
+      staff: { total: 10 },
+      unsignedContractCount: 2,
+      stores: { total: 2, direct: 1, franchise: 1, notOperating: 0 },
+    });
+    expect(s.cards!.staff!.fullTime + s.cards!.staff!.partTime).toBe(10);
+    expect(s.storeTable.items.map((r) => r.storeId).sort()).toEqual(
+      [directStoreId, franchiseStoreId].sort(),
+    );
+
+    const pending = await withBp('/home/pending', bpCodeId);
+    expect(pending.status).toBe(200);
+    const p = pending.body as HomePendingResponseDto;
+    expect(p.platform).toBe(false);
+    // 미동의 가맹 직원의 서명 대기 · 거절(4일)도 든다
+    expect(
+      p.items.find((i) => i.type === 'CONTRACT_PENDING_SIGNATURE'),
+    ).toMatchObject({ count: 2 });
+    expect(
+      p.items.find((i) => i.type === 'AFFILIATION_REJECTED'),
+    ).toMatchObject({ count: 3, waitingDays: 4 });
+
+    const platformBp = (
+      await prisma.bpCode.findFirstOrThrow({ where: { isPlatform: true } })
+    ).bpCodeId;
+    for (const bad of [platformBp, 2_000_000_000, 'abc'])
+      expect((await withBp('/home/summary', bad)).status).toBe(404);
+  });
 });

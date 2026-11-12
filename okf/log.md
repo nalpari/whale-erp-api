@@ -1,5 +1,9 @@
 # Directory Update Log
 
+## 2026-11-12
+* **Update**: [Notices and FAQ management](/api/posts.md) — 고객지원 공지사항의 플랫폼 계정 노출 대상(WHALEERP-667, 운영 정책 HOM-07 v281 · A안): 플랫폼 계정(PM · PA)이 고객 BP 탭에서 `GET /support-notices` · 상세 · 첨부 내려받기를 부르면 그 BP 의 BP 마스터와 같은 회원 · BP 대상을 본다(`audiencesOfAdmin(…, tabBp)`, 컨트롤러가 `@TargetBp()` 를 넘긴다). 로그인 후 홈 공지 띠의 BP 대상 공지를 눌러 상세 · 목록에서도 보이게 하려는 것이다. 헤더가 없으면(소속 플랫폼 BP) 회원만, BP · 가맹 계정과 FAQ 는 그대로다.
+* **Update**: [Employment contract batch](/api/employment-contract-batch.md) — 플랫폼 계정이 고른 BP 의 로그인 후 홈(WHALEERP-667, 운영 정책 HOM-07 v280): `GET /home/summary` · `/home/pending` 이 탭 BP 헤더(`X-Bp-Code-Id`)를 받는다. 홈은 메뉴가 아니라 가드가 탭 BP 를 정하지 않아 서비스가 가드와 같은 기준으로 본다 — 플랫폼 계정이 지우지 않은 고객 BP 를 보내면 그 BP 의 점포 전체를 `getManageableStores(…, bp)` 로 받아 BP 마스터처럼 세고(본사 제공 동의 가림 없음, 내 문의 · 문의 답변완료는 로그인한 계정 것), 없는 · 지운 · 플랫폼 BP 나 형식이 틀리면 404, 헤더가 없으면 지금처럼 `platform: true` 인 빈 결과다. BP · 가맹 계정은 헤더를 보지 않는다. openapi.json 다시 생성.
+
 ## 2026-11-11
 * **Update**: [Facilities](/api/facilities.md) — api #272 재리뷰 블로커: 문서 올리기는 가드가 「등록 또는 수정」으로 받아, 등록 권한만으로 이미 있는 시설물의 문서를 바꿀 수 있었다(빼기는 수정 권한이라 403). 서비스가 다시 묻는다 — 수정 권한이면 그대로, 등록 권한만이면 직접 등록한 시설물에 그 종류 문서가 아직 없을 때만(등록 화면 흐름), 그 밖은 403(근로계약 이어 쓰기 WHALEERP-592 와 같은 방식). openapi.json 다시 생성.
 * **Update**: [Facilities](/api/facilities.md) — api #272 머지 블로커 · 리뷰 반영: 관리 담당자는 가입 완료(`JOINED`) · 재직 직원만(가입 전 레코드는 계약 삭제 · 대체가 물리 삭제해 담당자 외래키 RESTRICT 가 그 삭제를 500 으로 막았다). 본사 역할(BM · BA)이 가맹 점포에서 보면 본사 제공 동의 직원만 고르고 보며(ATT-30, `hiddenStoreStaffWhere`), 남이 고른 미동의 담당자는 상세에서 이름 · 번호를 가린다(`isManagerHidden`) — 그대로 두고 저장하면 저장된 번호를 지킨다. 등록도 점포 행 `FOR SHARE` 로 폐점 · 삭제를 다시 본다. 운영상태에도 「지금 값 유지」(`isFacilityStatusActive`). 받은 `updatedAt` 이 이미 다르면 검증 전에 409. openapi.json 다시 생성.

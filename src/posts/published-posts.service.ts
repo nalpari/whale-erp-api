@@ -4,6 +4,7 @@ import {
   type PostAudienceType,
   type PostContentType,
 } from '@prisma/client';
+import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import type { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
@@ -25,10 +26,12 @@ const NOT_VISIBLE = '게시가 끝났거나 볼 수 없는 게시물입니다.';
 
 /**
  * 노출 대상의 「BP」는 사업자 관리자(BP 마스터 · BP 관리자), 「점포」는 점포 단위 관리자(가맹 마스터 · 가맹 관리자),
- * 「회원」은 로그인한 모든 관리자다(목업 notice-edit 의 노출 대상 설명). 플랫폼 관리자는 회원으로만 본다.
+ * 「회원」은 로그인한 모든 관리자다(목업 notice-edit 의 노출 대상 설명). 플랫폼 관리자는 회원으로만 본다 — 고객 BP 탭의
+ * 공지사항은 예외다(audiencesOfAdmin).
  */
 const BP_ROLES = new Set(['BM', 'BA']);
 const STORE_ROLES = new Set(['FM', 'FA']);
+const PLATFORM_ROLES = new Set(['PM', 'PA']);
 
 /** 게시일 — 게시 시작일(한국 0시), 없으면 등록 일시. 정렬과 응답이 같은 기준을 쓴다. */
 const POSTED_AT = Prisma.sql`COALESCE(p.publish_start_date::timestamp AT TIME ZONE 'Asia/Seoul', p.created_at)`;
@@ -66,13 +69,26 @@ export class PublishedPostsService {
     @Inject(STORAGE) private readonly storage: OptionalStorage,
   ) {}
 
-  /** 로그인한 관리자가 드는 노출 대상. 사용 중인 계정이 아니면 null — 가드는 계정 상태를 보지 않는다. */
-  async audiencesOfAdmin(adminAccountId: number): Promise<Audiences | null> {
+  /**
+   * 로그인한 관리자가 드는 노출 대상. 사용 중인 계정이 아니면 null — 가드는 계정 상태를 보지 않는다.
+   * 플랫폼 계정(PM · PA)이 고객 BP 탭(`tabBp` 가 소속 BP 가 아님)에서 보면 그 BP 의 BP 마스터와 같은 회원 + BP 다
+   * (WHALEERP-667, 운영 정책 HOM-07 v281). 탭 BP 는 가드가 고객 BP 만 통과시킨 값이고, 헤더가 없으면 소속(플랫폼) BP 라 회원만이다.
+   */
+  async audiencesOfAdmin(
+    adminAccountId: number,
+    tabBp?: TargetBpContext,
+  ): Promise<Audiences | null> {
     const admin = await this.prisma.adminAccount.findFirst({
       where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
-      select: { roleTypeCode: true },
+      select: { roleTypeCode: true, bpCodeId: true },
     });
     if (!admin) return null;
+    if (
+      tabBp?.isPlatformCaller &&
+      PLATFORM_ROLES.has(admin.roleTypeCode) &&
+      tabBp.bpCodeId !== admin.bpCodeId
+    )
+      return ['MEMBER', 'BP'];
     const audiences: Audiences = ['MEMBER'];
     if (BP_ROLES.has(admin.roleTypeCode)) audiences.push('BP');
     if (STORE_ROLES.has(admin.roleTypeCode)) audiences.push('STORE');

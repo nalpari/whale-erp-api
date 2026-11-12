@@ -1,7 +1,8 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
+import { BP_NOT_FOUND_MESSAGE } from '../auth/menu-permission.guard';
 import { PrismaService } from '../prisma/prisma.service';
 import { HomeService, openRejectionAt } from './home.service';
 import {
@@ -88,6 +89,12 @@ describe('HomeService', () => {
         ),
       },
       menu: { count: jest.fn().mockResolvedValue(1) },
+      // 탭 BP 확인 — where 의 조건(지우지 않은 고객 BP)으로 찾은 것처럼 고객 BP 8 만 있다
+      bpCode: {
+        findFirst: jest.fn(({ where }: { where: { bpCodeId: number } }) =>
+          Promise.resolve(where.bpCodeId === 8 ? { bpCodeId: 8 } : null),
+        ),
+      },
       // where 의 점포 ID · 폐점 제외를 따른다
       store: {
         findMany: jest.fn(
@@ -135,8 +142,8 @@ describe('HomeService', () => {
     service = module.get(HomeService);
   });
 
-  const firstArg = (mock: jest.Mock) =>
-    (mock.mock.calls[0] as [Record<string, any>])[0];
+  const firstArg = (mock: jest.Mock, call = 0) =>
+    (mock.mock.calls[call] as [Record<string, any>])[0];
   /** 호출 인자의 where.AND — 범위 · 가림 조건을 다른 조건과 AND 로 묶는다 */
   const andOf = (arg: Record<string, any>) =>
     (arg.where as { AND: unknown[] }).AND;
@@ -201,7 +208,7 @@ describe('HomeService', () => {
       });
     });
 
-    it('플랫폼 계정은 403 이 아니라 platform: true 인 빈 결과 — 범위 · 집계를 읽지 않는다', async () => {
+    it('BP 를 고르지 않은(탭 BP 헤더 없는) 플랫폼 계정은 403 이 아니라 platform: true 인 빈 결과 — 범위 · 집계를 읽지 않는다', async () => {
       scope.platformAdminAccess.mockResolvedValue('allowed');
       await expect(service.summary(9, undefined, NOW)).resolves.toEqual({
         asOf: NOW,
@@ -216,6 +223,60 @@ describe('HomeService', () => {
       });
       expect(scope.getManageableStores).not.toHaveBeenCalled();
       expect(prisma.store.findMany).not.toHaveBeenCalled();
+    });
+
+    describe('플랫폼 계정이 고른 BP(WHALEERP-667, HOM-07 v280)', () => {
+      beforeEach(() => {
+        scope.platformAdminAccess.mockResolvedValue('allowed');
+        scope.getManageableStores.mockResolvedValue({
+          roleTypeCode: 'PM',
+          stores: [
+            { storeId: 1, storeTypeCode: 'DIRECT' },
+            { storeId: 2, storeTypeCode: 'FRANCHISE' },
+          ],
+        });
+      });
+
+      it('탭 BP 헤더의 고객 BP 전체 점포로 BP 마스터처럼 센다', async () => {
+        const summary = await service.summary(9, undefined, NOW, '8');
+        const pending = await service.pending(9, undefined, NOW, '8');
+        expect(summary.platform).toBe(false);
+        expect(pending.platform).toBe(false);
+        expect(scope.getManageableStores).toHaveBeenCalledWith(9, {
+          bpCodeId: 8,
+          isPlatformCaller: true,
+        });
+        expect(firstArg(prisma.bpCode.findFirst).where).toEqual({
+          bpCodeId: 8,
+          isDeleted: false,
+          isPlatform: false,
+        });
+        expect(summary.storeTable.items.map((r) => r.storeId)).toEqual([1, 2]);
+      });
+
+      it('본사 제공 동의로 가리지 않는다 — 가맹 점포도 동의 조건 없이 센다(ATT-30 플랫폼 기준)', async () => {
+        await service.summary(9, undefined, NOW, '8');
+        expect(andOf(firstArg(prisma.contract.groupBy))[0]).toEqual({
+          storeId: { in: [1, 2] },
+        });
+        expect(firstArg(prisma.staffMember.groupBy, 1).where).toMatchObject({
+          AND: [{ storeId: { in: [1, 2] } }, expect.anything()],
+        });
+      });
+
+      it('없는 · 지운 · 플랫폼 BP 나 형식이 틀린 헤더면 404 — 범위를 읽지 않는다', async () => {
+        for (const bad of ['7', 'abc', '8, 9'])
+          await expect(service.summary(9, undefined, NOW, bad)).rejects.toThrow(
+            new NotFoundException(BP_NOT_FOUND_MESSAGE),
+          );
+        expect(scope.getManageableStores).not.toHaveBeenCalled();
+      });
+    });
+
+    it('BP · 가맹 계정은 탭 BP 헤더를 보지 않는다 — 늘 소속 BP 의 관리 범위', async () => {
+      await service.summary(9, undefined, NOW, '8');
+      expect(scope.getManageableStores).toHaveBeenCalledWith(9, undefined);
+      expect(prisma.bpCode.findFirst).not.toHaveBeenCalled();
     });
 
     it('사용 중인 관리자 계정이 아니면 403', async () => {

@@ -14,7 +14,11 @@ import {
 } from '@nestjs/swagger';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { CurrentUser } from '../auth/auth.decorators';
-import { MenuPermission } from '../auth/menu-permission.guard';
+import {
+  MenuPermission,
+  TargetBp,
+  type TargetBpContext,
+} from '../auth/menu-permission.guard';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
 import { parseRouteId } from '../common/route-id';
@@ -39,7 +43,10 @@ import {
 const FORBIDDEN =
   '관리자 토큰이 아니거나 사용 중인 관리자 계정이 아님 · 그 메뉴의 조회 권한 없음';
 
-/** 고객지원 공지사항 — 목록 · 상세(이전 · 다음, #282) · 첨부 내려받기. */
+/**
+ * 고객지원 공지사항 — 목록 · 상세(이전 · 다음, #282) · 첨부 내려받기. 플랫폼 계정이 고객 BP 탭에서 보면 그 BP 의 BP 마스터와 같은
+ * 노출 대상이다(탭 BP 를 넘긴다, WHALEERP-667). FAQ 는 넘기지 않는다.
+ */
 @ApiBearerAuth()
 @ApiForbiddenResponse({ description: FORBIDDEN })
 @Controller('support-notices')
@@ -51,9 +58,10 @@ export class SupportNoticesController {
   async list(
     @CurrentUser() user: AuthUser,
     @Query() query: ListPublishedPostsDto,
+    @TargetBp() bp?: TargetBpContext,
   ): Promise<PublishedPostListResponseDto> {
     return this.posts.list(
-      await audiencesOf(this.posts, user),
+      await audiencesOf(this.posts, user, bp),
       'NOTICE',
       query,
     );
@@ -68,11 +76,12 @@ export class SupportNoticesController {
   async get(
     @CurrentUser() user: AuthUser,
     @Param('postId') rawId: string,
+    @TargetBp() bp?: TargetBpContext,
   ): Promise<SupportPostResponseDto> {
     const postId = parseRouteId(rawId);
     if (postId === null)
       throw new NotFoundException('게시물을 찾을 수 없습니다.');
-    const audiences = await audiencesOf(this.posts, user);
+    const audiences = await audiencesOf(this.posts, user, bp);
     const post = await this.posts.get(audiences, 'NOTICE', postId);
     return { ...post, ...(await this.posts.neighbors(audiences, postId)) };
   }
@@ -88,13 +97,14 @@ export class SupportNoticesController {
     @CurrentUser() user: AuthUser,
     @Param('postId') rawId: string,
     @Param('postAttachmentId') rawAttachmentId: string,
+    @TargetBp() bp?: TargetBpContext,
   ): Promise<DownloadUrlResponseDto> {
     const postId = parseRouteId(rawId);
     const attachmentId = parseRouteId(rawAttachmentId);
     if (postId === null || attachmentId === null)
       throw new NotFoundException('첨부파일을 찾을 수 없습니다.');
     return this.posts.attachmentDownloadUrl(
-      await audiencesOf(this.posts, user),
+      await audiencesOf(this.posts, user, bp),
       postId,
       attachmentId,
     );
@@ -122,8 +132,9 @@ export class SupportFaqsController {
 async function audiencesOf(
   posts: PublishedPostsService,
   user: AuthUser,
+  bp?: TargetBpContext,
 ): Promise<Audiences> {
-  const audiences = await posts.audiencesOfAdmin(user.id);
+  const audiences = await posts.audiencesOfAdmin(user.id, bp);
   if (!audiences) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
   return audiences;
 }
