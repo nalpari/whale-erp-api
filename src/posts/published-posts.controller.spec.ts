@@ -99,6 +99,19 @@ describe('공개 · 고객지원 공지사항 · FAQ 컨트롤러', () => {
     expect(service.list).toHaveBeenCalledWith(['MEMBER', 'BP'], 'FAQ', query);
   });
 
+  it('고객지원 공지사항은 탭 BP 를 노출 대상 판정에 넘기고 FAQ 는 넘기지 않는다(WHALEERP-667)', async () => {
+    service.audiencesOfAdmin.mockResolvedValue(['MEMBER', 'BP']);
+    const bp = { bpCodeId: 8, isPlatformCaller: true };
+    await supportNotices.list(admin, query, bp);
+    await supportNotices.get(admin, '5', bp);
+    await supportNotices.attachmentDownloadUrl(admin, '5', '11', bp);
+    for (const call of service.audiencesOfAdmin.mock.calls)
+      expect(call).toEqual([admin.id, bp]);
+    service.audiencesOfAdmin.mockClear();
+    await supportFaqs.list(admin, query);
+    expect(service.audiencesOfAdmin).toHaveBeenCalledWith(admin.id, undefined);
+  });
+
   it('고객지원 공지사항 상세는 이전 · 다음을 함께 준다(#282)', async () => {
     service.audiencesOfAdmin.mockResolvedValue(['MEMBER', 'BP']);
     const prev = { postId: 4, title: '옛 글', postedDate: '2026-09-01' };

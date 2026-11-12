@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ContractStatus, InvitationType, Prisma } from '@prisma/client';
 import {
   AdminScopeService,
@@ -13,8 +18,11 @@ import {
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import {
   adminHasMenuAction,
+  BP_NOT_FOUND_MESSAGE,
   reportMissingMenu,
+  type TargetBpContext,
 } from '../auth/menu-permission.guard';
+import { parseRouteId } from '../common/route-id';
 import {
   needsRenewal,
   RENEWAL_CANDIDATE_SELECT,
@@ -160,7 +168,8 @@ const pendingItemOf = (
  * - 업무 범위: 관리 범위(getManageableStores) 안에서 고른 점포(storeIds). 범위 밖 ID 는 조용히 빠진다.
  * - 권한: 홈은 메뉴가 아니다. 영역마다 그 메뉴의 조회 권한이 있을 때만 채우고, 없으면 그 영역은 null 이다 — 403 으로 홈 전체를
  *   막지 않는다(직원 상세 요약과 같은 생각). 점포별 확인 필요는 볼 수 있는 영역의 건수만 더한다.
- * - 플랫폼 계정(플랫폼 BP 의 PM · PA)은 현황 없이 안내만 보므로 platform: true 인 빈 결과다.
+ * - 플랫폼 계정(플랫폼 BP 의 PM · PA)은 탭 BP 헤더로 고객 BP 를 고르면 그 BP 의 전체 점포로 BP 마스터와 같게 세고(본사 제공
+ *   동의 가림 없음, ATT-30 플랫폼 기준), 고르지 않으면 platform: true 인 빈 결과다(WHALEERP-667, HOM-07 v280).
  * - 폐점 점포는 모든 집계에서 뺀다. 카드 · 표(summary)는 운영 점포만 세고(운영 정책 HOM-06 · HOM-10 — 열을 더하면 카드와 같다),
  *   확인 필요(pending)는 미운영 점포 건까지 센다(HOM-07).
  * - 본사 역할의 가림(운영 정책 ATT-30 v216, 2026-10-27 재영): 가려지는 점포(직영이 아닌 점포)에서는 계약 집계(미체결 · 서명
@@ -183,10 +192,12 @@ export class HomeService {
     adminAccountId: number,
     storeIds?: number[],
     now: Date = new Date(),
+    bpHeader?: string,
   ): Promise<HomeSummaryResponseDto> {
     const ctx = await this.contextOf(
       adminAccountId,
       storeIds,
+      bpHeader,
       [
         'staff',
         'contracts',
@@ -452,8 +463,9 @@ export class HomeService {
     adminAccountId: number,
     storeIds?: number[],
     now: Date = new Date(),
+    bpHeader?: string,
   ): Promise<HomePendingResponseDto> {
-    const ctx = await this.contextOf(adminAccountId, storeIds, [
+    const ctx = await this.contextOf(adminAccountId, storeIds, bpHeader, [
       'staff',
       'contracts',
       'inquiries',
@@ -639,7 +651,11 @@ export class HomeService {
   }
 
   /**
-   * 업무 범위와 영역 권한. 플랫폼 계정이면 null. 사용 중인 관리자 계정이 아니면 403(TO-DO 목록과 같다). 고른 점포는 관리 범위
+   * 업무 범위와 영역 권한. 사용 중인 관리자 계정이 아니면 403(TO-DO 목록과 같다).
+   * 플랫폼 계정은 탭 BP 헤더(`X-Bp-Code-Id`)로 고른 고객 BP 의 전체 점포가 관리 범위다(WHALEERP-667, 운영 정책 HOM-07 v280).
+   * 홈은 메뉴가 아니라 가드가 탭 BP 를 정하지 않으므로 가드(targetBp)와 같은 기준으로 여기서 본다 — 지우지 않은 고객 BP 가
+   * 아니면 404. 헤더가 없으면(BP 를 고르지 않은 플랫폼 탭) null 이다. BP · 가맹 계정은 헤더를 보지 않고 늘 소속 BP 다.
+   * 고른 점포는 관리 범위
    * 안에서만 남고, 폐점 점포는 여기서 빠진다. `operatingOnly` 면 미운영 점포도 빠지고 그 수를 `notOperating` 으로 준다 — 그 영역의
    * 모든 집계가 같은 ids 를 쓴다. `shown` 은 개인 단위로 세는 집계에 거는 조건이다 — 가려지는 점포는 본사 제공 동의한 직원
    * 것만(hqVisibleWhere — 근로계약 목록과 같은 함수).
@@ -647,14 +663,28 @@ export class HomeService {
   private async contextOf(
     adminAccountId: number,
     storeIds: number[] | undefined,
+    bpHeader: string | undefined,
     areas: Area[],
     operatingOnly = false,
   ) {
     const access = await this.scope.platformAdminAccess(adminAccountId);
     if (access === 'unavailable')
       throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
-    if (access === 'allowed') return null;
-    const manageable = await this.scope.getManageableStores(adminAccountId);
+    let bp: TargetBpContext | undefined;
+    if (access === 'allowed') {
+      if (bpHeader === undefined) return null;
+      const bpCodeId = parseRouteId(bpHeader);
+      const found =
+        bpCodeId === null
+          ? null
+          : await this.prisma.bpCode.findFirst({
+              where: { bpCodeId, isDeleted: false, isPlatform: false },
+              select: { bpCodeId: true },
+            });
+      if (!found) throw new NotFoundException(BP_NOT_FOUND_MESSAGE);
+      bp = { bpCodeId: found.bpCodeId, isPlatformCaller: true };
+    }
+    const manageable = await this.scope.getManageableStores(adminAccountId, bp);
     if (!manageable) throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     const picked = storeIds ? new Set(storeIds) : null;
     const storeOf = new Map(

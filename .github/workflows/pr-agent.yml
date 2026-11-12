@@ -1,0 +1,30 @@
+name: PR Agent
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+jobs:
+  pr_agent_job:
+    # 댓글 명령(/review, /ask 등)은 저장소 소유자·멤버·협업자가 PR 에 단 것만 실행한다.
+    # 외부 사용자가 댓글로 ANTHROPIC_KEY 가 걸린 실행을 반복해서 일으키지 못하게 한다.
+    if: >-
+      ${{ github.event.sender.type != 'Bot' &&
+          (github.event_name != 'issue_comment' ||
+           (github.event.issue.pull_request &&
+            contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))) }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      # 키와 쓰기 권한을 받는 액션이라 커밋으로 고정한다 (2026-11-08 main). 올릴 때 SHA 를 바꾼다.
+      - uses: the-pr-agent/pr-agent@a76cb9111b6a944094e874b3d467c4e546946e7b
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          config.model: "anthropic/claude-opus-5-5"
+          config.response_language: "ko-KR"
+          ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
+          github_action_config.auto_review: "true"
+          github_action_config.auto_describe: "true"
+          github_action_config.auto_improve: "true"

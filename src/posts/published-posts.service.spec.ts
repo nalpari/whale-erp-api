@@ -68,6 +68,60 @@ describe('PublishedPostsService', () => {
       await expect(service.audiencesOfAdmin(3)).resolves.toEqual(expected);
     });
 
+    // WHALEERP-667(HOM-07 v281) — 고객 BP 탭의 플랫폼 계정은 그 BP 의 BP 마스터와 같다
+    it.each([
+      [
+        'PM 이 고객 BP 탭',
+        'PM',
+        { bpCodeId: 8, isPlatformCaller: true },
+        ['MEMBER', 'BP'],
+      ],
+      [
+        'PA 가 고객 BP 탭',
+        'PA',
+        { bpCodeId: 8, isPlatformCaller: true },
+        ['MEMBER', 'BP'],
+      ],
+      [
+        'PM 이 헤더 없음(소속 플랫폼 BP)',
+        'PM',
+        { bpCodeId: 1, isPlatformCaller: true },
+        ['MEMBER'],
+      ],
+      [
+        'BM 은 탭 BP 와 상관없이 그대로',
+        'BM',
+        { bpCodeId: 1, isPlatformCaller: false },
+        ['MEMBER', 'BP'],
+      ],
+      [
+        'FM 은 탭 BP 와 상관없이 그대로',
+        'FM',
+        { bpCodeId: 1, isPlatformCaller: false },
+        ['MEMBER', 'STORE'],
+      ],
+      [
+        '플랫폼 표시만 손으로 만든 BP 계정은 넓어지지 않는다',
+        'BA',
+        { bpCodeId: 8, isPlatformCaller: true },
+        ['MEMBER', 'BP'],
+      ],
+      [
+        '플랫폼 표시만 손으로 만든 가맹 계정은 BP 대상을 얻지 않는다',
+        'FA',
+        { bpCodeId: 8, isPlatformCaller: true },
+        ['MEMBER', 'STORE'],
+      ],
+    ])('%s', async (_, roleTypeCode, tabBp, expected) => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        roleTypeCode,
+        bpCodeId: 1,
+      });
+      await expect(service.audiencesOfAdmin(3, tabBp)).resolves.toEqual(
+        expected,
+      );
+    });
+
     it('사용 중이 아니거나 없는 계정이면 null', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(null);
       await expect(service.audiencesOfAdmin(3)).resolves.toBeNull();
