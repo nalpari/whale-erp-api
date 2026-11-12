@@ -4,7 +4,7 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개), 엑셀 일괄 등록(PL-7 — 양식 · 미리보기 · 오류 파일 · 등록, 오류가 있으면 전부 막기 · 500줄). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-12T07:23:22Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-12T07:36:43Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: facility-bulk
     resource: ../../src/facilities/facility-bulk.ts
     title: 일괄 등록 양식 · 파일 읽기 · 줄 검사 · 오류 파일
-    last_modified: 2026-11-12T07:23:22Z
+    last_modified: 2026-11-12T07:36:43Z
   - id: facility-bulk-reader
     resource: ../../src/facilities/facility-bulk-reader.ts
     title: 올린 xlsx 를 메모리 · 시간 상한이 걸린 worker 에서 읽고 쓰기
@@ -256,7 +256,12 @@ first in front's generated types.
     was 4MB until the 「점포 목록」 sheet of a BP with 20,000 open stores made the downloaded template
     itself too big. It also requires the central directory to end exactly at the end record (JSZip
     shifts offsets by any bytes before it) and treats zip64, more than 1,000 entries, a method other
-    than stored (0) or deflate (8), or a zlib data error (`Z_*`) as the template message;
+    than stored (0) or deflate (8), or a zlib data error (`Z_*`) as the template message. **Local
+    entries must not overlap** — sorted by offset, each starts after the previous one's data (seventh
+    review): counting only the inflated output let one local entry of empty deflate blocks (about
+    4.8MB that inflates to 0 bytes) be pointed at by all 1,000 central entries, and the API thread
+    inflated the same 5MB a thousand times — 33 s with every other request stalled. With no overlap,
+    what the API thread inflates is at most the upload itself once;
   - nothing scans the XML on the API thread. A regular-expression pre-check of merged and
     validation ranges was tried and removed: it was bypassed, and its `[^>]*?` was quadratic — a
     2.4KB upload of unclosed `<mergeCell ` tags froze the event loop for 16.5 s (third review). A

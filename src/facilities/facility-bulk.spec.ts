@@ -715,6 +715,118 @@ describe('facility-bulk', () => {
       expect(Date.now() - started).toBeLessThan(2_000);
     });
 
+    // 중앙 디렉터리 항목들을 edit 이 돌려준 목록으로 바꿔 쓴다(복제 · 순서 · 새 항목) — 끝 레코드의 개수 · 크기도 맞춘다
+    function rewriteDirectory(
+      zip: Buffer,
+      edit: (records: Buffer[]) => Buffer[],
+    ): Buffer {
+      const eocd = zip.length - 22;
+      const size = zip.readUInt32LE(eocd + 12);
+      const directory = zip.readUInt32LE(eocd + 16);
+      const records: Buffer[] = [];
+      for (let p = directory; p < directory + size;) {
+        const len =
+          46 +
+          zip.readUInt16LE(p + 28) +
+          zip.readUInt16LE(p + 30) +
+          zip.readUInt16LE(p + 32);
+        records.push(Buffer.from(zip.subarray(p, p + len)));
+        p += len;
+      }
+      const edited = edit(records);
+      const next = Buffer.concat(edited);
+      const count = edited.length;
+      const end = Buffer.from(zip.subarray(eocd));
+      end.writeUInt16LE(count, 8);
+      end.writeUInt16LE(count, 10);
+      end.writeUInt32LE(next.length, 12);
+      return Buffer.concat([zip.subarray(0, directory), next, end]);
+    }
+
+    // 로컬 항목 하나를 중앙 디렉터리 여럿이 가리키면 메인 스레드가 같은 입력을 여러 번 푼다 — 출력이 0바이트인 빈 deflate
+    // 블록 5MB 를 1,000번 가리켜 이벤트 루프가 33초 멈췄다(PR #276 7차 리뷰)
+    it('중앙 디렉터리 항목 여럿이 같은 로컬 항목을 가리키면 양식 문구(같은 입력을 두 번 풀지 않는다)', () => {
+      const zip = zipOf([{ name: 'a', data: Buffer.alloc(100, 0x41) }]);
+      const twice = rewriteDirectory(zip, ([r]) => [r, r]);
+      expect(() => assertZipWithinLimit(twice, 10_000_000)).toThrow(
+        BULK_TEMPLATE_ONLY,
+      );
+    });
+
+    it('한 항목의 데이터 안에서 다른 로컬 항목이 시작하면(겹침) 양식 문구', () => {
+      // 첫 항목 데이터 안에 두 번째 로컬 헤더를 숨긴다 — 저장(0) 데이터로 넣고, 두 번째 항목이 그 안을 가리키게 한다
+      const inner = zipOf([{ name: 'b', data: 'x', method: 0 }]);
+      const innerLocal = inner.subarray(0, 30 + 1 + 1);
+      const zip = zipOf([{ name: 'a', data: innerLocal, method: 0 }]);
+      const hidden = 30 + 1; // 첫 로컬 헤더 30 + 이름 1 뒤가 데이터 시작
+      const overlapped = rewriteDirectory(zip, ([r]) => {
+        const second = Buffer.concat([
+          Buffer.from(r.subarray(0, 46)),
+          Buffer.from('b'),
+        ]);
+        second.writeUInt16LE(1, 28);
+        second.writeUInt16LE(0, 10);
+        second.writeUInt32LE(1, 20);
+        second.writeUInt32LE(1, 24);
+        second.writeUInt32LE(hidden, 42);
+        return [r, second];
+      });
+      expect(() => assertZipWithinLimit(overlapped, 10_000_000)).toThrow(
+        BULK_TEMPLATE_ONLY,
+      );
+    });
+
+    it('중앙 디렉터리 순서가 로컬 순서와 달라도 겹치지 않으면 받는다', () => {
+      const zip = zipOf([
+        { name: 'a', data: 'aaaa' },
+        { name: 'b', data: 'bbbb', method: 0 },
+        { name: 'c', data: 'cccc' },
+      ]);
+      const reversed = rewriteDirectory(zip, (records) =>
+        [...records].reverse(),
+      );
+      expect(() => assertZipWithinLimit(reversed, 10_000_000)).not.toThrow();
+    });
+
+    it('빈 deflate 블록 수 MB 를 1,000개 항목이 가리키는 파일도 바로 양식 문구(메인 스레드를 붙잡지 않는다)', () => {
+      // 저장 블록 길이 0(비최종) × N + 최종 빈 고정 블록 — 풀면 0바이트
+      const empty = Buffer.concat([
+        Buffer.alloc(0),
+        ...Array.from({ length: 200_000 }, () =>
+          Buffer.from([0x00, 0x00, 0x00, 0xff, 0xff]),
+        ),
+        Buffer.from([0x03, 0x00]),
+      ]);
+      const name = Buffer.from('a');
+      const lh = Buffer.alloc(30);
+      lh.writeUInt32LE(0x04034b50, 0);
+      lh.writeUInt16LE(8, 8);
+      lh.writeUInt32LE(empty.length, 18);
+      lh.writeUInt16LE(1, 26);
+      const ch = Buffer.alloc(46);
+      ch.writeUInt32LE(0x02014b50, 0);
+      ch.writeUInt16LE(8, 10);
+      ch.writeUInt32LE(empty.length, 20);
+      ch.writeUInt16LE(1, 28);
+      const record = Buffer.concat([ch, name]);
+      const locals = Buffer.concat([lh, name, empty]);
+      const directory = Buffer.concat(
+        Array.from({ length: 1000 }, () => record),
+      );
+      const end = Buffer.alloc(22);
+      end.writeUInt32LE(0x06054b50, 0);
+      end.writeUInt16LE(1000, 8);
+      end.writeUInt16LE(1000, 10);
+      end.writeUInt32LE(directory.length, 12);
+      end.writeUInt32LE(locals.length, 16);
+      const bomb = Buffer.concat([locals, directory, end]);
+      const started = Date.now();
+      expect(() => assertZipWithinLimit(bomb, 16_000_000)).toThrow(
+        BULK_TEMPLATE_ONLY,
+      );
+      expect(Date.now() - started).toBeLessThan(1_000);
+    });
+
     it('zip 이 아니거나 깨졌으면 양식 문구', () => {
       expect(() => assertZipWithinLimit(Buffer.from('abc'), 1_000)).toThrow(
         BULK_TEMPLATE_ONLY,

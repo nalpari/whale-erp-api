@@ -350,6 +350,8 @@ const isZip = (buffer: Buffer) =>
  * - 중앙 디렉터리가 끝 레코드 바로 앞에 꼭 맞게 있어야 한다(위치 + 크기 = 끝 레코드, 다 돈 뒤 끝 레코드에 닿음). exceljs 가
  *   쓰는 JSZip 은 앞에 덧붙은 바이트만큼 모든 위치를 옮겨 읽으므로, 그 틈을 두면 여기서 센 목록과 실제로 풀리는 목록이
  *   달라진다(2026-11-12 리뷰).
+ * - 로컬 항목이 서로 겹치면(같은 위치를 여러 항목이 가리키는 것 포함) 400(양식 문구) — 메인 스레드가 푸는 입력의 합을
+ *   파일 크기 안으로 묶는다(PR #276 7차 리뷰).
  * - zip 이 아니거나 깨졌거나 zip64 · 항목이 너무 많거나 저장(0) · deflate(8) 밖의 압축 방식이면 400(양식 문구).
  *   zlib 의 데이터 오류(Z_*)만 깨진 파일로 보고, 그 밖의 예외(메모리 등)는 그대로 던진다(500 — 우리 쪽 문제).
  */
@@ -378,7 +380,12 @@ export function assertZipWithinLimit(buffer: Buffer, maxBytes: number): void {
   )
     throw broken();
   let p = directory;
-  let total = 0;
+  const items: {
+    method: number;
+    local: number;
+    start: number;
+    compressed: number;
+  }[] = [];
   for (let n = 0; n < entries; n++) {
     if (p + 46 > eocd || buffer.readUInt32LE(p) !== 0x02014b50) throw broken();
     const method = buffer.readUInt16LE(p + 10);
@@ -397,6 +404,20 @@ export function assertZipWithinLimit(buffer: Buffer, maxBytes: number): void {
       buffer.readUInt16LE(local + 26) +
       buffer.readUInt16LE(local + 28);
     if (start + compressed > directory) throw broken();
+    items.push({ method, local, start, compressed });
+  }
+  if (p !== eocd) throw broken();
+  // 로컬 항목은 서로 겹치지 않아야 한다(각 항목은 앞 항목의 데이터 끝 뒤에서 시작). 그래야 아래에서 푸는 입력의 합이
+  // 파일 크기를 넘지 않는다 — 출력만 세면, 출력이 0바이트인 빈 deflate 블록 5MB 를 항목 1,000개가 같은 위치로 가리킨
+  // 파일 하나에 메인 스레드가 같은 입력을 1,000번 풀어 이벤트 루프가 33초 멈췄다(PR #276 7차 리뷰). 중앙 디렉터리 순서는
+  // 로컬 순서와 다를 수 있어 위치로 정렬해 본다.
+  const ordered = [...items].sort((a, b) => a.local - b.local);
+  for (let i = 1; i < ordered.length; i++) {
+    const prev = ordered[i - 1];
+    if (ordered[i].local < prev.start + prev.compressed) throw broken();
+  }
+  let total = 0;
+  for (const { method, start, compressed } of items) {
     let content: Buffer;
     if (method === 0) content = buffer.subarray(start, start + compressed);
     else if (method === 8) {
@@ -415,7 +436,6 @@ export function assertZipWithinLimit(buffer: Buffer, maxBytes: number): void {
     total += content.length;
     if (total > maxBytes) throw tooBig();
   }
-  if (p !== eocd) throw broken();
 }
 
 /** 올린 파일을 읽은 결과 — 줄들과, 오류 파일을 만들 때 다시 쓸 원본(검사를 마친 같은 파일) */
