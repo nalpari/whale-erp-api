@@ -4,7 +4,7 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개), 엑셀 일괄 등록(PL-7 — 양식 · 미리보기 · 오류 파일 · 등록, 오류가 있으면 전부 막기 · 500줄). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-12T04:29:42Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-12T05:06:09Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: facilities-controller
     resource: ../../src/facilities/facilities.controller.ts
     title: /facilities 경로와 메뉴 권한
-    last_modified: 2026-11-12T04:29:42Z
+    last_modified: 2026-11-12T05:06:09Z
   - id: facility-caller
     resource: ../../src/facilities/facility-caller.ts
     title: 다루는 관리자 · BP 와 점포 범위(화면 경로 · 일괄 등록 공용)
@@ -21,7 +21,11 @@ sources:
   - id: facility-bulk
     resource: ../../src/facilities/facility-bulk.ts
     title: 일괄 등록 양식 · 파일 읽기 · 줄 검사 · 오류 파일
-    last_modified: 2026-11-12T04:29:42Z
+    last_modified: 2026-11-12T05:06:09Z
+  - id: facility-bulk-reader
+    resource: ../../src/facilities/facility-bulk-reader.ts
+    title: 올린 xlsx 를 메모리 · 시간 상한이 걸린 worker 에서 읽고 쓰기
+    last_modified: 2026-11-12T05:06:09Z
   - id: facility-bulk-service
     resource: ../../src/facilities/facility-bulk.service.ts
     title: FacilityBulkService — 점포 · 공통코드 조회와 한 번에 넣기
@@ -213,32 +217,40 @@ first in front's generated types.
   logs a warning with the BP code and answers 400 「시설물 공통코드(운영상태 · 분류)가 설정되지 않아 …
   플랫폼 관리자에게 문의해 주세요.」 instead of failing every row. A group that is 미사용 or deleted is
   dropped from the template and cannot be chosen; its rows say 「그룹: 목록에 있는 값을 골라 주세요.」.
-- **Parsing is bounded, because a tiny file can be huge** (code review, 2026-11-12). An xlsx is a zip
-  and exceljs inflates all of it into memory, so before loading, `assertZipWithinLimit`:
-  - inflates each entry with `maxOutputLength` and stops at 4MB in total
-    (`BULK_MAX_UNCOMPRESSED_BYTES`; a 500-row file with every cell at its maximum inflates to about
-    1MB, while a 20MB sheet of value cells took 220MB of heap) — the sizes in the central directory
-    are written by the sender and are not trusted. Over the limit is 「파일 내용이 너무 큽니다. …」;
-  - requires the central directory to end exactly at the end record (offset + size = end record,
-    and the walk lands on it). JSZip shifts every offset by any bytes found before that point, so a
-    gap would let a second, hidden directory be the one that is inflated;
-  - treats zip64, more than 1,000 entries, a method other than stored (0) or deflate (8), or a zlib
-    data error (`Z_*`) as the template message; any other exception is rethrown (500);
-  - scans every worksheet XML it inflated for `<mergeCell ref>` and `<dataValidation sqref>` and
-    sums their cells (`$A:$A` counts a whole column) — over 50,000 in one sheet is 「병합한 셀이나
-    데이터 유효성 검사 범위가 너무 넓습니다. …」. exceljs builds one object per cell of every merged
-    range and one entry per address of every validation range while loading, before any header check:
-    a 6KB file with `A2:J100000` took 292MB of heap, and a validation laid on whole columns in Excel
-    (`A1:X1048576`) is tens of millions (PR #276 review). The 4MB decompression cap cannot see this.
-    The template itself is 3,000 cells (six dropdown columns × 500 rows).
+- **An uploaded xlsx is opened only in a worker thread with a memory and time cap**
+  (`facility-bulk-reader.ts`, PR #276 re-review). exceljs builds an object per cell of every merged
+  range, per address of every data-validation range and every defined name (`definedName`), per
+  column up to `<col max>`, and per empty `<c/>` — a 7KB file killed the process several ways, and a
+  pre-scan of the XML with regular expressions was bypassed by a path prefix on the entry name
+  (exceljs matches `xl/worksheets/sheetN.xml` unanchored), a character reference (`&#58;`) and
+  spaces around `=`. So nothing tries to enumerate those any more:
+  - every read (preview, error file, registration) and the error-file write run exceljs in a
+    `worker_threads` worker with `maxOldGenerationSizeMb` 192 and a 15 s timeout; out of memory or
+    time is logged and answers 400 「파일을 읽는 데 자원이 너무 많이 듭니다. …」, and the API process
+    keeps serving. A load error is logged and answers 「파일을 읽지 못했습니다. …」; a crash inside the
+    worker is a 500. At most two workers run at once and the rest wait, which bounds the memory all
+    uploads can take together. The worker returns the header and the visited rows' cell values; the
+    row checks run in the API process as before;
+  - the worker is source text with `eval: true` and loads exceljs by its resolved path, so the same
+    code runs from `dist` and under ts-jest. Each read costs about a second to start the worker (more
+    when the whole unit suite runs in parallel — the two bulk specs set `jest.setTimeout(60_000)`).
+    Dates come back as another realm's `Date`, so cells test the `[object Date]` tag, not
+    `instanceof`;
+  - before the worker, `assertZipWithinLimit` still inflates each entry with `maxOutputLength` and
+    stops at 16MB (`BULK_MAX_UNCOMPRESSED_BYTES`) — that now bounds what the API thread inflates; it
+    was 4MB until the 「점포 목록」 sheet of a BP with 20,000 open stores made the downloaded template
+    itself too big. It also requires the central directory to end exactly at the end record (JSZip
+    shifts offsets by any bytes before it) and treats zip64, more than 1,000 entries, a method other
+    than stored (0) or deflate (8), or a zlib data error (`Z_*`) as the template message;
+  - `assertSheetRanges` (merged and validation ranges over 50,000 cells in a worksheet entry → 「병합한
+    셀이나 데이터 유효성 검사 범위가 너무 넓습니다. …」) is kept only to give that common mistake — a
+    validation laid on whole columns in Excel — a message the user can act on. It is not a security
+    boundary; the worker is.
 
   Rows are walked with `eachRow`, never `1..rowCount`: `rowCount` is the last row number ever
-  written, so one space in row 1,048,576 of a 6KB file made the old loop build a million rows and the
-  heap grew by gigabytes until the process died. `eachRow` still visits a row whose only value is a
-  space, and reading it builds 24 cells before it is found blank — such rows do not count toward the
-  500, so 60,000 of them took 321MB. The walk therefore stops at 1,000 visited rows (the header not
-  counted) with the 500-row message. The error file reuses the workbook `readBulkFile`
-  loaded (and changes it in place) instead of inflating it again.
+  written, so one space in row 1,048,576 of a 6KB file made the old loop build a million rows.
+  `eachRow` still visits a row whose only value is a space, so the walk stops at 1,000 visited rows
+  (the header not counted) with the 500-row message.
 - **Row checks mirror `POST /facilities`** (`SaveFacilityDto` lengths, phone 9–12 digits after
   dropping `-` and spaces, 단가 10 digits and 수량 1–9,999 both with thousands commas, Y/N, real
   `YYYY-MM-DD`, 설치일 ≥ 구매일, store in scope and not closed, 분류 an active code of the chosen
