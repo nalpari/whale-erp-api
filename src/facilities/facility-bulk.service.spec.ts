@@ -82,6 +82,9 @@ const upload = async (
   return { buffer, size: buffer.length, originalname: name, mimetype: 'x' };
 };
 
+// 올린 파일은 worker 스레드에서 읽는다(facility-bulk-reader) — 띄우는 데 1초 안팎이고 전체 테스트를 병렬로 돌리면 더 걸린다
+jest.setTimeout(60_000);
+
 describe('FacilityBulkService', () => {
   let service: FacilityBulkService;
   let tx: { $queryRaw: jest.Mock; facility: { createMany: jest.Mock } };

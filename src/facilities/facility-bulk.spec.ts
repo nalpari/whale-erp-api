@@ -1,3 +1,4 @@
+import { dirname } from 'node:path';
 import { crc32, deflateRawSync } from 'node:zlib';
 import { BadRequestException } from '@nestjs/common';
 import ExcelJS from 'exceljs';
@@ -8,6 +9,7 @@ import {
   BULK_PREVIEW_COLUMNS,
   BULK_TEMPLATE_ONLY,
   BULK_RANGE_TOO_LARGE,
+  BULK_TOO_COMPLEX,
   BULK_TOO_LARGE,
   BULK_TOO_MANY,
   BULK_UNREADABLE,
@@ -132,6 +134,35 @@ function zipOf(
   return Buffer.concat([...locals, directory, end]);
 }
 
+/** exceljs 가 쓰는 JSZip — 만든 xlsx 의 XML 을 고쳐 다시 묶는다(테스트 전용) */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const JSZip = require(
+  require.resolve('jszip', { paths: [dirname(require.resolve('exceljs'))] }),
+) as {
+  loadAsync(data: Buffer): Promise<{
+    file(name: string): { async(type: 'string'): Promise<string> } | null;
+    file(name: string, data: string): unknown;
+    remove(name: string): unknown;
+    generateAsync(o: {
+      type: 'nodebuffer';
+      compression: 'DEFLATE';
+    }): Promise<Buffer>;
+  }>;
+};
+
+/** 정상 양식 xlsx 의 항목 하나를 고친다. rename 을 주면 그 이름으로 옮긴다 */
+async function patched(
+  entry: string,
+  edit: (xml: string) => string,
+  rename?: string,
+): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(await xlsx([VALIDCELLS()]));
+  const xml = await zip.file(entry)!.async('string');
+  if (rename) zip.remove(entry);
+  zip.file(rename ?? entry, edit(xml));
+  return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+}
+
 async function rejection(p: Promise<unknown>): Promise<string> {
   try {
     await p;
@@ -141,6 +172,9 @@ async function rejection(p: Promise<unknown>): Promise<string> {
   }
   throw new Error('거절되지 않았다');
 }
+
+// 올린 파일은 worker 스레드에서 읽는다(facility-bulk-reader) — 띄우는 데 1초 안팎이고 전체 테스트를 병렬로 돌리면 더 걸린다
+jest.setTimeout(60_000);
 
 describe('facility-bulk', () => {
   describe('양식 칸', () => {
@@ -431,6 +465,95 @@ describe('facility-bulk', () => {
         ),
       );
       expect(rows).toHaveLength(1);
+    });
+  });
+
+  describe('파싱 격리 — exceljs 는 메모리 · 시간 상한이 걸린 worker 에서 읽는다', () => {
+    // 몇 KB 파일 하나로 exceljs 가 객체를 수천만 개 만들던 경로들(PR #276 재리뷰 재현). 프로세스는 살아 있고 400 이다
+    const SHEET = 'xl/worksheets/sheet1.xml';
+    const bombs: [string, () => Promise<Buffer>][] = [
+      [
+        '열 범위(<col max>) 폭탄',
+        () =>
+          patched(SHEET, (x) =>
+            x.replace(
+              '<sheetData>',
+              '<cols><col min="1" max="30000000" width="9"/></cols><sheetData>',
+            ),
+          ),
+      ],
+      [
+        '이름 정의(definedName) 범위 폭탄',
+        () =>
+          patched('xl/workbook.xml', (x) =>
+            x.replace(
+              '</workbook>',
+              '<definedNames><definedName name="boom">\'시설물·장비\'!$A$1:$J$3000000</definedName></definedNames></workbook>',
+            ),
+          ),
+      ],
+      [
+        '문자 참조로 정규식을 피한 병합 셀',
+        () =>
+          patched(SHEET, (x) =>
+            x.replace(
+              '</sheetData>',
+              '</sheetData><mergeCells count="1"><mergeCell ref="A3&#58;X1048576"/></mergeCells>',
+            ),
+          ),
+      ],
+      [
+        '= 앞뒤 공백으로 정규식을 피한 병합 셀',
+        () =>
+          patched(SHEET, (x) =>
+            x.replace(
+              '</sheetData>',
+              '</sheetData><mergeCells count="1"><mergeCell ref = "A3:X1048576"/></mergeCells>',
+            ),
+          ),
+      ],
+    ];
+    it.each(bombs)('%s → 400(자원 초과 문구)', async (_, make) => {
+      expect(await rejection(readBulkFile(await make()))).toBe(
+        BULK_TOO_COMPLEX,
+      );
+    });
+
+    it('항목 이름 앞에 경로를 붙여 범위 검사를 피해도 400', async () => {
+      const buffer = await patched(
+        SHEET,
+        (x) =>
+          x.replace(
+            '</sheetData>',
+            '</sheetData><mergeCells count="1"><mergeCell ref="A3:X1048576"/></mergeCells>',
+          ),
+        'a/xl/worksheets/sheet1.xml',
+      );
+      const message = await rejection(readBulkFile(buffer));
+      expect([BULK_TOO_COMPLEX, BULK_TEMPLATE_ONLY]).toContain(message);
+    });
+
+    it('빈 셀로 채운 시트(값이 없어 방문 상한에도 안 걸림)도 worker 의 메모리 상한에서 끝난다', async () => {
+      const cells = '<c/>'.repeat(1000);
+      const rows = Array.from(
+        { length: 3500 },
+        (_, i) => `<row r="${i + 3}">${cells}</row>`,
+      ).join('');
+      const buffer = await patched(SHEET, (x) =>
+        x.replace('</sheetData>', `${rows}</sheetData>`),
+      );
+      const message = await rejection(readBulkFile(buffer));
+      expect([BULK_TOO_COMPLEX, BULK_EMPTY]).toContain(message);
+    });
+
+    it('정상 파일은 worker 에서 읽어 행을 돌려주고, 오류 파일도 worker 에서 만든다', async () => {
+      const parsed = await readBulkFile(await xlsx([VALIDCELLS()]));
+      expect(parsed.rows).toHaveLength(1);
+      expect(parsed.rows[0].cells.store).toBe('ST000001');
+      const out = await buildBulkErrorFile(parsed, new Map([[2, ['a: b']]]));
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(out as unknown as ArrayBuffer);
+      expect(wb.worksheets[0].getCell(2, 25).value).toBe('a: b');
     });
   });
 

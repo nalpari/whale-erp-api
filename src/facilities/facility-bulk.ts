@@ -1,5 +1,5 @@
 import { inflateRawSync } from 'node:zlib';
-import { BadRequestException, Logger } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import ExcelJS from 'exceljs';
 import { NO_NUL } from '../common/no-nul';
 import {
@@ -8,6 +8,13 @@ import {
   EXCEL_HEADER_FILL,
 } from '../excel-exports/excel-sheet-style';
 import { parseDateOnly } from '../staff-members/kst-date';
+import {
+  BULK_NOT_TEMPLATE,
+  BULK_TOO_COMPLEX,
+  BULK_UNREADABLE,
+  readSheetInWorker,
+  writeErrorColumnInWorker,
+} from './facility-bulk-reader';
 import {
   type FacilityGroup,
   QUANTITY_MAX,
@@ -19,18 +26,16 @@ import {
 // 서버는 파일을 남기지 않는다 — 미리보기 · 오류 파일 · 등록마다 화면이 같은 파일을 다시 보낸다(일괄 등록 공통 API 요청, 2026-11-12).
 // 줄 검사는 POST /facilities(SaveFacilityDto · validated)와 같은 규칙이고, 문구만 「칸 이름: 사유」 모양이다.
 
-const logger = new Logger('FacilityBulk');
-
 /** 한 번에 올릴 수 있는 줄 수(PL-7 제안 500) */
 export const BULK_MAX_ROWS = 500;
 /** 올리는 파일의 크기 상한 — 500줄 양식은 1MB 안이다. 화면(front bulk-upload.ts)과 같은 5MB */
 export const BULK_MAX_BYTES = 5 * 1024 * 1024;
 /**
- * 압축을 푼 크기의 상한 — xlsx 는 zip 이라 5MB 안에서도 수 GB 로 풀릴 수 있고, exceljs 는 전부 풀어 메모리에 올린다
- * (값이 있는 셀로 채운 20MB 시트가 heap 220MB 를 썼다, 2026-11-12 리뷰 측정). 500줄 24칸을 칸마다 최대 길이로 채운 양식이
- * 약 1MB 로 풀리므로 엑셀이 다시 저장하며 붙이는 서식 · 테마까지 넉넉히 4MB.
+ * 압축을 푼 크기의 상한 — 이 스레드가 zip 사전 검사로 푸는 양을 막는다. exceljs 가 읽으며 쓰는 메모리는 worker 의 상한이
+ * 막는다(facility-bulk-reader). 500줄을 꽉 채운 첫 시트는 약 1MB 이고, 「점포 목록」 시트가 점포 수에 비례해 커져 열린 점포
+ * 1만 곳이면 약 3.5MB 다 — 수만 곳의 BP 도 받은 양식을 그대로 올릴 수 있게 16MB.
  */
-export const BULK_MAX_UNCOMPRESSED_BYTES = 4 * 1024 * 1024;
+export const BULK_MAX_UNCOMPRESSED_BYTES = 16 * 1024 * 1024;
 /** zip 항목 수 상한 — 양식은 항목 십여 개다 */
 const MAX_ZIP_ENTRIES = 1000;
 /**
@@ -46,13 +51,11 @@ const MAX_VISITED_ROWS = BULK_MAX_ROWS * 2;
 const EXCEL_MAX_ROWS = 1_048_576;
 const EXCEL_MAX_COLUMNS = 16_384;
 
-export const BULK_TEMPLATE_ONLY =
-  '내려받은 양식으로 작성한 파일만 올릴 수 있습니다.';
+export const BULK_TEMPLATE_ONLY = BULK_NOT_TEMPLATE;
+export { BULK_TOO_COMPLEX, BULK_UNREADABLE };
 export const BULK_TOO_MANY = `한 번에 ${BULK_MAX_ROWS}건까지 등록할 수 있습니다. 파일을 나눠 올려 주세요.`;
 export const BULK_TOO_LARGE =
   '파일 내용이 너무 큽니다. 그림 · 다른 시트 없이 내려받은 양식에 값만 적어 다시 올려 주세요.';
-export const BULK_UNREADABLE =
-  '파일을 읽지 못했습니다. 표 · 차트 · 그림 없이 내려받은 양식에 값만 적어 다시 올려 주세요.';
 export const BULK_EMPTY = '등록할 시설물·장비가 없습니다.';
 export const BULK_HAS_ERRORS = '오류를 고친 파일을 다시 올려 주세요.';
 export const BULK_STORE_CHANGED =
@@ -227,6 +230,9 @@ export type BulkCheckedRow =
       data: null;
     };
 
+const isDate = (value: unknown): value is Date =>
+  Object.prototype.toString.call(value) === '[object Date]';
+
 /** 셀을 읽은 결과 — 글자와, 읽을 수 없었으면 그 사유 */
 interface CellRead {
   text: string;
@@ -243,7 +249,8 @@ function readCell(value: ExcelJS.CellValue | undefined): CellRead {
   if (typeof value === 'string') return { text: value };
   if (typeof value === 'number') return { text: String(value) };
   if (typeof value === 'boolean') return { text: value ? 'TRUE' : 'FALSE' };
-  if (value instanceof Date)
+  // worker 가 넘긴 날짜는 다른 realm 의 Date 라 instanceof 가 맞지 않을 수 있다(테스트 vm) — 태그로 본다
+  if (isDate(value))
     return Number.isNaN(value.getTime())
       ? {
           text: '',
@@ -356,8 +363,9 @@ export function rangeCellCount(ref: string): number {
 /**
  * 워크시트 XML 의 병합 셀(mergeCell ref)과 데이터 유효성 검사(dataValidation sqref) 범위의 칸 수 합이 상한을 넘으면 400.
  * exceljs 는 읽는 순간 병합 범위의 모든 칸에 셀 객체를, 유효성 검사 범위의 모든 주소에 항목을 만든다 — 몇 KB 짜리
- * 「A2:J100000」 한 줄이 heap 292MB, 엑셀에서 열 전체에 건 유효성 검사(「A1:X1048576」)는 수천만 칸이라 프로세스가 죽는다
- * (2026-11-12 PR #276 리뷰). 압축 해제 상한은 이 확대를 막지 못한다. 조건부 서식 범위는 글자로만 들고 있어 보지 않는다.
+ * 「A2:J100000」 한 줄이 heap 292MB, 엑셀에서 열 전체에 건 유효성 검사(「A1:X1048576」)는 수천만 칸이다(2026-11-12 PR #276
+ * 리뷰). 이 검사는 흔한 실수에 알아볼 문구를 먼저 주려는 것이다 — 정규식이라 항목 이름 · 문자 참조 · 공백 변형으로 피할 수
+ * 있고, exceljs 가 펼치는 곳은 이 둘만이 아니다(이름 정의 · <col max> · 빈 셀). 보안 경계는 worker 의 메모리 · 시간 상한이다.
  */
 export function assertSheetRanges(xml: string): void {
   let cells = 0;
@@ -463,89 +471,48 @@ export function assertZipWithinLimit(buffer: Buffer, maxBytes: number): void {
   if (p !== eocd) throw broken();
 }
 
-/**
- * 첫 시트를 읽은 결과 — 일회용이다. buildBulkErrorFile 이 workbook 을 제자리에서 바꾼다(「오류 사유」 열을 더한다) — 같은
- * 통합문서를 다시 쓰지 않는다.
- */
+/** 올린 파일을 읽은 결과 — 줄들과, 오류 파일을 만들 때 다시 쓸 원본(검사를 마친 같은 파일) */
 export interface ParsedBulkFile {
   readonly rows: readonly BulkRawRow[];
-  readonly workbook: ExcelJS.Workbook;
-  readonly sheet: ExcelJS.Worksheet;
-}
-
-/**
- * 양식으로 만든 파일의 첫 시트. zip 검사는 assertZipWithinLimit. zip 은 맞는데 exceljs 가 읽지 못하면(표 · 차트 같은 내용,
- * 깨진 XML) 원인을 경고 로그로 남기고 400(읽기 실패 문구), 시트가 없거나 머리글이 양식과 다르면 400(양식 문구).
- */
-async function loadTemplateSheet(
-  buffer: Buffer,
-  maxUncompressedBytes: number,
-): Promise<{
-  workbook: ExcelJS.Workbook;
-  sheet: ExcelJS.Worksheet;
-}> {
-  assertZipWithinLimit(buffer, maxUncompressedBytes);
-  const workbook = new ExcelJS.Workbook();
-  try {
-    // exceljs 의 타입은 옛 Buffer 를 기대한다
-    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
-  } catch (error) {
-    logger.warn(
-      `일괄 등록 파일을 읽지 못했다 (${buffer.length}바이트): ${
-        error instanceof Error
-          ? `${error.name}: ${error.message}`
-          : String(error)
-      }`,
-    );
-    throw new BadRequestException(BULK_UNREADABLE);
-  }
-  const sheet = workbook.worksheets[0];
-  if (!sheet || !headerMatches(sheet))
-    throw new BadRequestException(BULK_TEMPLATE_ONLY);
-  return { workbook, sheet };
+  readonly source: Buffer;
 }
 
 /** 머리글이 양식과 같은가 — 끝의 「오류 사유」 열(오류 파일을 고쳐 다시 올린 것)은 받는다 */
-function headerMatches(sheet: ExcelJS.Worksheet): boolean {
-  const header = sheet.getRow(1);
-  if (
-    !BULK_HEADERS.every(
-      (h, i) => cellText(header.getCell(i + 1).value).trim() === h.label,
-    )
-  )
+function headerMatches(header: readonly ExcelJS.CellValue[]): boolean {
+  if (!BULK_HEADERS.every((h, i) => cellText(header[i]).trim() === h.label))
     return false;
-  const extra = cellText(header.getCell(BULK_HEADERS.length + 1).value).trim();
+  const extra = cellText(header[BULK_HEADERS.length]).trim();
   return extra === '' || extra === ERROR_HEADER;
 }
 
 /**
  * 올린 파일을 읽는다 — 양식이 아니면 · 내용이 없으면 · 500줄을 넘으면 400. 칸이 모두 빈 글자이거나 공백뿐인 줄은 세지
  * 않는다(서식 · 드롭다운만 있는 행은 eachRow 가 애초에 건너뛴다). 행 번호는 엑셀 그대로다.
- * 실제 있는 행만 돈다(eachRow) — rowCount 는 마지막으로 쓰인 행 번호라, 먼 셀에 공백 하나만 있는 작은 파일도 100만이
- * 되고 getRow 는 없는 행을 만든다(리뷰에서 6KB 파일로 재현, heap 이 GB 단위로 불어 프로세스가 죽었다).
+ * - exceljs 로 여는 일은 메모리 · 시간 상한이 걸린 worker 에서만 한다(facility-bulk-reader) — 이 프로세스는 셀 값만 받는다.
+ *   그 전에 압축 해제 양(assertZipWithinLimit)과 흔한 범위 과대(assertSheetRanges)를 본다 — 앞의 것은 이 스레드가 푸는
+ *   양을, 뒤의 것은 엑셀에서 열 전체에 건 유효성 검사 같은 흔한 실수에 알아볼 문구를 주려는 것이고, 보안 경계는 worker 다.
+ * - 실제 있는 행만 돈다(eachRow) — rowCount 는 마지막으로 쓰인 행 번호라 먼 셀 하나로 100만이 된다. 공백뿐인 줄도 방문
+ *   수에 세어 1,000행을 넘으면 칸을 만들기 전에 멈춘다.
  */
 export async function readBulkFile(
   buffer: Buffer,
   { maxUncompressedBytes = BULK_MAX_UNCOMPRESSED_BYTES } = {},
 ): Promise<ParsedBulkFile> {
-  const { workbook, sheet } = await loadTemplateSheet(
+  assertZipWithinLimit(buffer, maxUncompressedBytes);
+  const sheet = await readSheetInWorker(
     buffer,
-    maxUncompressedBytes,
+    BULK_HEADERS.length,
+    MAX_VISITED_ROWS,
   );
+  if (!headerMatches(sheet.header))
+    throw new BadRequestException(BULK_TEMPLATE_ONLY);
+  if (sheet.overflow) throw new BadRequestException(BULK_TOO_MANY);
   const rows: BulkRawRow[] = [];
-  let tooMany = false;
-  let visited = 0;
-  sheet.eachRow((row, n) => {
-    if (n === 1 || tooMany) return;
-    // 빈 줄도 방문 수에 센다 — 칸(셀 객체)을 만들기 전에 막는다
-    if (++visited > MAX_VISITED_ROWS) {
-      tooMany = true;
-      return;
-    }
+  for (const { rowNumber, values } of sheet.rows) {
     const cells = {} as Record<BulkField, string>;
     const problems: Partial<Record<BulkField, string>> = {};
     BULK_HEADERS.forEach((h, i) => {
-      const value = row.getCell(i + 1).value;
+      const value = values[i];
       const read = PHONE_FIELDS.has(h.key)
         ? readPhone(value)
         : IDENTIFIER_FIELDS.has(h.key)
@@ -556,18 +523,15 @@ export async function readBulkFile(
     });
     const hasProblems = Object.keys(problems).length > 0;
     if (!hasProblems && Object.values(cells).every((v) => v.trim() === ''))
-      return;
-    if (rows.length === BULK_MAX_ROWS) {
-      tooMany = true;
-      return;
-    }
+      continue;
+    if (rows.length === BULK_MAX_ROWS)
+      throw new BadRequestException(BULK_TOO_MANY);
     rows.push(
-      hasProblems ? { rowNumber: n, cells, problems } : { rowNumber: n, cells },
+      hasProblems ? { rowNumber, cells, problems } : { rowNumber, cells },
     );
-  });
-  if (tooMany) throw new BadRequestException(BULK_TOO_MANY);
+  }
   if (rows.length === 0) throw new BadRequestException(BULK_EMPTY);
-  return { rows, workbook, sheet };
+  return { rows, source: buffer };
 }
 
 /** 한글 이름이나 코드로 고른 값 — 이름이 먼저다(어떤 이름이 다른 항목의 코드와 같아도 화면에 보이는 이름을 따른다) */
@@ -971,24 +935,20 @@ export async function buildBulkTemplate(lookups: BulkLookups): Promise<Buffer> {
 
 /**
  * 오류 파일 — 올린 파일의 첫 시트 끝에 「오류 사유」 열을 더하고 오류 줄에만 사유를 줄바꿈으로 잇는다. 고쳐 다시 올린
- * 오류 파일이면 옛 사유를 지우고 새로 적는다. readBulkFile 이 읽은 통합문서를 그대로 받아 제자리에서 바꾼다(다시 풀지 않는다).
+ * 오류 파일이면 옛 사유를 지우고 새로 적는다. readBulkFile 이 검사를 마친 같은 파일(source)을 받는다.
  */
 export async function buildBulkErrorFile(
-  { workbook, sheet }: Pick<ParsedBulkFile, 'workbook' | 'sheet'>,
+  { source }: Pick<ParsedBulkFile, 'source'>,
   errorsByRow: ReadonlyMap<number, readonly string[]>,
 ): Promise<Buffer> {
-  const col = BULK_HEADERS.length + 1;
-  const header = sheet.getRow(1);
-  header.getCell(col).value = ERROR_HEADER;
-  styleHeader(header);
-  sheet.getColumn(col).width = 60;
-  // 실제 있는 행만 — 오류 줄은 모두 readBulkFile 이 읽은 행이다(빈 행을 만들지 않는다)
-  sheet.eachRow((row, n) => {
-    if (n === 1) return;
-    const cell = row.getCell(col);
-    const errors = errorsByRow.get(n);
-    cell.value = errors?.length ? errors.join('\n') : null;
-    if (errors?.length) cell.alignment = { wrapText: true, vertical: 'top' };
+  // 올린 파일을 다시 여는 일이라 읽기와 같은 worker 에서 한다(메모리 · 시간 상한). 실제 있는 행에만 쓴다
+  return writeErrorColumnInWorker(source, BULK_HEADERS.length, errorsByRow, {
+    header: ERROR_HEADER,
+    font: { name: EXCEL_FONT_NAME, size: EXCEL_FONT_SIZE, bold: true },
+    fill: {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: EXCEL_HEADER_FILL },
+    },
   });
-  return Buffer.from(await workbook.xlsx.writeBuffer());
 }
