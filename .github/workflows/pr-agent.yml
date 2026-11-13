@@ -59,5 +59,5 @@ jobs:
         run: |
           curl -fsSL -o "$RUNNER_TEMP/buzz.deb" "$BUZZ_DEB_URL"
           echo "$BUZZ_DEB_SHA256  $RUNNER_TEMP/buzz.deb" | sha256sum -c -
-          dpkg-deb --fsys-tarfile "$RUNNER_TEMP/buzz.deb" | tar -x -C "$RUNNER_TEMP" ./usr/bin/buzz
-          PATH="$RUNNER_TEMP/usr/bin:$PATH" python3 -I .github/scripts/post-review-to-buzz.py
+          dpkg-deb -x "$RUNNER_TEMP/buzz.deb" "$RUNNER_TEMP/buzz"
+          PATH="$RUNNER_TEMP/buzz/usr/bin:$PATH" python3 -I .github/scripts/post-review-to-buzz.py
