@@ -13,11 +13,18 @@ jobs:
            (github.event.issue.pull_request &&
             contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))) }}
     runs-on: ubuntu-latest
+    env:
+      # 키 값이 아니라 있는지만 둔다. 키를 job env 에 두면 pr-agent 액션에도 넘어간다.
+      # 포크 PR 처럼 secret 이 없는 실행은 Buzz 게시를 건너뛴다.
+      HAS_BUZZ_KEY: ${{ secrets.BUZZ_PRIVATE_KEY != '' }}
     permissions:
       contents: read
       issues: write
       pull-requests: write
     steps:
+      # 이번 실행이 단(또는 고친) 코멘트만 Buzz 에 올리려고 시작 시각을 남긴다.
+      - id: start
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       # 키와 쓰기 권한을 받는 액션이라 커밋으로 고정한다 (2026-11-08 main). 올릴 때 SHA 를 바꾼다.
       - uses: the-pr-agent/pr-agent@a76cb9111b6a944094e874b3d467c4e546946e7b
         env:
@@ -28,3 +35,29 @@ jobs:
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
           github_action_config.auto_improve: "true"
+      # pr-agent 결과(리뷰 요약 · 코드 제안 제목)를 Buzz 「Whale ERP 3팀」 채널에 올린다.
+      # GITHUB_TOKEN 으로 단 코멘트는 다른 워크플로를 깨우지 않아서 같은 job 에서 이어 한다.
+      # Buzz 게시가 실패해도 리뷰 job 은 실패로 표시하지 않는다.
+      - uses: actions/checkout@v5
+        if: ${{ env.HAS_BUZZ_KEY == 'true' }}
+        with:
+          sparse-checkout: .github/scripts
+      - name: Post review to Buzz
+        if: ${{ env.HAS_BUZZ_KEY == 'true' }}
+        continue-on-error: true
+        env:
+          BUZZ_PRIVATE_KEY: ${{ secrets.BUZZ_PRIVATE_KEY }}
+          BUZZ_RELAY_URL: https://buzz-qaaf.srv1933583.hstgr.cloud
+          BUZZ_CHANNEL: 58f69767-4094-48f2-95a4-21618804728f
+          # Linux CLI 는 데스크톱 .deb 안에만 있다. 올릴 때 버전과 SHA256(릴리스 asset digest)을 함께 바꾼다.
+          BUZZ_DEB_URL: https://github.com/block/buzz/releases/download/desktop-v0.5.28/Buzz_0.5.28_amd64.deb
+          BUZZ_DEB_SHA256: 53609fa586a787871f080b0bfce679633e457f650982411c81ba104648c388cb
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          SINCE: ${{ steps.start.outputs.at }}
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/buzz.deb" "$BUZZ_DEB_URL"
+          echo "$BUZZ_DEB_SHA256  $RUNNER_TEMP/buzz.deb" | sha256sum -c -
+          dpkg-deb -x "$RUNNER_TEMP/buzz.deb" "$RUNNER_TEMP/buzz"
+          PATH="$RUNNER_TEMP/buzz/usr/bin:$PATH" python3 -I .github/scripts/post-review-to-buzz.py
