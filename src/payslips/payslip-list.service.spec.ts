@@ -103,6 +103,8 @@ describe('PayslipListService', () => {
       count: jest.Mock;
       groupBy: jest.Mock;
     };
+    contract: { findMany: jest.Mock; count: jest.Mock };
+    staffMember: { findUniqueOrThrow: jest.Mock };
     store: { findMany: jest.Mock };
     adminAccount: { findMany: jest.Mock };
   };
@@ -128,6 +130,14 @@ describe('PayslipListService', () => {
         findUniqueOrThrow: jest.fn().mockResolvedValue(detailRow()),
         count: jest.fn().mockResolvedValue(1),
         groupBy: jest.fn().mockResolvedValue([]),
+      },
+      // 상세의 확정 가능일(confirmableFrom) — 급여 기간 계약 · 퇴직일 · 보낸 갱신
+      contract: {
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      staffMember: {
+        findUniqueOrThrow: jest.fn().mockResolvedValue({ retiredDate: null }),
       },
       store: {
         findMany: jest.fn().mockResolvedValue([
@@ -860,6 +870,7 @@ describe('PayslipListService', () => {
         attendanceEndDate: '2026-09-25',
         isAttendanceConfirmed: false,
         confirmedAt: null,
+        confirmableFrom: '2026-10-01',
         createdAt: new Date('2026-10-01T00:00:00.000Z'),
         updatedAt: new Date('2026-10-02T00:00:00.000Z'),
         contract: { contractId: 7, status: 'SIGNED', wageAmount: 10_320 },
@@ -929,6 +940,56 @@ describe('PayslipListService', () => {
         { sentAt: 'asc' },
         { payslipDispatchId: 'asc' },
       ]);
+    });
+
+    it('확정할 수 있는 첫날 — 기간 중 퇴직하면 퇴직 다음 날, 작성 중도 준다(WHALEERP-690)', async () => {
+      prisma.staffMember.findUniqueOrThrow.mockResolvedValue({
+        retiredDate: d('2026-09-14'),
+      });
+      prisma.payslip.findUniqueOrThrow.mockResolvedValue(
+        detailRow({ status: 'DRAFTING' }),
+      );
+      await expect(service.findOne(9, 40)).resolves.toMatchObject({
+        confirmableFrom: '2026-09-15',
+      });
+    });
+
+    it('확정할 수 있는 첫날 — 급여 기간 계약이 기간 중 끝나면 종료 다음 날, 확정과 같은 계약 · 기간으로 판정한다', async () => {
+      prisma.contract.findMany
+        .mockResolvedValueOnce([{ contractId: 7 }])
+        .mockResolvedValueOnce([
+          {
+            status: 'SIGNED',
+            endDate: d('2026-09-20'),
+            contractStatusHistories: [],
+          },
+        ]);
+      await expect(service.findOne(9, 40)).resolves.toMatchObject({
+        confirmableFrom: '2026-09-21',
+      });
+      type Where = { where: Record<string, unknown> };
+      const [periodQuery, endQuery] = prisma.contract.findMany.mock
+        .calls as Where[][];
+      expect(periodQuery[0].where).toMatchObject({ staffMemberId: 30 });
+      expect(endQuery[0].where).toEqual({ contractId: { in: [7] } });
+      const [[renewalQuery]] = prisma.contract.count.mock.calls as Where[][];
+      expect(renewalQuery.where).toMatchObject({
+        staffMemberId: 30,
+        previousContractId: { in: [7] },
+      });
+    });
+
+    it('확정할 수 없는 상태면 확정 가능일은 null 이고 계산하지 않는다', async () => {
+      for (const status of ['CONFIRMED', 'SENT']) {
+        prisma.payslip.findUniqueOrThrow.mockResolvedValue(
+          detailRow({ status }),
+        );
+        prisma.contract.findMany.mockClear();
+        await expect(service.findOne(9, 40)).resolves.toMatchObject({
+          confirmableFrom: null,
+        });
+        expect(prisma.contract.findMany).not.toHaveBeenCalled();
+      }
     });
 
     it('점포를 찾지 못하면 500', async () => {
