@@ -25,6 +25,9 @@ describe('ContractSendService (재발송)', () => {
       joinStatus: 'INVITED',
       candidateAccountId: null,
     },
+    // 앞서 다른 관리자가 고친 때(WHALEERP-699)
+    modifiedAt: new Date('2026-10-10T00:30:00Z'),
+    modifiedBy: 5,
     ...over,
   });
 
@@ -36,9 +39,11 @@ describe('ContractSendService (재발송)', () => {
       findUniqueOrThrow: jest.Mock;
       findFirst: jest.Mock;
       findMany: jest.Mock;
+      update: jest.Mock;
       updateMany: jest.Mock;
     };
     store: { findFirst: jest.Mock };
+    invitation: { updateMany: jest.Mock };
     contractStatusHistory: { create: jest.Mock };
     account: { findMany: jest.Mock };
     staffMember: { findMany: jest.Mock; update: jest.Mock };
@@ -78,10 +83,12 @@ describe('ContractSendService (재발송)', () => {
           contractWorkDays: [],
         }),
         findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       // 폐점 · 삭제가 아닌 점포
       store: { findFirst: jest.fn().mockResolvedValue({ storeId: 11 }) },
+      invitation: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       contractStatusHistory: { create: jest.fn().mockResolvedValue({}) },
       account: { findMany: jest.fn().mockResolvedValue([]) },
       staffMember: {
@@ -134,6 +141,11 @@ describe('ContractSendService (재발송)', () => {
             draftAction: 'SIGNUP_INVITE',
             staffMemberId: 3,
             staffMember: row().staffMember,
+            // 알림톡이 나가지 않으면 이 값으로 되돌린다 — 보내지 않은 재발송은 관리자 수정이 아니다(WHALEERP-699)
+            modified: {
+              modifiedAt: row().modifiedAt,
+              modifiedBy: row().modifiedBy,
+            },
           },
           statusChanged: false,
           phoneChanged: false,
@@ -147,6 +159,56 @@ describe('ContractSendService (재발송)', () => {
       );
     },
   );
+
+  it('다시 보내면 같은 트랜잭션에서 계약 행에 최종수정(보낸 때 · 관리자)을 남긴다 — 보내기 준비 전에(WHALEERP-699)', async () => {
+    await service().send(9, 7, NOW);
+    expect(tx.contract.update).toHaveBeenCalledWith({
+      where: { contractId: 7 },
+      data: { modifiedAt: NOW, modifiedBy: 9 },
+    });
+    expect(tx.contract.update.mock.invocationCallOrder[0]).toBeLessThan(
+      delivery.prepare.mock.invocationCallOrder[0],
+    );
+    // 잠금(직원 행 찾기) 다음, 보낼 계약을 읽을 때 보내기 전 최종수정도 읽는다
+    const reads = (
+      tx.contract.findUnique.mock.calls as [{ select: object }][]
+    ).map(([args]) => args.select);
+    expect(reads).toContainEqual(
+      expect.objectContaining({ modifiedAt: true, modifiedBy: true }),
+    );
+  });
+
+  it('보낼 수 없으면(409) 최종수정을 쓰지 않는다', async () => {
+    tx.contract.findUnique.mockResolvedValue(row({ status: 'SIGNED' }));
+    await expect(service().send(9, 7, NOW)).rejects.toThrow(ConflictException);
+    expect(tx.contract.update).not.toHaveBeenCalled();
+  });
+
+  describe('발송 대기 종료 (end)', () => {
+    it('종료로 바꾸는 전환에 최종수정(때 · 관리자)을 싣는다(WHALEERP-699)', async () => {
+      await expect(service().end(9, 7)).resolves.toEqual({
+        contractId: 7,
+        status: 'ENDED',
+      });
+      expect(tx.contract.updateMany).toHaveBeenCalledWith({
+        where: { contractId: 7, status: 'PENDING_SEND' },
+        data: {
+          modifiedAt: expect.any(Date) as unknown,
+          modifiedBy: 9,
+          status: 'ENDED',
+        },
+      });
+    });
+
+    it('발송 대기가 아니면 409 — 최종수정도 바꾸지 않는다', async () => {
+      tx.contract.findUnique.mockResolvedValue(
+        row({ status: 'PENDING_SIGNATURE' }),
+      );
+      await expect(service().end(9, 7)).rejects.toThrow(ConflictException);
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+      expect(tx.contract.update).not.toHaveBeenCalled();
+    });
+  });
 
   it('번호 잠금 다음 직원 행을 계약 행보다 먼저 잠근다 — 보내기가 직원 행(가입 상태)을 쓰므로', async () => {
     await service().send(9, 7, NOW);
@@ -204,6 +266,10 @@ describe('ContractSendService (재발송)', () => {
           draftAction: 'AFFILIATION_CONFIRM',
           staffMemberId: 3,
           staffMember: joinedRow('PENDING_SIGNATURE').staffMember,
+          modified: {
+            modifiedAt: row().modifiedAt,
+            modifiedBy: row().modifiedBy,
+          },
         },
         statusChanged: false,
         phoneChanged: false,

@@ -237,6 +237,9 @@ describe('ContractsService.create', () => {
           // 재계약이 아니다(WHALEERP-156)
           previousContractId: null,
           createdBy: 1,
+          // 상세의 최종수정 — 등록도 관리자 수정이다(WHALEERP-699)
+          modifiedAt: expect.any(Date) as unknown,
+          modifiedBy: 1,
           contractParty: {
             create: {
               enteredName: '남도현',
@@ -894,6 +897,15 @@ describe('ContractsService.create', () => {
         draftAction: null,
       });
       expect(prisma.staffMember.create).not.toHaveBeenCalled();
+      // 다시 쓰는 레코드에 붙여 만든 계약도 최종수정을 남긴다(WHALEERP-699)
+      expect(prisma.contract.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            modifiedAt: expect.any(Date) as unknown,
+            modifiedBy: 1,
+          }) as unknown,
+        }),
+      );
       expect(prisma.staffMember.updateMany).toHaveBeenCalledWith({
         where: {
           staffMemberId: 4,

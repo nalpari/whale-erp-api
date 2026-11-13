@@ -1293,6 +1293,9 @@ export class ContractsService {
         draftAction: invite.draftAction,
         previousContractId: previousContractId ?? null,
         createdBy: adminAccountId,
+        // 상세의 최종수정 — 관리자가 고치거나 보낸 때만 쓴다(WHALEERP-699). 등록도 그 하나다
+        modifiedAt: now,
+        modifiedBy: adminAccountId,
         contractParty: { create: partyFields(dto) },
         contractWorkDays: { create: workDayRows(dto) },
         contractStatusHistories: {
@@ -1544,6 +1547,8 @@ export class ContractsService {
         },
         createdAt: true,
         createdBy: true,
+        modifiedAt: true,
+        modifiedBy: true,
         // 최근 것부터. 같은 시각(초안 저장과 자동 발송이 한 번에)이면 나중에 쓴 줄이 먼저다.
         contractStatusHistories: {
           orderBy: [{ changedAt: 'desc' }, { contractStatusHistoryId: 'desc' }],
@@ -1608,6 +1613,13 @@ export class ContractsService {
     const registrar = registered
       ? await this.prisma.adminAccount.findUnique({
           where: { adminAccountId: c.createdBy },
+          select: { name: true, loginId: true },
+        })
+      : null;
+    // 최종수정 관리자(WHALEERP-699) — 등록 관리자와 같이 따로 읽는다
+    const modifier = c.modifiedBy
+      ? await this.prisma.adminAccount.findUnique({
+          where: { adminAccountId: c.modifiedBy },
           select: { name: true, loginId: true },
         })
       : null;
@@ -1682,6 +1694,8 @@ export class ContractsService {
       staffJoined: c.staffMember.joinStatus === 'JOINED',
       registeredAt: iso(registered),
       registeredBy: registrar ? (registrar.name ?? registrar.loginId) : null,
+      modifiedAt: iso(c.modifiedAt),
+      modifiedBy: modifier ? (modifier.name ?? modifier.loginId) : null,
       canResend,
       taxProfile: await this.taxProfileOf(adminAccountId, c.staffMemberId, bp),
     };
@@ -2025,6 +2039,9 @@ export class ContractsService {
         draftAction: invite.draftAction,
         // 바로잡기로 대체한 재계약의 직전 계약을 이어받는다
         ...(inherited.length === 1 && { previousContractId: inherited[0] }),
+        // 상세의 최종수정(WHALEERP-699) — 보내다 알림톡이 실패해도 고친 것은 남아 되돌리지 않는다
+        modifiedAt: now,
+        modifiedBy: adminAccountId,
       };
       // 초안 저장(전자계약)은 곧바로 보낸다 — 보낸 뒤의 상태로 넘긴다(가입 초대 발송 대기 · 앱으로 받으면 서명 대기)
       const sends = saved === 'PENDING_SEND';
@@ -2298,6 +2315,11 @@ export class ContractsService {
         await transition(tx, contractId, status, 'ADMIN', {
           from: [current.status],
         });
+      // 상세의 최종수정(WHALEERP-699) — 이 저장은 당사자 · 직원 행을 써 계약 행은 따로 쓴다(상태가 그대로여도)
+      await tx.contract.update({
+        where: { contractId },
+        data: { modifiedAt: now, modifiedBy: adminAccountId },
+      });
 
       await tx.contractParty.upsert({
         where: { contractId },

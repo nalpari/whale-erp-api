@@ -358,6 +358,9 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         previousContractId: null,
         registeredAt: null,
         registeredBy: null,
+        // 관리자 수정 기록이 없는 행 — 최종수정이 비어 있다(WHALEERP-699)
+        modifiedAt: null,
+        modifiedBy: null,
         canResend: false,
         renewedBy: null,
         staffJoined: false,
@@ -466,6 +469,46 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         registeredBy: '김관리',
       });
     });
+    it('최종수정은 관리자가 마지막으로 고치거나 보낸 때와 그 관리자 이름이다 — 전자계약도(WHALEERP-699)', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        ...draftRow,
+        status: 'PENDING_SIGNATURE',
+        modifiedAt: new Date('2026-11-13T05:00:00Z'),
+        // 요청한 관리자(9) · 작성한 관리자(9)와 다른 사람 — 최종수정 관리자를 읽는지 가른다
+        modifiedBy: 42,
+      });
+      await expect(service.findOne(9, 7)).resolves.toMatchObject({
+        modifiedAt: '2026-11-13T05:00:00.000Z',
+        modifiedBy: '김관리',
+        // 전자계약이라 등록 칸은 비어 있다 — 최종수정과 따로다
+        registeredBy: null,
+      });
+      const [args] = prisma.contract.findUnique.mock.calls[0] as [
+        Prisma.ContractFindUniqueArgs,
+      ];
+      expect(args.select).toMatchObject({ modifiedAt: true, modifiedBy: true });
+      expect(prisma.adminAccount.findUnique).toHaveBeenCalledTimes(1);
+      expect(prisma.adminAccount.findUnique).toHaveBeenCalledWith({
+        where: { adminAccountId: 42 },
+        select: { name: true, loginId: true },
+      });
+    });
+
+    it('최종수정 관리자 이름이 없으면 로그인 아이디를 준다 — 등록 관리자와 같은 규칙', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        ...draftRow,
+        modifiedAt: new Date('2026-11-13T05:00:00Z'),
+        modifiedBy: 42,
+      });
+      prisma.adminAccount.findUnique.mockResolvedValue({
+        name: null,
+        loginId: 'bm01',
+      });
+      await expect(service.findOne(9, 7)).resolves.toMatchObject({
+        modifiedBy: 'bm01',
+      });
+    });
+
     it('없으면 404', async () => {
       prisma.contract.findUnique.mockResolvedValue(null);
       await expect(service.findOne(9, 7)).rejects.toThrow(NotFoundException);
@@ -811,6 +854,9 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         payDay: null,
         status: 'DRAFT',
         draftAction: null,
+        // 임시저장 이어 쓰기도 관리자 수정이라 상세의 최종수정을 남긴다(WHALEERP-699)
+        modifiedAt: expect.any(Date) as unknown,
+        modifiedBy: 9,
       });
       expect(tx.staffMember.update).toHaveBeenCalledWith({
         where: { staffMemberId: 3 },
@@ -1166,6 +1212,9 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       expect(tx.contract.updateMany.mock.calls[0][0].data).toMatchObject({
         status: 'SIGNED',
         contractMethod: 'PAPER',
+        // 종이 계약 등록도 같은 전환에 최종수정을 싣는다(WHALEERP-699)
+        modifiedAt: expect.any(Date) as unknown,
+        modifiedBy: 9,
       });
       expect(tx.contractStatusHistory.create).toHaveBeenCalledWith({
         data: {

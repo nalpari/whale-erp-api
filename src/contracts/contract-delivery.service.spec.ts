@@ -1388,6 +1388,47 @@ describe('ContractDeliveryService', () => {
       expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
     });
 
+    it('재발송(ContractSendService)이 거절되면 최종수정도 보내기 전 값으로 되돌린다 — 나가지 않은 재발송은 관리자 수정이 아니다(WHALEERP-699)', async () => {
+      const PREV_SENT = new Date('2026-10-10T01:00:00Z');
+      const PREV_MODIFIED = new Date('2026-10-10T00:30:00Z');
+      tx.invitation.count.mockResolvedValue(1);
+      await failWith(
+        new BizppurioError('거절', 4100, 400),
+        pending({
+          statusChanged: false,
+          historyId: null,
+          expired: [40],
+          before: {
+            status: 'PENDING_SEND',
+            sentAt: PREV_SENT,
+            signDeadlineAt: new Date('2026-11-09T01:00:00Z'),
+            draftAction: 'SIGNUP_INVITE',
+            staffMemberId: 3,
+            staffMember: { joinStatus: 'INVITED', candidateAccountId: null },
+            modified: { modifiedAt: PREV_MODIFIED, modifiedBy: 5 },
+          },
+        }),
+      );
+      expect(tx.contract.update).toHaveBeenCalledWith({
+        where: { contractId: 7 },
+        data: expect.objectContaining({
+          status: 'PENDING_SEND',
+          sentAt: PREV_SENT,
+          modifiedAt: PREV_MODIFIED,
+          modifiedBy: 5,
+        }) as unknown,
+      });
+    });
+
+    it('저장(등록 · 이어 쓰기 · 근로자 정보 수정)이 보내다 거절되면 최종수정은 그대로 둔다 — 고친 것은 남는다(WHALEERP-699)', async () => {
+      await failWith(new BizppurioError('거절', 4100, 400));
+      const [args] = tx.contract.update.mock.calls[0] as [
+        { data: Record<string, unknown> },
+      ];
+      expect(args.data).not.toHaveProperty('modifiedAt');
+      expect(args.data).not.toHaveProperty('modifiedBy');
+    });
+
     it('번호를 바꾼 저장이 거절되면 옛 번호의 초대는 되살리지 않고 임시저장으로 — 그 일을 시스템 이력으로 남긴다', async () => {
       const body = await failWith(
         new BizppurioError('거절', 4100, 400),
