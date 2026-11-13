@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-13T08:10:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, layout, send, record)
-    last_modified: 2026-11-13T07:05:00Z
+    last_modified: 2026-11-13T08:10:00Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; masks button links)
@@ -64,6 +64,13 @@ the header (`WHALE ERP`) and the footer. Each button-link value becomes a
 template shows `<b>`, not bold: the body is text by policy, so markup in it is
 text too. A text part goes alongside — the body, then each link on its own
 paragraph — for clients that do not render HTML.
+
+The frame is a table, not a centred `<div>`: an outer full-width table centres a
+560px card table (`width`/`align`, since some clients strip `max-width` and
+`margin:auto`), and the card cell and every paragraph carry `align="left"` /
+`text-align:left`; the card cell repeats the font and colour because many clients drop `<body>` styles. Outlook desktop ignores `max-width`, so an MSO-only wrapper table (`<!--[if mso]>`) holds the 560px width there. Without an explicit alignment, clients that show a message
+inside their own centred cell (Naver, Daum, Outlook) passed the centring on and
+the body read centred (2026-11-13 user report).
 
 **Button links must be `http://` or `https://`** (any case). Anything else —
 `javascript:`, `data:`, a bare host, a protocol-relative `//…` — throws before
