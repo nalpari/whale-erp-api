@@ -662,6 +662,7 @@ describe('StaffMemberListService', () => {
         signDeadlineAt: null,
         endDate: new Date('2027-02-28T00:00:00Z'),
         updatedAt: new Date('2026-09-02T05:00:00Z'),
+        previousContract: null,
         contractWorkDays: [],
       },
     ]);
@@ -681,9 +682,49 @@ describe('StaffMemberListService', () => {
       endDate: '2027-02-28',
       // 거부일은 따로 저장하지 않고 최종 수정 일시로 보인다(2026-10-12 재영).
       updatedAt: new Date('2026-09-02T05:00:00Z'),
+      isRenewal: false,
       canResend: false,
       workDays: [],
     });
+  });
+
+  it('isRenewal — 연장 재계약만 true, 재입사 재계약 · 첫 계약은 false, 계약이 없으면 contract 가 null(WHALEERP-672)', async () => {
+    const base = {
+      signDeadlineAt: null,
+      endDate: null,
+      updatedAt: null,
+      status: 'PENDING_SIGNATURE',
+      contractWorkDays: [],
+    };
+    prisma.staffMember.findMany.mockResolvedValue([
+      row({ staffMemberId: 30 }),
+      row({ staffMemberId: 31 }),
+      row({ staffMemberId: 32 }),
+      row({ staffMemberId: 33 }),
+    ]);
+    prisma.contract.findMany.mockResolvedValue([
+      {
+        ...base,
+        staffMemberId: 30,
+        contractId: 9,
+        previousContract: { staffMemberId: 30 },
+      },
+      {
+        ...base,
+        staffMemberId: 31,
+        contractId: 10,
+        previousContract: { staffMemberId: 99 },
+      },
+      { ...base, staffMemberId: 32, contractId: 11, previousContract: null },
+    ]);
+    const { items } = (await service.list(9, {}))!;
+    expect(firstArg(prisma.contract.findMany).select).toMatchObject({
+      previousContract: { select: { staffMemberId: true } },
+    });
+    expect(items[0].contract?.isRenewal).toBe(true);
+    expect(items[1].contract?.isRenewal).toBe(false);
+    expect(items[2].contract?.isRenewal).toBe(false);
+    expect(items[3].contract).toBeNull();
   });
 
   it('workDays — 근무 요일을 HH:mm 으로, 휴게 없으면 null, 요일 없으면 빈 배열(WHALEERP-622)', async () => {

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-13
+* **Update**: [Staff members](/api/staff-members.md) — 직원 목록 · 상세 `contract.isRenewal`(boolean) 추가(WHALEERP-672, 홍기 2026-11-13 · 노영주 「연장만 재계약 취급」): 직전 계약이 같은 직원 레코드의 것일 때만 true, 재입사 재계약 · 첫 계약은 false. 화면이 재직 칸 「재직」 + 계약 칸 「재계약」 꼬리표로 그린다. 마이그레이션 · 권한 변경 없음. openapi.json 다시 생성.
 * **Update**: [Payslips](/api/payslips.md) — 관리자 상세(`GET /payslips/:id`)에 확정할 수 있는 첫날 `confirmableFrom` 을 담는다(WHALEERP-690, 통합테스트 IT-PAY-004). 확정의 422 `PERIOD_NOT_ENDED` 와 같은 `confirmableFrom` 판정이고, 작성 중 · 검토 중이 아니면 null — 관리자 웹이 그 전에는 [확정]을 막고 그날을 알린다.
 * **Update**: [Mail](/api/mail.md) — 공통 메일 틀을 표(table) 방식으로: 바깥 표가 560px 카드 표를 가운데에 두고, 카드 칸과 글마다 `align="left"` · `text-align:left` 를 적었다. 정렬을 적지 않아 네이버 · 다음 · Outlook 처럼 받은 메일을 가운데 정렬 칸에 넣어 보여 주는 화면에서 본문이 가운데로 보였다(사용자 지적).
 * **Update**: [Authentication](/api/auth.md) · [Admin auth](/api/admin-auth.md) · [Admin signup](/api/admin-signup.md) · [BP admins](/api/bp-admins.md) · [BP masters](/api/bp-masters.md) · [Platform admins](/api/platform-admins.md) · [Inquiries](/api/inquiries.md) · [Excel exports](/api/excel-exports.md) · [Employment contract batch](/api/employment-contract-batch.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 출처 갱신만(WHALEERP-676, api PR 리뷰): 메일 입력 `adminAccountId` → `accountId` 이름 바꿈과 `schema.prisma` 의 `mail_send_logs` 변경에 맞춰 `generated.at` · `last_modified` 를 올렸다. 본문 변경 없음. Team 1 physical schema 에는 새 마이그레이션을 출처로 더했다.
