@@ -136,6 +136,18 @@ describe('MailService', () => {
     expect(html).toContain('WHALE ERP');
   });
 
+  it('공통 틀은 카드를 표로 가운데 두고 칸 · 글마다 왼쪽 정렬을 적는다(가운데 정렬 칸에 넣어 보여 주는 메일 화면 대비)', async () => {
+    await service.send(input);
+
+    const { html } = sent();
+    expect(html).toContain('<td align="left"');
+    expect(html).toContain('width="560"');
+    const paragraphs = html.match(/<p [^>]*>/g) ?? [];
+    // 머리 · 본문 · 버튼 하나 · 꼬리
+    expect(paragraphs.length).toBeGreaterThanOrEqual(4);
+    for (const p of paragraphs) expect(p).toContain('text-align:left');
+  });
+
   it('text 파트는 본문 뒤에 링크를 붙인다', async () => {
     await service.send(input);
 
