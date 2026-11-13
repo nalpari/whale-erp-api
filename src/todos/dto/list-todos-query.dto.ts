@@ -8,9 +8,13 @@ import {
   IsIn,
   IsInt,
   IsOptional,
+  IsString,
+  Matches,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
+import { NO_NUL } from '../../common/no-nul';
 import { IsDateOnly } from '../../common/is-date-only';
 import { STORE_TYPES, type StoreType } from '../../stores/store-format';
 
@@ -118,6 +122,19 @@ export class ListTodosQueryDto extends TodoPageQueryDto {
   @Min(1)
   @Max(MAX_ID)
   staffMemberId?: number;
+
+  /**
+   * 담당직원 이름 부분 일치(WHALEERP-713). 개인 배정은 그 직원, 근무지 전체는 대상 직원 가운데 한 명이라도 맞으면 나온다.
+   * 앞뒤 공백을 지우고 비면 없는 것으로 본다 — 직원 목록 keyword 와 같다.
+   */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() || undefined : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  @Matches(NO_NUL, { message: '담당직원 이름에 쓸 수 없는 문자가 있습니다.' })
+  assigneeName?: string;
 
   /** true · false. 없으면 전체 */
   @IsOptional()
