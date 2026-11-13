@@ -26,6 +26,7 @@ describe('직원 비밀번호 초기화 메일 발송 이력 (e2e, DB)', () => {
   const accountIds: number[] = [];
   const staffIds: number[] = [];
   const contractIds: number[] = [];
+  const mailIds: number[] = [];
 
   beforeAll(async () => {
     if (process.env.APP_ENV !== 'test' || !process.env.DATABASE_URL)
@@ -106,7 +107,11 @@ describe('직원 비밀번호 초기화 메일 발송 이력 (e2e, DB)', () => {
   afterAll(async () => {
     await prisma.mailSendLog.deleteMany({
       where: {
-        OR: [{ staffMemberId: { in: staffIds } }, { sentBy: adminId }],
+        OR: [
+          { staffMemberId: { in: staffIds } },
+          { mailId: { in: mailIds } },
+          { sentBy: adminId },
+        ],
       },
     });
     await prisma.passwordResetLink.deleteMany({
@@ -266,6 +271,7 @@ describe('직원 비밀번호 초기화 메일 발송 이력 (e2e, DB)', () => {
       },
     });
 
+    mailIds.push(mailId);
     await api()
       .delete(`/contracts/${contract.contractId}`)
       .set('Authorization', auth.Authorization())
