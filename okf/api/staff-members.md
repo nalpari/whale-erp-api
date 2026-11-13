@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 알림톡과 비밀번호 초기화 메일 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T08:17:28Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-11-09T07:19:00Z
+    last_modified: 2026-11-13T08:17:28Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
@@ -37,7 +37,7 @@ sources:
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-13T08:17:28Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -498,3 +498,8 @@ e2e(staff-members · staff-member-summary · staff-member-work-schedules · staf
 목록에서는 다시 보내지 않는다.
 거부일은 따로 저장하지 않아 화면이 `contract.updatedAt` 으로 「거부 · MM-DD」를 그린다. 갱신 예정은 화면이
 `contract.endDate` 로 정한다.
+**`contract.isRenewal`**(boolean, WHALEERP-672, 홍기 2026-11-13 · 노영주 결정 「연장만 재계약 취급」): 그 계약의 `previous_contract_id` 가 있고
+그 직전 계약이 **같은 직원 레코드**의 것일 때만 true(연장 재계약). 재입사 재계약(직전 계약이 퇴직한 옛 레코드의 것)과 첫 계약은 false다.
+재계약 서명 대기 중인 재직 직원의 재직 칸이 「서명 대기」로 보이던 것을, 화면이 이 값으로 재계약을 가려 재직 칸은 「재직」, 계약 칸에
+「재계약」 꼬리표로 그리게 한다. 직전 계약의 직원 id 는 contract select 의 중첩 `previousContract` 로 함께 읽어 쿼리가 늘지 않는다. 직원
+상세(`GET /staff-members/:id`, 목록 줄과 같은 모양)도 같은 값이다. 가린 행은 `contract` 가 null 이라 없다. 근로계약 조회 권한과 상관없이 싣는다.

@@ -822,6 +822,68 @@ describe('직원 목록 (e2e, DB)', () => {
     }
   });
 
+  it('재계약 서명 대기 계약은 isRenewal 이 연장만 true 다(WHALEERP-672)', async () => {
+    const first = await prisma.contract.create({
+      data: {
+        staffMemberId: ids.draft,
+        storeId: directStoreId,
+        createdBy: bmId,
+        status: 'SIGNED',
+        startDate: new Date('2026-01-01'),
+        contractStatusHistories: {
+          create: { toStatus: 'SIGNED', actor: 'ADMIN' },
+        },
+      },
+    });
+    const contractIds = [first.contractId];
+    try {
+      const url = `?pageSize=200&storeIds=${directStoreId}`;
+      const find = async () =>
+        (await get(url)).body.items.find((i) => i.staffMemberId === ids.draft);
+      expect((await find())?.contract?.isRenewal).toBe(false);
+      const renewal = await prisma.contract.create({
+        data: {
+          staffMemberId: ids.draft,
+          storeId: directStoreId,
+          createdBy: bmId,
+          status: 'PENDING_SIGNATURE',
+          startDate: new Date('2027-01-01'),
+          previousContractId: first.contractId,
+          contractStatusHistories: {
+            create: { toStatus: 'PENDING_SIGNATURE', actor: 'ADMIN' },
+          },
+        },
+      });
+      contractIds.unshift(renewal.contractId);
+      const row = await find();
+      expect(row?.contract?.contractId).toBe(renewal.contractId);
+      expect(row?.contract?.isRenewal).toBe(true);
+      // 재입사 재계약 — 직전 계약이 다른 직원 레코드(퇴직한 옛 레코드)의 것이면 첫 계약처럼 false
+      const old = await prisma.contract.create({
+        data: {
+          staffMemberId: ids.invited,
+          storeId: directStoreId,
+          createdBy: bmId,
+          status: 'ENDED',
+          startDate: new Date('2025-01-01'),
+        },
+      });
+      contractIds.push(old.contractId);
+      await prisma.contract.update({
+        where: { contractId: renewal.contractId },
+        data: { previousContractId: old.contractId },
+      });
+      expect((await find())?.contract?.isRenewal).toBe(false);
+    } finally {
+      await prisma.contractStatusHistory.deleteMany({
+        where: { contractId: { in: contractIds } },
+      });
+      for (const contractId of contractIds) {
+        await prisma.contract.delete({ where: { contractId } });
+      }
+    }
+  });
+
   it('BP 마스터가 재직 상태로 걸러도 가린 행은 남는다', async () => {
     const res = await get('?pageSize=200&employmentStatus=EMPLOYED');
     const row = franchiseRow(res.body);
