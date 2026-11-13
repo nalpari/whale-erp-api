@@ -30561,7 +30561,7 @@
           "vendorPhone": {
             "type": "string",
             "nullable": true,
-            "description": "구매처 전화번호 — 숫자 9~12자리. 하이픈은 떼고 받는다",
+            "description": "구매처 전화번호 — 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리. 하이픈은 떼고 받는다",
             "example": "0212345678"
           },
           "salesRepresentativeName": {
@@ -30656,7 +30656,7 @@
           "serviceCenterPhone": {
             "type": "string",
             "nullable": true,
-            "description": "A/S센터 전화번호 — 숫자 9~12자리"
+            "description": "A/S센터 전화번호 — 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리. 하이픈은 떼고 받는다"
           }
         },
         "required": [
@@ -30744,7 +30744,7 @@
           "vendorPhone": {
             "type": "string",
             "nullable": true,
-            "description": "구매처 전화번호 — 숫자 9~12자리. 하이픈은 떼고 받는다",
+            "description": "구매처 전화번호 — 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리. 하이픈은 떼고 받는다",
             "example": "0212345678"
           },
           "salesRepresentativeName": {
@@ -30839,7 +30839,7 @@
           "serviceCenterPhone": {
             "type": "string",
             "nullable": true,
-            "description": "A/S센터 전화번호 — 숫자 9~12자리"
+            "description": "A/S센터 전화번호 — 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리. 하이픈은 떼고 받는다"
           }
         },
         "required": [

@@ -14,6 +14,10 @@ import type {
   FacilityListResponseDto,
 } from '../src/facilities/dto/facility.response.dto';
 import { BULK_HEADERS } from '../src/facilities/facility-bulk';
+import {
+  COMPANY_PHONE_PATTERN,
+  PHONE_PATTERN,
+} from '../src/facilities/facility-format';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STORAGE } from '../src/storage/storage.module';
 
@@ -818,6 +822,64 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
     await expect(
       set({ unitPriceAmount: null, totalAmount: null }),
     ).resolves.toBeDefined();
+  });
+
+  it('대표번호(15xx · 16xx · 18xx 8자리) — 구매처 · A/S센터는 API 로 저장되고, 사람 번호 칸은 API 400', async () => {
+    const { facilityId } = await create({
+      name: '대표번호 장비',
+      vendorPhone: '1588-1234',
+      serviceCenterPhone: '1644-0000',
+    });
+    expect(await detail(facilityId)).toMatchObject({
+      vendorPhone: '15881234',
+      serviceCenterPhone: '16440000',
+    });
+    await call('post', '/facilities', bmToken)
+      .send({ ...base(), managerPhone: '1588-1234' })
+      .expect(400);
+  });
+
+  it('전화번호 CHECK 는 칸마다 API 패턴과 같다 — 구매처 · A/S센터는 COMPANY_PHONE_PATTERN, 영업사원 · 관리 담당자는 PHONE_PATTERN', async () => {
+    const { facilityId } = await create({ name: '전화 CHECK 장비' });
+    const samples = [
+      '15881234',
+      '16440000',
+      '18001234',
+      '12345678',
+      '17001234',
+      '19001234',
+      '13001234',
+      '1588123',
+      '158812345',
+      '0212345678',
+      '050712345678',
+      '0505123456789',
+    ];
+    const columns = {
+      vendorPhone: COMPANY_PHONE_PATTERN,
+      serviceCenterPhone: COMPANY_PHONE_PATTERN,
+      salesRepresentativePhone: PHONE_PATTERN,
+      managerPhone: PHONE_PATTERN,
+    };
+    const mismatches: string[] = [];
+    for (const [column, pattern] of Object.entries(columns))
+      for (const value of samples) {
+        const expected = pattern.test(value);
+        const stored = await prisma.facility
+          .update({ where: { facilityId }, data: { [column]: value } })
+          .then(
+            () => true,
+            (e: Error) => {
+              if (!/facilities_phone_format/.test(e.message)) throw e;
+              return false;
+            },
+          );
+        if (stored !== expected)
+          mismatches.push(
+            `${column}=${value}: API ${String(expected)} · DB ${String(stored)}`,
+          );
+      }
+    expect(mismatches).toEqual([]);
   });
 
   it('다른 BP 격리 — 다른 BP 의 시설물 · 점포는 어느 경로로도 보이지 않고 고칠 수 없다', async () => {

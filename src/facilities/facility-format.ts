@@ -17,6 +17,18 @@ export type FacilityPageSize = (typeof FACILITY_PAGE_SIZES)[number];
 export const UNIT_PRICE_MAX = 9_999_999_999;
 export const QUANTITY_MAX = 9_999;
 
+/**
+ * 전화번호(하이픈 뗀 숫자) — 국내 번호 9~12자리. 영업사원 · 관리 담당자 칸의 DB CHECK `facilities_phone_format` 식과
+ * 같다.
+ */
+export const PHONE_PATTERN = /^[0-9]{9,12}$/;
+/**
+ * 구매처 · A/S센터 전화번호 — 국내 번호에 더해 15xx · 16xx · 18xx 전국 대표번호 8자리(1588-1234 → 15881234). 8자리를
+ * 아무 번호나 받으면 지역번호를 빠뜨린 1234-5678 같은 번호도 통과하므로 대표번호 앞자리로 묶는다. 영업사원 · 관리
+ * 담당자는 사람 번호라 받지 않는다. 구매처 · A/S센터 칸의 DB CHECK 식과 같다(20261113105855).
+ */
+export const COMPANY_PHONE_PATTERN = /^(?:[0-9]{9,12}|(?:15|16|18)[0-9]{6})$/;
+
 /** 문서 종류 — DB enum 그대로. 경로 `/facilities/:id/documents/:kind` 의 kind 다. */
 export const FACILITY_DOCUMENT_KINDS = Object.values(FacilityDocumentKind);
 /** 문서 한 개의 상한 — JPG · PNG · PDF 10MB 이하(PL-5), DB CHECK 와 같다. */

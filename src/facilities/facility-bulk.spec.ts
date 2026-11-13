@@ -337,6 +337,52 @@ describe('facility-bulk', () => {
       expect(rows[1].cells.serviceCenterPhone).toBe('0212345678');
     });
 
+    it('숫자 셀 대표번호는 읽기부터 줄 검사까지 — 구매처 · A/S센터는 그대로 받고, 영업사원은 사유, 7자리는 사유', async () => {
+      const { rows } = await readBulkFile(
+        await xlsx([
+          {
+            '점포*': 'ST000001',
+            '구매처 전화번호': 15881234,
+            '영업사원 전화번호': 15881234,
+            'A/S센터 전화번호': 18001234,
+          },
+          {
+            '점포*': 'ST000001',
+            '구매처 전화번호': 16440000,
+            'A/S센터 전화번호': 1588123,
+          },
+        ]),
+      );
+      // 16 · 18 대표번호에 0 을 붙이면 016 · 018 로 시작하는 옛 휴대폰 꼴 9자리가 돼 말없이 통과한다 — 그대로여야 한다
+      expect(rows[0].cells.serviceCenterPhone).toBe('18001234');
+      expect(rows[1].cells.vendorPhone).toBe('16440000');
+      expect(rows[1].cells.serviceCenterPhone).toBe('1588123');
+      const phones = (i: number) => ({
+        vendorPhone: rows[i].cells.vendorPhone,
+        salesRepresentativePhone: rows[i].cells.salesRepresentativePhone,
+        serviceCenterPhone: rows[i].cells.serviceCenterPhone,
+      });
+      const first = checkBulkRow(raw({ ...VALID, ...phones(0) }), LOOKUPS);
+      expect(first.errors).toEqual([
+        '영업사원 전화번호: 숫자 9~12자리로 적어 주세요.',
+      ]);
+      const second = checkBulkRow(raw({ ...VALID, ...phones(1) }), LOOKUPS);
+      expect(second.errors).toEqual([
+        'A/S센터 전화번호: 숫자 9~12자리 또는 대표번호 8자리(15xx·16xx·18xx)로 적어 주세요.',
+      ]);
+      const ok = checkBulkRow(
+        raw({
+          ...VALID,
+          vendorPhone: rows[0].cells.vendorPhone,
+          serviceCenterPhone: rows[0].cells.serviceCenterPhone,
+        }),
+        LOOKUPS,
+      );
+      expect(ok.errors).toEqual([]);
+      expect(ok.data?.vendorPhone).toBe('15881234');
+      expect(ok.data?.serviceCenterPhone).toBe('18001234');
+    });
+
     it('먼 행에 공백 한 칸만 있는 작은 파일 — 빈 행을 만들며 돌지 않고 바로 「내용 없음」', async () => {
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet('시설물·장비');
@@ -1274,17 +1320,21 @@ describe('facility-bulk', () => {
       ).toBeNull();
     });
 
-    it('전화번호 — 하이픈 · 공백을 떼고 숫자 9~12자리', () => {
+    it('전화번호 — 하이픈 · 공백을 떼고 9~12자리(구매처 · A/S센터는 대표번호 8자리도), 아니면 칸별 사유', () => {
       expect(
-        checkBulkRow(raw({ ...VALID, vendorPhone: '1588-1234' }), LOOKUPS)
+        checkBulkRow(raw({ ...VALID, vendorPhone: '1234-5678' }), LOOKUPS)
           .errors,
-      ).toEqual(['구매처 전화번호: 숫자 9~12자리로 적어 주세요.']);
+      ).toEqual([
+        '구매처 전화번호: 숫자 9~12자리 또는 대표번호 8자리(15xx·16xx·18xx)로 적어 주세요.',
+      ]);
       expect(
         checkBulkRow(
           raw({ ...VALID, serviceCenterPhone: '02-12a-4567' }),
           LOOKUPS,
         ).errors,
-      ).toEqual(['A/S센터 전화번호: 숫자 9~12자리로 적어 주세요.']);
+      ).toEqual([
+        'A/S센터 전화번호: 숫자 9~12자리 또는 대표번호 8자리(15xx·16xx·18xx)로 적어 주세요.',
+      ]);
       expect(
         checkBulkRow(
           raw({ ...VALID, salesRepresentativePhone: '0505-1234-5678' }),
@@ -1292,6 +1342,57 @@ describe('facility-bulk', () => {
         ).errors,
       ).toEqual([]);
     });
+
+    it.each(['1588-1234', '15881234', '1644-0000', '1800-1234'])(
+      '대표번호 %p — 구매처 · A/S센터는 숫자로 받고, 영업사원은 사유',
+      (phone) => {
+        const ok = checkBulkRow(
+          raw({ ...VALID, vendorPhone: phone, serviceCenterPhone: phone }),
+          LOOKUPS,
+        );
+        expect(ok.errors).toEqual([]);
+        expect(ok.data?.vendorPhone).toBe(phone.replace(/-/g, ''));
+        expect(ok.data?.serviceCenterPhone).toBe(phone.replace(/-/g, ''));
+        expect(
+          checkBulkRow(
+            raw({ ...VALID, salesRepresentativePhone: phone }),
+            LOOKUPS,
+          ).errors,
+        ).toEqual(['영업사원 전화번호: 숫자 9~12자리로 적어 주세요.']);
+      },
+    );
+
+    it.each(['0212-3456', '1700-1234', '1900-1234', '1300-1234', '1588-123'])(
+      '%p — 대표번호 꼴이 아닌 7 · 8자리는 구매처 · A/S센터도 사유',
+      (phone) => {
+        expect(
+          checkBulkRow(
+            raw({ ...VALID, vendorPhone: phone, serviceCenterPhone: phone }),
+            LOOKUPS,
+          ).errors,
+        ).toEqual([
+          '구매처 전화번호: 숫자 9~12자리 또는 대표번호 8자리(15xx·16xx·18xx)로 적어 주세요.',
+          'A/S센터 전화번호: 숫자 9~12자리 또는 대표번호 8자리(15xx·16xx·18xx)로 적어 주세요.',
+        ]);
+      },
+    );
+
+    it.each(['02-555-6666', '010-1234-5678', '1588-12345'])(
+      '%p — 9~12자리면 세 칸 모두 받는다',
+      (phone) => {
+        expect(
+          checkBulkRow(
+            raw({
+              ...VALID,
+              vendorPhone: phone,
+              salesRepresentativePhone: phone,
+              serviceCenterPhone: phone,
+            }),
+            LOOKUPS,
+          ).errors,
+        ).toEqual([]);
+      },
+    );
 
     it.each(['-1', '1.5', '12345678901', '만원', '1,5'])(
       '단가 %p 는 오류',

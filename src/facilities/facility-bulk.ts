@@ -19,7 +19,9 @@ import {
   writeErrorColumnInWorker,
 } from './facility-bulk-reader';
 import {
+  COMPANY_PHONE_PATTERN,
   type FacilityGroup,
+  PHONE_PATTERN,
   QUANTITY_MAX,
   totalAmountOf,
   UNIT_PRICE_MAX,
@@ -305,7 +307,7 @@ function resultOf(value: AnyCellValue): AnyCellValue {
 /**
  * 엑셀이 숫자로 바꿔 앞 0 을 지운 전화번호를 되살린다(수식 결과도) — 국내 번호(9~12자리)는 모두 0 으로 시작한다. 0 을
  * 붙여 그 꼴이 될 때만 붙인다: 0 을 뺀 9~11자리, 또는 8자리면 서울(2로 시작) 번호. 대표번호(15881234 같은 8자리)에
- * 붙이면 틀린 9자리 번호가 통과하므로 그대로 둬 길이 검사에 걸리게 한다.
+ * 붙이면 틀린 9자리 번호가 통과하므로 그대로 둬 대표번호 검사로 받는다(구매처 · A/S센터만, 다른 칸은 사유).
  */
 function readPhone(value: AnyCellValue): CellRead {
   const v = resultOf(value);
@@ -618,11 +620,24 @@ export function checkBulkRow(
     }
     return v === '' ? null : v;
   };
-  const phone = (field: BulkField): string | null => {
+  /** 전화번호 칸 — 구매처 · A/S센터만 15xx · 16xx · 18xx 대표번호 8자리도 받는다(단건 등록과 같다). */
+  const phone = (
+    field: BulkField,
+    allowRepresentative = false,
+  ): string | null => {
     const digits = raw(field).replace(/[-\s]/g, '');
     if (digits === '') return null;
-    if (!/^[0-9]{9,12}$/.test(digits)) {
-      fail(field, '숫자 9~12자리로 적어 주세요.');
+    if (
+      !(allowRepresentative ? COMPANY_PHONE_PATTERN : PHONE_PATTERN).test(
+        digits,
+      )
+    ) {
+      fail(
+        field,
+        allowRepresentative
+          ? '숫자 9~12자리 또는 대표번호 8자리(15xx·16xx·18xx)로 적어 주세요.'
+          : '숫자 9~12자리로 적어 주세요.',
+      );
       return null;
     }
     return digits;
@@ -689,7 +704,7 @@ export function checkBulkRow(
   const serialNumber = text('serialNumber');
   const installationLocation = text('installationLocation');
   const vendorName = text('vendorName');
-  const vendorPhone = phone('vendorPhone');
+  const vendorPhone = phone('vendorPhone', true);
   const salesRepresentativeName = text('salesRepresentativeName');
   const salesRepresentativePhone = phone('salesRepresentativePhone');
 
@@ -749,7 +764,7 @@ export function checkBulkRow(
     fail('inspectionCycle', '목록에 있는 값을 골라 주세요.');
 
   const inspectionNote = text('inspectionNote');
-  const serviceCenterPhone = phone('serviceCenterPhone');
+  const serviceCenterPhone = phone('serviceCenterPhone', true);
 
   const values: Record<BulkPreviewKey, string> = {
     storeName: store?.name ?? storeText,
