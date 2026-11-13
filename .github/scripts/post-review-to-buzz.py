@@ -22,7 +22,7 @@ def github(path):
             "Accept": "application/vnd.github+json",
         },
     )
-    with urllib.request.urlopen(req) as res:
+    with urllib.request.urlopen(req, timeout=30) as res:
         return json.load(res)
 
 
@@ -47,7 +47,8 @@ def review_lines(body):
 
 
 def suggestion_lines(body):
-    """「PR Code Suggestions」 표에서 (구분, 제목, 영향도)."""
+    """「PR Code Suggestions」 표에서 (구분, 제목, 영향도). 이전 커밋 제안 묶음은 뺀다."""
+    body = body.split("<summary>Suggestions up to commit")[0]
     items, category = [], ""
     for cat, summary, impact in re.findall(
         r"<td rowspan=\d+>(.*?)</td>|<details><summary>(.*?)</summary>|<td align=center>\s*(\w+)",
@@ -67,10 +68,11 @@ def main():
     number = os.environ["PR_NUMBER"]
     since = os.environ["SINCE"]
     pr = github(f"pulls/{number}")
+    # since 는 updated_at 기준이라 코멘트가 100개를 넘어도 이번 실행이 단 것만 온다.
     comments = [
         c
-        for c in github(f"issues/{number}/comments?per_page=100")
-        if c["user"]["login"] == "github-actions[bot]" and c["updated_at"] >= since
+        for c in github(f"issues/{number}/comments?since={since}&per_page=100")
+        if c["user"]["login"] == "github-actions[bot]"
     ]
     review = next((c for c in comments if "pr-agent:review" in c["body"]), None)
     improve = next((c for c in comments if "pr-agent:improve" in c["body"]), None)
@@ -93,6 +95,7 @@ def main():
         ["buzz", "messages", "send", "--channel", os.environ["BUZZ_CHANNEL"], "--content", "-"],
         input=message.encode(),
         check=True,
+        timeout=60,
     )
 
 
