@@ -107,7 +107,8 @@ sources:
 없는 명세서 · 관리 범위 밖 · 가려지는 명세서 · ID 형식 오류는 모두 같은 404 다. 가림은 나머지를 읽기 전에 정한다 —
 읽은 뒤에 거르면 가려지는 명세서의 404 만 늦어 응답 시간으로 드러난다(직원 상세와 같다). 담는 것: 금액 셋, 지급 ·
 공제 항목(급여 항목 `sort_order` 순, `itemCode` 를 붙임), 검토 대기 사유, 처리 이력(최근 것이 위, `changedByName`),
-발송 이력(보낸 순), 참조 근로계약(`contractId · status · wageAmount`).
+발송 이력(보낸 순), 참조 근로계약(`contractId · status · wageAmount`), 확정할 수 있는 첫날 `confirmableFrom`(YYYY-MM-DD —
+확정의 `PERIOD_NOT_ENDED` 와 같은 판정, 작성 중 · 검토 중이 아니면 null. 화면이 그 전에 [확정]을 막는다, WHALEERP-690).
 
 # 점포 · 월 요약 (GET /payslips/summary, WHALEERP-621)
 

@@ -40,6 +40,10 @@ import {
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
 import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
+import {
+  confirmableFrom,
+  periodContractIds,
+} from './payslip-attendance-reasons';
 
 const STATUSES = Object.values(PayslipStatus);
 
@@ -516,10 +520,27 @@ export class PayslipListService {
       }),
       storeNames(this.prisma, [found.storeId]),
     ]);
-    const changedByName = await adminNames(
-      this.prisma,
-      p.payslipLogs.map((l) => l.changedBy),
-    );
+    const [changedByName, confirmable] = await Promise.all([
+      adminNames(
+        this.prisma,
+        p.payslipLogs.map((l) => l.changedBy),
+      ),
+      // 확정할 수 있는 첫날 — 확정(confirm)과 같은 판정. 화면이 그 전에는 [확정]을 막는다(WHALEERP-690). 확정할 수 없는 상태면 null
+      p.status === 'DRAFTING' || p.status === 'REVIEWING'
+        ? periodContractIds(
+            this.prisma,
+            p.staffMemberId,
+            p.periodStartDate,
+            p.periodEndDate,
+          ).then((contractIds) =>
+            confirmableFrom(this.prisma, {
+              staffMemberId: p.staffMemberId,
+              contractIds,
+              periodEndDate: p.periodEndDate,
+            }),
+          )
+        : null,
+    ]);
     return {
       payslipId: p.payslipId,
       staffMemberId: p.staffMemberId,
@@ -543,6 +564,7 @@ export class PayslipListService {
         p.payslipReviewReasons.filter((r) => r.acknowledgedAt === null),
       ),
       confirmedAt: p.confirmedAt,
+      confirmableFrom: confirmable,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
       contract: p.contract,

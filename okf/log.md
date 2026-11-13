@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-13
+* **Update**: [Payslips](/api/payslips.md) — 관리자 상세(`GET /payslips/:id`)에 확정할 수 있는 첫날 `confirmableFrom` 을 담는다(WHALEERP-690, 통합테스트 IT-PAY-004). 확정의 422 `PERIOD_NOT_ENDED` 와 같은 `confirmableFrom` 판정이고, 작성 중 · 검토 중이 아니면 null — 관리자 웹이 그 전에는 [확정]을 막고 그날을 알린다.
 * **Update**: [Facilities](/api/facilities.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — 대표번호 허용 리뷰 반영: 근거 예시를 「끝자리 빠진 010-1234」(하이픈을 떼면 7자리라 근거가 아니었다)에서 「지역번호 빠진 1234-5678」로 바로잡고, 마이그레이션 DO 블록이 `pg_get_constraintdef` 에서 칸마다 기대한 식(구매처 · A/S센터 대표번호 식, 영업사원 · 관리 담당자 9~12자리 식)과 대표번호 식이 정확히 두 번인지를 확인하게 했다(전에는 리터럴끼리 비교해 늘 통과). e2e 에 샘플 12개 × 전화 4칸을 API 패턴과 DB CHECK 로 비교하는 표 시험, 단위 테스트에 7자리 · 19xx · 13xx 경계와 숫자 셀 대표번호의 읽기 → 줄 검사를 더했다. widened CHECK 는 넷.
 * **Update**: [Facilities](/api/facilities.md) · [Team 1 physical schema](/domain/team1-physical-schema.md) — 구매처 · A/S센터 전화번호에 15xx · 16xx · 18xx 전국 대표번호 8자리 허용(front 요청, 사용자 결정): 단건 등록 · 수정(`OptionalPhone(label, { allowRepresentative })`)과 엑셀 일괄 등록 줄 검사가 같은 패턴(`COMPANY_PHONE_PATTERN`)을 쓰고, 문구는 「… 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리입니다.」 · 「숫자 9~12자리 또는 대표번호 8자리(15xx·16xx·18xx)로 적어 주세요.」. 8자리 아무 번호는 지역번호를 빠뜨린 번호(1234-5678)도 통과하므로 앞자리로 묶는다. 영업사원 · 관리 담당자는 그대로 9~12자리. `facilities_phone_format` 을 새 마이그레이션 `20261113105855_team1_facility_company_phone` 에서 같은 이름으로 다시 만들어 두 칸만 넓혔다(안 하면 DTO 를 통과해 저장 때 500). api 를 front 보다 먼저 배포한다.
 
