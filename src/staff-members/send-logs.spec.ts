@@ -2,7 +2,13 @@ import {
   AFFILIATION_TEMPLATE,
   INVITATION_TEMPLATE,
 } from '../contracts/contract-send-log';
-import { type SendLogRow, toSendLogs } from './send-logs';
+import {
+  MAIL_SEND_FAILURE_MESSAGE,
+  type MailLogRow,
+  mergeSendLogs,
+  type SendLogRow,
+  toSendLogs,
+} from './send-logs';
 
 const at = (minute: number) => new Date(Date.UTC(2026, 9, 29, 0, minute));
 let nextId = 1;
@@ -93,5 +99,66 @@ describe('toSendLogs — 직원 상세 발송 이력', () => {
     ]);
     expect(log.failureReason).not.toContain('01012345678');
     expect(log.failureReason).toContain('3018');
+  });
+});
+
+describe('mergeSendLogs — 알림톡 줄과 비밀번호 초기화 메일 줄', () => {
+  const mail = (over: Partial<MailLogRow>): MailLogRow => ({
+    mailId: 1,
+    result: 'SUCCEEDED',
+    sentAt: at(10),
+    ...over,
+  });
+
+  it('보낸 시각 최근 순으로 섞고, 메일 줄은 PASSWORD_RESET · 계약 없음 · 재발송 아님 · 재시도 정보 없음', () => {
+    nextId = 1;
+    const talk = toSendLogs([
+      row({ sentAt: at(5) }),
+      row({ sentAt: at(20), relatedId: 8 }),
+    ]);
+    const logs = mergeSendLogs(talk, [mail({ mailId: 1, sentAt: at(10) })]);
+    expect(logs.map((l) => [l.kind, l.sendLogId])).toEqual([
+      ['SIGNUP_INVITE', 2],
+      ['PASSWORD_RESET', 1],
+      ['SIGNUP_INVITE', 1],
+    ]);
+    expect(logs[1]).toEqual({
+      sendLogId: 1,
+      contractId: null,
+      kind: 'PASSWORD_RESET',
+      isResend: false,
+      result: 'SUCCEEDED',
+      failureReason: null,
+      retryable: null,
+      sentAt: at(10),
+    });
+  });
+
+  it('실패한 메일은 SMTP 원문 없이 안전한 문구만 낸다', () => {
+    const [log] = mergeSendLogs([], [mail({ result: 'FAILED' })]);
+    expect(log).toMatchObject({
+      result: 'FAILED',
+      failureReason: MAIL_SEND_FAILURE_MESSAGE,
+      retryable: null,
+    });
+  });
+
+  it('보낸 시각이 같으면 넘겨받은 순서를 지킨다 — 알림톡 줄이 메일 줄보다 앞', () => {
+    nextId = 1;
+    const talk = toSendLogs([row({ sentAt: at(10) }), row({ sentAt: at(10) })]);
+    const logs = mergeSendLogs(talk, [
+      mail({ mailId: 9, sentAt: at(10) }),
+      mail({ mailId: 8, sentAt: at(10) }),
+    ]);
+    expect(logs.map((l) => [l.kind, l.sendLogId])).toEqual([
+      ['SIGNUP_INVITE', 2],
+      ['SIGNUP_INVITE', 1],
+      ['PASSWORD_RESET', 9],
+      ['PASSWORD_RESET', 8],
+    ]);
+  });
+
+  it('알림톡 줄이 없어도 메일 줄만 나온다', () => {
+    expect(mergeSendLogs([], [mail({})])).toHaveLength(1);
   });
 });

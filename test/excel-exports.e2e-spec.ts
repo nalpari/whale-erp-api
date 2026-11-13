@@ -409,7 +409,7 @@ describe('공통 엑셀 (e2e, DB)', () => {
       expect.objectContaining({
         templateCode: 'EMAIL_EXCEL_READY',
         to: 'rjy1537@interplug.co.kr',
-        adminAccountId: adminId,
+        accountId: adminId,
         variables: expect.objectContaining({
           화면: '시험 목록',
           건수: '12,480',

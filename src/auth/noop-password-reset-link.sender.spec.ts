@@ -33,6 +33,7 @@ describe('NoopPasswordResetLinkSender', () => {
         storeName: '연남점',
         link: 'https://x/password-reset/link#token=SECRET',
         expiresAt: new Date(),
+        staffMemberId: 5,
         requestedBy: 3,
       },
     );

@@ -4,7 +4,7 @@ title: Authentication
 description: The 직원 근무 앱 login (login · refresh · logout over per-device sessions — 30 days from last use, 7 with 자동 로그인 off, a `me` read of the current account, 5-wrong-attempts lock, no refresh rotation), its PIN password reset, the 관리자 초기화 reset link and e-mail find, and the deny-by-default guard that checks the session on every request for both logins. 관리자 웹's login is in Admin authentication.
 tags: [auth, jwt, security, nestjs, session]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T08:00:00Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
 sources:
   - id: auth-module
     resource: ../../src/auth/auth.module.ts
@@ -101,7 +101,7 @@ sources:
   - id: password-reset-link-service
     resource: ../../src/auth/password-reset-link.service.ts
     title: 관리자 초기화 reset link (issue · verify · reset, WHALEERP-172)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: password-reset-link-controller
     resource: ../../src/auth/password-reset-link.controller.ts
     title: POST /auth/account/password-reset-links/verify · reset
@@ -117,7 +117,7 @@ sources:
   - id: password-reset-link-sender
     resource: ../../src/auth/password-reset-link-sender.ts
     title: Reset-link sender slot and its contract
-    last_modified: 2026-10-13T07:28:48Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: noop-password-reset-link-sender
     resource: ../../src/auth/noop-password-reset-link.sender.ts
     title: Reset-link sender without MAIL_* (always unavailable)
@@ -125,7 +125,7 @@ sources:
   - id: mail-password-reset-link-sender
     resource: ../../src/auth/mail-password-reset-link.sender.ts
     title: Reset-link sender over MailService (EMAIL_STAFF_RESET_LINK)
-    last_modified: 2026-10-13T08:00:00Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: password-reset-link-sender-provider
     resource: ../../src/auth/password-reset-link-sender.provider.ts
     title: Picking the reset-link sender from MAIL_*

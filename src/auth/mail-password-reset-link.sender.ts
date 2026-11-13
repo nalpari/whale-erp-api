@@ -3,6 +3,7 @@ import {
   PasswordResetLinkMail,
   PasswordResetLinkSender,
   PasswordResetLinkTarget,
+  STAFF_RESET_LINK_TEMPLATE,
 } from './password-reset-link-sender';
 
 /**
@@ -24,10 +25,12 @@ export class MailPasswordResetLinkSender extends PasswordResetLinkSender {
     content: PasswordResetLinkMail,
   ): Promise<void> {
     await this.mail.send({
-      templateCode: 'EMAIL_STAFF_RESET_LINK',
+      templateCode: STAFF_RESET_LINK_TEMPLATE,
       to: target.email,
       variables: { 근무지: content.storeName, 링크: content.link },
       maskedVariables: ['링크'],
+      accountId: target.accountId,
+      staffMemberId: content.staffMemberId,
       sentBy: content.requestedBy,
     });
   }

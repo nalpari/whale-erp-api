@@ -36,10 +36,10 @@ describe('관리자 비밀번호 초기화가 로그인 잠금을 푼다 (e2e, D
       .useValue({
         mail: {
           send: (input: {
-            adminAccountId: number;
+            accountId: number;
             variables: Record<string, string>;
           }) => {
-            mailed.set(input.adminAccountId, input.variables['임시비밀번호']);
+            mailed.set(input.accountId, input.variables['임시비밀번호']);
             return Promise.resolve({});
           },
         },

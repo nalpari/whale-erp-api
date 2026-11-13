@@ -396,7 +396,7 @@ export class InquiriesService {
         문의제목: inquiry.title,
         링크: adminWebLink(this.adminWebUrl, path),
       },
-      adminAccountId: inquiry.createdBy,
+      accountId: inquiry.createdBy,
       // sentBy 는 비운다 — 관리자가 화면에서 대신 보낸 것이 아니라 답변이 남긴 시스템 알림이다.
     });
   }

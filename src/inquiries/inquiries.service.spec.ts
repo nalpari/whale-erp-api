@@ -233,7 +233,7 @@ describe('InquiriesService', () => {
             문의제목: '급여명세서 공제 항목 문의',
             링크: 'https://admin.test.invalid/support-inquiries/7',
           },
-          adminAccountId: 21,
+          accountId: 21,
         });
         // 시스템이 보내는 답변 알림이라 「대신 발송한 관리자」(sentBy)를 남기지 않는다.
         expect((mail!.send.mock.calls as [object][])[0][0]).not.toHaveProperty(
