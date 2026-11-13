@@ -16,8 +16,10 @@ export type SendMailInput = {
   variables: Record<string, string>;
   /** mail_send_logs 에 ******** 로 남길 변수 — 임시 비밀번호 · 핀 등 */
   maskedVariables?: readonly string[];
-  /** 받는 사람이 관리자 계정일 때 */
-  adminAccountId?: number;
+  /** 수신 계정 id — 관리자 메일이면 admin_accounts, 직원 메일이면 accounts.account_id(mail_type_code 로 구분) */
+  accountId?: number;
+  /** 받는 사람이 직원일 때(직원 상세 발송 이력에 남는다). 직원 레코드가 지워지면 이력의 이 칸은 비워진다 */
+  staffMemberId?: number;
   /** 관리자가 대신 보냈을 때. 본인 요청이면 비운다 */
   sentBy?: number;
 };
@@ -139,17 +141,13 @@ export class MailService {
     return { messageId };
   }
 
-  /**
-   * 이력 한 행. 실패해도 던지지 않는다 — 메일은 이미 나갔거나 SMTP 예외를 던질
-   * 참이고, 여기서 던지면 호출부가 실패로 보고 다시 보낼 수 있다.
-   */
   /** 보내기 전 검증과 렌더링. 던지면 보낸 것도 이력도 없다. */
   private async prepare(input: SendMailInput) {
     const { templateCode, to } = input;
     if (!isSendableEmail(to))
       throw new Error(`메일 주소가 아닙니다: ${maskEmail(to)}`);
     // 이력 INSERT 에서 거절될 값은 보내기 전에 막는다 — 보낸 뒤에는 이력만 조용히 빠진다.
-    for (const name of ['adminAccountId', 'sentBy'] as const) {
+    for (const name of ['accountId', 'staffMemberId', 'sentBy'] as const) {
       const id = input[name];
       if (id !== undefined && !isId(id))
         throw new Error(`${name} 가 올바르지 않습니다: ${id}`);
@@ -178,31 +176,47 @@ export class MailService {
     return mail;
   }
 
+  /**
+   * 이력 한 행. 실패해도 던지지 않는다 — 메일은 이미 나갔거나 SMTP 예외를 던질
+   * 참이고, 여기서 던지면 호출부가 실패로 보고 다시 보낼 수 있다. 이력이 빠지면
+   * 직원 상세 발송 이력에서도 빠진다. 직원 레코드가 그 사이 지워져 FK 위반(P2003)이면
+   * 직원 칸을 비워 한 번 더 남긴다(지워진 뒤의 SET NULL 상태와 같다). 위반한 제약이 직원 FK 가 아님이
+   * 확인되면(sent_by 등) 다시 남기지 않는다.
+   */
   private async record(
     input: Omit<SendMailInput, 'variables' | 'maskedVariables'>,
     masked: { subject: string; body: string },
     failureReason: string | null,
   ): Promise<void> {
+    const data = {
+      mailTypeCode: input.templateCode,
+      accountId: input.accountId ?? null,
+      staffMemberId: input.staffMemberId ?? null,
+      fromEmail: this.config.username,
+      toEmail: input.to,
+      subject: masked.subject,
+      body: masked.body,
+      result:
+        failureReason === null ? ('SUCCEEDED' as const) : ('FAILED' as const),
+      failureReason,
+      sentBy: input.sentBy ?? null,
+    };
     try {
-      await this.prisma.mailSendLog.create({
-        data: {
-          mailTypeCode: input.templateCode,
-          adminAccountId: input.adminAccountId ?? null,
-          fromEmail: this.config.username,
-          toEmail: input.to,
-          subject: masked.subject,
-          body: masked.body,
-          result: failureReason === null ? 'SUCCEEDED' : 'FAILED',
-          failureReason,
-          sentBy: input.sentBy ?? null,
-        },
-      });
+      try {
+        await this.prisma.mailSendLog.create({ data });
+      } catch (e) {
+        if (data.staffMemberId === null || !isStaffMemberFkViolation(e))
+          throw e;
+        await this.prisma.mailSendLog.create({
+          data: { ...data, staffMemberId: null },
+        });
+      }
     } catch (e) {
       // 메시지는 남기지 않는다. Prisma 오류 메시지는 호출 인자(data)를 통째로 찍어
       // 주소와 본문이 들어 있다. 이름·코드와 id 로 원인(P2003 이면 잘못 넘긴 id)을 가른다.
       const { name, code } = (e ?? {}) as { name?: string; code?: string };
       this.logger.error(
-        `mail_send_logs INSERT FAILED template=${input.templateCode} to=${maskEmail(input.to)} error=${name} code=${code} adminAccountId=${input.adminAccountId} sentBy=${input.sentBy}`,
+        `mail_send_logs INSERT FAILED template=${input.templateCode} to=${maskEmail(input.to)} error=${name} code=${code} accountId=${input.accountId} staffMemberId=${input.staffMemberId} sentBy=${input.sentBy}`,
       );
     }
   }
@@ -271,4 +285,25 @@ function isId(value: number): boolean {
 function maskEmail(email: string): string {
   const at = email.lastIndexOf('@');
   return at < 1 ? '***' : `${email[0]}***${email.slice(at)}`;
+}
+
+const STAFF_MEMBER_FK = 'mail_send_logs_staff_member_id_fkey';
+
+/**
+ * P2003 이면서 직원 FK 위반인가. 어느 제약인지는 Prisma 7 어댑터 오류의
+ * `meta.driverAdapterError.cause.constraint.index` 에서 읽는다. 제약 이름을 읽을 수 없으면(모양이 달라졌을 때)
+ * 직원 FK 로 보고 한 번 다시 남긴다 — 어차피 한 번뿐이고 실패하면 로그가 남는다.
+ */
+function isStaffMemberFkViolation(e: unknown): boolean {
+  const err = e as
+    | {
+        code?: string;
+        meta?: {
+          driverAdapterError?: { cause?: { constraint?: { index?: unknown } } };
+        };
+      }
+    | undefined;
+  if (err?.code !== 'P2003') return false;
+  const constraint = err.meta?.driverAdapterError?.cause?.constraint?.index;
+  return typeof constraint !== 'string' || constraint === STAFF_MEMBER_FK;
 }

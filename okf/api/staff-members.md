@@ -1,10 +1,10 @@
 ---
 type: API
 title: Staff member list, detail and detail summary
-description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 알림톡과 비밀번호 초기화 메일 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -25,7 +25,7 @@ sources:
   - id: send-logs
     resource: ../../src/staff-members/send-logs.ts
     title: 직원 상세 발송 이력 — 알림톡 발송 이력을 종류 · 재발송 · 결과로 바꾸는 toSendLogs
-    last_modified: 2026-10-29T07:00:00Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -45,11 +45,11 @@ sources:
   - id: summary-service
     resource: ../../src/staff-members/staff-member-summary.service.ts
     title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
-    last_modified: 2026-11-05T08:00:00Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE
@@ -215,7 +215,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 | `…/summary/work-schedules?weekStart=` | 근무스케줄 관리 `/work-schedules` | 한 주(월~일)의 근무스케줄과 근무시간 · 주간 합계(분). `weekStart` 는 그 주의 아무 날짜, 빼면 이번 주(한국 날짜) |
 | `…/summary/payslips` | 급여명세서 관리 `/payslips` | 최근 명세서 3건(`recent` — 상태와 관계없이 급여 기간 시작일 최신순, 기본급 · 수당 · 공제 · 실지급액 · 상태) · 미발송 건수 |
 | `…/summary/todos` | TO-DO 관리 `/todos` | 배정된 TO-DO 의 전체 · 완료 · 미완료 건수와 최근 처리 이력 5건 |
-| `…/summary/send-logs` | 근로계약 관리 `/contracts` | 발송 이력(WHALEERP-136) — 이 직원 레코드의 모든 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡, 최근 순. 줄마다 종류(`StaffSendKind` — 복귀 확인도 소속 추가 확인 요청) · 재발송 여부 · 결과(`StaffSendResult` 성공 · 실패 · 접수 여부 모름) · 실패 사유 · 재시도 가능 여부 · 보낸 시각 · 계약 ID. 계약이 없으면 빈 목록 |
+| `…/summary/send-logs` | 근로계약 관리 `/contracts` | 발송 이력(WHALEERP-136 · 676) — 이 직원 레코드의 모든 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡과, 관리자가 [비밀번호 초기화]로 보낸 재설정 링크 메일(`mail_send_logs.staff_member_id` = 이 직원 · `mail_type_code` = `EMAIL_STAFF_RESET_LINK`), 보낸 시각 최근 순. 줄마다 종류(`StaffSendKind` — `SIGNUP_INVITE` · `AFFILIATION_REQUEST`(복귀 확인 포함) · `PASSWORD_RESET` 비밀번호 초기화) · 재발송 여부 · 결과(`StaffSendResult` 성공 · 실패 · 접수 여부 모름) · 실패 사유 · 재시도 가능 여부 · 보낸 시각 · 계약 ID. 메일 줄은 `contractId` null · `isResend` false · `retryable` null · 결과는 성공 · 실패만이고, 실패 사유는 고정 문구다(SMTP 원문에는 받는 주소가 섞여 내보내지 않는다). `sendLogId` 는 알림톡 줄이 `alimtalk_send_logs` id, 메일 줄이 `mail_send_logs.mail_id` 라 서로 겹칠 수 있다 — 목록 key 는 `kind` 와 함께 쓴다. 계약이 없어도 메일 줄은 나온다 |
 
 **권한은 둘이다.** 컨트롤러가 `/staff-members` 라 가드가 직원 정보 관리(`MN000005`) 조회를 보고, 서비스가 그 영역 메뉴의
 조회 권한을 다시 본다(`adminHasMenuAction`, 가드와 같은 판정). 영역 권한이 없으면 **그 영역만 403 「조회 권한이 없습니다.」**

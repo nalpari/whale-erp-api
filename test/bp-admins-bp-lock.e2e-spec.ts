@@ -71,7 +71,12 @@ describe('BP 관리자 등록 · 수정 · BP 잠금 (e2e, DB)', () => {
         where: { adminAccountId: { in: ids } },
       });
       await prisma.mailSendLog.deleteMany({
-        where: { adminAccountId: { in: ids } },
+        where: {
+          accountId: { in: ids },
+          mailTypeCode: {
+            in: ['EMAIL_BP_ADMIN_CREATE', 'EMAIL_PASSWORD_RESET'],
+          },
+        },
       });
       await prisma.adminSession.deleteMany({
         where: { adminAccountId: { in: ids } },

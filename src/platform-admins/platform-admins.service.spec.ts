@@ -542,7 +542,7 @@ describe('PlatformAdminsService', () => {
         templateCode: 'EMAIL_PLAT_ADMIN_CREATE',
         to: 'seojun@whale.test',
         maskedVariables: ['임시비밀번호'],
-        adminAccountId: 5,
+        accountId: 5,
         sentBy: 1,
       });
       expect(sent.variables).toEqual({
@@ -1254,7 +1254,7 @@ describe('PlatformAdminsService', () => {
           링크: 'https://admin.whale.test',
         },
         maskedVariables: ['임시비밀번호'],
-        adminAccountId: 5,
+        accountId: 5,
         sentBy: 1,
       });
       await expect(

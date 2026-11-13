@@ -205,6 +205,7 @@ describe('PasswordResetLinkService', () => {
         expect.objectContaining({
           storeName: '연남점',
           expiresAt: at(24 * HOUR),
+          staffMemberId: 5,
           requestedBy: 31,
         }),
       );

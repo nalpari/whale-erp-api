@@ -215,7 +215,7 @@ export class ContractNoticeService {
             templateCode: template.templateCode,
             to: email,
             variables: { ...template.variables, 링크: link },
-            adminAccountId,
+            accountId: adminAccountId,
           })
           // 메시지는 남기지 않는다 — SMTP 오류에는 받는 주소가 섞인다(문의 답변 메일과 같다)
           .catch((e: unknown) =>

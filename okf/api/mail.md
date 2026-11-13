@@ -38,7 +38,7 @@ await mail.send({
   to: account.email,
   variables: { 관리자이름: account.name, 임시비밀번호: password, 링크: loginUrl },
   maskedVariables: ['임시비밀번호'],
-  adminAccountId: account.adminAccountId, // when the recipient is an 관리자 계정
+  accountId: account.adminAccountId,      // recipient's account id — an 관리자 계정 here (a 직원's accounts.account_id for the reset link)
   sentBy: operatorId,                     // when an 관리자 sent it on someone's behalf
 });
 ```
@@ -94,7 +94,9 @@ HTML from them, 알림톡 appends them to the SMS fallback.
 | Address is not exactly one mailbox or is longer than 254 characters (`isSendableEmail`, `src/mail/mail-address.ts` — the 직원 앱 e-mail change PIN DTO and 직원 앱 signup DTO check the same rule through `IsSendableEmail`, length first; the other DTOs that later mail the address they take — 관리자 회원가입, 플랫폼 관리자, 도입문의 — do not yet), template missing / off / not EMAIL / no title, required variable missing, unknown variable name, a `#{…}` the template does not declare | none — nothing was sent; `warn` `mail NOT SENT template=… to=<masked>: <reason>` | throws `Error` |
 | Gmail accepts | `SUCCEEDED` | resolves `{ messageId }` |
 | SMTP fails | `FAILED`, `failure_reason` = `code=… response=…: message` (a thrown non-`Error` is recorded as its string) | throws the original value unchanged |
-| The log INSERT itself fails | none; `logger.error` with the error name, Prisma code and the two ids | as above — never throws for this |
+| The log INSERT itself fails | none; `logger.error` with the error name, Prisma code and the ids (accountId · staffMemberId · sentBy) | as above — never throws for this |
+
+`send` takes `accountId` (renamed from `adminAccountId`, 2026-11-13) and an optional `staffMemberId` beside `sentBy`, each validated as an id before sending. `mail_send_logs.account_id` is the 수신 계정: an `admin_accounts` id for mail to an 관리자, an `accounts.account_id` for mail to a 직원 (the reset link) — which one is told by `mail_type_code`, and the column has no foreign key. `staff_member_id` is the 수신 직원 (WHALEERP-676): the 관리자 초기화 reset link passes it so the mail appears in that 직원's 발송 이력 ([Staff members](/api/staff-members.md)); that column is `ON DELETE SET NULL`, so the log row survives a deleted 직원 record. If the INSERT hits a foreign-key violation (`P2003`) with a `staffMemberId` — the 직원 record was deleted in between — `record` inserts once more with `staff_member_id` NULL (the same state `SET NULL` would leave); if that fails too it logs as above.
 
 **Callers can tell the two throwing rows apart** with `isMailTransportError(e)` (2026-10-20,
 api #77): it is true only for what `send` rethrew from the SMTP step. The thrown value is not
@@ -115,8 +117,8 @@ The log INSERT failing is swallowed on purpose. The mail has already gone; if
 `send` threw, the caller would see a failure and might issue and send a second
 temporary password. A missing log row is the lesser harm. The error line leaves
 out the error message, because a Prisma message prints the whole `data` — the
-address and the body. A `P2003` there means a caller passed an `adminAccountId`
-or `sentBy` that is not in `admin_accounts`, and every send from that call site
+address and the body. A `P2003` there names the violated constraint (`meta.driverAdapterError.cause.constraint.index`): `mail_send_logs_sent_by_fkey` means a caller passed a `sentBy`
+that is not in `admin_accounts` and is not retried; `mail_send_logs_staff_member_id_fkey` is retried once with the 직원 column NULL, and only a second failure reaches this line (if the constraint name cannot be read, the retry is attempted anyway), and every send from that call site
 will lose its row the same way. An id that could never be stored — not an integer in
 `1..2147483647` — is caught before sending instead, so only a missing account
 gets this far.
@@ -132,8 +134,8 @@ The logged `body` is the masked plain text, not the HTML that was sent: the
 layout is the same for every mail, and a button link has no place in the body, so
 the row shows what the template said.
 
-`to_email` is the address as sent. The table only has `admin_account_id`, so a
-mail to a 직원 앱 계정 or a 도입문의 contact is logged with it NULL and is found by
+`to_email` is the address as sent. `account_id` is filled only by the callers that pass it (관리자 mail, and the 직원 reset link with the 직원's account id), so a
+mail to another 직원 앱 계정 or a 도입문의 contact is logged with it NULL and is found by
 address alone.
 
 # A timeout is not "not sent"

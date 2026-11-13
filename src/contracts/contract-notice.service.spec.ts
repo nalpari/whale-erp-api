@@ -89,7 +89,7 @@ describe('ContractNoticeService (근로계약 날인 · 거부 · 만료 · 갱�
         근무지: '모리커피 연남점',
         링크: 'https://dev.whaleerp.co.kr/contracts/41',
       },
-      adminAccountId: 7,
+      accountId: 7,
     });
   });
 
