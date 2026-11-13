@@ -1,3 +1,6 @@
+/** 관리자 초기화 재설정 링크 메일의 템플릿 코드 — 발송기와 직원 상세 발송 이력(mail_send_logs.mail_type_code 로 거른다)이 같은 값을 쓴다 */
+export const STAFF_RESET_LINK_TEMPLATE = 'EMAIL_STAFF_RESET_LINK';
+
 /** 링크를 받는 사람. 직원 레코드에 묶인 계정이다. */
 export interface PasswordResetLinkTarget {
   accountId: number;
@@ -12,6 +15,8 @@ export interface PasswordResetLinkMail {
   /** 토큰이 실린 재설정 링크. 로그 · 발송 기록에 원문을 남기지 않는다 */
   link: string;
   expiresAt: Date;
+  /** 그 직원 레코드(staff_members.staff_member_id) — 직원 상세 발송 이력에 남기려고 메일 기록에 싣는다 */
+  staffMemberId: number;
   /** 요청 관리자(admin_accounts.admin_account_id) */
   requestedBy: number;
 }

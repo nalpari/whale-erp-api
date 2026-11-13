@@ -494,7 +494,7 @@ describe('AdminWithdrawalService.execute', () => {
       templateCode: 'EMAIL_WITHDRAW_DONE',
       to: 'master@whale.kr',
       variables: { BP이름: '웨일분식', 탈퇴일: '2026-10-27' },
-      adminAccountId: 1,
+      accountId: 1,
     });
   });
 

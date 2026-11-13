@@ -129,7 +129,7 @@ export class AdminTemporaryPasswordService {
           링크: `${this.sender.webUrl}/login`,
         },
         maskedVariables: ['임시비밀번호'],
-        adminAccountId: account.adminAccountId,
+        accountId: account.adminAccountId,
       });
     } catch (e) {
       // 원인과 가린 주소는 MailService 가 남겼다. 여기서는 SMTP 원문을 다시 찍지 않는다 — 받는 주소가 섞인다.

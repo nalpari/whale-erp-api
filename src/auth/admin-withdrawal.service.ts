@@ -293,7 +293,7 @@ export class AdminWithdrawalService {
         templateCode: WITHDRAW_MAIL_TEMPLATE,
         to: target.email,
         variables: { BP이름: target.bpName, 탈퇴일: kstDateText(now) },
-        adminAccountId,
+        accountId: adminAccountId,
       });
     } catch (error) {
       this.logger.error(

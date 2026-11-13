@@ -4,7 +4,7 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T10:00:00Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
@@ -21,7 +21,7 @@ sources:
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: 초기 · 초기화 비밀번호와 그 메일 — shared with 플랫폼 관리자 관리 · BP 관리자 관리
-    last_modified: 2026-10-27T07:48:04Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: next-bp-code
     resource: ../../src/admin-signup/next-bp-code.ts
     title: nextBpCode — BP code numbering under an advisory lock, shared with signup
@@ -33,7 +33,7 @@ sources:
   - id: admin-withdrawal-service
     resource: ../../src/auth/admin-withdrawal.service.ts
     title: 회원 탈퇴 — status_changed_at · 사유를 BP 마스터 본인 행에 쓴다, WITHDRAW_REASON_LABEL
-    last_modified: 2026-11-09T10:00:00Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: bp-masters-e2e
     resource: ../../test/bp-masters.e2e-spec.ts
     title: e2e on a real database — 403 for BP accounts, concurrent register, code copy, history paging, cascade, delete, withdrawn BP (histories 409 · detail withdrawal)

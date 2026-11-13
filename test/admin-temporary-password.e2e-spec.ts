@@ -61,7 +61,12 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
     await prisma.adminSession.deleteMany({ where: mine });
     await prisma.adminLoginLog.deleteMany({ where: mine });
     await prisma.temporaryPassword.deleteMany({ where: mine });
-    await prisma.mailSendLog.deleteMany({ where: mine });
+    await prisma.mailSendLog.deleteMany({
+      where: {
+        accountId: { in: created },
+        mailTypeCode: { in: ['EMAIL_TEMP_PASSWORD', 'EMAIL_PASSWORD_RESET'] },
+      },
+    });
     await prisma.adminAccount.deleteMany({ where: mine });
     await app.close();
   });
@@ -118,7 +123,10 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
     expect(after.isPasswordChangeRequired).toBe(false);
     // 메일 이력에는 임시 비밀번호가 남지 않는다.
     const log = await prisma.mailSendLog.findFirstOrThrow({
-      where: { adminAccountId: admin.adminAccountId },
+      where: {
+        accountId: admin.adminAccountId,
+        mailTypeCode: 'EMAIL_TEMP_PASSWORD',
+      },
     });
     expect(log.body).not.toContain(sentPassword());
 

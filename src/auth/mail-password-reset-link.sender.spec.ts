@@ -10,6 +10,7 @@ describe('MailPasswordResetLinkSender', () => {
     storeName: '연남점',
     link: 'https://staff.test/password-reset/link#token=SECRET',
     expiresAt: new Date('2026-10-14T03:00:00Z'),
+    staffMemberId: 5,
     requestedBy: 31,
   };
 
@@ -26,6 +27,8 @@ describe('MailPasswordResetLinkSender', () => {
       to: 'staff@example.com',
       variables: { 근무지: '연남점', 링크: content.link },
       maskedVariables: ['링크'],
+      accountId: 7,
+      staffMemberId: 5,
       sentBy: 31,
     });
   });
