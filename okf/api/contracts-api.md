@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-11T00:17:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-13T08:08:00Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-13T08:08:00Z
   - id: minimum-wage
     resource: ../../src/contracts/minimum-wage.ts
     title: 최저임금 공통코드 · 수습 중 시급 검사
@@ -37,11 +37,11 @@ sources:
   - id: contract-send
     resource: ../../src/contracts/contract-send.service.ts
     title: 근로계약 재발송 (WHALEERP-136 · 611)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-13T08:08:00Z
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-13T08:08:00Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -53,7 +53,7 @@ sources:
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-13T08:08:00Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -644,6 +644,17 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   Both null for a 종이 임시저장 not registered yet, or one ended (대체 · 퇴직) before it was. Only an old 체결 완료 ·
   종료 contract with no history rows at all falls back to `created_at`.
   A 임시저장 continued by another admin still shows the creator — history rows do not record which admin.
+- `modifiedAt` · `modifiedBy` — 최종수정 (WHALEERP-699, 2026-11-13): when, and which 관리자 (name, login id if no
+  name — same rule as `registeredBy`), last changed or sent the contract, for 전자 and 종이 alike. Stored in
+  `contracts.modified_at` · `modified_by` (FK → `admin_accounts`, migration `20261113164726_team3_contract_modified`,
+  existing rows backfilled from `created_at` · `created_by`). `updated_at` cannot serve: Prisma `@updatedAt` moves on
+  every write, including the 직원's 날인 · 거부 · 수정 요청 · 소속 확인 응답 and the batches. Only the admin entry points
+  write it, in the same transaction: `POST /contracts` (+ `/paper`), `PUT /contracts/:id` (+ `/paper`),
+  `PATCH …/worker` (writes the contract row explicitly — the rest of that save touches party and staff rows),
+  `POST …/send` and `POST …/end`. Contracts closed as a side effect (대체 by another save, 바로잡기, 퇴직 처리) keep
+  theirs — that status change shows in `lastProcessedAt`. When a 재발송's 알림톡 did not go out, `undo` puts back the
+  values carried in `before.modified` (the resend did not happen); a save that failed to send keeps its new value
+  (the edit itself stands). Null only if no admin write was ever recorded.
 - `canResend` — whether policy allows `POST …/send`: 발송 대기 · 서명 대기, or 거부 · 만료 that can be reopened
   (`reopenBlockOf` · 근무 시간 겹침, WHALEERP-153). A 가입 완료 직원 gets the app notice, a 가입 전 직원 the 가입 초대,
   or the 소속 추가 확인 요청 when the number has an account (WHALEERP-130 — it stays 발송 대기 until the 직원 accepts).
