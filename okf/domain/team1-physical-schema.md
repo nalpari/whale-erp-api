@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 30 tables (auth · BP · stores · facilities · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-13T02:05:38Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-13T02:40:20Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -57,7 +57,7 @@ sources:
   - id: facility-company-phone-migration
     resource: ../../prisma/migrations/20261113105855_team1_facility_company_phone/migration.sql
     title: 시설물 구매처 · A/S센터 전화번호 CHECK 에 대표번호 8자리(15xx · 16xx · 18xx)
-    last_modified: 2026-11-13T02:05:38Z
+    last_modified: 2026-11-13T02:40:20Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -103,10 +103,10 @@ edited by hand to match the migration, not regenerated.
 64 constraints exist only in the migration SQL — 37 from the initial DDL, one partial
 unique index added later, four from the holiday period migration, five from the excel
 download log and seventeen from the facilities (foreign keys not counted; the excel log's three
-and four of the facilities' six are SQL-only too); three CHECKs were
+and four of the facilities' six are SQL-only too); four CHECKs were
 later widened in place, not added
 (the `schema.prisma` header still counts the initial DDL's
-37).[^team1-migration][^menus-url-unique-migration][^holiday-periods-migration] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
+37).[^team1-migration][^menus-url-unique-migration][^holiday-periods-migration][^facility-company-phone-migration] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
 the same trap as 3팀's, whose CHECKs live only in their DDL migration.
 
 - **CHECK constraints** (32) — code formats (`^BP[0-9]{6}$`, `^MN[0-9]{6}$`,
@@ -168,7 +168,7 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
 - **시설물·장비 `facilities` · `facility_documents`** (`20261111153316_team1_facilities`,
   [Facilities](/api/facilities.md)) — written here first, **not yet in 1팀's ERD generator** in
   front, and `schema.prisma` was edited by hand to match. Seventeen SQL-only constraints: sixteen
-  CHECKs (name 1–100, the two groups, text lengths, every phone `^[0-9]{9,12}$`, unit price ≥ 0, quantity 1–9,999,
+  CHECKs (name 1–100, the two groups, text lengths, every phone `^[0-9]{9,12}$` (구매처 · A/S센터 widened below), unit price ≥ 0, quantity 1–9,999,
   **총금액 = 단가 × 수량 or both null**, 설치일 ≥ 구매일, A/S센터 우편번호 5 digits, 우편번호 and 기본주소 together with
   상세주소 only beside them, document size ≤ 10MB and name ≤ 255) and the partial unique index
   `facility_documents_facility_id_document_kind_key (facility_id, document_kind) WHERE NOT

@@ -4,7 +4,7 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서 3종(종류마다 1개), 엑셀 일괄 등록(PL-7 — 양식 · 미리보기 · 오류 파일 · 등록, 오류가 있으면 전부 막기 · 500줄). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-13T02:05:38Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-13T02:40:20Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
@@ -40,7 +40,7 @@ sources:
   - id: facility-format
     resource: ../../src/facilities/facility-format.ts
     title: 그룹 · 공통코드 그룹 이름 · 쪽 크기 · 총금액 · 이름표 고르기
-    last_modified: 2026-11-13T02:05:38Z
+    last_modified: 2026-11-13T02:40:20Z
   - id: save-facility-dto
     resource: ../../src/facilities/dto/save-facility.dto.ts
     title: 등록 · 수정 입력 검증
@@ -52,7 +52,7 @@ sources:
   - id: facility-company-phone-migration
     resource: ../../prisma/migrations/20261113105855_team1_facility_company_phone/migration.sql
     title: 구매처 · A/S센터 전화번호 CHECK 에 15xx · 16xx · 18xx 대표번호 8자리
-    last_modified: 2026-11-13T02:05:38Z
+    last_modified: 2026-11-13T02:40:20Z
   - id: facilities-policy
     resource: https://claude.ai/artifact/Mo31QtdCL8fmcvFwphQGQo
     title: 「시설물·장비 관리 정책서」 · 「시설물·장비 수리 이력 정책서」(claude.ai 문서, 2026-11-10)
@@ -155,10 +155,12 @@ actions (PM000001 already had them). Other BP role groups get nothing until thei
   (「영업사원 전화번호는 숫자 9~12자리입니다.」). **구매처 and A/S센터 also take a 전국 대표번호** — 8 digits
   starting 15 · 16 · 18 (1588-1234, stored `15881234`; user decision 2026-11-13, front request), and their
   message says so (「구매처 전화번호는 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리입니다.」). Any 8 digits
-  would also pass a 010-1234 with its last part missing, so only those prefixes are allowed; 영업사원 and
+  would also pass a local number missing its area code (1234-5678), so only those prefixes are allowed; 영업사원 and
   관리 담당자 are people's numbers and stay 9–12. `COMPANY_PHONE_PATTERN` / `PHONE_PATTERN` in
   `facility-format.ts` serve both the screen and bulk, and `facilities_phone_format` was widened to match
-  (`20261113105855`) — without it a 대표번호 would pass the DTO and fail the insert as a 500. **Deploy
+  (`20261113105855`) — without it a 대표번호 would pass the DTO and fail the insert as a 500. The
+  migration checks its own result column by column in `pg_get_constraintdef`, and an e2e test runs a table
+  of samples through every phone column to prove the CHECK and the two patterns accept the same values. **Deploy
   order**: api first; a front that accepts 1588-1234 against the old api gets 400.
 - **A/S센터 주소**: 우편번호 and 기본주소 come together, 상세주소 only with an address — 400 otherwise,
   and a CHECK backs it.
