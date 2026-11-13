@@ -80,7 +80,9 @@ def main():
         print("이번 실행에서 달린 pr-agent 리뷰·코드 제안이 없어 게시하지 않는다.")
         return
 
-    parts = [f"**PR #{number} 코드리뷰** — {pr['title']}", pr["html_url"]]
+    # 여러 저장소가 같은 채널에 올리므로 머리에 저장소 이름을 붙인다.
+    repo = os.environ["REPO"].split("/")[-1]
+    parts = [f"**[{repo}] PR #{number} 코드리뷰** — {pr['title']}", pr["html_url"]]
     if review:
         parts += ["", f"**리뷰 요약** ([전문]({review['html_url']}))", *review_lines(review["body"])]
     if improve:
