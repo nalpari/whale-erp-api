@@ -19,6 +19,8 @@ import {
   type TargetBpContext,
 } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
+import { hqVisibleWhere } from '../admin-scope/hq-visible';
+import { containsText } from '../common/contains-text';
 import { TODO_BP_NOT_CHOSEN } from './todo-target-bp';
 import { adminNames } from '../common/admin-names';
 import {
@@ -282,7 +284,10 @@ export class TodosService {
     query: ListTodosQueryDto,
     bp?: TargetBpContext,
   ): Promise<TodoListResponseDto> {
-    const { storeIds, storeOf, hide } = await this.scopeOf(adminAccountId, bp);
+    const { storeIds, storeOf, hide, roleTypeCode } = await this.scopeOf(
+      adminAccountId,
+      bp,
+    );
     // 직원 필터 — 그 직원을 다룰 수 없으면(범위 밖 · 가려지는 직원) 직원 상세와 같은 404(운영 정책 ATT-30)
     if (
       query.staffMemberId &&
@@ -321,6 +326,27 @@ export class TodosService {
     if (query.isUrgent !== undefined) where.isUrgent = query.isUrgent;
     if (query.staffMemberId)
       where.todoAssignees = { some: { staffMemberId: query.staffMemberId } };
+    // 담당직원 이름(WHALEERP-713) — 배정 직원 가운데 한 명이라도 이름이 맞는 행. 본사 역할에게 가려지는 직원(동의하지 않은
+    // 가맹 직원 · 폐점한 가맹 점포 직원)의 이름으로는 걸리지 않게 직원 레코드 조건을 함께 건다(운영 정책 ATT-30).
+    // 직원 필터와 같이 오면 둘 다 만족해야 해서 AND 로 붙인다.
+    if (query.assigneeName)
+      where.AND = [
+        ...(Array.isArray(where.AND)
+          ? where.AND
+          : where.AND
+            ? [where.AND]
+            : []),
+        {
+          todoAssignees: {
+            some: {
+              staffMember: {
+                name: containsText(query.assigneeName),
+                ...hqVisibleWhere(roleTypeCode, ids, storeOf).staff,
+              },
+            },
+          },
+        },
+      ];
 
     const rows = await this.prisma.todo.findMany({
       where,
@@ -816,6 +842,7 @@ export class TodosService {
     return {
       storeIds,
       storeOf,
+      roleTypeCode: manageable.roleTypeCode,
       where: { isDeleted: false, storeId: { in: storeIds } },
       hide,
       storeHides: (storeId: number): boolean | null =>

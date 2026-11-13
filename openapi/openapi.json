@@ -14516,6 +14516,16 @@
             }
           },
           {
+            "name": "assigneeName",
+            "required": false,
+            "in": "query",
+            "description": "담당직원 이름 부분 일치(WHALEERP-713). 개인 배정은 그 직원, 근무지 전체는 대상 직원 가운데 한 명이라도 맞으면 나온다.\n앞뒤 공백을 지우고 비면 없는 것으로 본다 — 직원 목록 keyword 와 같다.",
+            "schema": {
+              "maxLength": 50,
+              "type": "string"
+            }
+          },
+          {
             "name": "isUrgent",
             "required": false,
             "in": "query",
