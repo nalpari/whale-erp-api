@@ -624,7 +624,7 @@ describe('AdminSignupService', () => {
           로그인아이디: 'hangang01',
           링크: 'https://admin.whale.example',
         },
-        adminAccountId: 70,
+        accountId: 70,
       });
       expect(mail.send).toHaveBeenCalledWith({
         templateCode: 'EMAIL_SIGNUP_ALERT',
@@ -633,7 +633,7 @@ describe('AdminSignupService', () => {
           BP이름: '㈜한강상회',
           링크: 'https://admin.whale.example',
         },
-        adminAccountId: 1,
+        accountId: 1,
       });
       expect(prisma.adminAccount.findMany).toHaveBeenCalledWith(
         expect.objectContaining({

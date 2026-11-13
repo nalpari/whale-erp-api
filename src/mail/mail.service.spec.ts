@@ -54,7 +54,8 @@ describe('MailService', () => {
     to: 'hong@example.com',
     variables: { 관리자이름: '이서준', 임시비밀번호: 'x8Rk-2mPq', 링크: link },
     maskedVariables: ['임시비밀번호'],
-    adminAccountId: 12,
+    accountId: 12,
+    staffMemberId: 30,
     sentBy: 3,
   };
   const sentText =
@@ -163,7 +164,8 @@ describe('MailService', () => {
     expect(prisma.mailSendLog.create).toHaveBeenCalledWith({
       data: {
         mailTypeCode: 'EMAIL_TEMP_PASSWORD',
-        adminAccountId: 12,
+        accountId: 12,
+        staffMemberId: 30,
         fromEmail: 'noreply@whale.test',
         toEmail: 'hong@example.com',
         subject: '[WHALE ERP] 임시 비밀번호를 보내 드립니다',
@@ -254,7 +256,11 @@ describe('MailService', () => {
       variables: input.variables,
     });
 
-    expect(logged()).toMatchObject({ adminAccountId: null, sentBy: null });
+    expect(logged()).toMatchObject({
+      accountId: null,
+      staffMemberId: null,
+      sentBy: null,
+    });
   });
 
   it('SMTP 가 실패하면 FAILED 이력을 남기고 원래 예외를 다시 던진다', async () => {
@@ -314,6 +320,86 @@ describe('MailService', () => {
     );
   });
 
+  it('이력 INSERT 가 FK 위반(P2003)이고 직원이 있으면 직원 칸을 비워 한 번 더 남긴다 — 그 사이 직원 레코드가 지워진 경우', async () => {
+    prisma.mailSendLog.create
+      .mockRejectedValueOnce(Object.assign(new Error('fk'), { code: 'P2003' }))
+      .mockResolvedValueOnce({});
+
+    await expect(service.send(input)).resolves.toEqual({
+      messageId: '<abc@gmail.com>',
+    });
+    expect(prisma.mailSendLog.create).toHaveBeenCalledTimes(2);
+    const second = (
+      prisma.mailSendLog.create.mock.calls[1] as [
+        { data: Record<string, unknown> },
+      ]
+    )[0].data;
+    expect(second).toMatchObject({ staffMemberId: null, accountId: 12 });
+    expect(logs.some((m) => m.includes('INSERT FAILED'))).toBe(false);
+  });
+
+  it('P2003 이어도 위반한 제약이 직원 FK 가 아니면(sent_by) 다시 남기지 않는다', async () => {
+    prisma.mailSendLog.create.mockRejectedValue(
+      Object.assign(new Error('fk'), {
+        code: 'P2003',
+        meta: {
+          driverAdapterError: {
+            cause: { constraint: { index: 'mail_send_logs_sent_by_fkey' } },
+          },
+        },
+      }),
+    );
+
+    await service.send(input);
+    expect(prisma.mailSendLog.create).toHaveBeenCalledTimes(1);
+    expect(logs.some((m) => m.includes('mail_send_logs INSERT FAILED'))).toBe(
+      true,
+    );
+  });
+
+  it('직원 FK 위반으로 확인되면 다시 남긴다', async () => {
+    prisma.mailSendLog.create
+      .mockRejectedValueOnce(
+        Object.assign(new Error('fk'), {
+          code: 'P2003',
+          meta: {
+            driverAdapterError: {
+              cause: {
+                constraint: { index: 'mail_send_logs_staff_member_id_fkey' },
+              },
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce({});
+
+    await service.send(input);
+    expect(prisma.mailSendLog.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('다시 남기기도 실패하면 던지지 않고 로그를 남긴다', async () => {
+    prisma.mailSendLog.create.mockRejectedValue(
+      Object.assign(new Error('fk'), { code: 'P2003' }),
+    );
+
+    await expect(service.send(input)).resolves.toBeDefined();
+    expect(prisma.mailSendLog.create).toHaveBeenCalledTimes(2);
+    expect(logs.some((m) => m.includes('mail_send_logs INSERT FAILED'))).toBe(
+      true,
+    );
+  });
+
+  it('P2003 이어도 직원 칸이 비어 있으면 다시 남기지 않는다', async () => {
+    prisma.mailSendLog.create.mockRejectedValue(
+      Object.assign(new Error('fk'), { code: 'P2003' }),
+    );
+    const { staffMemberId: _omit, ...withoutStaff } = input;
+    void _omit;
+
+    await service.send(withoutStaff);
+    expect(prisma.mailSendLog.create).toHaveBeenCalledTimes(1);
+  });
+
   it('이력 INSERT 실패 로그에는 오류 이름 · 코드와 id 만 남기고 메시지는 남기지 않는다', async () => {
     // Prisma 오류 메시지는 호출 인자(data)를 통째로 찍는다 — 주소와 본문이 들어 있다.
     prisma.mailSendLog.create.mockRejectedValue(
@@ -330,7 +416,7 @@ describe('MailService', () => {
     const line = logs.find((m) => m.includes('mail_send_logs INSERT FAILED'));
     expect(line).toContain('PrismaClientKnownRequestError');
     expect(line).toContain('code=P2003');
-    expect(line).toContain('adminAccountId=12');
+    expect(line).toContain('accountId=12');
     expect(line).toContain('sentBy=3');
     expect(line).not.toContain('hong@example.com');
     expect(line).not.toContain('이서준');
@@ -446,8 +532,10 @@ describe('MailService', () => {
   });
 
   it.each([
-    ['adminAccountId 가 0', { adminAccountId: 0 }, 'adminAccountId'],
-    ['adminAccountId 가 소수', { adminAccountId: 1.5 }, 'adminAccountId'],
+    ['accountId 가 0', { accountId: 0 }, 'accountId'],
+    ['accountId 가 소수', { accountId: 1.5 }, 'accountId'],
+    ['staffMemberId 가 0', { staffMemberId: 0 }, 'staffMemberId'],
+    ['staffMemberId 가 소수', { staffMemberId: 1.5 }, 'staffMemberId'],
     ['sentBy 가 정수 범위 밖', { sentBy: 2_147_483_648 }, 'sentBy'],
   ])(
     '%s 이면 이력을 남길 수 없으므로 보내지 않고 던진다',

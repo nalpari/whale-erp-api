@@ -232,6 +232,8 @@ no foreign key: operators can rename a code, and a log records what was sent. It
 column comment still names 공통코드 `MAIL_TYPE`; the migration that wrote it is
 frozen, so correcting it takes a new migration's `COMMENT ON COLUMN`.
 
+3팀 changed `mail_send_logs` (`20261113151224_team3_mail_send_logs_account_staff_member`, WHALEERP-676, 노영주 · 1팀 협의 2026-11-13): (1) `admin_account_id` is renamed `account_id` (values kept), its FK `mail_send_logs_admin_account_id_fkey` is dropped and the index becomes `mail_send_logs_account_id_sent_at_idx` — the column is the 수신 계정: an `admin_accounts` id for mail to an 관리자, an `accounts.account_id` for mail to a 직원 (the 관리자 초기화 reset link), told apart by `mail_type_code`; (2) `staff_member_id` INT NULL, FK `mail_send_logs_staff_member_id_fkey` → `staff_members` `ON DELETE SET NULL` (직원 records can be deleted by contract cleanup; the log stays), index `(staff_member_id, sent_at)` — the 수신 직원 that 직원 상세 발송 이력 reads. `sent_by`'s FK stays. Older rows have `staff_member_id` NULL. `schema.prisma` declares both columns but not the `staff_member_id` relation (`StaffMember` belongs to the generated 3팀 section — like `facilities.manager_staff_member_id`, a 1팀 table → 3팀 `staff_members` FK is SQL only) and no longer has the `AdminAccount` ↔ `MailSendLog` `account_id` relation. `docs/raw/2026-10-12-1팀-*` copies 1팀's own deliverable and was not changed.
+
 Five of the templates (`EMAIL_BP_REGISTER`, `EMAIL_PLAT_ADMIN_CREATE`,
 `EMAIL_BP_ADMIN_CREATE`, `EMAIL_PASSWORD_RESET`, `EMAIL_TEMP_PASSWORD`) put
 `#{임시비밀번호}` in the body, and `mail_send_logs.body` keeps the filled body for a

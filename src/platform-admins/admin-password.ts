@@ -148,7 +148,7 @@ export async function sendPassword(
       ...mail,
       variables: { ...mail.variables, 링크: sender.webUrl },
       maskedVariables: ['임시비밀번호'],
-      adminAccountId,
+      accountId: adminAccountId,
       sentBy,
     });
     return true;
