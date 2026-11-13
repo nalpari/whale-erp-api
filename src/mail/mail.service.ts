@@ -212,22 +212,30 @@ export class MailService {
  * 공통 메일 틀. 일반 글 본문 전체(템플릿 글과 값)를 이스케이프하고 줄바꿈을 살려
  * 머리 · 꼬리 사이에 넣고, 링크마다 버튼을 붙인다. 스타일은 메일 클라이언트가
  * `<style>` 을 버리는 경우가 많아 인라인으로 둔다.
+ *
+ * 카드는 표(table)로 가운데에 두고 안쪽 칸과 글마다 왼쪽 정렬을 적는다. 정렬을 적지 않으면 네이버 · 다음 · Outlook 처럼
+ * 받은 메일을 가운데 정렬 칸에 넣어 보여 주는 메일 화면에서 본문이 가운데로 물려받아 보였다. `max-width` · `margin:auto`
+ * 를 지우는 메일 화면도 있어 카드 폭 · 가운데 두기는 표의 width · align 으로 한다(2026-11-13 사용자 지적).
  */
 function mailHtml(body: string, links: readonly string[]): string {
+  const left = 'text-align:left';
   const buttons = links
     .map(
       (link) =>
-        `<p style="margin:24px 0 0"><a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 20px;background:#1f5eff;color:#ffffff;text-decoration:none;border-radius:6px">바로가기</a></p>`,
+        `<p style="margin:24px 0 0;${left}"><a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 20px;background:#1f5eff;color:#ffffff;text-decoration:none;border-radius:6px">바로가기</a></p>`,
     )
     .join('');
   return [
-    '<!doctype html><html lang="ko"><body style="margin:0;padding:24px;background:#f4f5f7;font-family:sans-serif;color:#222222">',
-    '<div style="max-width:560px;margin:0 auto;padding:32px;background:#ffffff;border-radius:8px">',
-    `<p style="margin:0 0 24px;font-size:18px;font-weight:bold">${FROM_NAME}</p>`,
-    `<p style="margin:0;line-height:1.6">${escapeHtml(body).replace(/\r?\n/g, '<br>')}</p>`,
+    '<!doctype html><html lang="ko"><body style="margin:0;padding:0;background:#f4f5f7;font-family:sans-serif;color:#222222">',
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7"><tr><td align="center" style="padding:24px">',
+    '<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background:#ffffff;border-radius:8px"><tr>',
+    `<td align="left" style="padding:32px;${left};color:#222222">`,
+    `<p style="margin:0 0 24px;font-size:18px;font-weight:bold;${left}">${FROM_NAME}</p>`,
+    `<p style="margin:0;line-height:1.6;${left}">${escapeHtml(body).replace(/\r?\n/g, '<br>')}</p>`,
     buttons,
-    '<p style="margin:32px 0 0;font-size:12px;color:#888888">이 메일은 발신 전용입니다.</p>',
-    '</div></body></html>',
+    `<p style="margin:32px 0 0;font-size:12px;color:#888888;${left}">이 메일은 발신 전용입니다.</p>`,
+    '</td></tr></table>',
+    '</td></tr></table></body></html>',
   ].join('');
 }
 
