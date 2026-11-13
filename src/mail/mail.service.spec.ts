@@ -141,7 +141,8 @@ describe('MailService', () => {
 
     const { html } = sent();
     expect(html).toContain('<td align="left"');
-    expect(html).toContain('width="560"');
+    // 카드 표 자체의 폭(Outlook 전용 주석 안의 560px 표와 따로 확인한다)
+    expect(html).toContain('width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px');
     const paragraphs = html.match(/<p [^>]*>/g) ?? [];
     // 머리 · 본문 · 버튼 하나 · 꼬리
     expect(paragraphs.length).toBeGreaterThanOrEqual(4);
