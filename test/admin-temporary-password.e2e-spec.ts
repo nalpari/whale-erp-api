@@ -123,7 +123,10 @@ describe('POST /auth/admin/temporary-passwords (e2e, DB)', () => {
     expect(after.isPasswordChangeRequired).toBe(false);
     // 메일 이력에는 임시 비밀번호가 남지 않는다.
     const log = await prisma.mailSendLog.findFirstOrThrow({
-      where: { accountId: admin.adminAccountId },
+      where: {
+        accountId: admin.adminAccountId,
+        mailTypeCode: 'EMAIL_TEMP_PASSWORD',
+      },
     });
     expect(log.body).not.toContain(sentPassword());
 
