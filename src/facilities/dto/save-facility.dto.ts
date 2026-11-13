@@ -22,8 +22,10 @@ import {
   trimText,
 } from '../../platform-admins/platform-admin-format';
 import {
+  COMPANY_PHONE_PATTERN,
   FACILITY_GROUPS,
   type FacilityGroup,
+  PHONE_PATTERN,
   QUANTITY_MAX,
   UNIT_PRICE_MAX,
 } from '../facility-format';
@@ -57,13 +59,19 @@ function OptionalText(max: number): PropertyDecorator {
   };
 }
 
-function OptionalPhone(label: string): PropertyDecorator {
+/** 선택 전화번호 칸 — `allowRepresentative` 면 15xx · 16xx · 18xx 대표번호 8자리도 받는다(구매처 · A/S센터). */
+function OptionalPhone(
+  label: string,
+  { allowRepresentative = false }: { allowRepresentative?: boolean } = {},
+): PropertyDecorator {
   return (target, key) => {
     IsOptional()(target, key);
     Transform(phoneDigits)(target, key);
     ValidateIf(present)(target, key);
-    Matches(/^[0-9]{9,12}$/, {
-      message: `${label} 전화번호는 숫자 9~12자리입니다.`,
+    Matches(allowRepresentative ? COMPANY_PHONE_PATTERN : PHONE_PATTERN, {
+      message: allowRepresentative
+        ? `${label} 전화번호는 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리입니다.`
+        : `${label} 전화번호는 숫자 9~12자리입니다.`,
     })(target, key);
   };
 }
@@ -133,8 +141,8 @@ export class SaveFacilityDto {
   @OptionalText(100)
   vendorName?: string | null;
 
-  /** 구매처 전화번호 — 숫자 9~12자리. 하이픈은 떼고 받는다 @example 0212345678 */
-  @OptionalPhone('구매처')
+  /** 구매처 전화번호 — 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리. 하이픈은 떼고 받는다 @example 0212345678 */
+  @OptionalPhone('구매처', { allowRepresentative: true })
   vendorPhone?: string | null;
 
   /** 영업사원 — 50자 */
@@ -220,8 +228,8 @@ export class SaveFacilityDto {
   @OptionalText(100)
   serviceCenterAddressDetail?: string | null;
 
-  /** A/S센터 전화번호 — 숫자 9~12자리 */
-  @OptionalPhone('A/S센터')
+  /** A/S센터 전화번호 — 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리. 하이픈은 떼고 받는다 */
+  @OptionalPhone('A/S센터', { allowRepresentative: true })
   serviceCenterPhone?: string | null;
 }
 

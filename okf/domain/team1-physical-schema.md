@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 30 tables (auth · BP · stores · facilities · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-11T06:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-13T02:05:38Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -54,6 +54,10 @@ sources:
     resource: ../../prisma/migrations/20261111153316_team1_facilities/migration.sql
     title: 시설물·장비 2표(CHECK 16 · 부분 고유 1 · SQL 외래키 4) · 공통코드 4그룹 · 메뉴 /facilities
     last_modified: 2026-11-11T06:30:00Z
+  - id: facility-company-phone-migration
+    resource: ../../prisma/migrations/20261113105855_team1_facility_company_phone/migration.sql
+    title: 시설물 구매처 · A/S센터 전화번호 CHECK 에 대표번호 8자리(15xx · 16xx · 18xx)
+    last_modified: 2026-11-13T02:05:38Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -173,6 +177,12 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   store and document relations are in Prisma. Amounts are `NUMERIC(10,0)` / `NUMERIC(14,0)`
   (Prisma `Decimal`), not `bigint`. The migration also adds the enum `facility_document_kind`
   with its `COMMENT ON TYPE`, four 공통코드 groups, and turns menu MN000022 into `/facilities`.
+- **The facilities phone CHECK widened later** — `facilities_phone_format` lets `vendor_phone` and
+  `service_center_phone` also hold a 전국 대표번호, `^([0-9]{9,12}|(15|16|18)[0-9]{6})$`
+  (`20261113105855_team1_facility_company_phone`, dropped and re-added under the same name, with the two
+  column comments; user decision 2026-11-13). The two people's numbers (`sales_representative_phone`,
+  `manager_phone`) keep `^[0-9]{9,12}$`. Widened in place, so the count above does not change; the
+  initial facilities migration still shows the old range — the newer one is the truth.[^facility-company-phone-migration]
 
 The `'WITHDRAWN'` literal in two of those was a placeholder while the
 `ACCOUNT_STATUS` code value was undecided; the initial-data migration fixes it as
@@ -361,3 +371,4 @@ must be absent, and no lunar holiday may appear after 2050.
 [^stores-phone-migration]: 점포 연락처 CHECK 9~12자리(050X 평생번호)
 [^phone-twelve-migration]: 관리자 계정 · 점포 대표자 연락처 CHECK 9~12자리
 [^holiday-periods-migration]: BP 휴일 대상 · 예외 점포를 기간 행으로(기본키 · 부분 고유 · CHECK)
+[^facility-company-phone-migration]: 시설물 구매처 · A/S센터 전화번호 CHECK 에 대표번호 8자리(15xx · 16xx · 18xx)

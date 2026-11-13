@@ -820,6 +820,33 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
     ).resolves.toBeDefined();
   });
 
+  it('대표번호(15xx · 16xx · 18xx 8자리) — 구매처 · A/S센터는 저장되고, 사람 번호 칸은 API 400 · DB CHECK 도 막는다', async () => {
+    const { facilityId } = await create({
+      name: '대표번호 장비',
+      vendorPhone: '1588-1234',
+      serviceCenterPhone: '1644-0000',
+    });
+    expect(await detail(facilityId)).toMatchObject({
+      vendorPhone: '15881234',
+      serviceCenterPhone: '16440000',
+    });
+    await call('post', '/facilities', bmToken)
+      .send({ ...base(), managerPhone: '1588-1234' })
+      .expect(400);
+    const set = (data: Record<string, string>) =>
+      prisma.facility.update({ where: { facilityId }, data });
+    await expect(set({ managerPhone: '15881234' })).rejects.toThrow(
+      /facilities_phone_format/,
+    );
+    await expect(set({ salesRepresentativePhone: '15881234' })).rejects.toThrow(
+      /facilities_phone_format/,
+    );
+    await expect(set({ vendorPhone: '12345678' })).rejects.toThrow(
+      /facilities_phone_format/,
+    );
+    await expect(set({ vendorPhone: '18001234' })).resolves.toBeDefined();
+  });
+
   it('다른 BP 격리 — 다른 BP 의 시설물 · 점포는 어느 경로로도 보이지 않고 고칠 수 없다', async () => {
     const foreign = await prisma.facility.create({
       data: {

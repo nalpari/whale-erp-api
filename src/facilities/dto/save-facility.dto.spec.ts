@@ -58,10 +58,16 @@ describe('SaveFacilityDto', () => {
   });
 
   it.each([
-    ['vendorPhone', '구매처 전화번호는 숫자 9~12자리입니다.'],
+    [
+      'vendorPhone',
+      '구매처 전화번호는 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리입니다.',
+    ],
     ['salesRepresentativePhone', '영업사원 전화번호는 숫자 9~12자리입니다.'],
     ['managerPhone', '관리 담당자 전화번호는 숫자 9~12자리입니다.'],
-    ['serviceCenterPhone', 'A/S센터 전화번호는 숫자 9~12자리입니다.'],
+    [
+      'serviceCenterPhone',
+      'A/S센터 전화번호는 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리입니다.',
+    ],
   ])('%s 가 9~12자리가 아니면 「%s」', (field, message) => {
     expect(
       errorsOf(CreateFacilityDto, { ...required, [field]: '0102' }).messages,
@@ -83,6 +89,69 @@ describe('SaveFacilityDto', () => {
     });
     expect(messages).toEqual([]);
     expect(dto.vendorPhone).toBe('0212345678');
+  });
+
+  describe('대표번호(15xx · 16xx · 18xx 8자리)는 구매처 · A/S센터만', () => {
+    const company = ['vendorPhone', 'serviceCenterPhone'];
+    const person = ['salesRepresentativePhone', 'managerPhone'];
+
+    it.each(['1588-1234', '15881234', '1644-0000', '1800-1234'])(
+      '%p — 구매처 · A/S센터는 받고 숫자만 남긴다, 사람 번호는 400',
+      (input) => {
+        for (const field of company) {
+          const { dto, messages } = errorsOf(CreateFacilityDto, {
+            ...required,
+            [field]: input,
+          });
+          expect(messages).toEqual([]);
+          expect(dto[field]).toBe(input.replace(/-/g, ''));
+        }
+        for (const field of person)
+          expect(
+            errorsOf(CreateFacilityDto, { ...required, [field]: input })
+              .messages,
+          ).toHaveLength(1);
+      },
+    );
+
+    it.each(['1234-5678', '0212-3456', '1700-1234'])(
+      '%p — 대표번호 꼴이 아닌 8자리는 어디서나 400',
+      (input) => {
+        for (const field of [...company, ...person])
+          expect(
+            errorsOf(CreateFacilityDto, { ...required, [field]: input })
+              .messages,
+          ).toHaveLength(1);
+      },
+    );
+
+    it.each(['02-555-6666', '010-1234-5678'])(
+      '%p — 일반 번호는 네 칸 모두 받는다',
+      (input) => {
+        for (const field of [...company, ...person])
+          expect(
+            errorsOf(CreateFacilityDto, { ...required, [field]: input })
+              .messages,
+          ).toEqual([]);
+      },
+    );
+
+    it('수정에서도 같다', () => {
+      expect(
+        errorsOf(UpdateFacilityDto, {
+          ...withoutStore,
+          updatedAt: '2026-11-11T01:02:03.004Z',
+          serviceCenterPhone: '1588-1234',
+        }).messages,
+      ).toEqual([]);
+      expect(
+        errorsOf(UpdateFacilityDto, {
+          ...withoutStore,
+          updatedAt: '2026-11-11T01:02:03.004Z',
+          managerPhone: '1588-1234',
+        }).messages,
+      ).toHaveLength(1);
+    });
   });
 
   it('빈 선택 칸은 null 로 — 지우는 것과 같다', () => {

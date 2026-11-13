@@ -1276,15 +1276,19 @@ describe('facility-bulk', () => {
 
     it('전화번호 — 하이픈 · 공백을 떼고 숫자 9~12자리', () => {
       expect(
-        checkBulkRow(raw({ ...VALID, vendorPhone: '1588-1234' }), LOOKUPS)
+        checkBulkRow(raw({ ...VALID, vendorPhone: '1234-5678' }), LOOKUPS)
           .errors,
-      ).toEqual(['구매처 전화번호: 숫자 9~12자리로 적어 주세요.']);
+      ).toEqual([
+        '구매처 전화번호: 숫자 9~12자리 또는 대표번호 8자리(15xx·16xx·18xx)로 적어 주세요.',
+      ]);
       expect(
         checkBulkRow(
           raw({ ...VALID, serviceCenterPhone: '02-12a-4567' }),
           LOOKUPS,
         ).errors,
-      ).toEqual(['A/S센터 전화번호: 숫자 9~12자리로 적어 주세요.']);
+      ).toEqual([
+        'A/S센터 전화번호: 숫자 9~12자리 또는 대표번호 8자리(15xx·16xx·18xx)로 적어 주세요.',
+      ]);
       expect(
         checkBulkRow(
           raw({ ...VALID, salesRepresentativePhone: '0505-1234-5678' }),
@@ -1292,6 +1296,25 @@ describe('facility-bulk', () => {
         ).errors,
       ).toEqual([]);
     });
+
+    it.each(['1588-1234', '15881234', '1644-0000', '1800-1234'])(
+      '대표번호 %p — 구매처 · A/S센터는 숫자로 받고, 영업사원은 사유',
+      (phone) => {
+        const ok = checkBulkRow(
+          raw({ ...VALID, vendorPhone: phone, serviceCenterPhone: phone }),
+          LOOKUPS,
+        );
+        expect(ok.errors).toEqual([]);
+        expect(ok.data?.vendorPhone).toBe(phone.replace(/-/g, ''));
+        expect(ok.data?.serviceCenterPhone).toBe(phone.replace(/-/g, ''));
+        expect(
+          checkBulkRow(
+            raw({ ...VALID, salesRepresentativePhone: phone }),
+            LOOKUPS,
+          ).errors,
+        ).toEqual(['영업사원 전화번호: 숫자 9~12자리로 적어 주세요.']);
+      },
+    );
 
     it.each(['-1', '1.5', '12345678901', '만원', '1,5'])(
       '단가 %p 는 오류',
