@@ -303,6 +303,35 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         sendLog(4, 'TALK_STAFF_INVITATION', 'SUCCEEDED'),
       ],
     });
+    // 메일 발송 이력 — 지안에게 간 비밀번호 초기화 메일(성공 · 실패)과, 이력에 들지 않는 다른 유형 메일 하나
+    const mailLog = (
+      minute: number,
+      mailTypeCode: string,
+      result: 'SUCCEEDED' | 'FAILED',
+      failureReason: string | null = null,
+    ) => ({
+      mailTypeCode,
+      staffMemberId: jianId,
+      fromEmail: 'noreply@e2e.test',
+      toEmail: `jian${n}@e2e.test`,
+      subject: `e2e${n}`,
+      body: '-',
+      result,
+      failureReason,
+      sentAt: new Date(Date.UTC(2026, 9, 1, 0, minute)),
+    });
+    await prisma.mailSendLog.createMany({
+      data: [
+        mailLog(1, 'EMAIL_STAFF_RESET_LINK', 'SUCCEEDED'),
+        mailLog(
+          2,
+          'EMAIL_STAFF_RESET_LINK',
+          'FAILED',
+          `code=ECONNECTION response=undefined: connect refused jian${n}@e2e.test`,
+        ),
+        mailLog(3, 'EMAIL_TEMP_PASSWORD', 'SUCCEEDED'),
+      ],
+    });
     // 더 새 임시저장 계약은 생년월일이 없다 — 예전 계약에 적은 값이 그대로 보여야 한다
     await prisma.contract.create({
       data: {
@@ -542,6 +571,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     await prisma.contractParty.deleteMany({ where: { contract: byStaff } });
     await prisma.contract.deleteMany({ where: byStaff });
     await prisma.staffTaxProfile.deleteMany({ where: byStaff });
+    await prisma.mailSendLog.deleteMany({ where: byStaff });
     await prisma.staffMember.deleteMany({ where: byStaff });
     await prisma.account.deleteMany({
       where: { accountId: { in: accountIds } },
@@ -742,12 +772,23 @@ describe('직원 상세 요약 (e2e, DB)', () => {
       ['SIGNUP_INVITE', false, 'SUCCEEDED', null],
     ]);
     expect(items[1].failureReason).toContain('코드 3018');
+    // 지안은 알림톡 이력이 없고, 비밀번호 초기화 메일만 최근 순으로 나온다 — 실패 사유에 SMTP 원문(받는 주소)이 새지 않는다
+    const jian = await get(`/staff-members/${jianId}/summary/send-logs`);
+    const jianItems = (jian.body as StaffMemberSendLogResponseDto).items;
     expect(
-      (
-        (await get(`/staff-members/${jianId}/summary/send-logs`))
-          .body as StaffMemberSendLogResponseDto
-      ).items,
-    ).toEqual([]);
+      jianItems.map((i) => [
+        i.kind,
+        i.contractId,
+        i.isResend,
+        i.result,
+        i.retryable,
+      ]),
+    ).toEqual([
+      ['PASSWORD_RESET', null, false, 'FAILED', null],
+      ['PASSWORD_RESET', null, false, 'SUCCEEDED', null],
+    ]);
+    expect(jianItems[0].failureReason).toContain('메일을 보내지 못했습니다');
+    expect(JSON.stringify(jian.body)).not.toContain('e2e.test');
     expect(
       (await get(`/staff-members/${draftId}/summary/send-logs`, staffOnlyId))
         .status,

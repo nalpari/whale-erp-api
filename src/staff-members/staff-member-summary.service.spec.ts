@@ -36,6 +36,7 @@ describe('StaffMemberSummaryService', () => {
     roleGroupMenu: { count: jest.Mock };
     contract: { findFirst: jest.Mock; findMany: jest.Mock };
     alimtalkSendLog: { findMany: jest.Mock };
+    mailSendLog: { findMany: jest.Mock };
     staffTaxProfile: { findUnique: jest.Mock };
     codeItem: { findFirst: jest.Mock };
     workSchedule: { findMany: jest.Mock };
@@ -64,6 +65,7 @@ describe('StaffMemberSummaryService', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       alimtalkSendLog: { findMany: jest.fn().mockResolvedValue([]) },
+      mailSendLog: { findMany: jest.fn().mockResolvedValue([]) },
       staffTaxProfile: { findUnique: jest.fn().mockResolvedValue(null) },
       codeItem: { findFirst: jest.fn().mockResolvedValue(null) },
       workSchedule: { findMany: jest.fn().mockResolvedValue([]) },
@@ -140,6 +142,7 @@ describe('StaffMemberSummaryService', () => {
           prisma.contract.findFirst,
           prisma.contract.findMany,
           prisma.alimtalkSendLog.findMany,
+          prisma.mailSendLog.findMany,
           prisma.workSchedule.findMany,
           prisma.payslip.findMany,
           prisma.payslip.count,
@@ -499,8 +502,29 @@ describe('StaffMemberSummaryService', () => {
       ]);
     });
 
-    it('계약이 없으면 발송 이력을 읽지 않고 빈 목록', async () => {
+    it('계약이 없으면 알림톡 이력은 읽지 않고, 메일 이력이 없으면 빈 목록', async () => {
       await expect(service.sendLogs(9, 30)).resolves.toEqual({ items: [] });
+      expect(prisma.alimtalkSendLog.findMany).not.toHaveBeenCalled();
+    });
+
+    it('이 직원의 비밀번호 초기화 메일 이력을 읽어 알림톡 줄과 시각 최근 순으로 합친다 — 계약이 없어도 나온다', async () => {
+      prisma.mailSendLog.findMany.mockResolvedValue([
+        { mailId: 4, result: 'FAILED', sentAt: NOW },
+      ]);
+      const { items } = await service.sendLogs(9, 30);
+      expect(firstArg(prisma.mailSendLog.findMany).where).toEqual({
+        staffMemberId: 30,
+        mailTypeCode: 'EMAIL_STAFF_RESET_LINK',
+      });
+      expect(items).toEqual([
+        expect.objectContaining({
+          sendLogId: 4,
+          contractId: null,
+          kind: 'PASSWORD_RESET',
+          result: 'FAILED',
+          retryable: null,
+        }),
+      ]);
       expect(prisma.alimtalkSendLog.findMany).not.toHaveBeenCalled();
     });
   });

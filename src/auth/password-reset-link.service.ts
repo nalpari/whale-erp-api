@@ -220,6 +220,7 @@ export class PasswordResetLinkService {
           storeName: store?.name ?? '',
           link: resetLinkOf(this.appUrl, token),
           expiresAt: issued.expiresAt,
+          staffMemberId,
           requestedBy: adminAccountId,
         },
       );
