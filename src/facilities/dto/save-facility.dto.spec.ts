@@ -68,7 +68,7 @@ describe('SaveFacilityDto', () => {
       'serviceCenterPhone',
       'A/S센터 전화번호는 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리입니다.',
     ],
-  ])('%s 가 9~12자리가 아니면 「%s」', (field, message) => {
+  ])('%s 가 전화번호 형식이 아니면 「%s」', (field, message) => {
     expect(
       errorsOf(CreateFacilityDto, { ...required, [field]: '0102' }).messages,
     ).toEqual([message]);
@@ -94,6 +94,19 @@ describe('SaveFacilityDto', () => {
   describe('대표번호(15xx · 16xx · 18xx 8자리)는 구매처 · A/S센터만', () => {
     const company = ['vendorPhone', 'serviceCenterPhone'];
     const person = ['salesRepresentativePhone', 'managerPhone'];
+    /** 사람 번호 칸의 거부 문구 — 다른 이유의 오류 하나로 통과하지 않게 문구까지 본다 */
+    const personMessage: Record<string, string> = {
+      salesRepresentativePhone: '영업사원 전화번호는 숫자 9~12자리입니다.',
+      managerPhone: '관리 담당자 전화번호는 숫자 9~12자리입니다.',
+    };
+    const companyMessage: Record<string, string> = {
+      vendorPhone:
+        '구매처 전화번호는 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리입니다.',
+      serviceCenterPhone:
+        'A/S센터 전화번호는 숫자 9~12자리 또는 15xx·16xx·18xx 대표번호 8자리입니다.',
+    };
+    const messageOf = (field: string) =>
+      personMessage[field] ?? companyMessage[field];
 
     it.each(['1588-1234', '15881234', '1644-0000', '1800-1234'])(
       '%p — 구매처 · A/S센터는 받고 숫자만 남긴다, 사람 번호는 400',
@@ -110,23 +123,31 @@ describe('SaveFacilityDto', () => {
           expect(
             errorsOf(CreateFacilityDto, { ...required, [field]: input })
               .messages,
-          ).toHaveLength(1);
+          ).toEqual([personMessage[field]]);
       },
     );
 
-    it.each(['1234-5678', '0212-3456', '1700-1234'])(
-      '%p — 대표번호 꼴이 아닌 8자리는 어디서나 400',
+    it.each([
+      '1234-5678',
+      '0212-3456',
+      '1700-1234',
+      '1900-1234',
+      '1300-1234',
+      '1588-123',
+      '1500-123',
+    ])(
+      '%p — 대표번호 꼴이 아닌 7 · 8자리(앞자리 15 · 16 · 18 밖 · 자릿수 모자람)는 어디서나 400',
       (input) => {
         for (const field of [...company, ...person])
           expect(
             errorsOf(CreateFacilityDto, { ...required, [field]: input })
               .messages,
-          ).toHaveLength(1);
+          ).toEqual([messageOf(field)]);
       },
     );
 
-    it.each(['02-555-6666', '010-1234-5678'])(
-      '%p — 일반 번호는 네 칸 모두 받는다',
+    it.each(['02-555-6666', '010-1234-5678', '1588-12345', '015881234'])(
+      '%p — 9~12자리면(15로 시작해도) 네 칸 모두 받는다',
       (input) => {
         for (const field of [...company, ...person])
           expect(
@@ -150,7 +171,7 @@ describe('SaveFacilityDto', () => {
           updatedAt: '2026-11-11T01:02:03.004Z',
           managerPhone: '1588-1234',
         }).messages,
-      ).toHaveLength(1);
+      ).toEqual([personMessage.managerPhone]);
     });
   });
 
