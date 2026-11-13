@@ -336,7 +336,7 @@ export class AdminSignupService {
           로그인아이디: input.loginId,
           링크: webUrl,
         },
-        adminAccountId,
+        accountId: adminAccountId,
       })
       .catch((reason: unknown) => this.mailFailed(adminAccountId, reason));
 
@@ -365,7 +365,7 @@ export class AdminSignupService {
                 templateCode: 'EMAIL_SIGNUP_ALERT',
                 to: master.email as string,
                 variables: { BP이름: input.tradeName, 링크: webUrl },
-                adminAccountId: master.adminAccountId,
+                accountId: master.adminAccountId,
               })
               .catch((reason: unknown) =>
                 this.mailFailed(master.adminAccountId, reason),

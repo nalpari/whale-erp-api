@@ -465,6 +465,8 @@ export class StaffMemberListService {
           endDate: true,
           updatedAt: true,
           draftAction: true,
+          // 연장(같은 직원 레코드) 재계약 판정용 — 중첩 select 라 한 번에 읽는다(WHALEERP-672)
+          previousContract: { select: { staffMemberId: true } },
           // 중첩 select 라 Prisma 가 한 번에 IN 으로 읽는다 — 직원 수만큼 쿼리가 늘지 않는다(WHALEERP-622)
           ...(showsWorkDays
             ? { contractWorkDays: CONTRACT_WORK_DAYS_SELECT }
@@ -553,6 +555,8 @@ export class StaffMemberListService {
               lastSentAt: contract.sentAt,
               endDate: dateOnly(contract.endDate),
               updatedAt: contract.updatedAt,
+              isRenewal:
+                contract.previousContract?.staffMemberId === r.staffMemberId,
               canResend,
               workDays: showsWorkDays
                 ? workDaysOf(contract.contractWorkDays ?? [])

@@ -625,7 +625,7 @@ export class ExcelExportsService {
         templateCode,
         to: admin.email,
         variables: variables(),
-        adminAccountId: job.requestedBy,
+        accountId: job.requestedBy,
       });
       await this.prisma.excelDownloadLog.update({
         where: { excelDownloadId: job.excelDownloadId },

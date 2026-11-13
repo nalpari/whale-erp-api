@@ -272,7 +272,7 @@ describe('BP 회원가입 (e2e, DB)', () => {
     // 메일은 응답 뒤에 나간다.
     await new Promise((r) => setTimeout(r, 200));
     expect(
-      mail.sent.filter((m) => m.adminAccountId === account.adminAccountId),
+      mail.sent.filter((m) => m.accountId === account.adminAccountId),
     ).toEqual([
       expect.objectContaining({
         templateCode: 'EMAIL_SIGNUP_DONE',

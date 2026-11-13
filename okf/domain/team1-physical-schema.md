@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 30 tables (auth · BP · stores · facilities · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-13T02:40:20Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 30개)
-    last_modified: 2026-11-11T06:30:00Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -62,6 +62,10 @@ sources:
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
     last_modified: 2026-10-19T03:41:21Z
+  - id: mail-send-logs-account-staff-migration
+    resource: ../../prisma/migrations/20261113151224_team3_mail_send_logs_account_staff_member/migration.sql
+    title: 메일 발송 이력 수신 계정 칸 이름 변경(account_id · FK 제거) · 직원 칸(staff_member_id, ON DELETE SET NULL)
+    last_modified: 2026-11-13T07:05:00Z
 ---
 
 # Status
@@ -231,6 +235,8 @@ each is not stored; the 1팀 sending code decides it.
 no foreign key: operators can rename a code, and a log records what was sent. Its
 column comment still names 공통코드 `MAIL_TYPE`; the migration that wrote it is
 frozen, so correcting it takes a new migration's `COMMENT ON COLUMN`.
+
+3팀 changed `mail_send_logs` (`20261113151224_team3_mail_send_logs_account_staff_member`, WHALEERP-676, 노영주 · 1팀 협의 2026-11-13): (1) `admin_account_id` is renamed `account_id` (values kept), its FK `mail_send_logs_admin_account_id_fkey` is dropped and the index becomes `mail_send_logs_account_id_sent_at_idx` — the column is the 수신 계정: an `admin_accounts` id for mail to an 관리자, an `accounts.account_id` for mail to a 직원 (the 관리자 초기화 reset link), told apart by `mail_type_code`; (2) `staff_member_id` INT NULL, FK `mail_send_logs_staff_member_id_fkey` → `staff_members` `ON DELETE SET NULL` (직원 records can be deleted by contract cleanup; the log stays), index `(staff_member_id, sent_at)` — the 수신 직원 that 직원 상세 발송 이력 reads. `sent_by`'s FK stays. Older rows have `staff_member_id` NULL. `schema.prisma` declares both columns but not the `staff_member_id` relation (`StaffMember` belongs to the generated 3팀 section — like `facilities.manager_staff_member_id`, a 1팀 table → 3팀 `staff_members` FK is SQL only) and no longer has the `AdminAccount` ↔ `MailSendLog` `account_id` relation. `docs/raw/2026-10-12-1팀-*` copies 1팀's own deliverable and was not changed.
 
 Five of the templates (`EMAIL_BP_REGISTER`, `EMAIL_PLAT_ADMIN_CREATE`,
 `EMAIL_BP_ADMIN_CREATE`, `EMAIL_PASSWORD_RESET`, `EMAIL_TEMP_PASSWORD`) put

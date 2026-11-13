@@ -2382,7 +2382,6 @@ model AdminAccount {
   changeHistories                 AdminChangeHistory[]     @relation("AdminChangeHistoriesAdminAccount")
   changedAdminChangeHistories     AdminChangeHistory[]     @relation("AdminChangeHistoriesChangedBy")
   termsAgreementLogs              TermsAgreementLog[]      @relation("TermsAgreementLogsAdminAccount")
-  mailSendLogs                    MailSendLog[]            @relation("MailSendLogsAdminAccount")
   sentMailSendLogs                MailSendLog[]            @relation("MailSendLogsSentBy")
   createdStores                   Store[]                  @relation("StoresCreatedBy")
   updatedStores                   Store[]                  @relation("StoresUpdatedBy")
@@ -2573,8 +2572,10 @@ model MailSendLog {
   mailId         Int           @id @default(autoincrement()) @map("mail_id")
   /// 메일 유형 코드 — 공통코드 `MAIL_TYPE`(회원가입 완료·신규 BP 가입 알림·BP 신규 등록·플랫폼 관리자 계정 생성·BP 관리자 계정 생성·비밀번호 초기화·임시 비밀번호 발급·회원 탈퇴 완료)
   mailTypeCode   String        @map("mail_type_code")
-  /// 수신 계정 — admin_accounts FK
-  adminAccountId Int?          @map("admin_account_id")
+  /// 수신 계정 — 관리자에게 보낸 메일이면 admin_accounts.admin_account_id, 직원에게 보낸 메일(비밀번호 초기화)이면 accounts.account_id. 어느 쪽인지는 메일 유형 코드로 가른다. FK 없음 (WHALEERP-676, 2026-11-13 1팀 협의)
+  accountId      Int?          @map("account_id")
+  /// 수신 직원 — 직원에게 보낸 메일일 때 staff_members FK. 직원 상세 발송 이력이 읽는다. 직원 레코드가 지워지면 비움 (WHALEERP-676, 2026-11-13) (3팀 추가)
+  staffMemberId  Int?          @map("staff_member_id")
   /// 발신 이메일 — 보낸 주소
   fromEmail      String        @map("from_email")
   /// 수신 이메일 — 보낸 시점의 주소
@@ -2592,10 +2593,11 @@ model MailSendLog {
   /// 발송 일시 — 1년 보존
   sentAt         DateTime      @default(now()) @map("sent_at") @db.Timestamptz(6)
 
-  adminAccount AdminAccount? @relation("MailSendLogsAdminAccount", fields: [adminAccountId], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "mail_send_logs_admin_account_id_fkey")
   sender       AdminAccount? @relation("MailSendLogsSentBy", fields: [sentBy], references: [adminAccountId], onDelete: Restrict, onUpdate: NoAction, map: "mail_send_logs_sent_by_fkey")
 
-  @@index([adminAccountId, sentAt], map: "mail_send_logs_admin_account_id_sent_at_idx")
+  @@index([accountId, sentAt], map: "mail_send_logs_account_id_sent_at_idx")
+  // staff_member_id → staff_members FK(mail_send_logs_staff_member_id_fkey, ON DELETE SET NULL)는 SQL 에만 둔다 — StaffMember 는 생성기 구역이라 역관계를 못 단다(facilities.manager_staff_member_id 처럼 1팀 표 → 3팀 staff_members FK 를 SQL 에만 둔다)
+  @@index([staffMemberId, sentAt], map: "mail_send_logs_staff_member_id_sent_at_idx")
   @@map("mail_send_logs")
 }
 

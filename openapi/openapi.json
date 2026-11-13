@@ -20125,6 +20125,10 @@
             "nullable": true,
             "description": "최종 수정 일시. 서명 거절일을 따로 저장하지 않아 「서명 거절 · MM-DD」는 이 값으로 보인다"
           },
+          "isRenewal": {
+            "type": "boolean",
+            "description": "연장 재계약이면 true — 직전 계약(previous_contract_id)이 있고 그 직전 계약이 같은 직원 레코드의 것일 때만. 재입사 재계약(직전 계약이\n퇴직한 옛 레코드의 것)과 첫 계약은 false(노영주 결정 2026-11-13). 화면이 계약 칸 「재계약」 꼬리표와 재직 칸 판정에 쓴다(WHALEERP-672)"
+          },
           "canResend": {
             "type": "boolean",
             "description": "가입 · 인증 칸 재발송용 — 근로계약 상세의 canResend 와 달리 가입한 직원은 거짓이다(가입한 직원의 앱 알림 재발송은 근로계약\n상세에서). 이 칸의 버튼은 이 값 하나만 본다. 참이면 이 계약으로 근로계약 재발송(POST\n/contracts/{contractId}/send)이 가입 초대 알림톡 또는 소속 추가 확인 요청을 보낸다(설정 누락 503 · 그사이 바뀐 상태 409 · 발송\n실패 502 는 남는다). 서명 요청 전 · 서명 대기(서명 거절 · 계약 기간 만료 재발송은 근로계약 상세에서, WHALEERP-153) 위에 모두 맞을 때만 참이다: 가입 전 ·\n가입 상태가 가입 대기 · 초대 만료 · 소속 승인 대기 · 복귀 확인(정보 확인 필요 · 만 19세 미만 · 거절은 거짓), 또는 초안이고 이\n계약이 소속 추가 확인 · 복귀 확인으로 판별된 것(WHALEERP-130 전 요청 없이 서명 대기가 된 옛 계약) · 보이는 초대가 수락되지\n않음 · 휴대폰 번호 · 가린 줄 아님. 간격 제한은 없다."
@@ -20138,6 +20142,7 @@
           "lastSentAt",
           "endDate",
           "updatedAt",
+          "isRenewal",
           "canResend"
         ]
       },
@@ -20707,7 +20712,8 @@
         "type": "string",
         "enum": [
           "SIGNUP_INVITE",
-          "AFFILIATION_REQUEST"
+          "AFFILIATION_REQUEST",
+          "PASSWORD_RESET"
         ]
       },
       "StaffSendResult": {
@@ -20717,7 +20723,7 @@
           "FAILED",
           "UNCONFIRMED"
         ],
-        "description": "비즈뿌리오 접수 기준. 접수 여부 모름(UNCONFIRMED)은 다시 보내면 두 번 갈 수 있다"
+        "description": "알림톡 줄은 비즈뿌리오 접수 기준 — 접수 여부 모름(UNCONFIRMED)은 다시 보내면 두 번 갈 수 있다. 비밀번호 초기화 메일 줄은 SMTP 결과이고 SUCCEEDED · FAILED 만 있다"
       },
       "StaffMemberSendLogDto": {
         "type": "object",
@@ -20730,7 +20736,7 @@
             ]
           },
           "result": {
-            "description": "비즈뿌리오 접수 기준. 접수 여부 모름(UNCONFIRMED)은 다시 보내면 두 번 갈 수 있다",
+            "description": "알림톡 줄은 비즈뿌리오 접수 기준 — 접수 여부 모름(UNCONFIRMED)은 다시 보내면 두 번 갈 수 있다. 비밀번호 초기화 메일 줄은 SMTP 결과이고 SUCCEEDED · FAILED 만 있다",
             "allOf": [
               {
                 "$ref": "#/components/schemas/StaffSendResult"
@@ -20739,15 +20745,16 @@
           },
           "sendLogId": {
             "type": "number",
-            "description": "알림톡 발송 이력 ID(alimtalk_send_logs)"
+            "description": "발송 이력 ID — 알림톡 줄은 alimtalk_send_logs, 비밀번호 초기화 메일 줄은 mail_send_logs(mail_id). 두 테이블의 번호는 겹칠 수 있어 목록 key 는 kind 와 함께 쓴다"
           },
           "contractId": {
             "type": "number",
-            "description": "보낸 근로계약"
+            "nullable": true,
+            "description": "보낸 근로계약. 비밀번호 초기화 메일(PASSWORD_RESET)은 계약과 무관해 null"
           },
           "isResend": {
             "type": "boolean",
-            "description": "같은 계약으로 앞서 직원에게 나갔을 수 있는 발송(성공 · 접수 여부 모름)이 있었다 — 재발송 · 고쳐 다시 보냄. 계약 재발송 횟수와는 다를 수 있다"
+            "description": "같은 계약으로 앞서 직원에게 나갔을 수 있는 발송(성공 · 접수 여부 모름)이 있었다 — 재발송 · 고쳐 다시 보냄. 계약 재발송 횟수와는 다를 수 있다. 비밀번호 초기화 메일(PASSWORD_RESET)은 늘 false"
           },
           "failureReason": {
             "type": "string",
@@ -20757,7 +20764,7 @@
           "retryable": {
             "type": "boolean",
             "nullable": true,
-            "description": "다시 보내도 되는가 — 확실히 나가지 않은 실패만 true, 접수 여부 모름은 false. 성공이면 null"
+            "description": "다시 보내도 되는가 — 확실히 나가지 않은 실패만 true, 접수 여부 모름은 false. 성공이면 null. 비밀번호 초기화 메일(PASSWORD_RESET)은 늘 null"
           },
           "sentAt": {
             "format": "date-time",
@@ -20779,7 +20786,7 @@
         "type": "object",
         "properties": {
           "items": {
-            "description": "이 직원 레코드의 모든 근로계약 발송, 최근 순",
+            "description": "이 직원 레코드의 모든 근로계약 발송과 비밀번호 초기화 메일, 보낸 시각 최근 순",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/StaffMemberSendLogDto"
@@ -26188,6 +26195,11 @@
             "type": "string",
             "nullable": true
           },
+          "confirmableFrom": {
+            "type": "string",
+            "nullable": true,
+            "description": "확정할 수 있는 첫날(YYYY-MM-DD, 한국) — 확정의 422 PERIOD_NOT_ENDED 와 같은 판정이다(규칙은 그 422 설명). 작성 중 · 검토 중이\n아니면 null. 화면은 그 전에 [확정]을 막는다"
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -26248,6 +26260,7 @@
           "attendanceEndDate",
           "isAttendanceConfirmed",
           "confirmedAt",
+          "confirmableFrom",
           "createdAt",
           "updatedAt",
           "contract",
