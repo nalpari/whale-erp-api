@@ -1,3 +1,4 @@
+import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
 import {
   BadRequestException,
   ConflictException,
@@ -552,6 +553,62 @@ describe('TodosService', () => {
         service.list(ADMIN, { page: 1, pageSize: 20, storeId: 99 }),
       ).resolves.toEqual({ items: [], total: 0 });
       expect(db.todo.findMany).not.toHaveBeenCalled();
+    });
+
+    it('담당직원 이름(WHALEERP-713) — 배정 직원 이름 부분 일치, LIKE 특수문자는 글자 그대로, 본사 역할은 동의한 가맹 직원만', async () => {
+      await service.list(ADMIN, {
+        page: 1,
+        pageSize: 20,
+        assigneeName: '김_%',
+      });
+      expect(firstArg(db.todo.findMany).where).toEqual({
+        isDeleted: false,
+        storeId: { in: [3, 4] },
+        AND: [
+          {
+            todoAssignees: {
+              some: {
+                staffMember: {
+                  name: { contains: '김\\_\\%', mode: 'insensitive' },
+                  // 직영(3)은 모두, 폐점하지 않은 가맹(4)은 본사 제공 동의한 직원만
+                  OR: [
+                    { storeId: { in: [3] } },
+                    { storeId: { in: [4] }, ...HQ_SHARING_CONSENTED },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      });
+    });
+
+    it('담당직원 이름과 직원 필터를 같이 주면 둘 다 만족해야 한다, 가맹마스터는 동의를 보지 않는다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'FM',
+        stores: [{ storeId: 4, storeTypeCode: 'FRANCHISE' }],
+      });
+      await service.list(ADMIN, {
+        page: 1,
+        pageSize: 20,
+        staffMemberId: 12,
+        assigneeName: '하늘',
+      });
+      expect(firstArg(db.todo.findMany).where).toMatchObject({
+        todoAssignees: { some: { staffMemberId: 12 } },
+        AND: [
+          {
+            todoAssignees: {
+              some: {
+                staffMember: {
+                  name: { contains: '하늘', mode: 'insensitive' },
+                  storeId: { in: [4] },
+                },
+              },
+            },
+          },
+        ],
+      });
     });
 
     it('점포 범위 — 고른 점포(storeIds) · 점포 유형(storeTypes)은 업무 범위와 겹치는 점포만, 겹치지 않으면 0건', async () => {
