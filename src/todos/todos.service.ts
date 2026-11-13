@@ -331,6 +331,11 @@ export class TodosService {
     // 직원 필터와 같이 오면 둘 다 만족해야 해서 AND 로 붙인다.
     if (query.assigneeName)
       where.AND = [
+        ...(Array.isArray(where.AND)
+          ? where.AND
+          : where.AND
+            ? [where.AND]
+            : []),
         {
           todoAssignees: {
             some: {

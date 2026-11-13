@@ -23,6 +23,11 @@ describe('ListTodosQueryDto 담당직원 이름(WHALEERP-713)', () => {
     expect(errors.map((e) => e.property)).toEqual(['assigneeName']);
   });
 
+  it('NUL 문자가 들어 있으면 400(PostgreSQL text 는 NUL 을 받지 않아 그대로 두면 500)', async () => {
+    const errors = await validate(parse({ assigneeName: 'a\u0000b' }));
+    expect(errors.map((e) => e.property)).toEqual(['assigneeName']);
+  });
+
   it('여러 번 보내면(배열) 400', async () => {
     const errors = await validate(parse({ assigneeName: ['김', '이'] }));
     expect(errors.map((e) => e.property)).toEqual(['assigneeName']);

@@ -1,4 +1,3 @@
-import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
 import {
   BadRequestException,
   ConflictException,

@@ -9,10 +9,12 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
+import { NO_NUL } from '../../common/no-nul';
 import { IsDateOnly } from '../../common/is-date-only';
 import { STORE_TYPES, type StoreType } from '../../stores/store-format';
 
@@ -131,6 +133,7 @@ export class ListTodosQueryDto extends TodoPageQueryDto {
   @IsOptional()
   @IsString()
   @MaxLength(50)
+  @Matches(NO_NUL, { message: '담당직원 이름에 쓸 수 없는 문자가 있습니다.' })
   assigneeName?: string;
 
   /** true · false. 없으면 전체 */
