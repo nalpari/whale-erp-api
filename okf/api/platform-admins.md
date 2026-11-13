@@ -4,7 +4,7 @@ title: Platform admins
 description: 관리자 웹 「플랫폼 관리자 관리」 — list, register, edit, delete and password reset of 플랫폼 마스터 · 플랫폼 관리자 accounts, judged by the menu's CRUD permission plus master and self protection; the first password only ever travels by mail.
 tags: [admin, account, permission, mail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T02:27:29Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
 sources:
   - id: platform-admins-service
     resource: ../../src/platform-admins/platform-admins.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: admin-password
     resource: ../../src/platform-admins/admin-password.ts
     title: temporary password issue · mail · unsent-flag clear — moved out of the service, shared with BP admins
-    last_modified: 2026-10-27T07:48:04Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: platform-admin-mail
     resource: ../../src/platform-admins/platform-admin-mail.ts
     title: createPlatformAdminMail — the password-mail sender, or none without MAIL_* · ADMIN_WEB_URL

@@ -1,10 +1,10 @@
 ---
 type: API
 title: Staff member list, detail and detail summary
-description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 알림톡과 비밀번호 초기화 메일 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -25,7 +25,7 @@ sources:
   - id: send-logs
     resource: ../../src/staff-members/send-logs.ts
     title: 직원 상세 발송 이력 — 알림톡 발송 이력을 종류 · 재발송 · 결과로 바꾸는 toSendLogs
-    last_modified: 2026-10-29T07:00:00Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: join-state
     resource: ../../src/staff-members/join-state.ts
     title: StaffJoinState — display (joinStateOf) and filter (joinStateWhere)
@@ -45,11 +45,11 @@ sources:
   - id: summary-service
     resource: ../../src/staff-members/staff-member-summary.service.ts
     title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
-    last_modified: 2026-11-05T08:00:00Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE

@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 30 tables (auth · BP · stores · facilities · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-13T02:40:20Z }
+generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 30개)
-    last_modified: 2026-11-11T06:30:00Z
+    last_modified: 2026-11-13T07:05:00Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -62,6 +62,10 @@ sources:
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
     last_modified: 2026-10-19T03:41:21Z
+  - id: mail-send-logs-account-staff-migration
+    resource: ../../prisma/migrations/20261113151224_team3_mail_send_logs_account_staff_member/migration.sql
+    title: 메일 발송 이력 수신 계정 칸 이름 변경(account_id · FK 제거) · 직원 칸(staff_member_id, ON DELETE SET NULL)
+    last_modified: 2026-11-13T07:05:00Z
 ---
 
 # Status
