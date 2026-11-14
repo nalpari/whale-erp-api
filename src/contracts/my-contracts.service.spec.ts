@@ -20,6 +20,7 @@ describe('MyContractsService', () => {
     contract: {
       findFirst: jest.Mock;
       findUnique: jest.Mock;
+      update: jest.Mock;
       updateMany: jest.Mock;
     };
     contractStatusHistory: { create: jest.Mock; findFirstOrThrow: jest.Mock };
@@ -121,6 +122,7 @@ describe('MyContractsService', () => {
           staffMemberId: 5,
           startDate: new Date('2026-11-24T00:00:00.000Z'),
         }),
+        update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       contractStatusHistory: {
@@ -596,7 +598,10 @@ describe('MyContractsService', () => {
       await service().reject(77, 41, NOW);
       await service().requestCorrection(77, 41, '사유', NOW);
       const writes = (
-        tx.contract.updateMany.mock.calls as [{ data: object }][]
+        [
+          ...(tx.contract.updateMany.mock.calls as [{ data: object }][]),
+          ...(tx.contract.update.mock.calls as [{ data: object }][]),
+        ] as [{ data: object }][]
       ).map(([args]) => args.data);
       expect(writes.length).toBeGreaterThanOrEqual(3);
       for (const data of writes) {

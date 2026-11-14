@@ -395,6 +395,24 @@ describe('AffiliationRequestsService', () => {
     });
   });
 
+  it('소속 확인 응답(수락 · 거절)은 계약의 최종수정(관리자 수정)을 바꾸지 않는다(WHALEERP-699)', async () => {
+    request();
+    await service().accept(5, 41, {}, NOW);
+    request();
+    await service().reject(5, 41, NOW);
+    const writes = (
+      [
+        ...(tx.contract.updateManyAndReturn.mock.calls as [{ data: object }][]),
+        ...(tx.contract.updateMany.mock.calls as [{ data: object }][]),
+      ] as [{ data: object }][]
+    ).map(([args]) => args.data);
+    expect(writes.length).toBeGreaterThanOrEqual(3);
+    for (const data of writes) {
+      expect(data).not.toHaveProperty('modifiedAt');
+      expect(data).not.toHaveProperty('modifiedBy');
+    }
+  });
+
   describe('reject', () => {
     it('요청 · 발송 대기 계약을 거절 · 거부로 닫는다(사유는 받지 않는다, WHALEERP-635) — 계약을 쓴 관리자에게 운영 알림(커밋 뒤)', async () => {
       request();
