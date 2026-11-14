@@ -96,6 +96,8 @@ export class ContractSendService {
             previousContractId: true,
             startDate: true,
             endDate: true,
+            modifiedAt: true,
+            modifiedBy: true,
             staffMember: {
               select: {
                 phone: true,
@@ -172,6 +174,11 @@ export class ContractSendService {
           await transition(tx, contractId, status, 'ADMIN', {
             from: [c.status],
           });
+        // 상세의 최종수정 — 다시 보낸 때 · 관리자(WHALEERP-699). 알림톡이 나가지 않으면 되돌리기가 before.modified 로 돌린다
+        await tx.contract.update({
+          where: { contractId },
+          data: { modifiedAt: now, modifiedBy: adminAccountId },
+        });
 
         const pending = await this.delivery.prepare(
           tx,
@@ -188,6 +195,7 @@ export class ContractSendService {
               draftAction: c.draftAction,
               staffMemberId: c.staffMemberId,
               staffMember: c.staffMember,
+              modified: { modifiedAt: c.modifiedAt, modifiedBy: c.modifiedBy },
             },
             statusChanged: status !== c.status,
             phoneChanged: false,
@@ -239,6 +247,7 @@ export class ContractSendService {
   async end(
     adminAccountId: number,
     contractId: number,
+    now = new Date(),
     bp?: TargetBpContext,
   ): Promise<EndResult> {
     await this.contracts.checkTargetBp(bp);
@@ -266,6 +275,8 @@ export class ContractSendService {
       // 발송 대기가 아니면 transition 이 지금 상태를 실어 409 다
       await transition(tx, contractId, 'ENDED', 'ADMIN', {
         from: ['PENDING_SEND'],
+        // 상세의 최종수정 — 관리자가 닫은 때 · 관리자(WHALEERP-699)
+        data: { modifiedAt: now, modifiedBy: adminAccountId },
       });
       // 나간 초대 코드 · 링크를 막는다 — 가입하면 이 계약을 이어 서명 대기로 넘기는 길이 남지 않게
       await tx.invitation.updateMany({

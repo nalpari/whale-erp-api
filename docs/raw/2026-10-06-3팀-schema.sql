@@ -402,6 +402,8 @@ CREATE TABLE "contracts" (
     "created_by" INTEGER NOT NULL,
     "created_at" TIMESTAMPTZ(6) DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMPTZ(6) DEFAULT CURRENT_TIMESTAMP,
+    "modified_at" TIMESTAMPTZ(6),
+    "modified_by" INTEGER,
 
     CONSTRAINT "contracts_pkey" PRIMARY KEY ("contract_id")
 );
@@ -1092,6 +1094,7 @@ ALTER TABLE "contracts" ADD CONSTRAINT "contracts_staff_member_id_fkey" FOREIGN 
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_previous_contract_id_fkey" FOREIGN KEY ("previous_contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contracts" ADD CONSTRAINT "contracts_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "contracts" ADD CONSTRAINT "contracts_modified_by_fkey" FOREIGN KEY ("modified_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contract_work_days" ADD CONSTRAINT "contract_work_days_contract_id_fkey" FOREIGN KEY ("contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contract_parties" ADD CONSTRAINT "contract_parties_contract_id_fkey" FOREIGN KEY ("contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "contract_documents" ADD CONSTRAINT "contract_documents_contract_id_fkey" FOREIGN KEY ("contract_id") REFERENCES "contracts" ("contract_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -1417,6 +1420,8 @@ COMMENT ON COLUMN "contracts"."correction_reason" IS '수정 요청 사유 — �
 COMMENT ON COLUMN "contracts"."created_by" IS '작성 관리자';
 COMMENT ON COLUMN "contracts"."created_at" IS '등록 일시 (물리에서 추가)';
 COMMENT ON COLUMN "contracts"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."modified_at" IS '최종수정 일시 — 관리자가 고치거나 보낸 때만 (직원 서명 · 배치는 바꾸지 않는다) (WHALEERP-699, 2026-11-13) (물리에서 추가)';
+COMMENT ON COLUMN "contracts"."modified_by" IS '최종수정 관리자 — 관리자가 고치거나 보낸 때만 (직원 서명 · 배치는 바꾸지 않는다) (WHALEERP-699, 2026-11-13) (물리에서 추가)';
 COMMENT ON TABLE "contract_work_days" IS '계약 근무 요일';
 COMMENT ON COLUMN "contract_work_days"."contract_id" IS '근로계약';
 COMMENT ON COLUMN "contract_work_days"."weekday" IS '요일 — 근무하는 요일만 행으로 둔다';

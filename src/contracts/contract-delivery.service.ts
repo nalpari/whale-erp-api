@@ -132,6 +132,11 @@ export type DeliveryBefore = {
   draftAction: DraftAction;
   staffMemberId: number;
   staffMember: { joinStatus: string; candidateAccountId: number | null };
+  /**
+   * 재발송(ContractSendService.send)만 — 보내기 전 최종수정(WHALEERP-699). 알림톡이 나가지 않았으면 이 값으로 되돌린다 —
+   * 나가지 않은 재발송은 관리자 수정이 아니다. 저장(등록 · 이어 쓰기 · 근로자 정보 수정)은 고친 것이 남아 넣지 않는다.
+   */
+  modified?: { modifiedAt: Date | null; modifiedBy: number | null };
 };
 
 export type DeliveryInput = {
@@ -887,6 +892,8 @@ export class ContractDeliveryService {
           draftAction: rejudged ? p.draftAction : before.draftAction,
           // 이 발송이 센 재발송을 뺀다(prepare 와 같은 조건)
           ...(before.sentAt !== null && { resendCount: { decrement: 1 } }),
+          // 재발송이면 최종수정도 보내기 전으로(WHALEERP-699)
+          ...before.modified,
         },
       });
       if (p.historyId !== null) {

@@ -20,6 +20,7 @@ describe('MyContractsService', () => {
     contract: {
       findFirst: jest.Mock;
       findUnique: jest.Mock;
+      update: jest.Mock;
       updateMany: jest.Mock;
     };
     contractStatusHistory: { create: jest.Mock; findFirstOrThrow: jest.Mock };
@@ -121,6 +122,7 @@ describe('MyContractsService', () => {
           staffMemberId: 5,
           startDate: new Date('2026-11-24T00:00:00.000Z'),
         }),
+        update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       contractStatusHistory: {
@@ -589,6 +591,23 @@ describe('MyContractsService', () => {
         where: { contractId: 41, status: 'PENDING_SIGNATURE' },
         data: { status: 'REJECTED' },
       });
+    });
+
+    it('직원의 날인 · 거부 · 수정 요청은 상세의 최종수정(관리자 수정)을 바꾸지 않는다(WHALEERP-699)', async () => {
+      await service().sign(77, 41, file(), SENT_ISO, NOW);
+      await service().reject(77, 41, NOW);
+      await service().requestCorrection(77, 41, '사유', NOW);
+      const writes = (
+        [
+          ...(tx.contract.updateMany.mock.calls as [{ data: object }][]),
+          ...(tx.contract.update.mock.calls as [{ data: object }][]),
+        ] as [{ data: object }][]
+      ).map(([args]) => args.data);
+      expect(writes.length).toBeGreaterThanOrEqual(3);
+      for (const data of writes) {
+        expect(data).not.toHaveProperty('modifiedAt');
+        expect(data).not.toHaveProperty('modifiedBy');
+      }
     });
 
     it('날인 · 거부가 커밋되면 그 상태 이력을 사건 키로 관리자에게 알린다(WHALEERP-154)', async () => {
