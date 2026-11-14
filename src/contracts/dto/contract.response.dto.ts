@@ -340,11 +340,15 @@ export class ContractDetailDto extends ContractTermsDto {
    * 최종수정 일시(ISO 8601) — 관리자가 마지막으로 고치거나 보낸 때(WHALEERP-699). 등록 · 임시저장 이어 쓰기 · 종이 계약 등록 ·
    * 근로자 정보 수정 · 발송 · 재발송 · 발송 대기 종료만 바꾼다 — 직원의 날인 · 거부 · 수정 요청 · 소속 확인 응답과 배치(만료 · 종료 ·
    * 갱신 알림 · 퇴직 처리), 다른 계약 저장에 따른 대체 · 종료는 바꾸지 않는다(그 상태 변경은 lastProcessedAt). 재발송이
-   * 나가지 않아 되돌리면 보내기 전 값이다. 전자계약 · 종이 계약 모두. 관리자 수정 기록이 없으면 null
+   * 나가지 않아 되돌리면 보내기 전 값이다. 전자계약 · 종이 계약 모두. 이 칸 전에 만든 계약은 등록 · 발송 일시 · 관리자 상태 이력으로
+   * 근사한 값이다(상태를 바꾸지 않은 저장은 빠져 실제보다 이를 수 있다)
    */
   @ApiProperty({ nullable: true, type: String })
   modifiedAt: string | null;
-  /** 최종수정 관리자 — modifiedAt 의 관리자 이름, 이름이 없으면 로그인 아이디(registeredBy 와 같은 규칙). 없으면 null */
+  /**
+   * 최종수정 관리자 — modifiedAt 의 관리자 이름, 이름이 없으면 로그인 아이디(registeredBy 와 같은 규칙). 이 칸 전에 만든 계약이 등록
+   * 뒤에 고쳐졌으면 어느 관리자인지 몰라 null
+   */
   @ApiProperty({ nullable: true, type: String })
   modifiedBy: string | null;
   /**
