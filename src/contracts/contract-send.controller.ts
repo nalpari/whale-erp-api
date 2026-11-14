@@ -112,6 +112,6 @@ export class ContractSendController {
     @CurrentUser() user: AuthUser,
     @TargetBp() bp: TargetBpContext,
   ): Promise<EndResult> {
-    return this.sender.end(user.id, contractId, bp);
+    return this.sender.end(user.id, contractId, new Date(), bp);
   }
 }

@@ -247,6 +247,7 @@ export class ContractSendService {
   async end(
     adminAccountId: number,
     contractId: number,
+    now = new Date(),
     bp?: TargetBpContext,
   ): Promise<EndResult> {
     await this.contracts.checkTargetBp(bp);
@@ -275,7 +276,7 @@ export class ContractSendService {
       await transition(tx, contractId, 'ENDED', 'ADMIN', {
         from: ['PENDING_SEND'],
         // 상세의 최종수정 — 관리자가 닫은 때 · 관리자(WHALEERP-699)
-        data: { modifiedAt: new Date(), modifiedBy: adminAccountId },
+        data: { modifiedAt: now, modifiedBy: adminAccountId },
       });
       // 나간 초대 코드 · 링크를 막는다 — 가입하면 이 계약을 이어 서명 대기로 넘기는 길이 남지 않게
       await tx.invitation.updateMany({

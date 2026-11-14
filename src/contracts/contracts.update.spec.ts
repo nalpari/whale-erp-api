@@ -494,6 +494,30 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       });
     });
 
+    it('최종수정 관리자가 등록 관리자와 같으면 한 번만 읽는다 — 종이 계약 등록', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        ...draftRow,
+        status: 'SIGNED',
+        contractMethod: 'PAPER',
+        createdBy: 42,
+        modifiedAt: new Date('2026-10-15T03:00:00Z'),
+        modifiedBy: 42,
+        contractStatusHistories: [
+          {
+            fromStatus: 'DRAFT',
+            toStatus: 'SIGNED',
+            actor: 'ADMIN',
+            changedAt: new Date('2026-10-15T03:00:00Z'),
+          },
+        ],
+      });
+      await expect(service.findOne(9, 7)).resolves.toMatchObject({
+        registeredBy: '김관리',
+        modifiedBy: '김관리',
+      });
+      expect(prisma.adminAccount.findUnique).toHaveBeenCalledTimes(1);
+    });
+
     it('최종수정 관리자 이름이 없으면 로그인 아이디를 준다 — 등록 관리자와 같은 규칙', async () => {
       prisma.contract.findUnique.mockResolvedValue({
         ...draftRow,

@@ -186,17 +186,13 @@ describe('ContractSendService (재발송)', () => {
 
   describe('발송 대기 종료 (end)', () => {
     it('종료로 바꾸는 전환에 최종수정(때 · 관리자)을 싣는다(WHALEERP-699)', async () => {
-      await expect(service().end(9, 7)).resolves.toEqual({
+      await expect(service().end(9, 7, NOW)).resolves.toEqual({
         contractId: 7,
         status: 'ENDED',
       });
       expect(tx.contract.updateMany).toHaveBeenCalledWith({
         where: { contractId: 7, status: 'PENDING_SEND' },
-        data: {
-          modifiedAt: expect.any(Date) as unknown,
-          modifiedBy: 9,
-          status: 'ENDED',
-        },
+        data: { modifiedAt: NOW, modifiedBy: 9, status: 'ENDED' },
       });
     });
 
@@ -204,7 +200,7 @@ describe('ContractSendService (재발송)', () => {
       tx.contract.findUnique.mockResolvedValue(
         row({ status: 'PENDING_SIGNATURE' }),
       );
-      await expect(service().end(9, 7)).rejects.toThrow(ConflictException);
+      await expect(service().end(9, 7, NOW)).rejects.toThrow(ConflictException);
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
       expect(tx.contract.update).not.toHaveBeenCalled();
     });

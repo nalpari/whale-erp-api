@@ -1616,13 +1616,15 @@ export class ContractsService {
           select: { name: true, loginId: true },
         })
       : null;
-    // 최종수정 관리자(WHALEERP-699) — 등록 관리자와 같이 따로 읽는다
-    const modifier = c.modifiedBy
-      ? await this.prisma.adminAccount.findUnique({
-          where: { adminAccountId: c.modifiedBy },
-          select: { name: true, loginId: true },
-        })
-      : null;
+    // 최종수정 관리자(WHALEERP-699) — 등록 관리자와 같이 따로 읽는다. 등록 관리자와 같은 사람이면 읽은 것을 쓴다
+    const modifier = !c.modifiedBy
+      ? null
+      : registrar && c.modifiedBy === c.createdBy
+        ? registrar
+        : await this.prisma.adminAccount.findUnique({
+            where: { adminAccountId: c.modifiedBy },
+            select: { name: true, loginId: true },
+          });
     // 처음 보낸 때 — 이력은 최근 것부터라 발송 대기 · 서명 대기로 간 줄 가운데 마지막 것이 처음이다
     const firstSent = c.contractStatusHistories.findLast(
       (h) =>
