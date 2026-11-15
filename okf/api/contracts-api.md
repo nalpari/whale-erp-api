@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-13T09:09:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-14T08:47:00Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -41,7 +41,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-11-13T08:08:00Z
+    last_modified: 2026-11-14T08:47:00Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -653,14 +653,19 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   `PATCH …/worker` (writes the contract row explicitly — the rest of that save touches party and staff rows),
   `POST …/send` and `POST …/end`. Contracts closed as a side effect (대체 by another save, 바로잡기, 퇴직 처리) keep
   theirs — that status change shows in `lastProcessedAt`. When a 재발송's 알림톡 did not go out, `undo` puts back the
-  values carried in `before.modified` (the resend did not happen); a save that failed to send keeps its new value
+  values carried in `before.modified` (the resend did not happen) — only if the row's `modified_at` is still this
+  send's time, so another admin's edit in between is not overwritten; a save that failed to send keeps its new value
   (the edit itself stands).
   Rows that existed before the migration are approximated from what was recorded, since admin writes were never
   stored on their own: `modified_at` is the latest of `created_at`, `sent_at` and the last `ADMIN` status-history
-  `changed_at` (a save that kept the status — 임시저장 이어 쓰기, a 근로자 정보 수정 without a status change — left no
-  trace, so the real time can be later). `modified_by` is `created_by` only when that time is within 1 second of
-  `created_at` (creation writes `sent_at` and the first history row a few ms apart); otherwise the 관리자 is unknown
-  and it is null, so the detail shows `modifiedAt` with `modifiedBy: null`.
+  `changed_at` other than `ENDED` (a save that kept the status — 임시저장 이어 쓰기, a 근로자 정보 수정 without a status
+  change — left no trace, so the real time can be later). `ADMIN` 종료 rows are left out because 대체 종료 by another
+  save and 퇴직 처리 also write them, and those side-effect closes are not 최종수정 at runtime either; the price is that a
+  발송 대기 종료 an admin did before the deploy is approximated by an earlier time. `modified_by` is `created_by` only when
+  that time is within 1 minute of `created_at` — creation writes `sent_at` and the first history row moments apart, but
+  `created_at` is the DB clock (`DEFAULT now()`) and the other two the app clock (JS `new Date()`), so a tight bound
+  would misjudge on clock skew; otherwise the 관리자 is unknown and it is null, so the detail shows `modifiedAt` with
+  `modifiedBy: null`.
 - `canResend` — whether policy allows `POST …/send`: 발송 대기 · 서명 대기, or 거부 · 만료 that can be reopened
   (`reopenBlockOf` · 근무 시간 겹침, WHALEERP-153). A 가입 완료 직원 gets the app notice, a 가입 전 직원 the 가입 초대,
   or the 소속 추가 확인 요청 when the number has an account (WHALEERP-130 — it stays 발송 대기 until the 직원 accepts).
