@@ -73,16 +73,23 @@ export type SendFailure = {
   retryable: boolean;
 };
 
+/** 비즈뿌리오가 코드로 거절했을 때 사유 뒤에 붙는 안내 — 502 SEND_FAILED 와 같다 */
+export const REJECTED_HINT = '번호를 확인하고 다시 보내 주세요';
+
 /**
  * 발송 이력의 실패 한 줄 — 갈래는 발송(dispatch)이 되돌릴지 · 502 문구를 정할 때와 같은 sendFailureKindOf 다. 번호를 확인하라는 말은
- * 비즈뿌리오가 코드로 거절했을 때만 한다(502 SEND_FAILED 와 같다).
+ * 비즈뿌리오가 코드로 거절했을 때만 한다(502 SEND_FAILED 와 같다). rejectedHint 는 그 안내를 바꾼다 — 서명 요청 알림톡은 계약서가
+ * 아닌 계정 번호로 가고 실패해도 앱 알림함에는 들어가 「번호를 확인하라」가 맞지 않다(WHALEERP-675)
  */
-export function sendFailureOf(failureReason: string | null): SendFailure {
+export function sendFailureOf(
+  failureReason: string | null,
+  rejectedHint = REJECTED_HINT,
+): SendFailure {
   const { kind, code } = sendFailureKindOfReason(failureReason);
   if (kind === 'REJECTED')
     return {
       result: 'FAILED',
-      reason: `비즈뿌리오가 받지 않았습니다(코드 ${code}). 번호를 확인하고 다시 보내 주세요`,
+      reason: `비즈뿌리오가 받지 않았습니다(코드 ${code}). ${rejectedHint}`,
       retryable: true,
     };
   if (kind === 'NOT_SENT')

@@ -108,6 +108,32 @@ describe('toSendLogs — 직원 상세 발송 이력', () => {
     ]);
   });
 
+  it('서명 요청 알림톡이 거절되면 번호 확인 대신 앱 알림함에 들어갔다고 알린다 — 계정 번호로 간다(WHALEERP-675)', () => {
+    const [contractSent, invite] = toSendLogs([
+      row({
+        relatedId: 12,
+        result: 'FAILED',
+        failureReason: 'code=3018 http=200: x',
+      }),
+      row({
+        relatedId: 13,
+        templateCode: CONTRACT_SENT_TEMPLATE,
+        result: 'FAILED',
+        failureReason: 'code=3018 http=200: x',
+      }),
+    ]);
+    expect(contractSent).toMatchObject({
+      kind: 'CONTRACT_SENT',
+      retryable: true,
+    });
+    expect(contractSent.failureReason).toContain('코드 3018');
+    expect(contractSent.failureReason).toContain(
+      '직원 앱 알림함에는 들어갔습니다',
+    );
+    expect(contractSent.failureReason).not.toContain('번호를 확인');
+    expect(invite.failureReason).toContain('번호를 확인하고 다시 보내 주세요');
+  });
+
   it('근로계약 발송이 아닌 알림톡 · 관련 계약이 없는 줄은 뺀다', () => {
     expect(
       toSendLogs([

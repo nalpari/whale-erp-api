@@ -35,6 +35,10 @@ export const STAFF_SEND_RESULTS = Object.keys(
 export const MAIL_SEND_FAILURE_MESSAGE =
   '메일을 보내지 못했습니다. 잠시 뒤 비밀번호 초기화를 다시 눌러 주세요';
 
+/** 서명 요청 알림톡이 거절됐을 때의 안내 — 계정 번호로 가서 계약서 번호를 고쳐도 바뀌지 않고, 앱 알림함에는 이미 들어갔다 */
+export const CONTRACT_SENT_REJECTED_HINT =
+  '직원 앱 알림함에는 들어갔습니다. 알림톡을 다시 보내려면 근로계약 상세에서 재발송해 주세요';
+
 /**
  * 발송 이력에 싣는 알림톡 템플릿 — 근로계약 발송(ContractDeliveryService)이 보내는 셋. 가입한 직원의 서명 요청은 처음엔 앱
  * 알림만이라 뺐다가, 알림톡(WHALEERP-619)이 생긴 뒤 이력에도 싣는다(WHALEERP-675, 2026-11-16 김민식)
@@ -89,7 +93,12 @@ export function toSendLogs(rows: readonly SendLogRow[]): SendLog[] {
     if (!kind || row.relatedId === null) continue;
     const contractId = row.relatedId;
     const failure =
-      row.result === 'SUCCEEDED' ? null : sendFailureOf(row.failureReason);
+      row.result === 'SUCCEEDED'
+        ? null
+        : sendFailureOf(
+            row.failureReason,
+            kind === 'CONTRACT_SENT' ? CONTRACT_SENT_REJECTED_HINT : undefined,
+          );
     logs.push({
       sendLogId: row.alimtalkSendLogId,
       contractId,
