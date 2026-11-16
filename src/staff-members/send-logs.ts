@@ -47,11 +47,11 @@ function contractSentFailureOf(failureReason: string | null): SendFailure {
   const { kind, code } = sendFailureKindOfReason(failureReason);
   const reason =
     kind === 'REJECTED'
-      ? `비즈뿌리오가 받지 않아 알림톡은 가지 않았습니다(코드 ${code}). 직원 앱 알림함에는 들어갔습니다 — 알림톡이 가야 하면 직원 계정의 휴대전화번호를 확인해 주세요`
+      ? `비즈뿌리오가 받지 않아 알림톡은 가지 않았습니다(코드 ${code}). 직원 앱 알림함에는 들어갔습니다 — 알림톡이 가야 하면 직원에게 앱 계정의 휴대전화번호를 확인하게 한 뒤 근로계약 상세에서 재발송해 주세요`
       : kind === 'NOT_SENT'
         ? '보내기 전에 실패해 알림톡은 가지 않았습니다. 직원 앱 알림함에는 들어갔습니다'
         : '알림톡이 접수됐는지 알 수 없습니다. 직원 앱 알림함에는 들어갔습니다';
-  // retryable false — 직원이 받은 발송이라 다음 발송은 재발송이다. 화면에 내는 재시도 가능 여부는 toSendLogs 가 null 로 바꾼다
+  // 재시도 가능 여부는 화면에 내지 않는다(toSendLogs 가 null) — 다시 보내지 않아도 직원은 받았다
   return {
     result: kind === 'UNCONFIRMED' ? 'UNCONFIRMED' : 'FAILED',
     reason,
@@ -130,7 +130,8 @@ export function toSendLogs(rows: readonly SendLogRow[]): SendLog[] {
       retryable: contractSent ? null : (failure?.retryable ?? null),
       sentAt: row.sentAt,
     });
-    if (!failure?.retryable) delivered.add(contractId);
+    // 나갔을 수 있는 발송이면 다음 발송은 재발송 — 서명 요청은 알림톡이 실패해도 앱 알림함으로 받았다
+    if (contractSent || !failure?.retryable) delivered.add(contractId);
   }
   return logs.reverse();
 }

@@ -141,12 +141,18 @@ describe('toSendLogs — 직원 상세 발송 이력', () => {
       ['CONTRACT_SENT', 'FAILED', null],
       ['CONTRACT_SENT', 'UNCONFIRMED', null],
     ]);
+    // 실패한 서명 요청도 직원이 받은 발송이라 다음 줄은 재발송이다(보내기 전 실패 · 접수 여부 모름 뒤도)
+    expect([rejected, notSent, unconfirmed].map((l) => l.isResend)).toEqual([
+      false,
+      true,
+      true,
+    ]);
     for (const l of [rejected, notSent, unconfirmed]) {
       expect(l.failureReason).toContain('직원 앱 알림함에는 들어갔습니다');
       expect(l.failureReason).not.toContain('다시 보내');
     }
     expect(rejected.failureReason).toContain('코드 3018');
-    expect(rejected.failureReason).toContain('직원 계정의 휴대전화번호');
+    expect(rejected.failureReason).toContain('앱 계정의 휴대전화번호');
     expect(notSent.failureReason).toContain('보내기 전에 실패');
     expect(unconfirmed.failureReason).toContain('접수됐는지 알 수 없습니다');
     // 가입 초대는 그대로
