@@ -11,7 +11,9 @@
 --   칸을 비워 보인다). 등록은 sent_at · 첫 이력을 거의 같은 때 쓰지만 created_at 은 DB 시각(DEFAULT now()), sent_at ·
 --   이력 changed_at 은 앱 시각(JS new Date())이라 두 시계 차이만큼 어긋날 수 있어 10초를 둔다. 더 넓히면 등록 직후 다른
 --   관리자가 고친 행에 등록 관리자 이름이 잘못 붙는다 — 틀린 이름보다 빈칸이 낫다.
---   그 시각 뒤에 ADMIN 종료 이력이 있어도 비운다 — 관리자가 직접 한 발송 대기 종료일 수 있어 등록 관리자라고 할 수 없다.
+--   ADMIN 종료 이력이 있어도 비운다 — 관리자가 직접 한 발송 대기 종료일 수 있어 등록 관리자라고 할 수 없다. 종료는 끝
+--   상태라 그 이력은 늘 마지막이어서 시각은 견주지 않는다. 이력으로는 대체 종료 · 퇴직 처리의 종료와 가를 수 없어 그런
+--   행도 비운다 — 런타임은 그 종료에 최종수정 관리자를 남겨 두지만, 배포 전 행은 틀린 이름 대신 빈칸으로 둔다.
 --
 -- 줄은 물리 생성기 출력(docs/raw/2026-10-06-3팀-schema.sql)에서 옮겼다. front 논리 ERD 카탈로그에는 없는 물리 추가 칸이다.
 ALTER TABLE "contracts" ADD COLUMN "modified_at" TIMESTAMPTZ(6);
@@ -22,25 +24,23 @@ ALTER TABLE "contracts" ADD CONSTRAINT "contracts_modified_by_fkey" FOREIGN KEY 
 UPDATE "contracts" c
 SET "modified_at" = t."at",
     "modified_by" = CASE
-      WHEN c."created_at" IS NOT NULL AND t."at" <= c."created_at" + INTERVAL '10 seconds'
-           AND NOT EXISTS (
-             SELECT 1
-               FROM "contract_status_histories" e
-              WHERE e."contract_id" = c."contract_id" AND e."actor" = 'ADMIN' AND e."to_status" = 'ENDED'
-                AND e."changed_at" > t."at"
-           ) THEN c."created_by"
+      WHEN c."created_at" IS NOT NULL AND t."at" <= c."created_at" + INTERVAL '10 seconds' AND NOT t."ended"
+        THEN c."created_by"
       ELSE NULL
     END
 FROM (
   SELECT c2."contract_id",
-         GREATEST(
-           c2."created_at",
-           c2."sent_at",
-           (SELECT MAX(h."changed_at")
-              FROM "contract_status_histories" h
-             WHERE h."contract_id" = c2."contract_id" AND h."actor" = 'ADMIN' AND h."to_status" <> 'ENDED')
-         ) AS "at"
+         GREATEST(c2."created_at", c2."sent_at", h."last_at") AS "at",
+         COALESCE(h."ended", FALSE) AS "ended"
     FROM "contracts" c2
+    LEFT JOIN (
+      SELECT "contract_id",
+             MAX("changed_at") FILTER (WHERE "to_status" <> 'ENDED') AS "last_at",
+             BOOL_OR("to_status" = 'ENDED') AS "ended"
+        FROM "contract_status_histories"
+       WHERE "actor" = 'ADMIN'
+       GROUP BY "contract_id"
+    ) h ON h."contract_id" = c2."contract_id"
 ) t
 WHERE t."contract_id" = c."contract_id";
 
