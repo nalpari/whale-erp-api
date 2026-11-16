@@ -357,7 +357,7 @@ export class StaffMemberSummaryService {
   }
 
   /**
-   * 발송 이력(WHALEERP-136) — 이 직원 레코드의 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡과(WHALEERP-676)
+   * 발송 이력(WHALEERP-136) — 이 직원 레코드의 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 · 서명 요청(WHALEERP-675) 알림톡과(WHALEERP-676)
    * 관리자가 보낸 비밀번호 초기화 메일, 보낸 시각 최근 순. 따로 쌓지 않고 알림톡 발송 이력(alimtalk_send_logs, 관련 업무 = 계약)과
    * 메일 발송 이력(mail_send_logs, staff_member_id = 이 직원, 템플릿 EMAIL_STAFF_RESET_LINK)에서 읽는다. 근로계약 관리 조회 권한(근로계약 영역과 같다)
    */

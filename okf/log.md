@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-16
+* **Update**: [Staff members](/api/staff-members.md) · [Contracts API](/api/contracts-api.md) — 직원 상세 발송 이력에 가입한 직원에게 보낸 서명 요청 알림톡(`TALK_STAFF_CONTRACT_SENT`)을 종류 `CONTRACT_SENT`(「서명 요청」)로 싣는다(WHALEERP-675, 2026-11-16 김민식). 재발송 판정은 그대로 — 같은 계약으로 앞서 나갔을 수 있는 발송이 있으면 재발송(종류는 가리지 않는다). 단위 · e2e 테스트 추가.
 * **Update**: [Attendance](/api/attendance.md) — 대신 등록한 짝의 빈 쪽을 보정으로 채우면 새 기록도 대신 등록으로 만든다(WHALEERP-687, ATT-20 v283 「대신 등록은 대신 등록으로」) — 등록자 · 사유 · 받은 시각을 그 대신 등록에서 가져와 이력이 대신 등록 한 건 · 보정 한 건으로 남는다(대신 등록 이력은 받은 시각으로 묶는다). e2e 추가.
 * **Update**: [Staff retirement](/api/staff-retirement.md) — `attendance-edit.service.ts` 줄 번호를 주석이 늘어난 만큼 맞췄다(WHALEERP-687).
 * **Update**: [Attendance](/api/attendance.md) — 출퇴근 기록 다시 보정(WHALEERP-687, 운영 정책 ATT-20 v283 · 2026-11-16 재영): 보정 · 대신 등록한 짝과 정상 · 지각 기록도 보정으로 다시 고친다 — api 는 이미 막지 않았고, 고칠 때마다 보정 이력이 한 건씩 쌓이며 대신 등록은 대신 등록으로 남는다는 e2e 를 더했다. 그날 기록이 있을 때(409 `ATTENDANCE_EXISTS`) · 시간이 겹칠 때(409 `ATTENDANCE_OVERLAP`) 안내를 「보정이 필요한 기록에서 그 줄을 보정」에서 「일별 출퇴근에서 그날 기록의 [보정]으로 고쳐 주세요」로 바꿨다(정상 기록은 보정이 필요한 기록에 나오지 않는다).

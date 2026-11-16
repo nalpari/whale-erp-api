@@ -1,6 +1,7 @@
 import type { DispatchResult, ProcessResult } from '@prisma/client';
 import {
   AFFILIATION_TEMPLATE,
+  CONTRACT_SENT_TEMPLATE,
   INVITATION_TEMPLATE,
   sendFailureOf,
 } from '../contracts/contract-send-log';
@@ -9,6 +10,8 @@ import {
 export const STAFF_SEND_KIND_LABELS = {
   SIGNUP_INVITE: '가입 초대',
   AFFILIATION_REQUEST: '소속 추가 확인 요청',
+  /** 가입한 직원에게 앱으로 보낸 근로계약서의 서명 요청 알림톡(TALK_STAFF_CONTRACT_SENT, WHALEERP-619 · 675) */
+  CONTRACT_SENT: '서명 요청',
   /** 관리자가 직원 상세 [비밀번호 초기화]로 보낸 재설정 링크 메일(WHALEERP-676) */
   PASSWORD_RESET: '비밀번호 초기화',
 } as const;
@@ -32,10 +35,14 @@ export const STAFF_SEND_RESULTS = Object.keys(
 export const MAIL_SEND_FAILURE_MESSAGE =
   '메일을 보내지 못했습니다. 잠시 뒤 비밀번호 초기화를 다시 눌러 주세요';
 
-/** 발송 이력에 싣는 알림톡 템플릿 — 근로계약 발송(ContractDeliveryService.dispatch)이 보내는 둘 */
+/**
+ * 발송 이력에 싣는 알림톡 템플릿 — 근로계약 발송(ContractDeliveryService)이 보내는 셋. 가입한 직원의 서명 요청은 처음엔 앱
+ * 알림만이라 뺐다가, 알림톡(WHALEERP-619)이 생긴 뒤 이력에도 싣는다(WHALEERP-675, 2026-11-16 김민식)
+ */
 export const SEND_KIND_OF_TEMPLATE: Readonly<Record<string, StaffSendKind>> = {
   [INVITATION_TEMPLATE]: 'SIGNUP_INVITE',
   [AFFILIATION_TEMPLATE]: 'AFFILIATION_REQUEST',
+  [CONTRACT_SENT_TEMPLATE]: 'CONTRACT_SENT',
 };
 
 export type SendLogRow = {
@@ -69,7 +76,8 @@ export type SendLog = {
 
 /**
  * 알림톡 발송 이력(오래된 순)을 직원 상세 발송 이력(최근 순)으로 바꾼다. 재발송은 같은 계약으로 앞서 직원에게 나갔을 수 있는(성공 ·
- * 접수 여부 모름) 발송이 있을 때다 — 확실히 나가지 않은 실패(거절 · 보내기 전 실패)는 세지 않는다. 직원이 받은 기준이라 계약의
+ * 접수 여부 모름) 발송이 있을 때다 — 종류는 가리지 않는다(가입 초대 · 소속 추가 확인 요청 뒤의 서명 요청도 재발송, WHALEERP-675).
+ * 확실히 나가지 않은 실패(거절 · 보내기 전 실패)는 세지 않는다. 직원이 받은 기준이라 계약의
  * 재발송 횟수(resendCount)와는 다를 수 있다 — 보낸 계약이 되돌리기로 임시저장이 된 뒤 다시 보내면 resendCount 는 세지 않지만 직원은
  * 앞 초대를 받았고, 이력 행이 빠졌거나(AlimtalkService.record 는 INSERT 실패를 삼킨다) 앱으로 나간 발송(판별값 없는 옛 계약)은 이력에 없다.
  */

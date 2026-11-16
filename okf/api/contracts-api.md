@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-14T08:47:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-16T05:08:00Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -791,8 +791,8 @@ resent — a new contract instead.
     알림함 row and no 알림톡 (like the 근무스케줄 변경 mail — an 알림톡 template cannot carry a 묶음).
   - `prepare` returns it (`PendingContractNotice`) and `dispatch` sends it after commit. A failure never fails the
     save — the save and the 알림함 row are done; the result is in `alimtalk_send_logs` (related `contract`), a
-    pre-send failure (template off, …) is logged, a landline is skipped with a warning. It is **not** in the 직원 상세
-    발송 이력 (that list is 가입 초대 · 소속 추가 확인 요청 only).
+    pre-send failure (template off, …) is logged, a landline is skipped with a warning. It is in the 직원 상세
+    발송 이력 as 「서명 요청」 (`CONTRACT_SENT`, WHALEERP-675 — it was left out at first).
   - It goes to the **account's** phone (the one whose 수신 설정 was read), not the record's.
   - Just before sending, `dispatch` re-reads the contract and sends only if it is still this send — 서명 대기 with the
     deadline this send set. If another request sent it again meanwhile (it sends with its own new deadline) or it was

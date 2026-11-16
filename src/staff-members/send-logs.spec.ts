@@ -1,5 +1,6 @@
 import {
   AFFILIATION_TEMPLATE,
+  CONTRACT_SENT_TEMPLATE,
   INVITATION_TEMPLATE,
 } from '../contracts/contract-send-log';
 import {
@@ -78,6 +79,32 @@ describe('toSendLogs — 직원 상세 발송 이력', () => {
       [8, 'UNCONFIRMED', false, false],
       [7, 'SUCCEEDED', false, null],
       [7, 'FAILED', false, true],
+    ]);
+  });
+
+  it('가입한 직원의 서명 요청 알림톡도 싣고, 재발송은 같은 계약의 앞선 발송으로 가른다(종류는 가리지 않는다, WHALEERP-675)', () => {
+    const logs = toSendLogs([
+      row({ relatedId: 9, templateCode: CONTRACT_SENT_TEMPLATE }),
+      row({ relatedId: 9, templateCode: CONTRACT_SENT_TEMPLATE }),
+      // 소속 추가 확인 요청을 수락한 뒤 관리자가 다시 보낸 서명 요청
+      row({ relatedId: 10, templateCode: AFFILIATION_TEMPLATE }),
+      row({ relatedId: 10, templateCode: CONTRACT_SENT_TEMPLATE }),
+      // 확실히 나가지 않은 서명 요청 뒤는 재발송이 아니다
+      row({
+        relatedId: 11,
+        templateCode: CONTRACT_SENT_TEMPLATE,
+        result: 'FAILED',
+        failureReason: 'code=3018 http=200: x',
+      }),
+      row({ relatedId: 11, templateCode: CONTRACT_SENT_TEMPLATE }),
+    ]);
+    expect(logs.map((l) => [l.contractId, l.kind, l.isResend])).toEqual([
+      [11, 'CONTRACT_SENT', false],
+      [11, 'CONTRACT_SENT', false],
+      [10, 'CONTRACT_SENT', true],
+      [10, 'AFFILIATION_REQUEST', false],
+      [9, 'CONTRACT_SENT', true],
+      [9, 'CONTRACT_SENT', false],
     ]);
   });
 

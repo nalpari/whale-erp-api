@@ -277,7 +277,8 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         contractParty: { create: { enteredBirthDate: new Date('2001-05-05') } },
       },
     });
-    // 발송 이력 — 가입 전 직원의 계약에 나간 가입 초대 알림톡(성공 → 거절 → 성공)과, 이력에 들지 않는 다른 알림톡 하나
+    // 발송 이력 — 가입 전 직원의 계약에 나간 가입 초대 알림톡(성공 → 거절 → 성공), 가입 뒤 다시 보낸 서명 요청 알림톡(WHALEERP-675)과,
+    // 이력에 들지 않는 다른 알림톡 하나
     const sendLog = (
       minute: number,
       templateCode: string,
@@ -301,6 +302,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         sendLog(2, 'TALK_STAFF_INVITATION', 'FAILED', 'code=3018 http=200: x'),
         sendLog(3, 'TALK_CONTRACT_REMINDER', 'SUCCEEDED'),
         sendLog(4, 'TALK_STAFF_INVITATION', 'SUCCEEDED'),
+        sendLog(5, 'TALK_STAFF_CONTRACT_SENT', 'SUCCEEDED'),
       ],
     });
     // 메일 발송 이력 — 지안에게 간 비밀번호 초기화 메일(성공 · 실패)과, 이력에 들지 않는 다른 유형 메일 하나
@@ -760,18 +762,19 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     expect(JSON.stringify(outOfScope.body)).not.toContain('55556666777788');
   });
 
-  it('발송 이력 — 그 직원 계약의 가입 초대 알림톡만 최근 순, 재발송 · 실패 사유 · 재시도 가능 여부', async () => {
+  it('발송 이력 — 그 직원 계약의 가입 초대 · 서명 요청 알림톡만 최근 순, 재발송(종류를 가리지 않는다) · 실패 사유 · 재시도 가능 여부', async () => {
     const res = await get(`/staff-members/${draftId}/summary/send-logs`);
     expect(res.status).toBe(200);
     const { items } = res.body as StaffMemberSendLogResponseDto;
     expect(
       items.map((i) => [i.kind, i.isResend, i.result, i.retryable]),
     ).toEqual([
+      ['CONTRACT_SENT', true, 'SUCCEEDED', null],
       ['SIGNUP_INVITE', true, 'SUCCEEDED', null],
       ['SIGNUP_INVITE', true, 'FAILED', true],
       ['SIGNUP_INVITE', false, 'SUCCEEDED', null],
     ]);
-    expect(items[1].failureReason).toContain('코드 3018');
+    expect(items[2].failureReason).toContain('코드 3018');
     // 지안은 알림톡 이력이 없고, 비밀번호 초기화 메일만 최근 순으로 나온다 — 실패 사유에 SMTP 원문(받는 주소)이 새지 않는다
     const jian = await get(`/staff-members/${jianId}/summary/send-logs`);
     const jianItems = (jian.body as StaffMemberSendLogResponseDto).items;
