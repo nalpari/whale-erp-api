@@ -1,10 +1,10 @@
 ---
 type: API
 title: Staff member list, detail and detail summary
-description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 알림톡과 비밀번호 초기화 메일 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
+description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 · 서명 요청 알림톡과 비밀번호 초기화 메일 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T08:17:28Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-16T05:08:00Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -215,7 +215,7 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 | `…/summary/work-schedules?weekStart=` | 근무스케줄 관리 `/work-schedules` | 한 주(월~일)의 근무스케줄과 근무시간 · 주간 합계(분). `weekStart` 는 그 주의 아무 날짜, 빼면 이번 주(한국 날짜) |
 | `…/summary/payslips` | 급여명세서 관리 `/payslips` | 최근 명세서 3건(`recent` — 상태와 관계없이 급여 기간 시작일 최신순, 기본급 · 수당 · 공제 · 실지급액 · 상태) · 미발송 건수 |
 | `…/summary/todos` | TO-DO 관리 `/todos` | 배정된 TO-DO 의 전체 · 완료 · 미완료 건수와 최근 처리 이력 5건 |
-| `…/summary/send-logs` | 근로계약 관리 `/contracts` | 발송 이력(WHALEERP-136 · 676) — 이 직원 레코드의 모든 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡과, 관리자가 [비밀번호 초기화]로 보낸 재설정 링크 메일(`mail_send_logs.staff_member_id` = 이 직원 · `mail_type_code` = `EMAIL_STAFF_RESET_LINK`), 보낸 시각 최근 순. 줄마다 종류(`StaffSendKind` — `SIGNUP_INVITE` · `AFFILIATION_REQUEST`(복귀 확인 포함) · `PASSWORD_RESET` 비밀번호 초기화) · 재발송 여부 · 결과(`StaffSendResult` 성공 · 실패 · 접수 여부 모름) · 실패 사유 · 재시도 가능 여부 · 보낸 시각 · 계약 ID. 메일 줄은 `contractId` null · `isResend` false · `retryable` null · 결과는 성공 · 실패만이고, 실패 사유는 고정 문구다(SMTP 원문에는 받는 주소가 섞여 내보내지 않는다). `sendLogId` 는 알림톡 줄이 `alimtalk_send_logs` id, 메일 줄이 `mail_send_logs.mail_id` 라 서로 겹칠 수 있다 — 목록 key 는 `kind` 와 함께 쓴다. 계약이 없어도 메일 줄은 나온다 |
+| `…/summary/send-logs` | 근로계약 관리 `/contracts` | 발송 이력(WHALEERP-136 · 676 · 675) — 이 직원 레코드의 모든 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 · 서명 요청 알림톡과, 관리자가 [비밀번호 초기화]로 보낸 재설정 링크 메일(`mail_send_logs.staff_member_id` = 이 직원 · `mail_type_code` = `EMAIL_STAFF_RESET_LINK`), 보낸 시각 최근 순. 줄마다 종류(`StaffSendKind` — `SIGNUP_INVITE` · `AFFILIATION_REQUEST`(복귀 확인 포함) · `CONTRACT_SENT` 서명 요청 · `PASSWORD_RESET` 비밀번호 초기화) · 재발송 여부 · 결과(`StaffSendResult` 성공 · 실패 · 접수 여부 모름) · 실패 사유 · 재시도 가능 여부 · 보낸 시각 · 계약 ID. 메일 줄은 `contractId` null · `isResend` false · `retryable` null · 결과는 성공 · 실패만이고, 실패 사유는 고정 문구다(SMTP 원문에는 받는 주소가 섞여 내보내지 않는다). `sendLogId` 는 알림톡 줄이 `alimtalk_send_logs` id, 메일 줄이 `mail_send_logs.mail_id` 라 서로 겹칠 수 있다 — 목록 key 는 `kind` 와 함께 쓴다. 계약이 없어도 메일 줄은 나온다 |
 
 **권한은 둘이다.** 컨트롤러가 `/staff-members` 라 가드가 직원 정보 관리(`MN000005`) 조회를 보고, 서비스가 그 영역 메뉴의
 조회 권한을 다시 본다(`adminHasMenuAction`, 가드와 같은 판정). 영역 권한이 없으면 **그 영역만 403 「조회 권한이 없습니다.」**
@@ -260,18 +260,25 @@ BM · BA 가 ID 를 차례로 불러 응답 시간으로 목록이 숨긴 「자
 
 - **발송 이력**은 따로 쌓지 않고 알림톡 발송 이력(`alimtalk_send_logs`)에서 읽는다(2026-10-29 김민식 — 마이그레이션 없이).
   근로계약 발송(`ContractDeliveryService.dispatch`)이 남기는 줄 — 관련 업무 `contract`(`CONTRACT_RELATED_TYPE`) · 그 직원
-  레코드의 계약 · 템플릿 `TALK_STAFF_INVITATION`(가입 초대) · `TALK_STAFF_AFFILIATION_REQUEST`(소속 추가 확인 요청)만이다.
-  가입한 직원에게 가는 근로계약서 발송 알림톡(`TALK_STAFF_CONTRACT_SENT`, WHALEERP-619)은 같은 관련 업무로 남지만 이 목록에는 싣지 않는다.
+  레코드의 계약 · 템플릿 `TALK_STAFF_INVITATION`(가입 초대) · `TALK_STAFF_AFFILIATION_REQUEST`(소속 추가 확인 요청) ·
+  `TALK_STAFF_CONTRACT_SENT`(서명 요청 — 가입한 직원에게 가는 근로계약서 발송 알림톡, WHALEERP-619)다. 서명 요청은 처음엔 싣지 않다가
+  싣는다(WHALEERP-675, 2026-11-16 김민식 — 통합테스트 IT-STAFF-002 에서 가입한 직원에게 보낸 서명 요청이 이력에 없었다). 재발송은 종류를
+  가리지 않고 같은 계약으로 센다 — 소속 추가 확인 요청을 수락한 뒤 · 가입 초대로 가입한 뒤 다시 보낸 서명 요청도 재발송이다.
   **재발송**은 같은 계약으로 앞서 직원에게 나갔을 수 있는(성공 · 접수 여부 모름) 발송이 있을 때다 — 확실히 나가지 않은 실패(거절 ·
-  보내기 전 실패)는 세지 않는다. 직원이 받은 기준이라 계약 `resend_count` 와는 다를 수 있다(보낸 계약이 되돌리기로 임시저장이 된 뒤
-  다시 보내면 `resend_count` 는 세지 않지만 직원은 앞 초대를 받았다). **실패 사유 · 재시도 가능 여부**는
+  보내기 전 실패)는 세지 않는다 — 단 서명 요청은 알림톡이 실패해도 앱 알림함으로 받았으므로 실패 줄도 센다(아래). 직원이 받은 기준이라 계약 `resend_count` 와는 다를 수 있다(보낸 계약이 되돌리기로 임시저장이 된 뒤
+  다시 보내면 `resend_count` 는 세지 않지만 직원은 앞 초대를 받았다). **실패 사유 · 재시도 가능 여부**는(서명 요청은 예외 — 아래)
   `failure_reason`(`code=… http=… path=…: 메시지`, `src/alimtalk/failure-reason.ts` — path 는 실패한 단계, 모르면 `unknown`)을
   `sendFailureOf`(`src/contracts/contract-send-log.ts`)가 발송(dispatch)이 되돌릴지 · 502 문구를 정할 때와 같은 갈래(`sendFailureKindOf`)로
   가른다 — 비즈뿌리오 코드가 있으면 거절 · 토큰 단계면 보내지 않음이라 다시 보낼 수 있고(502 `SEND_FAILED`), 그 밖은
   접수 여부 모름이라 다시 보내면 두 번 갈 수 있다(502 `SEND_UNCONFIRMED`). 사유에는 비즈뿌리오 원문(번호가 섞일 수 있다)을
   싣지 않고 코드만 싣는다(토큰 단계 실패는 코드가 있어도 「보내기 전에 실패」 문구 — 번호 탓이 아니다, 502 도 「잠시 뒤」 문구다). 단계를 모르는 행(비즈뿌리오 오류가 아닌 예외)은 메시지가 나간 뒤일 수 있어 접수 여부 모름이다 — 발송(dispatch)은 그런 예외를 알림톡을 부르기 전 검사로 보고 되돌리지만, 이력 행은 클라이언트를 부른 뒤에만 남는다. 확실히 나가지 않았는데 되돌리기마저 실패한 드문 경우(502 `SEND_UNCONFIRMED`)는 계약이 「보낸 상태」로 남지만 이력은 실패 · 재시도 가능으로 남고 다음 발송도 재발송으로 세지 않는다 — 이력만으로는 가를 수 없는 알려진 한계다. 같은 까닭으로 알림톡 이력 행이 빠졌거나(`AlimtalkService.record` 는 INSERT 실패를 삼킨다) 앱으로 나간 발송(판별값 없는 옛 계약)이 섞이면 재발송 표시가 계약 `resend_count` 와 다를 수 있다. 토큰 단계는 `path` 칸으로 보고, `path` 칸이 없거나 `undefined` 인 옛 행만 메시지 머리(`/v1/token `)로 본다. 모양을 모르는 사유는 접수 여부 모름이다. 재시도 가능 여부는 그 발송 한 번의 판정이다 — 지금 재발송 버튼을 누를 수 있는지는 계약 상태가
-  정한다. 소속 추가 확인 요청 **메일**은 메일 발송 이력(`mail_send_logs`)에 관련 계약이 없어 담지 않는다. 앱으로 받는 가입한
-  직원(직원 알림 `PUSH_CONTRACT_SENT`)도 알림톡이 아니라 담지 않는다. 지운 계약(임시저장 삭제)의 발송은 빠진다.
+  정한다. 소속 추가 확인 요청 **메일**은 메일 발송 이력(`mail_send_logs`)에 관련 계약이 없어 담지 않는다. 가입한 직원의 앱
+  알림함 줄(직원 알림 `PUSH_CONTRACT_SENT`)은 담지 않고, 같은 때 나간 서명 요청 알림톡(`TALK_STAFF_CONTRACT_SENT`)을 담는다 —
+  수신 설정에서 근로계약서 묶음을 끈 직원 · 유선번호 · 보내기 직전에 건너뛴 발송은 알림톡 행이 없어 이력에도 없다. 서명 요청 알림톡이
+  실패해도 알림함 줄은 이미 있다(알림함 줄이 없으면 알림톡도 보내지 않는다). 그래서 서명 요청 실패 줄은 다시 보내라고 하지 않는다 —
+  사유는 실패 갈래(거절 · 보내기 전 실패 · 접수 여부 모름)마다 「… 직원 앱 알림함에는 들어갔습니다」이고, 거절이면 직원 **계정**의
+  휴대전화번호를 보라고 한다(계약서가 아닌 계정 번호로 간다). 재시도 가능 여부는 null(「-」)이고, 직원이 받은 발송이라 다음 발송은
+  재발송이다(`contractSentFailureOf`). 근로계약 재발송은 서명 기한을 새로 잡고 알림함에 한 번 더 보낸다. 지운 계약(임시저장 삭제)의 발송은 빠진다.
 
 **하지 않은 것.** 출퇴근 현황 영역(이번 주 출근 · 지각 · 결근 · 조기 퇴근 횟수)은 없다 — `attendance_records` 에 쓰는
 곳이 아직 없고(급여 초안이 읽기만 한다) 지각 · 결근 판정 규칙도 정해지지 않았다. 183 에서 떼어 출퇴근 작업과 함께 따로 한다(2026-10-21 재영). **본인인증 상태**도 내지 않는다 — 가입에

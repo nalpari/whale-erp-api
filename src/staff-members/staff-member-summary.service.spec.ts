@@ -460,7 +460,7 @@ describe('StaffMemberSummaryService', () => {
   });
 
   describe('sendLogs — 발송 이력 (WHALEERP-136)', () => {
-    it('이 직원 레코드의 모든 계약이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡을 오래된 순으로 읽어 최근 순으로 낸다', async () => {
+    it('이 직원 레코드의 모든 계약이 보낸 가입 초대 · 소속 추가 확인 요청 · 서명 요청 알림톡을 오래된 순으로 읽어 최근 순으로 낸다', async () => {
       prisma.contract.findMany.mockResolvedValue([
         { contractId: 7 },
         { contractId: 8 },
@@ -492,7 +492,11 @@ describe('StaffMemberSummaryService', () => {
         relatedType: 'contract',
         relatedId: { in: [7, 8] },
         templateCode: {
-          in: ['TALK_STAFF_INVITATION', 'TALK_STAFF_AFFILIATION_REQUEST'],
+          in: [
+            'TALK_STAFF_INVITATION',
+            'TALK_STAFF_AFFILIATION_REQUEST',
+            'TALK_STAFF_CONTRACT_SENT',
+          ],
         },
       });
       expect(query.orderBy).toEqual({ alimtalkSendLogId: 'asc' });
