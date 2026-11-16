@@ -236,6 +236,7 @@ export class BpHolidaysService {
   /**
    * 겹치는 휴일 확인(WHALEERP-556) — 저장은 막지 않고, 같은 점포 · 같은 날짜에 이미 있는 휴일을 점포별로 준다.
    * 새 휴일의 날짜는 오늘(시작 전이면 시작일)부터 1년 안에서만 본다. 공식 휴일과 겹치는지는 보지 않는다.
+   * 수정이면 이번 저장으로 새로 겹치는 것만 준다 — 저장된 그 휴일이 이미 덮던 (점포, 날짜)는 뺀다(WHALEERP-715).
    */
   async overlaps(
     caller: HolidayCaller,
@@ -243,19 +244,18 @@ export class BpHolidaysService {
     today: Date,
   ): Promise<BpHolidayOverlapsResponseDto> {
     // 수정 중인 휴일은 볼 수 있는 휴일이어야 하고, 진행 중이면 시작일이 지났다 — 그때만 지난 시작일을 받는다.
-    let editingStarted = false;
-    if (dto.bpHolidayId) {
-      const editing = await this.prisma.bpHoliday.findFirst({
-        where: {
-          ...visibleWhere(caller),
-          bpHolidayId: dto.bpHolidayId,
-          isDeleted: false,
-        },
-        select: { startDate: true },
-      });
-      if (!editing) throw new NotFoundException(NOT_FOUND);
-      editingStarted = editing.startDate <= today;
-    }
+    const editing = dto.bpHolidayId
+      ? await this.prisma.bpHoliday.findFirst({
+          where: {
+            ...visibleWhere(caller),
+            bpHolidayId: dto.bpHolidayId,
+            isDeleted: false,
+          },
+          select: HOLIDAY_SELECT,
+        })
+      : null;
+    if (dto.bpHolidayId && !editing) throw new NotFoundException(NOT_FOUND);
+    const editingStarted = !!editing && editing.startDate <= today;
     const rule = ruleOf(dto, today, { allowPastStart: editingStarted });
     const from = rule.startDate > today ? rule.startDate : today;
     const windowEnd = addDays(from, OVERLAP_WINDOW_DAYS);
@@ -291,12 +291,16 @@ export class BpHolidaysService {
       h,
       dates: new Set(datesBetween(h, from, to).map((x) => x.getTime())),
     }));
+    // 수정이면 저장된 그 휴일이 이미 덮고 있는 (점포, 날짜)는 이번 저장으로 새로 겹치지 않으니 묻지 않는다(WHALEERP-715) —
+    // 휴일명 · 설명만 고친 저장은 겹침이 0 이고, 날짜를 옮기거나 늘린 날 · 더한 점포만 남는다.
+    const alreadyCovered = coveredBy(editing, bpStores, from, to);
     const stores: BpHolidayOverlapsResponseDto['stores'] = [];
     let dateCount = 0;
     for (const s of targets) {
       const dates: { date: string; holidayNames: string[] }[] = [];
       for (const date of newDates) {
         if (!storeOpenOn(s, date, dto.isAllStores)) continue;
+        if (alreadyCovered(s.storeId, date)) continue;
         const holidayNames = otherDates
           .filter(
             ({ h, dates: ds }) =>
@@ -402,6 +406,25 @@ export class BpHolidaysService {
       orderBy: [{ name: 'asc' }, { storeId: 'asc' }],
     });
   }
+}
+
+/**
+ * 저장된 휴일(수정 중인 것)이 그 점포 · 날짜에 이미 적용되는가 — 겹침 확인에서 이번 저장으로 새로 겹치지 않는 것을 거른다.
+ * 등록이면(holiday 없음) 언제나 false.
+ */
+function coveredBy(
+  holiday: HolidayRow | null,
+  bpStores: HolidayStore[],
+  from: Date,
+  to: Date,
+): (storeId: number, date: Date) => boolean {
+  if (!holiday) return () => false;
+  const dates = new Set(
+    datesBetween(holiday, from, to).map((x) => x.getTime()),
+  );
+  return (storeId, date) =>
+    dates.has(date.getTime()) &&
+    appliedStoresOn(holiday, bpStores, date).some((a) => a.storeId === storeId);
 }
 
 function historyOf(

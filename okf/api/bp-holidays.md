@@ -4,7 +4,7 @@ title: BP holidays
 description: 관리자 웹 「BP 휴일 관리」(MN000015) — rule-stored holidays whose dates are computed when read, month calendar · list, detail, change history, overlap check, create, update, force termination and deletion; past dates never change, stores join from today and leave as of yesterday.
 tags: [admin, holiday, bp, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-10-30T09:10:32Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-16T02:24:11Z }
 sources:
   - id: bp-holidays-controller
     resource: ../../src/bp-holidays/bp-holidays.controller.ts
@@ -37,7 +37,7 @@ sources:
   - id: bp-holidays-service
     resource: ../../src/bp-holidays/bp-holidays.service.ts
     title: list · detail · histories · overlaps
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-16T02:24:11Z
   - id: store-periods-migration
     resource: ../../prisma/migrations/20261026135250_team1_bp_holiday_store_periods/migration.sql
     title: target · excluded stores become one row per period
@@ -205,7 +205,11 @@ and 「N개점」 — history is not rewritten.[^bp-holiday-changes]
 `POST /bp-holidays/overlaps` takes the same form (plus `bpHolidayId` when editing — it
 must be a holiday the caller can see, or 404; the holiday itself is left out, and a past
 start date is accepted only when that holiday has already started) and reports, per store, the dates another holiday already covers — the first ten dates with
-holiday names and a count of the rest. It looks at the new holiday's dates from today (or
+holiday names and a count of the rest. **When editing, it reports only what this save
+adds** (WHALEERP-715, 2026-11-16): a store · date the saved holiday already covers is left
+out, so renaming or re-describing a holiday answers zero and 관리자 웹 saves without asking —
+before, a 진행 중 holiday whose date shares a day with another asked 「휴일이 추가됩니다」 on a
+name-only edit. Moved or added days and added stores still show. It looks at the new holiday's dates from today (or
 its start) for **one year**; endless repeats are not compared beyond that. A caller who
 covers only some stores sees only their own stores in the answer. 공식 휴일 are
 not compared.
