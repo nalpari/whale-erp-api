@@ -781,6 +781,119 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
     expect(d.documents.map((x) => x.documentKind)).toEqual(['USER_MANUAL']);
   });
 
+  it('문서 종류는 플랫폼고정 공통코드 FACILITY_DOCUMENT — 더한 종류로 올리고, 사용 중지한 종류는 새로 못 올리지만 보이고 뺄 수 있다(WHALEERP-718)', async () => {
+    const kinds = await prisma.codeItem.findMany({
+      where: { groupCode: 'FACILITY_DOCUMENT', bpCode: 'BP000000' },
+      orderBy: { sortOrder: 'asc' },
+      select: { itemCode: true, label: true, manageOwnerCode: true },
+    });
+    expect(kinds).toEqual([
+      {
+        itemCode: 'USER_MANUAL',
+        label: '사용 매뉴얼',
+        manageOwnerCode: 'PLATFORM_FIXED',
+      },
+      {
+        itemCode: 'PRECAUTION',
+        label: '주의사항',
+        manageOwnerCode: 'PLATFORM_FIXED',
+      },
+      {
+        itemCode: 'WARRANTY',
+        label: '제품 보증서',
+        manageOwnerCode: 'PLATFORM_FIXED',
+      },
+    ]);
+    const key = (itemCode: string) => ({
+      groupCode_itemCode_bpCode: {
+        groupCode: 'FACILITY_DOCUMENT',
+        itemCode,
+        bpCode: 'BP000000',
+      },
+    });
+    const { facilityId } = await create({ name: '문서 종류 장비' });
+    await call('put', `/facilities/${facilityId}/documents/WARRANTY`)
+      .attach('file', PDF, '보증서.pdf')
+      .expect(200);
+    await prisma.codeItem.create({
+      data: {
+        groupCode: 'FACILITY_DOCUMENT',
+        itemCode: 'E2E_INVOICE',
+        bpCode: 'BP000000',
+        label: '거래명세서',
+        manageOwnerCode: 'PLATFORM_FIXED',
+        status: 'ACTIVE',
+        sortOrder: 0,
+      },
+    });
+    // 공용 기준 행 WARRANTY 를 잠시 사용 중지했다가 finally 에서 되돌린다 — 일회용 DB 에서 --runInBand 로 돈다는 전제다.
+    // 다른 suite 가 FACILITY_DOCUMENT 행을 쓰게 되면 병렬 실행에서 서로 간섭하니 그때는 전용 종류를 만들어 쓴다.
+    await prisma.codeItem.update({
+      where: key('WARRANTY'),
+      data: { status: 'INACTIVE' },
+    });
+    try {
+      const added = await call(
+        'put',
+        `/facilities/${facilityId}/documents/E2E_INVOICE`,
+      )
+        .attach('file', PDF, '명세서.pdf')
+        .expect(200);
+      expect(added.body).toMatchObject({
+        documentKind: 'E2E_INVOICE',
+        documentKindLabel: '거래명세서',
+        isDocumentKindActive: true,
+      });
+      const refused = await call(
+        'put',
+        `/facilities/${facilityId}/documents/WARRANTY`,
+      )
+        .attach('file', PDF, '보증서2.pdf')
+        .expect(400);
+      expect((refused.body as { message: string }).message).toBe(
+        '쓸 수 없는 문서 종류입니다.',
+      );
+
+      // 공통코드 순서(더한 종류 sortOrder 0 이 먼저) · 미사용 종류는 이름과 함께 남는다
+      let d = await detail(facilityId);
+      expect(
+        d.documents.map((x) => [
+          x.documentKind,
+          x.documentKindLabel,
+          x.isDocumentKindActive,
+          x.fileName,
+        ]),
+      ).toEqual([
+        ['E2E_INVOICE', '거래명세서', true, '명세서.pdf'],
+        ['WARRANTY', '제품 보증서', false, '보증서.pdf'],
+      ]);
+      await call(
+        'delete',
+        `/facilities/${facilityId}/documents/WARRANTY`,
+      ).expect(204);
+      d = await detail(facilityId);
+      expect(d.documents.map((x) => x.documentKind)).toEqual(['E2E_INVOICE']);
+    } finally {
+      await prisma.facilityDocument.deleteMany({
+        where: { documentKind: 'E2E_INVOICE' },
+      });
+      await prisma.codeItem.delete({ where: key('E2E_INVOICE') });
+      await prisma.codeItem.update({
+        where: key('WARRANTY'),
+        data: { status: 'ACTIVE' },
+      });
+    }
+  });
+
+  it('DB 도 문서 종류 모양을 상세 코드와 같게 막는다 — facility_documents_document_kind_format', async () => {
+    const { facilityId } = await create({ name: '문서 CHECK 장비' });
+    await expect(
+      prisma.$executeRaw`
+        INSERT INTO "facility_documents" ("facility_id", "document_kind", "file_name", "file_type", "size_bytes", "storage_key", "created_by")
+        VALUES (${facilityId}, 'user_manual', 'x.pdf', 'PDF', 1, ${'facilities/e2e/' + facilityId}, ${adminIds[0]})`,
+    ).rejects.toThrow(/facility_documents_document_kind_format/);
+  });
+
   it('삭제하면 목록 · 상세에서 빠지고(논리 삭제) 문서도 함께 지움 표시한다', async () => {
     const { facilityId } = await create({ name: '삭제할 장비' });
     await call('put', `/facilities/${facilityId}/documents/WARRANTY`)

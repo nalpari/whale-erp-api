@@ -3361,15 +3361,15 @@ model Facility {
   @@map("facilities")
 }
 
-/// 시설물·장비 문서 — 종류마다 지우지 않은 행 하나(부분 고유 인덱스) · CHECK 2(크기 10MB · 이름 255자) · 외래키 created_by 는
-/// 마이그레이션 SQL 에만 있다.
+/// 시설물·장비 문서 — 종류마다 지우지 않은 행 하나(부분 고유 인덱스) · CHECK 3(크기 10MB · 이름 255자 · 문서 종류 모양,
+/// 20261116112631) · 외래키 created_by 는 마이그레이션 SQL 에만 있다.
 model FacilityDocument {
   /// 문서 ID
   facilityDocumentId Int                  @id @default(autoincrement()) @map("facility_document_id")
   /// 시설물·장비 — facilities FK
   facilityId         Int                  @map("facility_id")
-  /// 문서 종류 — 사용 매뉴얼 · 주의사항 · 제품 보증서
-  documentKind       FacilityDocumentKind @map("document_kind")
+  /// 문서 종류 — 공통코드 FACILITY_DOCUMENT(플랫폼고정)의 상세 코드. 외래키 없음
+  documentKind       String               @map("document_kind")
   /// 파일 이름
   fileName           String               @map("file_name")
   /// 파일 종류 — JPG · PNG · PDF, 파일 내용으로 확인
@@ -3389,13 +3389,4 @@ model FacilityDocument {
 
   @@unique([storageKey], map: "facility_documents_storage_key_key")
   @@map("facility_documents")
-}
-
-/// 사용 매뉴얼 · 주의사항 · 제품 보증서
-enum FacilityDocumentKind {
-  USER_MANUAL
-  PRECAUTION
-  WARRANTY
-
-  @@map("facility_document_kind")
 }

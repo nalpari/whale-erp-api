@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { AttachmentFileType, FacilityDocumentKind } from '@prisma/client';
+import { AttachmentFileType } from '@prisma/client';
 import { FACILITY_GROUPS, type FacilityGroup } from '../facility-format';
 
 /** 목록 한 줄 */
@@ -46,8 +46,12 @@ export class FacilityManagerDto {
 
 export class FacilityDocumentDto {
   facilityDocumentId: number;
-  @ApiProperty({ enum: FacilityDocumentKind, enumName: 'FacilityDocumentKind' })
-  documentKind: FacilityDocumentKind;
+  /** 문서 종류 — 플랫폼고정 공통코드 FACILITY_DOCUMENT 의 상세 코드(경로 `/documents/:kind` 의 kind). @example USER_MANUAL */
+  documentKind: string;
+  /** 문서 종류 한글 — 공통코드 이름. 미사용 · 지운 종류도 이름이 남고, 공통코드에 없으면 코드 그대로 */
+  documentKindLabel: string;
+  /** 문서 종류가 지금 사용 중인가 — false 면 이 문서는 보이고 뺄 수 있지만 그 종류로 새로 올리거나 바꾸지 못한다(400) */
+  isDocumentKindActive: boolean;
   fileName: string;
   @ApiProperty({ enum: AttachmentFileType, enumName: 'AttachmentFileType' })
   fileType: AttachmentFileType;
