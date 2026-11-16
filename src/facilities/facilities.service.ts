@@ -10,11 +10,7 @@ import {
   type OnModuleInit,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import {
-  AttachmentFileType,
-  type FacilityDocumentKind,
-  Prisma,
-} from '@prisma/client';
+import { AttachmentFileType, Prisma } from '@prisma/client';
 import {
   hiddenStoreStaffWhere,
   hidesPersonalData,
@@ -66,14 +62,12 @@ import type {
   UpdateFacilityResponseDto,
 } from './dto/facility.response.dto';
 import {
-  FACILITY_DOCUMENT_KINDS,
+  FACILITY_DOCUMENT_GROUP,
   FACILITY_DOCUMENT_MAX_BYTES,
   FACILITY_GROUPS,
   type FacilityGroup,
   FACILITY_STATUS_GROUP,
   INSPECTION_CYCLE_GROUP,
-  documentKindLabel,
-  documentKindOf,
   pickLabel,
   totalAmountOf,
 } from './facility-format';
@@ -479,11 +473,17 @@ export class FacilitiesService implements OnModuleInit {
     rawKind: string,
     file: FacilityDocumentUpload | undefined,
   ): Promise<FacilityDocumentDto> {
-    const documentKind = kindOrNotFound(rawKind);
-    if (!file)
+    const kinds = await this.documentKinds();
+    const kind = kindOrNotFound(kinds, rawKind);
+    // 사용 중지 · 지운 종류(또는 그룹)는 새로 올리지 못한다 — 이미 올린 그 종류의 문서는 상세에 남고 뺄 수 있다.
+    // 이 확인은 트랜잭션 밖이다: 확인 직후 운영자가 그 종류를 사용 중지하면 이미 시작한 올리기 한 건은 들어간다(받아들임).
+    if (!kind.isActive)
       throw new BadRequestException(
-        `${documentKindLabel(documentKind)} 파일을 골라 주세요.`,
+        `사용 중지된 문서 종류(${kind.label})라 새로 올리거나 바꿀 수 없습니다. 이미 올린 문서는 뺄 수 있습니다.`,
       );
+    const documentKind = rawKind;
+    if (!file)
+      throw new BadRequestException(`${kind.label} 파일을 골라 주세요.`);
     const fileType = assertUpload(
       file,
       DOCUMENT_TYPES,
@@ -554,7 +554,7 @@ export class FacilitiesService implements OnModuleInit {
       }
       throw error;
     }
-    const [document] = await this.documentsOf([saved]);
+    const [document] = await this.documentsOf([saved], kinds);
     return document;
   }
 
@@ -568,7 +568,7 @@ export class FacilitiesService implements OnModuleInit {
   private async assertDocumentWritable(
     caller: FacilityCaller,
     row: Pick<DetailRow, 'createdBy' | 'documents'>,
-    documentKind: FacilityDocumentKind,
+    documentKind: string,
   ): Promise<void> {
     if (
       await adminHasMenuAction(
@@ -595,9 +595,18 @@ export class FacilitiesService implements OnModuleInit {
     facilityId: number,
     rawKind: string,
   ): Promise<void> {
-    const documentKind = kindOrNotFound(rawKind);
+    // 사용 중지한 종류도 뺄 수 있다. 공통코드에서 행이 사라진 종류(SQL 로 지운 때)라도 상세에 보이는 문서는 뺄 수 있게,
+    // 그 시설물에 그 종류의 문서가 있으면 받는다 — 둘 다 아니면 404.
+    const documentKind = rawKind;
+    const kinds = await this.documentKinds();
     const caller = await this.loadCaller(callerId, bp);
-    assertEditable(await this.findFacility(this.prisma, caller, facilityId));
+    const row = await this.findFacility(this.prisma, caller, facilityId);
+    if (
+      !kinds.has(documentKind) &&
+      !row.documents.some((d) => d.documentKind === documentKind)
+    )
+      throw new NotFoundException(DOCUMENT_KIND_NOT_FOUND);
+    assertEditable(row);
     await this.prisma.$transaction(async (tx) => {
       await lockEditable(tx, facilityId);
       await tx.facilityDocument.updateMany({
@@ -846,19 +855,69 @@ export class FacilitiesService implements OnModuleInit {
     return new Map(rows.map((r) => [r.adminAccountId, r.name]));
   }
 
-  /** 문서 응답 — 종류 순. 주소는 5분짜리 서명이고, 저장소가 없거나 서명이 실패하면 null(조회는 막지 않는다). */
+  /**
+   * 문서 종류 — 플랫폼고정 공통코드 FACILITY_DOCUMENT 의 플랫폼 원본(모든 BP 가 같다), 공통코드 순서대로. 미사용 · 지운
+   * 코드도 넣는다 — 그 종류로 올린 문서는 이름이 남고 뺄 수 있다. 사용 중은 코드와 그룹이 모두 사용 중 · 지우지 않음일 때다.
+   */
+  private async documentKinds(): Promise<Map<string, DocumentKind>> {
+    const rows = await this.prisma.codeItem.findMany({
+      where: { groupCode: FACILITY_DOCUMENT_GROUP, bpCode: PLATFORM_BP_CODE },
+      select: {
+        itemCode: true,
+        label: true,
+        status: true,
+        isDeleted: true,
+        codeGroup: { select: { status: true, isDeleted: true } },
+      },
+      orderBy: [{ sortOrder: 'asc' }, { itemCode: 'asc' }],
+    });
+    return new Map(
+      rows.map((r, order) => [
+        r.itemCode,
+        {
+          label: r.label,
+          order,
+          isActive:
+            r.status === 'ACTIVE' &&
+            !r.isDeleted &&
+            r.codeGroup.status === 'ACTIVE' &&
+            !r.codeGroup.isDeleted,
+        },
+      ]),
+    );
+  }
+
+  /**
+   * 문서 응답 — 공통코드 순서(공통코드에서 사라진 종류는 끝에, 코드 순), 이름 · 사용 여부와 함께. 주소는 5분짜리 서명이고,
+   * 저장소가 없거나 서명이 실패하면 null(조회는 막지 않는다).
+   */
   private async documentsOf(
     rows: DocumentRow[],
+    known?: Map<string, DocumentKind>,
   ): Promise<FacilityDocumentDto[]> {
+    const kinds = known ?? (await this.documentKinds());
+    // 공통코드에 없는 종류는 코드 그대로 보이지만(PL-3), 그룹이 통째로 빠진 환경 · SQL 로 지운 행처럼 원인이 따로 있으니 남긴다.
+    const missing = [
+      ...new Set(
+        rows.map((r) => r.documentKind).filter((code) => !kinds.has(code)),
+      ),
+    ];
+    if (missing.length)
+      this.logger.warn(
+        `공통코드 ${FACILITY_DOCUMENT_GROUP} 에 없는 문서 종류 ${missing.join(',')}`,
+      );
+    const orderOf = (code: string) => kinds.get(code)?.order ?? kinds.size;
     const sorted = [...rows].sort(
       (a, b) =>
-        FACILITY_DOCUMENT_KINDS.indexOf(a.documentKind) -
-        FACILITY_DOCUMENT_KINDS.indexOf(b.documentKind),
+        orderOf(a.documentKind) - orderOf(b.documentKind) ||
+        a.documentKind.localeCompare(b.documentKind),
     );
     return Promise.all(
       sorted.map(async (r) => ({
         facilityDocumentId: r.facilityDocumentId,
         documentKind: r.documentKind,
+        documentKindLabel: kinds.get(r.documentKind)?.label ?? r.documentKind,
+        isDocumentKindActive: kinds.get(r.documentKind)?.isActive ?? false,
         fileName: r.fileName,
         fileType: r.fileType,
         sizeBytes: r.sizeBytes,
@@ -962,9 +1021,22 @@ async function lockEditable(
     throw new ConflictException(READ_ONLY);
 }
 
-function kindOrNotFound(raw: string): FacilityDocumentKind {
-  const kind = documentKindOf(raw);
-  if (!kind) throw new NotFoundException('문서 종류를 찾을 수 없습니다');
+const DOCUMENT_KIND_NOT_FOUND = '문서 종류를 찾을 수 없습니다';
+
+/** 문서 종류 공통코드 한 줄 — order 는 공통코드 순서(0부터). */
+interface DocumentKind {
+  label: string;
+  order: number;
+  isActive: boolean;
+}
+
+/** 경로의 문서 종류. 공통코드(미사용 · 지운 것 포함)에 없으면 404 — Map 이라 'toString' 같은 값도 걸린다. */
+function kindOrNotFound(
+  kinds: Map<string, DocumentKind>,
+  raw: string,
+): DocumentKind {
+  const kind = kinds.get(raw);
+  if (!kind) throw new NotFoundException(DOCUMENT_KIND_NOT_FOUND);
   return kind;
 }
 

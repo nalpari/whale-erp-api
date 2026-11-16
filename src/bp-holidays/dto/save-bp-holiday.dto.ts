@@ -137,7 +137,10 @@ export class DeleteBpHolidayQueryDto {
   updatedAt: string;
 }
 
-/** 겹치는 휴일 확인 — 등록 · 수정 양식 그대로. 수정이면 고치는 휴일 자신은 빼고 본다. */
+/**
+ * 겹치는 휴일 확인 — 등록 · 수정 양식 그대로. 수정이면 고치는 휴일 자신은 빼고, 저장된 그 휴일이 이미 덮던
+ * 점포 · 날짜도 빼서 이번 저장으로 새로 겹치는 것만 준다(휴일명 · 설명만 고치면 0건).
+ */
 export class CheckBpHolidayOverlapsDto extends SaveBpHolidayDto {
   /** 수정 중인 휴일. 등록이면 비운다. @example 12 */
   @IsOptional()

@@ -11587,9 +11587,10 @@
             "name": "kind",
             "required": true,
             "in": "path",
-            "description": "문서 종류 — 사용 매뉴얼 · 주의사항 · 제품 보증서. 모르는 값이면 404",
+            "description": "문서 종류 — 플랫폼고정 공통코드 FACILITY_DOCUMENT 의 상세 코드(사용 매뉴얼 USER_MANUAL · 주의사항 PRECAUTION · 제품 보증서 WARRANTY 등). 올리기는 공통코드에 없으면 404 · 사용 중지한 종류면 400, 빼기는 공통코드에 없고 그 시설물에 그 종류의 문서도 없을 때만 404",
             "schema": {
-              "$ref": "#/components/schemas/FacilityDocumentKind"
+              "example": "USER_MANUAL",
+              "type": "string"
             }
           },
           {
@@ -11633,13 +11634,13 @@
             }
           },
           "400": {
-            "description": "파일 없음 · JPG · PNG · PDF 가 아님 · 10MB 초과 · 파일 2개 이상 · 썸네일을 만들 수 없는 그림(깨짐 · 화소 초과) · 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
+            "description": "파일 없음 · JPG · PNG · PDF 가 아님 · 10MB 초과 · 파일 2개 이상 · 썸네일을 만들 수 없는 그림(깨짐 · 화소 초과) · 사용 중지 · 지운 문서 종류(또는 그룹)(「사용 중지된 문서 종류(…)라 새로 올리거나 바꿀 수 없습니다. 이미 올린 문서는 뺄 수 있습니다.」) · 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 누락)"
           },
           "403": {
             "description": "메뉴 권한 없음(가드) · 등록 권한만 있는데 이미 있는 문서를 바꾸거나 남이 등록한 시설물에 올림(수정 권한 필요)"
           },
           "404": {
-            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) · 문서 종류"
+            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) · 공통코드에 없는 문서 종류"
           },
           "409": {
             "description": "폐점 점포의 시설물·장비(조회만 된다)"
@@ -11673,9 +11674,10 @@
             "name": "kind",
             "required": true,
             "in": "path",
-            "description": "문서 종류 — 사용 매뉴얼 · 주의사항 · 제품 보증서. 모르는 값이면 404",
+            "description": "문서 종류 — 플랫폼고정 공통코드 FACILITY_DOCUMENT 의 상세 코드(사용 매뉴얼 USER_MANUAL · 주의사항 PRECAUTION · 제품 보증서 WARRANTY 등). 올리기는 공통코드에 없으면 404 · 사용 중지한 종류면 400, 빼기는 공통코드에 없고 그 시설물에 그 종류의 문서도 없을 때만 404",
             "schema": {
-              "$ref": "#/components/schemas/FacilityDocumentKind"
+              "example": "USER_MANUAL",
+              "type": "string"
             }
           },
           {
@@ -11699,7 +11701,7 @@
             "description": "직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 메뉴 권한 없음 · BP · 가맹 계정이 다른 BP 나 형식이 틀린 X-Bp-Code-Id 를 보냄"
           },
           "404": {
-            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) · 문서 종류"
+            "description": "없거나 지운 시설물·장비 · 볼 수 없는 점포의 것 · 플랫폼 계정이 보낸 X-Bp-Code-Id 가 존재하지 않는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드) · 공통코드에 없고 그 시설물에 그 종류의 문서도 없는 문서 종류(사용 중지한 종류는 뺄 수 있다)"
           },
           "409": {
             "description": "폐점 점포의 시설물·장비(조회만 된다)"
@@ -30232,14 +30234,6 @@
           "name"
         ]
       },
-      "FacilityDocumentKind": {
-        "type": "string",
-        "enum": [
-          "USER_MANUAL",
-          "PRECAUTION",
-          "WARRANTY"
-        ]
-      },
       "AttachmentFileType": {
         "type": "string",
         "enum": [
@@ -30251,13 +30245,6 @@
       "FacilityDocumentDto": {
         "type": "object",
         "properties": {
-          "documentKind": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/FacilityDocumentKind"
-              }
-            ]
-          },
           "fileType": {
             "allOf": [
               {
@@ -30267,6 +30254,19 @@
           },
           "facilityDocumentId": {
             "type": "number"
+          },
+          "documentKind": {
+            "type": "string",
+            "description": "문서 종류 — 플랫폼고정 공통코드 FACILITY_DOCUMENT 의 상세 코드(경로 `/documents/:kind` 의 kind).",
+            "example": "USER_MANUAL"
+          },
+          "documentKindLabel": {
+            "type": "string",
+            "description": "문서 종류 한글 — 공통코드 이름. 미사용 · 지운 종류도 이름이 남고, 공통코드에 없으면 코드 그대로"
+          },
+          "isDocumentKindActive": {
+            "type": "boolean",
+            "description": "문서 종류가 지금 사용 중인가 — false 면 이 문서는 보이고 뺄 수 있지만 그 종류로 새로 올리거나 바꾸지 못한다(400)"
           },
           "fileName": {
             "type": "string"
@@ -30286,9 +30286,11 @@
           }
         },
         "required": [
-          "documentKind",
           "fileType",
           "facilityDocumentId",
+          "documentKind",
+          "documentKindLabel",
+          "isDocumentKindActive",
           "fileName",
           "sizeBytes",
           "downloadUrl",

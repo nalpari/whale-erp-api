@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -70,7 +71,7 @@ describe('FacilitiesService', () => {
     store: { findFirst: jest.Mock };
     facility: { findFirst: jest.Mock };
     facilityDocument: { count: jest.Mock };
-    codeItem: { count: jest.Mock };
+    codeItem: { count: jest.Mock; findMany: jest.Mock };
     roleGroupMenu: { count: jest.Mock };
     staffMember: { count: jest.Mock; findUnique: jest.Mock };
     $transaction: jest.Mock;
@@ -128,7 +129,15 @@ describe('FacilitiesService', () => {
       store: { findFirst: jest.fn() },
       facility: { findFirst: jest.fn().mockResolvedValue(facilityRow()) },
       facilityDocument: { count: jest.fn().mockResolvedValue(0) },
-      codeItem: { count: jest.fn().mockResolvedValue(1) },
+      codeItem: {
+        count: jest.fn().mockResolvedValue(1),
+        // 문서 종류 — 플랫폼고정 공통코드 FACILITY_DOCUMENT 의 플랫폼 행. 다른 그룹(이름표)은 빈 목록
+        findMany: jest.fn((args: { where: { groupCode?: unknown } }) =>
+          Promise.resolve(
+            args.where.groupCode === 'FACILITY_DOCUMENT' ? documentKinds : [],
+          ),
+        ),
+      },
       // 메뉴 권한 다시 묻기(adminHasMenuAction) — 기본은 수정 권한 있음
       roleGroupMenu: { count: jest.fn().mockResolvedValue(1) },
       staffMember: {
@@ -148,6 +157,209 @@ describe('FacilitiesService', () => {
   });
 
   const upload = { buffer: PDF, size: PDF.length, originalname: 'm.pdf' };
+
+  const kind = (
+    itemCode: string,
+    label: string,
+    sortOrder: number,
+    over: Record<string, unknown> = {},
+  ) => ({
+    itemCode,
+    label,
+    sortOrder,
+    status: 'ACTIVE',
+    isDeleted: false,
+    codeGroup: { status: 'ACTIVE', isDeleted: false },
+    ...over,
+  });
+  let documentKinds: ReturnType<typeof kind>[] = [];
+  beforeEach(() => {
+    documentKinds = [
+      kind('USER_MANUAL', '사용 매뉴얼', 1),
+      kind('PRECAUTION', '주의사항', 2),
+      kind('WARRANTY', '제품 보증서', 3),
+    ];
+  });
+
+  describe('문서 종류는 공통코드 FACILITY_DOCUMENT(플랫폼고정)에서 — WHALEERP-718', () => {
+    it('공통코드에 더한 종류로 올린다', async () => {
+      documentKinds.push(kind('INVOICE', '거래명세서', 4));
+      tx.facilityDocument.create.mockResolvedValue({
+        facilityDocumentId: 2,
+        documentKind: 'INVOICE',
+        fileName: 'm.pdf',
+        fileType: 'PDF',
+        sizeBytes: PDF.length,
+        storageKey: 'facilities/11/k.pdf',
+      });
+      const doc = await service.putDocument(9, BP, 11, 'INVOICE', upload);
+      expect(prisma.codeItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { groupCode: 'FACILITY_DOCUMENT', bpCode: 'BP000000' },
+        }),
+      );
+      expect(doc).toMatchObject({
+        documentKind: 'INVOICE',
+        documentKindLabel: '거래명세서',
+        isDocumentKindActive: true,
+      });
+    });
+
+    it('파일이 없다는 문구는 공통코드 이름으로', async () => {
+      documentKinds[0] = kind('USER_MANUAL', '사용 설명서', 1);
+      await expect(
+        service.putDocument(9, BP, 11, 'USER_MANUAL', undefined),
+      ).rejects.toThrow('사용 설명서 파일을 골라 주세요.');
+    });
+
+    it.each([
+      ['사용 중지한 종류', { status: 'INACTIVE' }],
+      ['지운 종류', { isDeleted: true }],
+      [
+        '사용 중지한 그룹의 종류',
+        { codeGroup: { status: 'INACTIVE', isDeleted: false } },
+      ],
+      [
+        '지운 그룹의 종류',
+        { codeGroup: { status: 'ACTIVE', isDeleted: true } },
+      ],
+    ])(
+      '%s로는 새로 올리지 못한다 — 400, 저장소에 올리지도 않는다',
+      async (_, over) => {
+        documentKinds[2] = kind('WARRANTY', '제품 보증서', 3, over);
+        await expect(
+          service.putDocument(9, BP, 11, 'WARRANTY', upload),
+        ).rejects.toThrow(
+          '사용 중지된 문서 종류(제품 보증서)라 새로 올리거나 바꿀 수 없습니다. 이미 올린 문서는 뺄 수 있습니다.',
+        );
+        expect(storage.put).not.toHaveBeenCalled();
+      },
+    );
+
+    it('이미 문서가 있는 종류를 사용 중지하면 바꾸기도 400 이고 기존 문서는 그대로다', async () => {
+      documentKinds[2] = kind('WARRANTY', '제품 보증서', 3, {
+        status: 'INACTIVE',
+      });
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({ documents: [{ documentKind: 'WARRANTY' }] }),
+      );
+      await expect(
+        service.putDocument(9, BP, 11, 'WARRANTY', upload),
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.put).not.toHaveBeenCalled();
+      expect(tx.facilityDocument.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('공통코드에 없는 문서 종류가 있으면 경고 로그를 남기고 코드 그대로 보인다', async () => {
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({
+          documents: [
+            {
+              facilityDocumentId: 1,
+              documentKind: 'LEGACY',
+              fileName: 'w.pdf',
+              fileType: 'PDF',
+              sizeBytes: 9,
+              storageKey: 'facilities/11/1.pdf',
+            },
+          ],
+          createdBy: 5,
+          updatedBy: null,
+        }),
+      );
+      Object.assign(prisma, {
+        codeGroup: { findMany: jest.fn().mockResolvedValue([]) },
+      });
+      const d = await service.detail(9, BP, 11);
+      expect(d.documents[0].documentKindLabel).toBe('LEGACY');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('FACILITY_DOCUMENT 에 없는 문서 종류 LEGACY'),
+      );
+      warn.mockRestore();
+    });
+
+    it('사용 중지한 종류의 문서도 뺄 수 있다', async () => {
+      documentKinds[2] = kind('WARRANTY', '제품 보증서', 3, {
+        status: 'INACTIVE',
+      });
+      await service.removeDocument(9, BP, 11, 'WARRANTY');
+      expect(tx.facilityDocument.updateMany).toHaveBeenCalledWith({
+        where: { facilityId: 11, documentKind: 'WARRANTY', isDeleted: false },
+        data: { isDeleted: true },
+      });
+    });
+
+    it.each(['INVOICE', 'toString', 'user_manual'])(
+      '공통코드에 없는 종류 %p 는 올리기 404',
+      async (raw) => {
+        await expect(
+          service.putDocument(9, BP, 11, raw, upload),
+        ).rejects.toThrow('문서 종류를 찾을 수 없습니다');
+      },
+    );
+
+    it('공통코드에서 행이 사라진 종류라도 그 시설물에 문서가 있으면 뺀다(상세에 보이는 문서)', async () => {
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({ documents: [{ documentKind: 'LEGACY' }] }),
+      );
+      await service.removeDocument(9, BP, 11, 'LEGACY');
+      expect(tx.facilityDocument.updateMany).toHaveBeenCalledWith({
+        where: { facilityId: 11, documentKind: 'LEGACY', isDeleted: false },
+        data: { isDeleted: true },
+      });
+    });
+
+    it('공통코드에 없는 종류는 빼기도 404', async () => {
+      await expect(
+        service.removeDocument(9, BP, 11, 'INVOICE'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('상세 문서는 공통코드 순서이고, 이름 · 사용 여부를 싣는다(공통코드에서 사라진 종류는 코드 그대로 끝에)', async () => {
+      documentKinds = [
+        kind('WARRANTY', '제품 보증서', 1),
+        kind('USER_MANUAL', '사용 매뉴얼', 2, { status: 'INACTIVE' }),
+      ];
+      const doc = (facilityDocumentId: number, documentKind: string) => ({
+        facilityDocumentId,
+        documentKind,
+        fileName: 'w.pdf',
+        fileType: 'PDF',
+        sizeBytes: 9,
+        storageKey: `facilities/11/${facilityDocumentId}.pdf`,
+      });
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({
+          documents: [
+            doc(1, 'USER_MANUAL'),
+            doc(2, 'LEGACY'),
+            doc(3, 'WARRANTY'),
+          ],
+          createdBy: 5,
+          updatedBy: null,
+        }),
+      );
+      Object.assign(prisma, {
+        codeGroup: { findMany: jest.fn().mockResolvedValue([]) },
+      });
+      const d = await service.detail(9, BP, 11);
+      expect(
+        d.documents.map((x) => [
+          x.documentKind,
+          x.documentKindLabel,
+          x.isDocumentKindActive,
+        ]),
+      ).toEqual([
+        ['WARRANTY', '제품 보증서', true],
+        ['USER_MANUAL', '사용 매뉴얼', false],
+        ['LEGACY', 'LEGACY', false],
+      ]);
+    });
+  });
 
   describe('호출자', () => {
     it('플랫폼 계정이 BP 를 고르지 않으면(대상 = 소속 플랫폼 BP) 400', async () => {
@@ -535,9 +747,6 @@ describe('FacilitiesService', () => {
       Object.assign(prisma, {
         codeGroup: { findMany: jest.fn().mockResolvedValue([]) },
       });
-      Object.assign(prisma.codeItem, {
-        findMany: jest.fn().mockResolvedValue([]),
-      });
       const d = await service.detail(9, BP, 11);
       expect(d.documents).toEqual([
         expect.objectContaining({ downloadUrl: null, thumbnailUrl: null }),
@@ -566,9 +775,6 @@ describe('FacilitiesService', () => {
       });
       Object.assign(prisma, {
         codeGroup: { findMany: jest.fn().mockResolvedValue([]) },
-      });
-      Object.assign(prisma.codeItem, {
-        findMany: jest.fn().mockResolvedValue([]),
       });
       return service.detail(9, BP, 11);
     };

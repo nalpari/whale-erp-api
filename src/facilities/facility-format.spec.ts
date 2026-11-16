@@ -1,9 +1,4 @@
-import {
-  documentKindOf,
-  FACILITY_DOCUMENT_KINDS,
-  pickLabel,
-  totalAmountOf,
-} from './facility-format';
+import { pickLabel, totalAmountOf } from './facility-format';
 
 describe('facility-format', () => {
   describe('totalAmountOf — 총금액은 단가 × 수량(정책서 PL-5)', () => {
@@ -25,19 +20,6 @@ describe('facility-format', () => {
         true,
       );
     });
-  });
-
-  describe('documentKindOf — 경로의 문서 종류', () => {
-    it.each(FACILITY_DOCUMENT_KINDS)('%s 는 그대로', (kind) => {
-      expect(documentKindOf(kind)).toBe(kind);
-    });
-
-    it.each(['', 'user_manual', 'toString', 'INVOICE'])(
-      '%p 는 문서 종류가 아니다',
-      (raw) => {
-        expect(documentKindOf(raw)).toBeNull();
-      },
-    );
   });
 
   describe('pickLabel — 점포 BP 의 행을 먼저, 없으면 플랫폼 원본', () => {

@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 30 tables (auth · BP · stores · facilities · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-16T04:00:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 30개)
-    last_modified: 2026-11-13T07:05:00Z
+    last_modified: 2026-11-16T04:00:00Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -58,6 +58,10 @@ sources:
     resource: ../../prisma/migrations/20261113105855_team1_facility_company_phone/migration.sql
     title: 시설물 구매처 · A/S센터 전화번호 CHECK 에 대표번호 8자리(15xx · 16xx · 18xx)
     last_modified: 2026-11-13T02:40:20Z
+  - id: facility-document-codes-migration
+    resource: ../../prisma/migrations/20261116112631_team1_facility_document_codes/migration.sql
+    title: 시설물 문서 종류 enum → 플랫폼고정 공통코드 FACILITY_DOCUMENT(TEXT · 모양 CHECK)
+    last_modified: 2026-11-16T04:00:00Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -104,13 +108,13 @@ edited by hand to match the migration, not regenerated.
 
 # What Prisma will not carry
 
-64 constraints exist only in the migration SQL — 37 from the initial DDL, one partial
+65 constraints exist only in the migration SQL — 37 from the initial DDL, one partial
 unique index added later, four from the holiday period migration, five from the excel
-download log and seventeen from the facilities (foreign keys not counted; the excel log's three
+download log, seventeen from the facilities and one from the facility document codes (foreign keys not counted; the excel log's three
 and four of the facilities' six are SQL-only too); four CHECKs were
 later widened in place, not added
 (the `schema.prisma` header still counts the initial DDL's
-37).[^team1-migration][^menus-url-unique-migration][^holiday-periods-migration][^facility-company-phone-migration] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
+37).[^team1-migration][^menus-url-unique-migration][^holiday-periods-migration][^facility-company-phone-migration][^facility-document-codes-migration] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
 the same trap as 3팀's, whose CHECKs live only in their DDL migration.
 
 - **CHECK constraints** (32) — code formats (`^BP[0-9]{6}$`, `^MN[0-9]{6}$`,
@@ -180,13 +184,22 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   into 3팀 `staff_members` and the three `*_by` into `admin_accounts` stay plain `Int`; only the
   store and document relations are in Prisma. Amounts are `NUMERIC(10,0)` / `NUMERIC(14,0)`
   (Prisma `Decimal`), not `bigint`. The migration also adds the enum `facility_document_kind`
-  with its `COMMENT ON TYPE`, four 공통코드 groups, and turns menu MN000022 into `/facilities`.
+  with its `COMMENT ON TYPE` (dropped by `20261116112631`, below), four 공통코드 groups, and turns menu MN000022 into `/facilities`.
 - **The facilities phone CHECK widened later** — `facilities_phone_format` lets `vendor_phone` and
   `service_center_phone` also hold a 전국 대표번호, `^([0-9]{9,12}|(15|16|18)[0-9]{6})$`
   (`20261113105855_team1_facility_company_phone`, dropped and re-added under the same name, with the two
   column comments; user decision 2026-11-13). The two people's numbers (`sales_representative_phone`,
   `manager_phone`) keep `^[0-9]{9,12}$`. Widened in place, so the count above does not change; the
   initial facilities migration still shows the old range — the newer one is the truth.[^facility-company-phone-migration]
+- **The facility document kind became a 공통코드** — `20261116112631_team1_facility_document_codes`
+  (WHALEERP-718, user decisions 2026-11-16) dropped the enum `facility_document_kind` and made
+  `facility_documents.document_kind` `TEXT` holding an item code of the new 플랫폼고정 group
+  `FACILITY_DOCUMENT` (시설물 문서 종류; the same three codes, platform rows only). The column keeps
+  its name instead of `{group}_code`, as the API field `documentKind` does. One more SQL-only CHECK,
+  `facility_documents_document_kind_format` (`^[A-Z][A-Z0-9_]{0,19}$`, the item-code shape); no
+  foreign key, as for every 공통코드 value column. The one-live-document-per-kind partial unique index
+  was rebuilt by the type change with the same name and condition. `GET /enums` lost
+  `FacilityDocumentKind`.[^facility-document-codes-migration]
 
 The `'WITHDRAWN'` literal in two of those was a placeholder while the
 `ACCOUNT_STATUS` code value was undecided; the initial-data migration fixes it as
@@ -378,3 +391,4 @@ must be absent, and no lunar holiday may appear after 2050.
 [^phone-twelve-migration]: 관리자 계정 · 점포 대표자 연락처 CHECK 9~12자리
 [^holiday-periods-migration]: BP 휴일 대상 · 예외 점포를 기간 행으로(기본키 · 부분 고유 · CHECK)
 [^facility-company-phone-migration]: 시설물 구매처 · A/S센터 전화번호 CHECK 에 대표번호 8자리(15xx · 16xx · 18xx)
+[^facility-document-codes-migration]: 시설물 문서 종류 enum → 플랫폼고정 공통코드 FACILITY_DOCUMENT(TEXT · 모양 CHECK)
