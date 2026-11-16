@@ -155,7 +155,7 @@ async function assertNoOverlap(
       'ATTENDANCE_OVERLAP',
       clash && !clash.attendanceRecordsAsCheckIn.length
         ? `${md} ${kstTimeOf(at)} 퇴근 미등록 출근이 있어 그 뒤 시간은 등록할 수 없습니다. 그 기록을 먼저 보정해 주세요.`
-        : `${md} 출퇴근 기록과 시간이 겹칩니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요.`,
+        : `${md} 출퇴근 기록과 시간이 겹칩니다. 일별 출퇴근에서 그날 기록의 [보정]으로 고쳐 주세요.`,
     ),
   );
 }
@@ -168,6 +168,11 @@ const RECORD_SELECT = {
   recordedAt: true,
   reviewReason: true,
   checkInAttendanceRecordId: true,
+  // 대신 등록한 짝을 보정으로 채울 때 새 기록도 그 대신 등록으로 맞춘다(ATT-20 v283)
+  entryMethod: true,
+  proxyBy: true,
+  proxyReason: true,
+  receivedAt: true,
 } as const satisfies Prisma.AttendanceRecordSelect;
 type RecordRow = Prisma.AttendanceRecordGetPayload<{
   select: typeof RECORD_SELECT;
@@ -188,8 +193,11 @@ export class AttendanceEditService {
   /**
    * 보정 — 짝의 출근 · 퇴근 시각을 고치고(비었던 쪽은 새로 만든다), 원본과 떼어 보정 이력(전후 값 · 사유 · 보정자)을 남기며,
    * 확인 필요 사유를 지운다(ATT-19). 그사이 다른 관리자가 고쳤으면 409 ATTENDANCE_CHANGED — 화면은 최신 기록을 다시 받는다.
-   * 새로 만드는 쪽도 「대신 등록」이 아니라 이 보정 한 건으로 본다(2026-10-26 재영 — 대신 등록은 위치정보 동의가 없거나 멈춘 직원의
-   * 대체 수단뿐, ATT-20). 등록 방식은 직원 등록(SELF) 그대로 두고, 관리자가 넣은 값이라는 것은 보정 이력이 말한다.
+   * 대신 등록한 짝이 아니면 새로 만드는 쪽은 직원 등록(SELF)이고 「대신 등록」이 아니라 이 보정 한 건으로 본다 — 관리자가 넣은 값이라는
+   * 것은 보정 이력이 말한다(2026-10-26 재영 — 대신 등록은 위치정보 동의가 없거나 멈춘 직원의 대체 수단뿐, ATT-20). 대신 등록한 짝이면
+   * 새로 만드는 쪽도 그 대신 등록으로 만든다(등록자 · 사유 · 받은 시각을 가져온다 — 한 짝 안에서 등록 방식이 섞이지 않게).
+   * 이미 보정했거나 대신 등록한 짝도 다시 고친다 — 고칠 때마다 이력이 한 건씩 남고, 등록 방식은 그대로(대신 등록은 대신 등록)다
+   * (운영 정책 ATT-20 v283, 2026-11-16 재영, WHALEERP-687).
    */
   async correct(
     adminAccountId: number,
@@ -292,6 +300,20 @@ export class AttendanceEditService {
         reviewedBy: adminAccountId,
         reviewedAt: now,
       };
+      // 대신 등록한 짝의 빈 쪽을 채우면 새 기록도 그 대신 등록의 것으로 만든다 — 한 짝 안에서 등록 방식이 섞이지 않게(운영 정책
+      // ATT-20 v283, WHALEERP-687). 등록자 · 사유 · 받은 시각을 그 대신 등록에서 가져와 이력에는 대신 등록 한 건과 이 보정 한 건만
+      // 남는다(대신 등록 이력은 받은 시각으로 묶는다). 그 밖의 짝은 직원 등록으로 만든다(2026-10-26 재영)
+      const origin = [pair.checkIn, pair.checkOut].find(
+        (r) => r?.entryMethod === 'PROXY',
+      );
+      const filled = origin
+        ? {
+            entryMethod: 'PROXY' as const,
+            proxyBy: origin.proxyBy,
+            proxyReason: origin.proxyReason,
+            receivedAt: origin.receivedAt,
+          }
+        : { receivedAt: now };
       let checkInId = pair.checkIn?.attendanceRecordId ?? null;
       if (pair.checkIn && inAt)
         await tx.attendanceRecord.update({
@@ -305,7 +327,7 @@ export class AttendanceEditService {
             storeId: pair.storeId,
             kind: 'CHECK_IN',
             recordedAt: inAt,
-            receivedAt: now,
+            ...filled,
             reviewedBy: adminAccountId,
             reviewedAt: now,
           },
@@ -329,7 +351,7 @@ export class AttendanceEditService {
             storeId: pair.storeId,
             kind: 'CHECK_OUT',
             recordedAt: outAt,
-            receivedAt: now,
+            ...filled,
             checkInAttendanceRecordId: checkInId,
             reviewedBy: adminAccountId,
             reviewedAt: now,
@@ -406,7 +428,7 @@ export class AttendanceEditService {
    * 시간이 겹치면 409 `ATTENDANCE_OVERLAP`(같은 짝을 두 번 넣지 않게).
    *
    * 그 밖의 직원(위치정보에 동의함 · 위치를 보지 않는 점포)은 그날 출근 · 퇴근을 모두 안 찍었을 때만 같은 조건으로 두 시각을 채우고, 대신 등록이 아니라
-   * 보정 한 건(이력 · 직원 앱 연필)으로 남긴다(2026-10-26 재영). 그날 기록이 있으면 그 줄을 보정하라고 409, 앞날 밤샘 짝 · 열린
+   * 보정 한 건(이력 · 직원 앱 연필)으로 남긴다(2026-10-26 재영). 그날 기록이 있으면 일별 출퇴근에서 그 줄을 [보정]하라고 409(정상 · 지각 · 보정 · 대신 등록 기록도 다시 보정한다 — ATT-20 v283, WHALEERP-687), 앞날 밤샘 짝 · 열린
    * 출근과 시간이 겹치면 대신 등록과 같은 409 `ATTENDANCE_OVERLAP`.
    */
   async proxy(
@@ -524,7 +546,7 @@ export class AttendanceEditService {
               HttpStatus.CONFLICT,
               'Conflict',
               'ATTENDANCE_EXISTS',
-              '그날 출퇴근 기록이 있습니다. 보정이 필요한 기록에서 그 줄을 보정해 주세요.',
+              '그날 출퇴근 기록이 있습니다. 일별 출퇴근에서 그날 기록의 [보정]으로 고쳐 주세요.',
             ),
           );
       }

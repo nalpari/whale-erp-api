@@ -958,6 +958,136 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       );
     });
 
+    it('보정 — 보정 · 대신 등록한 기록도 다시 보정할 수 있고, 고칠 때마다 이력이 한 건씩 쌓이며 대신 등록은 대신 등록으로 남는다(ATT-20 v283, WHALEERP-687)', async () => {
+      const day = addDays(today, -25);
+      await post(
+        '/attendance-records/proxy',
+        {
+          staffMemberId: directStaffId,
+          date: ymd(day),
+          checkInTime: '10:00',
+          checkOutTime: '12:00',
+          reason: '위치 수집 일시 중지 · 점장 확인',
+        },
+        200,
+      );
+      const pairOf = async () => {
+        const checkIn = await prisma.attendanceRecord.findFirstOrThrow({
+          where: {
+            staffMemberId: directStaffId,
+            kind: 'CHECK_IN',
+            recordedAt: { gte: at(day, 0), lt: at(addDays(day, 1), 0) },
+          },
+        });
+        const checkOut = await prisma.attendanceRecord.findFirstOrThrow({
+          where: { checkInAttendanceRecordId: checkIn.attendanceRecordId },
+        });
+        return { checkIn, checkOut };
+      };
+      const correct = async (checkInTime: string, checkOutTime: string) => {
+        const { checkIn, checkOut } = await pairOf();
+        await post(
+          `/attendance-records/${checkIn.attendanceRecordId}/correction`,
+          {
+            checkInTime,
+            checkOutTime,
+            checkOutNextDay: false,
+            reason: '점장 확인 후 정정',
+            expectedCheckInAt: checkIn.recordedAt.toISOString(),
+            expectedCheckOutAt: checkOut.recordedAt.toISOString(),
+          },
+          200,
+        );
+      };
+      // 대신 등록한 짝을 고치고, 고친 짝을 한 번 더 고친다
+      await correct('10:00', '12:30');
+      await correct('09:30', '12:30');
+      const { checkIn, checkOut } = await pairOf();
+      expect([checkIn.recordedAt, checkOut.recordedAt]).toEqual([
+        at(day, 9, 30),
+        at(day, 12, 30),
+      ]);
+      expect([checkIn.entryMethod, checkOut.entryMethod]).toEqual([
+        'PROXY',
+        'PROXY',
+      ]);
+      const history = await get(
+        `/attendance-records/${checkIn.attendanceRecordId}/history`,
+        200,
+      );
+      const items = (
+        history.body as {
+          items: {
+            kind: string;
+            before: string | null;
+            after: string | null;
+          }[];
+        }
+      ).items;
+      expect(items.map((i) => i.kind)).toEqual([
+        'CORRECTION',
+        'CORRECTION',
+        'PROXY',
+      ]);
+      expect(items.slice(0, 2).map((i) => [i.before, i.after])).toEqual([
+        ['출근 10:00 · 퇴근 12:30', '출근 09:30 · 퇴근 12:30'],
+        ['출근 10:00 · 퇴근 12:00', '출근 10:00 · 퇴근 12:30'],
+      ]);
+    });
+
+    it('보정 — 출근만 대신 등록한 짝에 퇴근을 채우면 새 퇴근도 대신 등록이고, 이력은 대신 등록 한 건 · 보정 한 건이다(ATT-20 v283, WHALEERP-687)', async () => {
+      const day = addDays(today, -27);
+      // 다른 시험이 남긴 열린 출근이 있어 출근만 넣는 대신 등록은 막힌다 — 대신 등록이 만드는 모양 그대로 출근 하나를 직접 둔다
+      const checkIn = await prisma.attendanceRecord.create({
+        data: {
+          staffMemberId: directStaffId,
+          storeId: directStoreId,
+          kind: 'CHECK_IN',
+          recordedAt: at(day, 9),
+          receivedAt: at(day, 20),
+          entryMethod: 'PROXY',
+          proxyBy: bmId,
+          proxyReason: '위치 수집 일시 중지 · 점장 확인',
+        },
+      });
+      await post(
+        `/attendance-records/${checkIn.attendanceRecordId}/correction`,
+        {
+          checkInTime: '09:00',
+          checkOutTime: '18:00',
+          checkOutNextDay: false,
+          reason: '퇴근 누락 · 점장 확인',
+          expectedCheckInAt: checkIn.recordedAt.toISOString(),
+        },
+        200,
+      );
+      const checkOut = await prisma.attendanceRecord.findFirstOrThrow({
+        where: { checkInAttendanceRecordId: checkIn.attendanceRecordId },
+      });
+      expect(checkOut).toMatchObject({
+        recordedAt: at(day, 18),
+        entryMethod: 'PROXY',
+        proxyBy: checkIn.proxyBy,
+        proxyReason: '위치 수집 일시 중지 · 점장 확인',
+        receivedAt: checkIn.receivedAt,
+      });
+      const history = await get(
+        `/attendance-records/${checkIn.attendanceRecordId}/history`,
+        200,
+      );
+      const items = (
+        history.body as {
+          items: { kind: string; after: string | null; reason: string }[];
+        }
+      ).items;
+      expect(items.map((i) => i.kind)).toEqual(['CORRECTION', 'PROXY']);
+      // 대신 등록 줄은 지금 짝의 값을 보인다 — 채운 퇴근도 함께(원래부터 등록 때 값이 아니라 지금 값)
+      expect(items[1]).toMatchObject({
+        after: '출근 09:00 · 퇴근 18:00',
+        reason: '위치 수집 일시 중지 · 점장 확인',
+      });
+    });
+
     it('대신 등록 — 같은 직원의 기록과 시간이 겹치면 409 ATTENDANCE_OVERLAP · 아무것도 남지 않는다(다시 누르기 · 두 관리자)', async () => {
       const body = {
         staffMemberId: directStaffId,
@@ -1144,13 +1274,15 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
           reason: '출퇴근 누락 · 점장 확인',
         }),
       ]);
-      // 그날 기록이 생겼으니 다시 넣으면 그 줄을 보정하라고 409
+      // 그날 기록이 생겼으니 다시 넣으면 일별 출퇴근에서 그 줄을 보정하라고 409
       const again = await post(
         '/attendance-records/proxy',
         { ...body, checkOutTime: '18:00' },
         409,
       );
-      expect((again.body as { code: string }).code).toBe('ATTENDANCE_EXISTS');
+      const exists = again.body as { code: string; message: string };
+      expect(exists.code).toBe('ATTENDANCE_EXISTS');
+      expect(exists.message).toContain('일별 출퇴근에서 그날 기록의 [보정]');
       // 그날 기록이 없어도 앞날 밤샘 짝과 시간이 겹치면 409 — 같은 시간이 급여에 두 번 들어가지 않게
       await post(
         '/attendance-records/proxy',
