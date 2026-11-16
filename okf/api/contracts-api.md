@@ -667,8 +667,8 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   allows for clock skew; a wider one would put the creator's name on a row another admin edited right after creation,
   and a blank name is better than a wrong one. It is also null when the contract has an `ADMIN` 종료 row — it may be a
   발송 대기 종료 by another admin (종료 is final, so that row is always the last). History cannot tell it from 대체 종료
-  or 퇴직 처리, so those rows are blanked too, although at runtime such side-effect closes keep the last admin. Otherwise the 관리자 is unknown and it is null, so the detail shows `modifiedAt` with
-  `modifiedBy: null`.
+  or 퇴직 처리, so those rows are blanked too, although at runtime such side-effect closes keep the last admin.
+  Otherwise the 관리자 is unknown and it is null, so the detail shows `modifiedAt` with `modifiedBy: null`.
 - `canResend` — whether policy allows `POST …/send`: 발송 대기 · 서명 대기, or 거부 · 만료 that can be reopened
   (`reopenBlockOf` · 근무 시간 겹침, WHALEERP-153). A 가입 완료 직원 gets the app notice, a 가입 전 직원 the 가입 초대,
   or the 소속 추가 확인 요청 when the number has an account (WHALEERP-130 — it stays 발송 대기 until the 직원 accepts).
