@@ -1035,6 +1035,59 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
       ]);
     });
 
+    it('보정 — 출근만 대신 등록한 짝에 퇴근을 채우면 새 퇴근도 대신 등록이고, 이력은 대신 등록 한 건 · 보정 한 건이다(ATT-20 v283, WHALEERP-687)', async () => {
+      const day = addDays(today, -27);
+      // 다른 시험이 남긴 열린 출근이 있어 출근만 넣는 대신 등록은 막힌다 — 대신 등록이 만드는 모양 그대로 출근 하나를 직접 둔다
+      const checkIn = await prisma.attendanceRecord.create({
+        data: {
+          staffMemberId: directStaffId,
+          storeId: directStoreId,
+          kind: 'CHECK_IN',
+          recordedAt: at(day, 9),
+          receivedAt: at(day, 20),
+          entryMethod: 'PROXY',
+          proxyBy: bmId,
+          proxyReason: '위치 수집 일시 중지 · 점장 확인',
+        },
+      });
+      await post(
+        `/attendance-records/${checkIn.attendanceRecordId}/correction`,
+        {
+          checkInTime: '09:00',
+          checkOutTime: '18:00',
+          checkOutNextDay: false,
+          reason: '퇴근 누락 · 점장 확인',
+          expectedCheckInAt: checkIn.recordedAt.toISOString(),
+        },
+        200,
+      );
+      const checkOut = await prisma.attendanceRecord.findFirstOrThrow({
+        where: { checkInAttendanceRecordId: checkIn.attendanceRecordId },
+      });
+      expect(checkOut).toMatchObject({
+        recordedAt: at(day, 18),
+        entryMethod: 'PROXY',
+        proxyBy: checkIn.proxyBy,
+        proxyReason: '위치 수집 일시 중지 · 점장 확인',
+        receivedAt: checkIn.receivedAt,
+      });
+      const history = await get(
+        `/attendance-records/${checkIn.attendanceRecordId}/history`,
+        200,
+      );
+      const items = (
+        history.body as {
+          items: { kind: string; after: string | null; reason: string }[];
+        }
+      ).items;
+      expect(items.map((i) => i.kind)).toEqual(['CORRECTION', 'PROXY']);
+      // 대신 등록 줄은 지금 짝의 값을 보인다 — 채운 퇴근도 함께(원래부터 등록 때 값이 아니라 지금 값)
+      expect(items[1]).toMatchObject({
+        after: '출근 09:00 · 퇴근 18:00',
+        reason: '위치 수집 일시 중지 · 점장 확인',
+      });
+    });
+
     it('대신 등록 — 같은 직원의 기록과 시간이 겹치면 409 ATTENDANCE_OVERLAP · 아무것도 남지 않는다(다시 누르기 · 두 관리자)', async () => {
       const body = {
         staffMemberId: directStaffId,
