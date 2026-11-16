@@ -89,7 +89,7 @@ describe('toSendLogs — 직원 상세 발송 이력', () => {
       // 소속 추가 확인 요청을 수락한 뒤 관리자가 다시 보낸 서명 요청
       row({ relatedId: 10, templateCode: AFFILIATION_TEMPLATE }),
       row({ relatedId: 10, templateCode: CONTRACT_SENT_TEMPLATE }),
-      // 확실히 나가지 않은 서명 요청 뒤는 재발송이 아니다
+      // 서명 요청은 알림톡이 거절돼도 앱 알림함으로 받았다 — 다음 서명 요청은 재발송이다
       row({
         relatedId: 11,
         templateCode: CONTRACT_SENT_TEMPLATE,
@@ -99,7 +99,7 @@ describe('toSendLogs — 직원 상세 발송 이력', () => {
       row({ relatedId: 11, templateCode: CONTRACT_SENT_TEMPLATE }),
     ]);
     expect(logs.map((l) => [l.contractId, l.kind, l.isResend])).toEqual([
-      [11, 'CONTRACT_SENT', false],
+      [11, 'CONTRACT_SENT', true],
       [11, 'CONTRACT_SENT', false],
       [10, 'CONTRACT_SENT', true],
       [10, 'AFFILIATION_REQUEST', false],
@@ -108,29 +108,49 @@ describe('toSendLogs — 직원 상세 발송 이력', () => {
     ]);
   });
 
-  it('서명 요청 알림톡이 거절되면 번호 확인 대신 앱 알림함에 들어갔다고 알린다 — 계정 번호로 간다(WHALEERP-675)', () => {
-    const [contractSent, invite] = toSendLogs([
+  it('서명 요청 알림톡이 실패하면 앱 알림함에 들어갔다고 알리고 재시도 가능 여부는 내지 않는다 — 계정 번호로 간다(WHALEERP-675)', () => {
+    const contractSent = (failureReason: string) =>
+      row({
+        relatedId: 13,
+        templateCode: CONTRACT_SENT_TEMPLATE,
+        result: 'FAILED',
+        failureReason,
+      });
+    const [unconfirmed, notSent, rejected, invite] = toSendLogs([
       row({
         relatedId: 12,
         result: 'FAILED',
         failureReason: 'code=3018 http=200: x',
       }),
-      row({
-        relatedId: 13,
-        templateCode: CONTRACT_SENT_TEMPLATE,
-        result: 'FAILED',
-        failureReason: 'code=3018 http=200: x',
-      }),
+      contractSent('code=3018 http=200: x'),
+      contractSent(
+        'code=undefined http=401 path=/v1/token: /v1/token failed: unauthorized',
+      ),
+      contractSent(
+        'code=undefined http=undefined: /v3/message failed: aborted',
+      ),
     ]);
-    expect(contractSent).toMatchObject({
-      kind: 'CONTRACT_SENT',
-      retryable: true,
-    });
-    expect(contractSent.failureReason).toContain('코드 3018');
-    expect(contractSent.failureReason).toContain(
-      '직원 앱 알림함에는 들어갔습니다',
-    );
-    expect(contractSent.failureReason).not.toContain('번호를 확인');
+    expect(
+      [rejected, notSent, unconfirmed].map((l) => [
+        l.kind,
+        l.result,
+        l.retryable,
+      ]),
+    ).toEqual([
+      ['CONTRACT_SENT', 'FAILED', null],
+      ['CONTRACT_SENT', 'FAILED', null],
+      ['CONTRACT_SENT', 'UNCONFIRMED', null],
+    ]);
+    for (const l of [rejected, notSent, unconfirmed]) {
+      expect(l.failureReason).toContain('직원 앱 알림함에는 들어갔습니다');
+      expect(l.failureReason).not.toContain('다시 보내');
+    }
+    expect(rejected.failureReason).toContain('코드 3018');
+    expect(rejected.failureReason).toContain('직원 계정의 휴대전화번호');
+    expect(notSent.failureReason).toContain('보내기 전에 실패');
+    expect(unconfirmed.failureReason).toContain('접수됐는지 알 수 없습니다');
+    // 가입 초대는 그대로
+    expect(invite).toMatchObject({ kind: 'SIGNUP_INVITE', retryable: true });
     expect(invite.failureReason).toContain('번호를 확인하고 다시 보내 주세요');
   });
 

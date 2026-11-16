@@ -3,6 +3,8 @@ import {
   AFFILIATION_TEMPLATE,
   CONTRACT_SENT_TEMPLATE,
   INVITATION_TEMPLATE,
+  type SendFailure,
+  sendFailureKindOfReason,
   sendFailureOf,
 } from '../contracts/contract-send-log';
 
@@ -35,9 +37,27 @@ export const STAFF_SEND_RESULTS = Object.keys(
 export const MAIL_SEND_FAILURE_MESSAGE =
   '메일을 보내지 못했습니다. 잠시 뒤 비밀번호 초기화를 다시 눌러 주세요';
 
-/** 서명 요청 알림톡이 거절됐을 때의 안내 — 계정 번호로 가서 계약서 번호를 고쳐도 바뀌지 않고, 앱 알림함에는 이미 들어갔다 */
-export const CONTRACT_SENT_REJECTED_HINT =
-  '직원 앱 알림함에는 들어갔습니다. 알림톡을 다시 보내려면 근로계약 상세에서 재발송해 주세요';
+/**
+ * 서명 요청 알림톡의 실패 한 줄(WHALEERP-675). 알림톡보다 먼저 직원 앱 알림함 줄을 만들므로(ContractDeliveryService.noticeSent —
+ * 알림함 줄이 없으면 알림톡도 보내지 않는다) 알림톡이 실패해도 직원은 서명 요청을 받았다. 그래서 다시 보내라고 하지 않고
+ * 재시도 가능 여부는 null 이다 — 근로계약 재발송은 서명 기한을 새로 잡고 알림함에 한 번 더 보낸다. 알림톡은 계약서가 아닌
+ * 직원 계정의 휴대전화번호로 가므로, 거절이면 그 번호를 보라고 한다.
+ */
+function contractSentFailureOf(failureReason: string | null): SendFailure {
+  const { kind, code } = sendFailureKindOfReason(failureReason);
+  const reason =
+    kind === 'REJECTED'
+      ? `비즈뿌리오가 받지 않아 알림톡은 가지 않았습니다(코드 ${code}). 직원 앱 알림함에는 들어갔습니다 — 알림톡이 가야 하면 직원 계정의 휴대전화번호를 확인해 주세요`
+      : kind === 'NOT_SENT'
+        ? '보내기 전에 실패해 알림톡은 가지 않았습니다. 직원 앱 알림함에는 들어갔습니다'
+        : '알림톡이 접수됐는지 알 수 없습니다. 직원 앱 알림함에는 들어갔습니다';
+  // retryable false — 직원이 받은 발송이라 다음 발송은 재발송이다. 화면에 내는 재시도 가능 여부는 toSendLogs 가 null 로 바꾼다
+  return {
+    result: kind === 'UNCONFIRMED' ? 'UNCONFIRMED' : 'FAILED',
+    reason,
+    retryable: false,
+  };
+}
 
 /**
  * 발송 이력에 싣는 알림톡 템플릿 — 근로계약 발송(ContractDeliveryService)이 보내는 셋. 가입한 직원의 서명 요청은 처음엔 앱
@@ -81,7 +101,7 @@ export type SendLog = {
 /**
  * 알림톡 발송 이력(오래된 순)을 직원 상세 발송 이력(최근 순)으로 바꾼다. 재발송은 같은 계약으로 앞서 직원에게 나갔을 수 있는(성공 ·
  * 접수 여부 모름) 발송이 있을 때다 — 종류는 가리지 않는다(가입 초대 · 소속 추가 확인 요청 뒤의 서명 요청도 재발송, WHALEERP-675).
- * 확실히 나가지 않은 실패(거절 · 보내기 전 실패)는 세지 않는다. 직원이 받은 기준이라 계약의
+ * 확실히 나가지 않은 실패(거절 · 보내기 전 실패)는 세지 않는다 — 서명 요청은 알림톡이 실패해도 앱 알림함으로 받아 센다. 직원이 받은 기준이라 계약의
  * 재발송 횟수(resendCount)와는 다를 수 있다 — 보낸 계약이 되돌리기로 임시저장이 된 뒤 다시 보내면 resendCount 는 세지 않지만 직원은
  * 앞 초대를 받았고, 이력 행이 빠졌거나(AlimtalkService.record 는 INSERT 실패를 삼킨다) 앱으로 나간 발송(판별값 없는 옛 계약)은 이력에 없다.
  */
@@ -92,13 +112,14 @@ export function toSendLogs(rows: readonly SendLogRow[]): SendLog[] {
     const kind = SEND_KIND_OF_TEMPLATE[row.templateCode];
     if (!kind || row.relatedId === null) continue;
     const contractId = row.relatedId;
+    // 서명 요청은 알림톡이 실패해도 앱 알림함으로 받았다 — 재시도 가능 여부를 내지 않고, 다음 발송의 재발송 판정에서 「나간 발송」이다
+    const contractSent = kind === 'CONTRACT_SENT';
     const failure =
       row.result === 'SUCCEEDED'
         ? null
-        : sendFailureOf(
-            row.failureReason,
-            kind === 'CONTRACT_SENT' ? CONTRACT_SENT_REJECTED_HINT : undefined,
-          );
+        : contractSent
+          ? contractSentFailureOf(row.failureReason)
+          : sendFailureOf(row.failureReason);
     logs.push({
       sendLogId: row.alimtalkSendLogId,
       contractId,
@@ -106,7 +127,7 @@ export function toSendLogs(rows: readonly SendLogRow[]): SendLog[] {
       isResend: delivered.has(contractId),
       result: failure?.result ?? 'SUCCEEDED',
       failureReason: failure?.reason ?? null,
-      retryable: failure?.retryable ?? null,
+      retryable: contractSent ? null : (failure?.retryable ?? null),
       sentAt: row.sentAt,
     });
     if (!failure?.retryable) delivered.add(contractId);

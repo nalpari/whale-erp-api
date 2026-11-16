@@ -173,7 +173,7 @@ export class StaffMemberSendLogDto {
   result: StaffSendResult;
   /** 관리자에게 보일 실패 사유. 성공이면 null */
   failureReason: string | null;
-  /** 다시 보내도 되는가 — 확실히 나가지 않은 실패만 true, 접수 여부 모름은 false. 성공이면 null. 비밀번호 초기화 메일(PASSWORD_RESET)은 늘 null */
+  /** 다시 보내도 되는가 — 확실히 나가지 않은 실패만 true, 접수 여부 모름은 false. 성공이면 null. 비밀번호 초기화 메일(PASSWORD_RESET) · 서명 요청(CONTRACT_SENT — 알림톡이 실패해도 앱 알림함으로 받았다)은 늘 null */
   retryable: boolean | null;
   sentAt: Date;
 }
