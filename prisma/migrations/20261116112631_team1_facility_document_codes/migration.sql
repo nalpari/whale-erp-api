@@ -42,14 +42,18 @@ BEGIN
         AND "item_code" IN ('USER_MANUAL', 'PRECAUTION', 'WARRANTY') AND "status" = 'ACTIVE' AND NOT "is_deleted") <> 3 THEN
     RAISE EXCEPTION '문서 종류 상세 코드 3건이 들어가지 않았다';
   END IF;
+  -- 행이 없으면 NULL 이라 <> 로는 통과해 버린다 — IS DISTINCT FROM 으로 본다.
   IF (SELECT data_type FROM information_schema.columns
-       WHERE table_name = 'facility_documents' AND column_name = 'document_kind') <> 'text' THEN
+       WHERE table_schema = current_schema() AND table_name = 'facility_documents'
+         AND column_name = 'document_kind') IS DISTINCT FROM 'text' THEN
     RAISE EXCEPTION 'facility_documents.document_kind 가 TEXT 로 바뀌지 않았다';
   END IF;
-  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'facility_document_kind') THEN
+  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'facility_document_kind'
+               AND typnamespace = current_schema()::regnamespace) THEN
     RAISE EXCEPTION 'enum facility_document_kind 가 남았다';
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'facility_documents_facility_id_document_kind_key'
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = current_schema()
+                    AND indexname = 'facility_documents_facility_id_document_kind_key'
                     AND indexdef LIKE '%WHERE (NOT is_deleted)%') THEN
     RAISE EXCEPTION '「종류마다 1개」 부분 고유 인덱스가 없다';
   END IF;

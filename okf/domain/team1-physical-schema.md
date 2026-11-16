@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 30 tables (auth · BP · stores · facilities · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-16T02:36:10Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-16T04:00:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 30개)
-    last_modified: 2026-11-13T07:05:00Z
+    last_modified: 2026-11-16T04:00:00Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -61,7 +61,7 @@ sources:
   - id: facility-document-codes-migration
     resource: ../../prisma/migrations/20261116112631_team1_facility_document_codes/migration.sql
     title: 시설물 문서 종류 enum → 플랫폼고정 공통코드 FACILITY_DOCUMENT(TEXT · 모양 CHECK)
-    last_modified: 2026-11-16T02:36:10Z
+    last_modified: 2026-11-16T04:00:00Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -184,7 +184,7 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   into 3팀 `staff_members` and the three `*_by` into `admin_accounts` stay plain `Int`; only the
   store and document relations are in Prisma. Amounts are `NUMERIC(10,0)` / `NUMERIC(14,0)`
   (Prisma `Decimal`), not `bigint`. The migration also adds the enum `facility_document_kind`
-  with its `COMMENT ON TYPE`, four 공통코드 groups, and turns menu MN000022 into `/facilities`.
+  with its `COMMENT ON TYPE` (dropped by `20261116112631`, below), four 공통코드 groups, and turns menu MN000022 into `/facilities`.
 - **The facilities phone CHECK widened later** — `facilities_phone_format` lets `vendor_phone` and
   `service_center_phone` also hold a 전국 대표번호, `^([0-9]{9,12}|(15|16|18)[0-9]{6})$`
   (`20261113105855_team1_facility_company_phone`, dropped and re-added under the same name, with the two

@@ -826,8 +826,9 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
         sortOrder: 0,
       },
     });
-    // 공용 기준 행 WARRANTY 를 잠시 사용 중지했다가 finally 에서 되돌린다 — 일회용 DB 에서 --runInBand 로 돈다는 전제다.
-    // 다른 suite 가 FACILITY_DOCUMENT 행을 쓰게 되면 병렬 실행에서 서로 간섭하니 그때는 전용 종류를 만들어 쓴다.
+    // 공용 기준 행 WARRANTY 를 잠시 사용 중지했다가 finally 에서 되돌린다 — 일회용 DB 이고 다른 suite 가 FACILITY_DOCUMENT
+    // 행을 쓰지 않는다는 전제다(pnpm test:e2e 는 --runInBand 없이 suite 를 병렬로 돌린다). 다른 suite 가 이 그룹을 쓰게
+    // 되면 서로 간섭하니 그때는 전용 종류를 만들어 쓴다.
     await prisma.codeItem.update({
       where: key('WARRANTY'),
       data: { status: 'INACTIVE' },
@@ -851,7 +852,7 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
         .attach('file', PDF, '보증서2.pdf')
         .expect(400);
       expect((refused.body as { message: string }).message).toBe(
-        '쓸 수 없는 문서 종류입니다.',
+        '사용 중지된 문서 종류(제품 보증서)라 새로 올리거나 바꿀 수 없습니다. 이미 올린 문서는 뺄 수 있습니다.',
       );
 
       // 공통코드 순서(더한 종류 sortOrder 0 이 먼저) · 미사용 종류는 이름과 함께 남는다

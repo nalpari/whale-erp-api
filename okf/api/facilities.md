@@ -4,16 +4,16 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서(종류는 플랫폼고정 공통코드 FACILITY_DOCUMENT, 종류마다 1개), 엑셀 일괄 등록(PL-7 — 양식 · 미리보기 · 오류 파일 · 등록, 오류가 있으면 전부 막기 · 500줄). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-16T02:36:10Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-16T04:00:00Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
     title: FacilitiesService — 범위 · 공통코드 · 담당자 · 폐점 조회만 · 문서
-    last_modified: 2026-11-16T02:36:10Z
+    last_modified: 2026-11-16T04:00:00Z
   - id: facilities-controller
     resource: ../../src/facilities/facilities.controller.ts
     title: /facilities 경로와 메뉴 권한
-    last_modified: 2026-11-16T02:36:10Z
+    last_modified: 2026-11-16T04:00:00Z
   - id: facility-caller
     resource: ../../src/facilities/facility-caller.ts
     title: 다루는 관리자 · BP 와 점포 범위(화면 경로 · 일괄 등록 공용)
@@ -56,7 +56,7 @@ sources:
   - id: facility-document-codes-migration
     resource: ../../prisma/migrations/20261116112631_team1_facility_document_codes/migration.sql
     title: 문서 종류 enum → 플랫폼고정 공통코드 FACILITY_DOCUMENT(document_kind TEXT · 모양 CHECK)
-    last_modified: 2026-11-16T02:36:10Z
+    last_modified: 2026-11-16T04:00:00Z
   - id: facilities-policy
     resource: https://claude.ai/artifact/Mo31QtdCL8fmcvFwphQGQo
     title: 「시설물·장비 관리 정책서」 · 「시설물·장비 수리 이력 정책서」(claude.ai 문서, 2026-11-10)
@@ -106,11 +106,19 @@ the item-code shape (`facility_documents_document_kind_format`), and dropped the
   `FACILITY_STATUS`, so there is no BP 적용 and no BP left without kinds. The platform operator adds,
   renames, reorders and turns kinds off in 공통코드 관리.
 - **A code not in the group** (in any status) is 404 on both routes — except that removal still
-  works for a document of that kind the facility already has (a code row deleted by hand in SQL;
-  the API cannot delete 플랫폼고정 codes), since the detail keeps showing it. **A kind or group that is off
-  or deleted** cannot take a new upload or a replacement — 400 「쓸 수 없는 문서 종류입니다.」 —
-  but documents already uploaded under it still show and can be removed. 「종류마다 1개」 holds per
-  code, by the same partial unique index.
+  works for a document of that kind the facility already has, since the detail keeps showing it.
+  **A kind or group that is off** (or deleted) cannot take a new upload or a replacement — 400
+  「사용 중지된 문서 종류(제품 보증서)라 새로 올리거나 바꿀 수 없습니다. 이미 올린 문서는 뺄 수 있습니다.」 — but
+  documents already uploaded under it still show and can be removed. Through the API only 사용 중지
+  happens: 플랫폼고정 codes cannot be deleted (409) and groups have no delete route, so a deleted
+  (`is_deleted`) or removed code row comes only from hand-written SQL. A document whose kind is
+  missing from 공통코드 logs a warning. 「종류마다 1개」 holds per code, by the same partial unique
+  index.
+- **Order of answers on the document routes**: the kind is checked before the facility. An upload
+  with an unknown kind is 404 and with a kind that is off is 400 even for a facility that is out of
+  scope (404), in a 폐점 점포 (409) or not writable (403); the kinds are the same platform rows for
+  every BP, so this reveals nothing about the facility. Removal checks the facility first (404),
+  then the kind (404), then 폐점 (409).
 - **Responses** carry `documentKindLabel` (the code's name, even when off or deleted; the code
   itself if the row is gone) and `isDocumentKindActive`; documents are sorted in 공통코드 order,
   kinds missing from 공통코드 last. The no-file message uses the code's name
@@ -129,7 +137,7 @@ actions (PM000001 already had them). Other BP role groups get nothing until thei
 - **Store fixed after registration** (PL-1). The update DTO has no `storeId`, so the global
   whitelist pipe rejects it. Moving a unit means registering anew and setting the old one to 폐기.
 - **폐점 점포**: `POST` 400; existing rows are read-only — `PUT` · `DELETE` and both document routes
-  are 409 「폐점 점포의 시설물·장비는 조회만 할 수 있습니다.」. List and detail carry `isStoreClosed` /
+  are 409 (an upload with an unknown or switched-off kind answers 404 · 400 first, above) 「폐점 점포의 시설물·장비는 조회만 할 수 있습니다.」. List and detail carry `isStoreClosed` /
   `store.isClosed` for the badge.
 - **Codes are checked by the server, not the DTO.** 운영상태 must be an active platform row of
   `FACILITY_STATUS`; 분류 an active row of the chosen group **in the target BP**; 점검 주기 likewise

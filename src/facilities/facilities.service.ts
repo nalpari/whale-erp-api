@@ -478,7 +478,9 @@ export class FacilitiesService implements OnModuleInit {
     // 사용 중지 · 지운 종류(또는 그룹)는 새로 올리지 못한다 — 이미 올린 그 종류의 문서는 상세에 남고 뺄 수 있다.
     // 이 확인은 트랜잭션 밖이다: 확인 직후 운영자가 그 종류를 사용 중지하면 이미 시작한 올리기 한 건은 들어간다(받아들임).
     if (!kind.isActive)
-      throw new BadRequestException('쓸 수 없는 문서 종류입니다.');
+      throw new BadRequestException(
+        `사용 중지된 문서 종류(${kind.label})라 새로 올리거나 바꿀 수 없습니다. 이미 올린 문서는 뺄 수 있습니다.`,
+      );
     const documentKind = rawKind;
     if (!file)
       throw new BadRequestException(`${kind.label} 파일을 골라 주세요.`);
@@ -894,6 +896,16 @@ export class FacilitiesService implements OnModuleInit {
     known?: Map<string, DocumentKind>,
   ): Promise<FacilityDocumentDto[]> {
     const kinds = known ?? (await this.documentKinds());
+    // 공통코드에 없는 종류는 코드 그대로 보이지만(PL-3), 그룹이 통째로 빠진 환경 · SQL 로 지운 행처럼 원인이 따로 있으니 남긴다.
+    const missing = [
+      ...new Set(
+        rows.map((r) => r.documentKind).filter((code) => !kinds.has(code)),
+      ),
+    ];
+    if (missing.length)
+      this.logger.warn(
+        `공통코드 ${FACILITY_DOCUMENT_GROUP} 에 없는 문서 종류 ${missing.join(',')}`,
+      );
     const orderOf = (code: string) => kinds.get(code)?.order ?? kinds.size;
     const sorted = [...rows].sort(
       (a, b) =>

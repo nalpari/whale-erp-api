@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -218,16 +219,67 @@ describe('FacilitiesService', () => {
         '사용 중지한 그룹의 종류',
         { codeGroup: { status: 'INACTIVE', isDeleted: false } },
       ],
+      [
+        '지운 그룹의 종류',
+        { codeGroup: { status: 'ACTIVE', isDeleted: true } },
+      ],
     ])(
       '%s로는 새로 올리지 못한다 — 400, 저장소에 올리지도 않는다',
       async (_, over) => {
         documentKinds[2] = kind('WARRANTY', '제품 보증서', 3, over);
         await expect(
           service.putDocument(9, BP, 11, 'WARRANTY', upload),
-        ).rejects.toThrow('쓸 수 없는 문서 종류입니다.');
+        ).rejects.toThrow(
+          '사용 중지된 문서 종류(제품 보증서)라 새로 올리거나 바꿀 수 없습니다. 이미 올린 문서는 뺄 수 있습니다.',
+        );
         expect(storage.put).not.toHaveBeenCalled();
       },
     );
+
+    it('이미 문서가 있는 종류를 사용 중지하면 바꾸기도 400 이고 기존 문서는 그대로다', async () => {
+      documentKinds[2] = kind('WARRANTY', '제품 보증서', 3, {
+        status: 'INACTIVE',
+      });
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({ documents: [{ documentKind: 'WARRANTY' }] }),
+      );
+      await expect(
+        service.putDocument(9, BP, 11, 'WARRANTY', upload),
+      ).rejects.toThrow(BadRequestException);
+      expect(storage.put).not.toHaveBeenCalled();
+      expect(tx.facilityDocument.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('공통코드에 없는 문서 종류가 있으면 경고 로그를 남기고 코드 그대로 보인다', async () => {
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      prisma.facility.findFirst.mockResolvedValue(
+        facilityRow({
+          documents: [
+            {
+              facilityDocumentId: 1,
+              documentKind: 'LEGACY',
+              fileName: 'w.pdf',
+              fileType: 'PDF',
+              sizeBytes: 9,
+              storageKey: 'facilities/11/1.pdf',
+            },
+          ],
+          createdBy: 5,
+          updatedBy: null,
+        }),
+      );
+      Object.assign(prisma, {
+        codeGroup: { findMany: jest.fn().mockResolvedValue([]) },
+      });
+      const d = await service.detail(9, BP, 11);
+      expect(d.documents[0].documentKindLabel).toBe('LEGACY');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('FACILITY_DOCUMENT 에 없는 문서 종류 LEGACY'),
+      );
+      warn.mockRestore();
+    });
 
     it('사용 중지한 종류의 문서도 뺄 수 있다', async () => {
       documentKinds[2] = kind('WARRANTY', '제품 보증서', 3, {
