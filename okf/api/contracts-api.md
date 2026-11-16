@@ -662,9 +662,11 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   change — left no trace, so the real time can be later). `ADMIN` 종료 rows are left out because 대체 종료 by another
   save and 퇴직 처리 also write them, and those side-effect closes are not 최종수정 at runtime either; the price is that a
   발송 대기 종료 an admin did before the deploy is approximated by an earlier time. `modified_by` is `created_by` only when
-  that time is within 1 minute of `created_at` — creation writes `sent_at` and the first history row moments apart, but
-  `created_at` is the DB clock (`DEFAULT now()`) and the other two the app clock (JS `new Date()`), so a tight bound
-  would misjudge on clock skew; otherwise the 관리자 is unknown and it is null, so the detail shows `modifiedAt` with
+  that time is within 10 seconds of `created_at` — creation writes `sent_at` and the first history row moments apart,
+  but `created_at` is the DB clock (`DEFAULT now()`) and the other two the app clock (JS `new Date()`), so the bound
+  allows for clock skew; a wider one would put the creator's name on a row another admin edited right after creation,
+  and a blank name is better than a wrong one. It is also null when an `ADMIN` 종료 row comes after that time — it may be
+  a 발송 대기 종료 by another admin. Otherwise the 관리자 is unknown and it is null, so the detail shows `modifiedAt` with
   `modifiedBy: null`.
 - `canResend` — whether policy allows `POST …/send`: 발송 대기 · 서명 대기, or 거부 · 만료 that can be reopened
   (`reopenBlockOf` · 근무 시간 겹침, WHALEERP-153). A 가입 완료 직원 gets the app notice, a 가입 전 직원 the 가입 초대,

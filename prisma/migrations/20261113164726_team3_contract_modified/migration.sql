@@ -7,9 +7,11 @@
 --   가장 늦은 것. 상태를 바꾸지 않은 저장(임시저장 이어 쓰기 · 상태 그대로의 근로자 정보 수정)은 이 기록에 없어 그보다
 --   이를 수 있다. ADMIN 종료 이력은 뺀다 — 다른 계약 저장의 대체 종료 · 퇴직 처리의 종료도 ADMIN 으로 남는데 이 칸은
 --   그런 부수 종료를 최종수정으로 보지 않는다. 그래서 배포 전에 관리자가 직접 한 발송 대기 종료도 그 앞 시각으로 근사된다.
--- - modified_by: 그 시각이 등록 일시와 1분 안이면 등록 관리자, 아니면 어느 관리자인지 몰라 비운다(NULL — 상세는 관리자
+-- - modified_by: 그 시각이 등록 일시와 10초 안이면 등록 관리자, 아니면 어느 관리자인지 몰라 비운다(NULL — 상세는 관리자
 --   칸을 비워 보인다). 등록은 sent_at · 첫 이력을 거의 같은 때 쓰지만 created_at 은 DB 시각(DEFAULT now()), sent_at ·
---   이력 changed_at 은 앱 시각(JS new Date())이라 두 시계 차이만큼 어긋날 수 있어 1분을 둔다.
+--   이력 changed_at 은 앱 시각(JS new Date())이라 두 시계 차이만큼 어긋날 수 있어 10초를 둔다. 더 넓히면 등록 직후 다른
+--   관리자가 고친 행에 등록 관리자 이름이 잘못 붙는다 — 틀린 이름보다 빈칸이 낫다.
+--   그 시각 뒤에 ADMIN 종료 이력이 있어도 비운다 — 관리자가 직접 한 발송 대기 종료일 수 있어 등록 관리자라고 할 수 없다.
 --
 -- 줄은 물리 생성기 출력(docs/raw/2026-10-06-3팀-schema.sql)에서 옮겼다. front 논리 ERD 카탈로그에는 없는 물리 추가 칸이다.
 ALTER TABLE "contracts" ADD COLUMN "modified_at" TIMESTAMPTZ(6);
@@ -20,7 +22,13 @@ ALTER TABLE "contracts" ADD CONSTRAINT "contracts_modified_by_fkey" FOREIGN KEY 
 UPDATE "contracts" c
 SET "modified_at" = t."at",
     "modified_by" = CASE
-      WHEN c."created_at" IS NOT NULL AND t."at" <= c."created_at" + INTERVAL '1 minute' THEN c."created_by"
+      WHEN c."created_at" IS NOT NULL AND t."at" <= c."created_at" + INTERVAL '10 seconds'
+           AND NOT EXISTS (
+             SELECT 1
+               FROM "contract_status_histories" e
+              WHERE e."contract_id" = c."contract_id" AND e."actor" = 'ADMIN' AND e."to_status" = 'ENDED'
+                AND e."changed_at" > t."at"
+           ) THEN c."created_by"
       ELSE NULL
     END
 FROM (
