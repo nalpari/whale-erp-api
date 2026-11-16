@@ -158,7 +158,7 @@ export class StaffMemberTodoSummaryResponseDto {
   recentHistories: StaffMemberTodoHistoryDto[];
 }
 
-/** 발송 이력 한 줄 — 근로계약 발송이 보낸 가입 초대 · 소속 추가 확인 요청 알림톡 한 번(WHALEERP-136), 또는 관리자가 보낸 비밀번호 초기화 메일 한 번(PASSWORD_RESET, WHALEERP-676) */
+/** 발송 이력 한 줄 — 근로계약 발송이 보낸 가입 초대 · 소속 추가 확인 요청 · 서명 요청(CONTRACT_SENT, WHALEERP-675) 알림톡 한 번(WHALEERP-136), 또는 관리자가 보낸 비밀번호 초기화 메일 한 번(PASSWORD_RESET, WHALEERP-676) */
 export class StaffMemberSendLogDto {
   /** 발송 이력 ID — 알림톡 줄은 alimtalk_send_logs, 비밀번호 초기화 메일 줄은 mail_send_logs(mail_id). 두 테이블의 번호는 겹칠 수 있어 목록 key 는 kind 와 함께 쓴다 */
   sendLogId: number;
@@ -166,7 +166,7 @@ export class StaffMemberSendLogDto {
   contractId: number | null;
   @ApiProperty({ enum: STAFF_SEND_KINDS, enumName: 'StaffSendKind' })
   kind: StaffSendKind;
-  /** 같은 계약으로 앞서 직원에게 나갔을 수 있는 발송(성공 · 접수 여부 모름)이 있었다 — 재발송 · 고쳐 다시 보냄. 계약 재발송 횟수와는 다를 수 있다. 비밀번호 초기화 메일(PASSWORD_RESET)은 늘 false */
+  /** 같은 계약으로 앞서 직원에게 나갔을 수 있는 발송(성공 · 접수 여부 모름)이 있었다 — 재발송 · 고쳐 다시 보냄. 종류는 가리지 않는다(가입 초대 뒤의 서명 요청도 재발송). 계약 재발송 횟수와는 다를 수 있다. 비밀번호 초기화 메일(PASSWORD_RESET)은 늘 false */
   isResend: boolean;
   /** 알림톡 줄은 비즈뿌리오 접수 기준 — 접수 여부 모름(UNCONFIRMED)은 다시 보내면 두 번 갈 수 있다. 비밀번호 초기화 메일 줄은 SMTP 결과이고 SUCCEEDED · FAILED 만 있다 */
   @ApiProperty({ enum: STAFF_SEND_RESULTS, enumName: 'StaffSendResult' })
