@@ -31,7 +31,6 @@ import {
   type ApiResponseOptions,
   ApiServiceUnavailableResponse,
 } from '@nestjs/swagger';
-import { FacilityDocumentKind } from '@prisma/client';
 import { CurrentUser, UserTypes } from '../auth/auth.decorators';
 // 데코레이터가 붙은 시그니처에서만 쓰는 타입이라 import type 이어야 한다.
 import type { AuthUser } from '../auth/auth.types';
@@ -98,10 +97,10 @@ const BP_MISSING_DESCRIPTION =
 const READ_ONLY_DESCRIPTION = '폐점 점포의 시설물·장비(조회만 된다)';
 const KIND_PARAM = {
   name: 'kind',
-  enum: FacilityDocumentKind,
-  enumName: 'FacilityDocumentKind',
+  type: String,
+  example: 'USER_MANUAL',
   description:
-    '문서 종류 — 사용 매뉴얼 · 주의사항 · 제품 보증서. 모르는 값이면 404',
+    '문서 종류 — 플랫폼고정 공통코드 FACILITY_DOCUMENT 의 상세 코드(사용 매뉴얼 USER_MANUAL · 주의사항 PRECAUTION · 제품 보증서 WARRANTY 등). 올리기는 공통코드에 없으면 404 · 사용 중지한 종류면 400, 빼기는 공통코드에 없고 그 시설물에 그 종류의 문서도 없을 때만 404',
 } as const;
 
 /** 엑셀 일괄 등록이 받는 본문 — multipart 의 file 하나(.xlsx) */
@@ -367,9 +366,11 @@ export class FacilitiesController {
   })
   @ApiOkResponse({ type: FacilityDocumentDto })
   @ApiBadRequestResponse({
-    description: `파일 없음 · JPG · PNG · PDF 가 아님 · 10MB 초과 · 파일 2개 이상 · 썸네일을 만들 수 없는 그림(깨짐 · 화소 초과) · ${BP_MISSING_DESCRIPTION}`,
+    description: `파일 없음 · JPG · PNG · PDF 가 아님 · 10MB 초과 · 파일 2개 이상 · 썸네일을 만들 수 없는 그림(깨짐 · 화소 초과) · 사용 중지 · 지운 문서 종류(또는 그룹)(「사용 중지된 문서 종류(…)라 새로 올리거나 바꿀 수 없습니다. 이미 올린 문서는 뺄 수 있습니다.」) · ${BP_MISSING_DESCRIPTION}`,
   })
-  @ApiNotFoundResponse({ description: `${NOT_FOUND_DESCRIPTION} · 문서 종류` })
+  @ApiNotFoundResponse({
+    description: `${NOT_FOUND_DESCRIPTION} · 공통코드에 없는 문서 종류`,
+  })
   @ApiConflictResponse({ description: READ_ONLY_DESCRIPTION })
   @ApiForbiddenResponse({
     description:
@@ -400,7 +401,9 @@ export class FacilitiesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam(KIND_PARAM)
   @ApiNoContentResponse()
-  @ApiNotFoundResponse({ description: `${NOT_FOUND_DESCRIPTION} · 문서 종류` })
+  @ApiNotFoundResponse({
+    description: `${NOT_FOUND_DESCRIPTION} · 공통코드에 없고 그 시설물에 그 종류의 문서도 없는 문서 종류(사용 중지한 종류는 뺄 수 있다)`,
+  })
   @ApiConflictResponse({ description: READ_ONLY_DESCRIPTION })
   async removeDocument(
     @CurrentUser() user: AuthUser,
