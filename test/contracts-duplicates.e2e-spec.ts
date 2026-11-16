@@ -10,6 +10,7 @@ import {
 import { fakeBizppurio } from './fake-alimtalk';
 import { ContractSendService } from '../src/contracts/contract-send.service';
 import { ContractsService } from '../src/contracts/contracts.service';
+import { MyContractsService } from '../src/contracts/my-contracts.service';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RetirementService } from '../src/staff-members/retirement.service';
@@ -717,6 +718,115 @@ describe('계약 중복 검사 (e2e, DB)', () => {
       expect(resent.lastSentAt).toBe(at.toISOString());
       expect(resent.signDeadlineAt).not.toBe(first.signDeadlineAt);
       expect(resent.resendCount).toBe(1);
+    });
+
+    it('최종수정은 관리자가 고치거나 보낸 때 · 그 관리자다 — 재발송이 나가지 않으면 보내기 전으로 되돌린다(WHALEERP-699)', async () => {
+      const roleGroup = await prisma.roleGroup.findFirstOrThrow({
+        where: { roleCode: 'BM000001' },
+      });
+      const { adminAccountId: otherId } = await prisma.adminAccount.create({
+        data: {
+          loginId: `mod${n}`,
+          name: '최수정',
+          bpCodeId,
+          passwordHash: '!',
+          roleTypeCode: 'BM',
+          roleGroupId: roleGroup.roleGroupId,
+          joinPathCode: 'PLATFORM_REGISTERED',
+          isAllStores: true,
+          accountStatusCode: 'ACTIVE',
+        },
+      });
+      const phone = nextPhone();
+      const detail = (id: number) => contracts.findOne(adminId, id);
+      const { contractId } = await contracts.create(
+        dto(phone, { isTemporarySave: true }),
+        adminId,
+      );
+      // 등록 — 이름 없는 관리자는 로그인 아이디
+      const created = await detail(contractId);
+      expect(created.modifiedBy).toBe(`dup${n}`);
+      expect(created.modifiedAt).not.toBeNull();
+
+      // 다른 관리자가 이어 써 보낸다(PUT)
+      await contracts.update(otherId, contractId, dto(phone));
+      const saved = await detail(contractId);
+      expect(saved.modifiedBy).toBe('최수정');
+      expect(Date.parse(saved.modifiedAt as string)).toBeGreaterThanOrEqual(
+        Date.parse(created.modifiedAt as string),
+      );
+
+      // 근로자 정보 수정(PATCH …/worker) — 계약 행은 당사자 · 직원 행 말고도 최종수정을 쓴다
+      await contracts.updateWorker(adminId, contractId, {
+        name: '남도현',
+        phone,
+        birthDate: '1998-07-12',
+        gender: 'MALE',
+        isForeigner: false,
+      });
+      expect((await detail(contractId)).modifiedBy).toBe(`dup${n}`);
+
+      // 재발송 — 보낸 때 · 관리자
+      const at = later(60_000);
+      await sender.send(otherId, contractId, at);
+      const resent = await detail(contractId);
+      expect(resent.modifiedAt).toBe(at.toISOString());
+      expect(resent.modifiedBy).toBe('최수정');
+
+      // 나가지 않은 재발송은 관리자 수정이 아니다 — 보내기 전 값으로
+      bizppurio.sendMessage.mockRejectedValueOnce(
+        new BizppurioError('거절', 4100, 400),
+      );
+      await expect(
+        sender.send(adminId, contractId, later(120_000)),
+      ).rejects.toMatchObject({ status: 502 });
+      const undone = await detail(contractId);
+      expect(undone.modifiedAt).toBe(resent.modifiedAt);
+      expect(undone.modifiedBy).toBe('최수정');
+
+      // 발송 대기 종료 — 닫은 때 · 관리자
+      const endedAt = later(180_000);
+      await sender.end(adminId, contractId, endedAt);
+      const ended = await detail(contractId);
+      expect(ended.modifiedAt).toBe(endedAt.toISOString());
+      expect(ended.modifiedBy).toBe(`dup${n}`);
+    });
+
+    it('직원 앱의 거부는 최종수정을 바꾸지 않는다 — 상태 변경은 lastProcessedAt 에만(WHALEERP-699)', async () => {
+      const phone = nextPhone();
+      const { contractId, staffMemberId } = await contracts.create(
+        dto(phone),
+        adminId,
+      );
+      // 가입한 직원의 서명 대기 계약으로 만든다(직원 앱이 볼 수 있게)
+      const account = await prisma.account.create({
+        data: {
+          email: `reject-${n}-${seq}@test.invalid`,
+          passwordHash: '!',
+          realName: '남도현',
+          birthDate: new Date('1998-07-12'),
+          phone,
+          status: 'JOINED',
+        },
+      });
+      await prisma.staffMember.update({
+        where: { staffMemberId },
+        data: { accountId: account.accountId, joinStatus: 'JOINED' },
+      });
+      await prisma.contract.update({
+        where: { contractId },
+        data: { status: 'PENDING_SIGNATURE' },
+      });
+      const before = await contracts.findOne(adminId, contractId);
+
+      await expect(
+        app.get(MyContractsService).reject(account.accountId, contractId),
+      ).resolves.toMatchObject({ status: 'REJECTED' });
+      const after = await contracts.findOne(adminId, contractId);
+      expect(after.status).toBe('REJECTED');
+      expect(after.lastProcessedAt).not.toBe(before.lastProcessedAt);
+      expect(after.modifiedAt).toBe(before.modifiedAt);
+      expect(after.modifiedBy).toBe(before.modifiedBy);
     });
 
     it('계정이 있는 번호의 가입 전 직원(소속 추가 확인)은 재발송하면 소속 추가 확인 요청을 새로 보낸다 — 상세가 알린다(WHALEERP-130)', async () => {

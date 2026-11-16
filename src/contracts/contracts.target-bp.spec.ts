@@ -85,7 +85,7 @@ describe('근로계약 대상 BP', () => {
     ['삭제', (bp) => contracts.remove(5, 7, bp)],
     ['날인본 내려받기', (bp) => contracts.documentDownloadUrl(5, 7, 3, bp)],
     ['재발송', (bp) => sender.send(5, 7, new Date(), {}, bp)],
-    ['발송 대기 종료', (bp) => sender.end(5, 7, bp)],
+    ['발송 대기 종료', (bp) => sender.end(5, 7, new Date(), bp)],
   ];
 
   describe('플랫폼 계정이 헤더 없이 부르면(대상 = 소속 플랫폼 BP)', () => {

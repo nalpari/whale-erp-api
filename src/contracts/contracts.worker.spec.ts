@@ -41,6 +41,7 @@ describe('ContractsService.updateWorker', () => {
     contract: {
       findUnique: jest.Mock;
       findMany: jest.Mock;
+      update: jest.Mock;
       updateMany: jest.Mock<
         Promise<{ count: number }>,
         [Prisma.ContractUpdateManyArgs]
@@ -107,6 +108,7 @@ describe('ContractsService.updateWorker', () => {
       contract: {
         findUnique: jest.fn().mockResolvedValue(row()),
         findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn().mockResolvedValue({}),
         updateMany: jest
           .fn<Promise<{ count: number }>, [Prisma.ContractUpdateManyArgs]>()
           .mockResolvedValue({ count: 1 }),
@@ -162,6 +164,39 @@ describe('ContractsService.updateWorker', () => {
     }).compile();
     service = module.get(ContractsService);
   });
+
+  it.each([
+    ['상태가 바뀌어도', {}],
+    // 가입한 직원은 앱으로 받아 서명 대기 그대로다 — 전환이 없어도 남긴다
+    [
+      '상태가 그대로여도',
+      {
+        draftAction: null,
+        staffMember: {
+          phone: PHONE,
+          joinStatus: 'JOINED',
+          candidateAccountId: null,
+        },
+      },
+    ],
+  ])(
+    '%s 근로자 정보 수정은 계약 행에 최종수정(때 · 관리자)을 남긴다 — 당사자 · 직원 행만 쓰는 저장이라 따로 쓴다(WHALEERP-699)',
+    async (_, over) => {
+      tx.contract.findUnique.mockResolvedValue(row(over));
+      await service.updateWorker(9, 7, dto());
+      expect(tx.contract.update).toHaveBeenCalledTimes(1);
+      expect(tx.contract.update).toHaveBeenCalledWith({
+        where: { contractId: 7 },
+        data: { modifiedAt: expect.any(Date) as unknown, modifiedBy: 9 },
+      });
+      // 보내기와 같은 시각이다
+      expect(
+        (
+          tx.contract.update.mock.calls[0] as [{ data: { modifiedAt: Date } }]
+        )[0].data.modifiedAt,
+      ).toBe(delivery.prepare.mock.calls[0][2]);
+    },
+  );
 
   it('계정이 있는 번호의 옛 서명 대기면 당사자 정보를 고치고 발송 대기로 돌려 소속 추가 확인 요청을 다시 보낸다 — 보내기 직전 값을 넘긴다(WHALEERP-130)', async () => {
     // 저장한 뒤 그 번호의 계정이 탈퇴 후 다시 가입해 바뀌었다(42 → 43) — 번호가 같아도 다시 판별해 새 계정에 건다(리뷰)

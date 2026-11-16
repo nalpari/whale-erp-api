@@ -132,6 +132,11 @@ export type DeliveryBefore = {
   draftAction: DraftAction;
   staffMemberId: number;
   staffMember: { joinStatus: string; candidateAccountId: number | null };
+  /**
+   * 재발송(ContractSendService.send)만 — 보내기 전 최종수정(WHALEERP-699). 알림톡이 나가지 않았으면 이 값으로 되돌린다 —
+   * 나가지 않은 재발송은 관리자 수정이 아니다. 저장(등록 · 이어 쓰기 · 근로자 정보 수정)은 고친 것이 남아 넣지 않는다.
+   */
+  modified?: { modifiedAt: Date | null; modifiedBy: number | null };
 };
 
 export type DeliveryInput = {
@@ -826,7 +831,7 @@ export class ContractDeliveryService {
       });
       const c = await tx.contract.findUnique({
         where: { contractId },
-        select: { status: true, sentAt: true },
+        select: { status: true, sentAt: true, modifiedAt: true },
       });
       // 직원이 이미 답한 요청은 지우지도 되돌리지도 않는다 — 수락으로 이어진 레코드 · 서명 대기 계약, 거절로 닫힌 계약이 그 답의 것이다
       if (answered(mine?.status)) return 'ANSWERED';
@@ -887,6 +892,9 @@ export class ContractDeliveryService {
           draftAction: rejudged ? p.draftAction : before.draftAction,
           // 이 발송이 센 재발송을 뺀다(prepare 와 같은 조건)
           ...(before.sentAt !== null && { resendCount: { decrement: 1 } }),
+          // 재발송이면 최종수정도 보내기 전으로(WHALEERP-699) — 이 재발송이 쓴 값 그대로일 때만. 그사이 다른 관리자가 고쳤으면
+          // (근로자 정보 수정 등) 그 수정을 덮지 않는다
+          ...(c?.modifiedAt?.getTime() === p.now.getTime() && before.modified),
         },
       });
       if (p.historyId !== null) {

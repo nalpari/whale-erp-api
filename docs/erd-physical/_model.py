@@ -194,7 +194,10 @@ ADD = {
                   ("resend_count", "", "갱신 예정 알림 일시", "datetime", "renewal_notified_at", "갱신 예정 알림 · 메일을 보낸 때 — 계약마다 한 번 (WHALEERP-152, 2026-10-26 김민식)"),
                   ("end_date", "", "주휴일", "enum", "weekly_holiday", "근무하지 않는 요일 하나를 관리자가 고른다. 주 소정근로시간 15시간 미만이면 NULL (노무사 확인 2026-10-14)"),
                   (None, "", "등록 일시", "datetime", "created_at", ""),
-                  (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
+                  (None, "", "최근 수정 일시", "datetime", "updated_at", ""),
+                  # 상세의 최종수정 — updated_at 은 직원 서명 · 배치도 바꿔서 관리자 수정만 따로 남긴다 (WHALEERP-699, 2026-11-13 김민식)
+                  (None, "", "최종수정 일시", "datetime", "modified_at", "관리자가 고치거나 보낸 때만 (직원 서명 · 배치는 바꾸지 않는다) (WHALEERP-699, 2026-11-13)"),
+                  (None, "FK", "최종수정 관리자", "id", "modified_by", "관리자가 고치거나 보낸 때만 (직원 서명 · 배치는 바꾸지 않는다) (WHALEERP-699, 2026-11-13)")],
     "contract_documents": [("storage_key", "", "원래 파일 이름", "text", "file_name", "올린 파일의 원래 이름 — 내려받으면 이 이름으로 저장된다 (종이 계약 날인본, 2026-10-15)"),
                            # 보낸 원본은 발송마다 한 장 — 어느 발송의 원본인지 남긴다 (WHALEERP-131, 2026-10-29 김민식)
                            ("checksum", "", "발송 일시", "datetime", "sent_at", "보낸 원본 · 처리 완료본이 담은 계약의 발송 일시(contracts.sent_at). 다른 파일은 NULL (WHALEERP-131, 2026-10-29 김민식)")],
@@ -269,7 +272,8 @@ FK_TARGET = {
     # 관리자 외래키 {역할}_by
     **{c: "admin_accounts" for c in ("created_by", "updated_by", "changed_by", "requested_by", "resolved_by",
                                      "reviewed_by", "proxy_by", "corrected_by", "confirmed_by", "sent_by",
-                                     "replied_by", "processed_by", "processing_started_by", "downloaded_by")},
+                                     "replied_by", "processed_by", "processing_started_by", "downloaded_by",
+                                     "modified_by")},
 }
 
 # 논리 PK 를 그대로 두는 테이블 (1:1 · 복합 PK)
