@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T08:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-16T01:17:40Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -193,7 +193,7 @@ deadlock (`40P01`):
 - staff-app check-in / check-out — account `FOR UPDATE` (`my-attendance.service.ts:404`) then
   `attendanceRecord.create` (`my-attendance.service.ts:363`), whose `attendance_records_store_id_fkey` takes the store
   `FOR KEY SHARE`; admin attendance register / correction — account (or staff, when there is no account) `FOR UPDATE`
-  (`attendance-edit.service.ts:442-445`, `:731-734`) then the inserts (`:302`, `:326`, `:549`, `:589`). These collide
+  (`attendance-edit.service.ts:444-447`, `:733-736`) then the inserts (`:304`, `:328`, `:551`, `:591`). These collide
   with the closing's store `FOR UPDATE`, and the closing then waits for the same account `FOR UPDATE`: `40P01` is
   possible, and a check-out on the closing day is common;
 - account → staff order (the closing takes staff → account, so these can deadlock): adding a workplace
