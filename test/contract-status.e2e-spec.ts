@@ -19,6 +19,7 @@ import { SIGNED_ONCE } from '../src/contracts/signed-contract';
 import { StaffMemberSummaryService } from '../src/staff-members/staff-member-summary.service';
 import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp } from './hq-bp';
 
 // 계약 상태 전환(WHALEERP-151)을 실제 DB 로 확인한다. 조건부 UPDATE · 상태 이력 · 거부 사유가 한 트랜잭션에서
 // 함께 남고, 실패하면 직전 상태가 그대로인지는 목으로 증명되지 않는다.
@@ -121,7 +122,7 @@ describe('계약 상태 전환 (e2e, DB)', () => {
     expiry = app.get(ContractExpiryService);
     notice = app.get(ContractNoticeService);
 
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${String((n + 500_000) % 1_000_000).padStart(6, '0')}`,
         isPlatform: false,

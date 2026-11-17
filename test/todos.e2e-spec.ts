@@ -11,6 +11,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
 import { TodoDueSoonService } from '../src/todos/todo-due-soon.service';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
+import { createBp, deleteBps } from './hq-bp';
 
 // TO-DO 를 실제 DB 로 확인한다 — 본사 제공 동의 가림(운영 정책 ATT-30), 「재직 직원」 기준(체결 완료 계약 · 가입 완료 ·
 // 퇴직 전), 한 명 수행 완료 선점(조건부 UPDATE), 수행 임박 알림의 부분 고유 인덱스 dedupe. 목으로는 쿼리 모양만 보인다.
@@ -54,7 +55,7 @@ describe('TO-DO (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -108,7 +109,7 @@ describe('TO-DO (e2e, DB)', () => {
         accountStatusCode: 'ACTIVE',
       },
     }));
-    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId: otherBpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${(n + 1) % 1_000_000}`,
         isPlatform: false,
@@ -245,7 +246,7 @@ describe('TO-DO (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: { storeId: { in: [directStoreId, franchiseStoreId] } },
     });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: {
         bpCodeId: { in: [bpCodeId, otherBpCodeId].filter((id) => id) },
       },

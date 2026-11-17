@@ -16,6 +16,7 @@ import {
 import { PasswordResetPinSender } from '../src/auth/password-reset-pin-sender';
 import * as mailService from '../src/mail/mail.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 const OLD_PASSWORD = 'old-Password-1';
 const NEW_PASSWORD = 'Brand-new-pw1';
@@ -105,7 +106,7 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     oldHash = await hashPassword(OLD_PASSWORD);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -164,7 +165,7 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
         accountStatusCode: 'ACTIVE',
       },
     }));
-    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId: otherBpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${(n + 1) % 1_000_000}`,
         isPlatform: false,
@@ -274,7 +275,7 @@ describe('관리자 초기화 재설정 링크 (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: { storeId: { in: [storeId, otherStoreId] } },
     });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: {
         bpCodeId: { in: [bpCodeId, otherBpCodeId].filter((id) => id) },
       },

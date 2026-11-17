@@ -15,6 +15,7 @@ import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { RetirementService } from '../src/staff-members/retirement.service';
 import { StaffSignupService } from '../src/staff-signup/staff-signup.service';
+import { createBp } from './hq-bp';
 
 // 계약 중복 검사(WHALEERP-129)를 실제 DB 로 확인한다. 대체(지우기 · 종료) · 가입 전 레코드 재사용 · 다른 점포
 // 근무 시간 겹침이 여러 표와 관계 조건(staffMember.phone, contracts none)에 걸쳐 있어 목으로는 증명되지 않는다.
@@ -91,7 +92,7 @@ describe('계약 중복 검사 (e2e, DB)', () => {
     sender = app.get(ContractSendService);
     signup = app.get(StaffSignupService);
 
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,

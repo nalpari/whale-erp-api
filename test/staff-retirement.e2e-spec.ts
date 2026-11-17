@@ -18,6 +18,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 import { RetirementService } from '../src/staff-members/retirement.service';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
+import { createBp, deleteBps } from './hq-bp';
 
 // 퇴직 처리(WHALEERP-584)를 실제 DB 로 확인한다. 계약은 바꾸지 않고, 퇴직일 다음 날 배치(retireDue)가
 // 상태를 바꾸며 스케줄 · 개인 TO-DO 배정 · 대기 계약을 정리한다는 규칙이 여러 표에 걸쳐 있어 목으로는
@@ -81,7 +82,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
     retirement = app.get(RetirementService);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -131,7 +132,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
         accountStatusCode: 'ACTIVE',
       },
     }));
-    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId: otherBpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${(n + 1) % 1_000_000}`,
         isPlatform: false,
@@ -308,7 +309,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
         },
       },
     });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: {
         bpCodeId: { in: [bpCodeId, otherBpCodeId].filter((id) => id) },
       },
@@ -1973,7 +1974,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
           },
         });
         created.storeIds.push(deletedStore.storeId);
-        const otherBp = await prisma.bpCode.create({
+        const otherBp = await createBp(prisma, {
           data: {
             bpCode: `BP${code()}`,
             isPlatform: false,
@@ -2060,7 +2061,7 @@ describe('퇴직 처리 (e2e, DB)', () => {
         await prisma.store.deleteMany({
           where: { storeId: { in: created.storeIds } },
         });
-        await prisma.bpCode.deleteMany({
+        await deleteBps(prisma, {
           where: { bpCodeId: { in: created.bpCodeIds } },
         });
       }

@@ -12,6 +12,7 @@ import {
   PASSWORD_CHANGE_REQUIRED_MESSAGE,
 } from '../src/auth/access-messages';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // 플랫폼 공통코드 관리를 실제 DB 로 확인한다. 동시에 같은 코드를 만들 때의 409, BP 적용이 있는 행을
 // 건너뛰는 것(ON CONFLICT DO NOTHING)은 단위 테스트가 목의 반환값으로 가정만 하므로 여기서만 증명된다.
@@ -73,7 +74,7 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     bpCode = `BP${n}`;
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode,
         isPlatform: false,
@@ -218,7 +219,7 @@ describe('플랫폼 공통코드 관리 (e2e, DB)', () => {
       });
     }
     if (bpCodeId !== undefined)
-      await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+      await deleteBps(prisma, { where: { bpCodeId } });
     await app?.close();
   });
 

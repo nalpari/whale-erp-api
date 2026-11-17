@@ -11,6 +11,7 @@ import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STORAGE } from '../src/storage/storage.module';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 앱 근로계약 파일 내려받기 주소(WHALEERP-146 · 149)를 실제 DB 로 확인한다 — 내 계약의 상세 documents 파일만,
 // 남의 계약 · 다른 계약의 파일 · 필기 서명은 404, 처리 완료본은 체결된 계약에서만(그 밖은 409), 관리자 토큰 403 ·
@@ -47,7 +48,7 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -105,7 +106,7 @@ describe('직원 근로계약 파일 내려받기 (e2e, DB)', () => {
       where: { adminAccountId: adminId },
     });
     await prisma.store.deleteMany({ where: { storeId } });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

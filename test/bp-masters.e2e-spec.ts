@@ -16,6 +16,7 @@ import type {
 import { ExcelExportsService } from '../src/excel-exports/excel-exports.service';
 import { PLATFORM_ADMIN_MAIL } from '../src/platform-admins/platform-admin-mail';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps, deleteHqStores, findHq } from './hq-bp';
 
 /**
  * BP 마스터 계정 관리를 실제 DB 로 — 메뉴 권한(MN000203) · 플랫폼 계정 판정, BP 코드 채번 잠금(동시 등록),
@@ -63,7 +64,7 @@ describe('BP 마스터 계정 관리 (e2e, DB)', () => {
     const bmGroup = await prisma.roleGroup.findFirstOrThrow({
       where: { roleCode: 'BM000001' },
     });
-    const { bpCodeId: callerBpId } = await prisma.bpCode.create({
+    const { bpCodeId: callerBpId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -123,6 +124,8 @@ describe('BP 마스터 계정 관리 (e2e, DB)', () => {
         await prisma.bpChangeHistory.deleteMany({
           where: { bpCodeId: { in: bpCodeIds } },
         });
+        // 본사 점포(등록 · 수정이 만든 이력 · 사업자정보 포함)는 등록자 계정을 가리키므로 계정보다 먼저 지운다.
+        await deleteHqStores(prisma, bpCodeIds);
         // BP 와 계정이 서로를 가리킨다(등록자 · 소속) — 등록자를 먼저 비워야 계정을 지울 수 있다.
         await prisma.bpCode.updateMany({
           where: { bpCodeId: { in: bpCodeIds } },
@@ -137,7 +140,7 @@ describe('BP 마스터 계정 관리 (e2e, DB)', () => {
         await prisma.adminAccount.deleteMany({ where });
       }
       if (bpCodeIds.length)
-        await prisma.bpCode.deleteMany({
+        await deleteBps(prisma, {
           where: { bpCodeId: { in: bpCodeIds } },
         });
     }
@@ -317,19 +320,28 @@ describe('BP 마스터 계정 관리 (e2e, DB)', () => {
 
       const all = await call('get', `/bp-masters/${bpCodeId}/histories`);
       const body = all.body as BpMasterHistoryListResponseDto;
-      // 등록 · 상호명(BP) + 연락처(계정)
-      expect(body.total).toBe(3);
+      // 등록(BP) + 연락처(계정). 상호명은 BP 이력이 아니라 본사 점포 이력에 남는다(설계 D5, 2026-11-17).
+      expect(body.total).toBe(2);
       expect(body.items.map((h) => h.field)).toEqual(
-        expect.arrayContaining(['BP', '상호명', '연락처']),
+        expect.arrayContaining(['BP', '연락처']),
       );
       expect(body.items.at(-1)?.field).toBe('BP');
+      const { storeId: hqStoreId } = await findHq(prisma, bpCodeId);
+      await expect(
+        prisma.storeChangeHistory.findMany({
+          where: { storeId: hqStoreId, field: '상호명' },
+          select: { beforeValue: true, afterValue: true },
+        }),
+      ).resolves.toEqual([
+        { beforeValue: `한강상회 c${n}`, afterValue: `한강상회 본점 ${n}` },
+      ]);
 
       const second = await call(
         'get',
-        `/bp-masters/${bpCodeId}/histories?page=2&pageSize=2`,
+        `/bp-masters/${bpCodeId}/histories?page=2&pageSize=1`,
       );
       const page2 = second.body as BpMasterHistoryListResponseDto;
-      expect(page2.total).toBe(3);
+      expect(page2.total).toBe(2);
       expect(page2.items).toHaveLength(1);
     });
 

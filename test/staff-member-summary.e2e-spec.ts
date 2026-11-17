@@ -26,6 +26,7 @@ import {
   staffTaxProfileAad,
 } from '../src/common/personal-data-cipher';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 상세 요약(WHALEERP-183)을 실제 DB 로 확인한다. 영역 메뉴 권한은 권한 그룹 · 메뉴 url 조인이라, 그리고 「한 영역이
 // 실패해도 나머지는 온다」는 경로가 실제로 나뉘어 있어야 성립하므로 목으로는 증명되지 않는다.
@@ -82,7 +83,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
 
     const bp = async (code: number, name: string) =>
       (
-        await prisma.bpCode.create({
+        await createBp(prisma, {
           data: {
             bpCode: `BP${pad(code)}`,
             isPlatform: false,
@@ -591,7 +592,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         storeId: { in: [directStoreId, franchiseStoreId, otherStoreId] },
       },
     });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: { bpCodeId: { in: [bpCodeId, otherBpId] } },
     });
     await app.close();

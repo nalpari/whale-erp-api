@@ -11,6 +11,7 @@ import type {
   TemplateListResponseDto,
 } from '../src/notification-templates/dto/template.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // 알림 템플릿 관리(WHALEERP-572 · 573 · 581)를 실제 DB 로 확인한다. 기본값 복사 마이그레이션, 채널별 CHECK,
 // 템플릿 코드 고유, 이력 · 되돌리기는 목으로 증명되지 않는다.
@@ -94,7 +95,7 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     const platformBp = await prisma.bpCode.findFirstOrThrow({
       where: { isPlatform: true },
     });
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -143,7 +144,7 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: [pmId, bmId] } },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

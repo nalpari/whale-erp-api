@@ -14,6 +14,7 @@ import {
   kstToday,
 } from '../src/staff-members/kst-date';
 import { STORAGE } from '../src/storage/storage.module';
+import { createBp } from './hq-bp';
 
 // 급여명세서 보존 기간 파기(WHALEERP-649)를 실제 DB 로 확인한다 — 딸린 행 · 알림을 지우는 순서를 외래키(모두 RESTRICT)가 막지
 // 않는지, 생성일 + 3년 당일은 남는지, 계정이 탈퇴해도 같은 기준인지, 명세서가 없어진 뒤 퇴직자 계약 파기(645)가 건너뛰던
@@ -45,7 +46,7 @@ describe('급여명세서 보존 기간 파기 (e2e, DB)', () => {
     app = moduleFixture.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);
-    const { bpCodeId } = await prisma.bpCode.create({
+    const { bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,

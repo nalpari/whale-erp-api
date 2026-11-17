@@ -9,6 +9,7 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PLATFORM_ADMIN_MAIL } from '../src/platform-admins/platform-admin-mail';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 /**
  * 잠긴 관리자 계정을 운영자가 비밀번호 초기화하면, 메일로 받은 비밀번호로 바로 로그인된다(2026-10-28 재영 결정).
@@ -57,7 +58,7 @@ describe('관리자 비밀번호 초기화가 로그인 잠금을 푼다 (e2e, D
     });
     const group = (roleCode: string) =>
       prisma.roleGroup.findFirstOrThrow({ where: { roleCode } });
-    ({ bpCodeId: customerBpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId: customerBpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -119,7 +120,7 @@ describe('관리자 비밀번호 초기화가 로그인 잠금을 푼다 (e2e, D
         await prisma.bpChangeHistory.deleteMany({
           where: { bpCodeId: customerBpCodeId },
         });
-        await prisma.bpCode.deleteMany({
+        await deleteBps(prisma, {
           where: { bpCodeId: customerBpCodeId },
         });
       }

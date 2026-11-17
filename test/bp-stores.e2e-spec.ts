@@ -14,6 +14,7 @@ import { BpStoreListResponseDto } from '../src/bp-codes/dto/bp-store-list.respon
 import { BpStoresVersionResponseDto } from '../src/bp-codes/dto/bp-stores-version.response.dto';
 import { CodeItemsResponseDto } from '../src/codes/dto/code-items.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 const PASSWORD = 'Whale-admin-1';
 
@@ -43,14 +44,14 @@ describe('BP 점포 목록 (e2e, DB)', () => {
     const passwordHash = await hashPassword(PASSWORD);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId: otherBpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n === 999_999 ? 100_000 : n + 1}`,
         tradeName: '다른 BP',
         accountStatusCode: 'ACTIVE',
       },
     }));
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         tradeName: '점포 목록 테스트 BP',
@@ -130,7 +131,7 @@ describe('BP 점포 목록 (e2e, DB)', () => {
     await prisma.adminSession.deleteMany({ where: byAdmin });
     await prisma.adminAccount.deleteMany({ where: byAdmin });
     await prisma.store.deleteMany({ where: { storeId: { in: storeIds } } });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: { bpCodeId: { in: [bpCodeId, otherBpCodeId] } },
     });
     await app.close();
@@ -145,8 +146,13 @@ describe('BP 점포 목록 (e2e, DB)', () => {
     const res = await stores(bpCodeId, pmToken);
     expect(res.status).toBe(200);
     const body = res.body as BpStoreListResponseDto;
-    expect(body.total).toBe(2);
-    expect(body.items.map((s) => s.name)).toEqual(['가 점포', '나 점포']);
+    // 플랫폼 계정은 본사 점포(이름 = 상호명)도 본다(2026-11-17).
+    expect(body.total).toBe(3);
+    expect(body.items.map((s) => s.name)).toEqual([
+      '가 점포',
+      '나 점포',
+      '점포 목록 테스트 BP',
+    ]);
     expect(body.items[1]).toMatchObject({
       storeId: storeIds[0],
       storeTypeCode: 'DIRECT',
@@ -325,7 +331,8 @@ describe('BP 점포 목록 (e2e, DB)', () => {
     it('BP · 가맹 관리자는 관리 범위 · 담당 점포 매핑이 바뀌면 바뀌고, 플랫폼 계정은 영향이 없다', async () => {
       const pmBefore = (await versionOf(bpCodeId, pmToken)).version;
       const allStores = (await versionOf(bpCodeId, bmToken)).version;
-      expect((await myStores(bmToken)).total).toBe(2);
+      // 전체 점포 BP 마스터 — 두 점포와 본사 점포
+      expect((await myStores(bmToken)).total).toBe(3);
 
       await prisma.adminAccount.update({
         where: { adminAccountId: bmId() },

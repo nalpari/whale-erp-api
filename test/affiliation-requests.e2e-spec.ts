@@ -20,6 +20,7 @@ import { CreateContractDto } from '../src/contracts/dto/create-contract.dto';
 import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AffiliationRequestsService } from '../src/staff-signup/affiliation-requests.service';
+import { createBp } from './hq-bp';
 
 // 소속 추가 확인 요청(WHALEERP-130, 2026-10-26 재영)을 실제 DB 로 확인한다 — 저장하면 발송 대기 · 요청(초대) · 알림톡 · 메일,
 // 수락하면 계정을 잇고 서명 대기(날인 기한은 수락부터), 거절하면 요청 · 계약을 거절 · 거부로 닫고 관리자 운영 알림, 답이 없으면
@@ -123,7 +124,7 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
     expiry = app.get(ContractExpiryService);
     requests = app.get(AffiliationRequestsService);
 
-    const { bpCodeId } = await prisma.bpCode.create({
+    const { bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${String((n + 600_000) % 1_000_000).padStart(6, '0')}`,
         isPlatform: false,

@@ -9,6 +9,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // 플랫폼 메뉴 관리(MN000215)를 실제 DB 로 확인한다. 채번 · 권한 행 · URL 겹침 · 순서 다시 매기기 · 낙관적 잠금과,
 // 동시 등록을 advisory lock 이 줄 세우는지는 단위 테스트가 목으로 가정만 하므로 여기서만 증명된다.
@@ -73,7 +74,7 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
       },
     });
     // 메뉴 관리 행을 가진 고객 BP 의 BA 그룹 — BP 계정은 행이 있어도 403
-    ({ bpCodeId: customerBpId } = await prisma.bpCode.create({
+    ({ bpCodeId: customerBpId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -182,7 +183,7 @@ describe('플랫폼 메뉴 관리 (e2e, DB)', () => {
         });
       }
       if (customerBpId !== undefined)
-        await prisma.bpCode.deleteMany({ where: { bpCodeId: customerBpId } });
+        await deleteBps(prisma, { where: { bpCodeId: customerBpId } });
     } finally {
       // 정리가 실패해도 앱을 닫는다 — 닫지 않으면 jest 가 끝나지 않는다.
       await app?.close();
