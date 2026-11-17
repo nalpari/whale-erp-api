@@ -1,7 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-17
-* **Update**: [Work schedules](/api/work-schedules.md) — 기간 등록 `POST /work-schedules/range`(WHALEERP-730, 2026-11-17 재영): 시작일 ~ 종료일(최대 92일) 가운데 고른 요일마다 직원별 줄로 한 건씩, 넣을 수 없는 날은 근무일과 함께 건너뛰고 나머지는 저장한다. 날 수 × 줄 수 1000건까지. 알림은 직원마다 한 번, 기간 · 건수로 묶는다(`rangeText`). 일괄 등록과 저장 · 알림 코드를 함께 쓴다(`insertEach` · `noticeEach`).
+* **Update**: [Work schedules](/api/work-schedules.md) — 기간 등록 `POST /work-schedules/range`(WHALEERP-730, 2026-11-17 재영): 시작일 ~ 종료일(최대 92일) 가운데 고른 요일마다 직원별 줄로 한 건씩, 넣을 수 없는 날은 근무일과 함께 건너뛰고 나머지는 저장한다. 날 수 × 줄 수 500건까지. 알림은 직원마다 한 번, 기간 · 건수로 묶는다(`rangeText`). 일괄 등록과 저장 · 알림 코드를 함께 쓴다(`insertEach` · `noticeEach`).
 
 ## 2026-11-16
 * **Update**: [Staff members](/api/staff-members.md) · [Contracts API](/api/contracts-api.md) — 직원 상세 발송 이력에 가입한 직원에게 보낸 서명 요청 알림톡(`TALK_STAFF_CONTRACT_SENT`)을 종류 `CONTRACT_SENT`(「서명 요청」)로 싣는다(WHALEERP-675, 2026-11-16 김민식). 재발송은 같은 판정 — 같은 계약으로 앞서 나갔을 수 있는 발송이 있으면 재발송(종류는 가리지 않는다)이고, 서명 요청만 알림톡 실패 줄도 「나간 발송」으로 센다. 서명 요청 알림톡이 실패해도 앱 알림함으로는 받았으므로, 실패 줄은 다시 보내라고 하지 않고(재시도 가능 여부 null) 앱 알림함에 들어갔다고 알리며 다음 발송은 재발송으로 센다(거절이면 직원 계정 번호를 확인한 뒤 근로계약 상세에서 재발송하라고 함). 단위 · e2e 테스트 추가.

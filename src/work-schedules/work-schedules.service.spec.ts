@@ -748,7 +748,7 @@ describe('WorkSchedulesService', () => {
       breakMinutes: 0,
     });
 
-    it('종료일이 앞서거나 92일을 넘거나 고른 요일의 날이 없거나 1000건을 넘으면 400 — 아무것도 저장하지 않는다', async () => {
+    it('종료일이 앞서거나 92일을 넘거나 고른 요일의 날이 없거나 500건을 넘으면 400 — 아무것도 저장하지 않는다', async () => {
       const cases = [
         { fromDate: '2026-10-21', toDate: '2026-10-20', weekdays: [1] },
         // 10-01 ~ 다음 해 01-01 은 93일
@@ -760,13 +760,13 @@ describe('WorkSchedulesService', () => {
         await expect(
           service.rangeCreate(ADMIN, { ...c, rows: [line(11)] }),
         ).rejects.toBeInstanceOf(BadRequestException);
-      // 10-01 ~ 12-31 은 92일(받는 최대) — 92일 × 11줄 = 1012건
+      // 10-01 ~ 12-31 은 92일(받는 최대) — 92일 × 6줄 = 552건(상한 500)
       await expect(
         service.rangeCreate(ADMIN, {
           fromDate: '2026-10-01',
           toDate: '2026-12-31',
           weekdays: [0, 1, 2, 3, 4, 5, 6],
-          rows: Array.from({ length: 11 }, (_, i) => line(11 + i)),
+          rows: Array.from({ length: 6 }, (_, i) => line(11 + i)),
         }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(db.workSchedule.create).not.toHaveBeenCalled();

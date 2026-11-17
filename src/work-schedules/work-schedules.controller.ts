@@ -228,7 +228,7 @@ export class WorkSchedulesController {
   @MenuPermission('create')
   @ApiCreatedResponse({ type: RangeCreateWorkSchedulesResponseDto })
   @ApiBadRequestResponse({
-    description: `요청 형식 오류(날짜 · 요일 · 줄 수 1~100 · 줄의 시각 형식) · 종료일이 시작일보다 앞섬 · 기간 92일 초과 · 고른 요일의 날이 없음 · 날 수 × 줄 수 1000건 초과 — 이때는 아무것도 저장하지 않는다 · ${BP_MISSING_DESCRIPTION}`,
+    description: `요청 형식 오류(날짜 · 요일 · 줄 수 1~100 · 줄의 시각 형식) · 종료일이 시작일보다 앞섬 · 기간 92일 초과 · 고른 요일의 날이 없음 · 날 수 × 줄 수 500건 초과 — 이때는 아무것도 저장하지 않는다 · ${BP_MISSING_DESCRIPTION}`,
   })
   rangeCreate(
     @Body() body: RangeCreateWorkSchedulesDto,
