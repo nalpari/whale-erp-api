@@ -547,6 +547,64 @@ describe('BpProfileService', () => {
       expect(prisma.bpCode.updateMany).not.toHaveBeenCalled();
     });
 
+    it('위도 · 경도 중 하나만 있으면 400 — 짝으로만 둔다(bp_codes_coordinates_pair)', async () => {
+      await expect(
+        service.update(1, { ...base, latitude: 37.5, longitude: null }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp({ latitude: 37.5, longitude: 126.9 }),
+      );
+      await expect(
+        service.update(1, { ...base, latitude: null }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('켠 채 토큰으로 재인증하면 통과한다 — 저장 뒤에도 인증이 남는다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp({
+          ...verified,
+          latitude: 37.5,
+          longitude: 126.9,
+          isHqStaffEnabled: true,
+        }),
+      );
+      verifier.readToken.mockResolvedValue({
+        bizRegistrationNumber: '2118701234',
+        bizCeoName: '남도현',
+        bizOpenDate: '2021-03-15',
+      });
+      await service.update(1, { ...base, businessVerificationToken: 'tok' });
+      expect(prisma.bpCode.updateMany).toHaveBeenCalled();
+    });
+
+    it('같은 저장에서 끄면서 사업자정보를 지우는 것은 된다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp({
+          ...verified,
+          latitude: 37.5,
+          longitude: 126.9,
+          isHqStaffEnabled: true,
+        }),
+      );
+      await service.update(1, {
+        ...base,
+        isHqStaffEnabled: false,
+        clearBusinessVerification: true,
+      });
+      expect(dataOf()).toMatchObject({
+        isHqStaffEnabled: false,
+        bizVerifiedAt: null,
+      });
+    });
+
+    it('저장된 좌표가 문자열(Decimal)이어도 같은 값이면 이력을 남기지 않는다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp({ latitude: '37.500000', longitude: '126.900000' }),
+      );
+      await service.update(1, { ...base, latitude: 37.5, longitude: 126.9 });
+      expect(prisma.bpChangeHistory.createMany).not.toHaveBeenCalled();
+    });
+
     it('켠 채로 좌표를 지우면 400', async () => {
       prisma.bpCode.findFirst.mockResolvedValue(
         bp({

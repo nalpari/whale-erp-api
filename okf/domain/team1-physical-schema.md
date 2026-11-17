@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 30 tables (auth · BP · stores · facilities · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-16T04:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T04:07:38Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -62,6 +62,10 @@ sources:
     resource: ../../prisma/migrations/20261116112631_team1_facility_document_codes/migration.sql
     title: 시설물 문서 종류 enum → 플랫폼고정 공통코드 FACILITY_DOCUMENT(TEXT · 모양 CHECK)
     last_modified: 2026-11-16T04:00:00Z
+  - id: bp-hq-staff-migration
+    resource: ../../prisma/migrations/20261117122817_team1_bp_hq_staff/migration.sql
+    title: BP 본사 좌표 · 위치 적용 · 본사 직원 관리(CHECK 5)
+    last_modified: 2026-11-17T04:07:38Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -200,6 +204,14 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   foreign key, as for every 공통코드 value column. The one-live-document-per-kind partial unique index
   was rebuilt by the type change with the same name and condition. `GET /enums` lost
   `FacilityDocumentKind`.[^facility-document-codes-migration]
+- **BP headquarters coordinates and the 본사 직원 관리 switch** — `20261117122817_team1_bp_hq_staff`
+  (WHALEERP-724, user decision 2026-11-17) added `bp_codes.latitude` · `longitude` (same NUMERIC(8,6) ·
+  (9,6) as `stores`), `is_location_applied` (default false — stores default true) and
+  `is_hq_staff_enabled` (default false), with five SQL-only CHECKs: `bp_codes_latitude_range`,
+  `bp_codes_longitude_range`, `bp_codes_coordinates_pair` (both or neither), 
+  `bp_codes_location_applied_requires_coordinates`, and
+  `bp_codes_hq_staff_enabled_requires_verified_location` (switch on needs `biz_verified_at` and both
+  coordinates). `BpProfileService` checks the same rules first and answers 400.[^bp-hq-staff-migration]
 
 The `'WITHDRAWN'` literal in two of those was a placeholder while the
 `ACCOUNT_STATUS` code value was undecided; the initial-data migration fixes it as
@@ -392,3 +404,4 @@ must be absent, and no lunar holiday may appear after 2050.
 [^holiday-periods-migration]: BP 휴일 대상 · 예외 점포를 기간 행으로(기본키 · 부분 고유 · CHECK)
 [^facility-company-phone-migration]: 시설물 구매처 · A/S센터 전화번호 CHECK 에 대표번호 8자리(15xx · 16xx · 18xx)
 [^facility-document-codes-migration]: 시설물 문서 종류 enum → 플랫폼고정 공통코드 FACILITY_DOCUMENT(TEXT · 모양 CHECK)
+[^bp-hq-staff-migration]: BP 본사 좌표 · 위치 적용 · 본사 직원 관리(CHECK 5)

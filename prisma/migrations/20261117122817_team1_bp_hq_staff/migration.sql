@@ -6,6 +6,7 @@
 --     위치 적용 기본값만 stores(true)와 달리 false 다 — 기존 BP 에는 좌표가 없다.
 --   - is_hq_staff_enabled 는 사업자정보 인증 · 좌표가 있어야 켤 수 있다. api(BpProfileService)가 먼저 막고, 이 CHECK 가
 --     그 규칙을 DB 에서도 지킨다 — 켠 채로 인증을 지우거나 좌표를 지우는 저장은 실패한다.
+--   - 위도 · 경도는 함께 있거나 함께 없다(bp_codes_coordinates_pair).
 --   - 본사근무 직원이 있으면 끌 수 없다는 규칙은 본사근무 직원(WHALEERP-725)이 생길 때 api 가 더한다.
 
 ALTER TABLE "bp_codes"
@@ -16,6 +17,7 @@ ALTER TABLE "bp_codes"
 
 ALTER TABLE "bp_codes" ADD CONSTRAINT "bp_codes_latitude_range" CHECK ("latitude" BETWEEN -90 AND 90);
 ALTER TABLE "bp_codes" ADD CONSTRAINT "bp_codes_longitude_range" CHECK ("longitude" BETWEEN -180 AND 180);
+ALTER TABLE "bp_codes" ADD CONSTRAINT "bp_codes_coordinates_pair" CHECK (("latitude" IS NULL) = ("longitude" IS NULL));
 ALTER TABLE "bp_codes" ADD CONSTRAINT "bp_codes_location_applied_requires_coordinates"
     CHECK (NOT "is_location_applied" OR ("latitude" IS NOT NULL AND "longitude" IS NOT NULL));
 ALTER TABLE "bp_codes" ADD CONSTRAINT "bp_codes_hq_staff_enabled_requires_verified_location"

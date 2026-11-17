@@ -114,11 +114,7 @@ export class BpProfileUpdateDto {
   @IsBoolean()
   clearBusinessVerification?: boolean;
 
-  // ── 본사 좌표 · 본사 직원 관리(WHALEERP-724, 2026-11-17 사용자 지정) ──
-  // 위 칸들과 달리 이 넷은 빼고 보내면 그대로 둔다(undefined = 바꾸지 않음) — 이 칸을 모르는 옛 화면이 저장해도
-  // 좌표 · 스위치가 지워지지 않게. 좌표를 지우려면 null 을 보낸다.
-
-  /** 본사 위도 — −90~90, 소수 6자리. null 이면 지운다. @example 37.556312 */
+  /** 본사 위도 — −90~90, 소수 6자리. null 이면 지운다. 본사 좌표 · 위치 적용 · 본사 직원 관리 네 칸은 다른 칸과 달리 빼고 보내면 그대로 둔다(WHALEERP-724 — 옛 화면이 지우지 않게). @example 37.556312 */
   @IsOptional()
   @ValidateIf((_, v) => v !== null)
   @IsNumber({ maxDecimalPlaces: 6 })

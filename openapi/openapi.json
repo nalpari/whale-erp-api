@@ -19893,6 +19893,8 @@
           "latitude": {
             "type": "number",
             "nullable": true,
+            "description": "본사 위도 — −90~90, 소수 6자리. null 이면 지운다. 본사 좌표 · 위치 적용 · 본사 직원 관리 네 칸은 다른 칸과 달리 빼고 보내면 그대로 둔다(WHALEERP-724 — 옛 화면이 지우지 않게).",
+            "example": 37.556312,
             "minimum": -90,
             "maximum": 90
           },

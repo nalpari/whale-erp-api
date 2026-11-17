@@ -330,6 +330,9 @@ function hqStateOf(
   const isHqStaffEnabled = input.isHqStaffEnabled ?? target.isHqStaffEnabled;
   const hasCoordinates = latitude !== null && longitude !== null;
 
+  if ((latitude === null) !== (longitude === null))
+    throw new BadRequestException('위도와 경도는 함께 입력해 주세요.');
+
   if (isHqStaffEnabled && !verifiedAfter)
     throw new BadRequestException(
       target.isHqStaffEnabled
