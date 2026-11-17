@@ -4,12 +4,12 @@ title: Attendance
 description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(출퇴근 탭 진입 · 버튼 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-16T01:29:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
 sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
     title: 관리자 웹 일별 출퇴근 GET /attendance-records/daily(WHALEERP-217)
-    last_modified: 2026-11-04T06:24:38Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: open-check-ins
     resource: ../../src/attendance/open-check-ins.ts
     title: 점포의 열린 출근 조건 openCheckInsOf · checkOutExpired(644 · 647 · 650 공용)
@@ -123,8 +123,11 @@ sources:
 # Admin daily view
 
 관리자 웹 「출·퇴근 현황 조회」(메뉴 `/attendance-records`, MN000025, 읽기 권한, WHALEERP-217 · 219).[^records] 두 경로 모두 점포 조건
-`storeIds`(쉼표 · 반복, 1000개까지)와 `storeTypes`(DIRECT · FRANCHISE — 폐점 점포는 뺌)를 받는다 — 상단 점포 범위 ↔ 필터의 점포, TO-DO
+`storeIds`(쉼표 · 반복, 1000개까지)와 `storeTypes`(DIRECT · FRANCHISE · HQ — 폐점 점포는 뺌)를 받는다 — 상단 점포 범위 ↔ 필터의 점포, TO-DO
 목록과 같은 규칙이다. 둘 다 없으면 업무 범위 전체이고, 업무 범위 밖 점포는 오류 없이 빠진다. 계정을 쓸 수 없으면 403.
+`HQ`(본사 점포)는 2026-11-17 부터 받는 값이다(API enum `StoreScopeType`) — 본사도 `store_type_code` 가 `DIRECT` 라 `DIRECT` 는 본사가
+아닌 직영만이고(`matchesStoreScope`), 본사도 권한 · 매핑대로 업무 범위에 들어가고 가맹 마스터 · 가맹 관리자만 뺀다. 대신 등록(`attendance-edit.service.ts`)도
+같은 범위를 쓴다.
 
 - `GET /attendance-records/daily?date=` — 그날. 줄은 근무스케줄을 받을 수 있는 직원(근무스케줄 관리의 `schedulable`)과 그날 근무스케줄 ·
   출퇴근 기록이 있는 직원이다 — 퇴직한 직원도 그날 기록이 있으면 나온다. 점포 · 이름순.

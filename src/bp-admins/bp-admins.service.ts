@@ -35,6 +35,7 @@ import {
   type PlatformAdminMail,
 } from '../platform-admins/platform-admin-mail';
 import { generateTempPassword } from '../platform-admins/temp-password';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   actionsOf,
@@ -305,10 +306,11 @@ export class BpAdminsService {
           ? caller.storeIds
           : [];
     if (!pool.length) return { items: [] };
+    const allowed = await this.allowedFor(this.prisma, pool, roleTypeCode);
     // 저장 때도 다시 막는다 — 후보 목록은 동시에 저장하는 두 사람을 막지 못한다.
     const stores = await this.prisma.store.findMany({
       where: {
-        storeId: { in: pool },
+        storeId: { in: [...allowed] },
         bpCodeId: bp.bpCodeId,
         isDeleted: false,
         storeStatusCode: { not: 'CLOSED' },
@@ -318,6 +320,7 @@ export class BpAdminsService {
         storeCode: true,
         name: true,
         storeTypeCode: true,
+        isHq: true,
         storeStatusCode: true,
       },
       orderBy: [{ name: 'asc' }, { storeId: 'asc' }],
@@ -375,6 +378,7 @@ export class BpAdminsService {
         },
         orderBy: [{ name: 'asc' }, { storeId: 'asc' }],
       }),
+      // 「BP 점포 N개 중 M개」 — 본사도 BP 관리자에게 맡길 수 있는 점포라 센다(M 의 매핑과 같은 기준).
       this.prisma.store.count({
         where: { bpCodeId: bp.bpCodeId, isDeleted: false },
       }),
@@ -533,14 +537,14 @@ export class BpAdminsService {
       caller,
       role,
       requested: input,
-      allowed: new Set(caller.storeIds),
+      allowed: await this.allowedFor(this.prisma, caller.storeIds, role),
       closed: await this.closedStores(this.prisma, input.storeIds),
     });
 
     // 메일에 쓸 상호명은 커밋 전에 읽는다 — 커밋 뒤에 실패하면 계정은 생겼는데 500 이라 다시 등록이 아이디 409 가 된다.
     const bpCode = await this.prisma.bpCode.findFirst({
       where: { bpCodeId: bp.bpCodeId },
-      select: { tradeName: true },
+      select: HQ_TRADE_NAME_SELECT,
     });
     const password = generateTempPassword();
     const passwordHash = await hashPassword(password);
@@ -556,7 +560,7 @@ export class BpAdminsService {
             caller: master,
             role,
             requested: input,
-            allowed: new Set(master.storeIds),
+            allowed: await this.allowedFor(tx, master.storeIds, role),
             closed: await this.closedStores(tx, input.storeIds),
           });
         }
@@ -625,7 +629,7 @@ export class BpAdminsService {
         to: input.email,
         variables: {
           관리자이름: input.name,
-          BP이름: bpCode?.tradeName ?? '',
+          BP이름: bpCode ? tradeNameOf(bpCode) : '',
           로그인아이디: input.loginId,
           임시비밀번호: password,
         },
@@ -702,7 +706,7 @@ export class BpAdminsService {
               role,
               requested: input,
               current: target,
-              allowed: new Set(decider.storeIds),
+              allowed: await this.allowedFor(tx, decider.storeIds, role),
               closed: await this.closedStores(tx, input.storeIds),
             });
 
@@ -927,6 +931,7 @@ export class BpAdminsService {
     } else if (bp.bpCodeId !== row.bpCodeId)
       throw new ForbiddenException(OTHER_BP_MESSAGE);
     const isAllStores = row.bpCode.isPlatform || row.isAllStores;
+    // 본사 점포도 다른 점포처럼 포함한다(2026-11-17) — 가맹 마스터 · 가맹 관리자에게 맡길 때만 allowedFor 가 본사를 뺀다.
     const storeIds = isAllStores
       ? (
           await db.store.findMany({
@@ -1025,6 +1030,25 @@ export class BpAdminsService {
       },
       select: { adminAccountId: true },
     });
+  }
+
+  /**
+   * 그 역할에게 맡길 수 있는 점포 — 호출자가 맡은 점포 안에서. 가맹 마스터 · 가맹 관리자는 매칭 대상이 가맹 점포라 본사를
+   * 뺀다(2026-11-17 — 본사도 일반 점포처럼 권한 · 매칭으로 보되 가맹 역할은 본사를 맡지 않는다). BP 관리자는 본사도 된다.
+   */
+  private async allowedFor(
+    db: Db,
+    storeIds: number[],
+    role: string,
+  ): Promise<Set<number>> {
+    if (!['FM', 'FA'].includes(role) || !storeIds.length)
+      return new Set(storeIds);
+    const hq = await db.store.findMany({
+      where: { storeId: { in: storeIds }, isHq: true },
+      select: { storeId: true },
+    });
+    const hqIds = new Set(hq.map((s) => s.storeId));
+    return new Set(storeIds.filter((id) => !hqIds.has(id)));
   }
 
   private async closedStores(db: Db, storeIds: number[]): Promise<Set<number>> {

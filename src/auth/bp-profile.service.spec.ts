@@ -23,8 +23,10 @@ describe('BpProfileService', () => {
     $transaction: jest.Mock;
     $executeRaw: jest.Mock;
     adminAccount: { findFirst: jest.Mock };
-    bpCode: { findFirst: jest.Mock; updateMany: jest.Mock };
-    bpChangeHistory: { createMany: jest.Mock };
+    bpCode: { findFirst: jest.Mock; update: jest.Mock };
+    store: { findFirst: jest.Mock; update: jest.Mock };
+    storeBusinessProfile: { updateMany: jest.Mock; update: jest.Mock };
+    storeChangeHistory: { createMany: jest.Mock };
   };
 
   const updatedAt = new Date('2026-10-21T00:00:00Z');
@@ -33,23 +35,38 @@ describe('BpProfileService', () => {
     bpCodeId: 1,
     ...over,
   });
-  const bp = (over: Record<string, unknown> = {}) => ({
-    bpCodeId: 1,
-    tradeName: '웨일상사',
-    bizRegistrationNumber: null,
-    bizCeoName: null,
-    bizOpenDate: null,
-    bizCeoPhone: null,
-    bizCeoEmail: null,
-    bizZipCode: null,
-    bizAddress: null,
-    bizAddressDetail: null,
-    bizCategory: null,
-    bizItem: null,
-    bizVerifiedAt: null,
-    updatedAt,
-    ...over,
-  });
+  /** BP 1 과 본사 점포 10 — 상호명 · 사업자정보 · 좌표는 본사 점포에 있다(2026-11-17). */
+  const bp = (over: Record<string, unknown> = {}) => {
+    const { bpCodeId = 1, tradeName = '웨일상사', ...biz } = over;
+    return {
+      bpCodeId,
+      stores: [
+        {
+          storeId: 10,
+          latitude: null,
+          longitude: null,
+          isLocationApplied: true,
+          storeStatusCode: 'NOT_OPERATING',
+          businessProfile: {
+            bizTradeName: tradeName,
+            bizRegistrationNumber: null,
+            bizCeoName: null,
+            bizOpenDate: null,
+            bizCeoPhone: null,
+            bizCeoEmail: null,
+            bizZipCode: null,
+            bizAddress: null,
+            bizAddressDetail: null,
+            bizCategory: null,
+            bizItem: null,
+            bizVerifiedAt: null,
+            updatedAt,
+            ...biz,
+          },
+        },
+      ],
+    };
+  };
 
   beforeEach(async () => {
     verifier = {
@@ -63,9 +80,17 @@ describe('BpProfileService', () => {
       adminAccount: { findFirst: jest.fn().mockResolvedValue(account()) },
       bpCode: {
         findFirst: jest.fn().mockResolvedValue(bp()),
-        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn().mockResolvedValue({}),
       },
-      bpChangeHistory: {
+      store: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      storeBusinessProfile: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      storeChangeHistory: {
         createMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
     };
@@ -123,7 +148,7 @@ describe('BpProfileService', () => {
         1,
       );
       expect(result).toEqual({ verificationToken: 'token' });
-      expect(prisma.bpCode.updateMany).not.toHaveBeenCalled();
+      expect(prisma.storeBusinessProfile.updateMany).not.toHaveBeenCalled();
     });
 
     it('인증이 실패하면(중복·불일치) 그대로 던진다', async () => {
@@ -200,7 +225,7 @@ describe('BpProfileService', () => {
     };
 
     it('동시 수정이면 409', async () => {
-      prisma.bpCode.updateMany.mockResolvedValue({ count: 0 });
+      prisma.storeBusinessProfile.updateMany.mockResolvedValue({ count: 0 });
       await expect(service.update(1, input)).rejects.toBeInstanceOf(
         ConflictException,
       );
@@ -213,7 +238,7 @@ describe('BpProfileService', () => {
       await expect(service.update(1, input)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
-      expect(prisma.bpCode.updateMany).not.toHaveBeenCalled();
+      expect(prisma.storeBusinessProfile.updateMany).not.toHaveBeenCalled();
     });
 
     it('계정이 없으면 404', async () => {
@@ -225,19 +250,29 @@ describe('BpProfileService', () => {
 
     it('바뀐 값만 변경 이력에 남긴다', async () => {
       await service.update(1, input);
-      expect(prisma.bpCode.updateMany).toHaveBeenCalledWith({
+      // 동시 수정 검사는 본사 사업자정보 행의 updatedAt 으로 본다.
+      expect(prisma.storeBusinessProfile.updateMany).toHaveBeenCalledWith({
         where: {
-          bpCodeId: 1,
+          storeId: 10,
           updatedAt: { gte: updatedAt, lt: anyDate },
         },
+        data: { updatedBy: 1 },
+      });
+      expect(prisma.storeBusinessProfile.update).toHaveBeenCalledWith({
+        where: { storeId: 10 },
         data: partial({
-          tradeName: '새 상호명',
+          bizTradeName: '새 상호명',
           bizCeoPhone: '0212345678',
           updatedBy: 1,
         }),
       });
+      // 로그인 정보 버전이 상호명 변경을 알도록 BP 의 최종수정도 올린다.
+      expect(prisma.bpCode.update).toHaveBeenCalledWith({
+        where: { bpCodeId: 1 },
+        data: { updatedBy: 1 },
+      });
       const changes = (
-        prisma.bpChangeHistory.createMany.mock.calls[0] as [
+        prisma.storeChangeHistory.createMany.mock.calls[0] as [
           { data: { field: string }[] },
         ]
       )[0].data;
@@ -251,14 +286,14 @@ describe('BpProfileService', () => {
         bp({ tradeName: '새 상호명', bizCeoPhone: '0212345678' }),
       );
       await service.update(1, input);
-      expect(prisma.bpChangeHistory.createMany).not.toHaveBeenCalled();
+      expect(prisma.storeChangeHistory.createMany).not.toHaveBeenCalled();
     });
 
     it('businessVerificationToken 이 없으면 사업자등록번호 · 대표자명 · 개업일자 · 인증일시를 건드리지 않는다', async () => {
       await service.update(1, input);
       expect(verifier.readToken).not.toHaveBeenCalled();
       const data = (
-        prisma.bpCode.updateMany.mock.calls[0] as [{ data: object }]
+        prisma.storeBusinessProfile.update.mock.calls[0] as [{ data: object }]
       )[0].data;
       expect(Object.keys(data)).not.toContain('bizRegistrationNumber');
     });
@@ -269,7 +304,7 @@ describe('BpProfileService', () => {
         service.update(1, { ...input, businessVerificationToken: 'bad' }),
       ).rejects.toThrow('expired');
       expect(prisma.$transaction).not.toHaveBeenCalled();
-      expect(prisma.bpCode.updateMany).not.toHaveBeenCalled();
+      expect(prisma.storeBusinessProfile.updateMany).not.toHaveBeenCalled();
     });
 
     describe('businessVerificationToken 을 실었으면', () => {
@@ -287,7 +322,7 @@ describe('BpProfileService', () => {
       it('토큰을 풀어 세 값과 인증일시를 같은 저장에 반영한다', async () => {
         await service.update(1, withToken);
         expect(verifier.readToken).toHaveBeenCalledWith('tok');
-        expect(prisma.bpCode.updateMany).toHaveBeenCalledWith(
+        expect(prisma.storeBusinessProfile.update).toHaveBeenCalledWith(
           partial({
             data: partial({
               bizRegistrationNumber: '1058763602',
@@ -298,7 +333,7 @@ describe('BpProfileService', () => {
           }),
         );
         const changes = (
-          prisma.bpChangeHistory.createMany.mock.calls[0] as [
+          prisma.storeChangeHistory.createMany.mock.calls[0] as [
             { data: { field: string }[] },
           ]
         )[0].data;
@@ -317,7 +352,7 @@ describe('BpProfileService', () => {
           prisma,
           1,
         );
-        expect(prisma.bpCode.updateMany).not.toHaveBeenCalled();
+        expect(prisma.storeBusinessProfile.updateMany).not.toHaveBeenCalled();
       });
 
       it('번호로 잠근 뒤에 중복을 다시 센다 — 점포 저장·가입과 같은 키', async () => {
@@ -351,7 +386,7 @@ describe('BpProfileService', () => {
       it('사업자등록번호 · 대표자명 · 개업일자 · 인증일시를 전부 null 로 쓴다 — 점포와 달리 BP 는 지울 수 있다', async () => {
         await service.update(1, withClear);
         expect(verifier.readToken).not.toHaveBeenCalled();
-        expect(prisma.bpCode.updateMany).toHaveBeenCalledWith(
+        expect(prisma.storeBusinessProfile.update).toHaveBeenCalledWith(
           partial({
             data: partial({
               bizRegistrationNumber: null,
@@ -363,34 +398,43 @@ describe('BpProfileService', () => {
         );
       });
 
-      it('변경 이력에 사업자 번호 인증 해제로 남긴다', async () => {
+      it('본사 점포 이력에 세 칸을 빈 값으로 남긴다', async () => {
         await service.update(1, withClear);
         const changes = (
-          prisma.bpChangeHistory.createMany.mock.calls[0] as [
-            { data: { field: string; note?: string }[] },
+          prisma.storeChangeHistory.createMany.mock.calls[0] as [
+            { data: { field: string; afterValue: string | null }[] },
           ]
-        )[0].data;
-        expect(changes.map((c) => c.field)).toEqual(
-          expect.arrayContaining(['사업자등록번호', '대표자명', '개업일자']),
+        )[0].data.filter((c) =>
+          ['사업자등록번호', '대표자명', '개업일자'].includes(c.field),
         );
-        const notes = changes
-          .filter((c) =>
-            ['사업자등록번호', '대표자명', '개업일자'].includes(c.field),
-          )
-          .map((c) => c.note);
-        expect(notes).toEqual([
-          '사업자 번호 인증 해제',
-          '사업자 번호 인증 해제',
-          '사업자 번호 인증 해제',
-        ]);
+        expect(changes.map((c) => c.field).sort()).toEqual(
+          ['개업일자', '대표자명', '사업자등록번호'].sort(),
+        );
+        expect(changes.every((c) => c.afterValue === null)).toBe(true);
+      });
+
+      it('운영 중이던 본사는 사업자번호를 잃어 미운영으로 내려간다', async () => {
+        prisma.store.findFirst.mockResolvedValue({
+          storeId: 10,
+          storeStatusCode: 'OPERATING',
+          latitude: 37.5,
+          longitude: 127,
+          businessProfile: { bizRegistrationNumber: null },
+          bpCode: { accountStatusCode: 'ACTIVE' },
+        });
+        await service.update(1, withClear);
+        expect(prisma.store.update).toHaveBeenCalledWith({
+          where: { storeId: 10 },
+          data: { storeStatusCode: 'NOT_OPERATING', updatedBy: 1 },
+        });
       });
 
       it('이미 비어 있으면(지울 게 없으면) 그 세 칸은 변경 이력에 안 남는다', async () => {
         prisma.bpCode.findFirst.mockResolvedValue(bp());
         await service.update(1, withClear);
-        const changes = prisma.bpChangeHistory.createMany.mock.calls.length
+        const changes = prisma.storeChangeHistory.createMany.mock.calls.length
           ? (
-              prisma.bpChangeHistory.createMany.mock.calls[0] as [
+              prisma.storeChangeHistory.createMany.mock.calls[0] as [
                 { data: { field: string }[] },
               ]
             )[0].data

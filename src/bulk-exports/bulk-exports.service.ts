@@ -17,6 +17,7 @@ import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { DETAIL_SELECT, toSummary } from '../payslips/my-payslips.service';
 import { payslipPdfModel, renderPayslipPdf } from '../payslips/payslip-pdf';
 import { dateOnly, storeNames } from '../payslips/payslip-shared';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE, type OptionalStorage } from '../storage/storage.module';
 import { StorageService } from '../storage/storage.service';
@@ -155,7 +156,7 @@ export class BulkExportsService {
     if (busy) throw new ConflictException(BUSY_MESSAGE);
     const bp = await this.prisma.bpCode.findUniqueOrThrow({
       where: { bpCodeId: viewer.bpCodeId },
-      select: { tradeName: true },
+      select: HQ_TRADE_NAME_SELECT,
     });
     const row = await this.prisma.bulkExport
       .create({
@@ -166,7 +167,7 @@ export class BulkExportsService {
           storeIds: ids,
           scopeKey,
           staffCount,
-          fileName: bulkExportFileName(bp.tradeName, now),
+          fileName: bulkExportFileName(tradeNameOf(bp), now),
           requestedAt: now,
         },
       })

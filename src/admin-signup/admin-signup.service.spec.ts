@@ -39,6 +39,9 @@ describe('AdminSignupService', () => {
     $executeRaw: jest.Mock;
     bpCode: { findFirst: jest.Mock; create: jest.Mock };
     adminAccount: { create: jest.Mock };
+    store: { findFirst: jest.Mock; create: jest.Mock };
+    storeBusinessProfile: { create: jest.Mock };
+    storeChangeHistory: { createMany: jest.Mock };
     termsAgreementLog: { createMany: jest.Mock };
     codeGroup: { findMany: jest.Mock };
     codeItem: { findMany: jest.Mock; createMany: jest.Mock };
@@ -83,6 +86,14 @@ describe('AdminSignupService', () => {
       adminAccount: {
         create: jest.fn().mockResolvedValue({ adminAccountId: 70 }),
       },
+      store: {
+        findFirst: jest.fn().mockResolvedValue({ storeCode: 'ST000009' }),
+        create: jest
+          .fn()
+          .mockResolvedValue({ storeId: 90, storeCode: 'ST000010' }),
+      },
+      storeBusinessProfile: { create: jest.fn().mockResolvedValue({}) },
+      storeChangeHistory: { createMany: jest.fn().mockResolvedValue({}) },
       termsAgreementLog: { createMany: jest.fn().mockResolvedValue({}) },
       codeGroup: { findMany: jest.fn().mockResolvedValue([]) },
       codeItem: {
@@ -203,9 +214,29 @@ describe('AdminSignupService', () => {
           bpCode: 'BP000004',
           isPlatform: false,
           accountStatusCode: 'ACTIVE',
-          tradeName: '㈜한강상회',
         },
         select: { bpCodeId: true },
+      });
+      // 상호명은 본사 점포(직영 · 미운영)와 그 사업자정보에 둔다 — 등록자는 가입한 BP 마스터(2026-11-17).
+      expect(tx.store.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            storeCode: 'ST000010',
+            bpCodeId: 40,
+            storeTypeCode: 'DIRECT',
+            name: '㈜한강상회',
+            isHq: true,
+            storeStatusCode: 'NOT_OPERATING',
+            createdBy: 70,
+          }) as unknown,
+        }),
+      );
+      expect(tx.storeBusinessProfile.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          storeId: 90,
+          bizTradeName: '㈜한강상회',
+          createdBy: 70,
+        }) as unknown,
       });
       expect(tx.adminAccount.create).toHaveBeenCalledWith({
         data: {
@@ -359,7 +390,8 @@ describe('AdminSignupService', () => {
         return Promise.resolve({ bpCode: 'BP000003' });
       });
       await service.signup(input());
-      expect(order).toEqual(['lock', 'max']);
+      // 뒤의 lock 은 본사 점포의 점포코드 채번 잠금이다(2026-11-17).
+      expect(order.slice(0, 2)).toEqual(['lock', 'max']);
       // 삭제·탈퇴한 BP 의 코드도 다시 쓰지 않으므로 거르지 않는다.
       expect(tx.bpCode.findFirst).toHaveBeenCalledWith({
         orderBy: { bpCode: 'desc' },
@@ -450,11 +482,11 @@ describe('AdminSignupService', () => {
           }) as unknown,
         }),
       );
-      expect(tx.bpCode.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ tradeName: '㈜한강상회' }) as unknown,
-        }),
-      );
+      expect(tx.storeBusinessProfile.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          bizTradeName: '㈜한강상회',
+        }) as unknown,
+      });
       expect(result).toEqual(
         expect.objectContaining({
           loginId: 'hangang01',
@@ -519,7 +551,7 @@ describe('AdminSignupService', () => {
   describe('사업자정보 인증 토큰', () => {
     it('토큰이 없으면 biz_* 를 비워 둔다', async () => {
       await service.signup(input());
-      const [{ data }] = tx.bpCode.create.mock.calls[0] as [
+      const [{ data }] = tx.storeBusinessProfile.create.mock.calls[0] as [
         { data: Record<string, unknown> },
       ];
       expect(data).not.toHaveProperty('bizRegistrationNumber');
@@ -530,16 +562,14 @@ describe('AdminSignupService', () => {
     it('토큰이 있으면 토큰의 값과 가입 시각을 저장한다', async () => {
       await service.signup(input({ bizVerificationToken: 'biz-token' }));
       expect(verifications.readToken).toHaveBeenCalledWith('biz-token');
-      expect(tx.bpCode.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            bizRegistrationNumber: '1234567890',
-            bizCeoName: '정하윤',
-            bizOpenDate: new Date('2020-03-02T00:00:00.000Z'),
-            bizVerifiedAt: now,
-          }) as unknown,
-        }),
-      );
+      expect(tx.storeBusinessProfile.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          bizRegistrationNumber: '1234567890',
+          bizCeoName: '정하윤',
+          bizOpenDate: new Date('2020-03-02T00:00:00.000Z'),
+          bizVerifiedAt: now,
+        }) as unknown,
+      });
     });
 
     it('토큰이 틀리면 트랜잭션 전에 400', async () => {

@@ -4,6 +4,7 @@ import {
   hqSharingConsentedOf,
 } from '../admin-scope/hq-sharing';
 import type { PrismaService } from '../prisma/prisma.service';
+import { canSeeHq } from '../stores/store-scope-type';
 
 /**
  * 운영 알림을 받을 관리자를 고른다(운영 정책 NTF-04). 업무 쪽이 `OpsNotificationService.notify` 의
@@ -47,7 +48,12 @@ export async function storeManagers(
   const { storeId } = staff;
   const store = await prisma.store.findFirst({
     where: { storeId, isDeleted: false },
-    select: { bpCodeId: true, storeTypeCode: true, storeStatusCode: true },
+    select: {
+      bpCodeId: true,
+      storeTypeCode: true,
+      storeStatusCode: true,
+      isHq: true,
+    },
   });
   if (!store) return [];
 
@@ -66,6 +72,8 @@ export async function storeManagers(
   return rows
     .filter(
       (r) =>
+        // 본사 직원이면 본사를 보지 않는 계정(가맹 마스터 · 가맹 관리자, 전체 점포여도)은 받지 않는다(2026-11-17).
+        (!store.isHq || canSeeHq(r.roleTypeCode, false)) &&
         !hidesPersonalData(r.roleTypeCode, store, hqSharingConsentedOf(staff)),
     )
     .map((r) => r.adminAccountId);

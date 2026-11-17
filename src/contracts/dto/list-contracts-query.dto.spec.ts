@@ -43,7 +43,7 @@ describe('ListContractsQueryDto (근로계약 목록 쿼리)', () => {
     expect(check({ storeIds: ids(1001) }).failed).toEqual(['storeIds']);
   });
 
-  it.each(['', 'HQ', 'DIRECT,'])('점포 유형 %p 는 400', (storeTypes) =>
+  it.each(['', 'BRANCH', 'DIRECT,'])('점포 유형 %p 는 400', (storeTypes) =>
     expect(check({ storeTypes }).failed).toEqual(['storeTypes']),
   );
 });

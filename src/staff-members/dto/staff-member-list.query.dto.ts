@@ -14,7 +14,10 @@ import {
   Min,
 } from 'class-validator';
 import { INT4_MAX } from '../../platform-admins/platform-admin-format';
-import { STORE_TYPES, type StoreType } from '../../stores/store-format';
+import {
+  STORE_SCOPE_TYPES,
+  type StoreScopeType,
+} from '../../stores/store-scope-type';
 import { STAFF_JOIN_STATES, type StaffJoinState } from '../join-state';
 
 /** `a,b` → `['a', 'b']`. 같은 이름을 여러 번 보낸 것(`?x=a&x=b`)도 같은 목록이 된다. 빈 칸은 그대로 남겨 검증이 막는다. */
@@ -73,11 +76,15 @@ export class StaffMemberListQueryDto {
    * 뺀다(TO-DO 목록 api #133 과 같다, 2026-10-22 재영 — 폐점 점포는 전체 · 점포를 골라 본다). storeIds 와 함께 주면 둘 다
    * 맞는 점포만이다. 주지 않으면 유형 · 폐점 무관. 빈 값 · 모르는 값이 하나라도 있으면 400 이다.
    */
-  @ApiPropertyOptional({ enum: STORE_TYPES, isArray: true })
+  @ApiPropertyOptional({
+    enum: STORE_SCOPE_TYPES,
+    enumName: 'StoreScopeType',
+    isArray: true,
+  })
   @IsOptional()
   @Transform(splitComma)
-  @IsIn(STORE_TYPES, { each: true })
-  storeTypes?: StoreType[];
+  @IsIn(STORE_SCOPE_TYPES, { each: true })
+  storeTypes?: StoreScopeType[];
 
   /**
    * 이름 부분 일치, 또는 하이픈을 뺀 휴대전화번호 부분 일치. 앞뒤 공백을 지우고 비면 없는 것으로 본다 — 빈

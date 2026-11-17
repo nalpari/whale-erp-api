@@ -15,7 +15,10 @@ import {
   Min,
 } from 'class-validator';
 import { IsDateOnly } from '../../common/is-date-only';
-import { STORE_TYPES, type StoreType } from '../../stores/store-format';
+import {
+  STORE_SCOPE_TYPES,
+  type StoreScopeType,
+} from '../../stores/store-scope-type';
 import {
   ATTENDANCE_DAY_STATUS_LABELS,
   type AttendanceDayStatus,
@@ -53,11 +56,15 @@ export class AttendanceStoresQueryDto {
   storeIds?: number[];
 
   /** 점포 유형(상단 범위 직영 · 가맹) — DIRECT · FRANCHISE. 폐점 점포는 뺀다 */
-  @ApiPropertyOptional({ enum: STORE_TYPES, isArray: true })
+  @ApiPropertyOptional({
+    enum: STORE_SCOPE_TYPES,
+    enumName: 'StoreScopeType',
+    isArray: true,
+  })
   @IsOptional()
   @Transform(splitComma)
-  @IsIn(STORE_TYPES, { each: true })
-  storeTypes?: StoreType[];
+  @IsIn(STORE_SCOPE_TYPES, { each: true })
+  storeTypes?: StoreScopeType[];
 }
 
 export class DailyAttendanceQueryDto extends AttendanceStoresQueryDto {

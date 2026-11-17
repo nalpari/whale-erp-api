@@ -22,6 +22,8 @@ import { sameMillisecond } from '../common/updated-at';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import type { MenuCaller } from '../menu-permissions/menu-permissions.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
+import { claimStoreCode, STORE_CODE_TX } from './next-store-code';
 import { kstToday, parseDateOnly } from '../staff-members/kst-date';
 import {
   type OptionalStorage,
@@ -144,11 +146,6 @@ const LIVE_IMAGE = {
   take: 1,
 } as const;
 
-/**
- * 등록 트랜잭션 시간. 모든 등록이 점포코드 잠금에 줄을 서므로 기본값(대기 2초 · 실행 5초)보다 넉넉히 둔다.
- */
-const STORE_CODE_TX = { maxWait: 5_000, timeout: 15_000 };
-
 const FLOOR_SELECT = {
   storeFloorId: true,
   floorTypeCode: true,
@@ -176,7 +173,7 @@ const DETAIL_SELECT = {
   createdAt: true,
   updatedAt: true,
   bpCode: {
-    select: { bpCode: true, tradeName: true, accountStatusCode: true },
+    select: { bpCode: true, accountStatusCode: true, ...HQ_TRADE_NAME_SELECT },
   },
   creator: { select: { name: true } },
   updater: { select: { name: true } },
@@ -272,7 +269,7 @@ export class StoreManagementService implements OnModuleInit {
           phone: true,
           address: true,
           createdAt: true,
-          bpCode: { select: { tradeName: true } },
+          bpCode: { select: HQ_TRADE_NAME_SELECT },
           businessProfile: { select: { bizRegistrationNumber: true } },
           imageFiles: LIVE_IMAGE,
         },
@@ -294,7 +291,7 @@ export class StoreManagementService implements OnModuleInit {
         storeTypeCode: r.storeTypeCode,
         storeStatusCode: r.storeStatusCode,
         bpCodeId: r.bpCodeId,
-        bpTradeName: r.bpCode.tradeName,
+        bpTradeName: tradeNameOf(r.bpCode),
         bizRegistrationNumber: r.businessProfile?.bizRegistrationNumber ?? null,
         phone: r.phone,
         region: regionOf(r.address),
@@ -390,7 +387,7 @@ export class StoreManagementService implements OnModuleInit {
       closedDate: dateOnly(store.closedDate),
       bpCodeId: store.bpCodeId,
       bpCode: store.bpCode.bpCode,
-      bpTradeName: store.bpCode.tradeName,
+      bpTradeName: tradeNameOf(store.bpCode),
       bpAccountStatusCode: store.bpCode.accountStatusCode,
       phone: store.phone,
       zipCode: store.zipCode,
@@ -524,12 +521,8 @@ export class StoreManagementService implements OnModuleInit {
       .$transaction(async (tx) => {
         if (identity) await this.lockNumber(tx, identity, null, bpCodeId);
 
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('stores:store_code'))`;
-        const last = await tx.store.findFirst({
-          orderBy: { storeCode: 'desc' },
-          select: { storeCode: true },
-        });
-        const storeCode = nextStoreCode(last?.storeCode ?? null);
+        // 본사 점포 생성(createHqStore)과 같은 잠금 · 채번을 쓴다.
+        const storeCode = await claimStoreCode(tx);
 
         const store = await tx.store.create({
           data: {
@@ -1229,9 +1222,10 @@ export class StoreManagementService implements OnModuleInit {
   }
 
   /**
-   * 이 번호를 미운영 · 운영 점포(지우지 않은)나 소속 BP 가 아닌 다른 고객 BP(사용 · 미사용)가 쓰는가. 폐점 ·
-   * 삭제한 점포와 탈퇴 · 삭제한 BP 의 번호는 다시 쓸 수 있고, 소속 BP 의 번호는 점포도 쓸 수 있다(PL-OCJOFP).
-   * BP 조건은 가입 · 마이페이지의 BusinessVerificationService.isBizRegistrationNumberTaken 과 같다.
+   * 이 번호를 미운영 · 운영 점포(지우지 않은)가 쓰는가. BP 번호는 본사 점포 사업자정보에 있어(2026-11-17) 다른 BP 의
+   * 본사도 같은 검사로 걸린다 — 탈퇴한 BP 의 본사는 폐점, 삭제한 BP 의 본사는 삭제라 그 번호는 다시 쓸 수 있다.
+   * 소속 BP 의 본사 번호는 점포도 쓸 수 있다(PL-OCJOFP) — 그래서 소속 BP 의 본사만 뺀다.
+   * 조건은 가입 · 마이페이지의 BusinessVerificationService.isBizRegistrationNumberTaken 과 같다.
    */
   private async isNumberTaken(
     db: Tx | PrismaService,
@@ -1239,28 +1233,20 @@ export class StoreManagementService implements OnModuleInit {
     exclude: number | null,
     ownerBpCodeId: number,
   ): Promise<boolean> {
-    const [stores, bps] = await Promise.all([
-      db.storeBusinessProfile.count({
-        where: {
-          bizRegistrationNumber,
-          ...(exclude !== null && { storeId: { not: exclude } }),
-          store: {
-            isDeleted: false,
-            storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
-          },
-        },
-      }),
-      db.bpCode.count({
-        where: {
-          bizRegistrationNumber,
-          bpCodeId: { not: ownerBpCodeId },
-          isPlatform: false,
+    const stores = await db.storeBusinessProfile.count({
+      where: {
+        bizRegistrationNumber,
+        ...(exclude !== null && { storeId: { not: exclude } }),
+        store: {
           isDeleted: false,
-          accountStatusCode: { not: 'WITHDRAWN' },
+          storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
+          // 소속 BP 의 본사 번호는 점포도 쓴다. 플랫폼 BP 의 본사 번호는 예전처럼 검사에서 뺀다.
+          NOT: { isHq: true, bpCodeId: ownerBpCodeId },
+          bpCode: { isPlatform: false },
         },
-      }),
-    ]);
-    return stores > 0 || bps > 0;
+      },
+    });
+    return stores > 0;
   }
 }
 
@@ -1306,10 +1292,14 @@ function listWhere(
  * 점포, 그 밖의 계정은 전체 점포가 아니면 매핑된 점포만.
  * AdminScopeService 와 일부러 다르다: 그쪽은 직원 · 근로계약용이라 플랫폼 계정에게 고객 점포를 열지 않지만
  * (WHALEERP-301), 점포 정보 관리는 플랫폼이 고른 BP 의 점포를 다룬다. 하나로 합치지 않는다.
+ * 본사 점포(is_hq)는 없는 점포처럼 뺀다(2026-11-17) — 목록 · 엑셀 · 건수에 나오지 않고, id 로 열거나 고치려 해도
+ * (상세 · 상태 확인 · 이력 · 수정 · 삭제 · 이미지 · 진위확인) 404 다. 본사는 마이페이지 BP 사업자정보와 플랫폼 BP
+ * 수정에서만 고친다.
  */
 function scopeOf(caller: StoreCaller): Prisma.StoreWhereInput {
   return {
     isDeleted: false,
+    isHq: false,
     bpCodeId: caller.targetBpCodeId,
     ...(!caller.isPlatform &&
       !caller.isAllStores && {
@@ -1536,14 +1526,6 @@ function verifiedKey(
     identity.ceoName,
     identity.openDate.toISOString(),
   ].join('|');
-}
-
-/** 다음 점포코드. 6자리를 다 쓰면 더 만들 수 없다. */
-function nextStoreCode(last: string | null): string {
-  const next = (last ? Number(last.slice(2)) : 0) + 1;
-  if (next > 999_999)
-    throw new ConflictException('점포코드를 더 만들 수 없습니다.');
-  return `ST${String(next).padStart(6, '0')}`;
 }
 
 async function record(

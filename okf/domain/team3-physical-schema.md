@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
 sources:
   - id: contract-work-location-comment
     resource: ../../prisma/migrations/20261111091227_team3_contract_work_location_comment/migration.sql
@@ -61,7 +61,7 @@ sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
     title: 본사 제공 동의를 직원 레코드의 계정에서 읽는 조각
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-11-17T07:26:26Z
   - id: post-attachments-file-type
     resource: ../../prisma/migrations/20261019171114_team3_post_attachments_file_type/migration.sql
     title: 공지 첨부 file_type · 자리 1~5 CHECK · 지우지 않은 첨부의 자리 부분 고유 (#272)
@@ -101,7 +101,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 27개)
-    last_modified: 2026-11-13T07:05:00Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: account-status-migration
     resource: ../../prisma/migrations/20261007100000_account_status_withdrawn/migration.sql
     title: 계정 상태에 탈퇴를 더하는 마이그레이션
@@ -113,7 +113,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: hidesPersonalData — 본사 제공 동의를 읽는 곳
-    last_modified: 2026-10-29T07:10:00Z
+    last_modified: 2026-11-17T07:26:26Z
   - id: inquiry-lead-processing-start-migration
     resource: ../../prisma/migrations/20261013151714_team3_inquiry_lead_processing_start/migration.sql
     title: 문의사항 · 도입문의 처리 시작 관리자 · 일시를 더하는 마이그레이션
@@ -233,6 +233,11 @@ keys but never create them. Apply 1팀's `schema.sql` first; on an empty databas
 the 3팀 DDL fails at its first foreign key.[^physical-sql] A foreign key to a
 관리자 is named for the role (`created_by`, `reviewed_by`), per the naming
 conventions.
+
+Since 2026-11-17 every BP also has a 본사 점포 (`stores.is_hq`, [Team 1 physical
+schema](/domain/team1-physical-schema.md)), and 본사 직원 use it like any store: their
+contracts, schedules, attendance, payslips and TO-DOs carry its `store_id`. No 3팀 table
+changed for it — whether a row is 본사 is read from `stores`, and every account but FM · FA has the 본사 in its scope by permission and mapping.
 
 # The Prisma half
 

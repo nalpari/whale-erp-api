@@ -4,7 +4,7 @@ title: Staff signup (직원 앱 가입)
 description: The 직원 앱 entry and signup of the 진입 · 가입 화면 가이드 (JOIN-7) — POST /auth/account/invitations/check finds a live 가입 초대 by the link token or by phone + 초대 코드 and returns the 근무지 · 고용 형태 · 유효 기간 · phone to fill; POST /auth/account/signup creates the account on the invitation's phone, links the 직원 레코드, accepts the invitation, moves the waiting 근로계약 to 서명 대기 and returns a login session in one go; 만 19세 미만 stops with the invitation marked 가입 불가 and an 운영 알림. No 본인인증; the per-phone lock waits for its table.
 tags: [auth, signup, staff, invitation, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T06:50:00Z }
 sources:
   - id: staff-signup-service
     resource: ../../src/staff-signup/staff-signup.service.ts
@@ -17,7 +17,7 @@ sources:
   - id: affiliation-requests-service
     resource: ../../src/staff-signup/affiliation-requests.service.ts
     title: AffiliationRequestsService — 소속 추가 확인 · 복귀 확인 요청 목록 · 수락 · 거절
-    last_modified: 2026-11-09T07:19:00Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: my-invitations-controller
     resource: ../../src/staff-signup/my-invitations.controller.ts
     title: GET /me/invitations · POST /me/invitations/:invitationId/accept (account token)

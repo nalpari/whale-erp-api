@@ -49,6 +49,7 @@ describe('HomeService', () => {
     name: string;
     storeTypeCode: string;
     status: string;
+    isHq?: boolean;
   }[];
   let prisma: Record<string, Record<string, jest.Mock>>;
 
@@ -111,6 +112,7 @@ describe('HomeService', () => {
                   name: r.name,
                   storeTypeCode: r.storeTypeCode,
                   storeStatusCode: r.status,
+                  isHq: r.isHq ?? false,
                 })),
             ),
         ),
@@ -316,6 +318,48 @@ describe('HomeService', () => {
         franchise: 1,
         notOperating: 0,
       });
+    });
+
+    it('본사 점포는 점포 카드의 수(전체 · 직영 · 미운영)에서 빠지고 표에는 본사 표시와 함께 나온다(2026-11-17)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 1, storeTypeCode: 'DIRECT' },
+          { storeId: 2, storeTypeCode: 'FRANCHISE' },
+          { storeId: 3, storeTypeCode: 'DIRECT', isHq: true },
+          { storeId: 4, storeTypeCode: 'DIRECT', isHq: true },
+        ],
+      });
+      storeRows.push(
+        {
+          storeId: 3,
+          name: '본사',
+          storeTypeCode: 'DIRECT',
+          status: 'OPERATING',
+          isHq: true,
+        },
+        {
+          storeId: 4,
+          name: '옛 본사',
+          storeTypeCode: 'DIRECT',
+          status: 'NOT_OPERATING',
+          isHq: true,
+        },
+      );
+      const res = await service.summary(9, undefined, NOW);
+      expect(res.cards!.stores).toEqual({
+        total: 2,
+        direct: 1,
+        franchise: 1,
+        notOperating: 0,
+      });
+      expect(
+        res.storeTable.items.map((r) => [r.storeId, r.isHq]).sort(),
+      ).toEqual([
+        [1, false],
+        [2, false],
+        [3, true],
+      ]);
     });
 
     it('미운영 점포는 카드 · 표 집계에서 빠지고 수만 센다 — 확인 필요(pending)는 미운영 건까지 센다(HOM-06 · HOM-07)', async () => {

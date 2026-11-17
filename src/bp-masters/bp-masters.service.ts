@@ -39,6 +39,19 @@ import {
 } from '../platform-admins/platform-admin-mail';
 import { generateTempPassword } from '../platform-admins/temp-password';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  HQ_PROFILE_SELECT,
+  type HqBiz,
+  hqBizOf,
+  hqLocationOf,
+} from '../bp-codes/hq-profile';
+import {
+  createHqStore,
+  hqLocationInput,
+  recordHq,
+  saveHqProfile,
+  syncHqStatus,
+} from '../stores/hq-store';
 import { buildBpMasterWorkbook } from './bp-master-excel';
 import type { ChangeableBpStatus } from './dto/bp-master-status.dto';
 import type {
@@ -107,18 +120,8 @@ const bpSelect = {
   bpCodeId: true,
   bpCode: true,
   accountStatusCode: true,
-  tradeName: true,
-  bizRegistrationNumber: true,
-  bizCeoName: true,
-  bizOpenDate: true,
-  bizCeoPhone: true,
-  bizCeoEmail: true,
-  bizZipCode: true,
-  bizAddress: true,
-  bizAddressDetail: true,
-  bizCategory: true,
-  bizItem: true,
-  bizVerifiedAt: true,
+  // 상호명 · 사업자정보 · 좌표는 본사 점포에 있다(2026-11-17) — flatBp 가 예전 칸 이름으로 펼친다.
+  ...HQ_PROFILE_SELECT,
   createdAt: true,
   updatedAt: true,
   creator: { select: { name: true } },
@@ -135,8 +138,21 @@ const ORDER_BY: Prisma.BpCodeOrderByWithRelationInput[] = [
   { bpCodeId: 'desc' },
 ];
 
-type BpRow = Prisma.BpCodeGetPayload<{ select: typeof bpSelect }>;
-type MasterRow = BpRow['adminAccounts'][number];
+type RawBpRow = Prisma.BpCodeGetPayload<{ select: typeof bpSelect }>;
+/** BP 행 + 본사 사업자정보(예전 bp_codes 칸 이름) + 본사 점포 id · 좌표. */
+type BpRow = RawBpRow &
+  HqBiz &
+  ReturnType<typeof hqLocationOf> & { hqStoreId: number | null };
+type MasterRow = RawBpRow['adminAccounts'][number];
+
+function flatBp(row: RawBpRow): BpRow {
+  return {
+    ...row,
+    ...hqBizOf(row),
+    ...hqLocationOf(row),
+    hqStoreId: row.stores[0]?.storeId ?? null,
+  };
+}
 type History = {
   field: string;
   beforeValue: string | null;
@@ -191,7 +207,7 @@ export class BpMastersService {
     return {
       items: rows.flatMap((row) => {
         const master = row.adminAccounts[0];
-        return master ? [summaryOf(row, master)] : [];
+        return master ? [summaryOf(flatBp(row), master)] : [];
       }),
       total,
     };
@@ -203,6 +219,7 @@ export class BpMastersService {
       this.prisma.store.count({
         where: {
           bpCodeId,
+          isHq: false,
           isDeleted: false,
           storeStatusCode: { not: 'CLOSED' },
         },
@@ -223,6 +240,9 @@ export class BpMastersService {
       bizCategory: bp.bizCategory,
       bizItem: bp.bizItem,
       bizVerifiedAt: bp.bizVerifiedAt,
+      latitude: bp.latitude,
+      longitude: bp.longitude,
+      isLocationApplied: bp.isLocationApplied,
       storeCount,
       subAdminCount,
       lastLoginAt: master.lastLoginAt,
@@ -348,6 +368,7 @@ export class BpMastersService {
     if (!roleGroup)
       throw new Error(`권한 그룹 ${BP_MASTER_ROLE_CODE} 이(가) 없습니다`);
 
+    const location = hqLocationInput(input);
     const password = generateTempPassword();
     const passwordHash = await hashPassword(password);
     const by = callerId;
@@ -360,9 +381,6 @@ export class BpMastersService {
             bpCode,
             isPlatform: false,
             accountStatusCode: 'ACTIVE',
-            tradeName: input.tradeName,
-            ...bizProfileOf(input),
-            ...(biz && verifiedBizOf(biz)),
             createdBy: by,
             updatedBy: by,
           },
@@ -400,6 +418,15 @@ export class BpMastersService {
         await recordBp(tx, bpCodeId, by, [
           { field: 'BP', beforeValue: null, afterValue: '등록' },
         ]);
+        // 상호명 · 사업자정보 · 좌표는 본사 점포에 둔다(2026-11-17). 점포코드 잠금을 커밋 직전에만 쥐도록 맨 끝에서 만든다.
+        await createHqStore(tx, {
+          bpCodeId,
+          bpAccountStatusCode: 'ACTIVE',
+          tradeName: input.tradeName,
+          biz: { ...bizProfileOf(input), ...(biz && verifiedBizOf(biz)) },
+          location,
+          by,
+        });
         return { bpCodeId, bpCode, adminAccountId, issuedId };
       })
       .catch((error: unknown) => {
@@ -458,10 +485,13 @@ export class BpMastersService {
       ? await this.verifications.readToken(input.verificationToken)
       : null;
     const by = callerId;
+    const location = hqLocationInput(input);
     await this.prisma
       .$transaction(async (tx) => {
         const { bp, master } = await this.findBp(tx, bpCodeId);
         assertNotWithdrawn(bp);
+        if (bp.hqStoreId === null)
+          throw new Error(`BP ${bpCodeId} 에 본사 점포가 없습니다`);
         const adminAccountId = master.adminAccountId;
         if (
           input.email !== master.email &&
@@ -473,10 +503,20 @@ export class BpMastersService {
         if (biz)
           await this.assertNumberFree(tx, biz.bizRegistrationNumber, bpCodeId);
 
-        const profile = { tradeName: input.tradeName, ...bizProfileOf(input) };
+        // 상호명 · 사업자정보 · 좌표는 본사 점포에 고치고 이력도 본사 점포에 남긴다(설계 D5). BP 행은 최종수정만 올린다.
+        await saveHqProfile(tx, {
+          bpCodeId,
+          hqStoreId: bp.hqStoreId,
+          before: bp,
+          tradeName: input.tradeName,
+          biz: bizProfileOf(input),
+          verified: biz ? verifiedBizOf(biz) : null,
+          location,
+          by,
+        });
         await tx.bpCode.update({
           where: { bpCodeId },
-          data: { ...profile, ...(biz && verifiedBizOf(biz)), updatedBy: by },
+          data: { updatedBy: by },
         });
         await tx.adminAccount.update({
           where: { adminAccountId },
@@ -495,37 +535,6 @@ export class BpMastersService {
           change('연락처', master.phone, input.phone),
           change('이메일', master.email, input.email),
         ]);
-        const verified = biz
-          ? [
-              change(
-                '사업자등록번호',
-                bp.bizRegistrationNumber,
-                biz.bizRegistrationNumber,
-              ),
-              change('대표자명', bp.bizCeoName, biz.bizCeoName),
-              change('개업일자', dateOnly(bp.bizOpenDate), biz.bizOpenDate),
-            ]
-          : [];
-        await recordBp(
-          tx,
-          bpCodeId,
-          by,
-          [
-            change('상호명', bp.tradeName, profile.tradeName),
-            change('대표자 연락처', bp.bizCeoPhone, profile.bizCeoPhone),
-            change('대표자 이메일', bp.bizCeoEmail, profile.bizCeoEmail),
-            change('사업장 우편번호', bp.bizZipCode, profile.bizZipCode),
-            change('사업장 기본주소', bp.bizAddress, profile.bizAddress),
-            change(
-              '사업장 상세주소',
-              bp.bizAddressDetail,
-              profile.bizAddressDetail,
-            ),
-            change('업태', bp.bizCategory, profile.bizCategory),
-            change('종목', bp.bizItem, profile.bizItem),
-          ],
-          verified,
-        );
       })
       .catch((error: unknown) => {
         if (isUniqueViolation(error))
@@ -593,6 +602,8 @@ export class BpMastersService {
       await recordBp(tx, bpCodeId, by, [
         { field: 'BP 상태', beforeValue: from, afterValue: to },
       ]);
+      // BP 사용은 본사 운영 조건이다 — 미사용이면 본사가 미운영으로, 다시 사용이면 조건대로 돌아간다.
+      await syncHqStatus(tx, bpCodeId, by);
       // BP 마스터의 상태는 BP 상태와 늘 같아 BP 이력 한 줄로 보인다 — 하위 계정만 계정 이력에 남긴다.
       const subs = accounts.filter((a) => a.roleTypeCode !== BP_MASTER);
       if (subs.length)
@@ -705,6 +716,21 @@ export class BpMastersService {
         where: { bpCodeId },
         data: { isDeleted: true, updatedBy: callerId },
       });
+      // 본사 점포도 함께 지운다(폐점 · 삭제). 상호명은 남아 지운 BP 를 읽는 곳이 계속 이름을 보인다.
+      if (bp.hqStoreId !== null) {
+        await tx.store.update({
+          where: { storeId: bp.hqStoreId },
+          data: {
+            isDeleted: true,
+            storeStatusCode: 'CLOSED',
+            closedDate: kstTodayDate(),
+            updatedBy: callerId,
+          },
+        });
+        await recordHq(tx, bp.hqStoreId, callerId, [
+          { field: '삭제', beforeValue: bp.tradeName, afterValue: null },
+        ]);
+      }
       await tx.adminAccount.updateMany({
         where: { bpCodeId, ...masterOnly },
         data: { isDeleted: true, updatedBy: callerId },
@@ -752,7 +778,7 @@ export class BpMastersService {
     return buildBpMasterWorkbook(
       rows.flatMap((row) => {
         const master = row.adminAccounts[0];
-        return master ? [summaryOf(row, master)] : [];
+        return master ? [summaryOf(flatBp(row), master)] : [];
       }),
     );
   }
@@ -768,7 +794,7 @@ export class BpMastersService {
     });
     const master = bp?.adminAccounts[0];
     if (!bp || !master) throw new NotFoundException(NOT_FOUND);
-    return { bp, master };
+    return { bp: flatBp(bp), master };
   }
 
   private countSubAdmins(db: Tx | PrismaService, bpCodeId: number) {
@@ -787,9 +813,17 @@ export class BpMastersService {
     bp: BpRow,
     master: MasterRow,
   ): Promise<string[]> {
-    const [subAdmins, stores] = await Promise.all([
+    const hq = bp.hqStoreId;
+    const [subAdmins, stores, hqStaff, hqFacilities] = await Promise.all([
       this.countSubAdmins(db, bp.bpCodeId),
-      db.store.count({ where: { bpCodeId: bp.bpCodeId, isDeleted: false } }),
+      db.store.count({
+        where: { bpCodeId: bp.bpCodeId, isHq: false, isDeleted: false },
+      }),
+      // 본사는 「등록된 점포」에 세지 않지만 본사에 직원 · 시설물이 있으면 쓰인 BP 다 — 함께 지우면 그 자료가 사라진다.
+      hq === null ? 0 : db.staffMember.count({ where: { storeId: hq } }),
+      hq === null
+        ? 0
+        : db.facility.count({ where: { storeId: hq, isDeleted: false } }),
     ]);
     return [
       bp.accountStatusCode === WITHDRAWN && '탈퇴한 BP는 삭제할 수 없습니다.',
@@ -797,6 +831,8 @@ export class BpMastersService {
         'BP 마스터 계정으로 로그인한 이력이 있어 삭제할 수 없습니다.',
       subAdmins > 0 && '하위 관리자 계정이 등록되어 있어 삭제할 수 없습니다.',
       stores > 0 && '등록된 점포가 있어 삭제할 수 없습니다.',
+      hqStaff + hqFacilities > 0 &&
+        '본사에 등록된 직원 · 시설물이 있어 삭제할 수 없습니다.',
     ].filter((r): r is string => typeof r === 'string');
   }
 
@@ -871,8 +907,12 @@ function listWhere({
     isDeleted: false,
     adminAccounts: { some: masterOnly },
     ...(statuses?.length && { accountStatusCode: { in: statuses } }),
-    ...(verification === 'VERIFIED' && { bizVerifiedAt: { not: null } }),
-    ...(verification === 'UNVERIFIED' && { bizVerifiedAt: null }),
+    ...(verification === 'VERIFIED' && {
+      stores: hqProfileWhere({ bizVerifiedAt: { not: null } }),
+    }),
+    ...(verification === 'UNVERIFIED' && {
+      NOT: { stores: hqProfileWhere({ bizVerifiedAt: { not: null } }) },
+    }),
     ...(keywordOr && { AND: [{ OR: keywordOr }] }),
   };
 }
@@ -897,10 +937,14 @@ function keywordConditions(
         adminAccounts: { some: { ...masterOnly, name: contains } },
       },
     ],
-    TRADE_NAME: [{ tradeName: contains }],
+    TRADE_NAME: [{ stores: hqProfileWhere({ bizTradeName: contains }) }],
     // 번호는 숫자만 저장한다. 숫자가 없는 검색어는 그대로 둬 아무 번호와도 맞지 않게 한다.
     BIZ_REGISTRATION_NUMBER: [
-      { bizRegistrationNumber: { contains: digits || keyword } },
+      {
+        stores: hqProfileWhere({
+          bizRegistrationNumber: { contains: digits || keyword },
+        }),
+      },
     ],
   };
   if (searchType) return byType[searchType];
@@ -909,6 +953,20 @@ function keywordConditions(
     ...Object.values(others).flat(),
     ...(/^[0-9\s-]+$/.test(keyword) ? byNumber : []),
   ];
+}
+
+/** 본사 점포 사업자정보 조건 — 상호명 · 사업자번호 · 인증 여부는 본사에 있다. 지운 BP 는 목록에 없어 살아 있는 본사만 본다. */
+function hqProfileWhere(
+  profile: Prisma.StoreBusinessProfileWhereInput,
+): Prisma.StoreListRelationFilter {
+  return { some: { isHq: true, isDeleted: false, businessProfile: profile } };
+}
+
+/** 오늘(한국 날짜) — 폐점일 칸(date). */
+function kstTodayDate(): Date {
+  return new Date(
+    `${new Date(Date.now() + 9 * 3_600_000).toISOString().slice(0, 10)}T00:00:00.000Z`,
+  );
 }
 
 function summaryOf(bp: BpRow, master: MasterRow): BpMasterSummaryResponseDto {

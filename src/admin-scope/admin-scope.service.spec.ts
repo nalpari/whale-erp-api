@@ -375,13 +375,19 @@ describe('AdminScopeService', () => {
         roleTypeCode: 'BA',
         stores: [{ storeId: 5, storeTypeCode: 'DIRECT' }],
       });
+      // BP 관리자는 본사도 매핑대로 본다(2026-11-17 — 본사도 일반 점포처럼)
       expect(prisma.store.findMany).toHaveBeenCalledWith({
         where: {
           bpCodeId: 2,
           isDeleted: false,
           adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
         },
-        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
+        select: {
+          storeId: true,
+          storeTypeCode: true,
+          storeStatusCode: true,
+          isHq: true,
+        },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -396,7 +402,12 @@ describe('AdminScopeService', () => {
       await get();
       expect(prisma.store.findMany).toHaveBeenCalledWith({
         where: { bpCodeId: 2, isDeleted: false },
-        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
+        select: {
+          storeId: true,
+          storeTypeCode: true,
+          storeStatusCode: true,
+          isHq: true,
+        },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -436,7 +447,12 @@ describe('AdminScopeService', () => {
       });
       expect(prisma.store.findMany).toHaveBeenCalledWith({
         where: { bpCodeId: 7, isDeleted: false },
-        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
+        select: {
+          storeId: true,
+          storeTypeCode: true,
+          storeStatusCode: true,
+          isHq: true,
+        },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -451,14 +467,19 @@ describe('AdminScopeService', () => {
           isDeleted: false,
           adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
         },
-        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
+        select: {
+          storeId: true,
+          storeTypeCode: true,
+          storeStatusCode: true,
+          isHq: true,
+        },
         orderBy: { storeId: 'asc' },
       });
 
       await scope.canManageStore(9, 5, otherBp);
       expect(prisma.store.findFirst).toHaveBeenCalledWith({
         where: { storeId: 5, bpCodeId: 2, isDeleted: false },
-        select: { storeTypeCode: true, storeStatusCode: true },
+        select: { storeTypeCode: true, storeStatusCode: true, isHq: true },
       });
       expect(prisma.adminStoreMapping.count).toHaveBeenCalled();
     });
@@ -534,7 +555,12 @@ describe('AdminScopeService', () => {
           isDeleted: false,
           adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
         },
-        select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
+        select: {
+          storeId: true,
+          storeTypeCode: true,
+          storeStatusCode: true,
+          isHq: true,
+        },
         orderBy: { storeId: 'asc' },
       });
     });
@@ -556,7 +582,7 @@ describe('AdminScopeService', () => {
       await expect(scope.canManageStore(9, 5, platformBp)).resolves.toBe(true);
       expect(prisma.store.findFirst).toHaveBeenCalledWith({
         where: { storeId: 5, bpCodeId: 7, isDeleted: false },
-        select: { storeTypeCode: true, storeStatusCode: true },
+        select: { storeTypeCode: true, storeStatusCode: true, isHq: true },
       });
       expect(prisma.adminStoreMapping.count).not.toHaveBeenCalled();
     });
@@ -588,11 +614,12 @@ describe('AdminScopeService', () => {
       storeCode: true,
       name: true,
       storeTypeCode: true,
+      isHq: true,
       storeStatusCode: true,
     };
     const orderBy = [{ name: 'asc' }, { storeId: 'asc' }];
 
-    it('매핑으로 관리하면 그 BP 의 매핑된 점포만', async () => {
+    it('매핑으로 관리하면 그 BP 의 매핑된 점포만 — BP 관리자는 본사도 매핑대로', async () => {
       await scope.listStores(9);
       expect(prisma.store.findMany).toHaveBeenCalledWith({
         where: {
@@ -609,6 +636,22 @@ describe('AdminScopeService', () => {
       prisma.adminAccount.findFirst.mockResolvedValue({
         bpCodeId: 2,
         isAllStores: true,
+        roleTypeCode: 'BM',
+      });
+      await scope.listStores(9);
+      // BP 마스터는 본사도 본다
+      expect(prisma.store.findMany).toHaveBeenCalledWith({
+        where: { bpCodeId: 2, isDeleted: false },
+        select,
+        orderBy,
+      });
+    });
+
+    it('가맹 계정은 전체 점포여도 본사를 받지 않는다 — 전체 점포 BP 관리자는 본사 포함', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 2,
+        isAllStores: true,
+        roleTypeCode: 'BA',
       });
       await scope.listStores(9);
       expect(prisma.store.findMany).toHaveBeenCalledWith({
@@ -616,6 +659,20 @@ describe('AdminScopeService', () => {
         select,
         orderBy,
       });
+      for (const roleTypeCode of ['FM', 'FA']) {
+        prisma.store.findMany.mockClear();
+        prisma.adminAccount.findFirst.mockResolvedValue({
+          bpCodeId: 2,
+          isAllStores: true,
+          roleTypeCode,
+        });
+        await scope.listStores(9);
+        expect(prisma.store.findMany).toHaveBeenCalledWith({
+          where: { bpCodeId: 2, isDeleted: false, isHq: false },
+          select,
+          orderBy,
+        });
+      }
     });
 
     it('사용 중인 계정이 아니면 빈 목록', async () => {
@@ -871,7 +928,12 @@ describe('AdminScopeService', () => {
 
   describe('listBps — 플랫폼 계정이 고를 고객 BP', () => {
     beforeEach(() => {
-      prisma.bpCode.findMany.mockResolvedValue([{ bpCodeId: 7 }]);
+      prisma.bpCode.findMany.mockResolvedValue([
+        {
+          bpCodeId: 7,
+          stores: [{ businessProfile: { bizTradeName: '고래상사' } }],
+        },
+      ]);
       prisma.bpCode.count.mockResolvedValue(31);
     });
 
@@ -879,7 +941,8 @@ describe('AdminScopeService', () => {
       await expect(
         scope.listBps({ withMaster: true, page: 3, pageSize: 10 }),
       ).resolves.toEqual({
-        items: [{ bpCodeId: 7 }],
+        // 상호명은 본사 점포 사업자정보에서 꺼내 예전 자리(tradeName)에 싣는다
+        items: [{ bpCodeId: 7, tradeName: '고래상사' }],
         total: 31,
       });
       const where = {
@@ -892,8 +955,13 @@ describe('AdminScopeService', () => {
         select: {
           bpCodeId: true,
           bpCode: true,
-          tradeName: true,
           accountStatusCode: true,
+          stores: {
+            where: { isHq: true },
+            orderBy: [{ isDeleted: 'asc' }, { storeId: 'asc' }],
+            take: 1,
+            select: { businessProfile: { select: { bizTradeName: true } } },
+          },
         },
         orderBy: [{ createdAt: 'desc' }, { bpCodeId: 'desc' }],
         skip: 20,
@@ -908,7 +976,17 @@ describe('AdminScopeService', () => {
         isDeleted: false,
         isPlatform: false,
         OR: [
-          { tradeName: { contains: 'bp0001', mode: 'insensitive' } },
+          {
+            stores: {
+              some: {
+                isHq: true,
+                isDeleted: false,
+                businessProfile: {
+                  bizTradeName: { contains: 'bp0001', mode: 'insensitive' },
+                },
+              },
+            },
+          },
           { bpCode: { contains: 'bp0001', mode: 'insensitive' } },
         ],
       };
@@ -925,7 +1003,20 @@ describe('AdminScopeService', () => {
           isDeleted: false,
           isPlatform: false,
           OR: [
-            { tradeName: { contains: 'BP\\_1\\%', mode: 'insensitive' } },
+            {
+              stores: {
+                some: {
+                  isHq: true,
+                  isDeleted: false,
+                  businessProfile: {
+                    bizTradeName: {
+                      contains: 'BP\\_1\\%',
+                      mode: 'insensitive',
+                    },
+                  },
+                },
+              },
+            },
             { bpCode: { contains: 'BP\\_1\\%', mode: 'insensitive' } },
           ],
         },
@@ -948,6 +1039,7 @@ describe('AdminScopeService', () => {
           storeCode: true,
           name: true,
           storeTypeCode: true,
+          isHq: true,
           storeStatusCode: true,
         },
         orderBy: [{ name: 'asc' }, { storeId: 'asc' }],

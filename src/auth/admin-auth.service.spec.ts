@@ -55,6 +55,13 @@ describe('AdminAuthService', () => {
     tradeName: '고래상사',
     isPlatform: false,
   };
+  // DB 가 주는 모양 — 상호명은 본사 점포 사업자정보에 있다(20261117150907_team1_hq_stores)
+  const BP_ROW = {
+    bpCodeId: BP.bpCodeId,
+    bpCode: BP.bpCode,
+    isPlatform: BP.isPlatform,
+    stores: [{ businessProfile: { bizTradeName: BP.tradeName } }],
+  };
   const account = (over: Record<string, unknown> = {}) => ({
     adminAccountId: 7,
     loginId: 'bpmaster1',
@@ -67,7 +74,7 @@ describe('AdminAuthService', () => {
     lockExpiresAt: null,
     isPasswordChangeRequired: false,
     updatedAt: EDITED_AT,
-    bpCode: { ...BP, accountStatusCode: 'ACTIVE' },
+    bpCode: { ...BP_ROW, accountStatusCode: 'ACTIVE' },
     ...over,
   });
   const temp = (over: Record<string, unknown> = {}) => ({
@@ -305,7 +312,7 @@ describe('AdminAuthService', () => {
       prisma.adminAccount.findUnique.mockResolvedValue(
         account({
           roleTypeCode: 'BA',
-          bpCode: { ...BP, accountStatusCode: 'WITHDRAWN' },
+          bpCode: { ...BP_ROW, accountStatusCode: 'WITHDRAWN' },
         }),
       );
       await expect(login()).rejects.toThrow(
@@ -540,7 +547,7 @@ describe('AdminAuthService', () => {
 
     it('상위 BP 가 탈퇴했으면 403', async () => {
       prisma.adminAccount.findUnique.mockResolvedValue(
-        account({ bpCode: { ...BP, accountStatusCode: 'WITHDRAWN' } }),
+        account({ bpCode: { ...BP_ROW, accountStatusCode: 'WITHDRAWN' } }),
       );
       await expect(redeem()).rejects.toThrow(ForbiddenException);
       expect(sessions.issue).not.toHaveBeenCalled();

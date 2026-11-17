@@ -4,12 +4,12 @@ title: Bulk exports (직원 자료 일괄 저장)
 description: BP 마스터 · 가맹마스터가 업무 범위 직원의 근로계약서 · 출퇴근 기록 · 급여명세서 · 근무스케줄을 zip 하나로 받는다 — 1분 배치가 만들고 7일 보관, 같은 BP · 같은 권한 유형 · 점포를 모두 관리하는 마스터가 목록 · 내려받기를 쓰고, 알림은 없다.
 tags: [admin, staff, batch, storage, zip, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T12:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T06:50:00Z }
 sources:
   - id: bulk-exports-service
     resource: ../../src/bulk-exports/bulk-exports.service.ts
     title: BulkExportsService — preview · request · list · download · processPending · purgeExpiredFiles · buildArchive
-    last_modified: 2026-10-29T03:05:33Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: bulk-export-policy
     resource: ../../src/bulk-exports/bulk-export-policy.ts
     title: 담을 직원 · 범위 · 볼 수 있는가 · 파일 이름

@@ -46,7 +46,7 @@ describe('StaffMemberListQueryDto (직원 목록 쿼리) — 점포 칸', () => 
     expect(check({ storeIds: ids(1001) }).failed).toEqual(['storeIds']);
   });
 
-  it.each(['', 'HQ', 'DIRECT,', 'direct'])(
+  it.each(['', 'BRANCH', 'DIRECT,', 'direct'])(
     '점포 유형 %p 는 400',
     (storeTypes) =>
       expect(check({ storeTypes }).failed).toEqual(['storeTypes']),

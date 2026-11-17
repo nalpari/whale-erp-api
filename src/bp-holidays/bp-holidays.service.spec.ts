@@ -77,8 +77,9 @@ describe('BpHolidaysService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    // 상호명은 본사 점포 사업자정보에 있다(20261117150907_team1_hq_stores)
     prisma.bpCode.findUniqueOrThrow.mockResolvedValue({
-      tradeName: '㈜한강상회',
+      stores: [{ businessProfile: { bizTradeName: '㈜한강상회' } }],
     });
     prisma.publicHoliday.findMany.mockResolvedValue([]);
     prisma.store.findMany.mockResolvedValue([]);

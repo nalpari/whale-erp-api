@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T01:41:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-11-17T01:41:00Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: minimum-wage
     resource: ../../src/contracts/minimum-wage.ts
     title: 최저임금 공통코드 · 수습 중 시급 검사
@@ -41,7 +41,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-11-14T08:47:00Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -57,7 +57,7 @@ sources:
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
-    last_modified: 2026-10-08T00:00:00Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
@@ -65,7 +65,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-10-29T07:10:00Z
+    last_modified: 2026-11-17T07:26:26Z
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
@@ -100,7 +100,8 @@ sources:
 tie-breaker. Filters: `status` (repeatable — `?status=SIGNED&status=REJECTED`),
 `storeName` and `staffMemberName` (case-insensitive substring), `storeIds` (picked stores — comma-separated, up
 to 1000; a repeated key also works for a few, but the query parser reads only 1000 keys and drops the rest without a
-400, so many ids go comma-separated as the 관리자웹 does — api #132 review; ids outside the scope drop silently) and `storeTypes` (`DIRECT` · `FRANCHISE`), all
+400, so many ids go comma-separated as the 관리자웹 does — api #132 review; ids outside the scope drop silently) and `storeTypes` (`DIRECT` · `FRANCHISE` · `HQ` — API enum `StoreScopeType` since 2026-11-17: `DIRECT` means 직영 *other
+than* the 본사 점포, which is also `DIRECT` in the database, and `HQ` the 본사 only; `matchesStoreScope`), all
 ANDed and always inside the admin scope below. `storeIds` · `storeTypes` are what the 관리자웹 list's store filter
 and the header store scope send (WHALEERP-326 · 133, 2026-10-22 — same shape as 점포 정보 관리 `GET /stores`).
 An empty `storeIds=` (or an empty piece such as `storeIds=3,`) is 400, like `GET /stores`, so the 관리자웹 leaves the
@@ -1323,10 +1324,13 @@ only — a 종이 계약 has no body.
 
 # GET /contracts/store-options
 
-The 근무지 dropdown's source: `{ items: [{ storeId, name }], total }`,
+The 근무지 dropdown's source: `{ items: [{ storeId, name, storeTypeCode, isHq }], total }`,
 undeleted and not `CLOSED`, by name, and only the stores the admin may write
 contracts for — managed, and for 본사 역할 직영 only (the per-store half of the
 contract rule above: a new contract has no 직원 whose consent could open it).
+`storeTypeCode` and `isHq` were added on 2026-11-17 so the screen can mark the 본사 점포, which
+is `DIRECT` too; it does not appear for FM · FA, whose scope drops it; the others see it by permission and mapping
+([admin authentication](/api/admin-auth.md)).
 403 for an account that is not in use. It moved from `GET /stores` on 2026-10-14,
 when that path became the 점포 정보 관리 list ([Store management](/api/stores.md));
 the two answer different questions — this one is "where may I write a contract",

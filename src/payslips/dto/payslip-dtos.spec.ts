@@ -29,7 +29,9 @@ describe('PayslipListQueryDto (관리자 목록 쿼리)', () => {
       dto: { storeTypes: ['DIRECT', 'FRANCHISE'] },
       failed: [],
     });
-    expect(list({ storeTypes: 'HQ' }).failed).toEqual(['storeTypes']);
+    // 본사(HQ)는 2026-11-17 부터 받는 값이다
+    expect(list({ storeTypes: 'HQ' }).failed).toEqual([]);
+    expect(list({ storeTypes: 'BRANCH' }).failed).toEqual(['storeTypes']);
     expect(list({ storeTypes: '' }).failed).toEqual(['storeTypes']);
   });
 
@@ -129,7 +131,8 @@ describe('SendPayslipsDto · CreatePayslipDto · PayslipMonthDto', () => {
         .failed,
     ).toEqual([]);
     expect(
-      check(SendPayslipsDto, { month: '2026-09', storeTypes: ['HQ'] }).failed,
+      check(SendPayslipsDto, { month: '2026-09', storeTypes: ['BRANCH'] })
+        .failed,
     ).toEqual(['storeTypes']);
   });
 

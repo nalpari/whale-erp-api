@@ -16,7 +16,10 @@ import {
   Min,
 } from 'class-validator';
 
-import { STORE_TYPES, type StoreType } from '../../stores/store-format';
+import {
+  STORE_SCOPE_TYPES,
+  type StoreScopeType,
+} from '../../stores/store-scope-type';
 
 export const PAYSLIP_PAGE_SIZES = [20, 50, 100] as const;
 
@@ -75,8 +78,8 @@ export class PayslipListQueryDto {
       .split(',')
       .map((v) => v.trim()),
   )
-  @IsIn(STORE_TYPES, { each: true })
-  storeTypes?: StoreType[];
+  @IsIn(STORE_SCOPE_TYPES, { each: true })
+  storeTypes?: StoreScopeType[];
 
   /**
    * 직원명 부분 일치(대소문자 무시, `%` · `_` 는 글자 그대로). 앞뒤 공백을 지우고 비면 없는 것으로 본다. 주면 본사 역할에게

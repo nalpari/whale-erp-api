@@ -10,7 +10,8 @@ export class HomeStaffCardDto {
   partTime: number;
 }
 
-/** 운영 점포 — 업무 범위 안 운영 상태 점포(운영 정책 HOM-10). 다른 카드 · 표도 이 점포들만 센다 */
+/** 운영 점포 — 업무 범위 안 운영 상태 점포(운영 정책 HOM-10). 다른 카드 · 표도 이 점포들만 센다. 이 카드의 수에는
+ * 본사 점포를 세지 않는다(2026-11-17 — 본사는 사용자가 등록한 점포가 아니다). 표 · 다른 카드는 본사도 센다 */
 export class HomeStoreCardDto {
   total: number;
   direct: number;
@@ -67,6 +68,8 @@ export class HomeStoreRowDto {
   storeName: string;
   /** 점포 유형 코드 — DIRECT · FRANCHISE */
   storeTypeCode: string;
+  /** 본사 점포인가 — 본사는 storeTypeCode 가 늘 DIRECT 다(2026-11-17) */
+  isHq: boolean;
   staffCount: number | null;
   unsignedContractCount: number | null;
   /** 오늘 출근 — 카드의 checkedIn 과 같은 기준(본사 역할에게 가려지는 점포는 동의한 직원만) */

@@ -61,6 +61,7 @@ const stores = [1, 2, 3, 4, 5, 6, 7, 8].map((storeId) => ({
   storeStatusCode: storeId === 4 ? 'CLOSED' : 'OPERATING',
   bpCodeId: BP,
   isDeleted: false,
+  isHq: false,
 }));
 
 const group = (
@@ -199,7 +200,10 @@ describe('BpAdminsService', () => {
         count: jest.fn().mockResolvedValue(0),
       },
       bpCode: {
-        findFirst: jest.fn().mockResolvedValue({ tradeName: '모리커피' }),
+        // 상호명은 본사 점포 사업자정보에 있다(20261117150907_team1_hq_stores)
+        findFirst: jest.fn().mockResolvedValue({
+          stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+        }),
       },
       temporaryPassword: {
         create: jest.fn().mockResolvedValue({ temporaryPasswordId: 7 }),
@@ -469,6 +473,33 @@ describe('BpAdminsService', () => {
         adminAccountId: 21,
       });
       expect(ids(r)).toEqual([1, 2, 3, 6, 7, 8]);
+    });
+
+    // 본사도 일반 점포처럼 맡길 수 있다 — 가맹 마스터 · 가맹 관리자에게만 빼고(2026-11-17)
+    it('본사 점포는 BP 관리자 후보에는 나오고(isHq) 가맹 마스터 후보에는 없다', async () => {
+      const hqStore = {
+        storeId: 2,
+        storeCode: 'ST000002',
+        name: '점포2',
+        storeTypeCode: 'DIRECT',
+        storeStatusCode: 'OPERATING',
+        bpCodeId: BP,
+        isDeleted: false,
+        isHq: true,
+      };
+      const original = stores[1];
+      stores[1] = hqStore;
+      try {
+        const ba = await service.storeOptions(1, bp, { roleTypeCode: 'BA' });
+        expect(ids(ba)).toContain(2);
+        const fm = await service.storeOptions(1, bp, {
+          roleTypeCode: 'FM',
+          adminAccountId: 21,
+        });
+        expect(ids(fm)).not.toContain(2);
+      } finally {
+        stores[1] = original;
+      }
     });
   });
 

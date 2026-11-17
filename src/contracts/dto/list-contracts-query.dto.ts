@@ -13,7 +13,10 @@ import {
   Min,
 } from 'class-validator';
 import { INT4_MAX } from '../../platform-admins/platform-admin-format';
-import { STORE_TYPES, type StoreType } from '../../stores/store-format';
+import {
+  STORE_SCOPE_TYPES,
+  type StoreScopeType,
+} from '../../stores/store-scope-type';
 
 /** `a=1&a=2` · `a=1,2` · 둘을 섞은 `a=1,2&a=3` 을 모두 같은 배열로 받는다. */
 const splitComma = ({ value }: { value: unknown }): unknown =>
@@ -71,11 +74,15 @@ export class ListContractsQueryDto {
   storeIds?: number[];
 
   /** 점포 유형(직영 · 가맹) — 상단 점포 범위의 직영 · 가맹. 주지 않으면 둘 다. */
-  @ApiPropertyOptional({ enum: STORE_TYPES, isArray: true })
+  @ApiPropertyOptional({
+    enum: STORE_SCOPE_TYPES,
+    enumName: 'StoreScopeType',
+    isArray: true,
+  })
   @IsOptional()
   @Transform(splitComma)
-  @IsIn(STORE_TYPES, { each: true })
-  storeTypes?: StoreType[];
+  @IsIn(STORE_SCOPE_TYPES, { each: true })
+  storeTypes?: StoreScopeType[];
 
   /** 점포 이름 일부 */
   @IsOptional()

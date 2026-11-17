@@ -4,16 +4,16 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 · 서명 요청 알림톡과 비밀번호 초기화 메일 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-16T05:08:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
     title: 본사 제공 동의를 직원 레코드의 계정에서 읽는 조각
-    last_modified: 2026-10-28T08:41:55Z
+    last_modified: 2026-11-17T07:26:26Z
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-11-13T08:17:28Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
@@ -53,7 +53,7 @@ sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: week-query-dto
     resource: ../../src/staff-members/dto/staff-member-week.query.dto.ts
     title: 근무스케줄 영역 쿼리 — weekStart(그 주의 아무 날짜)
@@ -81,11 +81,11 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService.getManageableStores · hidesPersonalData · consentOpensStore · hiddenStoreStaffWhere
-    last_modified: 2026-10-29T07:10:00Z
+    last_modified: 2026-11-17T07:26:26Z
   - id: query-dto
     resource: ../../src/staff-members/dto/staff-member-list.query.dto.ts
     title: 요청 — 목록 필터(storeIds · storeTypes · joinState · employmentType)
-    last_modified: 2026-10-23T03:52:09Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: birth-date-controller
     resource: ../../src/staff-members/staff-birth-date.controller.ts
     title: PUT /staff-members/:id/birth-date (직원 정보 관리 수정 권한, WHALEERP-602)
@@ -141,11 +141,18 @@ null 은 「근로계약 조회 권한 없음」, `[]` 는 「근무 요일 없�
 근로계약 목록(`ListContractsQueryDto`, api #132)과 **형식만** 같다 — 반복(`storeIds=1&storeIds=2`)과 쉼표(`storeIds=1,2`)를
 섞어도 받는다. 아래 폐점 제외는 근로계약 목록에 없고 TO-DO 목록의 기준이다. `storeIds` 는 쉼표로 1000개까지다. 같은 키
 반복도 받지만 쿼리 파서가 키를 1000개까지만 읽어, 넘치면 뒤쪽 조건(`storeIds` 뒤쪽만이 아니라 뒤에 오는 다른 조건도)이
-400 없이 빠지므로 많을 때는 쉼표로 보낸다. `storeTypes`(DIRECT · FRANCHISE)를 주면 그 유형 점포만이고 **폐점 점포는 뺀다** —
+400 없이 빠지므로 많을 때는 쉼표로 보낸다. `storeTypes`(DIRECT · FRANCHISE · HQ)를 주면 그 유형 점포만이고 **폐점 점포는 뺀다** —
 TO-DO 목록(api #133)과 같은 기준(`storeStatusCode` ≠ `CLOSED`, 미운영은 남는다)이고, 폐점 점포는 전체나 점포를 골라(`storeIds`) 본다.
 `storeTypes` 를 주지 않으면 유형 · 폐점과 상관없다. 둘을 함께 주면 둘 다 맞는 점포만(교집합)이고, 둘 다 관리 범위 안에서만
 거른다. 폐점을 가리는 점포 조회는 `storeTypes` 가 있고 남은 점포가 있을 때만 한 번 더 돈다(왕복 5번). 남은 점포가 없으면
 직원을 묻지 않고 0건이다.
+
+**`storeTypes` 는 2026-11-17 부터 `HQ`(본사 점포)도 받는다** — API enum `StoreScopeType`(DIRECT · FRANCHISE · HQ,
+`src/stores/store-scope-type.ts`). 본사도 `store_type_code` 가 `DIRECT` 라 **`DIRECT` 는 「본사가 아닌 직영」**, `HQ` 는
+본사만이고(`matchesStoreScope`), 유형을 주지 않으면 본사도 들어간다. 본사도 권한 · 매핑대로 관리 범위에 들어가고 가맹 마스터 · 가맹 관리자만 뺀다
+(`AdminScopeService.getManageableStores` 의 `hqScope`, [admin authentication](/api/admin-auth.md)) 가맹 계정에게는
+본사 직원이 목록 · 상세 · 작업 모두에서 범위 밖이고 `HQ` 를 주면 0건이다. 목록 행에는 `isHq` 를 싣지 않는다 — front 가
+점포 목록(`AdminStoreDto.isHq`)으로 판정하기로 했다(front 합의, 2026-11-17).
 
 # 직원 상세 (GET /staff-members/:id)
 

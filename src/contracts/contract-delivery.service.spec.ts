@@ -384,7 +384,9 @@ describe('ContractDeliveryService', () => {
         });
         tx.store.findUnique.mockResolvedValue({
           name: '모리커피 연남점',
-          bpCode: { tradeName: '모리커피' },
+          bpCode: {
+            stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+          },
         });
         Object.assign(tx, {
           account: {
@@ -479,7 +481,7 @@ describe('ContractDeliveryService', () => {
       });
       tx.store.findUnique.mockResolvedValue({
         name: '모리커피 연남점',
-        bpCode: { tradeName: '모리커피' },
+        bpCode: { stores: [{ businessProfile: { bizTradeName: '모리커피' } }] },
       });
       Object.assign(tx, {
         account: {
@@ -537,7 +539,7 @@ describe('ContractDeliveryService', () => {
       });
       tx.store.findUnique.mockResolvedValue({
         name: '모리커피 연남점',
-        bpCode: { tradeName: '모리커피' },
+        bpCode: { stores: [{ businessProfile: { bizTradeName: '모리커피' } }] },
       });
       Object.assign(tx, {
         account: {
@@ -855,7 +857,9 @@ describe('ContractDeliveryService', () => {
         });
         tx.store.findUnique.mockResolvedValue({
           name: '모리커피 연남점',
-          bpCode: { tradeName: '모리커피' },
+          bpCode: {
+            stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+          },
         });
         Object.assign(tx, {
           account: {

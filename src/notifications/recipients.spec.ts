@@ -54,6 +54,18 @@ describe('운영 알림 수신자 판정', () => {
       { adminAccountId: 13, roleTypeCode: 'FA' },
     ];
 
+    // 가맹 마스터 · 가맹 관리자는 전체 점포여도 본사를 보지 않는다(2026-11-17) — 본사 직원 알림도 받지 않는다.
+    it('본사 점포 직원이면 가맹 마스터 · 가맹 관리자는 받지 않는다', async () => {
+      prisma.store.findFirst.mockResolvedValue({
+        bpCodeId: 7,
+        storeTypeCode: 'DIRECT',
+        storeStatusCode: 'OPERATING',
+        isHq: true,
+      });
+      prisma.adminAccount.findMany.mockResolvedValue(managers);
+      await expect(storeManagers(db(), 30)).resolves.toEqual([10, 11]);
+    });
+
     it('직원 근무지 BP 의 사업자 관리자 가운데 전체 점포이거나 그 점포가 매핑된 사람을 고른다', async () => {
       prisma.store.findFirst.mockResolvedValue({
         bpCodeId: 7,
@@ -76,7 +88,12 @@ describe('운영 알림 수신자 판정', () => {
       });
       expect(prisma.store.findFirst).toHaveBeenCalledWith({
         where: { storeId: 5, isDeleted: false },
-        select: { bpCodeId: true, storeTypeCode: true, storeStatusCode: true },
+        select: {
+          bpCodeId: true,
+          storeTypeCode: true,
+          storeStatusCode: true,
+          isHq: true,
+        },
       });
       expect(prisma.adminAccount.findMany).toHaveBeenCalledWith({
         where: {

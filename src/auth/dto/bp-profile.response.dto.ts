@@ -36,7 +36,12 @@ export class BpProfileResponseDto {
   /** 최종 인증일시 — 인증한 적 없으면 null. */
   bizVerifiedAt: Date | null;
 
+  /** 본사 점포 위도 · 경도 — 본사 직원 출퇴근 반경 기준. 없으면 null(본사는 미운영). */
+  latitude: number | null;
+  longitude: number | null;
+  /** 본사 출퇴근 위치 적용 여부 */
+  isLocationApplied: boolean;
   /** 저장(PATCH)할 때 동시 수정 검사에 그대로 돌려줘야 하는 값 — 검사만 하는 인증(POST
-   * business-verification)은 저장이 아니라 받지 않는다. */
+   * business-verification)은 저장이 아니라 받지 않는다. 본사 사업자정보 행의 최종 수정 일시다. */
   updatedAt: Date;
 }

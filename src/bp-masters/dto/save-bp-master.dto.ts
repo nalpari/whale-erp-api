@@ -12,6 +12,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { BpBusinessVerificationDto } from '../../auth/dto/bp-business-verification.dto';
+import { HqLocationDto } from '../../stores/dto/hq-location.dto';
 import {
   emptyToNull,
   INT4_MAX,
@@ -29,7 +30,7 @@ const CEO_PHONE_PATTERN = /^[0-9]{9,11}$/;
  * 등록 · 수정이 같이 받는 칸. 전체 치환이다 — 선택 칸을 빼고 보내면 그 칸은 비워진다. 사업자등록번호 · 대표자명 ·
  * 개업일자는 여기 적지 않는다 — 사업자 진위확인이 준 토큰(verificationToken)에서만 꺼낸다.
  */
-class BpMasterProfileDto {
+class BpMasterProfileDto extends HqLocationDto {
   /** BP 마스터 이름. 한글 · 영문 2~20자. @example 김하늘 */
   @Transform(trimText)
   @Matches(NAME_PATTERN, { message: '이름은 한글 또는 영문 2~20자입니다.' })

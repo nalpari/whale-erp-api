@@ -41,6 +41,8 @@ describe('callerOf — 계정에서 휴일을 다루는 범위를 정한다', ()
     isPlatform: false,
     isAllStores: true,
     mappedStoreIds: [10],
+    // 본사(12)를 뺀 BP 점포 — 가맹 계정은 본사를 다루지 않는다(2026-11-17)
+    branchStoreIds: [10, 11],
     rights: RIGHTS,
   };
   it.each([
@@ -51,6 +53,7 @@ describe('callerOf — 계정에서 휴일을 다루는 범위를 정한다', ()
       null,
     ],
     ['BP 마스터', { roleTypeCode: 'BM' }, true, null],
+    // 본사도 일반 점포처럼 — 전체 점포 BP 관리자는 본사 포함 BP 전체
     ['전체 점포 BP 관리자', { roleTypeCode: 'BA' }, true, null],
     [
       '일부 점포 BP 관리자',
@@ -60,7 +63,7 @@ describe('callerOf — 계정에서 휴일을 다루는 범위를 정한다', ()
     ],
     ['가맹 마스터', { roleTypeCode: 'FM', isAllStores: false }, false, [10]],
     // 가맹 역할은 전체 점포여도 전체 점포 휴일 · 예외 점포를 다루지 못한다(CONFIG-10)
-    ['전체 점포 가맹 관리자', { roleTypeCode: 'FA' }, false, null],
+    ['전체 점포 가맹 관리자', { roleTypeCode: 'FA' }, false, [10, 11]],
   ])('%s', (_, over, manageAll, scope) => {
     const caller = callerOf({ ...base, ...over });
     expect(caller.manageAll).toBe(manageAll);

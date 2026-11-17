@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 30 tables (auth · BP · stores · facilities · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-16T04:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T06:50:00Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: prisma-schema
     resource: ../../prisma/schema.prisma
     title: Prisma 스키마 (3팀 48개 + 1팀 30개)
-    last_modified: 2026-11-16T04:00:00Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: team1-raw-schema
     resource: ../../docs/raw/2026-10-12-1팀-schema.sql
     title: 1팀 DDL (front 생성기가 쓴 원본, 3팀 raw 와 같은 자리)
@@ -62,6 +62,10 @@ sources:
     resource: ../../prisma/migrations/20261116112631_team1_facility_document_codes/migration.sql
     title: 시설물 문서 종류 enum → 플랫폼고정 공통코드 FACILITY_DOCUMENT(TEXT · 모양 CHECK)
     last_modified: 2026-11-16T04:00:00Z
+  - id: hq-stores-migration
+    resource: ../../prisma/migrations/20261117150907_team1_hq_stores/migration.sql
+    title: 본사 점포 stores.is_hq(부분 고유 · 직영 CHECK) · BP 상호명 · 사업자정보를 본사 사업자정보로 옮기고 bp_codes 칸 삭제
+    last_modified: 2026-11-17T06:50:00Z
   - id: terms-demo-migration
     resource: ../../prisma/migrations/20261019124121_team1_terms_demo_content/migration.sql
     title: 약관 v1.0 6건 제목 · 본문을 목업 데모 문구로 (출시 전 예외 UPDATE)
@@ -108,13 +112,15 @@ edited by hand to match the migration, not regenerated.
 
 # What Prisma will not carry
 
-65 constraints exist only in the migration SQL — 37 from the initial DDL, one partial
+63 constraints exist only in the migration SQL — 37 from the initial DDL, one partial
 unique index added later, four from the holiday period migration, five from the excel
-download log, seventeen from the facilities and one from the facility document codes (foreign keys not counted; the excel log's three
+download log, seventeen from the facilities, one from the facility document codes and two from
+the 본사 점포 migration, less the four of the initial DDL's that the 본사 점포 migration dropped
+with their `bp_codes` columns (foreign keys not counted; the excel log's three
 and four of the facilities' six are SQL-only too); four CHECKs were
 later widened in place, not added
 (the `schema.prisma` header still counts the initial DDL's
-37).[^team1-migration][^menus-url-unique-migration][^holiday-periods-migration][^facility-company-phone-migration][^facility-document-codes-migration] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
+37).[^team1-migration][^menus-url-unique-migration][^holiday-periods-migration][^facility-company-phone-migration][^facility-document-codes-migration][^hq-stores-migration] `db:pull` drops all of them, so `schema.prisma` will never be the whole truth for these tables —
 the same trap as 3팀's, whose CHECKs live only in their DDL migration.
 
 - **CHECK constraints** (32) — code formats (`^BP[0-9]{6}$`, `^MN[0-9]{6}$`,
@@ -124,7 +130,8 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   uniqueness, and are the ones most easily lost:
   - one platform BP (`bp_codes (is_platform) WHERE is_platform`);
   - 사업자등록번호 unique only among live customer BPs (`WHERE is_platform = false
-    AND is_deleted = false AND account_status_code <> 'WITHDRAWN'`);
+    AND is_deleted = false AND account_status_code <> 'WITHDRAWN'`) — **dropped** by the 본사
+    점포 migration with the column (below); BP numbers are no longer unique in the database;
   - `admin_accounts.email` unique among non-withdrawn accounts, while `login_id`
     is unique **including** withdrawn and deleted rows (a full index) — an id is
     never reissued, an address may be;
@@ -149,8 +156,9 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   `store_business_profiles_biz_ceo_phone_format` went from `^[0-9]{10,11}$` to
   `^[0-9]{9,12}$` (`20261027131104_team1_phone_twelve_digits`, same names, with column
   comments), so every 1팀 연락처 — 회원가입, 내 정보, BP · 플랫폼 관리자, BP · 점포 대표자 —
-  takes the 점포 연락처 range.[^phone-twelve-migration] `bp_codes.biz_ceo_phone` has no
-  CHECK; only its DTO changed. Unlike `stores_phone_format`, 1팀's generator has not carried
+  takes the 점포 연락처 range.[^phone-twelve-migration] `bp_codes.biz_ceo_phone` had no
+  CHECK; only its DTO changed (the column moved to the 본사 점포's `store_business_profiles` on
+  2026-11-17, where `store_business_profiles_biz_ceo_phone_format` now covers the BP number too). Unlike `stores_phone_format`, 1팀's generator has not carried
   these two yet, so the raw DDL and 물리 ERD regenerated on 2026-10-28 still say 10–11 for them.
 - **The holiday link tables became period rows** —
   `20261026135250_team1_bp_holiday_store_periods` gave `holiday_store_mappings` an
@@ -200,6 +208,24 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   foreign key, as for every 공통코드 value column. The one-live-document-per-kind partial unique index
   was rebuilt by the type change with the same name and condition. `GET /enums` lost
   `FacilityDocumentKind`.[^facility-document-codes-migration]
+- **본사 점포 `stores.is_hq`** — `20261117150907_team1_hq_stores` (user decisions 2026-11-17)
+  gives every BP one 본사 점포 and moves the BP's 상호명 and 사업자정보 off `bp_codes` into that
+  store's `store_business_profiles` row (`biz_trade_name` is now the source of the BP name; a new
+  `biz_ceo_email` column is used by 본사 rows only). It creates a 본사 for **every** `bp_codes` row
+  — the platform BP and deleted BPs included, so a deleted BP keeps its name: a deleted BP's 본사
+  is `is_deleted` and `CLOSED`, a withdrawn BP's is `CLOSED`, every other one starts
+  `NOT_OPERATING` (no coordinates yet). The business address is copied into the 본사's own address,
+  each 본사 gets a 「등록」 store history row, and a `DO` block refuses to finish unless every BP
+  has exactly one 본사 whose profile matches the old columns. Two SQL-only constraints are added —
+  the partial unique index `stores_bp_code_id_is_hq_key (bp_code_id) WHERE is_hq AND NOT
+  is_deleted` (one live 본사 per BP) and `stores_is_hq_direct` (a 본사 is `DIRECT`) — and four are
+  dropped: `bp_codes_biz_registration_number_key` and the length CHECKs on `trade_name`,
+  `biz_category` and `biz_item`, which went with their columns. **The database no longer keeps
+  BP 사업자등록번호 unique**: like store numbers, that is now the duplicate check plus the per-number
+  advisory lock in signup and platform BP registration. Reading a BP's name now means joining its
+  본사 (`HQ_PROFILE_SELECT` in `src/bp-codes/hq-profile.ts`, live 본사 first, the deleted one for a
+  deleted BP).[^hq-stores-migration] Not in 1팀's ERD generator in front, and the naming raw doc
+  still lists the `bp_codes` biz columns.
 
 The `'WITHDRAWN'` literal in two of those was a placeholder while the
 `ACCOUNT_STATUS` code value was undecided; the initial-data migration fixes it as
@@ -392,3 +418,4 @@ must be absent, and no lunar holiday may appear after 2050.
 [^holiday-periods-migration]: BP 휴일 대상 · 예외 점포를 기간 행으로(기본키 · 부분 고유 · CHECK)
 [^facility-company-phone-migration]: 시설물 구매처 · A/S센터 전화번호 CHECK 에 대표번호 8자리(15xx · 16xx · 18xx)
 [^facility-document-codes-migration]: 시설물 문서 종류 enum → 플랫폼고정 공통코드 FACILITY_DOCUMENT(TEXT · 모양 CHECK)
+[^hq-stores-migration]: 본사 점포 stores.is_hq(부분 고유 · 직영 CHECK) · BP 상호명 · 사업자정보를 본사 사업자정보로 옮기고 bp_codes 칸 삭제

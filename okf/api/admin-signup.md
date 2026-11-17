@@ -4,12 +4,12 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T02:07:22Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:56:00Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
     title: AdminSignupService (availability, signup transaction, mails)
-    last_modified: 2026-11-13T07:05:00Z
+    last_modified: 2026-11-17T07:56:00Z
   - id: next-bp-code
     resource: ../../src/admin-signup/next-bp-code.ts
     title: nextBpCode — BP code numbering, shared with BP 마스터 등록
@@ -37,7 +37,7 @@ sources:
   - id: business-verification
     resource: ../../src/admin-signup/business-verification.service.ts
     title: BusinessVerificationService (duplicate check — optional self-BP exclusion — NTS verify, verification token)
-    last_modified: 2026-10-29T02:50:08Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: nts-business-client
     resource: ../../src/nts/nts-business.client.ts
     title: NtsBusinessClient (국세청 진위확인 validate)
@@ -52,7 +52,8 @@ sources:
 
 The specification is manyfast F-JVTPSU (screens S-RCJXIG 회원가입 and S-UUBGOD 가입
 완료) and front's `docs/flow/auth-account`. One request creates a customer BP and
-its BP 마스터 together; no store is created.
+its BP 마스터 together; no store the user registers is created (the system's 본사 점포 is —
+see below).
 
 | Route | Purpose |
 |---|---|
@@ -84,9 +85,16 @@ rather than a query string so that it stays out of access logs.
 
 In one transaction the service writes:
 
-- `bp_codes`: the next `BP######`, `ACTIVE`, with `trade_name` as typed. With a
-  `bizVerificationToken`, also `biz_registration_number` · `biz_ceo_name` ·
-  `biz_open_date` from the token and `biz_verified_at` = signup time.
+- `bp_codes`: the next `BP######`, `ACTIVE` — no name or 사업자정보 columns any more.
+- the **본사 점포** (`createHqStore`, `src/stores/hq-store.ts`, since 2026-11-17): a `DIRECT`
+  `stores` row with `is_hq = true` named after the 상호명, its `store_business_profiles` row
+  holding `biz_trade_name` as typed — with a `bizVerificationToken` also
+  `biz_registration_number` · `biz_ceo_name` · `biz_open_date` from the token and
+  `biz_verified_at` = signup time — and a 「등록」 row in `store_change_histories`. Signup has no
+  coordinates, so the 본사 always starts 미운영. It takes the store-code lock
+  (`claimStoreCode`), so a signup queues behind store registrations; it is the last write of the transaction, so that lock is held only right before commit. It is written after the
+  account, so its `created_by` is the new BP 마스터. The 본사 never appears in 점포 관리
+  ([Store management](/api/stores.md)).
 - `admin_accounts`: `role_type_code = BM`, role group `BM000001`, `join_path_code =
   SIGNUP`, `is_all_stores = true`, and the agreed versions and times of both 약관.
 - `terms_agreement_logs`: two rows with `channel = SIGNUP` and the client IP.
@@ -116,11 +124,14 @@ belong to the BP 마스터 마이페이지 and 점포 등록/수정 (2026-10-15 
 
 `POST /auth/signup/business-verifications` runs in this order:
 
-1. **Duplicate check first** (`PL-OCJOFP`). A number used by another customer BP
-   (not the platform BP, not deleted, not `WITHDRAWN`), or by the 사업자정보 of a store
-   that is 미운영 or 운영 and not deleted, is a 409 「이미 등록된 사업자등록번호입니다.」
-   without saying who uses it. 국세청 is not called. The store condition is the same as
-   store registration's (`StoreManagementService.isNumberTaken`): a closed store's
+1. **Duplicate check first** (`PL-OCJOFP`). A number held by the 사업자정보 of a store
+   that is 미운영 or 운영 and not deleted — **the 본사 점포 included, which is where a BP's
+   number lives since 2026-11-17**; platform-BP rows are left out — is a 409 「이미 등록된
+   사업자등록번호입니다.」 without saying who uses it. 국세청 is not called. The BP and store
+   checks used to be two queries; they are now one `store_business_profiles` query: a
+   withdrawn BP's 본사 is 폐점 and a deleted BP's is deleted, so their numbers come free exactly as
+   the old `bp_codes` condition (not deleted, not `WITHDRAWN`) allowed. The condition is the same
+   as store registration's (`StoreManagementService.isNumberTaken`): a closed store's
    number can be reused there, so signup must not block it either.
 2. `NtsBusinessClient.verify` posts `{ businesses: [{ b_no, start_dt, p_nm }] }` to
    `api.odcloud.kr/api/nts-businessman/v1/validate` with a 5-second timeout.
@@ -135,7 +146,8 @@ passes (no BP exists yet to exclude). It exists only for 마이페이지 사업�
 `BpProfileService.requestVerification`) — a BP re-verifying its own already-registered number isn't
 a duplicate of itself, and (2026-10-22 사용자 결정, `PL-OCJOFP`) neither is a number already held by
 a live store that belongs to that same BP (직영 · 가맹 가리지 않는다) — the exclusion drops both that
-BP's own `bp_codes` row and any `store.bpCodeId` match from the dup query.
+BP's own 본사 and any `store.bpCodeId` match from the dup query. Platform BP edit
+([BP masters](/api/bp-masters.md)) passes it too.
 
 Signup takes `bizVerificationToken` and reads the three values **only from the
 token** — the request cannot carry `biz*` fields (unknown fields are a 400). A bad,
@@ -144,9 +156,11 @@ expired or other-purpose token (`typ` `signup` / `access`) is a 400 「사업자
 transaction, after the BP-code advisory lock and the per-number lock store writes take
 (`stores:biz:<number>`), the duplicate check runs again, so two signups racing on the same number cannot both
 pass, and a signup waits for a store save in progress on that number; the loser gets the
-same 409 and no BP is left behind. The other direction is not checked: the store side
-counts only `store_business_profiles`, so a store may take a number a BP already
-holds.
+same 409 and no BP is left behind. Since the BP number moved to the 본사's
+`store_business_profiles` (2026-11-17) both directions are the same query, so a store save
+also sees another BP's number. **This lock plus the re-check is now the only thing keeping BP
+numbers unique** — the migration dropped the `bp_codes_biz_registration_number_key` partial
+unique index with the column, so a path that writes a 본사 number without the lock is unguarded.
 
 **사업자정보 진위확인은 같은 IP 당 1시간에 10건까지만 받는다** (2026-10-15). It spends
 국세청's daily quota and its 409 tells whether a number is registered, so the default
