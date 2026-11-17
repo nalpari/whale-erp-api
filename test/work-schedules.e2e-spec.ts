@@ -835,11 +835,12 @@ describe('근무스케줄 (e2e, DB)', () => {
     });
 
     it('고른 요일의 날마다 저장하고 넣을 수 없는 날은 근무일과 함께 건너뛰며, 알림은 직원마다 하나로 기간 · 건수를 묶는다', async () => {
-      // day(72) ~ day(78) 가운데 day(72) · day(74) 의 요일만 — 다른 시험(지난 주 복사의 day 53~66 등)이 쓰지 않는 날
-      const weekdays = [72, 74].map((n) => addDays(today, n).getUTCDay());
+      // day(88) ~ day(94) 가운데 day(88) · day(90) 의 요일만 — 다른 시험이 쓰지 않는 날(지난 주 복사는 mondayOffset 60~66 기준
+      // 원본 · 넣을 주 · 둘째 주(+14 ~ +20)로 day 53 ~ 86 까지 닿고, day 84 · 100 은 다른 시험이 쓴다)
+      const weekdays = [88, 90].map((n) => addDays(today, n).getUTCDay());
       const res = await asAdmin('post', '/work-schedules/range', {
-        fromDate: day(72),
-        toDate: day(78),
+        fromDate: day(88),
+        toDate: day(94),
         weekdays,
         rows: [line(directId), line(unjoinedId)],
       });
@@ -858,14 +859,14 @@ describe('근무스케줄 (e2e, DB)', () => {
         }[];
       };
       expect(body.created.map((c) => [c.staffMemberId, c.workDate])).toEqual([
-        [directId, day(72)],
-        [directId, day(74)],
+        [directId, day(88)],
+        [directId, day(90)],
       ]);
       expect(
         body.failed.map((f) => [f.index, f.workDate, f.staffMemberId, f.code]),
       ).toEqual([
-        [1, day(72), unjoinedId, 'WORK_SCHEDULE_NOT_JOINED'],
-        [1, day(74), unjoinedId, 'WORK_SCHEDULE_NOT_JOINED'],
+        [1, day(88), unjoinedId, 'WORK_SCHEDULE_NOT_JOINED'],
+        [1, day(90), unjoinedId, 'WORK_SCHEDULE_NOT_JOINED'],
       ]);
       const notices = await prisma.notification.findMany({
         where: {
