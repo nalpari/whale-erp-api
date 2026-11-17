@@ -649,6 +649,23 @@ describe('근무스케줄 (e2e, DB)', () => {
         },
       ],
       [
+        'post',
+        '/work-schedules/range',
+        {
+          fromDate: day(71),
+          toDate: day(71),
+          weekdays: [0, 1, 2, 3, 4, 5, 6],
+          rows: [
+            {
+              staffMemberId: directId,
+              startTime: '09:00',
+              endTime: '10:00',
+              breakMinutes: 0,
+            },
+          ],
+        },
+      ],
+      [
         'get',
         `/work-schedules/copy-last-week?storeId=${directStoreId}&weekStart=${weekStart}`,
       ],
@@ -806,6 +823,86 @@ describe('근무스케줄 (e2e, DB)', () => {
           })
         ).status,
       ).toBe(400);
+    });
+  });
+
+  describe('기간 등록 POST /work-schedules/range (WHALEERP-730)', () => {
+    const line = (staffMemberId: number) => ({
+      staffMemberId,
+      startTime: '09:00',
+      endTime: '13:00',
+      breakMinutes: 0,
+    });
+
+    it('고른 요일의 날마다 저장하고 넣을 수 없는 날은 근무일과 함께 건너뛰며, 알림은 직원마다 하나로 기간 · 건수를 묶는다', async () => {
+      // day(72) ~ day(78) 가운데 day(72) · day(74) 의 요일만 — 다른 시험(지난 주 복사의 day 53~66 등)이 쓰지 않는 날
+      const weekdays = [72, 74].map((n) => addDays(today, n).getUTCDay());
+      const res = await asAdmin('post', '/work-schedules/range', {
+        fromDate: day(72),
+        toDate: day(78),
+        weekdays,
+        rows: [line(directId), line(unjoinedId)],
+      });
+      expect(res.status).toBe(201);
+      const body = res.body as {
+        created: {
+          workScheduleId: number;
+          staffMemberId: number;
+          workDate: string;
+        }[];
+        failed: {
+          index: number;
+          workDate: string;
+          staffMemberId: number;
+          code: string | null;
+        }[];
+      };
+      expect(body.created.map((c) => [c.staffMemberId, c.workDate])).toEqual([
+        [directId, day(72)],
+        [directId, day(74)],
+      ]);
+      expect(
+        body.failed.map((f) => [f.index, f.workDate, f.staffMemberId, f.code]),
+      ).toEqual([
+        [1, day(72), unjoinedId, 'WORK_SCHEDULE_NOT_JOINED'],
+        [1, day(74), unjoinedId, 'WORK_SCHEDULE_NOT_JOINED'],
+      ]);
+      const notices = await prisma.notification.findMany({
+        where: {
+          relatedType: 'WORK_SCHEDULE',
+          relatedId: { in: body.created.map((c) => c.workScheduleId) },
+        },
+      });
+      expect(notices).toHaveLength(1);
+      expect(notices[0].body).toMatch(/~.* 근무 2건 추가/);
+    });
+
+    it('종료일이 앞서거나 92일을 넘거나 고른 요일의 날이 없으면 400 이고 아무것도 저장하지 않는다', async () => {
+      const before = await prisma.workSchedule.count({
+        where: { staffMemberId: directId },
+      });
+      const weekdayOf59 = addDays(today, 59).getUTCDay();
+      for (const payload of [
+        { fromDate: day(59), toDate: day(58), weekdays: [0, 1, 2, 3, 4, 5, 6] },
+        { fromDate: day(59), toDate: day(151), weekdays: [1] },
+        {
+          fromDate: day(59),
+          toDate: day(59),
+          weekdays: [(weekdayOf59 + 1) % 7],
+        },
+        { fromDate: day(59), toDate: day(60), weekdays: [] },
+      ])
+        expect(
+          (
+            await asAdmin('post', '/work-schedules/range', {
+              ...payload,
+              rows: [line(directId)],
+            })
+          ).status,
+        ).toBe(400);
+      expect(
+        await prisma.workSchedule.count({ where: { staffMemberId: directId } }),
+      ).toBe(before);
     });
   });
 

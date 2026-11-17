@@ -4,12 +4,12 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
 tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T01:27:06Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-17T01:27:06Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
@@ -21,11 +21,11 @@ sources:
   - id: controller
     resource: ../../src/work-schedules/work-schedules.controller.ts
     title: /work-schedules
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-17T01:27:06Z
   - id: notice
     resource: ../../src/work-schedules/work-schedule-notice.ts
     title: 저장 알림 — 직원 알림 · 앱 푸시 발송 대기(#201)
-    last_modified: 2026-10-30T00:40:00Z
+    last_modified: 2026-11-17T01:27:06Z
   - id: purge
     resource: ../../src/work-schedules/work-schedule-purge.ts
     title: 3년 보존 뒤 파기 배치 work-schedule-purge(#609)
@@ -48,6 +48,7 @@ sources:
 | `GET /work-schedules/assignable-staff?storeId=&workDate=` | create | 그 근무일에 받을 수 있는 직원(아래), 이름순 `{ items: { staffMemberId, name, phoneLast4, jobTitle }[] }` |
 | `GET /work-schedules/defaults?staffMemberId=&workDate=` | create or update | 근무일을 덮는 계약의 그 요일 `contract_work_days` → `{ startTime, endTime, breakMinutes }`, 계약 근무일이 아니면 셋 다 null |
 | `POST /work-schedules/bulk` | create | 일괄 등록(#199) `{ workDate, rows[1~100] }` → `{ created, failed[{ index, staffMemberId, statusCode, code, message }] }`, 아래 「Bulk」 |
+| `POST /work-schedules/range` | create | 기간 등록(WHALEERP-730) `{ fromDate, toDate, weekdays[0~6], rows[1~100] }` → `{ created, failed[{ index, workDate, staffMemberId, statusCode, code, message }] }`, 아래 「Range」 |
 | `GET · POST /work-schedules/copy-last-week` | create | 지난 주 복사 미리보기 · 복사(#200 · #204), 아래 「Copy last week」 |
 | `POST /work-schedules` | create | `{ staffMemberId, workDate, startTime, endTime, breakMinutes }` → 201 근무스케줄 |
 | `PATCH /work-schedules/:id` | update | 근무일 · 시각 · 휴게를 모두 다시 보낸다. 직원은 못 바꾼다 |
@@ -109,6 +110,16 @@ every route — they all go through `scopeOf` — before the scope is read. 직�
 - 줄 순서대로 저장하므로 같은 직원의 겹치는 두 줄은 뒤 줄이 409 다. 겹치지 않으면 쪼갠 근무로 둘 다 저장한다.
 - 알림은 다 저장한 뒤 바뀐 직원마다 한 번이다 — 같은 직원의 여러 줄은 알림 하나에 「…, …」로 묶는다(#201). 알림이 실패해도 저장은 되돌리지 않고 `work schedule notice FAILED` 로그만.
 
+# Range
+
+`POST /work-schedules/range` 는 시작일 ~ 종료일 가운데 고른 요일마다 직원별 줄(일괄 등록과 같은 모양, 1명이면 한 줄)로 한 건씩 만든다(WHALEERP-730, 2026-11-17 재영 — 근무일을 하루씩 넣으면 반복이 많고 저장마다 알림 메일이 따로 갔다).[^service]
+
+- 기간은 최대 92일(`RANGE_MAX_DAYS`), 요일은 0(일) ~ 6(토) 1~7개. 휴일(BP 휴일 · 공휴일)도 기간에 든다 — 쉬는 날은 관리자가 요일로 뺀다.
+- 종료일이 앞서거나 92일을 넘거나 고른 요일의 날이 없거나, 날 수 × 줄 수가 1000건(`RANGE_MAX_ITEMS`, 한 요청이 너무 오래 걸리지 않게)을 넘으면 400 — 아무것도 저장하지 않는다.
+- BP 를 고르지 않았으면 기간을 보기 전에 400(다른 경로와 같다). 걸린 시간은 `work schedule range … in Nms` 로그로 남긴다 — 한 건마다 트랜잭션이라 1000건이면 수십 초가 걸릴 수 있다(상한을 실제 시간으로 맞출 때 본다).
+- 저장은 일괄 등록과 같은 `insertEach` 다 — 한 건마다 따로, 근무일 순 · 줄 순. 넣을 수 없는 날(계약 없음 · 가입 전 · 퇴직일 뒤 · 겹침 등)은 건너뛰어 `failed` 에 그 근무일(`workDate`)과 함께 넣고 나머지는 저장한다.
+- 알림은 다 저장한 뒤 직원마다 한 번이고, 하나하나 적지 않고 「11월 17일(화)~11월 21일(토) 근무 3건 추가」로 묶는다(`rangeText` — 그 직원에게 실제로 생긴 첫 날 ~ 마지막 날, 하루뿐이면 날짜 하나). 메일도 직원마다 한 통, 기다리지 않는다.
+
 # Copy last week
 
 `GET /work-schedules/copy-last-week?storeId=&weekStart=` 는 미리보기(쓰지 않음), `POST` 같은 경로 `{ storeId, weekStart }` 는 복사다(#200, STAFF-13).[^service]
@@ -127,7 +138,7 @@ every route — they all go through `scopeOf` — before the scope is read. 직�
 
 등록 · 수정 · 삭제가 저장 트랜잭션 안에서 `noticeScheduleChange` 를 부른다 — 템플릿 `PUSH_SCHEDULE_CHANGED`(근무스케줄 변경, 수신 설정 묶음 `SCHEDULE`)로 직원 알림(`notification_target = STAFF`, `related_type = WORK_SCHEDULE`, `related_id` = 근무스케줄) · 받는 사람 하나 · 앱 푸시 발송 대기(`notification_deliveries`, `sent_at` 빈 행) 하나.[^notice]
 
-- `#{변경내용}`: 등록 「10월 21일(수) 09:00~18:00 추가」, 삭제 「… 삭제」, 수정 「전 → 후」(근무일이 같으면 뒤 날짜를 뺀다), 시각이 같고 휴게만 바뀌면 「… 09:00~13:00 휴게 30분 → 60분」, 시각과 휴게가 함께 바뀌면 시각 변화만(Q7, 2026-10-21 재영). 자정을 넘으면 「22:00~익일 02:00」, 24:00 에 끝나면 「18:00~24:00」.
+- `#{변경내용}`: 등록 「10월 21일(수) 09:00~18:00 추가」, 삭제 「… 삭제」, 수정 「전 → 후」(근무일이 같으면 뒤 날짜를 뺀다), 시각이 같고 휴게만 바뀌면 「… 09:00~13:00 휴게 30분 → 60분」, 시각과 휴게가 함께 바뀌면 시각 변화만(Q7, 2026-10-21 재영). 자정을 넘으면 「22:00~익일 02:00」, 24:00 에 끝나면 「18:00~24:00」. 기간 등록은 직원마다 「11월 17일(화)~11월 21일(토) 근무 3건 추가」로 묶는다(`rangeText`, WHALEERP-730) — 그 직원에게 한 건만 생겼으면 한 건 등록 문구(시각까지)다.
 - 템플릿의 수신 설정 묶음(`preference_category`, 기본 근무스케줄 — 운영자가 바꿀 수 있다)을 끈 계정은 알림함 줄만 남고 발송 대기가 없다(NTF-14). 시간과 관계없이 곧바로다 — 근무시간 외 보류 규칙은 없다.
 - 시작 · 종료 · 휴게가 모두 같은 수정은 알리지 않는다(변경 이력은 남는다, api #106 리뷰).
 - 퇴직 처리가 퇴직일 뒤 근무스케줄을 지울 때는 부르지 않는다(PAY-14, 결정 6 — `retirement.service.ts` 는 이 함수를 모른다).
@@ -140,7 +151,7 @@ every route — they all go through `scopeOf` — before the scope is read. 직�
 
 - 템플릿 `EMAIL_SCHEDULE_CHANGED`(근무스케줄 변경 메일, `20261030142820`). 본문은 `PUSH_SCHEDULE_CHANGED` 와 같은 문장이고 제목은 「[WHALE ERP] 근무스케줄 변경」, 변수는 근무지 · 변경내용 · 링크(버튼 — `STAFF_APP_URL` origin + `/work`, 직원 근무 앱 근무 탭).
 - `noticeScheduleChange` 는 앱 푸시 발송 대기를 만들었을 때만 보낼 메일(받는 사람 행 · 계정 이메일 · 변수)을 돌려준다. 그래서 알림이 없는 경우(퇴직 · 계정 없음 · 탈퇴 · 템플릿 문제 · 바뀐 것 없음)와 수신 설정 묶음을 끈 계정에는 메일도 없다. 메일 템플릿에는 묶음을 둘 수 없어(CHECK `notification_templates_preference_category_push_only`) 앱 푸시의 판정을 따른다.
-- 메일은 커밋 뒤에 보낸다(`sendScheduleMail`) — 등록 · 수정 · 삭제 · 일괄 등록(직원마다 한 통) · 지난 주 복사(직원마다 한 통). 롤백된 저장의 메일은 나가지 않는다. 요청 안에서 차례로 보내므로 복사 인원이 많으면 응답이 그만큼 늦다.
+- 메일은 커밋 뒤에 보낸다(`sendScheduleMail`) — 등록 · 수정 · 삭제 · 일괄 등록 · 기간 등록 · 지난 주 복사(뒤 셋은 직원마다 한 통). 롤백된 저장의 메일은 나가지 않는다. 한 건 등록 · 수정 · 삭제는 보낸 뒤 응답하고, 일괄 · 기간 등록 · 지난 주 복사는 기다리지 않고 응답한다(차례로 보내는 동안 화면이 시간 초과로 실패를 보이지 않게).
 - 메일 실패는 저장을 막지 않는다. 메일 설정(`MAIL_*`) · `STAFF_APP_URL` 이 없으면 보내지 않고 `work schedule mail SKIPPED` 로그만(알림함 줄은 남는다).
 - 이력: `notification_deliveries` 에 channel `EMAIL` 한 행 — 보냈으면 `sent_at` · `SUCCEEDED`, SMTP 실패면 `FAILED`(`sent_at` 없음). 보내기 전에 막힌 것(템플릿 꺼짐 · 주소 형식)은 행 없이 로그만. 메일 원문 이력 `mail_send_logs` 는 MailService 가 남긴다.
 

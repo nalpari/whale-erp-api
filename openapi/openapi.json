@@ -1790,7 +1790,7 @@
             "bearer": []
           }
         ],
-        "summary": "발송 이력 영역 — 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청(재발송 포함)의 결과 · 실패 사유 · 재시도 가능 여부, 최근 순\n(WHALEERP-136). 근로계약 관리 조회 권한",
+        "summary": "발송 이력 영역 — 근로계약이 보낸 가입 초대 · 소속 추가 확인 요청 · 서명 요청(재발송 포함)의 결과 · 실패 사유 · 재시도 가능 여부, 최근 순\n(WHALEERP-136). 근로계약 관리 조회 권한",
         "tags": [
           "StaffMemberSummary"
         ]
@@ -15653,6 +15653,62 @@
         ]
       }
     },
+    "/work-schedules/range": {
+      "post": {
+        "operationId": "WorkSchedulesController_rangeCreate",
+        "parameters": [
+          {
+            "name": "X-Bp-Code-Id",
+            "in": "header",
+            "description": "대상 BP(bpCodeId). WHALE_ERP 메뉴 경로에서만 읽는다 — 없으면 소속 BP. 플랫폼 계정은 없는 BP · 플랫폼 BP 면 404, BP · 가맹 계정은 소속 BP 가 아니면 403",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RangeCreateWorkSchedulesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RangeCreateWorkSchedulesResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "요청 형식 오류(날짜 · 요일 · 줄 수 1~100 · 줄의 시각 형식) · 종료일이 시작일보다 앞섬 · 기간 92일 초과 · 고른 요일의 날이 없음 · 날 수 × 줄 수 1000건 초과 — 이때는 아무것도 저장하지 않는다 · 플랫폼 계정의 X-Bp-Code-Id 누락"
+          },
+          "403": {
+            "description": "근무스케줄 관리 권한 없음 · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · BP · 가맹 계정의 다른 BP · 형식이 틀린 헤더"
+          },
+          "404": {
+            "description": "플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "기간 등록(WHALEERP-730) — 시작일 ~ 종료일(최대 92일) 가운데 고른 요일마다 직원별 줄로 한 건씩. 넣을 수 없는 날은 건너뛰어\n`failed` 로 돌려주고 나머지는 저장한다. 알림은 직원마다 한 번(기간 · 건수)",
+        "tags": [
+          "WorkSchedules"
+        ]
+      }
+    },
     "/work-schedules/copy-last-week": {
       "get": {
         "operationId": "WorkSchedulesController_copyPreview",
@@ -20715,6 +20771,7 @@
         "enum": [
           "SIGNUP_INVITE",
           "AFFILIATION_REQUEST",
+          "CONTRACT_SENT",
           "PASSWORD_RESET"
         ]
       },
@@ -20756,7 +20813,7 @@
           },
           "isResend": {
             "type": "boolean",
-            "description": "같은 계약으로 앞서 직원에게 나갔을 수 있는 발송(성공 · 접수 여부 모름)이 있었다 — 재발송 · 고쳐 다시 보냄. 계약 재발송 횟수와는 다를 수 있다. 비밀번호 초기화 메일(PASSWORD_RESET)은 늘 false"
+            "description": "같은 계약으로 앞서 직원에게 나갔을 수 있는 발송(성공 · 접수 여부 모름)이 있었다 — 재발송 · 고쳐 다시 보냄. 종류는 가리지 않는다(가입 초대 뒤의 서명 요청도 재발송). 계약 재발송 횟수와는 다를 수 있다. 비밀번호 초기화 메일(PASSWORD_RESET)은 늘 false"
           },
           "failureReason": {
             "type": "string",
@@ -20766,7 +20823,7 @@
           "retryable": {
             "type": "boolean",
             "nullable": true,
-            "description": "다시 보내도 되는가 — 확실히 나가지 않은 실패만 true, 접수 여부 모름은 false. 성공이면 null. 비밀번호 초기화 메일(PASSWORD_RESET)은 늘 null"
+            "description": "다시 보내도 되는가 — 확실히 나가지 않은 실패만 true, 접수 여부 모름은 false. 성공이면 null. 비밀번호 초기화 메일(PASSWORD_RESET) · 서명 요청(CONTRACT_SENT — 알림톡이 실패해도 앱 알림함으로 받았다)은 늘 null"
           },
           "sentAt": {
             "format": "date-time",
@@ -34048,6 +34105,111 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/BulkWorkScheduleFailureDto"
+            }
+          }
+        },
+        "required": [
+          "created",
+          "failed"
+        ]
+      },
+      "RangeCreateWorkSchedulesDto": {
+        "type": "object",
+        "properties": {
+          "weekdays": {
+            "description": "넣을 요일 — 0(일) ~ 6(토), 1~7개",
+            "minItems": 1,
+            "maxItems": 7,
+            "example": [
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "type": "array",
+            "items": {
+              "type": "number",
+              "maximum": 6,
+              "minimum": 0
+            }
+          },
+          "fromDate": {
+            "type": "string",
+            "description": "시작일 YYYY-MM-DD"
+          },
+          "toDate": {
+            "type": "string",
+            "description": "종료일 YYYY-MM-DD — 시작일과 같거나 뒤, 시작일부터 92일 안"
+          },
+          "rows": {
+            "description": "직원별 줄. 1~100줄. 같은 직원이 여러 줄이면 쪼갠 근무다",
+            "minItems": 1,
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkWorkScheduleRowDto"
+            }
+          }
+        },
+        "required": [
+          "weekdays",
+          "fromDate",
+          "toDate",
+          "rows"
+        ]
+      },
+      "RangeWorkScheduleFailureDto": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "number",
+            "description": "요청 rows 의 순번(0부터)"
+          },
+          "staffMemberId": {
+            "type": "number"
+          },
+          "statusCode": {
+            "type": "number",
+            "description": "한 건 등록이면 받았을 HTTP 상태 — 400 · 404 · 409, 예상 못 한 저장 오류는 500(code WORK_SCHEDULE_SAVE_FAILED)"
+          },
+          "code": {
+            "type": "string",
+            "nullable": true,
+            "description": "WORK_SCHEDULE_NO_CONTRACT · WORK_SCHEDULE_NOT_JOINED · WORK_SCHEDULE_AFTER_RETIREMENT · WORK_SCHEDULE_OVERLAP 등. 없으면 null"
+          },
+          "message": {
+            "type": "string"
+          },
+          "workDate": {
+            "type": "string",
+            "description": "넣지 못한 근무일 YYYY-MM-DD"
+          }
+        },
+        "required": [
+          "index",
+          "staffMemberId",
+          "statusCode",
+          "code",
+          "message",
+          "workDate"
+        ]
+      },
+      "RangeCreateWorkSchedulesResponseDto": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "description": "저장한 근무스케줄(근무일 · 줄 순서)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkScheduleDto"
+            }
+          },
+          "failed": {
+            "description": "건너뛴 근무일 · 줄(근무일 · 줄 순서)",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RangeWorkScheduleFailureDto"
             }
           }
         },

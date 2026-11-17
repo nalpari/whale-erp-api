@@ -40,10 +40,15 @@ import {
   CopyLastWeekResponseDto,
   CopyLastWeekStaffDto,
   BulkCreateWorkSchedulesResponseDto,
-  BulkWorkScheduleFailureDto,
+  BulkWorkScheduleRowDto,
   CreateWorkScheduleDto,
   ListWorkScheduleHistoriesQueryDto,
   MyWorkScheduleListResponseDto,
+  RANGE_MAX_DAYS,
+  RANGE_MAX_ITEMS,
+  RangeCreateWorkSchedulesDto,
+  RangeCreateWorkSchedulesResponseDto,
+  RangeWorkScheduleFailureDto,
   UpdateWorkScheduleDto,
   WorkScheduleDefaultsDto,
   WorkScheduleDeleteResponseDto,
@@ -669,11 +674,105 @@ export class WorkSchedulesService {
     bp?: TargetBpContext,
   ): Promise<BulkCreateWorkSchedulesResponseDto> {
     const scope = await this.scopeOf(adminAccountId, bp);
+    const { created, failed } = await this.insertEach(
+      scope,
+      adminAccountId,
+      dto.rows.map((line, index) => ({
+        index,
+        workDate: dto.workDate,
+        line,
+      })),
+      'bulk',
+    );
+    await this.noticeEach(created, false);
+    return {
+      created: created.map(toDto),
+      // 일괄 등록은 근무일이 하나라 실패에 근무일을 싣지 않는다(응답 모양 그대로)
+      failed: failed.map((f) => ({
+        index: f.index,
+        staffMemberId: f.staffMemberId,
+        statusCode: f.statusCode,
+        code: f.code,
+        message: f.message,
+      })),
+    };
+  }
+
+  /**
+   * 기간 등록(WHALEERP-730, 2026-11-17 재영). 시작일 ~ 종료일(최대 92일) 가운데 고른 요일마다 줄의 시각 · 휴게로 한 건씩 만든다 —
+   * 일괄 등록과 같이 한 건마다 따로 저장해, 넣을 수 없는 날(계약 없음 · 퇴직일 뒤 · 겹침 등)은 건너뛰고 나머지는 저장한다.
+   * 휴일(BP 휴일 · 공휴일)도 기간에 든다 — 쉬는 날은 관리자가 요일로 뺀다. 알림은 다 저장한 뒤 직원마다 한 번, 기간과 건수로
+   * 묶는다(rangeText). 근무일 순 · 줄 순으로 저장한다.
+   */
+  async rangeCreate(
+    adminAccountId: number,
+    dto: RangeCreateWorkSchedulesDto,
+    bp?: TargetBpContext,
+  ): Promise<RangeCreateWorkSchedulesResponseDto> {
+    // 범위(BP)를 먼저 본다 — 다른 경로처럼 BP 를 고르지 않았으면 기간을 보기 전에 400
+    const scope = await this.scopeOf(adminAccountId, bp);
+    const from = toDate(dto.fromDate);
+    const to = toDate(dto.toDate);
+    const days = Math.round((to.getTime() - from.getTime()) / DAY_MS) + 1;
+    if (days < 1)
+      throw new BadRequestException('종료일이 시작일보다 앞섭니다.');
+    if (days > RANGE_MAX_DAYS)
+      throw new BadRequestException(
+        `기간은 최대 ${RANGE_MAX_DAYS}일까지 정할 수 있습니다.`,
+      );
+    const weekdays = new Set(dto.weekdays);
+    const dates: string[] = [];
+    for (let d = 0; d < days; d++) {
+      const day = new Date(from.getTime() + d * DAY_MS);
+      if (weekdays.has(day.getUTCDay()))
+        dates.push(day.toISOString().slice(0, 10));
+    }
+    if (dates.length === 0)
+      throw new BadRequestException(
+        '기간 안에 고른 요일에 해당하는 날이 없습니다.',
+      );
+    if (dates.length * dto.rows.length > RANGE_MAX_ITEMS)
+      throw new BadRequestException(
+        `한 번에 근무스케줄 ${RANGE_MAX_ITEMS}건까지 등록할 수 있습니다(날 ${dates.length}일 × 줄 ${dto.rows.length}개). 기간이나 직원을 나눠 주세요.`,
+      );
+    const started = Date.now();
+    const { created, failed } = await this.insertEach(
+      scope,
+      adminAccountId,
+      dates.flatMap((workDate) =>
+        dto.rows.map((line, index) => ({ index, workDate, line })),
+      ),
+      'range',
+    );
+    await this.noticeEach(created, true);
+    // 한 건마다 트랜잭션이라 건수가 많으면 오래 걸린다 — 상한(RANGE_MAX_ITEMS)을 맞추려고 걸린 시간을 남긴다
+    this.logger.log(
+      `work schedule range ${dates.length} days x ${dto.rows.length} rows: created ${created.length}, failed ${failed.length} in ${Date.now() - started}ms`,
+    );
+    return { created: created.map(toDto), failed };
+  }
+
+  /**
+   * 일괄 · 기간 등록의 저장. 한 건마다 한 건 등록과 같은 규칙 · 같은 트랜잭션으로 따로 저장한다 — 한 건이 실패해도 앞뒤는
+   * 그대로 두고 실패를 모은다. 예상 못 한 오류도 그 건의 실패(500)로 남기고 계속하므로 created · failed 가 저장 결과를 그대로
+   * 보인다(커밋 뒤 응답 전에 끊기면 화면은 모른다 — 다시 불러 확인한다). 차례대로 저장하므로 같은 직원의 겹치는 두 건은 뒤 건이
+   * 409 로 실패한다.
+   */
+  private async insertEach(
+    scope: Scope,
+    adminAccountId: number,
+    items: { index: number; workDate: string; line: BulkWorkScheduleRowDto }[],
+    /** 로그에 남길 경로 — 일괄 · 기간 등록을 가른다 */
+    via: 'bulk' | 'range',
+  ): Promise<{
+    created: ScheduleRow[];
+    failed: RangeWorkScheduleFailureDto[];
+  }> {
     const created: ScheduleRow[] = [];
-    const failed: BulkWorkScheduleFailureDto[] = [];
-    for (const [index, line] of dto.rows.entries()) {
+    const failed: RangeWorkScheduleFailureDto[] = [];
+    for (const { index, workDate, line } of items) {
       try {
-        const { date, span } = spanOf({ ...line, workDate: dto.workDate });
+        const { date, span } = spanOf({ ...line, workDate });
         created.push(
           await this.save((tx) =>
             this.insert(tx, scope, adminAccountId, {
@@ -685,14 +784,15 @@ export class WorkSchedulesService {
           ),
         );
       } catch (error) {
-        // 업무 규칙(400 · 404 · 409)이 아닌 오류(트랜잭션 시간 초과 · 연결 등)도 그 줄의 실패로 남기고 다음 줄로 간다 —
-        // 던지면 앞 줄은 저장됐는데 알림이 빠지고 화면은 500 만 받아, 다시 보내면 저장된 줄이 겹침 409 로 보인다(api 리뷰)
+        // 업무 규칙(400 · 404 · 409)이 아닌 오류(트랜잭션 시간 초과 · 연결 등)도 그 건의 실패로 남기고 다음으로 간다 —
+        // 던지면 앞 건은 저장됐는데 알림이 빠지고 화면은 500 만 받아, 다시 보내면 저장된 건이 겹침 409 로 보인다(api 리뷰)
         if (!(error instanceof HttpException)) {
           this.logger.error(
-            `work schedule bulk row ${index} FAILED staffMember ${line.staffMemberId}: ${error instanceof Error ? error.message : String(error)}`,
+            `work schedule ${via} row ${index} ${workDate} FAILED staffMember ${line.staffMemberId}: ${error instanceof Error ? error.message : String(error)}`,
           );
           failed.push({
             index,
+            workDate,
             staffMemberId: line.staffMemberId,
             statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
             code: 'WORK_SCHEDULE_SAVE_FAILED',
@@ -702,6 +802,7 @@ export class WorkSchedulesService {
         }
         failed.push({
           index,
+          workDate,
           staffMemberId: line.staffMemberId,
           statusCode: error.getStatus(),
           code: codeOf(error),
@@ -709,15 +810,24 @@ export class WorkSchedulesService {
         });
       }
     }
+    return { created, failed };
+  }
 
-    // 직원마다 한 번. 근무스케줄은 이미 저장됐으니 알림이 실패해도 저장을 되돌리지 않는다 — 로그만 남긴다
+  /**
+   * 일괄 · 기간 등록 뒤 알림 — 직원마다 한 번(같은 직원의 여러 건은 한 알림에 묶는다, #201). 기간 등록이면 기간 · 건수로 적는다.
+   * 근무스케줄은 이미 저장됐으니 알림이 실패해도 저장을 되돌리지 않는다 — 로그만 남긴다. 메일은 기다리지 않는다(최대 수십 명이면
+   * SMTP 를 차례로 기다리는 동안 화면이 시간 초과로 실패를 보인다 — 다시 보내면 겹침 409, 지난 주 복사와 같다).
+   */
+  private async noticeEach(
+    created: ScheduleRow[],
+    range: boolean,
+  ): Promise<void> {
     const byStaff = new Map<number, ScheduleRow[]>();
     for (const row of created)
       byStaff.set(row.staffMemberId, [
         ...(byStaff.get(row.staffMemberId) ?? []),
         row,
       ]);
-    // 커밋 뒤에 보낼 메일 — 직원마다 한 통
     const mails: (ScheduleMail | null)[] = [];
     for (const [staffMemberId, rows] of byStaff) {
       try {
@@ -726,6 +836,7 @@ export class WorkSchedulesService {
             staffMemberId,
             workScheduleId: rows[0].workScheduleId,
             changes: rows.map((after) => ({ kind: 'CREATED', after })),
+            range,
           }),
         );
         mails.push(mail);
@@ -735,10 +846,7 @@ export class WorkSchedulesService {
         );
       }
     }
-    // 최대 100줄 · 직원 수십 명이면 SMTP 를 차례로 기다리는 동안 화면이 시간 초과로 실패를 보인다(다시 보내면 겹침 409) —
-    // 지난 주 복사와 같이 기다리지 않는다(던지지 않는다)
     void this.mailAfterCommit(mails);
-    return { created: created.map(toDto), failed };
   }
 
   /**

@@ -43,6 +43,8 @@ import {
   CreateWorkScheduleDto,
   ListWorkScheduleHistoriesQueryDto,
   ListWorkSchedulesQueryDto,
+  RangeCreateWorkSchedulesDto,
+  RangeCreateWorkSchedulesResponseDto,
   UpdateWorkScheduleDto,
   WorkScheduleDefaultsDto,
   WorkScheduleDefaultsQueryDto,
@@ -216,6 +218,24 @@ export class WorkSchedulesController {
     @TargetBp() bp: TargetBpContext,
   ): Promise<BulkCreateWorkSchedulesResponseDto> {
     return this.schedules.bulkCreate(user.id, body, bp);
+  }
+
+  /**
+   * 기간 등록(WHALEERP-730) — 시작일 ~ 종료일(최대 92일) 가운데 고른 요일마다 직원별 줄로 한 건씩. 넣을 수 없는 날은 건너뛰어
+   * `failed` 로 돌려주고 나머지는 저장한다. 알림은 직원마다 한 번(기간 · 건수)
+   */
+  @Post('range')
+  @MenuPermission('create')
+  @ApiCreatedResponse({ type: RangeCreateWorkSchedulesResponseDto })
+  @ApiBadRequestResponse({
+    description: `요청 형식 오류(날짜 · 요일 · 줄 수 1~100 · 줄의 시각 형식) · 종료일이 시작일보다 앞섬 · 기간 92일 초과 · 고른 요일의 날이 없음 · 날 수 × 줄 수 1000건 초과 — 이때는 아무것도 저장하지 않는다 · ${BP_MISSING_DESCRIPTION}`,
+  })
+  rangeCreate(
+    @Body() body: RangeCreateWorkSchedulesDto,
+    @CurrentUser() user: AuthUser,
+    @TargetBp() bp: TargetBpContext,
+  ): Promise<RangeCreateWorkSchedulesResponseDto> {
+    return this.schedules.rangeCreate(user.id, body, bp);
   }
 
   /** 지난 주 복사 미리보기(#204) — 쓰지 않는다. 넣을 주가 비어 있지 않으면 409 */
