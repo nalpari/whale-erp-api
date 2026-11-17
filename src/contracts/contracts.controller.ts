@@ -173,7 +173,7 @@ export class ContractsController {
     return this.contracts.list(user.id, query, bp);
   }
 
-  /** 작성 · 이어 쓰기의 근무지 선택지. 업무 범위(플랫폼 계정은 탭 BP) 안에서 지우지 않았고 폐점이 아닌 점포, 이름순. 작성 또는 수정 권한. */
+  /** 작성 · 이어 쓰기의 근무지 선택지. 업무 범위(플랫폼 계정은 탭 BP) 안에서 지우지 않은 운영 중 점포(미운영 · 폐점 빼고, WHALEERP-722), 이름순. 작성 또는 수정 권한. */
   // 가드가 대상 BP 를 정하는 근로계약 경로라 여기 둔다 — 메뉴 권한 없는 /stores/options 는 탭 BP 를 못 받았다(WHALEERP-638).
   // `:contractId` 보다 먼저 둔다.
   @Get('store-options')
@@ -203,7 +203,7 @@ export class ContractsController {
     description: `근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 작성 중 계약은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
   })
   @ApiBadRequestResponse({
-    description: `입력 오류 · 만 19세 미만 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기 · ${BP_MISSING_DESCRIPTION}`,
+    description: `입력 오류 · 만 19세 미만 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기 · 미운영 근무지 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
     description: `근무지 점포가 없거나 폐점이거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
@@ -243,7 +243,7 @@ export class ContractsController {
     description: `근로계약 관리 작성 권한 없음 · 대체하는데 권한 없음(진행 중 계약은 수정, 작성 중 계약은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · ${BP_FORBIDDEN_DESCRIPTION}`,
   })
   @ApiBadRequestResponse({
-    description: `입력 오류 · 만 19세 미만 · 근로계약서 서명본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄 · ${BP_MISSING_DESCRIPTION}`,
+    description: `입력 오류 · 만 19세 미만 · 근로계약서 서명본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄 · 미운영 근무지 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
     description: `근무지 점포가 없거나 폐점이거나 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
@@ -309,7 +309,7 @@ export class ContractsController {
   @MenuPermission(['create', 'update'])
   @ApiOkResponse({ type: CreatedContractResponseDto })
   @ApiBadRequestResponse({
-    description: `입력 오류 · 만 19세 미만 · 수정 요청인데 임시저장 · 근무지 변경 · 가입한 직원의 번호 변경 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기 · ${BP_MISSING_DESCRIPTION}`,
+    description: `입력 오류 · 만 19세 미만 · 수정 요청인데 임시저장 · 근무지 변경 · 가입한 직원의 번호 변경 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 종이 계약 등록이 아닌데 잘못 올린 계약 바로잡기 · 미운영 근무지로 옮김 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
     description: `없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
@@ -384,7 +384,7 @@ export class ContractsController {
   @ApiBody(PAPER_BODY)
   @ApiOkResponse({ type: CreatedContractResponseDto })
   @ApiBadRequestResponse({
-    description: `입력 오류 · 만 19세 미만 · 근로계약서 서명본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄 · ${BP_MISSING_DESCRIPTION}`,
+    description: `입력 오류 · 만 19세 미만 · 근로계약서 서명본 없음 · 파일 종류 · 크기 · 개수 · 재계약 시작일이 직전 계약 시작일 다음 날보다 이름 · 잘못 올린 계약 바로잡기를 재계약과 함께 보냄 · 미운영 근무지로 옮김 · ${BP_MISSING_DESCRIPTION}`,
   })
   @ApiNotFoundResponse({
     description: `없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖 · ${BP_NOT_FOUND_DESCRIPTION}`,
