@@ -112,7 +112,7 @@ describe('ContractsService.create', () => {
       store: {
         findFirst: jest
           .fn<Promise<unknown>, [Prisma.StoreFindFirstArgs]>()
-          .mockResolvedValue({ storeId: 11 }),
+          .mockResolvedValue({ storeStatusCode: 'OPERATING' }),
       },
       account: {
         findMany: jest
@@ -752,7 +752,7 @@ describe('ContractsService.create', () => {
         isDeleted: false,
         storeStatusCode: { not: 'CLOSED' },
       },
-      select: { storeId: true },
+      select: { storeStatusCode: true },
     });
   });
 
@@ -769,6 +769,29 @@ describe('ContractsService.create', () => {
       undefined,
     );
     expect(prisma.staffMember.create).not.toHaveBeenCalled();
+  });
+
+  // WHALEERP-722 — 새 계약은 운영 중 점포에만. 범위를 본 뒤에 알린다(범위 밖 점포의 상태가 새지 않게).
+  it('미운영 점포면 400 — 직원 레코드를 만들지 않는다', async () => {
+    prisma.store.findFirst.mockResolvedValue({
+      storeStatusCode: 'NOT_OPERATING',
+    });
+
+    const run = service.create(dto(), 1);
+    await expect(run).rejects.toThrow(BadRequestException);
+    await expect(run).rejects.toThrow(
+      '운영 중인 점포만 근무지로 고를 수 있습니다.',
+    );
+    expect(prisma.staffMember.create).not.toHaveBeenCalled();
+  });
+
+  it('업무 범위 밖 미운영 점포면 운영 여부가 아니라 404', async () => {
+    prisma.store.findFirst.mockResolvedValue({
+      storeStatusCode: 'NOT_OPERATING',
+    });
+    scope.canManageStaffAt.mockResolvedValue(false);
+
+    await expect(service.create(dto(), 5)).rejects.toThrow(NotFoundException);
   });
 
   // 「계정 있음 · 이 점포 재직 중 → 차단」(목업 contracts-new 초대 유형 판별). 계정 조회 없이도 레코드로 막는다.

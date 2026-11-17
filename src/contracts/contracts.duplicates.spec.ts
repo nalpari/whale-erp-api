@@ -100,7 +100,11 @@ describe('ContractsService 계약 중복 검사', () => {
       // 재입사 사슬 조회(linkedRecords) — 기본은 이은 레코드가 없다
       $queryRaw: jest.fn().mockResolvedValue([]),
       $executeRaw: jest.fn().mockResolvedValue(1),
-      store: { findFirst: jest.fn().mockResolvedValue({ storeId: 11 }) },
+      store: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ storeStatusCode: 'OPERATING' }),
+      },
       account: { findMany: jest.fn().mockResolvedValue([]) },
       // 근로계약 관리 메뉴 권한(WHALEERP-592) — 기본은 있다
       adminAccount: {
