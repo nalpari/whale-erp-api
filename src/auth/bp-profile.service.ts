@@ -334,11 +334,11 @@ function hqStateOf(
     throw new BadRequestException(
       target.isHqStaffEnabled
         ? '본사 직원 관리를 사용하는 동안에는 사업자정보를 지울 수 없습니다. 본사 직원 관리를 먼저 꺼 주세요.'
-        : '사업자정보를 인증해야 본사 직원 관리를 켤 수 있습니다.',
+        : '사업자정보를 인증해야 본사 직원 관리를 사용할 수 있습니다.',
     );
   if (isHqStaffEnabled && !hasCoordinates)
     throw new BadRequestException(
-      '본사 직원 관리를 사용하려면 본사 위도 · 경도가 필요합니다.',
+      '위도 · 경도를 입력해야 본사 직원 관리를 사용할 수 있습니다.',
     );
   if (isLocationApplied && !hasCoordinates)
     throw new BadRequestException(
