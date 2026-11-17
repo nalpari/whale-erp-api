@@ -967,6 +967,8 @@ function sameStore(storeId: number, scoped: number): void {
     );
 }
 const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다.';
+/** 미운영 점포는 새 근무지로 고를 수 없다(WHALEERP-722). */
+const STORE_NOT_OPERATING = '운영 중인 점포만 근무지로 고를 수 있습니다.';
 /** 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 없음) — 점포 정보 관리와 같은 400 이다. */
 const BP_NOT_CHOSEN = '근로계약을 볼 BP 를 골라 주세요.';
 
@@ -1065,26 +1067,33 @@ export class ContractsService {
     }
   }
 
-  /** 근무지로 고를 수 있는 점포인가 — 지우지 않고, 폐점하지 않았고, 업무 범위 안. 아니면 404. */
+  /**
+   * 새로 근무지로 고를 수 있는 점포인가 — 지우지 않고, 폐점하지 않았고, 업무 범위 안이면서(아니면 404) 운영 중(아니면 400,
+   * WHALEERP-722). 새 계약 · 근무지를 옮길 때만 부른다 — 이미 미운영 점포로 만든 계약을 같은 근무지로 이어 쓰는 것은
+   * checkStoreOpen 만 본다(그대로 둔다, 2026-11-17 김민식). 운영 여부는 범위를 본 뒤에 알린다 — 범위 밖 점포의 상태가 새지 않게.
+   */
   private async checkStore(
     adminAccountId: number,
     storeId: number,
     bp?: TargetBpContext,
   ): Promise<void> {
-    await this.checkStoreOpen(storeId);
+    const status = await this.checkStoreOpen(storeId);
     if (
       !(await this.scope.canManageStaffAt(adminAccountId, storeId, false, bp))
     )
       throw new NotFoundException(STORE_NOT_FOUND);
+    if (status !== 'OPERATING')
+      throw new BadRequestException(STORE_NOT_OPERATING);
   }
 
-  /** 지우지 않고 폐점하지 않은 점포인가. 아니면 404. 업무 범위는 보지 않는다. */
-  private async checkStoreOpen(storeId: number): Promise<void> {
+  /** 지우지 않고 폐점하지 않은 점포인가. 아니면 404. 업무 범위는 보지 않는다. 점포 상태 코드를 돌려준다. */
+  private async checkStoreOpen(storeId: number): Promise<string> {
     const store = await this.prisma.store.findFirst({
       where: { storeId, isDeleted: false, storeStatusCode: { not: 'CLOSED' } },
-      select: { storeId: true },
+      select: { storeStatusCode: true },
     });
     if (!store) throw new NotFoundException(STORE_NOT_FOUND);
+    return store.storeStatusCode;
   }
 
   /** 업무 범위 밖의 계약은 없는 계약과 같게 404 다. 계약 직원의 본사 제공 동의로 판단한다. */
@@ -2461,7 +2470,8 @@ export class ContractsService {
   }
 
   /**
-   * 작성 · 이어 쓰기 화면의 근무지 선택지(WHALEERP-638). 지운 점포와 폐점(STORE_STATUS CLOSED)은 고를 수 없다. 업무 범위
+   * 작성 · 이어 쓰기 화면의 근무지 선택지(WHALEERP-638). 운영 중(STORE_STATUS OPERATING)인 점포만이다 — 지운 점포 · 미운영 ·
+   * 폐점은 고를 수 없다(미운영은 WHALEERP-722). 업무 범위
    * (플랫폼 계정은 탭 BP 의 점포 전부) 안에서 직원 개인 정보를 다루는 점포만이다 — 본사 역할(BM · BA)에게 직영이 아닌 점포는
    * 빠진다(새 근로계약과 같은 점포 단위 기준). 사용 중인 관리자 계정이 아니면 403.
    */
@@ -2482,7 +2492,7 @@ export class ContractsService {
     const where: Prisma.StoreWhereInput = {
       storeId: { in: storeIds },
       isDeleted: false,
-      storeStatusCode: { not: 'CLOSED' },
+      storeStatusCode: 'OPERATING',
     };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.store.findMany({

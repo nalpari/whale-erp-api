@@ -179,7 +179,9 @@ describe('근로계약 목록 (e2e)', () => {
     prisma.contract.count.mockReset().mockResolvedValue(0);
     prisma.contract.groupBy.mockReset().mockResolvedValue([]);
     prisma.store.findMany.mockReset().mockResolvedValue([]);
-    prisma.store.findFirst.mockReset().mockResolvedValue({ storeId: 11 });
+    prisma.store.findFirst
+      .mockReset()
+      .mockResolvedValue({ storeStatusCode: 'OPERATING' });
     prisma.codeItem.findUnique.mockReset().mockResolvedValue({
       label: '10320',
       status: 'ACTIVE',
