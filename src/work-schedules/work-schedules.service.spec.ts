@@ -796,6 +796,79 @@ describe('WorkSchedulesService', () => {
       ]);
     });
 
+    it('예상 못 한 저장 오류가 연달아 3번 나면 남은 날은 시도하지 않고 같은 실패로 채운다 — 성공하면 다시 센다(WHALEERP-731)', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      // 1번째 성공 → 2 · 3번째 실패 → 4번째 성공(다시 셈) → 5 · 6 · 7번째 실패 → 남은 8 · 9 · 10번째는 시도하지 않는다
+      const fails = new Set([2, 3, 5, 6, 7]);
+      let n = 0;
+      db.workSchedule.create.mockImplementation(() =>
+        fails.has((n += 1))
+          ? Promise.reject(new Error('db down'))
+          : Promise.resolve(scheduleRow({ workScheduleId: 100 + n })),
+      );
+      const res = await service.rangeCreate(ADMIN, {
+        fromDate: '2026-10-01',
+        toDate: '2026-10-10',
+        weekdays: [0, 1, 2, 3, 4, 5, 6],
+        rows: [line(11)],
+      });
+      expect(db.workSchedule.create).toHaveBeenCalledTimes(7);
+      expect(res.created).toHaveLength(2);
+      expect(res.failed.map((f) => [f.workDate, f.code])).toEqual(
+        ['02', '03', '05', '06', '07', '08', '09', '10'].map((d) => [
+          `2026-10-${d}`,
+          'WORK_SCHEDULE_SAVE_FAILED',
+        ]),
+      );
+      expect(
+        error.mock.calls.filter(([m]) => String(m).includes('STOPPED')),
+      ).toEqual([
+        [
+          'work schedule range STOPPED after 3 unexpected failures in a row: 3 rows not tried',
+        ],
+      ]);
+      error.mockRestore();
+    });
+
+    it('업무 규칙 거절(400 · 404 · 409)은 세지 않는다 — DB 는 닿는 것이라 그 뒤의 예상 못 한 오류는 처음부터 센다', async () => {
+      // 12 는 계약이 없다(400) — 11 의 저장 오류 사이에 끼어도 연속으로 세지 않는다
+      db.staffMember.findUnique.mockImplementation(
+        ({ where }: { where: { staffMemberId: number } }) =>
+          Promise.resolve(
+            where.staffMemberId === 12
+              ? staffRow({ contracts: [] })
+              : staffRow(),
+          ),
+      );
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      db.workSchedule.create.mockRejectedValue(new Error('db down'));
+      const res = await service.rangeCreate(ADMIN, {
+        fromDate: '2026-10-01',
+        toDate: '2026-10-03',
+        weekdays: [0, 1, 2, 3, 4, 5, 6],
+        rows: [line(11), line(12)],
+      });
+      // 11 · 12 · 11 · 12 · 11 · 12 — 11 의 저장 오류는 세 번이지만 사이사이 12 의 거절로 끊겨 여섯 다 시도한다
+      // (거절에서 다시 세지 않으면 세 번째 오류 뒤 마지막 12 가 시도 없이 SAVE_FAILED 로 채워진다)
+      expect(db.workSchedule.create).toHaveBeenCalledTimes(3);
+      expect(res.failed.map((f) => f.code)).toEqual([
+        'WORK_SCHEDULE_SAVE_FAILED',
+        'WORK_SCHEDULE_NO_CONTRACT',
+        'WORK_SCHEDULE_SAVE_FAILED',
+        'WORK_SCHEDULE_NO_CONTRACT',
+        'WORK_SCHEDULE_SAVE_FAILED',
+        'WORK_SCHEDULE_NO_CONTRACT',
+      ]);
+      expect(
+        error.mock.calls.filter(([m]) => String(m).includes('STOPPED')),
+      ).toHaveLength(0);
+      error.mockRestore();
+    });
+
     it('고른 요일의 날마다 줄을 저장하고, 넣을 수 없는 날은 근무일과 함께 실패로 — 알림은 직원마다 한 번, 기간으로 묶는다', async () => {
       const noticeSpy = jest
         .spyOn(notice, 'noticeScheduleChange')
