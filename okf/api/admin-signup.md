@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T01:01:50Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T02:07:22Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -45,7 +45,7 @@ sources:
   - id: nts-module
     resource: ../../src/nts/nts.module.ts
     title: NtsModule (NTS key optional — 503 without it; shared with stores; dev bypass)
-    last_modified: 2026-11-17T01:01:50Z
+    last_modified: 2026-11-17T02:07:22Z
 ---
 
 # What it does
@@ -157,21 +157,27 @@ one bucket.
 `NTS_SERVICE_KEY` is the 공공데이터포털 key. Either form works: a key containing `%`
 is taken as already URL-encoded, otherwise it is encoded. **It is optional, like
 mail** (2026-10-15): empty, the api still boots and every verification is a 503 (signup
-without verification still works); in production an error is logged at boot so a
+without verification still works; the dev bypass below is the exception); in production an error is logged at boot so a
 deploy that forgot it shows up in the logs instead of refusing to start. The token
 carries 사업자등록번호 and 대표자명 in plain base64 — keep it out of logs and URLs. The e2e suite
 overrides `NtsBusinessClient`, so it never calls 국세청.
 
 **개발서버 통과 모드 — `NTS_VERIFICATION_BYPASS=true`** (2026-11-17, front 요청). On a dev server
 only real business data passes 국세청, which made 사업자 인증 untestable. With the value `true` (case
-and surrounding spaces ignored; anything else is off) `NtsModule` provides `BypassNtsBusinessClient`
+and surrounding spaces ignored) `NtsModule` provides `BypassNtsBusinessClient`
 instead: `isConfigured` is true even without `NTS_SERVICE_KEY` (so stores do not answer 503 either),
 and `verify` never calls 국세청 and always answers MATCH, logging a warning each time (no 대표자명 ·
 번호) and once at boot. The four routes — signup, MY PAGE BP 사업자정보, BP 마스터, 점포 — all go
-through that one client; input validation, the 사업자등록번호 duplicate check (409) and the 10-minute
-token stay as they are, as does the response shape. **In production (`isProduction()`) the value is
-ignored** and an error is logged at boot — the same image runs on dev and prod, so a stray line in the
-prod env file must still leave the real check running.
+through that one client. What stays as it is: input validation, the 사업자등록번호 duplicate check (409),
+the rate limits (10 an hour per route — a bypassed check still counts), the 10-minute token of signup,
+MY PAGE and BP 마스터, the stores' 10-minute reuse of a match (`VERIFIED_REUSE_MS`, see
+[Stores](/api/stores.md)), and the response shape. A bypassed verification is stored exactly like a real
+one (`biz_verified_at` included) and its number then blocks the duplicate check, so business data on a
+dev database is not evidence of a real 국세청 match. `false` or an empty value is off; any other value is
+off too but logs a boot warning, so 「I turned it on and nothing happened」 shows in the log. **In
+production (`isProduction()`) the value is ignored** and an error is logged at boot — a stray line in
+the prod env file must still leave the real check running (the prod image also bakes in `APP_ENV=prod`
+and `NODE_ENV=production`).
 
 # Traps
 

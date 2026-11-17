@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T01:14:38Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T02:07:22Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -421,13 +421,15 @@ The check is `NtsStoreBusinessVerifier` over the same `NtsBusinessClient` that B
 signup uses (`NtsModule`), so the key, the 5-second timeout and the rule that only
 `valid` 01 / 02 count as an answer are shared. The adapter only reshapes the values —
 `ceoName` → `bizCeoName`, `openDate` (UTC midnight) → `YYYY-MM-DD`. Without
-`NTS_SERVICE_KEY` the api still boots (in production too — it logs an error at boot), but the verifier is `null`
+`NTS_SERVICE_KEY` (and without the dev bypass below) the api still boots (in production too — it logs an error at boot), but the verifier is `null`
 rather than the client: every check is the 503 「연동이 아직 없어」 and the service
 warns once at boot, instead of a 「잠시 뒤 다시」 503 with an error stack on every
 click that would read as an outage.[^store-business-verifier][^nts-store-business-verifier]
 On a dev server `NTS_VERIFICATION_BYPASS=true` makes the shared client answer MATCH for any value
 without calling 국세청, so the verifier is not `null` even without the key; production ignores it —
-see [BP signup](/api/admin-signup.md).
+see [BP signup](/api/admin-signup.md). The per-admin count and the 10-minute reuse below still apply in
+that mode: each bypassed MATCH counts as a call (the 11th in an hour is a 429) and is remembered as if
+국세청 had answered.
 
 `POST /stores/business-verifications` is the screen's preview of that check (API
 enum `StoreBusinessVerificationResult`: `VERIFIED` · `UNVERIFIABLE` · `DUPLICATE`,
