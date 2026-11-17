@@ -40,7 +40,10 @@ export class SendPayslipsDto {
   @Max(MAX_ID, { each: true })
   storeIds?: number[];
 
-  /** 점포 유형(상단 점포 범위의 직영 · 가맹, 목록과 같다). 주면 그 유형 점포만이고 폐점 점포는 뺀다 */
+  /**
+   * 점포 유형(상단 점포 범위, API enum StoreScopeType, 목록과 같다) — DIRECT(본사가 아닌 직영) · FRANCHISE(가맹) · HQ(본사).
+   * 주면 그 유형 점포만이고 폐점 점포는 뺀다
+   */
   @ApiPropertyOptional({
     enum: STORE_SCOPE_TYPES,
     enumName: 'StoreScopeType',

@@ -33,3 +33,20 @@ describe('ListTodosQueryDto 담당직원 이름(WHALEERP-713)', () => {
     expect(errors.map((e) => e.property)).toEqual(['assigneeName']);
   });
 });
+
+// 본사 점포(2026-11-17) — 점포 유형에 HQ(본사)가 더해졌다
+describe('ListTodosQueryDto 점포 유형(storeTypes)', () => {
+  it('HQ 를 받는다 — 다른 유형과 섞어도', async () => {
+    const hq = parse({ storeTypes: 'HQ' });
+    expect(hq.storeTypes).toEqual(['HQ']);
+    expect(await validate(hq)).toEqual([]);
+    const mixed = parse({ storeTypes: 'FRANCHISE,HQ' });
+    expect(mixed.storeTypes).toEqual(['FRANCHISE', 'HQ']);
+    expect(await validate(mixed)).toEqual([]);
+  });
+
+  it('모르는 유형은 400', async () => {
+    const errors = await validate(parse({ storeTypes: 'BRANCH' }));
+    expect(errors.map((e) => e.property)).toEqual(['storeTypes']);
+  });
+});

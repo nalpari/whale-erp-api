@@ -1,8 +1,8 @@
 /**
- * 상단 점포 범위의 유형 — 3팀 목록 · 홈의 `storeTypes` 쿼리가 받는 값(API enum `StoreScopeType`, 2026-11-17).
- * 공통코드 STORE_TYPE(직영 · 가맹)에 본사(HQ)를 더한 것이다. 본사 점포는 store_type_code 가 DIRECT 지만 범위에서는 따로
- * 친다 — DIRECT 는 본사가 아닌 직영, HQ 는 본사. 유형을 주지 않으면 「전체」(본사 포함 — BP 마스터가 아니면 애초에
- * 본사가 업무 범위에 없다). 헤더 「전체 · 직영 · 가맹 · 본사 · 점포 하나」 → 없음 · [DIRECT] · [FRANCHISE] · [HQ] · storeIds.
+ * 상단 점포 범위의 유형 — 3팀 목록(직원 · 근로계약 · 급여명세서 · TO-DO · 출퇴근)의 `storeTypes` 쿼리가 받는 값(API enum
+ * `StoreScopeType`, 2026-11-17). 공통코드 STORE_TYPE(직영 · 가맹)에 본사(HQ)를 더한 것이다. 본사 점포는 store_type_code 가
+ * DIRECT 지만 범위에서는 따로 친다 — DIRECT 는 본사가 아닌 직영, HQ 는 본사. 유형을 주지 않으면 「전체」(본사 포함 — 다만
+ * 가맹마스터 · 가맹관리자(FM · FA)는 전체 점포 관리여도 본사가 업무 범위에 없다). 헤더 「전체 · 직영 · 가맹 · 본사 · 점포 하나」 → 없음 · [DIRECT] · [FRANCHISE] · [HQ] · storeIds.
  */
 export const STORE_SCOPE_TYPES = ['DIRECT', 'FRANCHISE', 'HQ'] as const;
 export type StoreScopeType = (typeof STORE_SCOPE_TYPES)[number];

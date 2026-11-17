@@ -44,6 +44,7 @@ import {
   type HqBiz,
   hqBizOf,
   hqLocationOf,
+  liveHqStoreId,
 } from '../bp-codes/hq-profile';
 import {
   createHqStore,
@@ -148,9 +149,9 @@ type MasterRow = RawBpRow['adminAccounts'][number];
 function flatBp(row: RawBpRow): BpRow {
   return {
     ...row,
-    ...hqBizOf(row),
+    ...hqBizOf(row, row.bpCodeId),
     ...hqLocationOf(row),
-    hqStoreId: row.stores[0]?.storeId ?? null,
+    hqStoreId: liveHqStoreId(row),
   };
 }
 type History = {
@@ -171,8 +172,9 @@ type HistoryRow = {
  * BP 마스터 계정 관리(메뉴 MN000203, BP-1~5). 플랫폼이 고객 BP 와 그 BP 마스터(BM) 계정을 함께 다룬다 —
  * BP 하나에 BP 마스터 하나다. 플랫폼 BP(BP000000)와 지운 BP 는 다루지 않는다. 탈퇴한 BP 는 보기만 한다.
  *
- * 메뉴 권한과 플랫폼 계정 여부는 컨트롤러의 가드가 본다. 이력은 둘로 나뉜다 — BP 의 칸 · 상태는
- * bp_change_histories, BP 마스터 계정의 칸은 admin_change_histories. 상세의 변경 이력은 둘을 합쳐 보인다.
+ * 메뉴 권한과 플랫폼 계정 여부는 컨트롤러의 가드가 본다. 이력은 셋으로 나뉜다 — BP 등록 · 상태 · 삭제는
+ * bp_change_histories, BP 상호명 · 사업자정보 · 좌표 변경은 본사 점포의 store_change_histories(2026-11-17, 아직 읽는
+ * 경로 없음), BP 마스터 계정의 칸은 admin_change_histories. 상세의 변경 이력은 bp_change_histories 와 계정 이력을 합쳐 보인다.
  * 비밀번호 초기화는 계정 이력에 값 없이 「비밀번호 → 초기화」 한 줄만 남긴다(BP 관리자와 같다).
  */
 @Injectable()
@@ -431,9 +433,9 @@ export class BpMastersService {
       })
       .catch((error: unknown) => {
         // 확인과 INSERT 사이에 같은 아이디 · 이메일 · 사업자등록번호가 먼저 들어갔다.
-        if (isUniqueViolation(error))
+        if (isAccountUniqueViolation(error))
           throw new ConflictException(
-            '이미 사용 중인 아이디 · 이메일 또는 사업자등록번호입니다.',
+            '이미 사용 중인 아이디 또는 이메일입니다.',
           );
         throw error;
       });
@@ -537,9 +539,9 @@ export class BpMastersService {
         ]);
       })
       .catch((error: unknown) => {
-        if (isUniqueViolation(error))
+        if (isAccountUniqueViolation(error))
           throw new ConflictException(
-            '이미 사용 중인 이메일 또는 사업자등록번호입니다.',
+            '이미 다른 관리자 계정에 등록된 이메일입니다.',
           );
         throw error;
       });
@@ -1048,19 +1050,19 @@ function verifiedBizOf(biz: {
   };
 }
 
-/** BP 이력. verified 의 줄에는 「사업자 번호 인증」을 단다. */
+/**
+ * BP 이력 — BP 등록 · 상태 · 삭제. 상호명 · 사업자정보 · 좌표 변경은 본사 점포 이력(store_change_histories)에 남는다
+ * (설계 D5, 2026-11-17 — 「사업자 번호 인증」 비고 구분은 그 표에 칸이 없어 남지 않는다).
+ */
 async function recordBp(
   tx: Tx,
   bpCodeId: number,
   changedBy: number,
   changes: (History | null)[],
-  verified: (History | null)[] = [],
 ): Promise<void> {
-  const tag = (list: (History | null)[], note: string | null) =>
-    list
-      .filter((c): c is History => c !== null)
-      .map((c) => ({ bpCodeId, ...c, changedBy, note }));
-  const data = [...tag(changes, null), ...tag(verified, '사업자 번호 인증')];
+  const data = changes
+    .filter((c): c is History => c !== null)
+    .map((c) => ({ bpCodeId, ...c, changedBy, note: null }));
   if (data.length) await tx.bpChangeHistory.createMany({ data });
 }
 
@@ -1088,9 +1090,17 @@ function dateOnly(d: Date | null): string | null {
   return d ? d.toISOString().slice(0, 10) : null;
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === 'P2002'
-  );
+/**
+ * 관리자 계정의 아이디 · 이메일 고유 위반인가 — 확인과 저장 사이에 같은 값이 먼저 들어온 경우다. 사업자번호는 DB 고유가
+ * 아니고(본사 점포로 옮긴 뒤, 번호별 잠금 + 재검사가 지킨다), 점포코드 · 본사 같은 다른 고유 위반은 코드 버그라 409 로
+ * 숨기지 않고 그대로 던진다(500 과 로그).
+ */
+function isAccountUniqueViolation(error: unknown): boolean {
+  if (
+    !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+    error.code !== 'P2002'
+  )
+    return false;
+  const where = `${error.message} ${JSON.stringify(error.meta?.target ?? '')}`;
+  return /admin_accounts_(login_id|email)/.test(where);
 }

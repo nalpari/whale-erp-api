@@ -105,7 +105,10 @@ export class ListTodosQueryDto extends TodoPageQueryDto {
   @Max(MAX_ID, { each: true })
   storeIds?: number[];
 
-  /** 점포 유형(상단 범위 직영 · 가맹) — DIRECT · FRANCHISE. 폐점 점포는 뺀다. 여러 개는 반복하거나 쉼표로. 주지 않으면 둘 다(폐점 포함) */
+  /**
+   * 점포 유형(상단 점포 범위, API enum StoreScopeType) — DIRECT(본사가 아닌 직영) · FRANCHISE(가맹) · HQ(본사). 폐점 점포는
+   * 뺀다. 여러 개는 반복하거나 쉼표로. 주지 않으면 전체(폐점 포함, 본사 포함 — FM · FA 범위에는 본사가 없다)
+   */
   @ApiPropertyOptional({
     enum: STORE_SCOPE_TYPES,
     enumName: 'StoreScopeType',

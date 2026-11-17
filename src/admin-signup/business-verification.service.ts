@@ -47,7 +47,7 @@ export class BusinessVerificationService {
    * 미운영·운영 점포(본사 점포 포함)가 이 번호를 쓰는지. BP 번호는 본사 점포 사업자정보에 있어(2026-11-17) BP · 점포
    * 두 검사가 하나로 합쳐졌다 — 탈퇴한 BP 의 본사는 폐점, 삭제한 BP 의 본사는 삭제라 그 번호는 다시 쓸 수 있다
    * (Manyfast S-CQGGZS). 조건은 점포 등록(StoreManagementService.isNumberTaken)과 같다 — 다르면 점포에서는 다시
-   * 쓰는 번호가 가입에서만 막힌다. 플랫폼 BP 의 본사는 번호가 없다. 가입은 트랜잭션 안에서 한 번 더 부르려고 db 를 받는다.
+   * 쓰는 번호가 가입에서만 막힌다. 플랫폼 BP 의 본사 번호는 검사에서 뺀다(예전 bp_codes 검사와 같다). 가입은 트랜잭션 안에서 한 번 더 부르려고 db 를 받는다.
    * excludeBpCodeId — 재인증(이미 그 번호를 쓰고 있는 자기 자신)을 중복으로 보지 않는다. 그 BP 의 본사 · 소속 점포의
    * 번호는 BP 가 쓸 수 있다(PL-OCJOFP). 마이페이지 BP 사업자정보 재인증(BpProfileService)과 플랫폼 BP 수정이 쓴다.
    */
@@ -62,7 +62,7 @@ export class BusinessVerificationService {
         store: {
           isDeleted: false,
           storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
-          // 플랫폼 BP 의 본사 번호는 예전 bp_codes 검사처럼 뺀다.
+          // 플랫폼 BP 의 본사 번호는 검사에서 뺀다(예전 bp_codes 검사와 같다).
           bpCode: { isPlatform: false },
           ...(excludeBpCodeId !== undefined && {
             bpCodeId: { not: excludeBpCodeId },

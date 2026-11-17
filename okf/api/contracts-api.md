@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -57,7 +57,7 @@ sources:
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
-    last_modified: 2026-11-17T06:50:00Z
+    last_modified: 2026-11-17T08:19:43Z
   - id: create-dto
     resource: ../../src/contracts/dto/create-contract.dto.ts
     title: CreateContractDto
@@ -65,7 +65,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
-    last_modified: 2026-11-17T07:26:26Z
+    last_modified: 2026-11-17T08:19:43Z
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
@@ -1326,10 +1326,10 @@ only — a 종이 계약 has no body.
 
 The 근무지 dropdown's source: `{ items: [{ storeId, name, storeTypeCode, isHq }], total }`,
 undeleted and not `CLOSED`, by name, and only the stores the admin may write
-contracts for — managed, and for 본사 역할 직영 only (the per-store half of the
+contracts for — managed, and for 본사 역할 (the BM · BA roles, not the 본사 점포) 직영 only (the per-store half of the
 contract rule above: a new contract has no 직원 whose consent could open it).
-`storeTypeCode` and `isHq` were added on 2026-11-17 so the screen can mark the 본사 점포, which
-is `DIRECT` too; it does not appear for FM · FA, whose scope drops it; the others see it by permission and mapping
+`storeTypeCode` and `isHq` were added on 2026-11-17 so the screen can mark the 본사 점포 (`stores.is_hq`), which
+is `DIRECT` too, so it counts as 직영 here; it does not appear for FM · FA, whose scope drops it; the others see it by permission and mapping
 ([admin authentication](/api/admin-auth.md)).
 403 for an account that is not in use. It moved from `GET /stores` on 2026-10-14,
 when that path became the 점포 정보 관리 list ([Store management](/api/stores.md));

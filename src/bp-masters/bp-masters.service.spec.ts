@@ -929,14 +929,25 @@ describe('BpMastersService', () => {
     it('확인과 저장 사이에 같은 아이디 · 이메일이 먼저 들어왔으면 409', async () => {
       prisma.bpCode.findFirst.mockResolvedValue({ bpCode: 'BP000012' });
       prisma.adminAccount.create.mockRejectedValue(
-        new Prisma.PrismaClientKnownRequestError('unique', {
-          code: 'P2002',
-          clientVersion: 'x',
-        }),
+        new Prisma.PrismaClientKnownRequestError(
+          'Unique constraint failed on the constraint: `admin_accounts_login_id_key`',
+          { code: 'P2002', clientVersion: 'x' },
+        ),
       );
-      await expect(service.create(CALLER, createInput)).rejects.toBeInstanceOf(
-        ConflictException,
+      await expect(service.create(CALLER, createInput)).rejects.toThrow(
+        new ConflictException('이미 사용 중인 아이디 또는 이메일입니다.'),
       );
+    });
+
+    // 사업자번호는 DB 고유가 아니다(본사 점포로 옮긴 뒤) — 다른 고유 위반(점포코드 등)을 409 로 숨기지 않는다.
+    it('계정이 아닌 고유 위반은 409 로 바꾸지 않고 그대로 던진다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue({ bpCode: 'BP000012' });
+      const storeCode = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on the constraint: `stores_store_code_key`',
+        { code: 'P2002', clientVersion: 'x' },
+      );
+      prisma.store.create.mockRejectedValue(storeCode);
+      await expect(service.create(CALLER, createInput)).rejects.toBe(storeCode);
     });
   });
 
@@ -1122,6 +1133,35 @@ describe('BpMastersService', () => {
           field: '점포상태',
           beforeValue: '운영',
           afterValue: '미운영',
+        }),
+      ]);
+    });
+
+    it('다시 사용으로 바꾸면 사업자번호 · 좌표를 갖춘 미운영 본사를 운영으로 올리고 본사 점포 이력을 남긴다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp({ accountStatusCode: 'INACTIVE' }),
+      );
+      prisma.store.findFirst.mockResolvedValue({
+        storeId: 120,
+        storeStatusCode: 'NOT_OPERATING',
+        latitude: 37.5,
+        longitude: 127,
+        businessProfile: { bizRegistrationNumber: '1058763602' },
+        bpCode: { accountStatusCode: 'ACTIVE' },
+      });
+      await service.changeStatus(CALLER, 12, 'ACTIVE');
+      expect(prisma.store.findFirst).toHaveBeenCalledWith(
+        partial({ where: { bpCodeId: 12, isHq: true, isDeleted: false } }),
+      );
+      expect(prisma.store.update).toHaveBeenCalledWith({
+        where: { storeId: 120 },
+        data: { storeStatusCode: 'OPERATING', updatedBy: CALLER },
+      });
+      expect(hqHistories()).toEqual([
+        partial({
+          field: '점포상태',
+          beforeValue: '미운영',
+          afterValue: '운영',
         }),
       ]);
     });

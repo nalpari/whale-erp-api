@@ -4,7 +4,7 @@ title: Team 1 physical schema
 description: The PostgreSQL schema for 1팀's 30 tables (auth · BP · stores · facilities · system settings) and the migrations that load its reference data; what Prisma cannot carry and why the platform master has no password.
 tags: [database, schema, erd, postgresql, prisma, seed]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T06:50:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
 sources:
   - id: team1-migration
     resource: ../../prisma/migrations/20261006000000_team1_initial/migration.sql
@@ -222,10 +222,18 @@ the same trap as 3팀's, whose CHECKs live only in their DDL migration.
   dropped: `bp_codes_biz_registration_number_key` and the length CHECKs on `trade_name`,
   `biz_category` and `biz_item`, which went with their columns. **The database no longer keeps
   BP 사업자등록번호 unique**: like store numbers, that is now the duplicate check plus the per-number
-  advisory lock in signup and platform BP registration. Reading a BP's name now means joining its
+  advisory lock (below). Reading a BP's name now means joining its
   본사 (`HQ_PROFILE_SELECT` in `src/bp-codes/hq-profile.ts`, live 본사 first, the deleted one for a
   deleted BP).[^hq-stores-migration] Not in 1팀's ERD generator in front, and the naming raw doc
   still lists the `bp_codes` biz columns.
+- **One lock now guards every business number** — with the database unique gone, uniqueness is the
+  duplicate check run inside the write transaction under
+  `pg_advisory_xact_lock(hashtext('stores:biz:<번호>'))`. Every path that writes a number takes the
+  same key: signup, platform BP registration and edit, 마이페이지 BP 사업자정보, and store saves —
+  a path that skipped it would race the others into two holders of one number. The CHECK (32) and
+  partial unique (5) lists above count the initial DDL: the HQ migration dropped one of those
+  partial uniques (`bp_codes_biz_registration_number_key`) and three of those CHECKs
+  (`bp_codes_trade_name_length`, `bp_codes_biz_category_length`, `bp_codes_biz_item_length`).
 
 The `'WITHDRAWN'` literal in two of those was a placeholder while the
 `ACCOUNT_STATUS` code value was undecided; the initial-data migration fixes it as

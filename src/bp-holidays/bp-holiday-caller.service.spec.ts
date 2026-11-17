@@ -11,6 +11,7 @@ describe('BpHolidayCallerService', () => {
     adminAccount: { findFirst: jest.fn() },
     roleGroupMenu: { findFirst: jest.fn() },
     adminStoreMapping: { findMany: jest.fn() },
+    store: { findMany: jest.fn() },
   };
 
   const account = (over: Record<string, unknown> = {}) => ({
@@ -121,5 +122,51 @@ describe('BpHolidayCallerService', () => {
       update: false,
       delete: false,
     });
+  });
+
+  // 본사 점포(2026-11-17) — 가맹 계정은 전체 점포여도 본사를 뺀 점포가 범위다. BP 관리자 · 플랫폼은 그대로 전체.
+  it('전체 점포 FA 는 본사를 뺀 그 BP 의 점포를 읽어 범위로 삼는다', async () => {
+    prisma.adminAccount.findFirst.mockResolvedValue(
+      account({ roleTypeCode: 'FA', isAllStores: true }),
+    );
+    prisma.store.findMany.mockResolvedValue([{ storeId: 20 }, { storeId: 21 }]);
+    const caller = await service.load(5, {
+      bpCodeId: 7,
+      isPlatformCaller: false,
+    });
+    expect(prisma.store.findMany).toHaveBeenCalledWith({
+      where: { bpCodeId: 7, isDeleted: false, isHq: false },
+      select: { storeId: true },
+    });
+    expect(caller.storeScope).toEqual(new Set([20, 21]));
+    expect(prisma.adminStoreMapping.findMany).not.toHaveBeenCalled();
+  });
+
+  it('전체 점포 BA 는 점포를 읽지 않고 범위 제한이 없다(본사 포함)', async () => {
+    prisma.adminAccount.findFirst.mockResolvedValue(
+      account({ roleTypeCode: 'BA', isAllStores: true }),
+    );
+    const caller = await service.load(5, {
+      bpCodeId: 7,
+      isPlatformCaller: false,
+    });
+    expect(prisma.store.findMany).not.toHaveBeenCalled();
+    expect(caller.storeScope).toBeNull();
+  });
+
+  it('플랫폼 계정은 점포를 읽지 않고 범위 제한이 없다', async () => {
+    prisma.adminAccount.findFirst.mockResolvedValue(
+      account({
+        bpCodeId: 1,
+        roleTypeCode: 'PM',
+        bpCode: { isPlatform: true },
+      }),
+    );
+    const caller = await service.load(5, {
+      bpCodeId: 9,
+      isPlatformCaller: true,
+    });
+    expect(prisma.store.findMany).not.toHaveBeenCalled();
+    expect(caller.storeScope).toBeNull();
   });
 });

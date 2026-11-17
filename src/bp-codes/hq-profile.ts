@@ -1,4 +1,14 @@
+import { Logger } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+
+const logger = new Logger('HqProfile');
+
+/** 본사 · 사업자정보가 없다 — BP 마다 본사가 있어야 하므로 불변식이 깨진 것이다. 빈 값으로 넘기되 알아챌 수 있게 남긴다. */
+function reportMissing(bpCodeId: number | undefined): void {
+  logger.error(
+    `본사 점포 사업자정보가 없다 bpCodeId=${bpCodeId ?? '?'} — BP 마다 본사가 있어야 한다(stores.is_hq)`,
+  );
+}
 
 /**
  * BP 의 상호명 · 사업자정보는 본사 점포(stores.is_hq)의 사업자정보(store_business_profiles)에 있다
@@ -14,6 +24,7 @@ export const HQ_PROFILE_SELECT = {
     take: 1,
     select: {
       storeId: true,
+      isDeleted: true,
       latitude: true,
       longitude: true,
       isLocationApplied: true,
@@ -53,9 +64,22 @@ type WithHqTradeName = {
   stores: { businessProfile: { bizTradeName: string | null } | null }[];
 };
 
-/** BP 상호명. 본사가 늘 채워 두지만(DB 로는 강제 못 함) 비면 빈 문자열이다. */
-export function tradeNameOf(bp: WithHqTradeName): string {
-  return bp.stores[0]?.businessProfile?.bizTradeName ?? '';
+/** BP 상호명. 본사가 늘 채워 두지만(DB 로는 강제 못 함) 비면 빈 문자열이고 error 로그를 남긴다. */
+export function tradeNameOf(bp: WithHqTradeName, bpCodeId?: number): string {
+  const name = bp.stores[0]?.businessProfile?.bizTradeName;
+  if (name == null) reportMissing(bpCodeId);
+  return name ?? '';
+}
+
+/**
+ * 살아 있는 본사 점포 id. 살아 있는 BP 에 지워진 본사만 남은 비정상 상태면 null — 수정 경로가 지워진 점포에 쓰지 않고
+ * 「본사가 없다」 500 으로 멈추게.
+ */
+export function liveHqStoreId(bp: {
+  stores: { storeId: number; isDeleted: boolean }[];
+}): number | null {
+  const hq = bp.stores[0];
+  return hq && !hq.isDeleted ? hq.storeId : null;
 }
 
 type HqProfileRow = Prisma.BpCodeGetPayload<{
@@ -79,8 +103,12 @@ export type HqBiz = {
 };
 
 /** 본사 사업자정보를 예전 bp_codes 칸 이름으로. 본사가 없으면(있어선 안 된다) 모두 비어 있다. */
-export function hqBizOf(bp: { stores: HqProfileRow[] }): HqBiz {
+export function hqBizOf(
+  bp: { stores: HqProfileRow[] },
+  bpCodeId?: number,
+): HqBiz {
   const p = bp.stores[0]?.businessProfile;
+  if (!p) reportMissing(bpCodeId);
   return {
     tradeName: p?.bizTradeName ?? '',
     bizRegistrationNumber: p?.bizRegistrationNumber ?? null,

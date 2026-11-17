@@ -390,6 +390,33 @@ describe('ContractsService', () => {
       expect(listWhere()).toEqual({ storeId: { in: [11] } });
     });
 
+    // 본사 점포(2026-11-17) — HQ 는 본사만, DIRECT 는 본사가 아닌 직영, 유형이 없으면 본사 포함 전부
+    it.each([
+      [['HQ'], [3]],
+      [['DIRECT'], [1]],
+      [undefined, [1, 2, 3]],
+    ])(
+      '점포 유형 %j 이면 점포 %j 의 계약을 읽는다',
+      async (storeTypes, ids) => {
+        scope.getManageableStores.mockResolvedValue({
+          roleTypeCode: 'PM',
+          stores: [
+            { storeId: 1, storeTypeCode: 'DIRECT', isHq: false },
+            { storeId: 2, storeTypeCode: 'FRANCHISE', isHq: false },
+            { storeId: 3, storeTypeCode: 'DIRECT', isHq: true },
+          ],
+        });
+        await service.list(9, {
+          page: 1,
+          pageSize: 20,
+          storeTypes: storeTypes as
+            ('DIRECT' | 'FRANCHISE' | 'HQ')[] | undefined,
+        });
+
+        expect(listWhere()).toEqual({ storeId: { in: ids } });
+      },
+    );
+
     it('고른 점포가 모두 범위 밖이면 계약을 읽지 않고 빈 목록이다', async () => {
       await expect(
         service.list(9, { page: 1, pageSize: 20, storeIds: [99] }),

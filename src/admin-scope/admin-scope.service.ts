@@ -465,6 +465,8 @@ export class AdminScopeService {
   /**
    * 고객 BP 의 미삭제 점포 전체(운영 상태와 상관없이). 없거나 삭제된 BP · 플랫폼 BP 면 null.
    * 탈퇴한 BP 도 기록을 봐야 하므로 막지 않는다. 누가 불러도 되는지는 부르는 쪽이 정한다.
+   * 관리자(admin)가 부르면 본사 점포는 hqScope 를 따른다 — 가맹마스터 · 가맹관리자(FM · FA)에게는 빠진다. 관리자 행을
+   * 찾지 못하면 본사를 뺀다(제한 쪽으로 닫는다). 직원 앱 계정은 소속 점포 목록이라 그대로다.
    */
   async listBpStores(bpCodeId: number, user?: AuthUser) {
     const bp = await this.prisma.bpCode.findFirst({
@@ -484,7 +486,9 @@ export class AdminScopeService {
       where: {
         bpCodeId,
         isDeleted: false,
-        ...(user?.type === 'admin' && hqScope(admin?.roleTypeCode ?? '')),
+        // 관리자 행을 못 찾으면(그 사이 지워짐) 본사를 빼는 쪽으로 닫는다 — 제한 판정은 열리는 쪽으로 틀리지 않는다.
+        ...(user?.type === 'admin' &&
+          (admin ? hqScope(admin.roleTypeCode) : { isHq: false })),
       },
       select: STORE_SELECT,
       orderBy: STORE_ORDER,

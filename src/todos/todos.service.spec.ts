@@ -652,6 +652,35 @@ describe('TodosService', () => {
       expect(db.store.findMany).not.toHaveBeenCalled();
     });
 
+    // 본사 점포(2026-11-17) — HQ 는 본사만, DIRECT 는 본사가 아닌 직영, 유형이 없으면 본사 포함 전부
+    it('점포 유형 HQ · DIRECT · 없음으로 본사를 가른다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 1, storeTypeCode: 'DIRECT', isHq: false },
+          { storeId: 2, storeTypeCode: 'FRANCHISE', isHq: false },
+          { storeId: 3, storeTypeCode: 'DIRECT', isHq: true },
+        ],
+      });
+      db.store.findMany.mockImplementation(
+        ({ where }: { where: { storeId: { in: number[] } } }) =>
+          Promise.resolve(where.storeId.in.map((storeId) => ({ storeId }))),
+      );
+      const storeIdOf = async (storeTypes?: string[]) => {
+        db.todo.findMany.mockClear();
+        await service.list(ADMIN, {
+          page: 1,
+          pageSize: 20,
+          ...(storeTypes && { storeTypes }),
+        } as never);
+        return (firstArg(db.todo.findMany).where as { storeId: unknown })
+          .storeId;
+      };
+      expect(await storeIdOf(['HQ'])).toEqual({ in: [3] });
+      expect(await storeIdOf(['DIRECT'])).toEqual({ in: [1] });
+      expect(await storeIdOf()).toEqual({ in: [1, 2, 3] });
+    });
+
     it('줄 단위로 페이지를 자른다', async () => {
       db.todo.findMany.mockResolvedValue([row(1), row(2), row(3)]);
       const result = await service.list(ADMIN, { page: 2, pageSize: 2 });

@@ -29,7 +29,10 @@ export class HqLocationDto {
   @Max(180)
   longitude?: number | null;
 
-  /** 출퇴근 위치 적용 여부 — 생략하면 그대로(처음 만들 때는 사용). 3팀 출퇴근이 본사 직원의 위치를 이 값으로 본다. */
+  /**
+   * 출퇴근 위치 적용 여부 — 좌표 없이 이 칸만 보내도 반영한다. 생략하면 그대로 두고, 본사를 처음 만들 때는 사용(true)이다.
+   * 3팀 출퇴근이 본사 직원의 위치를 이 값으로 본다.
+   */
   @IsOptional()
   @IsBoolean()
   isLocationApplied?: boolean;

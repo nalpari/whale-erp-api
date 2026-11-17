@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, the store list version (`stores-version`, `me/stores`) the header store picker refreshes by, and the login info version (`me/login-info-version`) the screen re-reads login-info by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:56:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -33,7 +33,7 @@ sources:
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
     title: BpProfileService — 마이페이지 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영 · 지우기) · 사업자 번호 검사
-    last_modified: 2026-11-17T07:56:00Z
+    last_modified: 2026-11-17T08:19:43Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -77,11 +77,11 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService — 직원 · 점포 판정의 탭 BP 인자(scopeAdmin), 본사 점포 범위(hqScope)
-    last_modified: 2026-11-17T07:26:26Z
+    last_modified: 2026-11-17T08:19:43Z
   - id: store-scope-type
     resource: ../../src/stores/store-scope-type.ts
     title: StoreScopeType(DIRECT · FRANCHISE · HQ) · matchesStoreScope · canSeeHq(가맹 마스터 · 가맹 관리자만 본사 제외)
-    last_modified: 2026-11-17T07:56:00Z
+    last_modified: 2026-11-17T08:19:43Z
 ---
 
 # Routes
@@ -827,7 +827,7 @@ BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules
 본사 행을 읽고(`HQ_PROFILE_SELECT`) 저장은 `saveHqProfile`(`src/stores/hq-store.ts`)로 한다 — 플랫폼 BP
 수정([BP masters](/api/bp-masters.md))과 같은 함수다. 응답 모양은 그대로(`tradeName` · `biz*`)이고,
 본사 좌표 `latitude` · `longitude` · `isLocationApplied` 가 조회 응답과 저장 본문에 더해졌다(위도 · 경도는
-함께; 둘 다 생략하면 그대로, `null` 이면 지움. `isLocationApplied` 도 생략하면 현재 값 그대로이고, 본사를 처음 만들 때만 사용으로 시작한다 — 2026-11-17 리뷰 반영). 저장하면 본사 점포명 · 주소 · 좌표도 같이 바뀌고 본사 운영
+함께; 하나만 보내면 400, 둘 다 생략하면 그대로, `null` 이면 지움. `isLocationApplied` 는 좌표 없이 혼자 보내도 반영되고, 생략하면 현재 값 그대로이며, 본사를 처음 만들 때만 사용으로 시작한다 — 2026-11-17 리뷰 반영). 이 세 칸은 「전체 치환」의 예외다 — 다른 선택 칸은 빼면 지워진다. 살아 있는 본사의 사업자정보가 없으면(BP 마다 본사가 있어야 하므로 불변식이 깨진 것) 조회는 빈 값으로 덮지 않고 500 이다. 저장하면 본사 점포명 · 주소 · 좌표도 같이 바뀌고 본사 운영
 상태를 다시 정한다 — 운영 조건(사업자 인증 · 좌표 · BP 사용)을 잃으면 **묻지 않고 미운영으로 내려간다**
 (2026-11-17 사용자 결정).
 

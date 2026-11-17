@@ -1052,4 +1052,120 @@ describe('AdminScopeService', () => {
       expect(prisma.store.findMany).not.toHaveBeenCalled();
     });
   });
+
+  // 본사 점포(stores.is_hq, 2026-11-17) — 플랫폼 · BP 마스터 · BP 관리자는 권한 · 매핑대로, 가맹 계정은 전체 점포여도 본사를 받지 않는다.
+  describe('본사 점포 범위(hqScope)', () => {
+    const MANAGEABLE_SELECT = {
+      storeId: true,
+      storeTypeCode: true,
+      storeStatusCode: true,
+      isHq: true,
+    };
+    const LIST_SELECT = {
+      storeId: true,
+      storeCode: true,
+      name: true,
+      storeTypeCode: true,
+      isHq: true,
+      storeStatusCode: true,
+    };
+    const LIST_ORDER = [{ name: 'asc' }, { storeId: 'asc' }];
+
+    it.each(['FM', 'FA'])(
+      'getManageableStores — 전체 점포 %s 는 본사를 빼고 받는다',
+      async (roleTypeCode) => {
+        prisma.adminAccount.findFirst.mockResolvedValue({
+          bpCodeId: 2,
+          isAllStores: true,
+          roleTypeCode,
+        });
+        await scope.getManageableStores(9);
+        expect(prisma.store.findMany).toHaveBeenCalledWith({
+          where: { bpCodeId: 2, isDeleted: false, isHq: false },
+          select: MANAGEABLE_SELECT,
+          orderBy: { storeId: 'asc' },
+        });
+      },
+    );
+
+    it('getManageableStores — 플랫폼 계정(탭 BP)은 본사 조건이 없다', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 1,
+        isAllStores: false,
+        roleTypeCode: 'PM',
+      });
+      await scope.getManageableStores(9, {
+        bpCodeId: 7,
+        isPlatformCaller: true,
+      });
+      const [[{ where }]] = prisma.store.findMany.mock.calls as [
+        [{ where: object }],
+      ];
+      expect(where).toEqual({ bpCodeId: 7, isDeleted: false });
+      expect(where).not.toHaveProperty('isHq');
+    });
+
+    it('canManageStore — 전체 점포 FA 가 본사 점포를 물으면 isHq: false 로 찾고, 없으면 false', async () => {
+      prisma.adminAccount.findFirst.mockResolvedValue({
+        bpCodeId: 2,
+        isAllStores: true,
+        roleTypeCode: 'FA',
+      });
+      // 본사 점포 100 — isHq: false 조건이면 찾지 못한다
+      prisma.store.findFirst.mockResolvedValue(null);
+      await expect(scope.canManageStore(9, 100)).resolves.toBe(false);
+      expect(prisma.store.findFirst).toHaveBeenCalledWith({
+        where: { storeId: 100, bpCodeId: 2, isDeleted: false, isHq: false },
+        select: { storeTypeCode: true, storeStatusCode: true, isHq: true },
+      });
+    });
+
+    describe('listBpStores(bpCodeId, user)', () => {
+      const admin = { type: 'admin' as const, id: 9, loginId: 'a', sid: 1 };
+      const staff = {
+        type: 'account' as const,
+        id: 30,
+        email: 's@test.invalid',
+        sid: 1,
+      };
+      const whereOf = () =>
+        (prisma.store.findMany.mock.calls as [[{ where: object }]])[0][0].where;
+
+      it('가맹 계정(FM)이면 본사를 뺀다', async () => {
+        prisma.adminAccount.findFirst.mockResolvedValue({ roleTypeCode: 'FM' });
+        await scope.listBpStores(7, admin);
+        expect(prisma.adminAccount.findFirst).toHaveBeenCalledWith({
+          where: { adminAccountId: 9, isDeleted: false },
+          select: { roleTypeCode: true },
+        });
+        expect(prisma.store.findMany).toHaveBeenCalledWith({
+          where: { bpCodeId: 7, isDeleted: false, isHq: false },
+          select: LIST_SELECT,
+          orderBy: LIST_ORDER,
+        });
+      });
+
+      it.each(['BA', 'BM'])('%s 는 본사 조건이 없다', async (roleTypeCode) => {
+        prisma.adminAccount.findFirst.mockResolvedValue({ roleTypeCode });
+        await scope.listBpStores(7, admin);
+        expect(whereOf()).toEqual({ bpCodeId: 7, isDeleted: false });
+      });
+
+      it('직원 앱(account)은 소속 점포 목록이라 본사 조건이 없고 관리자 계정을 묻지 않는다', async () => {
+        await scope.listBpStores(7, staff);
+        expect(prisma.adminAccount.findFirst).not.toHaveBeenCalled();
+        expect(whereOf()).toEqual({ bpCodeId: 7, isDeleted: false });
+      });
+
+      it('관리자 행을 못 찾으면 본사를 빼는 쪽으로 닫는다', async () => {
+        prisma.adminAccount.findFirst.mockResolvedValue(null);
+        await scope.listBpStores(7, admin);
+        expect(whereOf()).toEqual({
+          bpCodeId: 7,
+          isDeleted: false,
+          isHq: false,
+        });
+      });
+    });
+  });
 });

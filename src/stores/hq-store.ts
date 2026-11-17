@@ -11,7 +11,7 @@ import {
  * 본사 점포(stores.is_hq, 2026-11-17) — BP 마다 하나, 직영. 가입 · 플랫폼 BP 등록 때 시스템이 만들고, 점포 관리에는
  * 나오지 않는다. BP 상호명 · 사업자정보는 이 점포의 사업자정보(store_business_profiles)에 있다.
  * 상태는 사람이 고르지 않는다 — 일반 점포의 운영 조건(사업자 인증 · 좌표 · BP 사용)을 채우면 운영, 하나라도 빠지면
- * 미운영(운영 중에도 잃으면 내려간다, 사용자 결정). BP 탈퇴만 폐점으로 닫는다.
+ * 미운영(운영 중에도 잃으면 내려간다, 사용자 결정). BP 탈퇴(폐점)와 BP 삭제(폐점 · 삭제)만 닫는다.
  */
 
 type Tx = Pick<
@@ -41,24 +41,35 @@ export type HqBizInput = Partial<{
   bizVerifiedAt: Date | null;
 }>;
 
+/** 받은 좌표 칸. 빠진 칸(undefined)은 그대로 둔다 — 위도 · 경도는 둘 다 있거나 둘 다 없다(hqLocationInput 이 맞춘다). */
 export type HqLocationInput = {
-  latitude: number | null;
-  longitude: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
   /** 생략하면 그대로 둔다(만들 때는 사용) — 좌표를 다시 보내며 이 칸을 빼먹어도 「사용 안 함」이 켜지지 않게 */
   isLocationApplied?: boolean;
 };
 
+/** 저장된 본사 좌표 — 이력의 전 값. */
+type HqLocationRow = {
+  latitude: number | null;
+  longitude: number | null;
+  isLocationApplied: boolean;
+};
+
 /**
- * 받은 좌표 칸을 저장할 값으로 — 위도 · 경도는 함께 넣거나 함께 비운다(점포 등록과 같은 문구). 둘 다 생략하면 undefined
- * (좌표 · 위치 적용을 그대로 둔다 — 좌표를 모르는 옛 화면이 저장해도 지워지지 않게). null 은 지운다.
+ * 받은 좌표 칸을 저장할 값으로 — 위도 · 경도는 함께 넣거나(null 이면 지움) 함께 생략한다(그대로, 점포 등록과 같은 문구).
+ * 위치 적용은 따로 바꿀 수 있다(좌표 없이 이 칸만 보내도 반영). 셋 다 생략하면 undefined — 좌표를 모르는 옛 화면이
+ * 저장해도 지워지지 않게.
  */
 export function hqLocationInput(dto: {
   latitude?: number | null;
   longitude?: number | null;
   isLocationApplied?: boolean;
 }): HqLocationInput | undefined {
-  if (dto.latitude === undefined && dto.longitude === undefined)
-    return undefined;
+  const coordsOmitted =
+    dto.latitude === undefined && dto.longitude === undefined;
+  if (coordsOmitted && dto.isLocationApplied === undefined) return undefined;
+  if (coordsOmitted) return { isLocationApplied: dto.isLocationApplied };
   const latitude = dto.latitude ?? null;
   const longitude = dto.longitude ?? null;
   if ((latitude === null) !== (longitude === null))
@@ -99,7 +110,7 @@ export async function saveHqProfile(
   input: {
     bpCodeId: number;
     hqStoreId: number;
-    before: { tradeName: string } & Required<HqBizInput> & HqLocationInput;
+    before: { tradeName: string } & Required<HqBizInput> & HqLocationRow;
     tradeName: string;
     biz: HqBizInput;
     verified?: {
@@ -133,12 +144,12 @@ export async function saveHqProfile(
       zipCode: after.bizZipCode,
       address: after.bizAddress,
       addressDetail: after.bizAddressDetail,
-      ...(location && {
+      ...(location?.latitude !== undefined && {
         latitude: location.latitude,
-        longitude: location.longitude,
-        ...(location.isLocationApplied !== undefined && {
-          isLocationApplied: location.isLocationApplied,
-        }),
+        longitude: location.longitude ?? null,
+      }),
+      ...(location?.isLocationApplied !== undefined && {
+        isLocationApplied: location.isLocationApplied,
       }),
       updatedBy: by,
     },
@@ -158,11 +169,12 @@ export async function saveHqProfile(
   if (location) {
     const coord = (lat: number | null, lng: number | null) =>
       lat === null || lng === null ? null : `${lat}, ${lng}`;
-    push(
-      '위도 · 경도',
-      coord(before.latitude, before.longitude),
-      coord(location.latitude, location.longitude),
-    );
+    if (location.latitude !== undefined)
+      push(
+        '위도 · 경도',
+        coord(before.latitude, before.longitude),
+        coord(location.latitude, location.longitude ?? null),
+      );
     if (location.isLocationApplied !== undefined)
       push(
         '위치 적용',
@@ -206,8 +218,8 @@ export async function createHqStore(
       addressDetail: biz.bizAddressDetail ?? null,
       ...(location
         ? {
-            latitude: location.latitude,
-            longitude: location.longitude,
+            latitude: location.latitude ?? null,
+            longitude: location.longitude ?? null,
             isLocationApplied: location.isLocationApplied ?? true,
           }
         : {}),
@@ -245,6 +257,9 @@ export async function syncHqStatus(
   bpCodeId: number,
   by: number | null,
 ): Promise<void> {
+  // 본사 행을 잠근 뒤 읽는다 — BP 상태 변경과 좌표 · 사업자번호 저장이 겹치면 잠그지 않은 읽기는 서로의 커밋 전 값을 봐
+  // 「BP 미사용인데 본사 운영」처럼 조건과 다른 상태가 남는다. 수정 쪽은 이미 본사 행을 update 로 잠그므로 한 줄로 선다.
+  await tx.$executeRaw`SELECT 1 FROM stores WHERE bp_code_id = ${bpCodeId} AND is_hq AND NOT is_deleted FOR UPDATE`;
   const hq = await tx.store.findFirst({
     where: { bpCodeId, isHq: true, isDeleted: false },
     select: {

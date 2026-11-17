@@ -68,10 +68,15 @@ export class PayslipListQueryDto {
   storeIds?: number[];
 
   /**
-   * 쉼표로 구분한 점포 유형(상단 점포 범위의 직영 · 가맹) — DIRECT · FRANCHISE. 주면 그 유형 점포만이고 폐점 점포는 뺀다(직원
-   * 목록과 같다). storeIds 와 함께 주면 둘 다 맞는 점포만이다. 빈 값 · 모르는 값이 하나라도 있으면 400 이다.
+   * 쉼표로 구분한 점포 유형(상단 점포 범위, API enum StoreScopeType) — DIRECT(본사가 아닌 직영) · FRANCHISE(가맹) · HQ(본사).
+   * 주면 그 유형 점포만이고 폐점 점포는 뺀다(직원 목록과 같다). storeIds 와 함께 주면 둘 다 맞는 점포만이다. 주지 않으면
+   * 전체(본사 포함 — FM · FA 범위에는 본사가 없다). 빈 값 · 모르는 값이 하나라도 있으면 400 이다.
    */
-  @ApiPropertyOptional({ type: String, example: 'DIRECT' })
+  @ApiPropertyOptional({
+    enum: STORE_SCOPE_TYPES,
+    enumName: 'StoreScopeType',
+    isArray: true,
+  })
   @IsOptional()
   @Transform(({ value }) =>
     String(value)

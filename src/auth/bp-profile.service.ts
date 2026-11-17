@@ -17,6 +17,7 @@ import {
   type HqBiz,
   hqBizOf,
   hqLocationOf,
+  liveHqStoreId,
 } from '../bp-codes/hq-profile';
 import { sameMillisecond } from '../common/updated-at';
 import { hqLocationInput, saveHqProfile } from '../stores/hq-store';
@@ -39,8 +40,9 @@ const NTS_CALLS_PER_HOUR = 10;
 const NTS_WINDOW_MS = 3_600_000;
 
 /**
- * 내 정보(마이페이지) 사업자정보 조회 · 수정 · 인증(manyfast F-AMTDCK > S-UOJVUR). BP 마스터 본인의
- * bp_codes 행만 다룬다 — 다른 BP 는 다루지 않는다(플랫폼 쪽 BP 수정은 F-EHHJLV, 아직 없음).
+ * 내 정보(마이페이지) 사업자정보 조회 · 수정 · 인증(manyfast F-AMTDCK > S-UOJVUR). BP 마스터 본인의 BP 만
+ * 다룬다. 상호명 · 사업자정보 · 좌표는 그 BP 의 본사 점포(stores.is_hq) 사업자정보와 좌표에 있다(2026-11-17) — 저장은
+ * 플랫폼 BP 수정(BpMastersService)과 같은 saveHqProfile 로 하고, 이력도 본사 점포 이력에 남는다.
  *
  * 사업자등록번호 · 대표자명 · 개업일자는 점포 사업자정보와 같은 두 단계다(2026-10-22 사용자 결정 —
  * 「인증하기」를 누르자마자 바로 저장되던 것을 고침): business-verification 은 검사만 하고 10분짜리
@@ -223,13 +225,20 @@ export class BpProfileService {
     });
     if (!bp) throw new NotFoundException(NOT_FOUND);
     // 상호명 · 사업자정보 · 좌표는 본사 점포에 있다(2026-11-17) — 예전 bp_codes 칸 이름으로 펼친다.
-    const hq = bp.stores[0];
+    const hqStoreId = liveHqStoreId(bp);
+    const profile = bp.stores[0]?.businessProfile;
+    // 본사 · 사업자정보가 없으면 불변식이 깨진 것이다 — 1970 같은 가짜 수정 시각을 주면 저장이 늘 「먼저 수정」 409 가
+    // 되어 원인을 가린다. 500 으로 멈춘다.
+    if (hqStoreId === null || !profile)
+      throw new Error(
+        `BP ${bp.bpCodeId} 에 살아 있는 본사 점포 사업자정보가 없습니다`,
+      );
     return {
       bpCodeId: bp.bpCodeId,
-      ...hqBizOf(bp),
+      ...hqBizOf(bp, bp.bpCodeId),
       ...hqLocationOf(bp),
-      hqStoreId: hq?.storeId ?? null,
-      updatedAt: hq?.businessProfile?.updatedAt ?? new Date(0),
+      hqStoreId,
+      updatedAt: profile.updatedAt,
     };
   }
 

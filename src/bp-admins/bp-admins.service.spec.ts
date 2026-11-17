@@ -1113,6 +1113,77 @@ describe('BpAdminsService', () => {
     });
   });
 
+  // 본사도 일반 점포처럼 맡길 수 있다 — 가맹 마스터 · 가맹 관리자에게만 안 된다(2026-11-17, allowedFor)
+  describe('본사 점포 배정', () => {
+    /** 점포 2 를 잠시 본사로 바꿔 fn 을 돌린다 — storeOptions 의 본사 테스트와 같은 방식. */
+    const withHq = async (fn: () => Promise<void>) => {
+      const original = stores[1];
+      stores[1] = { ...original, isHq: true };
+      try {
+        await fn();
+      } finally {
+        stores[1] = original;
+      }
+    };
+    const createInput = (o: Record<string, unknown>) => ({
+      loginId: 'newuser1',
+      name: '새사람',
+      phone: '01099998888',
+      email: 'New@Whale.test',
+      roleTypeCode: 'BA' as const,
+      roleGroupId: 11,
+      isAllStores: false,
+      storeIds: [2],
+      ...o,
+    });
+    const updateInput = (id: number, storeIds: number[]) => {
+      const a = accounts.find((x) => x.adminAccountId === id)!;
+      return {
+        name: a.name,
+        phone: a.phone,
+        email: a.email,
+        roleGroupId: a.roleGroupId,
+        isAllStores: a.isAllStores,
+        storeIds,
+        accountStatus: 'ACTIVE' as const,
+        updatedAt: updatedAt.toISOString(),
+      };
+    };
+
+    it('create — 가맹 마스터에게 본사 점포를 맡기면 400(범위 밖), 계정은 없다', () =>
+      withHq(async () => {
+        await expect(
+          service.create(
+            1,
+            bp,
+            createInput({ roleTypeCode: 'FM', roleGroupId: 13 }),
+          ),
+        ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다.');
+        expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+      }));
+
+    it('create — BP 관리자에게는 본사 점포를 맡길 수 있다', () =>
+      withHq(async () => {
+        await service.create(1, bp, createInput({}));
+        expect(prisma.adminAccount.create).toHaveBeenCalled();
+      }));
+
+    it('update — 가맹 마스터에게 본사 점포를 더하면 400, 바꾸지 않는다', () =>
+      withHq(async () => {
+        await expect(
+          service.update(1, bp, 21, updateInput(21, [2, 3])),
+        ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다.');
+        expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
+      }));
+
+    it('update — BP 관리자에게는 본사 점포를 더할 수 있다', () =>
+      withHq(async () => {
+        await service.update(1, bp, 40, updateInput(40, [1, 2, 5]));
+        expect(prisma.adminStoreMapping.createMany).toHaveBeenCalledWith(
+          partial({ data: [partial({ adminAccountId: 40, storeId: 2 })] }),
+        );
+      }));
+  });
   describe('updateImpact', () => {
     it('미사용이 되는 가맹 관리자와 매핑이 빠지는 가맹 관리자를 센다', async () => {
       const res = await service.updateImpact(1, bp, 20, {

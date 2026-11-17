@@ -73,7 +73,10 @@ export class ListContractsQueryDto {
   @Max(INT4_MAX, { each: true })
   storeIds?: number[];
 
-  /** 점포 유형(직영 · 가맹) — 상단 점포 범위의 직영 · 가맹. 주지 않으면 둘 다. */
+  /**
+   * 점포 유형(상단 점포 범위, API enum StoreScopeType) — DIRECT(본사가 아닌 직영) · FRANCHISE(가맹) · HQ(본사). 주지 않으면
+   * 전체(본사 포함 — FM · FA 범위에는 본사가 없다).
+   */
   @ApiPropertyOptional({
     enum: STORE_SCOPE_TYPES,
     enumName: 'StoreScopeType',

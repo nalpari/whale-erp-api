@@ -37,7 +37,7 @@ export const API_ENUMS: EnumSource = {
   StaffSendResult: Object.entries(STAFF_SEND_RESULT_LABELS),
   /** 커뮤니티 관리 문의사항 · 도입문의 목록의 답변 상태 거르기 (WHALEERP-332) */
   InquiryAnswerStatus: Object.entries(ANSWER_STATUS_LABELS),
-  /** 상단 점포 범위의 유형 — 3팀 목록 · 홈의 storeTypes(직영은 본사 아닌 직영, 2026-11-17) */
+  /** 상단 점포 범위의 유형 — 3팀 목록(직원 · 근로계약 · 급여명세서 · TO-DO · 출퇴근)의 storeTypes(직영은 본사 아닌 직영, 2026-11-17) */
   StoreScopeType: Object.entries(STORE_SCOPE_TYPE_LABELS),
   /** 점포를 운영으로 바꾸는 데 모자란 것 — 점포 상세 · 전환 확인의 missingForOperation (MN000002) */
   StoreOperationRequirement: Object.entries(OPERATION_REQUIREMENT_LABELS),

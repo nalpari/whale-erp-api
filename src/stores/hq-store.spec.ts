@@ -154,10 +154,14 @@ describe('hq-store', () => {
       ...patch,
     });
 
-    it('조건이 바뀌면 상태를 바꾸고 「점포상태」 이력을 남긴다', async () => {
+    it('조건이 바뀌면 상태를 바꾸고 「점포상태」 이력을 남긴다 — 판정 전에 본사 행을 잠근다', async () => {
       const t = tx();
       t.store.findFirst.mockResolvedValue(hq());
       await syncHqStatus(t as never, 3, 9);
+      // 동시에 BP 상태 변경 · 좌표 저장이 겹쳐도 최신 값으로 판정하도록 잠근 뒤 읽는다
+      expect(t.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        t.store.findFirst.mock.invocationCallOrder[0],
+      );
       expect(t.store.findFirst).toHaveBeenCalledWith(
         like({
           where: { bpCodeId: 3, isHq: true, isDeleted: false },
@@ -232,8 +236,12 @@ describe('hq-store', () => {
         longitude: 127,
         isLocationApplied: undefined,
       });
-      // 둘 다 생략하면 그대로 둔다 — 좌표를 모르는 옛 화면이 저장해도 지워지지 않게
-      expect(hqLocationInput({ isLocationApplied: true })).toBeUndefined();
+      // 셋 다 생략하면 그대로 둔다 — 좌표를 모르는 옛 화면이 저장해도 지워지지 않게
+      expect(hqLocationInput({})).toBeUndefined();
+      // 위치 적용만 보내면 그것만 바꾼다 — 화면이 토글만 바꿔 저장해도 반영된다
+      expect(hqLocationInput({ isLocationApplied: false })).toEqual({
+        isLocationApplied: false,
+      });
     });
   });
 
@@ -331,6 +339,30 @@ describe('hq-store', () => {
         where: { storeId: 70 },
         data: { storeStatusCode: 'OPERATING', updatedBy: 9 },
       });
+    });
+
+    it('위치 적용만 주면 좌표는 그대로 두고 위치 적용만 바꾼다', async () => {
+      const t = tx();
+      t.store.findFirst.mockResolvedValue(null);
+      await saveHqProfile(t as never, {
+        bpCodeId: 3,
+        hqStoreId: 70,
+        before,
+        tradeName: '고래상사',
+        biz: {},
+        location: { isLocationApplied: false },
+        by: 9,
+      });
+      const data = dataOf(t.store.update);
+      expect(data).not.toHaveProperty('latitude');
+      expect(data.isLocationApplied).toBe(false);
+      expect(
+        (
+          dataOf(t.storeChangeHistory.createMany) as unknown as {
+            field: string;
+          }[]
+        ).map((r) => r.field),
+      ).toEqual(['위치 적용']);
     });
 
     it('location 을 주지 않으면 좌표는 그대로 둔다', async () => {

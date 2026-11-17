@@ -4,12 +4,12 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:56:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excelCount · excelFile · assertExcelCaller)
-    last_modified: 2026-11-17T07:56:00Z
+    last_modified: 2026-11-17T08:19:43Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
@@ -36,8 +36,8 @@ sources:
     last_modified: 2026-11-17T06:50:00Z
   - id: hq-profile
     resource: ../../src/bp-codes/hq-profile.ts
-    title: BP 상호명 · 사업자정보 · 좌표를 본사 점포에서 읽는 select 조각과 펼침(tradeNameOf · hqBizOf · hqLocationOf)
-    last_modified: 2026-11-17T06:50:00Z
+    title: BP 상호명 · 사업자정보 · 좌표를 본사 점포에서 읽는 select 조각과 펼침(tradeNameOf · hqBizOf · hqLocationOf · liveHqStoreId)
+    last_modified: 2026-11-17T08:19:43Z
   - id: bp-masters-e2e
     resource: ../../test/bp-masters.e2e-spec.ts
     title: e2e on a real database — 403 for BP accounts, concurrent register, code copy, history paging, cascade, delete, withdrawn BP (histories 409 · detail withdrawal)
@@ -107,7 +107,9 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   `POST /bp-masters/business-verifications` checks (duplicate first, then 국세청) and
   returns a 10-minute token; register and edit write the three values and `biz_verified_at`
   only when the token rides along, re-checking the number inside the transaction under
-  the per-number lock `stores:biz:<번호>` that store saves, signup and 마이페이지 take. The
+  the per-number lock `stores:biz:<번호>` that store saves, signup and 마이페이지 take. Since the 본사 move
+  the number is no longer unique in the database, so a `P2002` on register · edit answers 409 only when it names
+  `admin_accounts`' `login_id` or `email`; any other unique violation is a real 500, not a misleading 「중복」. The
   edit screen sends its `bpCodeId` so the BP's own number (and its stores') is not a
   duplicate. Ten calls per admin per hour, plus the controller's IP · account throttle —
   the 국세청 key and daily quota are shared by every BP.
@@ -121,7 +123,7 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   renames the 본사 점포, copies the business address into its address and re-derives its status —
   **clearing the number or the coordinates drops a 운영 본사 to 미운영 without asking** (user
   decision 2026-11-17). Latitude and longitude come together; leaving both out keeps the stored
-  coordinates (an older screen that does not know them cannot wipe them), `null` clears them. `isLocationApplied` left out likewise keeps the current value; only when the 본사 is first created does it default to 사용 (it used to default to 사용 on every save). Platform BP registration writes the 본사 last in its transaction, so the store-code advisory lock is held only until commit.
+  coordinates (an older screen that does not know them cannot wipe them), `null` clears them. `isLocationApplied` left out likewise keeps the current value, and sent alone (without coordinates) it is applied; only when the 본사 is first created does it default to 사용 (it used to default to 사용 on every save). Only one of latitude · longitude is a 400. These three are the exception to the form's 「전체 치환」. The 상호명 and 사업자정보 are read from the live 본사 only; when it is missing (it must exist for every BP) `tradeNameOf` · `hqBizOf` return empty values but log an error, and the edit path stops with 500 instead of writing to a deleted 본사 (`liveHqStoreId`). Platform BP registration writes the 본사 last in its transaction, so the store-code advisory lock is held only until commit.
 - **미사용 cascades, 사용 does not.** Turning a BP 미사용 turns every active account of the
   BP (BM · BA · FM · FA) 미사용 in the same transaction; sessions and passwords stay, and
   the menu-permission check refuses them from the next request. Turning it back 사용 lifts

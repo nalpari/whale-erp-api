@@ -1225,7 +1225,9 @@ export class StoreManagementService implements OnModuleInit {
    * 이 번호를 미운영 · 운영 점포(지우지 않은)가 쓰는가. BP 번호는 본사 점포 사업자정보에 있어(2026-11-17) 다른 BP 의
    * 본사도 같은 검사로 걸린다 — 탈퇴한 BP 의 본사는 폐점, 삭제한 BP 의 본사는 삭제라 그 번호는 다시 쓸 수 있다.
    * 소속 BP 의 본사 번호는 점포도 쓸 수 있다(PL-OCJOFP) — 그래서 소속 BP 의 본사만 뺀다.
-   * 조건은 가입 · 마이페이지의 BusinessVerificationService.isBizRegistrationNumberTaken 과 같다.
+   * 살아 있는 점포 · 플랫폼 BP 본사 제외 조건은 가입 · 마이페이지 · 플랫폼 BP 의 BusinessVerificationService
+   * .isBizRegistrationNumberTaken 과 같고, 빼는 범위만 다르다 — 여기는 소속 BP 의 본사만, 저쪽 재인증(excludeBpCodeId)은
+   * 그 BP 의 점포 전부를 뺀다.
    */
   private async isNumberTaken(
     db: Tx | PrismaService,
