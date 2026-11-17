@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-16T05:08:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T01:41:00Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-11-13T09:09:00Z
+    last_modified: 2026-11-17T01:41:00Z
   - id: minimum-wage
     resource: ../../src/contracts/minimum-wage.ts
     title: 최저임금 공통코드 · 수습 중 시급 검사
@@ -188,7 +188,13 @@ a 직원 not yet joined has no account, so counts as not consented)
   once 본사 제공 동의 is saved). Whether the store still exists and is
   not 폐점 is checked either way — a draft whose store closed after it was saved
   is 404 「근무지 점포를 찾을 수 없습니다.」 even when kept at the same store, so
-  it cannot move on to 발송 대기 (api #21 재리뷰). An account that is deleted, inactive or unknown gets 403
+  it cannot move on to 발송 대기 (api #21 재리뷰). A **new** 근무지 must also be
+  운영 중 (`store_status_code = OPERATING`, WHALEERP-722): a new contract or a
+  move to another store at a 미운영 (`NOT_OPERATING`) store is 400 「운영 중인
+  점포만 근무지로 고를 수 있습니다.」, told only after the scope check so a store
+  outside the scope stays 404. A contract already at a 미운영 store is left as
+  it is — kept at the same store it is still saved and sent (2026-11-17 김민식).
+  `GET /contracts/store-options` lists 운영 중 stores only. An account that is deleted, inactive or unknown gets 403
   on the list (`getManageableStores` is null).[^admin-scope]
 - **The BP is the tab's, not the account's** (WHALEERP-618, 2026-10-29). Every
   관리자 웹 route here (`ContractsController` and `ContractSendController`'s
@@ -387,6 +393,7 @@ What it refuses, before writing:
   and turn the age check into NaN, a 500), an integer above 2147483647
   (`storeId`, `wageAmount`, 수당 — the column would 500).
 - **404** — the store is missing, deleted, `CLOSED`, or outside the admin scope.
+- **400** — the store is 미운영 (`NOT_OPERATING`, WHALEERP-722): 「운영 중인 점포만 근무지로 고를 수 있습니다.」
 - **409** — someone with the same phone has **joined** (`join_status = JOINED`)
   and is `EMPLOYED` at that store (the mockup's 「이 점포 재직 중 → 차단」,
   decided from records alone). Records not joined yet are ignored: they are
