@@ -1,8 +1,9 @@
 import { type DynamicModule, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
+import { storeBusinessVerifierFor } from '../stores/nts-store-business-verifier';
 import { NtsBusinessClient } from './nts-business.client';
-import { NtsModule } from './nts.module';
+import { BypassNtsBusinessClient, NtsModule } from './nts.module';
 
 // 국세청 키는 선택 설정이다 — 메일 · 점포 사업자 인증처럼, 없어도 api 는 뜨고 진위확인만 503 이 된다
 // (2026-10-15 결정). 운영에서 비어 있으면 기동 때 error 로 남겨 배포 로그에서 알게 한다.
@@ -22,7 +23,10 @@ describe('NtsModule', () => {
   });
 
   // 실제 앱은 전역 ConfigModule 이 ConfigService 를 준다. 테스트는 같은 자리에 가짜 전역 모듈을 둔다.
-  const build = async (key: string | undefined) => {
+  const build = async (
+    key: string | undefined,
+    bypass: string | undefined = undefined,
+  ) => {
     const config: DynamicModule = {
       module: class FakeConfigModule {},
       global: true,
@@ -30,7 +34,12 @@ describe('NtsModule', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: (k: string) => (k === 'NTS_SERVICE_KEY' ? key : undefined),
+            get: (k: string) =>
+              k === 'NTS_SERVICE_KEY'
+                ? key
+                : k === 'NTS_VERIFICATION_BYPASS'
+                  ? bypass
+                  : undefined,
           },
         },
       ],
@@ -67,5 +76,111 @@ describe('NtsModule', () => {
     expect(client.isConfigured).toBe(true);
     expect(error).not.toHaveBeenCalled();
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  // 개발서버 시험용(2026-11-17 front 요청) — 국세청을 건너뛰고 어떤 값이든 일치로 본다. 운영에서는 무시한다.
+  describe('NTS_VERIFICATION_BYPASS', () => {
+    const identity = {
+      bizRegistrationNumber: '0000000000',
+      bizCeoName: '아무나',
+      bizOpenDate: '2000-01-01',
+    };
+
+    it('true 면 키가 없어도 설정된 것으로 보고 어떤 값이든 MATCH 다 — 기동 · 확인마다 경고를 남긴다', async () => {
+      process.env.APP_ENV = 'dev';
+      const fetchFn = jest
+        .spyOn(global, 'fetch')
+        .mockRejectedValue(new Error('국세청을 부르면 안 된다'));
+      const client = await build(undefined, 'true');
+      expect(client.isConfigured).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('사업자 진위확인 통과 모드'),
+      );
+      warn.mockClear();
+      await expect(client.verify(identity)).resolves.toBe('MATCH');
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('국세청을 건너뜀'),
+      );
+      expect(fetchFn).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+    });
+
+    it('키가 있어도 국세청을 부르지 않는다', async () => {
+      process.env.APP_ENV = 'local';
+      const fetchFn = jest
+        .spyOn(global, 'fetch')
+        .mockRejectedValue(new Error('국세청을 부르면 안 된다'));
+      const client = await build('service-key', ' TRUE ');
+      await expect(client.verify(identity)).resolves.toBe('MATCH');
+      expect(fetchFn).not.toHaveBeenCalled();
+    });
+
+    it('점포의 진위확인도 503 대신 통과한다', async () => {
+      process.env.APP_ENV = 'dev';
+      const verifier = storeBusinessVerifierFor(await build(undefined, 'true'));
+      expect(verifier).not.toBeNull();
+      await expect(
+        verifier!.verify({
+          bizRegistrationNumber: '0000000000',
+          ceoName: '아무나',
+          openDate: new Date('2000-01-01T00:00:00Z'),
+        }),
+      ).resolves.toBe(true);
+    });
+
+    it.each([
+      ['APP_ENV=prod', { APP_ENV: 'prod' }],
+      ['NODE_ENV=production', { APP_ENV: 'dev', NODE_ENV: 'production' }],
+    ])(
+      '운영(%s)이면 켜져 있어도 무시하고 기동 때 error 를 남긴다',
+      async (_, env: Record<string, string>) => {
+        const nodeEnv = process.env.NODE_ENV;
+        Object.assign(process.env, env);
+        try {
+          const client = await build(undefined, 'true');
+          expect(client.isConfigured).toBe(false);
+          await expect(client.verify(identity)).rejects.toThrow(
+            'NTS_SERVICE_KEY',
+          );
+          expect(error).toHaveBeenCalledWith(
+            expect.stringContaining('NTS_VERIFICATION_BYPASS'),
+          );
+          expect(warn).not.toHaveBeenCalledWith(
+            expect.stringContaining('통과 모드'),
+          );
+
+          // 키가 있으면 진짜 클라이언트로 국세청을 부른다 — 통과 모드 클라이언트가 아니다.
+          // 클라이언트는 만들 때 fetch 를 잡아 두므로 가짜 fetch 를 먼저 건다(진짜 odcloud 를 부르지 않게).
+          const fetchFn = jest
+            .spyOn(global, 'fetch')
+            .mockRejectedValue(new Error('network'));
+          const withKey = await build('service-key', 'true');
+          expect(withKey.isConfigured).toBe(true);
+          expect(withKey).not.toBeInstanceOf(BypassNtsBusinessClient);
+          await expect(withKey.verify(identity)).rejects.toThrow(
+            '국세청 호출 실패',
+          );
+          expect(fetchFn).toHaveBeenCalledTimes(1);
+        } finally {
+          if (nodeEnv === undefined) delete process.env.NODE_ENV;
+          else process.env.NODE_ENV = nodeEnv;
+        }
+      },
+    );
+
+    it.each([[undefined], [''], ['false'], ['1'], ['yes']])(
+      '%p 이면 지금과 같다',
+      async (value) => {
+        process.env.APP_ENV = 'local';
+        const client = await build(undefined, value);
+        expect(client.isConfigured).toBe(false);
+        await expect(client.verify(identity)).rejects.toThrow(
+          'NTS_SERVICE_KEY',
+        );
+        expect(warn).not.toHaveBeenCalledWith(
+          expect.stringContaining('통과 모드'),
+        );
+      },
+    );
   });
 });

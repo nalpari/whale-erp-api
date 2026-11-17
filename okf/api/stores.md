@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T10:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T01:14:38Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -425,6 +425,9 @@ signup uses (`NtsModule`), so the key, the 5-second timeout and the rule that on
 rather than the client: every check is the 503 「연동이 아직 없어」 and the service
 warns once at boot, instead of a 「잠시 뒤 다시」 503 with an error stack on every
 click that would read as an outage.[^store-business-verifier][^nts-store-business-verifier]
+On a dev server `NTS_VERIFICATION_BYPASS=true` makes the shared client answer MATCH for any value
+without calling 국세청, so the verifier is not `null` even without the key; production ignores it —
+see [BP signup](/api/admin-signup.md).
 
 `POST /stores/business-verifications` is the screen's preview of that check (API
 enum `StoreBusinessVerificationResult`: `VERIFIED` · `UNVERIFIABLE` · `DUPLICATE`,

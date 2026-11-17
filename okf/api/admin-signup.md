@@ -4,7 +4,7 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T01:01:50Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
@@ -44,8 +44,8 @@ sources:
     last_modified: 2026-10-15T06:37:12Z
   - id: nts-module
     resource: ../../src/nts/nts.module.ts
-    title: NtsModule (NTS key optional — 503 without it; shared with stores)
-    last_modified: 2026-10-15T06:05:33Z
+    title: NtsModule (NTS key optional — 503 without it; shared with stores; dev bypass)
+    last_modified: 2026-11-17T01:01:50Z
 ---
 
 # What it does
@@ -161,6 +161,17 @@ without verification still works); in production an error is logged at boot so a
 deploy that forgot it shows up in the logs instead of refusing to start. The token
 carries 사업자등록번호 and 대표자명 in plain base64 — keep it out of logs and URLs. The e2e suite
 overrides `NtsBusinessClient`, so it never calls 국세청.
+
+**개발서버 통과 모드 — `NTS_VERIFICATION_BYPASS=true`** (2026-11-17, front 요청). On a dev server
+only real business data passes 국세청, which made 사업자 인증 untestable. With the value `true` (case
+and surrounding spaces ignored; anything else is off) `NtsModule` provides `BypassNtsBusinessClient`
+instead: `isConfigured` is true even without `NTS_SERVICE_KEY` (so stores do not answer 503 either),
+and `verify` never calls 국세청 and always answers MATCH, logging a warning each time (no 대표자명 ·
+번호) and once at boot. The four routes — signup, MY PAGE BP 사업자정보, BP 마스터, 점포 — all go
+through that one client; input validation, the 사업자등록번호 duplicate check (409) and the 10-minute
+token stay as they are, as does the response shape. **In production (`isProduction()`) the value is
+ignored** and an error is logged at boot — the same image runs on dev and prod, so a stray line in the
+prod env file must still leave the real check running.
 
 # Traps
 
