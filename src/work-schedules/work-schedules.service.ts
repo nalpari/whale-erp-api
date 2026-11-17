@@ -762,7 +762,7 @@ export class WorkSchedulesService {
     scope: Scope,
     adminAccountId: number,
     items: { index: number; workDate: string; line: BulkWorkScheduleRowDto }[],
-    /** 로그에 남길 경로 — 일괄 · 기간 등록을 가른다 */
+    /** 일괄 · 기간 등록을 가른다 — 로그와 예상 못 한 저장 오류의 안내 문구 */
     via: 'bulk' | 'range',
   ): Promise<{
     created: ScheduleRow[];
@@ -796,7 +796,11 @@ export class WorkSchedulesService {
             staffMemberId: line.staffMemberId,
             statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
             code: 'WORK_SCHEDULE_SAVE_FAILED',
-            message: '저장하지 못했습니다. 이 줄만 다시 시도해 주세요.',
+            // 기간 등록 화면에는 줄만 다시 보내는 길이 없다 — 그날만 다시 넣게 안내한다(재영 리뷰)
+            message:
+              via === 'range'
+                ? '저장하지 못했습니다. 잠시 뒤 그날만 다시 등록해 주세요.'
+                : '저장하지 못했습니다. 이 줄만 다시 시도해 주세요.',
           });
           continue;
         }

@@ -4,12 +4,12 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
 tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T01:27:06Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T03:05:37Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-11-17T01:27:06Z
+    last_modified: 2026-11-17T03:05:37Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
@@ -117,7 +117,7 @@ every route — they all go through `scopeOf` — before the scope is read. 직�
 - 기간은 최대 92일(`RANGE_MAX_DAYS`), 요일은 0(일) ~ 6(토) 1~7개. 휴일(BP 휴일 · 공휴일)도 기간에 든다 — 쉬는 날은 관리자가 요일로 뺀다.
 - 종료일이 앞서거나 92일을 넘거나 고른 요일의 날이 없거나, 날 수 × 줄 수가 500건(`RANGE_MAX_ITEMS` — 한 건마다 트랜잭션이라 프록시 · 화면 시간 초과보다 확실히 짧게, 직원 5명 × 92일 · 10명 × 50일)을 넘으면 400 — 아무것도 저장하지 않는다.
 - BP 를 고르지 않았으면 기간을 보기 전에 400(다른 경로와 같다). 걸린 시간은 `work schedule range … in Nms` 로그로 남긴다 — 한 건마다 트랜잭션이라 건수만큼 오래 걸린다(상한을 실제 시간으로 맞출 때 본다).
-- 저장은 일괄 등록과 같은 `insertEach` 다 — 한 건마다 따로, 근무일 순 · 줄 순. 넣을 수 없는 날(계약 없음 · 가입 전 · 퇴직일 뒤 · 겹침 등)은 건너뛰어 `failed` 에 그 근무일(`workDate`)과 함께 넣고 나머지는 저장한다.
+- 저장은 일괄 등록과 같은 `insertEach` 다 — 한 건마다 따로, 근무일 순 · 줄 순. 넣을 수 없는 날(계약 없음 · 가입 전 · 퇴직일 뒤 · 겹침 등)은 건너뛰어 `failed` 에 그 근무일(`workDate`)과 함께 넣고 나머지는 저장한다. 예상 못 한 저장 오류(500 `WORK_SCHEDULE_SAVE_FAILED`)의 안내는 「잠시 뒤 그날만 다시 등록해 주세요」다 — 기간 화면에는 줄만 다시 보내는 길이 없다(일괄 등록은 「이 줄만 다시 시도」, 재영 리뷰).
 - 알림은 다 저장한 뒤 직원마다 한 번이고, 하나하나 적지 않고 「11월 17일(화)~11월 21일(토) 근무 3건 추가」로 묶는다(`rangeText` — 그 직원에게 실제로 생긴 첫 날 ~ 마지막 날, 하루뿐이면 날짜 하나). 메일도 직원마다 한 통, 기다리지 않는다.
 
 # Copy last week

@@ -772,6 +772,30 @@ describe('WorkSchedulesService', () => {
       expect(db.workSchedule.create).not.toHaveBeenCalled();
     });
 
+    it('예상 못 한 저장 오류는 그 날만 실패(500)로, 안내는 그날만 다시 등록하라고 — 일괄 등록의 「이 줄만」과 다르다', async () => {
+      let n = 0;
+      db.workSchedule.create.mockImplementation(() =>
+        (n += 1) === 2
+          ? Promise.reject(new Error('db down'))
+          : Promise.resolve(scheduleRow({ workScheduleId: 100 + n })),
+      );
+      const res = await service.rangeCreate(ADMIN, {
+        fromDate: '2026-10-19',
+        toDate: '2026-10-21',
+        weekdays: [1, 2, 3],
+        rows: [line(11)],
+      });
+      expect(res.created).toHaveLength(2);
+      expect(res.failed).toEqual([
+        expect.objectContaining({
+          workDate: '2026-10-20',
+          statusCode: 500,
+          code: 'WORK_SCHEDULE_SAVE_FAILED',
+          message: '저장하지 못했습니다. 잠시 뒤 그날만 다시 등록해 주세요.',
+        }),
+      ]);
+    });
+
     it('고른 요일의 날마다 줄을 저장하고, 넣을 수 없는 날은 근무일과 함께 실패로 — 알림은 직원마다 한 번, 기간으로 묶는다', async () => {
       const noticeSpy = jest
         .spyOn(notice, 'noticeScheduleChange')

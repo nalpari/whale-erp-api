@@ -189,7 +189,9 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         }),
       },
       store: {
-        findFirst: jest.fn().mockResolvedValue({ storeId: 11 }),
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ storeStatusCode: 'OPERATING' }),
         findUnique: jest.fn().mockResolvedValue({ name: '모리커피 성수점' }),
       },
       // 종이 계약을 작성한 관리자(WHALEERP-328)
@@ -1424,6 +1426,58 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    // WHALEERP-722 — 이미 미운영 점포로 만든 계약은 그대로 둔다(같은 근무지로 이어 쓰기), 옮겨 갈 근무지만 운영 중이어야 한다
+    it('같은 근무지면 미운영 점포라도 이어 쓴다', async () => {
+      prisma.store.findFirst.mockResolvedValue({
+        storeStatusCode: 'NOT_OPERATING',
+      });
+      await service.update(9, 7, dto());
+      expect(tx.contract.updateMany).toHaveBeenCalled();
+    });
+
+    it('미운영 점포로 옮기면 400 — 아무것도 쓰지 않는다', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 11,
+        staffMember: {
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          },
+          phone: '01090145563',
+        },
+      });
+      prisma.store.findFirst.mockResolvedValue({
+        storeStatusCode: 'NOT_OPERATING',
+      });
+      await expect(service.update(9, 7, dto({ storeId: 12 }))).rejects.toThrow(
+        '운영 중인 점포만 근무지로 고를 수 있습니다.',
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('업무 범위 밖 미운영 점포로 옮기면 운영 여부가 아니라 404', async () => {
+      prisma.contract.findUnique.mockResolvedValue({
+        storeId: 11,
+        staffMember: {
+          account: {
+            isHqSharingConsented: true,
+            hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
+          },
+          phone: '01090145563',
+        },
+      });
+      prisma.store.findFirst.mockResolvedValue({
+        storeStatusCode: 'NOT_OPERATING',
+      });
+      scope.canManageStaffAt.mockImplementation(
+        (_admin: number, storeId: number) => Promise.resolve(storeId === 11),
+      );
+      await expect(service.update(9, 7, dto({ storeId: 12 }))).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     // api #49 4차 리뷰 — 동의로만 보이는 관리자가 번호를 바꿔 보내 남의 계약을 409 로 엿보거나 대체로 닫지 못하게

@@ -57,7 +57,7 @@ describe('근로계약 근무지 선택지', () => {
     service = module.get(ContractsService);
   });
 
-  it('업무 범위 안에서 지우지 않았고 폐점이 아닌 점포를 이름순(+ id)으로 준다', async () => {
+  it('업무 범위 안에서 지우지 않은 운영 중 점포만(미운영 · 폐점 빼고, WHALEERP-722) 이름순(+ id)으로 준다', async () => {
     await expect(
       service.storeOptions(9, { page: 2, pageSize: 50 }, bp),
     ).resolves.toEqual({
@@ -69,7 +69,7 @@ describe('근로계약 근무지 선택지', () => {
     const where = {
       storeId: { in: [11] },
       isDeleted: false,
-      storeStatusCode: { not: 'CLOSED' },
+      storeStatusCode: 'OPERATING',
     };
     expect(args).toEqual({
       where,
