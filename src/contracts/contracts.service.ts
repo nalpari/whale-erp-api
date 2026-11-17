@@ -28,6 +28,7 @@ import {
   hqSharingConsentedOf,
   type HqSharingSource,
 } from '../admin-scope/hq-sharing';
+import type { StoreStatus } from '../stores/store-format';
 import { bankNameOf } from '../common/bank-name';
 import { dateOnly } from '../common/date-only';
 import {
@@ -1082,7 +1083,7 @@ export class ContractsService {
       !(await this.scope.canManageStaffAt(adminAccountId, storeId, false, bp))
     )
       throw new NotFoundException(STORE_NOT_FOUND);
-    if (status !== 'OPERATING')
+    if (status !== ('OPERATING' satisfies StoreStatus))
       throw new BadRequestException(STORE_NOT_OPERATING);
   }
 
