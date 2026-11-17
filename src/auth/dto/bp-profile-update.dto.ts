@@ -2,11 +2,15 @@ import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEmail,
+  IsNumber,
   IsOptional,
   IsString,
   Length,
   Matches,
+  Max,
   MaxLength,
+  Min,
+  ValidateIf,
 } from 'class-validator';
 import { IsUpdatedAt } from '../../common/updated-at';
 import {
@@ -109,4 +113,35 @@ export class BpProfileUpdateDto {
   @IsOptional()
   @IsBoolean()
   clearBusinessVerification?: boolean;
+
+  // ── 본사 좌표 · 본사 직원 관리(WHALEERP-724, 2026-11-17 사용자 지정) ──
+  // 위 칸들과 달리 이 넷은 빼고 보내면 그대로 둔다(undefined = 바꾸지 않음) — 이 칸을 모르는 옛 화면이 저장해도
+  // 좌표 · 스위치가 지워지지 않게. 좌표를 지우려면 null 을 보낸다.
+
+  /** 본사 위도 — −90~90, 소수 6자리. null 이면 지운다. @example 37.556312 */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(-90)
+  @Max(90)
+  latitude?: number | null;
+
+  /** 본사 경도 — −180~180, 소수 6자리. null 이면 지운다. @example 126.901845 */
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null)
+  @IsNumber({ maxDecimalPlaces: 6 })
+  @Min(-180)
+  @Max(180)
+  longitude?: number | null;
+
+  /** 본사 위치 적용 여부 — 좌표가 있어야 true 로 둘 수 있다(아니면 400). */
+  @IsOptional()
+  @IsBoolean()
+  isLocationApplied?: boolean;
+
+  /** 본사 직원 관리 — 사업자정보 인증(이 저장 뒤 기준) · 좌표가 있어야 true 로 둘 수 있다(아니면 400). 켠 채로
+   * 사업자정보를 지우거나 좌표를 지울 수 없다. */
+  @IsOptional()
+  @IsBoolean()
+  isHqStaffEnabled?: boolean;
 }

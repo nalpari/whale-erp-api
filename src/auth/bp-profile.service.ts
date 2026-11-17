@@ -125,6 +125,13 @@ export class BpProfileService {
       }
 
       const clear = Boolean(input.clearBusinessVerification);
+      const hq = hqStateOf(target, input, {
+        verifiedAfter: biz
+          ? true
+          : clear
+            ? false
+            : target.bizVerifiedAt !== null,
+      });
       const data = {
         tradeName: input.tradeName,
         bizCeoPhone: input.bizCeoPhone ?? null,
@@ -148,6 +155,7 @@ export class BpProfileService {
           bizOpenDate: null,
           bizVerifiedAt: null,
         }),
+        ...hq.data,
       };
 
       const { count } = await tx.bpCode.updateMany({
@@ -190,6 +198,7 @@ export class BpProfileService {
               change('개업일자', dateOnly(target.bizOpenDate), null),
             ]
           : []),
+        ...hq.changes,
       ].filter((c): c is History => c !== null);
       if (changes.length)
         await tx.bpChangeHistory.createMany({
@@ -267,6 +276,10 @@ export class BpProfileService {
       bizCategory: bp.bizCategory ?? '',
       bizItem: bp.bizItem ?? '',
       bizVerifiedAt: bp.bizVerifiedAt,
+      latitude: numberOrNull(bp.latitude),
+      longitude: numberOrNull(bp.longitude),
+      isLocationApplied: bp.isLocationApplied,
+      isHqStaffEnabled: bp.isHqStaffEnabled,
       updatedAt: bp.updatedAt,
     };
   }
@@ -286,8 +299,96 @@ type BpCodeRow = {
   bizCategory: string | null;
   bizItem: string | null;
   bizVerifiedAt: Date | null;
+  latitude: unknown;
+  longitude: unknown;
+  isLocationApplied: boolean;
+  isHqStaffEnabled: boolean;
   updatedAt: Date;
 };
+
+/**
+ * 본사 좌표 · 본사 직원 관리(WHALEERP-724, 2026-11-17 사용자 지정). 빼고 보낸 칸(undefined)은 저장된 값 그대로 —
+ * 옛 화면의 저장이 좌표 · 스위치를 지우지 않게. 저장 뒤 값으로 규칙을 본다: 위치 적용 · 본사 직원 관리는 좌표가
+ * 있어야 켜지고, 본사 직원 관리는 사업자정보 인증(verifiedAfter)도 있어야 한다. 켠 채로 인증 · 좌표를 지우는 저장도
+ * 같은 검사에 걸린다. 같은 규칙을 DB CHECK(bp_codes_*_requires_*)가 한 번 더 지킨다.
+ * 본사근무 직원이 있으면 끌 수 없다는 규칙은 본사근무 직원(WHALEERP-725)이 생길 때 여기에 더한다.
+ */
+function hqStateOf(
+  target: BpCodeRow,
+  input: BpProfileUpdateDto,
+  { verifiedAfter }: { verifiedAfter: boolean },
+): { data: Record<string, unknown>; changes: (History | null)[] } {
+  const latitude =
+    input.latitude === undefined
+      ? numberOrNull(target.latitude)
+      : input.latitude;
+  const longitude =
+    input.longitude === undefined
+      ? numberOrNull(target.longitude)
+      : input.longitude;
+  const isLocationApplied = input.isLocationApplied ?? target.isLocationApplied;
+  const isHqStaffEnabled = input.isHqStaffEnabled ?? target.isHqStaffEnabled;
+  const hasCoordinates = latitude !== null && longitude !== null;
+
+  if (isHqStaffEnabled && !verifiedAfter)
+    throw new BadRequestException(
+      target.isHqStaffEnabled
+        ? '본사 직원 관리를 사용하는 동안에는 사업자정보를 지울 수 없습니다. 본사 직원 관리를 먼저 꺼 주세요.'
+        : '사업자정보를 인증해야 본사 직원 관리를 켤 수 있습니다.',
+    );
+  if (isHqStaffEnabled && !hasCoordinates)
+    throw new BadRequestException(
+      '본사 직원 관리를 사용하려면 본사 위도 · 경도가 필요합니다.',
+    );
+  if (isLocationApplied && !hasCoordinates)
+    throw new BadRequestException(
+      '위도 · 경도가 없으면 출퇴근 위치적용을 사용할 수 없습니다.',
+    );
+
+  const data: Record<string, unknown> = {
+    ...(input.latitude !== undefined && { latitude: input.latitude }),
+    ...(input.longitude !== undefined && { longitude: input.longitude }),
+    ...(input.isLocationApplied !== undefined && {
+      isLocationApplied: input.isLocationApplied,
+    }),
+    ...(input.isHqStaffEnabled !== undefined && {
+      isHqStaffEnabled: input.isHqStaffEnabled,
+    }),
+  };
+  return {
+    data,
+    changes: [
+      change(
+        '위도 · 경도',
+        coordinatesOf(target.latitude, target.longitude),
+        coordinatesOf(latitude, longitude),
+      ),
+      change(
+        '위치 적용 여부',
+        usedLabel(target.isLocationApplied),
+        usedLabel(isLocationApplied),
+      ),
+      change(
+        '본사 직원 관리',
+        usedLabel(target.isHqStaffEnabled),
+        usedLabel(isHqStaffEnabled),
+      ),
+    ],
+  };
+}
+
+function numberOrNull(value: unknown): number | null {
+  return value == null ? null : Number(value);
+}
+
+function coordinatesOf(latitude: unknown, longitude: unknown): string | null {
+  if (latitude == null && longitude == null) return null;
+  return `${numberOrNull(latitude) ?? '-'}, ${numberOrNull(longitude) ?? '-'}`;
+}
+
+function usedLabel(on: boolean): string {
+  return on ? '사용' : '미사용';
+}
 
 function dateOnly(d: Date | null): string | null {
   return d ? d.toISOString().slice(0, 10) : null;

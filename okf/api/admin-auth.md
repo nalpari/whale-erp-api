@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, the store list version (`stores-version`, `me/stores`) the header store picker refreshes by, and the login info version (`me/login-info-version`) the screen re-reads login-info by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T03:34:05Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -100,7 +100,7 @@ sources:
 | `POST /auth/admin/me/password-change` | admin | `{ currentPassword, newPassword, newPasswordConfirm }` → 204. 마이페이지 자기 비밀번호 변경(S-PTWREE) — 강제 변경(위)과 달리 현재 비밀번호를 먼저 본다. 자세한 순서·임시 비밀번호 처리는 아래 「Self-service password change」 |
 | `POST /auth/admin/me/password-verifications` | admin | `{ currentPassword }` → 204, 틀리면 400 `현재 비밀번호가 올바르지 않습니다.`. 회원 탈퇴 1단계(S-JHQQNR) — 맞아야 front 가 탈퇴 화면을 연다. 아래 「Self-service password change」 |
 | `GET /auth/admin/me/bp` | admin, BP 마스터만 | 마이페이지 사업자정보 탭(S-UOJVUR) — 그 밖의 권한은 403 |
-| `PATCH /auth/admin/me/bp` | admin, BP 마스터만 | 상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목 저장. `updatedAt` 필수(동시 수정 409) |
+| `PATCH /auth/admin/me/bp` | admin, BP 마스터만 | 상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목 저장, 본사 좌표 · 위치 적용 · 본사 직원 관리(빼면 그대로). `updatedAt` 필수(동시 수정 409) |
 | `POST /auth/admin/me/bp/business-verification` | admin, BP 마스터만 | 사업자등록번호 · 대표자명 · 개업일자 재인증 — 성공하면 세 값과 인증일시를 바로 반영 |
 | `GET /public-code-items?groups=A,B` | yes | the platform BP's 공통코드 — only the named groups when `groups` is given — `{ codes: { GROUP: [{ value, label, order }] } }` |
 | `GET /bp-codes?keyword=&withMaster=&page=&pageSize=` | PM · PA only | customer BPs to pick from, `{ items: [{ bpCodeId, bpCode, tradeName, accountStatusCode }], total }` (below) |
@@ -843,6 +843,7 @@ BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules
 - 바뀐 항목마다 `bp_change_histories`에 한 줄(`field` · `beforeValue` · `afterValue` · `changedBy`) —
   값이 같으면 쓰지 않는다. 토큰으로 반영된 세 값은 `note: '사업자 번호 인증'`, `clearBusinessVerification`
   으로 지운 세 값은 `note: '사업자 번호 인증 해제'`로 구분한다.
+- **본사 좌표 · 본사 직원 관리(WHALEERP-724, 2026-11-17 사용자 지정)** — 본사(인증까지 마친 BP 사업자정보)도 근무지가 된다(front `docs/raw/2026-11-17-근무지-본사근무-정책.md`). `bp_codes` 에 `latitude` · `longitude`(점포와 같은 NUMERIC(8,6) · (9,6)), `is_location_applied`(기본 false — 점포는 true), `is_hq_staff_enabled`(「본사 직원 관리」, 기본 false)를 더했다(`20261117122817_team1_bp_hq_staff`). `GET` 이 넷을 함께 돌려준다(좌표는 숫자). `PATCH` 는 다른 칸과 달리 **이 넷을 빼고 보내면 그대로 둔다** — 옛 화면의 저장이 지우지 않게, 지우려면 `null`. 저장 뒤 값으로 본다(`hqStateOf`): 위치 적용 · 본사 직원 관리는 좌표가 있어야 켜고, 본사 직원 관리는 사업자정보 인증도 있어야 한다 — 아니면 400. 켠 채로 `clearBusinessVerification` 이나 좌표 지우기도 400(「본사 직원 관리를 먼저 꺼 주세요」). 같은 규칙을 CHECK `bp_codes_location_applied_requires_coordinates` · `bp_codes_hq_staff_enabled_requires_verified_location` 가 한 번 더 지킨다. 변경 이력 「위도 · 경도」 · 「위치 적용 여부」 · 「본사 직원 관리」(사용 · 미사용). 본사근무 직원이 있으면 끌 수 없다는 규칙은 본사근무 직원(WHALEERP-725)이 생길 때 더한다.
 - `AuthModule`이 `BusinessVerificationService`를 직접 provider로 둔다(`AdminSignupModule`이 반대로
   `AuthModule`을 import 해 그 방향은 순환이 된다) — `NtsModule`도 같이 import 한다.
 

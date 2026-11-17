@@ -36,6 +36,18 @@ export class BpProfileResponseDto {
   /** 최종 인증일시 — 인증한 적 없으면 null. */
   bizVerifiedAt: Date | null;
 
+  /** 본사 위도 — 본사근무 직원 출퇴근 위치 확인 기준. 없으면 null. @example 37.556312 */
+  latitude: number | null;
+
+  /** 본사 경도. 없으면 null. @example 126.901845 */
+  longitude: number | null;
+
+  /** 본사 위치 적용 여부 — true 면 본사근무 직원 출퇴근을 위도 · 경도로 판정한다. */
+  isLocationApplied: boolean;
+
+  /** 본사 직원 관리 — true 면 [본사근무] · 헤더 「본사」 범위 · 본사 근무지가 보인다(2026-11-17 사용자 지정). */
+  isHqStaffEnabled: boolean;
+
   /** 저장(PATCH)할 때 동시 수정 검사에 그대로 돌려줘야 하는 값 — 검사만 하는 인증(POST
    * business-verification)은 저장이 아니라 받지 않는다. */
   updatedAt: Date;

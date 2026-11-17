@@ -47,6 +47,10 @@ describe('BpProfileService', () => {
     bizCategory: null,
     bizItem: null,
     bizVerifiedAt: null,
+    latitude: null,
+    longitude: null,
+    isLocationApplied: false,
+    isHqStaffEnabled: false,
     updatedAt,
     ...over,
   });
@@ -412,6 +416,149 @@ describe('BpProfileService', () => {
         expect(verifier.readToken).not.toHaveBeenCalled();
         expect(prisma.$transaction).not.toHaveBeenCalled();
       });
+    });
+  });
+  describe('본사 좌표 · 본사 직원 관리(WHALEERP-724, 2026-11-17 사용자 지정)', () => {
+    const base = {
+      tradeName: '웨일상사',
+      updatedAt: updatedAt.toISOString(),
+    };
+    const verified = {
+      bizRegistrationNumber: '1058763602',
+      bizVerifiedAt: updatedAt,
+    };
+    const dataOf = () =>
+      (
+        prisma.bpCode.updateMany.mock.calls[0] as [
+          { data: Record<string, unknown> },
+        ]
+      )[0].data;
+    const fieldsOf = () =>
+      (
+        prisma.bpChangeHistory.createMany.mock.calls[0] as [
+          { data: { field: string; afterValue: string | null }[] },
+        ]
+      )[0].data;
+
+    it('조회는 좌표를 숫자로 · 위치 적용 · 본사 직원 관리를 함께 돌려준다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp({
+          latitude: '37.556312',
+          longitude: '126.901845',
+          isLocationApplied: true,
+          isHqStaffEnabled: true,
+        }),
+      );
+      const result = await service.get(1);
+      expect(result.latitude).toBe(37.556312);
+      expect(result.longitude).toBe(126.901845);
+      expect(result.isLocationApplied).toBe(true);
+      expect(result.isHqStaffEnabled).toBe(true);
+    });
+
+    it('새 칸을 빼고 보내면(옛 화면) 그대로 둔다 — 지우지 않는다', async () => {
+      await service.update(1, base);
+      const data = dataOf();
+      for (const key of [
+        'latitude',
+        'longitude',
+        'isLocationApplied',
+        'isHqStaffEnabled',
+      ])
+        expect(Object.keys(data)).not.toContain(key);
+    });
+
+    it('좌표 · 위치 적용을 저장하고 변경 이력에 남긴다', async () => {
+      await service.update(1, {
+        ...base,
+        latitude: 37.5,
+        longitude: 126.9,
+        isLocationApplied: true,
+      });
+      expect(dataOf()).toMatchObject({
+        latitude: 37.5,
+        longitude: 126.9,
+        isLocationApplied: true,
+      });
+      expect(
+        fieldsOf()
+          .map((c) => c.field)
+          .sort(),
+      ).toEqual(['위도 · 경도', '위치 적용 여부'].sort());
+    });
+
+    it('좌표 없이 위치 적용을 켜면 400', async () => {
+      await expect(
+        service.update(1, {
+          ...base,
+          latitude: null,
+          longitude: null,
+          isLocationApplied: true,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.bpCode.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('사업자정보 인증 전에 본사 직원 관리를 켜면 400', async () => {
+      await expect(
+        service.update(1, {
+          ...base,
+          latitude: 37.5,
+          longitude: 126.9,
+          isHqStaffEnabled: true,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.bpCode.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('좌표 없이 본사 직원 관리를 켜면 400', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(bp(verified));
+      await expect(
+        service.update(1, { ...base, isHqStaffEnabled: true }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('인증 · 좌표가 있으면 켜고 변경 이력에 「본사 직원 관리」를 남긴다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(bp(verified));
+      await service.update(1, {
+        ...base,
+        latitude: 37.5,
+        longitude: 126.9,
+        isHqStaffEnabled: true,
+      });
+      expect(dataOf()).toMatchObject({ isHqStaffEnabled: true });
+      expect(
+        fieldsOf().find((c) => c.field === '본사 직원 관리')?.afterValue,
+      ).toBe('사용');
+    });
+
+    it('본사 직원 관리를 켠 채 사업자정보를 지우면 400 — 먼저 끄게 한다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp({
+          ...verified,
+          latitude: 37.5,
+          longitude: 126.9,
+          isHqStaffEnabled: true,
+        }),
+      );
+      await expect(
+        service.update(1, { ...base, clearBusinessVerification: true }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.bpCode.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('켠 채로 좌표를 지우면 400', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp({
+          ...verified,
+          latitude: 37.5,
+          longitude: 126.9,
+          isHqStaffEnabled: true,
+        }),
+      );
+      await expect(
+        service.update(1, { ...base, latitude: null, longitude: null }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });

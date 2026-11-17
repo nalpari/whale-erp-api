@@ -2261,6 +2261,14 @@ model BpCode {
   bizItem               String?   @map("biz_item")
   /// 최종 인증일시
   bizVerifiedAt         DateTime? @map("biz_verified_at") @db.Timestamptz(6)
+  /// 본사 위도 — 소수점 6자리. 본사근무 직원 출퇴근 위치 확인 기준
+  latitude              Decimal?  @db.Decimal(8, 6)
+  /// 본사 경도 — 소수점 6자리
+  longitude             Decimal?  @db.Decimal(9, 6)
+  /// 본사 위치 적용 여부 — 기본 false. 좌표가 있어야 켠다(CHECK)
+  isLocationApplied     Boolean   @default(false) @map("is_location_applied")
+  /// 본사 직원 관리 — 기본 false. 사업자정보 인증 · 좌표가 있어야 켠다(CHECK)
+  isHqStaffEnabled      Boolean   @default(false) @map("is_hq_staff_enabled")
   /// 삭제 여부 — 오등록 BP 삭제 때만 true. BP 탈퇴는 바꾸지 않음
   isDeleted             Boolean   @default(false) @map("is_deleted")
   /// 등록 일시
