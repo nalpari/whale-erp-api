@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-17
+* **Update**: [Work schedules](/api/work-schedules.md) — 일괄 · 기간 등록에서 예상 못 한 저장 오류가 연달아 3번 나면 남은 건은 시도하지 않고 같은 실패로 채워 바로 응답한다(WHALEERP-731, 재영 리뷰 — DB 장애 때 500건을 하나씩 다시 시도하며 요청을 붙잡지 않게). 저장 성공 · 업무 규칙 거절이면 다시 센다.
 * **Update**: [Work schedules](/api/work-schedules.md) — 기간 등록의 예상 못 한 저장 오류 안내를 「잠시 뒤 그날만 다시 등록해 주세요」로(WHALEERP-730, 재영 리뷰 — 기간 화면에는 줄만 다시 보내는 길이 없다).
 * **Update**: [Work schedules](/api/work-schedules.md) — 기간 등록 `POST /work-schedules/range`(WHALEERP-730, 2026-11-17 재영): 시작일 ~ 종료일(최대 92일) 가운데 고른 요일마다 직원별 줄로 한 건씩, 넣을 수 없는 날은 근무일과 함께 건너뛰고 나머지는 저장한다. 날 수 × 줄 수 500건까지. 알림은 직원마다 한 번, 기간 · 건수로 묶는다(`rangeText`). 일괄 등록과 저장 · 알림 코드를 함께 쓴다(`insertEach` · `noticeEach`).
 * **Update**: [Contracts API](/api/contracts-api.md) — 근무지는 운영 중 점포만(WHALEERP-722, 2026-11-17 근무지 이슈 요약 · 김민식 결정): 근무지 선택지(`GET /contracts/store-options`)가 미운영(`NOT_OPERATING`) 점포를 뺀다. 새 계약(초안 · 임시저장 · 종이 계약 · 재계약)과 이어 쓰기에서 근무지를 옮길 때 미운영 점포면 400 「운영 중인 점포만 근무지로 고를 수 있습니다.」 — 업무 범위를 본 뒤에 알려 범위 밖 점포는 그대로 404. 이미 미운영 점포로 만든 계약은 같은 근무지로 이어 쓰기 · 발송을 막지 않는다. 마이그레이션 없음.
