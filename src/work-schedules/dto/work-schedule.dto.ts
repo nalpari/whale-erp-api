@@ -263,6 +263,59 @@ export class BulkCreateWorkSchedulesResponseDto {
   failed: BulkWorkScheduleFailureDto[];
 }
 
+/** 기간 등록의 최대 일수 — 시작일부터 종료일까지 92일(2026-11-17 재영, WHALEERP-730) */
+export const RANGE_MAX_DAYS = 92;
+/**
+ * 기간 등록에서 한 번에 만드는 근무스케줄 최대 건수(줄 수 × 고른 날 수). 한 건마다 트랜잭션이라 건수만큼 오래 걸린다 — 프록시 ·
+ * 화면의 시간 초과(30~60초)보다 확실히 짧게(직원 5명 × 92일, 10명 × 50일). 처리 시간 로그로 보고 맞춘다
+ */
+export const RANGE_MAX_ITEMS = 500;
+
+/**
+ * 기간 등록(WHALEERP-730, 2026-11-17 재영). 시작일 ~ 종료일(최대 92일) 가운데 고른 요일마다, 직원별 줄의 시각 · 휴게로 한
+ * 건씩 만든다. 휴일(BP 휴일 · 공휴일)도 기간에 들고, 쉬는 날은 관리자가 요일로 뺀다. 줄은 일괄 등록과 같은 모양이다(1명이면 한 줄).
+ */
+export class RangeCreateWorkSchedulesDto {
+  /** 시작일 YYYY-MM-DD */
+  @IsDateOnly('시작일은 YYYY-MM-DD 형식의 있는 날짜입니다.')
+  fromDate: string;
+
+  /** 종료일 YYYY-MM-DD — 시작일과 같거나 뒤, 시작일부터 92일 안 */
+  @IsDateOnly('종료일은 YYYY-MM-DD 형식의 있는 날짜입니다.')
+  toDate: string;
+
+  /** 넣을 요일 — 0(일) ~ 6(토), 1~7개 */
+  @IsArray({ message: '요일은 0(일) ~ 6(토) 숫자 목록입니다.' })
+  @ArrayMinSize(1, { message: '요일을 하나 이상 골라 주세요.' })
+  @ArrayMaxSize(7, { message: '요일은 7개까지 고를 수 있습니다.' })
+  @IsInt({ each: true, message: '요일은 0(일) ~ 6(토) 숫자입니다.' })
+  @Min(0, { each: true, message: '요일은 0(일) ~ 6(토) 숫자입니다.' })
+  @Max(6, { each: true, message: '요일은 0(일) ~ 6(토) 숫자입니다.' })
+  @ApiProperty({ type: [Number], example: [1, 2, 3, 4, 5] })
+  weekdays: number[];
+
+  /** 직원별 줄. 1~100줄. 같은 직원이 여러 줄이면 쪼갠 근무다 */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => BulkWorkScheduleRowDto)
+  rows: BulkWorkScheduleRowDto[];
+}
+
+/** 기간 등록에서 건너뛴 한 건 — 그 날 그 줄을 넣지 못한 까닭(계약 없음 · 퇴직일 뒤 · 겹침 등) */
+export class RangeWorkScheduleFailureDto extends BulkWorkScheduleFailureDto {
+  /** 넣지 못한 근무일 YYYY-MM-DD */
+  workDate: string;
+}
+
+export class RangeCreateWorkSchedulesResponseDto {
+  /** 저장한 근무스케줄(근무일 · 줄 순서) */
+  created: WorkScheduleDto[];
+  /** 건너뛴 근무일 · 줄(근무일 · 줄 순서) */
+  failed: RangeWorkScheduleFailureDto[];
+}
+
 export class CopyLastWeekQueryDto {
   /** 근무지 점포. 업무 범위 밖이면 404 */
   @Type(() => Number)

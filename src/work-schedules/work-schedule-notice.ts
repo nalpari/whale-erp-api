@@ -68,6 +68,24 @@ export function changeText(change: ScheduleChange): string {
   }
 }
 
+/** 「11월 17일(화)」 */
+function dayOf(at: Date): string {
+  const day = workDateOf(at);
+  return `${day.getUTCMonth() + 1}월 ${day.getUTCDate()}일(${WEEKDAY[day.getUTCDay()]})`;
+}
+
+/**
+ * 기간 등록(WHALEERP-730)의 묶음 #{변경내용} — 「11월 17일(화)~11월 21일(토) 근무 3건 추가」. 직원마다 한 번, 기간과 건수만
+ * 적는다(2026-11-17 재영). 기간은 그 직원에게 실제로 생긴 첫 날 ~ 마지막 날이고, 같은 날의 여러 건이면 날짜 하나다. 그 직원에게
+ * 한 건만 생겼으면 쓰지 않고 한 건 등록 문구(시각까지)로 적는다(noticeScheduleChange).
+ */
+export function rangeText(changes: ScheduleChange[]): string {
+  const starts = changes.map(startOf).sort((a, b) => a.getTime() - b.getTime());
+  const first = dayOf(starts[0]);
+  const last = dayOf(starts[starts.length - 1]);
+  return `${first === last ? first : `${first}~${last}`} 근무 ${changes.length}건 추가`;
+}
+
 /** 변경의 시작 시각 — 등록 · 수정은 변경 후, 삭제는 변경 전 */
 const startOf = (c: ScheduleChange) =>
   c.kind === 'DELETED' ? c.before.startAt : c.after.startAt;
@@ -111,6 +129,8 @@ export async function noticeScheduleChange(
     workScheduleId: number;
     /** 이번 저장에서 그 직원에게 생긴 변경. 일괄 등록은 여러 건을 알림 하나로 묶는다(저장 한 번에 직원마다 한 번, #201) */
     changes: ScheduleChange[];
+    /** 기간 등록 — 여러 건을 하나하나 적지 않고 기간 · 건수로 묶는다(rangeText, WHALEERP-730) */
+    range?: boolean;
   },
 ): Promise<ScheduleMail | null> {
   // 시작 · 종료 · 휴게가 모두 같은 수정은 바뀐 것이 없다 — 알리지 않는다(변경 이력은 저장 쪽이 남긴다, api #106 리뷰)
@@ -178,10 +198,13 @@ export async function noticeScheduleChange(
   const variables = {
     근무지: store.name,
     // 여러 건은 시작 시각순으로 잇는다(삭제는 변경 전 시각)
-    변경내용: [...changes]
-      .sort((a, b) => startOf(a).getTime() - startOf(b).getTime())
-      .map(changeText)
-      .join(', '),
+    변경내용:
+      input.range && changes.length > 1
+        ? rangeText(changes)
+        : [...changes]
+            .sort((a, b) => startOf(a).getTime() - startOf(b).getTime())
+            .map(changeText)
+            .join(', '),
   };
   let rendered: { subject: string | null; body: string };
   try {

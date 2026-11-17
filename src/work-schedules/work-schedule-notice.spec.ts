@@ -5,6 +5,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import {
   changeText,
   noticeScheduleChange,
+  rangeText,
   sendScheduleMail,
 } from './work-schedule-notice';
 import { toSpan } from './work-schedule-rules';
@@ -13,6 +14,25 @@ const d = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const span = (ymd: string, s: string, e: string, breakMinutes = 0) => ({
   ...toSpan(d(ymd), s, e)!,
   breakMinutes,
+});
+
+describe('rangeText (기간 등록 #{변경내용}, WHALEERP-730)', () => {
+  it('직원에게 생긴 첫 날 ~ 마지막 날과 건수 — 하루뿐이면 날짜 하나', () => {
+    const created = (ymd: string) => ({
+      kind: 'CREATED' as const,
+      after: span(ymd, '09:00', '18:00'),
+    });
+    expect(
+      rangeText([
+        created('2026-11-21'),
+        created('2026-11-17'),
+        created('2026-11-19'),
+      ]),
+    ).toBe('11월 17일(화)~11월 21일(토) 근무 3건 추가');
+    expect(rangeText([created('2026-11-17'), created('2026-11-17')])).toBe(
+      '11월 17일(화) 근무 2건 추가',
+    );
+  });
 });
 
 describe('changeText (#{변경내용})', () => {

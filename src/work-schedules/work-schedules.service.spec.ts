@@ -740,6 +740,116 @@ describe('WorkSchedulesService', () => {
     });
   });
 
+  describe('rangeCreate (기간 등록, WHALEERP-730)', () => {
+    const line = (staffMemberId: number) => ({
+      staffMemberId,
+      startTime: '09:00',
+      endTime: '13:00',
+      breakMinutes: 0,
+    });
+
+    it('종료일이 앞서거나 92일을 넘거나 고른 요일의 날이 없거나 500건을 넘으면 400 — 아무것도 저장하지 않는다', async () => {
+      const cases = [
+        { fromDate: '2026-10-21', toDate: '2026-10-20', weekdays: [1] },
+        // 10-01 ~ 다음 해 01-01 은 93일
+        { fromDate: '2026-10-01', toDate: '2027-01-01', weekdays: [1] },
+        // 10-21(수) 하루에 월요일만 고름
+        { fromDate: '2026-10-21', toDate: '2026-10-21', weekdays: [1] },
+      ];
+      for (const c of cases)
+        await expect(
+          service.rangeCreate(ADMIN, { ...c, rows: [line(11)] }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+      // 10-01 ~ 12-31 은 92일(받는 최대) — 92일 × 6줄 = 552건(상한 500)
+      await expect(
+        service.rangeCreate(ADMIN, {
+          fromDate: '2026-10-01',
+          toDate: '2026-12-31',
+          weekdays: [0, 1, 2, 3, 4, 5, 6],
+          rows: Array.from({ length: 6 }, (_, i) => line(11 + i)),
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(db.workSchedule.create).not.toHaveBeenCalled();
+    });
+
+    it('예상 못 한 저장 오류는 그 날만 실패(500)로, 안내는 그날만 다시 등록하라고 — 일괄 등록의 「이 줄만」과 다르다', async () => {
+      let n = 0;
+      db.workSchedule.create.mockImplementation(() =>
+        (n += 1) === 2
+          ? Promise.reject(new Error('db down'))
+          : Promise.resolve(scheduleRow({ workScheduleId: 100 + n })),
+      );
+      const res = await service.rangeCreate(ADMIN, {
+        fromDate: '2026-10-19',
+        toDate: '2026-10-21',
+        weekdays: [1, 2, 3],
+        rows: [line(11)],
+      });
+      expect(res.created).toHaveLength(2);
+      expect(res.failed).toEqual([
+        expect.objectContaining({
+          workDate: '2026-10-20',
+          statusCode: 500,
+          code: 'WORK_SCHEDULE_SAVE_FAILED',
+          message: '저장하지 못했습니다. 잠시 뒤 그날만 다시 등록해 주세요.',
+        }),
+      ]);
+    });
+
+    it('고른 요일의 날마다 줄을 저장하고, 넣을 수 없는 날은 근무일과 함께 실패로 — 알림은 직원마다 한 번, 기간으로 묶는다', async () => {
+      const noticeSpy = jest
+        .spyOn(notice, 'noticeScheduleChange')
+        .mockResolvedValue(null);
+      // 12 는 계약이 없다
+      db.staffMember.findUnique.mockImplementation(
+        ({ where }: { where: { staffMemberId: number } }) =>
+          Promise.resolve(
+            where.staffMemberId === 12
+              ? staffRow({ contracts: [] })
+              : staffRow(),
+          ),
+      );
+      let id = 100;
+      db.workSchedule.create.mockImplementation(
+        ({
+          data,
+        }: {
+          data: { staffMemberId: number; startAt: Date; endAt: Date };
+        }) =>
+          Promise.resolve(scheduleRow({ ...data, workScheduleId: (id += 1) })),
+      );
+
+      // 10-19(월) ~ 10-25(일) 가운데 월 · 수 · 금
+      const res = await service.rangeCreate(ADMIN, {
+        fromDate: '2026-10-19',
+        toDate: '2026-10-25',
+        weekdays: [1, 3, 5],
+        rows: [line(11), line(12)],
+      });
+
+      expect(res.created.map((r) => r.workDate)).toEqual([
+        '2026-10-19',
+        '2026-10-21',
+        '2026-10-23',
+      ]);
+      expect(res.failed.map((f) => [f.workDate, f.index, f.code])).toEqual([
+        ['2026-10-19', 1, 'WORK_SCHEDULE_NO_CONTRACT'],
+        ['2026-10-21', 1, 'WORK_SCHEDULE_NO_CONTRACT'],
+        ['2026-10-23', 1, 'WORK_SCHEDULE_NO_CONTRACT'],
+      ]);
+      expect(noticeSpy).toHaveBeenCalledTimes(1);
+      expect(noticeSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ staffMemberId: 11, range: true }),
+      );
+      expect(
+        (noticeSpy.mock.calls[0][2] as { changes: unknown[] }).changes,
+      ).toHaveLength(3);
+      noticeSpy.mockRestore();
+    });
+  });
+
   describe('copyLastWeek (#200)', () => {
     it('weekStart 가 월요일이 아니면 400, 범위 밖 점포는 404', async () => {
       await expect(

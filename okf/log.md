@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-11-17
+* **Update**: [Work schedules](/api/work-schedules.md) — 기간 등록의 예상 못 한 저장 오류 안내를 「잠시 뒤 그날만 다시 등록해 주세요」로(WHALEERP-730, 재영 리뷰 — 기간 화면에는 줄만 다시 보내는 길이 없다).
+* **Update**: [Work schedules](/api/work-schedules.md) — 기간 등록 `POST /work-schedules/range`(WHALEERP-730, 2026-11-17 재영): 시작일 ~ 종료일(최대 92일) 가운데 고른 요일마다 직원별 줄로 한 건씩, 넣을 수 없는 날은 근무일과 함께 건너뛰고 나머지는 저장한다. 날 수 × 줄 수 500건까지. 알림은 직원마다 한 번, 기간 · 건수로 묶는다(`rangeText`). 일괄 등록과 저장 · 알림 코드를 함께 쓴다(`insertEach` · `noticeEach`).
 * **Update**: [Contracts API](/api/contracts-api.md) — 근무지는 운영 중 점포만(WHALEERP-722, 2026-11-17 근무지 이슈 요약 · 김민식 결정): 근무지 선택지(`GET /contracts/store-options`)가 미운영(`NOT_OPERATING`) 점포를 뺀다. 새 계약(초안 · 임시저장 · 종이 계약 · 재계약)과 이어 쓰기에서 근무지를 옮길 때 미운영 점포면 400 「운영 중인 점포만 근무지로 고를 수 있습니다.」 — 업무 범위를 본 뒤에 알려 범위 밖 점포는 그대로 404. 이미 미운영 점포로 만든 계약은 같은 근무지로 이어 쓰기 · 발송을 막지 않는다. 마이그레이션 없음.
 * **Update**: [BP signup](/api/admin-signup.md) — 개발서버 사업자 진위확인 통과 모드(front 요청): `NTS_VERIFICATION_BYPASS=true` 면 `NtsModule` 이 국세청 대신 늘 MATCH 를 주는 `BypassNtsBusinessClient` 를 넣는다 — 키가 없어도 「설정됨」이라 503 이 나지 않고(점포 포함), 기동 때와 확인할 때마다 경고 로그. 회원가입 · MY PAGE BP 사업자정보 · BP 마스터 · 점포 네 경로 모두 해당, 입력 검사 · 사업자등록번호 중복 · 10분 토큰 · 응답 모양은 그대로. 운영(`isProduction()`)에서는 켜져 있어도 무시하고 기동 때 error. `.env.example` 에 키 추가. [Stores](/api/stores.md) 에 점포 verifier 도 통과 모드에서는 키 없이 null 이 아니라는 한 줄과 링크. 리뷰 반영(같은 날): 「그대로인 것」을 바로잡았다 — 10분 인증 토큰은 회원가입 · MY PAGE · BP 마스터만이고 점포는 10분 재사용, 요청 제한(시간당 10건)도 그대로이며 점포는 통과한 확인도 국세청 호출로 센다. 통과 모드로 인증한 사업자정보는 실제 인증과 구분되지 않고 중복 검사에 걸린다는 것, 「키 없으면 503」 문장의 예외, true · false · 빈 값이 아닌 값은 꺼짐으로 보되 기동 때 경고하는 것을 더했다.
 
