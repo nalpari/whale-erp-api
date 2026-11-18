@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-18
+* **Update**: 알림 템플릿 기본 문구 — 관리자 계정 생성 메일 2건(`EMAIL_BP_ADMIN_CREATE` · `EMAIL_PLAT_ADMIN_CREATE`)에 「※ 임시 비밀번호는 1시간 동안 유효합니다.」를 넣었다(마이그레이션 `20261118130917_team1_admin_create_mail_expiry`, 통합테스트 · 사용자 지정). 비밀번호 초기화 메일과 같은 문장이고, 지금 값은 되돌리기 원본과 같을 때만 바꾼다(운영자가 고친 문구는 둔다).
 * **Update**: [Store management](/api/stores.md) — `syncHqStatus` 의 본사 행 잠금을 `FOR UPDATE` 에서 `FOR NO KEY UPDATE` 로 낮췄다 — BP 상태 변경 · 마이페이지 저장 · 플랫폼 BP 수정이 본사 출퇴근 · 근로계약 · 시설물 삽입(외래키 KEY SHARE)과 서로 기다리지 않게. BP 삭제의 본사 `FOR UPDATE` 는 그 삽입과 줄을 세우려는 것이라 그대로다.
 * **Update**: [BP masters](/api/bp-masters.md) — 본사 점포 적대적 리뷰(PR #295) 2차 블로커 반영: BP 삭제가 본사 직원 · 시설물을 세기 전에 본사 행을 `FOR UPDATE` 로 잠근다 — 본사 자료 등록은 `stores` 외래키만 확인해 `bp_codes` 잠금에 막히지 않아, 동시 등록이 삭제된 본사 아래 남을 수 있었다.
 * **Update**: [Admin signup](/api/admin-signup.md) · [BP masters](/api/bp-masters.md) — 본사 점포 적대적 리뷰(PR #295) 블로커 반영: 가입 · 플랫폼 BP 등록 트랜잭션이 본사 생성으로 점포코드 잠금 줄에 서므로 점포 등록과 같은 `STORE_CODE_TX`(대기 5초 · 실행 15초)를 쓰고, 시간 초과(P2028)는 500 이 아니라 503 이다.
