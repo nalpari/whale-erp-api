@@ -36,9 +36,10 @@ import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
 import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import {
+  EMPLOYER_BIZ_SELECT,
   employerMissing,
   employerMissingConflict,
-} from './contract-files.service';
+} from './contract-employer';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   lockContract,
@@ -341,7 +342,7 @@ export class ContractDeliveryService {
     // 사용자 칸이 빈 계약서는 보내지 않는다 — 처음 보내기 · 재발송 · 고쳐 다시 보내기가 모두 여기를 지난다
     const biz = await tx.storeBusinessProfile.findUnique({
       where: { storeId: input.storeId },
-      select: { bizCeoName: true, bizRegistrationNumber: true },
+      select: EMPLOYER_BIZ_SELECT,
     });
     if (employerMissing(biz))
       throw employerMissingConflict(EMPLOYER_MISSING_FOR_ADMIN);

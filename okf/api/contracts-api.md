@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-18T04:43:16Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T05:47:36Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -13,7 +13,7 @@ sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-18T05:47:36Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
@@ -41,7 +41,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-11-17T06:50:00Z
+    last_modified: 2026-11-18T05:47:36Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -49,7 +49,7 @@ sources:
   - id: contract-files
     resource: ../../src/contracts/contract-files.service.ts
     title: 보낸 원본 · 처리 완료본 만들기 · 채우기 배치 (WHALEERP-131)
-    last_modified: 2026-10-29T07:30:00Z
+    last_modified: 2026-11-18T05:47:36Z
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
@@ -66,10 +66,14 @@ sources:
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
     last_modified: 2026-11-17T08:19:43Z
+  - id: contract-employer
+    resource: ../../src/contracts/contract-employer.ts
+    title: employerMissing · employerMissingConflict — 사용자 칸 판정과 409 EMPLOYER_INFO_MISSING
+    last_modified: 2026-11-18T05:47:36Z
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-18T05:47:36Z
   - id: contracts-menu
     resource: ../../src/contracts/contracts-menu.ts
     title: 근로계약 관리 메뉴 상수(CONTRACTS_MENU) — 서비스의 권한 재확인과 직원 목록 · 상세의 workDays 판정이 같이 쓴다

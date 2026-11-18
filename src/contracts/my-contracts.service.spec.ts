@@ -31,6 +31,7 @@ describe('MyContractsService', () => {
     contractParty: { update: jest.Mock };
     staffMember: { updateMany: jest.Mock };
     store: { findUniqueOrThrow: jest.Mock };
+    storeBusinessProfile: { findUnique: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let storage: { put: jest.Mock; delete: jest.Mock };
@@ -143,6 +144,13 @@ describe('MyContractsService', () => {
       },
       contractParty: { update: jest.fn() },
       staffMember: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      // 올리기 전에 보는 사용자 칸(대표자 · 사업자등록번호)
+      storeBusinessProfile: {
+        findUnique: jest.fn().mockResolvedValue({
+          bizCeoName: '김대표',
+          bizRegistrationNumber: '1234567890',
+        }),
+      },
       // 날인 때 고정하는 사용자 칸(WHALEERP-131)
       store: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({
@@ -575,12 +583,15 @@ describe('MyContractsService', () => {
     };
 
     it.each([
-      ['사업자정보가 없으면', { ...emptyEmployer, businessProfile: null }],
-      ['대표자 · 사업자등록번호가 비면(본사 사업자 인증 해제)', emptyEmployer],
+      ['사업자정보가 없으면', null],
+      [
+        '대표자 · 사업자등록번호가 비면(본사 사업자 인증 해제)',
+        { bizCeoName: null, bizRegistrationNumber: ' ' },
+      ],
     ])(
       '근무지 점포의 %s 409 EMPLOYER_INFO_MISSING — 올리기 전에 막고 아무것도 쓰지 않는다',
-      async (_, store) => {
-        tx.store.findUniqueOrThrow.mockResolvedValue(store);
+      async (_, biz) => {
+        tx.storeBusinessProfile.findUnique.mockResolvedValue(biz);
         const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
         expect(bodyOf(e)).toMatchObject({
           code: 'EMPLOYER_INFO_MISSING',
@@ -592,11 +603,8 @@ describe('MyContractsService', () => {
     );
 
     it('올리는 동안 사용자 칸이 지워졌으면 잠근 뒤 다시 봐 409 — 빈 사용자 칸을 고정하지 않고 올린 서명을 지운다', async () => {
-      const filled: unknown = await tx.store.findUniqueOrThrow();
-      tx.store.findUniqueOrThrow
-        .mockReset()
-        .mockResolvedValueOnce(filled)
-        .mockResolvedValueOnce(emptyEmployer);
+      // 올리기 전에는 있었고(사업자정보 행), 잠근 뒤 다시 읽은 점포에서는 비었다
+      tx.store.findUniqueOrThrow.mockResolvedValue(emptyEmployer);
       const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
       expect(bodyOf(e)).toMatchObject({ code: 'EMPLOYER_INFO_MISSING' });
       expect(storage.put).toHaveBeenCalled();

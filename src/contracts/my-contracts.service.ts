@@ -16,10 +16,13 @@ import {
   ContractFilesService,
   EMPLOYER_STORE_SELECT,
   article2Of,
-  employerMissing,
-  employerMissingConflict,
   employerOf,
 } from './contract-files.service';
+import {
+  EMPLOYER_BIZ_SELECT,
+  employerMissing,
+  employerMissingConflict,
+} from './contract-employer';
 import { ContractNoticeService } from './contract-notice.service';
 import { STORAGE, requireStorage } from '../storage/storage.module';
 import type { OptionalStorage } from '../storage/storage.module';
@@ -172,15 +175,15 @@ export class MyContractsService {
     // 관계 쿼리를 한 연결에서 차례로 보내려는 것이다(잠그지 않는다). 시점이 맞는지는 잠근 뒤 다시 대조하는 쪽이 맡는다
     const seen = await this.prisma.$transaction(async (tx) => {
       const c = await this.mine(tx, accountId, contractId);
-      const store = await tx.store.findUniqueOrThrow({
+      const biz = await tx.storeBusinessProfile.findUnique({
         where: { storeId: c.storeId },
-        select: EMPLOYER_STORE_SELECT,
+        select: EMPLOYER_BIZ_SELECT,
       });
-      return { c, store };
+      return { c, biz };
     });
     this.checkSignable(seen.c, sentAt, now ?? new Date());
     // 사용자 칸이 빈 계약은 올리기 전에 막는다 — 잠근 뒤에 다시 본다(그사이 지워졌을 수 있다)
-    if (employerMissing(seen.store.businessProfile))
+    if (employerMissing(seen.biz))
       throw employerMissingConflict(EMPLOYER_MISSING_FOR_STAFF);
     assertUpload(signature, ['PNG'], SIGNATURE_MAX_BYTES);
     await checkSignatureImage(signature.buffer);
@@ -214,9 +217,9 @@ export class MyContractsService {
           where: { storeId: c.storeId },
           select: EMPLOYER_STORE_SELECT,
         });
-        const employer = employerOf(store);
         if (employerMissing(store.businessProfile))
           throw employerMissingConflict(EMPLOYER_MISSING_FOR_STAFF);
+        const employer = employerOf(store);
         await signContract(tx, contractId, lockedAt);
         // 응답의 날인 시각은 이력의 처리 시각(DB 시계)과 같게 — 처리 완료본(131)도 이 값을 읽는다
         const history = await tx.contractStatusHistory.findFirstOrThrow({
