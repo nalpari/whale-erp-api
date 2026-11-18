@@ -5,8 +5,9 @@ import { StorageService } from '../storage/storage.service';
 import { ContractFilesService } from './contract-files.service';
 import { ContractNoticeService } from './contract-notice.service';
 import { MY_CONTRACT_STATUSES } from './my-contract-scope';
+import { OPERATING_STORE_WHERE } from './contract-store-open';
 import {
-  EMPLOYER_MISSING_FOR_STAFF,
+  STORE_NOT_OPERATING_FOR_STAFF,
   MyContractsService,
 } from './my-contracts.service';
 
@@ -14,12 +15,27 @@ const NOW = new Date('2026-10-21T05:00:00.000Z');
 const SENT = new Date('2026-10-20T01:00:00.000Z');
 const SENT_ISO = SENT.toISOString();
 const HISTORY_AT = new Date('2026-10-21T05:00:00.123Z');
+/** readSignStore 가 읽는 점포 · 사업자정보 한 줄 — 기본은 운영 중이고 사용자 칸이 있다 */
+const signStoreRow = (o: Record<string, unknown> = {}) => ({
+  name: '강남점',
+  phone: '0212345678',
+  storeStatusCode: 'OPERATING',
+  isDeleted: false,
+  profileStoreId: 3,
+  bizTradeName: null,
+  bizRegistrationNumber: '1234567890',
+  bizCeoName: '김대표',
+  bizAddress: '서울 강남구 테헤란로 1',
+  bizAddressDetail: null,
+  ...o,
+});
 
 /** 직원 앱 날인 · 거부 · 수정 요청(WHALEERP-145) */
 describe('MyContractsService', () => {
   let png: Buffer;
   let tx: {
     $executeRaw: jest.Mock;
+    $queryRaw: jest.Mock;
     contract: {
       findFirst: jest.Mock;
       findUnique: jest.Mock;
@@ -30,8 +46,7 @@ describe('MyContractsService', () => {
     contractDocument: { create: jest.Mock; findFirst: jest.Mock };
     contractParty: { update: jest.Mock };
     staffMember: { updateMany: jest.Mock };
-    store: { findUniqueOrThrow: jest.Mock };
-    storeBusinessProfile: { findUnique: jest.Mock };
+    store: { findFirst: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let storage: { put: jest.Mock; delete: jest.Mock };
@@ -117,6 +132,8 @@ describe('MyContractsService', () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
+      // 날인 트랜잭션의 점포 · 사업자정보 한 문장 읽기(readSignStore) — 날인 때 고정하는 사용자 칸(WHALEERP-131)
+      $queryRaw: jest.fn().mockResolvedValue([signStoreRow()]),
       contract: {
         findFirst: jest.fn().mockResolvedValue(mine()),
         // 전환 함수(기한 · 상태)가 잠근 뒤 읽는 값
@@ -144,27 +161,8 @@ describe('MyContractsService', () => {
       },
       contractParty: { update: jest.fn() },
       staffMember: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      // 올리기 전에 보는 사용자 칸(대표자 · 사업자등록번호)
-      storeBusinessProfile: {
-        findUnique: jest.fn().mockResolvedValue({
-          bizCeoName: '김대표',
-          bizRegistrationNumber: '1234567890',
-        }),
-      },
-      // 날인 때 고정하는 사용자 칸(WHALEERP-131)
-      store: {
-        findUniqueOrThrow: jest.fn().mockResolvedValue({
-          name: '강남점',
-          phone: '0212345678',
-          businessProfile: {
-            bizTradeName: null,
-            bizRegistrationNumber: '1234567890',
-            bizCeoName: '김대표',
-            bizAddress: '서울 강남구 테헤란로 1',
-            bizAddressDetail: null,
-          },
-        }),
-      },
+      // 올리기 전 근무지가 운영 중인가(storeOperating) — 기본은 운영 중(행이 있다)
+      store: { findFirst: jest.fn().mockResolvedValue({ storeId: 3 }) },
     };
     prisma = {
       ...tx,
@@ -257,9 +255,13 @@ describe('MyContractsService', () => {
           fixedJobTitle: '바리스타',
         },
       });
-      expect(tx.store.findUniqueOrThrow).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { storeId: 3 } }),
-      );
+      // 점포 · 사업자정보를 한 문장으로 읽는다(readSignStore — 판정과 고정 값이 같은 시점)
+      const [sql, storeId] = tx.$queryRaw.mock.calls[0] as [
+        TemplateStringsArray,
+        number,
+      ];
+      expect(sql.join('?')).toMatch(/LEFT JOIN "store_business_profiles"/);
+      expect(storeId).toBe(3);
       // 입사일이 비어 있으면 계약 시작일로(WHALEERP-613)
       expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
         where: {
@@ -570,47 +572,35 @@ describe('MyContractsService', () => {
       expect(storage.delete).toHaveBeenCalled();
     });
 
-    const emptyEmployer = {
-      name: '강남점',
-      phone: '0212345678',
-      businessProfile: {
-        bizTradeName: '모리커피',
-        bizRegistrationNumber: null,
-        bizCeoName: null,
-        bizAddress: '서울 강남구 테헤란로 1',
-        bizAddressDetail: null,
-      },
-    };
-
-    it.each([
-      ['사업자정보가 없으면', null],
-      [
-        '대표자 · 사업자등록번호가 비면(본사 사업자 인증 해제)',
-        { bizCeoName: null, bizRegistrationNumber: ' ' },
-      ],
-    ])(
-      '근무지 점포의 %s 409 EMPLOYER_INFO_MISSING — 올리기 전에 막고 아무것도 쓰지 않는다',
-      async (_, biz) => {
-        tx.storeBusinessProfile.findUnique.mockResolvedValue(biz);
-        const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
-        expect(bodyOf(e)).toMatchObject({
-          code: 'EMPLOYER_INFO_MISSING',
-          message: EMPLOYER_MISSING_FOR_STAFF,
-        });
-        expect(storage.put).not.toHaveBeenCalled();
-        expect(tx.contract.updateMany).not.toHaveBeenCalled();
-      },
-    );
-
-    it('올리는 동안 사용자 칸이 지워졌으면 잠근 뒤 다시 봐 409 — 빈 사용자 칸을 고정하지 않고 올린 서명을 지운다', async () => {
-      // 올리기 전에는 있었고(사업자정보 행), 잠근 뒤 다시 읽은 점포에서는 비었다
-      tx.store.findUniqueOrThrow.mockResolvedValue(emptyEmployer);
+    it('근무지가 운영 중이 아니면(미운영 · 폐점 · 사업주 정보 없음) 409 STORE_NOT_OPERATING — 올리기 전에 막고 아무것도 쓰지 않는다', async () => {
+      tx.store.findFirst.mockResolvedValue(null);
       const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
-      expect(bodyOf(e)).toMatchObject({ code: 'EMPLOYER_INFO_MISSING' });
+      expect(bodyOf(e)).toMatchObject({
+        code: 'STORE_NOT_OPERATING',
+        message: STORE_NOT_OPERATING_FOR_STAFF,
+      });
+      expect(tx.store.findFirst).toHaveBeenCalledWith({
+        where: { storeId: 3, ...OPERATING_STORE_WHERE },
+        select: { storeId: true },
+      });
+      expect(storage.put).not.toHaveBeenCalled();
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('올리는 동안 근무지가 운영 중이 아니게 됐으면 날인 트랜잭션에서 다시 봐 409 — 사용자 칸을 고정하지 않고 올린 서명을 지운다', async () => {
+      // 올리기 전에는 운영 중, 날인 트랜잭션에서 다시 읽으니 사업주 정보가 비었다(본사 사업자 인증 해제 등)
+      tx.$queryRaw.mockResolvedValue([
+        signStoreRow({ bizCeoName: null, bizRegistrationNumber: null }),
+      ]);
+      const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
+      expect(bodyOf(e)).toMatchObject({ code: 'STORE_NOT_OPERATING' });
       expect(storage.put).toHaveBeenCalled();
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
       expect(tx.contractParty.update).not.toHaveBeenCalled();
       expect(storage.delete).toHaveBeenCalled();
+      // 점포 행은 잠그지 않는다 — 다른 잠금 순서(점포 폐점 · 재발송)와 교착하지 않게
+      const [sql] = tx.$queryRaw.mock.calls[0] as [TemplateStringsArray];
+      expect(sql.join('?')).not.toMatch(/FOR (SHARE|UPDATE)/);
     });
   });
 

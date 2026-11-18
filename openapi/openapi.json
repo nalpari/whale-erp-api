@@ -8509,7 +8509,7 @@
             "description": "근무지 점포가 없거나 폐점이거나 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
-            "description": "이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(같은 점포 진행 중 계약 — contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(다른 점포 근무 시간 겹침, 초안 저장만) · 대체할 계약을 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · EMPLOYER_INFO_MISSING(근무지 점포의 대표자 · 사업자등록번호가 없어 보내지 않음 — 저장하지 않음)"
+            "description": "이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(같은 점포 진행 중 계약 — contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(다른 점포 근무 시간 겹침, 초안 저장만) · 대체할 계약을 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음 — 저장하지 않음)"
           },
           "502": {
             "description": "저장했지만 가입 초대 · 소속 추가 확인 요청 알림톡이 실패(본문 contractId · delivery INVITE | AFFILIATION): SEND_FAILED(나가지 않아 보내기 직전으로 되돌림 — status, 새 계약 · 작성 중에서 넘긴 것은 작성 중. failure REJECTED 비즈뿌리오 거절 | NOT_SENT 보내기 전 실패) · SEND_UNCONFIRMED(접수 여부 모름 — 상세를 다시 읽을 것. 저장 뒤 상태를 읽지 못한 경우는 delivery 없음)"
@@ -8592,7 +8592,7 @@
             "bearer": []
           }
         ],
-        "summary": "작성 · 이어 쓰기의 근무지 선택지. 업무 범위(플랫폼 계정은 탭 BP) 안에서 지우지 않은 운영 중 점포(미운영 · 폐점 빼고, WHALEERP-722), 이름순. 작성 또는 수정 권한.",
+        "summary": "작성 · 이어 쓰기의 근무지 선택지. 업무 범위(플랫폼 계정은 탭 BP) 안에서 운영 중인 점포(운영 · 지움 아님 · 사업주 정보 있음 — 발송 · 날인과 같은 기준, WHALEERP-722), 이름순. 작성 또는 수정 권한.",
         "tags": [
           "Contracts"
         ]
@@ -8828,7 +8828,7 @@
             "description": "없는 계약 · 근무지 점포가 없거나 폐점 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
-            "description": "작성 중 · 직원 수정 요청이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · EMPLOYER_INFO_MISSING(근무지 점포의 대표자 · 사업자등록번호가 없어 보내지 않음 — 저장하지 않음)"
+            "description": "작성 중 · 직원 수정 요청이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음 — 저장하지 않음)"
           },
           "502": {
             "description": "저장했지만 가입 초대 · 소속 추가 확인 요청 알림톡이 실패(본문 contractId · delivery INVITE | AFFILIATION): SEND_FAILED(나가지 않아 보내기 직전으로 되돌림 — status, 새 계약 · 작성 중에서 넘긴 것은 작성 중. failure REJECTED 비즈뿌리오 거절 | NOT_SENT 보내기 전 실패) · SEND_UNCONFIRMED(접수 여부 모름 — 상세를 다시 읽을 것. 저장 뒤 상태를 읽지 못한 경우는 delivery 없음)"
@@ -8949,7 +8949,7 @@
             "description": "없는 계약 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(서명 요청 전 · 직원 서명 대기 · 직원 수정 요청이 아님) · 새 번호로 이 점포에 재직 중 · CONTRACT_IN_PROGRESS(새 번호의 같은 점포 진행 중 계약 — replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · EMPLOYER_INFO_MISSING(근무지 점포의 대표자 · 사업자등록번호가 없어 보내지 않음 — 저장하지 않음)"
+            "description": "CONTRACT_STATUS_CONFLICT(서명 요청 전 · 직원 서명 대기 · 직원 수정 요청이 아님) · 새 번호로 이 점포에 재직 중 · CONTRACT_IN_PROGRESS(새 번호의 같은 점포 진행 중 계약 — replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음 — 저장하지 않음)"
           },
           "502": {
             "description": "저장했지만 가입 초대 · 소속 추가 확인 요청 알림톡이 실패(본문 contractId · delivery INVITE | AFFILIATION): SEND_FAILED(나가지 않아 보내기 직전으로 되돌림 — status, 새 계약 · 작성 중에서 넘긴 것은 작성 중. failure REJECTED 비즈뿌리오 거절 | NOT_SENT 보내기 전 실패) · SEND_UNCONFIRMED(접수 여부 모름 — 상세를 다시 읽을 것. 저장 뒤 상태를 읽지 못한 경우는 delivery 없음)"
@@ -9177,7 +9177,7 @@
             "description": "없는 계약 · 업무 범위 밖 · 플랫폼 계정의 X-Bp-Code-Id 가 없는 · 지운 · 플랫폼 BP 이거나 형식이 틀림(가드)"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(서명 요청 전 · 직원 서명 대기 · 서명 거절 · 계약 기간 만료가 아님, 또는 본문 expectedStatus · expectedSentAt 이 지금 계약과 다름 — 그사이 서명을 거절했거나 서명 기한이 지나 만료되었거나 다른 탭에서 먼저 보냄) · REOPEN_BLOCKED(서명 거절 · 계약 기간 만료를 되살릴 수 없음 — 퇴직 · 퇴직일 있음, 폐점 · 삭제 점포, 같은 점포 · 번호의 다른 진행 중 계약, 계약 종료일이 지남, 기간이 겹치거나 더 늦게 시작한 다른 서명 완료, 같은 직전 계약의 다른 재계약. message 에 까닭) · WORK_TIME_OVERLAP(서명 거절 · 계약 기간 만료를 되살리면 다른 점포 근무 시간과 겹침) · SEND_PHONE_NOT_MOBILE(휴대폰 번호가 아님) · 코드 없음 「이 점포에 이미 재직 중인 직원입니다.」(가입 전 레코드인데 그 번호의 계정이 이 점포에 재직 중) · 다른 요청이 먼저 고침 · EMPLOYER_INFO_MISSING(근무지 점포의 대표자 · 사업자등록번호가 없어 보내지 않음)"
+            "description": "CONTRACT_STATUS_CONFLICT(서명 요청 전 · 직원 서명 대기 · 서명 거절 · 계약 기간 만료가 아님, 또는 본문 expectedStatus · expectedSentAt 이 지금 계약과 다름 — 그사이 서명을 거절했거나 서명 기한이 지나 만료되었거나 다른 탭에서 먼저 보냄) · REOPEN_BLOCKED(서명 거절 · 계약 기간 만료를 되살릴 수 없음 — 퇴직 · 퇴직일 있음, 폐점 · 삭제 점포, 같은 점포 · 번호의 다른 진행 중 계약, 계약 종료일이 지남, 기간이 겹치거나 더 늦게 시작한 다른 서명 완료, 같은 직전 계약의 다른 재계약. message 에 까닭) · WORK_TIME_OVERLAP(서명 거절 · 계약 기간 만료를 되살리면 다른 점포 근무 시간과 겹침) · SEND_PHONE_NOT_MOBILE(휴대폰 번호가 아님) · 코드 없음 「이 점포에 이미 재직 중인 직원입니다.」(가입 전 레코드인데 그 번호의 계정이 이 점포에 재직 중) · 다른 요청이 먼저 고침 · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음)"
           },
           "502": {
             "description": "가입 초대 · 소속 추가 확인 요청 알림톡일 때만(본문 contractId · delivery INVITE | AFFILIATION) — SEND_FAILED(나가지 않음 — 거절 · 토큰 단계 · 요청 전 오류, 되돌렸고 다시 보낼 수 있음, 본문 status · failure REJECTED 비즈뿌리오 거절 | NOT_SENT 보내기 전 실패) · SEND_UNCONFIRMED(접수 여부 모름 또는 되돌리기 실패 — 상세를 다시 읽을 것). 소속 추가 확인 요청 메일 실패는 오류가 아니다"
@@ -9310,7 +9310,7 @@
             "description": "내 계약이 아님 — 없는 id · 남의 계약 · 작성 중 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(직원 서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남) · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨) · EMPLOYER_INFO_MISSING(보낸 뒤 근무지 점포의 대표자 · 사업자등록번호가 지워짐 — 빈 사용자 칸을 고정하지 않게 날인하지 않음)"
+            "description": "CONTRACT_STATUS_CONFLICT(직원 서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남) · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨) · STORE_NOT_OPERATING(보낸 뒤 근무지가 운영 중이 아니게 됨 — 미운영 · 폐점 · 사업주 정보 없음. 빈 사용자 칸을 고정하지 않는다)"
           },
           "429": {
             "description": "경로마다 계정당 10분에 20번(서명 · 서명 거절 · 수정 요청을 따로 센다)"
@@ -28687,11 +28687,11 @@
           },
           "signable": {
             "type": "boolean",
-            "description": "지금 서명하면 받는가 — awaitingSignature 이고 본인 대조가 맞고 사용자 칸이 있을 때. 서명 API 와 같은 판정이다"
+            "description": "지금 서명하면 받는가 — awaitingSignature 이고 본인 대조가 맞고 근무지가 운영 중일 때. 서명 API 와 같은 판정이다"
           },
-          "employerMissing": {
+          "storeNotOperating": {
             "type": "boolean",
-            "description": "사용자 칸(대표자 · 사업자등록번호)이 비었는가 — 그러면 서명 API 는 409 EMPLOYER_INFO_MISSING 이고 signable 은 false 다.\n직원은 고칠 수 없어 근무지 관리자에게 문의한다(본사 사업자 인증 해제 등, 2026-11-18). 날인을 기다리는 계약만 본다 — 고정한 값이 있거나 날인 대기가 아니면 늘 false"
+            "description": "근무지 점포가 운영 중이 아닌가(미운영 · 폐점 · 사업주 정보(대표자 · 사업자등록번호) 없음) — 그러면 서명 API 는 409 STORE_NOT_OPERATING 이고 signable 은 false 다.\n직원은 고칠 수 없어 근무지 관리자에게 문의한다(본사 사업자 인증 해제 등, 2026-11-18). 날인을 기다리는 계약만 보고 그 밖은 늘 false"
           }
         },
         "required": [
@@ -28734,7 +28734,7 @@
           "storeId",
           "awaitingSignature",
           "signable",
-          "employerMissing"
+          "storeNotOperating"
         ]
       },
       "NotificationRelatedType": {

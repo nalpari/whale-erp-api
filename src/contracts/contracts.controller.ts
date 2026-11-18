@@ -173,7 +173,7 @@ export class ContractsController {
     return this.contracts.list(user.id, query, bp);
   }
 
-  /** 작성 · 이어 쓰기의 근무지 선택지. 업무 범위(플랫폼 계정은 탭 BP) 안에서 지우지 않은 운영 중 점포(미운영 · 폐점 빼고, WHALEERP-722), 이름순. 작성 또는 수정 권한. */
+  /** 작성 · 이어 쓰기의 근무지 선택지. 업무 범위(플랫폼 계정은 탭 BP) 안에서 운영 중인 점포(운영 · 지움 아님 · 사업주 정보 있음 — 발송 · 날인과 같은 기준, WHALEERP-722), 이름순. 작성 또는 수정 권한. */
   // 가드가 대상 BP 를 정하는 근로계약 경로라 여기 둔다 — 메뉴 권한 없는 /stores/options 는 탭 BP 를 못 받았다(WHALEERP-638).
   // `:contractId` 보다 먼저 둔다.
   @Get('store-options')
@@ -210,7 +210,7 @@ export class ContractsController {
   })
   @ApiConflictResponse({
     description:
-      '이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(같은 점포 진행 중 계약 — contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(다른 점포 근무 시간 겹침, 초안 저장만) · 대체할 계약을 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · EMPLOYER_INFO_MISSING(근무지 점포의 대표자 · 사업자등록번호가 없어 보내지 않음 — 저장하지 않음)',
+      '이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(같은 점포 진행 중 계약 — contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(다른 점포 근무 시간 겹침, 초안 저장만) · 대체할 계약을 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음 — 저장하지 않음)',
   })
   @ApiServiceUnavailableResponse({
     description:
@@ -316,7 +316,7 @@ export class ContractsController {
   })
   @ApiConflictResponse({
     description:
-      '작성 중 · 직원 수정 요청이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · EMPLOYER_INFO_MISSING(근무지 점포의 대표자 · 사업자등록번호가 없어 보내지 않음 — 저장하지 않음)',
+      '작성 중 · 직원 수정 요청이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음 — 저장하지 않음)',
   })
   @ApiServiceUnavailableResponse({
     description:
@@ -354,7 +354,7 @@ export class ContractsController {
   })
   @ApiConflictResponse({
     description:
-      'CONTRACT_STATUS_CONFLICT(서명 요청 전 · 직원 서명 대기 · 직원 수정 요청이 아님) · 새 번호로 이 점포에 재직 중 · CONTRACT_IN_PROGRESS(새 번호의 같은 점포 진행 중 계약 — replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · EMPLOYER_INFO_MISSING(근무지 점포의 대표자 · 사업자등록번호가 없어 보내지 않음 — 저장하지 않음)',
+      'CONTRACT_STATUS_CONFLICT(서명 요청 전 · 직원 서명 대기 · 직원 수정 요청이 아님) · 새 번호로 이 점포에 재직 중 · CONTRACT_IN_PROGRESS(새 번호의 같은 점포 진행 중 계약 — replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음 — 저장하지 않음)',
   })
   @ApiForbiddenResponse({
     description: `근로계약 관리 수정 권한 없음 · 새 번호의 같은 점포 작성 중 계약을 대체하는데 삭제 권한 없음(409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원) · ${BP_FORBIDDEN_DESCRIPTION}`,

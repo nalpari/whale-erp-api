@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
   HttpStatus,
   Inject,
   Injectable,
@@ -14,15 +15,14 @@ import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ContractFilesService,
-  EMPLOYER_STORE_SELECT,
   article2Of,
   employerOf,
 } from './contract-files.service';
 import {
-  EMPLOYER_BIZ_SELECT,
-  employerMissing,
-  employerMissingConflict,
-} from './contract-employer';
+  readSignStore,
+  storeNotOperatingConflict,
+  storeOperating,
+} from './contract-store-open';
 import { ContractNoticeService } from './contract-notice.service';
 import { STORAGE, requireStorage } from '../storage/storage.module';
 import type { OptionalStorage } from '../storage/storage.module';
@@ -46,9 +46,9 @@ import type {
 import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
 import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
 
-/** 날인을 막을 때 직원에게 보이는 문장 — 사용자 칸(대표자 · 사업자등록번호)이 비었다 */
-export const EMPLOYER_MISSING_FOR_STAFF =
-  '근로계약서의 사용자(사업주) 정보가 비어 있어 지금은 서명할 수 없습니다. 근무지 관리자에게 문의해 주세요.';
+/** 날인을 막을 때 직원에게 보이는 문장 — 근무지 점포가 운영 중이 아니다 */
+export const STORE_NOT_OPERATING_FOR_STAFF =
+  '근무지가 운영 중이 아니거나 사업주 정보(대표자 · 사업자등록번호)가 없어 지금은 서명할 수 없습니다. 근무지 관리자에게 문의해 주세요.';
 
 /** 필기 서명 이미지 상한 — 화면 캔버스 PNG 한 장 */
 export const SIGNATURE_MAX_BYTES = 1024 * 1024;
@@ -175,16 +175,12 @@ export class MyContractsService {
     // 관계 쿼리를 한 연결에서 차례로 보내려는 것이다(잠그지 않는다). 시점이 맞는지는 잠근 뒤 다시 대조하는 쪽이 맡는다
     const seen = await this.prisma.$transaction(async (tx) => {
       const c = await this.mine(tx, accountId, contractId);
-      const biz = await tx.storeBusinessProfile.findUnique({
-        where: { storeId: c.storeId },
-        select: EMPLOYER_BIZ_SELECT,
-      });
-      return { c, biz };
+      return { c, operating: await storeOperating(tx, c.storeId) };
     });
     this.checkSignable(seen.c, sentAt, now ?? new Date());
-    // 사용자 칸이 빈 계약은 올리기 전에 막는다 — 잠근 뒤에 다시 본다(그사이 지워졌을 수 있다)
-    if (employerMissing(seen.biz))
-      throw employerMissingConflict(EMPLOYER_MISSING_FOR_STAFF);
+    // 운영 중이 아닌 근무지의 계약은 올리기 전에 막는다 — 잠근 뒤에 다시 본다(그사이 미운영이 됐을 수 있다)
+    if (!seen.operating)
+      throw storeNotOperatingConflict(STORE_NOT_OPERATING_FOR_STAFF);
     assertUpload(signature, ['PNG'], SIGNATURE_MAX_BYTES);
     await checkSignatureImage(signature.buffer);
 
@@ -211,14 +207,17 @@ export class MyContractsService {
         // 기한 · 퇴직일은 잠근 시각으로 다시 본다 — 요청이 들어온 시각이면 올리는 동안 기한이 지나도 받는다
         const lockedAt = now ?? new Date();
         this.checkSignable(c, sentAt, lockedAt);
-        // 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 날인째 되돌린다. 사용자 칸이 비면(보낸 뒤 점포 사업자정보가
-        // 지워짐 — 본사 사업자 인증 해제 등) 빈 칸이 고정되지 않게 날인을 받지 않는다
-        const store = await tx.store.findUniqueOrThrow({
-          where: { storeId: c.storeId },
-          select: EMPLOYER_STORE_SELECT,
-        });
-        if (employerMissing(store.businessProfile))
-          throw employerMissingConflict(EMPLOYER_MISSING_FOR_STAFF);
+        // 점포와 사업자정보를 한 문장으로 읽어 판정과 고정 값을 같은 시점으로 얻는다(readSignStore — 본사 사업자 인증 해제가 사이에
+        // 끼지 못한다). 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 날인째 되돌린다
+        const store = await readSignStore(tx, c.storeId);
+        if (!store)
+          throw new InternalServerErrorException(
+            `점포 ${c.storeId} 를 찾을 수 없습니다.`,
+          );
+        // 보낸 뒤 근무지가 운영 중이 아니게 됐으면(본사 사업자 인증 해제 · 사업주 정보 없음 등) 날인을 받지 않는다 — 빈 사용자 칸을
+        // 고정하지 않는다
+        if (!store.operating)
+          throw storeNotOperatingConflict(STORE_NOT_OPERATING_FOR_STAFF);
         const employer = employerOf(store);
         await signContract(tx, contractId, lockedAt);
         // 응답의 날인 시각은 이력의 처리 시각(DB 시계)과 같게 — 처리 완료본(131)도 이 값을 읽는다

@@ -28,7 +28,6 @@ import {
   hqSharingConsentedOf,
   type HqSharingSource,
 } from '../admin-scope/hq-sharing';
-import type { StoreStatus } from '../stores/store-format';
 import { bankNameOf } from '../common/bank-name';
 import { dateOnly } from '../common/date-only';
 import {
@@ -123,6 +122,7 @@ import {
   type TargetBpContext,
 } from '../auth/menu-permission.guard';
 import { matchesStoreScope } from '../stores/store-scope-type';
+import { OPERATING_STORE_WHERE, storeOperating } from './contract-store-open';
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -970,7 +970,8 @@ function sameStore(storeId: number, scoped: number): void {
 }
 const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다.';
 /** 미운영 점포는 새 근무지로 고를 수 없다(WHALEERP-722). */
-const STORE_NOT_OPERATING = '운영 중인 점포만 근무지로 고를 수 있습니다.';
+const STORE_NOT_OPERATING =
+  '운영 중이고 사업자 정보(대표자 · 사업자등록번호)가 있는 점포만 근무지로 고를 수 있습니다.';
 /** 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 없음) — 점포 정보 관리와 같은 400 이다. */
 const BP_NOT_CHOSEN = '근로계약을 볼 BP 를 골라 주세요.';
 
@@ -1079,23 +1080,23 @@ export class ContractsService {
     storeId: number,
     bp?: TargetBpContext,
   ): Promise<void> {
-    const status = await this.checkStoreOpen(storeId);
+    await this.checkStoreOpen(storeId);
     if (
       !(await this.scope.canManageStaffAt(adminAccountId, storeId, false, bp))
     )
       throw new NotFoundException(STORE_NOT_FOUND);
-    if (status !== ('OPERATING' satisfies StoreStatus))
+    // 운영 기준은 발송 · 날인과 하나다(운영 · 사업주 정보 있음, OPERATING_STORE_WHERE)
+    if (!(await storeOperating(this.prisma, storeId)))
       throw new BadRequestException(STORE_NOT_OPERATING);
   }
 
-  /** 지우지 않고 폐점하지 않은 점포인가. 아니면 404. 업무 범위는 보지 않는다. 점포 상태 코드를 돌려준다. */
-  private async checkStoreOpen(storeId: number): Promise<string> {
+  /** 지우지 않고 폐점하지 않은 점포인가. 아니면 404. 업무 범위는 보지 않는다. */
+  private async checkStoreOpen(storeId: number): Promise<void> {
     const store = await this.prisma.store.findFirst({
       where: { storeId, isDeleted: false, storeStatusCode: { not: 'CLOSED' } },
       select: { storeStatusCode: true },
     });
     if (!store) throw new NotFoundException(STORE_NOT_FOUND);
-    return store.storeStatusCode;
   }
 
   /** 업무 범위 밖의 계약은 없는 계약과 같게 404 다. 계약 직원의 본사 제공 동의로 판단한다. */
@@ -2491,10 +2492,10 @@ export class ContractsService {
         (s) => !hidesPersonalData(manageable.roleTypeCode, s, false),
       )
       .map((s) => s.storeId);
+    // 운영 중인 근무지만(운영 · 사업주 정보 있음 — 발송 · 날인과 같은 기준, OPERATING_STORE_WHERE)
     const where: Prisma.StoreWhereInput = {
       storeId: { in: storeIds },
-      isDeleted: false,
-      storeStatusCode: 'OPERATING',
+      ...OPERATING_STORE_WHERE,
     };
     const [items, total] = await this.prisma.$transaction([
       this.prisma.store.findMany({

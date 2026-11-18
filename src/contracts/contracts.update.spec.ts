@@ -1448,11 +1448,17 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           phone: '01090145563',
         },
       });
-      prisma.store.findFirst.mockResolvedValue({
-        storeStatusCode: 'NOT_OPERATING',
-      });
+      prisma.store.findFirst.mockImplementation(
+        (args: Prisma.StoreFindFirstArgs) =>
+          // 근무지 확인(지움 · 폐점 아님)은 지나고 운영 확인(OPERATING_STORE_WHERE)은 비게
+          Promise.resolve(
+            args.where?.businessProfile
+              ? null
+              : { storeStatusCode: 'NOT_OPERATING' },
+          ),
+      );
       await expect(service.update(9, 7, dto({ storeId: 12 }))).rejects.toThrow(
-        '운영 중인 점포만 근무지로 고를 수 있습니다.',
+        '운영 중이고 사업자 정보(대표자 · 사업자등록번호)가 있는 점포만 근무지로 고를 수 있습니다.',
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });

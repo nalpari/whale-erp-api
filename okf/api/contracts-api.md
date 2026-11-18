@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-18T05:47:36Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T07:58:05Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -13,11 +13,11 @@ sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-11-18T05:47:36Z
+    last_modified: 2026-11-18T07:58:05Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-11-17T06:50:00Z
+    last_modified: 2026-11-18T07:58:05Z
   - id: minimum-wage
     resource: ../../src/contracts/minimum-wage.ts
     title: 최저임금 공통코드 · 수습 중 시급 검사
@@ -41,7 +41,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-11-18T05:47:36Z
+    last_modified: 2026-11-18T07:58:05Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -66,14 +66,14 @@ sources:
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
     last_modified: 2026-11-17T08:19:43Z
-  - id: contract-employer
-    resource: ../../src/contracts/contract-employer.ts
-    title: employerMissing · employerMissingConflict — 사용자 칸 판정과 409 EMPLOYER_INFO_MISSING
-    last_modified: 2026-11-18T05:47:36Z
+  - id: contract-store-open
+    resource: ../../src/contracts/contract-store-open.ts
+    title: OPERATING_STORE_WHERE · isOperatingStore · storeOperating · readSignStore — 운영 근무지 판정(운영 · 지움 아님 · 사업주 정보)과 409 STORE_NOT_OPERATING
+    last_modified: 2026-11-18T07:58:05Z
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
-    last_modified: 2026-11-18T05:47:36Z
+    last_modified: 2026-11-18T06:49:02Z
   - id: contracts-menu
     resource: ../../src/contracts/contracts-menu.ts
     title: 근로계약 관리 메뉴 상수(CONTRACTS_MENU) — 서비스의 권한 재확인과 직원 목록 · 상세의 workDays 판정이 같이 쓴다
@@ -194,12 +194,12 @@ a 직원 not yet joined has no account, so counts as not consented)
   not 폐점 is checked either way — a draft whose store closed after it was saved
   is 404 「근무지 점포를 찾을 수 없습니다.」 even when kept at the same store, so
   it cannot move on to 발송 대기 (api #21 재리뷰). A **new** 근무지 must also be
-  운영 중 (`store_status_code = OPERATING`, WHALEERP-722): a new contract or a
-  move to another store at a 미운영 (`NOT_OPERATING`) store is 400 「운영 중인
-  점포만 근무지로 고를 수 있습니다.」, told only after the scope check so a store
+  운영 중 (WHALEERP-722; since 2026-11-18 the shared 운영 기준 `OPERATING_STORE_WHERE` — `OPERATING`, not deleted,
+  with 대표자 · 사업자등록번호, see below): a new contract or a move to another store that is not 운영 중 is 400 「운영 중이고 사업자 정보(대표자 · 사업자등록번호)가 있는 점포만 근무지로 고를 수 있습니다.」, told only after the scope check so a store
   outside the scope stays 404. A contract already at a 미운영 store is left as
-  it is — kept at the same store it is still saved and sent (2026-11-17 김민식).
-  `GET /contracts/store-options` lists 운영 중 stores only. An account that is deleted, inactive or unknown gets 403
+  it is — kept at the same store it is still saved (2026-11-17 김민식), but since 2026-11-18 it is not sent (409
+  `STORE_NOT_OPERATING`, below).
+  `GET /contracts/store-options` lists 운영 중 stores only (the same `OPERATING_STORE_WHERE`). An account that is deleted, inactive or unknown gets 403
   on the list (`getManageableStores` is null).[^admin-scope]
 - **The BP is the tab's, not the account's** (WHALEERP-618, 2026-10-29). Every
   관리자 웹 route here (`ContractsController` and `ContractSendController`'s
@@ -398,7 +398,7 @@ What it refuses, before writing:
   and turn the age check into NaN, a 500), an integer above 2147483647
   (`storeId`, `wageAmount`, 수당 — the column would 500).
 - **404** — the store is missing, deleted, `CLOSED`, or outside the admin scope.
-- **400** — the store is 미운영 (`NOT_OPERATING`, WHALEERP-722): 「운영 중인 점포만 근무지로 고를 수 있습니다.」
+- **400** — the store is not 운영 중 (미운영, or 운영 without 대표자 · 사업자등록번호 — `OPERATING_STORE_WHERE`, WHALEERP-722): 「운영 중이고 사업자 정보(대표자 · 사업자등록번호)가 있는 점포만 근무지로 고를 수 있습니다.」
 - **409** — someone with the same phone has **joined** (`join_status = JOINED`)
   and is `EMPLOYED` at that store (the mockup's 「이 점포 재직 중 → 차단」,
   decided from records alone). Records not joined yet are ignored: they are
@@ -688,19 +688,27 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   from the 상세) and adds its 가입·인증 column policy for a 가입 전 직원 (a joined 직원 is false there, true here — the
   app notice).
   Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503), the account being 재직 at this
-  store already (409) or an empty 사용자 칸 (409 `EMPLOYER_INFO_MISSING`, below) still fail when sent.
-- **Empty 사용자 칸 blocks sending and 날인** (2026-11-18 김민식). Every send — 저장하면 곧바로 보내기, `PUT` 고쳐 다시
-  보내기, `PATCH …/worker`, `POST …/send` — passes `ContractDeliveryService.prepare`, which first reads the 근무지 점포's
-  `store_business_profiles` and answers 409 `EMPLOYER_INFO_MISSING` (nothing written, the save rolls back) when the
-  대표자 or 사업자등록번호 is empty (`employerMissing`, blank counts as empty). 날인 (`POST /me/contracts/:id/sign`)
-  checks the same after the row lock and before 체결 완료 — the 사용자 칸 it would freeze (`employerOf`) must have both —
-  so a 계약 sent while the store had them but whose store lost them before 날인 (본사 사업자 인증 해제 makes the 본사
-  점포 미운영 and empties them) is not signed with blank 사용자 칸 forever; the uploaded signature is deleted. Applies to
-  every store, not only 본사 (사용자 결정). 상호 falls back to 점포명 and 소재지 may be empty — not checked.
-  날인 checks it twice: before uploading the signature (no storage round trip for a request that must fail) and again
-  after the lock (it may have been emptied meanwhile). The 직원 앱 상세 (`GET /me/contracts/:id`) reports
-  `employerMissing: true` and `signable: false` for such a contract (same `employerMissing` judgement, only while it
-  awaits 날인 — frozen values or a contract not awaiting 날인 (거부 · 만료 · 종료 · 종이) is always false) — the app shows why instead of the 본인 대조 notice.
+  store already (409) or a 근무지 not 운영 (409 `STORE_NOT_OPERATING`, below) still fail when sent.
+- **Only a 운영 근무지 sends and takes 날인** (2026-11-18 김민식, replaces api #300's 사용자 칸 check). 「사업주 정보가 없는
+  점포는 미운영으로 본다」(사용자 결정): a 근무지 counts as 운영 only when it is `OPERATING`, not deleted, **and** has the
+  대표자 · 사업자등록번호 that 날인 freezes into the 사용자 칸 (empty = null or `''`; whitespace-only cannot be stored —
+  the 진위확인 대표자명 is trimmed to 1~50 chars and the number is 10 digits) — `isOperatingStore` in
+  `contract-store-open.ts`; `OPERATING_STORE_WHERE` is the same condition as a Prisma where, used by the 근무지
+  선택지 and the new-근무지 check of 722 too, so a store that can be chosen can also be sent. A store becomes 운영 only
+  with 사업자 인증 · 좌표 · BP 사용 (`missingForOperation`) and the 본사
+  drops to 미운영 when its 사업자 인증 is cleared, but stores that were 운영 before that rule without 인증 remain, so the
+  사용자 칸 is checked too. Every send — 저장하면 곧바로 보내기, `PUT` 고쳐 다시 보내기, `PATCH …/worker`, `POST …/send` —
+  passes `ContractDeliveryService.prepare`, which checks it first (`storeOperating`) and answers 409
+  `STORE_NOT_OPERATING` otherwise (nothing written, the save rolls back). Saving a 작성 중 계약 at its own 미운영 근무지 is
+  still allowed (722) — only sending is blocked. 날인 (`POST /me/contracts/:id/sign`) checks it before uploading the
+  signature (no storage round trip for a request that must fail) and again inside the 날인 transaction, after the 직원 ·
+  계약 row locks: `readSignStore` reads the store and its 사업자정보 in **one SQL statement** (LEFT JOIN), so the judgement
+  and the 사용자 칸 it freezes come from one committed state — a 본사 사업자 인증 해제 (empties the 사용자 칸 and sets
+  미운영 in one transaction) cannot slip in between. The store row is not locked, so 날인 adds no lock-order conflict
+  with 점포 폐점 · 재발송; a missing row is a 500. The uploaded signature is deleted when it fails. The 직원 앱 상세
+  (`GET /me/contracts/:id`) reports `storeNotOperating: true` and `signable: false` while such a contract awaits 날인
+  (always false otherwise) — the app shows why instead of the 본인 대조 notice. A 본사 whose 좌표 is removed also drops to
+  미운영 and so blocks its contracts (운영 기준 그대로).
 - `taxProfile` — the 직원's 신고 정보, read-only (WHALEERP-155, 2026-10-29 김민식): `{ status, rrnMasked, bankName,
   accountNumber }`. It hangs on the 직원 record (`StaffTaxProfile` is 1:1 by `staffMemberId`), not the contract, so an
   old contract shows the 직원's **current** values. The visibility check (`canManageStaffAccount`) uses the same target

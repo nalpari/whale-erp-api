@@ -773,14 +773,20 @@ describe('ContractsService.create', () => {
 
   // WHALEERP-722 — 새 계약은 운영 중 점포에만. 범위를 본 뒤에 알린다(범위 밖 점포의 상태가 새지 않게).
   it('미운영 점포면 400 — 직원 레코드를 만들지 않는다', async () => {
-    prisma.store.findFirst.mockResolvedValue({
-      storeStatusCode: 'NOT_OPERATING',
-    });
+    prisma.store.findFirst.mockImplementation(
+      (args: Prisma.StoreFindFirstArgs) =>
+        // 근무지 확인(지움 · 폐점 아님)은 지나고 운영 확인(OPERATING_STORE_WHERE)은 비게
+        Promise.resolve(
+          args.where?.businessProfile
+            ? null
+            : { storeStatusCode: 'NOT_OPERATING' },
+        ),
+    );
 
     const run = service.create(dto(), 1);
     await expect(run).rejects.toThrow(BadRequestException);
     await expect(run).rejects.toThrow(
-      '운영 중인 점포만 근무지로 고를 수 있습니다.',
+      '운영 중이고 사업자 정보(대표자 · 사업자등록번호)가 있는 점포만 근무지로 고를 수 있습니다.',
     );
     expect(prisma.staffMember.create).not.toHaveBeenCalled();
   });

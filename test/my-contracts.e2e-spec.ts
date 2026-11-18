@@ -540,7 +540,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     ).toBe('PENDING_SIGNATURE');
   });
 
-  it('보낸 뒤 점포 대표자 · 사업자등록번호가 지워지면(본사 사업자 인증 해제) 상세는 날인할 수 없다고 하고 날인은 409 EMPLOYER_INFO_MISSING — 올리지도 바꾸지도 않는다', async () => {
+  it('보낸 뒤 점포 대표자 · 사업자등록번호가 지워지면(본사 사업자 인증 해제) 근무지가 운영 중이 아닌 것으로 보아(사업주 정보 없음) 상세는 날인할 수 없다고 하고 날인은 409 STORE_NOT_OPERATING — 올리지도 바꾸지도 않는다', async () => {
     const a = await account();
     const auth = await token(a.accountId);
     const { contractId, sentAt } = await pending(a);
@@ -552,12 +552,12 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       const detail = await get(`/me/contracts/${contractId}`, auth).expect(200);
       expect(detail.body).toMatchObject({
         signable: false,
-        employerMissing: true,
+        storeNotOperating: true,
         mismatches: [],
       });
       storage.put.mockClear();
       const res = await sign(contractId, auth, sentAt).expect(409);
-      expect(res.body).toMatchObject({ code: 'EMPLOYER_INFO_MISSING' });
+      expect(res.body).toMatchObject({ code: 'STORE_NOT_OPERATING' });
       expect(storage.put).not.toHaveBeenCalled();
       expect(
         (await prisma.contract.findUniqueOrThrow({ where: { contractId } }))
@@ -573,6 +573,37 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       await prisma.storeBusinessProfile.update({
         where: { storeId },
         data: baseBiz(),
+      });
+    }
+  });
+
+  it('보낸 뒤 근무지가 미운영이 되면(본사 사업자 인증 해제 등) 상세는 날인할 수 없다고 하고 날인은 409 STORE_NOT_OPERATING — 올리지도 바꾸지도 않는다', async () => {
+    const a = await account();
+    const auth = await token(a.accountId);
+    const { contractId, sentAt } = await pending(a);
+    await prisma.store.update({
+      where: { storeId },
+      data: { storeStatusCode: 'NOT_OPERATING' },
+    });
+    try {
+      const detail = await get(`/me/contracts/${contractId}`, auth).expect(200);
+      expect(detail.body).toMatchObject({
+        signable: false,
+        storeNotOperating: true,
+        mismatches: [],
+      });
+      storage.put.mockClear();
+      const res = await sign(contractId, auth, sentAt).expect(409);
+      expect(res.body).toMatchObject({ code: 'STORE_NOT_OPERATING' });
+      expect(storage.put).not.toHaveBeenCalled();
+      expect(
+        (await prisma.contract.findUniqueOrThrow({ where: { contractId } }))
+          .status,
+      ).toBe('PENDING_SIGNATURE');
+    } finally {
+      await prisma.store.update({
+        where: { storeId },
+        data: { storeStatusCode: 'OPERATING' },
       });
     }
   });
