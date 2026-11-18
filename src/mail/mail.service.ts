@@ -398,7 +398,7 @@ export function mailHtml(
     'role="presentation" cellpadding="0" cellspacing="0" border="0"';
   const header =
     `<table ${TABLE}><tr>` +
-    `<td width="34" valign="middle" style="width:34px;vertical-align:middle;padding:0 10px 0 0"><img src="cid:${MAIL_LOGO_CID}" width="34" height="34" alt="" style="display:block;width:34px;height:34px;border:0"></td>` +
+    `<td width="28" valign="middle" style="width:28px;vertical-align:middle;padding:0 8px 0 0"><img src="cid:${MAIL_LOGO_CID}" width="28" height="28" alt="" style="display:block;width:28px;height:28px;border:0"></td>` +
     `<td valign="middle" style="vertical-align:middle;${L};${FONT};white-space:nowrap"><span style="font-size:17px;font-weight:800;color:#0c0c0c;letter-spacing:0.02em">${FROM_NAME}</span><span style="margin:0 7px;font-size:12px;color:#b9bec5">·</span><span style="font-size:12px;color:#8a8f96">${SERVICE_TAGLINE}</span></td>` +
     '</tr></table>';
   const block = (b: BodyBlock): string => {
@@ -427,7 +427,7 @@ export function mailHtml(
     '<!--[if mso]><table role="presentation" width="560" align="left" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
     `<table ${TABLE} width="560" bgcolor="#ffffff" style="width:100%;max-width:560px;background:#ffffff">`,
     // 머리 영역 아래 옅은 구분선 — 머리와 본문을 가른다(2026-11-18 사용자 지정)
-    `<tr><td align="left" style="padding:28px 32px 22px;border-bottom:1px solid #e6e8eb;${L}">${header}</td></tr>`,
+    `<tr><td align="left" style="padding:20px 32px 18px;border-bottom:1px solid #e6e8eb;${L}">${header}</td></tr>`,
     `<tr><td align="left" style="padding:28px 32px 28px;${L};${FONT};color:${INK}">`,
     `<p style="margin:0 0 14px;font-size:22px;line-height:1.4;font-weight:bold;color:#111111;${L}">${escapeHtml(mailHeading(subject))}</p>`,
     bodyBlocks(body, fill).map(block).join(''),

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-18
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 머리 줄을 낮췄다: 로고 그림 34 → 28px, 위아래 여백 28 · 22 → 20 · 18px(사용자 지정 — 로고 줄이 너무 높았다).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 본문 글(문단 · 정보 상자 · 안내 · 버튼)을 14px 로 — 관리자 웹 본문 크기(DESIGN.md Body 14px)와 맞춘다(사용자 지정, 15 · 16 은 커머스 메일을 따랐던 것).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 버튼 글자도 16 → 15px — 본문 · 정보 상자 · 안내 · 버튼을 15px 하나로(사용자 지정).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 머리(로고 · WHALE ERP) 아래 옅은 1px 구분선으로 머리와 본문을 가른다(사용자 지정).
