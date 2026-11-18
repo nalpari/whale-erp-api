@@ -233,10 +233,13 @@ export class MailService {
  * 메일 꼬리의 운영사 정보 — 쿠팡 메일 꼬리처럼 「상호」 이름표 없이 회사명부터(2026-11-18 사용자 지정, 대표이사 이정선).
  * 주소 · 전화 · 사업자등록번호는 로그인 전 홈 꼬리(front guest-footer)와 같은 값(2026-10-22 재영).
  */
-const OPERATOR_LINES = [
-  '(주)인터플러그 | 대표이사: 이정선 | 사업자등록번호: 105-87-63602',
-  '(03787) 서울특별시 서대문구 연세로 5다길 22-3, 발리빌딩 3층 | 전화: 02-6928-0028',
-];
+const FOOTER_HTML = [
+  '본 메일은 발신전용으로 회신되지 않습니다.',
+  '',
+  // 회사명만 굵게(2026-11-18 사용자 지정)
+  '<b style="font-weight:bold;color:#5f656d">(주)인터플러그</b> · 대표이사: 이정선 · 사업자등록번호: 105-87-63602',
+  '(03787) 서울특별시 서대문구 연세로 5다길 22-3, 발리빌딩 3층 · 전화: 02-6928-0028',
+].join('<br>');
 // 본문 블록 — 「- 항목: 값」 줄은 정보 표, 「※」 줄은 안내 상자, 나머지는 문단.
 // 콜론 뒤에 빈칸이 있어야 표다 — 「- 10:00 이후」 · 「- https://…」 는 문단으로 둔다.
 const INFO_LINE = /^\s*-\s*([^:\n]{1,30}?)\s*:\s+(.+)$/;
@@ -321,7 +324,7 @@ export function mailHeading(subject: string): string {
 /**
  * 공통 메일 틀(2026-11-18 사용자 지정 「B 브랜드 띠형」 — 쿠팡 · 컬리 · SSG 안내 메일처럼 보낸 곳이 분명하게, 신뢰도).
  * 맨 위 짙은 띠(관리자 웹 메뉴 줄 #282f37)에 흰 로고 · 「WHALE ERP」, 그 아래 제목(메일 제목에서 [WHALE ERP] 를 뗀 것),
- * 본문 블록(문단 · 「- 항목: 값」 정보 표 · 「※」 안내 상자), 버튼, 회색 꼬리(발신 전용 · 운영사 정보). 템플릿 42건은 고치지 않는다.
+ * 본문 블록(문단 · 「- 항목: 값」 정보 표 · 「※」 안내 상자), 버튼, 회색 꼬리(발신 전용 안내 · 한 줄 띄고 운영사 정보, 회사명 굵게). 템플릿 42건은 고치지 않는다.
  * 본문 · 제목 · 값은 모두 이스케이프한다. 스타일은 `<style>` 을 버리는 메일 화면이 많아 인라인으로 둔다.
  *
  * 카드는 표(table)로 왼쪽에 붙이고 칸과 글마다 왼쪽 정렬을 적는다. 정렬을 적지 않으면 네이버 · 다음 · Outlook 처럼
@@ -363,7 +366,7 @@ export function mailHtml(
   const buttons = links
     .map(
       (link) =>
-        `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 0"><tr><td bgcolor="#6b7988" style="padding:13px 24px;border-radius:6px;background:#6b7988"><a href="${escapeHtml(link)}" style="display:inline-block;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;border-radius:6px">바로가기</a></td></tr></table>`,
+        `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 0"><tr><td bgcolor="#ffffff" style="padding:12px 24px;border:1px solid #6b7988;border-radius:6px;background:#ffffff"><a href="${escapeHtml(link)}" style="display:inline-block;color:#3c4046;font-size:15px;font-weight:bold;text-decoration:none;border-radius:6px">바로가기</a></td></tr></table>`,
     )
     .join('');
   return [
@@ -378,7 +381,7 @@ export function mailHtml(
     bodyBlocks(body, fill).map(block).join(''),
     buttons,
     '</td></tr>',
-    `<tr><td align="left" bgcolor="#f0f1f3" style="padding:18px 32px;background:#f0f1f3;font-size:12px;line-height:1.7;color:#8a8f96;${L};${FONT}">이 메일은 발신 전용이라 회신할 수 없습니다.<br>${OPERATOR_LINES.map(escapeHtml).join('<br>')}</td></tr>`,
+    `<tr><td align="left" bgcolor="#f0f1f3" style="padding:18px 32px;background:#f0f1f3;font-size:12px;line-height:1.7;color:#8a8f96;${L};${FONT}">${FOOTER_HTML}</td></tr>`,
     '</table>',
     '<!--[if mso]></td></tr></table><![endif]-->',
     '</td></tr></table></body></html>',

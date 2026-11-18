@@ -72,8 +72,8 @@ menu bar) with the white `WHALE ERP` wordmark; a heading — the mail subject wi
 `- 10:00 …` and `- https://…` stay text) become a grey-label info table, `※` lines become a
 notice box (an empty `※` line is dropped), everything else a paragraph, and the template's own
 sentences each get their own line (`sentences`: after `. ? !` followed by a space — user request);
-the buttons (slate `#6b7988`, user's pick over blue); a grey footer with 「발신 전용」 and, like
-Coupang's footer, `(주)인터플러그 | 대표이사: 이정선 | 사업자등록번호: …` then address and phone
+the buttons in the admin web's hover look — white, 1px slate `#6b7988` border, ink text (user's pick); a grey footer with 「본 메일은 발신전용으로 회신되지 않습니다.」, a blank line, and, like
+Coupang's footer, `**(주)인터플러그** · 대표이사: 이정선 · 사업자등록번호: …` (company name bold, `·` separators) then address and phone
 (user-specified; address and phone match the guest-site footer).
 
 **The block shape comes from the template, not the filled body.** `send` passes the unfilled

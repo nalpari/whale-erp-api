@@ -184,6 +184,8 @@ describe('mailHtml', () => {
     expect(html).toContain('>it1118a</td>');
     expect(html).toContain('처음 로그인할 때 비밀번호를 변경해 주세요.</td>');
     expect(html).toContain('bgcolor="#282f37"');
-    expect(html).toContain('bgcolor="#6b7988"');
+    // 버튼: 관리자 웹 호버 모양 — 흰 바탕 · 회청 테두리 · 먹색 글자(2026-11-18 사용자 지정)
+    expect(html).toContain('border:1px solid #6b7988');
+    expect(html).toContain('style="display:inline-block;color:#3c4046;');
   });
 });

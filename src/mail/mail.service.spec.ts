@@ -132,10 +132,9 @@ describe('MailService', () => {
     expect(html).toContain('>임시 비밀번호: x8Rk-2mPq</p>');
     // 제목은 메일 제목에서 [WHALE ERP] 를 뗀 것
     expect(html).toContain('>임시 비밀번호를 보내 드립니다</p>');
-    // 꼬리: 발신 전용 · 운영사 정보
-    expect(html).toContain('이 메일은 발신 전용이라 회신할 수 없습니다.');
+    // 꼬리: 발신 전용 안내, 한 줄 띄고 운영사 정보(회사명 굵게, 2026-11-18 사용자 지정)
     expect(html).toContain(
-      '(주)인터플러그 | 대표이사: 이정선 | 사업자등록번호: 105-87-63602',
+      '본 메일은 발신전용으로 회신되지 않습니다.<br><br><b style="font-weight:bold;color:#5f656d">(주)인터플러그</b> · 대표이사: 이정선 · 사업자등록번호: 105-87-63602',
     );
     // MAIL_LOGO_URL 이 없으면 로고 그림 없이 글자만
     expect(html).not.toContain('<img');
