@@ -429,7 +429,7 @@ export function mailHtml(
     // 머리 영역 아래 옅은 구분선 — 머리와 본문을 가른다(2026-11-18 사용자 지정)
     `<tr><td align="left" style="padding:14px 32px 12px;border-bottom:1px solid #e6e8eb;${L}">${header}</td></tr>`,
     `<tr><td align="left" style="padding:28px 32px 28px;${L};${FONT};color:${INK}">`,
-    `<p style="margin:0 0 14px;font-size:22px;line-height:1.4;font-weight:bold;color:#111111;${L}">${escapeHtml(mailHeading(subject))}</p>`,
+    `<p style="margin:0 0 14px;font-size:22px;line-height:1.4;font-weight:bold;color:#282f37;${L}">${escapeHtml(mailHeading(subject))}</p>`,
     bodyBlocks(body, fill).map(block).join(''),
     buttons,
     '</td></tr>',
