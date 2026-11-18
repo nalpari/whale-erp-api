@@ -4,7 +4,7 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-18T01:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T05:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
@@ -13,7 +13,7 @@ sources:
   - id: hq-store
     resource: ../../src/stores/hq-store.ts
     title: 본사 점포 — createHqStore · saveHqProfile · syncHqStatus · hqStatusOf(운영 조건 = missingForOperation)
-    last_modified: 2026-11-17T08:19:43Z
+    last_modified: 2026-11-18T05:00:00Z
   - id: next-store-code
     resource: ../../src/stores/next-store-code.ts
     title: claimStoreCode — 점포코드 잠금 · 채번(점포 등록 · 본사 생성 공용)
@@ -187,7 +187,7 @@ to 미운영 the moment one is lost, even from 운영 (user decision); only BP w
 closes it. Those writes record into the 본사's `store_change_histories` (design D5), which this
 screen's history route will not show because it 404s the 본사 — **no route reads 본사 history
 today**. Its code comes from the same `claimStoreCode` (`src/stores/next-store-code.ts`), so 본사
-and ordinary stores share one `ST` sequence and one lock. `StoreScopeType` (DIRECT 직영 · FRANCHISE 가맹 · HQ 본사) is an API enum served by `GET /enums`. In the 본사 coordinate block (`HqLocationDto`) `isLocationApplied` left out keeps the current value, sent alone it is applied, and only creation defaults it to 사용; latitude · longitude go together (one alone is a 400, `null` clears). `syncHqStatus` locks the live 본사 row (`SELECT … FOR UPDATE`) before reading the conditions — a BP status change and a coordinate or number save that overlap would otherwise each read the other's pre-commit values and leave, say, a 운영 본사 under a 미사용 BP. Every path that writes a 본사 locks the `bp_codes` row first and the 본사 row second — 플랫폼 BP 상태 변경 updates `bp_codes` then syncs, and 플랫폼 BP 수정 · 마이페이지 BP 사업자정보 now bump `bp_codes.updated_by` before touching the 본사 — so two concurrent requests on one BP queue instead of deadlocking (40P01). Only the live 본사 is written; a BP whose 본사 is missing (an invariant break) gets an error log from `tradeNameOf` · `hqBizOf` and a 500 from 마이페이지 BP 사업자정보 rather than a silent empty profile. The duplicate-number check here matches `BusinessVerificationService.isBizRegistrationNumberTaken` on live stores and on skipping the platform BP's 본사, and differs only in what it excludes: here the owner BP's 본사, there (re-verification, `excludeBpCodeId`) every store of that BP.
+and ordinary stores share one `ST` sequence and one lock. `StoreScopeType` (DIRECT 직영 · FRANCHISE 가맹 · HQ 본사) is an API enum served by `GET /enums`. In the 본사 coordinate block (`HqLocationDto`) `isLocationApplied` left out keeps the current value, sent alone it is applied, and only creation defaults it to 사용; latitude · longitude go together (one alone is a 400, `null` clears). `syncHqStatus` locks the live 본사 row (`SELECT … FOR NO KEY UPDATE`, as 폐점 does, so 본사 attendance, contract and facility inserts — whose foreign-key check takes `KEY SHARE` — are not held up; only BP 삭제 takes `FOR UPDATE`, because it must queue behind exactly those inserts) before reading the conditions — a BP status change and a coordinate or number save that overlap would otherwise each read the other's pre-commit values and leave, say, a 운영 본사 under a 미사용 BP. Every path that writes a 본사 locks the `bp_codes` row first and the 본사 row second — 플랫폼 BP 상태 변경 updates `bp_codes` then syncs, and 플랫폼 BP 수정 · 마이페이지 BP 사업자정보 now bump `bp_codes.updated_by` before touching the 본사 — so two concurrent requests on one BP queue instead of deadlocking (40P01). Only the live 본사 is written; a BP whose 본사 is missing (an invariant break) gets an error log from `tradeNameOf` · `hqBizOf` and a 500 from 마이페이지 BP 사업자정보 rather than a silent empty profile. The duplicate-number check here matches `BusinessVerificationService.isBizRegistrationNumberTaken` on live stores and on skipping the platform BP's 본사, and differs only in what it excludes: here the owner BP's 본사, there (re-verification, `excludeBpCodeId`) every store of that BP.
 
 This scope is the store screen's own. `AdminScopeService` keeps platform
 accounts out of customer stores unless the caller passes the tab BP, and its `hidesPersonalData` is for

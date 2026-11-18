@@ -154,6 +154,16 @@ describe('hq-store', () => {
       ...patch,
     });
 
+    // FOR UPDATE 는 본사를 외래키로 가리키는 행(출퇴근 · 근로계약 · 시설물 등) 삽입의 KEY SHARE 와 충돌한다 —
+    // NO KEY UPDATE 로도 BP 상태 변경과 좌표 · 번호 저장은 서로 줄을 서고, 그 삽입과는 부딪치지 않는다.
+    it('본사 행은 FOR NO KEY UPDATE 로 잠근다 — 외래키 삽입과 부딪치지 않게', async () => {
+      const t = tx();
+      t.store.findFirst.mockResolvedValue(hq());
+      await syncHqStatus(t as never, 3, 9);
+      const [sql] = t.$executeRaw.mock.calls[0] as [string[]];
+      expect(sql.join('?')).toMatch(/FOR NO KEY UPDATE\s*$/);
+    });
+
     it('조건이 바뀌면 상태를 바꾸고 「점포상태」 이력을 남긴다 — 판정 전에 본사 행을 잠근다', async () => {
       const t = tx();
       t.store.findFirst.mockResolvedValue(hq());

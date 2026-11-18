@@ -259,7 +259,9 @@ export async function syncHqStatus(
 ): Promise<void> {
   // 본사 행을 잠근 뒤 읽는다 — BP 상태 변경과 좌표 · 사업자번호 저장이 겹치면 잠그지 않은 읽기는 서로의 커밋 전 값을 봐
   // 「BP 미사용인데 본사 운영」처럼 조건과 다른 상태가 남는다. 수정 쪽은 이미 본사 행을 update 로 잠그므로 한 줄로 선다.
-  await tx.$executeRaw`SELECT 1 FROM stores WHERE bp_code_id = ${bpCodeId} AND is_hq AND NOT is_deleted FOR UPDATE`;
+  // FOR UPDATE 가 아닌 까닭은 점포 폐점과 같다 — 본사를 외래키로 가리키는 행(출퇴근 · 근로계약 · 시설물 등) 삽입의
+  // KEY SHARE 와 부딪치지 않게 한다. 그 삽입과 줄을 세워야 하는 BP 삭제(remove)만 FOR UPDATE 로 잠근다.
+  await tx.$executeRaw`SELECT 1 FROM stores WHERE bp_code_id = ${bpCodeId} AND is_hq AND NOT is_deleted FOR NO KEY UPDATE`;
   const hq = await tx.store.findFirst({
     where: { bpCodeId, isHq: true, isDeleted: false },
     select: {
