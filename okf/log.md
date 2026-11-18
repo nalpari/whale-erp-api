@@ -1,6 +1,25 @@
 # Directory Update Log
 
 ## 2026-11-18
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 최종 리뷰 블로커 반영: 끊긴 줄 잇기(`joinBrokenLines`)가 「· 」 · 「• 」 · 「1. 」 목록 줄도 잇지 않는다(회원가입 완료 메일의 「· 직원 초대 …」 목록이 한 줄로 붙었다). 값 안에서 문단을 나눈 빈 줄(운영자 답변)은 남기고 앞뒤 빈 줄만 버린다.
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 맨 위 메뉴색 선 3 → 6px, 「매장 통합관리 서비스」는 가운뎃점 회색 글자 대신 관리자 웹 꼬리표(Tag) 모양(옅은 바탕 · 테두리 · 12px 회색)으로(사용자 지정 — 다른 느낌이 나되 튀지 않게).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 맨 위에 3px 메뉴색(#282f37) 선(머리 시안 다섯 가지 중 B, 사용자 결정 — 제목 색과 이어져 웨일ERP 메일로 읽힌다).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 제목 색을 거의 검정(#111) 대신 관리자 웹 메뉴 줄 색 #282f37 로(사용자 지정).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 머리 줄을 낮췄다: 로고 그림 34 → 24px, 「WHALE ERP」 17 → 16px, 위아래 여백 28 · 22 → 14 · 12px(사용자 지정 — 로고 줄이 너무 높았다).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 본문 글(문단 · 정보 상자 · 안내 · 버튼)을 14px 로 — 관리자 웹 본문 크기(DESIGN.md Body 14px)와 맞춘다(사용자 지정, 15 · 16 은 커머스 메일을 따랐던 것).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 버튼 글자도 16 → 15px — 본문 · 정보 상자 · 안내 · 버튼을 15px 하나로(사용자 지정).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 머리(로고 · WHALE ERP) 아래 옅은 1px 구분선으로 머리와 본문을 가른다(사용자 지정).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 제목 글자를 24 → 22px 로(사용자 지정 — 제목 22 · 본문 15 · 띠 17/12 · 꼬리 12).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 템플릿이 문장 가운데서 끊어 둔 줄(문장 끝 . ? ! 로 끝나지 않은 일반 줄)은 메일에서 한 줄로 잇는다(`joinBrokenLines`, 사용자 지정 — 「계약 조건을 수정해 / 근로계약서를…」이 어색하게 끊겨 보였다).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 본문 글 크기를 15px 하나로: 「※」 안내 글도 13 → 15px(색만 옅게) — 문단 · 안내 · 정보 상자 크기가 섞여 어색했다(사용자 지정).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 틀을 「C 커머스 안내형」으로 바꿨다(사용자 결정, 짙은 띠형 대신): 흰 바탕 한 장, 왼쪽 위 짙은 고래 로고 · WHALE ERP · 매장 통합관리 서비스(그림 · 글자 칸을 나눠 세로 가운데), 큰 제목, 회색 둥근 정보 상자, 회색 안내 글, 폭을 채운 버튼, 굵은 회색 구분 띠, 꼬리는 그대로. 로고 PNG 를 흰 바탕 짙은 고래로 다시 그렸다.
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 꼬리 맨 아래에 「Copyrights© 2026 INTERPLUG. All Rights Reserved.」(로그인 전 홈 꼬리와 같은 줄, 사용자 지정).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 버튼을 표 · 안내 상자와 같은 폭으로 가득 채우고 글자는 가운데(사용자 지정 — 가장자리가 맞아 정돈돼 보인다).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 띠에 흰 고래 로고를 넣는다: 공개 주소 없이 보이게 PNG(`src/mail/mail-logo.ts`, 띠 색 바탕이라 다크 모드에서도 보임)를 인라인 첨부(cid)로 싣는다. 그래서 `MAIL_LOGO_URL` 은 없앴다(`.env.example` · `mail.config.ts` main 그대로). 꼬리 운영사 정보는 점 · 콜론 없이 작고 옅은 「|」(10px · #c9cdd3)로만 가른다 — 「(주)인터플러그 | 대표이사 이정선 | 사업자등록번호 …」(사용자 지정, 점 · 콜론이 복잡해 보였다).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 띠의 「WHALE ERP」 옆에 「· 매장 통합관리 서비스」(가운뎃점으로 이어 작게, 사용자 지정 — 한 번 뺐다가 다시 넣었다). 꼬리 회사명은 굵게 하지 않는다.
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 틀 리뷰 · 사용자 지정 반영: 블록 모양(표 · 안내 · 문단)을 값을 채우기 전 템플릿 줄로 정한다(값 안의 줄바꿈으로 상호명 · 답변이 공식 안내처럼 꾸며지던 것, PR #296 리뷰). 문장 줄바꿈은 템플릿 글에만, 표 줄은 콜론 뒤 빈칸이 있을 때만, 빈 「※」 줄은 버린다. 버튼은 관리자 웹 호버 모양(흰 바탕 · 회청 테두리 · 먹색 글자) · Outlook 용 padding 은 칸에, 꼬리는 쿠팡처럼 「본 메일은 발신전용으로 회신되지 않습니다.」 · 한 줄 띄고 굵은 「(주)인터플러그」 · 대표이사: 이정선 · 사업자등록번호(사용자 지정).
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 공통 메일 틀을 「B 브랜드 띠형」으로(2026-11-18 사용자 결정 — 쿠팡 · 컬리 · SSG 안내 메일처럼 보낸 곳이 분명하게, 신뢰도): 짙은 띠(#282f37) + 흰 「WHALE ERP」, 제목은 메일 제목에서 [WHALE ERP] 를 뗀 것, 본문의 「- 항목: 값」 줄은 정보 표 · 「※」 줄은 안내 상자 · 나머지는 문단이고 문단 · 안내는 문장마다 줄을 바꾼다, 버튼 #4a7ae0, 회색 꼬리에 발신 전용 · 운영사 정보. 템플릿은 고치지 않는다(29건 그대로 맞게 그려진다). 로고 그림은 선택 — text 파트는 그대로.
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 공통 메일 틀의 카드도 왼쪽에 붙인다(2026-11-18 사용자 지정, 통합테스트). 11-13 에 글만 왼쪽으로 맞추고 560px 카드는 바깥 칸 `align="center"` 로 가운데에 두어 메일이 여전히 가운데 정렬로 보였다 — 바깥 칸 · Outlook 전용 표도 `align="left"` 로, 틀에 `center` 가 남지 않는다. 단위 테스트 갱신.
 * **Update**: [Store management](/api/stores.md) — `syncHqStatus` 의 본사 행 잠금을 `FOR UPDATE` 에서 `FOR NO KEY UPDATE` 로 낮췄다 — BP 상태 변경 · 마이페이지 저장 · 플랫폼 BP 수정이 본사 출퇴근 · 근로계약 · 시설물 삽입(외래키 KEY SHARE)과 서로 기다리지 않게. BP 삭제의 본사 `FOR UPDATE` 는 그 삽입과 줄을 세우려는 것이라 그대로다.
 * **Update**: [BP masters](/api/bp-masters.md) — 본사 점포 적대적 리뷰(PR #295) 2차 블로커 반영: BP 삭제가 본사 직원 · 시설물을 세기 전에 본사 행을 `FOR UPDATE` 로 잠근다 — 본사 자료 등록은 `stores` 외래키만 확인해 `bp_codes` 잠금에 막히지 않아, 동시 등록이 삭제된 본사 아래 남을 수 있었다.
 * **Update**: [Admin signup](/api/admin-signup.md) · [BP masters](/api/bp-masters.md) — 본사 점포 적대적 리뷰(PR #295) 블로커 반영: 가입 · 플랫폼 BP 등록 트랜잭션이 본사 생성으로 점포코드 잠금 줄에 서므로 점포 등록과 같은 `STORE_CODE_TX`(대기 5초 · 실행 15초)를 쓰고, 시간 초과(P2028)는 500 이 아니라 503 이다.

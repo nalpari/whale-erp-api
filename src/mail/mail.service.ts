@@ -5,6 +5,7 @@ import { MAIL_CONFIG, type MailConfig } from './mail.config';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { isSendableEmail, MAX_EMAIL_LENGTH } from './mail-address';
 import { renderTemplate } from '../notification-templates/render-template';
+import { MAIL_LOGO_CID, MAIL_LOGO_PNG } from './mail-logo';
 
 export const MAIL_TRANSPORT = Symbol('MAIL_TRANSPORT');
 
@@ -110,8 +111,24 @@ export class MailService {
         from: { name: FROM_NAME, address: this.config.username },
         to,
         subject: mail.subject as string,
-        html: mailHtml(mail.body, mail.links),
+        // 블록 모양은 채우기 전 템플릿 본문으로 정한다 — 값 안의 줄바꿈이 표 · 안내를 꾸미지 못하게
+        html: mailHtml(
+          mail.subject as string,
+          mail.templateBody,
+          mail.links,
+          fillLine(input.variables),
+        ),
         text: [mail.body, ...mail.links].join('\n\n'),
+        // 띠의 고래 로고 — 공개 주소 없이 보이게 인라인 첨부(cid)로 싣는다
+        attachments: [
+          {
+            filename: 'whale-erp.png',
+            content: MAIL_LOGO_PNG,
+            contentType: 'image/png',
+            cid: MAIL_LOGO_CID,
+            contentDisposition: 'inline',
+          },
+        ],
       })) as { messageId: string };
       messageId = info.messageId;
     } catch (e) {
@@ -173,7 +190,7 @@ export class MailService {
         `메일 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,
       );
 
-    return mail;
+    return { ...mail, templateBody: template.body };
   }
 
   /**
@@ -223,37 +240,217 @@ export class MailService {
 }
 
 /**
- * 공통 메일 틀. 일반 글 본문 전체(템플릿 글과 값)를 이스케이프하고 줄바꿈을 살려
- * 머리 · 꼬리 사이에 넣고, 링크마다 버튼을 붙인다. 스타일은 메일 클라이언트가
- * `<style>` 을 버리는 경우가 많아 인라인으로 둔다.
- *
- * 카드는 표(table)로 가운데에 두고 안쪽 칸과 글마다 왼쪽 정렬을 적는다. 정렬을 적지 않으면 네이버 · 다음 · Outlook 처럼
- * 받은 메일을 가운데 정렬 칸에 넣어 보여 주는 메일 화면에서 본문이 가운데로 물려받아 보였다. `max-width` · `margin:auto`
- * 를 지우는 메일 화면도 있어 가운데 두기는 표의 align 으로 한다(2026-11-13 사용자 지적). 카드 폭은 `width:100%;max-width:560px`
- * 라 좁은 화면에서는 줄어들고, `max-width` 를 모르는 Outlook 데스크톱(Word 엔진)은 그 전용 주석(`<!--[if mso]>`) 안의
- * 560px 표가 폭을 잡는다. 글꼴 · 색은 body 스타일을 버리는 메일 화면이 많아 카드 칸에 다시 적는다.
+ * 메일 꼬리의 운영사 정보 — 쿠팡 메일 꼬리처럼 「상호」 이름표 없이 회사명부터(2026-11-18 사용자 지정, 대표이사 이정선).
+ * 주소 · 전화 · 사업자등록번호는 로그인 전 홈 꼬리(front guest-footer)와 같은 값(2026-10-22 재영).
  */
-function mailHtml(body: string, links: readonly string[]): string {
-  const ALIGN_LEFT = 'text-align:left';
+/** 「WHALE ERP」 옆에 관리자 웹 꼬리표(Tag) 모양으로 작게 붙이는 서비스 설명 — 다른 느낌이 나되 튀지 않게(2026-11-18 사용자 지정 — 한 번 뺐다가 점을 두고 다시 넣었다) */
+const SERVICE_TAGLINE = '매장 통합관리 서비스';
+
+// 꼬리 한 줄 안 항목 사이 구분자 — 작고 옅은 「|」(글자보다 작게 · 연한 회색), 정신없지 않게(2026-11-18 사용자 지정)
+const GAP = '<span style="margin:0 8px;font-size:10px;color:#c9cdd3">|</span>';
+const FOOTER_HTML = [
+  '본 메일은 발신전용으로 회신되지 않습니다.',
+  '',
+  // 점 · 콜론은 쓰지 않고 작은 「|」 하나로만 가른다 — 점 · 콜론이 섞여 복잡해 보였다(2026-11-18 사용자 지정)
+  ['(주)인터플러그', '대표이사 이정선', '사업자등록번호 105-87-63602'].join(
+    GAP,
+  ),
+  [
+    '03787 서울특별시 서대문구 연세로 5다길 22-3, 발리빌딩 3층',
+    '전화 02-6928-0028',
+  ].join(GAP),
+  // 로그인 전 홈 꼬리와 같은 저작권 줄(2026-11-18 사용자 지정)
+  'Copyrights© 2026 INTERPLUG. All Rights Reserved.',
+].join('<br>');
+// 본문 블록 — 「- 항목: 값」 줄은 정보 표, 「※」 줄은 안내 상자, 나머지는 문단.
+// 콜론 뒤에 빈칸이 있어야 표다 — 「- 10:00 이후」 · 「- https://…」 는 문단으로 둔다.
+const INFO_LINE = /^\s*-\s*([^:\n]{1,30}?)\s*:\s+(.+)$/;
+const NOTICE_LINE = /^\s*※\s*(.*)$/;
+/** 목록 줄(「- 」 · 「· 」 · 「• 」 · 「1. 」) — 앞 줄과 잇지 않는다 */
+const LIST_LINE = /^\s*(?:[-·•]|\d+[.)])\s*/;
+type BodyBlock =
+  | { kind: 'text'; lines: string[] }
+  | { kind: 'info'; rows: [string, string][] }
+  | { kind: 'notice'; lines: string[] };
+
+const lines = (text: string) => text.split(/\r?\n/);
+/** 앞뒤 빈 줄만 버린다 */
+const trimBlank = (list: string[]) => {
+  let start = 0;
+  let end = list.length;
+  while (start < end && !list[start].trim()) start++;
+  while (end > start && !list[end - 1].trim()) end--;
+  return list.slice(start, end);
+};
+
+/**
+ * 본문을 블록으로 나눈다. 빈 줄은 문단 사이 간격으로만 쓰고 버린다.
+ *
+ * 모양(표 · 안내 · 문단)은 **값을 채우기 전 템플릿 줄**로 정하고, 값은 그 뒤에 `fill` 로 채운다. 채운 본문으로 정하면
+ * 값 안의 줄바꿈이 새 표 줄 · 안내 상자를 만들어, 로그인 없이 넣는 상호명 같은 값이 공식 안내처럼 보이게 꾸밀 수 있었다
+ * (PR #296 리뷰). 값 안의 줄바꿈은 그 문단 · 안내 안의 줄바꿈으로만 남고, 표 값에서는 빈칸이 된다.
+ * 문장마다 줄바꿈(`sentences`)도 템플릿 글에만 건다 — 운영자 답변 · 상호명 같은 값 안의 「1. 」 · 「Co. Ltd」 는 나누지 않는다.
+ */
+export function bodyBlocks(
+  template: string,
+  fill: (text: string) => string = (text) => text,
+): BodyBlock[] {
+  const blocks: BodyBlock[] = [];
+  // 템플릿 글을 문장마다 나눈 뒤 값을 채우고, 값 안의 줄바꿈은 그 자리의 줄바꿈으로 둔다
+  const filled = (text: string) =>
+    sentences(text).flatMap((s) => lines(fill(s)));
+  for (const line of joinBrokenLines(lines(template))) {
+    const last = blocks.at(-1);
+    if (!line.trim()) {
+      if (last?.kind === 'text') blocks.push({ kind: 'text', lines: [] });
+      continue;
+    }
+    const info = INFO_LINE.exec(line);
+    const notice = NOTICE_LINE.exec(line);
+    if (info) {
+      const row: [string, string] = [
+        fill(info[1]).replace(/\s*\r?\n\s*/g, ' '),
+        fill(info[2]).replace(/\s*\r?\n\s*/g, ' '),
+      ];
+      if (last?.kind === 'info') last.rows.push(row);
+      else blocks.push({ kind: 'info', rows: [row] });
+    } else if (notice) {
+      if (last?.kind === 'notice') last.lines.push(...filled(notice[1]));
+      else blocks.push({ kind: 'notice', lines: filled(notice[1]) });
+    } else if (last?.kind === 'text') last.lines.push(...filled(line));
+    else blocks.push({ kind: 'text', lines: filled(line) });
+  }
+  // 앞뒤 빈 줄만 버린다 — 운영자 답변처럼 값 안에서 문단을 나눈 빈 줄은 남긴다(PR #296 리뷰)
+  return blocks
+    .map((b) => (b.kind === 'info' ? b : { ...b, lines: trimBlank(b.lines) }))
+    .filter((b) => b.kind === 'info' || b.lines.length);
+}
+
+/**
+ * 문장 가운데서 끊은 템플릿 줄을 한 줄로 잇는다 — 「필요하면 계약 조건을 수정해 / 근로계약서를 다시 보내 주세요.」처럼
+ * 템플릿이 글자 수에 맞춰 줄을 바꿔 둔 것이 메일에서 어색하게 끊겨 보였다(2026-11-18 사용자 지정). 문장 끝(. ? !)으로
+ * 끝나지 않은 일반 줄 뒤에 일반 줄이 바로 오면 빈칸 하나로 잇는다. 빈 줄 · 목록 줄(「- 」 · 「· 」 · 「• 」 · 「1. 」, 표 포함) ·
+ * 「※」 줄은 잇지 않는다 — 회원가입 완료 메일의 「· 직원 초대 …」 목록이 한 줄로 붙었다(PR #296 리뷰).
+ */
+export function joinBrokenLines(source: string[]): string[] {
+  const plain = (line: string) =>
+    !!line.trim() && !LIST_LINE.test(line) && !NOTICE_LINE.test(line);
+  const out: string[] = [];
+  for (const line of source) {
+    const prev = out.at(-1);
+    if (
+      prev !== undefined &&
+      plain(prev) &&
+      plain(line) &&
+      !/[.?!][)"'」』]?\s*$/.test(prev)
+    )
+      out[out.length - 1] = `${prev.trimEnd()} ${line.trim()}`;
+    else out.push(line);
+  }
+  return out;
+}
+
+/** 템플릿 한 줄의 `#{변수}` 를 채운다 — renderTemplate 이 이미 이름 · 필수 값을 검사한 뒤에만 쓴다 */
+export function fillLine(values: Record<string, string>) {
+  return (text: string) =>
+    text.replace(/#\{([^}]+)\}/g, (_, name: string) =>
+      Object.hasOwn(values, name) && typeof values[name] === 'string'
+        ? values[name]
+        : '',
+    );
+}
+
+/**
+ * 한 줄을 문장마다 나눈다(2026-11-18 사용자 지정 — 메일 글은 문장마다 줄을 바꾼다). 문장 끝(. ? !) 뒤에 빈칸이 올 때만
+ * 나눠 3.3% · 1.5배 · URL 같은 값은 그대로 둔다. 따옴표 · 괄호로 닫힌 문장 끝도 나눈다.
+ */
+export function sentences(line: string): string[] {
+  return (
+    line
+      // 숫자 바로 뒤 마침표(「1. 첫째」 목록 번호)에서는 나누지 않는다
+      .split(/(?<=[^\d\s][.?!][)"'」』]?)\s+(?=\S)/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+}
+
+/** 메일 제목 앞의 「[WHALE ERP]」를 떼어 본문 머리 제목으로 쓴다 */
+export function mailHeading(subject: string): string {
+  return subject.replace(/^\s*\[\s*WHALE\s*ERP\s*\]\s*/i, '').trim() || subject;
+}
+
+/**
+ * 공통 메일 틀(2026-11-18 사용자 지정 「C 커머스 안내형」 — 쿠팡 · 마켓컬리 · SSG 주문 안내 메일의 짜임, 보낸 곳이 분명하게 · 신뢰도).
+ * 흰 바탕 한 장에 왼쪽 위 고래 로고 · 「WHALE ERP · 매장 통합관리 서비스」, 크게 굵은 제목(메일 제목에서 [WHALE ERP] 를 뗀 것),
+ * 본문 블록(문단 · 「- 항목: 값」 회색 둥근 정보 상자 · 「※」 회색 안내 글), 폭을 채우는 버튼, 굵은 회색 구분 띠,
+ * 꼬리(발신전용 안내 · 한 줄 띄고 운영사 정보 · 저작권). 템플릿은 고치지 않는다. 본문 · 제목 · 값은 모두 이스케이프하고,
+ * 스타일은 `<style>` 을 버리는 메일 화면이 많아 인라인으로 둔다.
+ *
+ * 카드는 표(table)로 왼쪽에 붙이고 칸과 글마다 왼쪽 정렬을 적는다. 정렬을 적지 않으면 네이버 · 다음 · Outlook 처럼
+ * 받은 메일을 가운데 정렬 칸에 넣어 보여 주는 메일 화면에서 본문이 가운데로 물려받아 보였다(2026-11-13 사용자 지적).
+ * 카드 자리도 바깥 칸 · Outlook 전용 표에 align="left" 를 적어 왼쪽에 둔다(2026-11-18 사용자 지정, 통합테스트).
+ * 카드 폭은 `width:100%;max-width:560px` 라 좁은 화면에서는 줄어들고, `max-width` 를 모르는 Outlook 데스크톱(Word 엔진)은
+ * 그 전용 주석(`<!--[if mso]>`) 안의 560px 표가 폭을 잡는다. 글꼴 · 색은 body 스타일을 버리는 메일 화면이 많아 칸마다 다시 적는다.
+ * 바탕 · 상자 · 버튼 색은 bgcolor 와 style 에 함께 적는다 — 다크 모드 메일 앱이 style 색만 뒤집는 경우가 있다.
+ * 로고 그림과 글자는 표의 두 칸에 나눠 valign="middle" 로 세로 가운데를 맞춘다 — 글자 줄의 vertical-align 은 메일 화면마다
+ * 어긋났다(2026-11-18 사용자 지정). 로고는 send 가 인라인 첨부(cid, mail-logo.ts)로 싣는 PNG 다.
+ */
+export function mailHtml(
+  subject: string,
+  /** 값을 채우기 전 템플릿 본문 — 블록 모양은 이것으로 정한다(bodyBlocks) */
+  body: string,
+  links: readonly string[],
+  fill?: (text: string) => string,
+): string {
+  const L = 'text-align:left';
   const FONT = "font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif";
+  const INK = '#3c4046';
+  // 본문 글(문단 · 안내 · 정보 상자 · 버튼)은 모두 14px 하나로 — 관리자 웹 본문(DESIGN.md Body 14px)과 같다 — 크기가 섞여 어색했다(2026-11-18 사용자 지정). 안내는 색만 옅게
+  const TABLE =
+    'role="presentation" cellpadding="0" cellspacing="0" border="0"';
+  const header =
+    `<table ${TABLE}><tr>` +
+    `<td width="24" valign="middle" style="width:24px;vertical-align:middle;padding:0 8px 0 0"><img src="cid:${MAIL_LOGO_CID}" width="24" height="24" alt="" style="display:block;width:24px;height:24px;border:0"></td>` +
+    `<td valign="middle" style="vertical-align:middle;${L};${FONT};white-space:nowrap"><span style="font-size:16px;font-weight:800;color:#0c0c0c;letter-spacing:0.02em">${FROM_NAME}</span><span style="display:inline-block;margin-left:10px;padding:2px 8px;font-size:12px;line-height:1.5;color:#858b94;background:#f8f9fb;border:1px solid #e9edf5;border-radius:2px;vertical-align:middle">${SERVICE_TAGLINE}</span></td>` +
+    '</tr></table>';
+  const block = (b: BodyBlock): string => {
+    if (b.kind === 'text')
+      return `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#555b63;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
+    if (b.kind === 'notice')
+      return `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#8a8f96;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
+    const rows = b.rows
+      .map(
+        ([k, v], i) =>
+          `<tr><td width="120" valign="top" style="width:120px;padding:14px 0;color:#8a8f96;font-size:14px;${i ? 'border-top:1px solid #e9ebef;' : ''}${L}">${escapeHtml(k)}</td><td valign="top" style="padding:14px 0 14px 12px;color:#111111;font-size:14px;font-weight:bold;word-break:break-all;${i ? 'border-top:1px solid #e9ebef;' : ''}${L}">${escapeHtml(v)}</td></tr>`,
+      )
+      .join('');
+    return `<table ${TABLE} width="100%" style="margin:6px 0 22px"><tr><td bgcolor="#f6f7f9" style="padding:6px 22px;background:#f6f7f9;border-radius:10px"><table ${TABLE} width="100%" style="border-collapse:collapse">${rows}</table></td></tr></table>`;
+  };
   const buttons = links
     .map(
       (link) =>
-        `<p style="margin:24px 0 0;${ALIGN_LEFT}"><a href="${escapeHtml(link)}" style="display:inline-block;padding:12px 20px;background:#1f5eff;color:#ffffff;text-decoration:none;border-radius:6px">바로가기</a></p>`,
+        `<table ${TABLE} width="100%" style="margin:8px 0 6px"><tr><td align="center" bgcolor="#ffffff" style="text-align:center;padding:15px 24px;border:1px solid #6b7988;border-radius:8px;background:#ffffff"><a href="${escapeHtml(link)}" style="display:inline-block;color:#3c4046;font-size:14px;font-weight:bold;text-decoration:none">바로가기</a></td></tr></table>`,
     )
     .join('');
   return [
     '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>',
-    `<body style="margin:0;padding:0;background:#f4f5f7;${FONT};color:#222222">`,
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7"><tr><td align="center" style="padding:24px">',
-    '<!--[if mso]><table role="presentation" width="560" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
-    '<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background:#ffffff;border-radius:8px"><tr>',
-    `<td align="left" style="padding:32px;${ALIGN_LEFT};${FONT};color:#222222">`,
-    `<p style="margin:0 0 24px;font-size:18px;font-weight:bold;${ALIGN_LEFT}">${FROM_NAME}</p>`,
-    `<p style="margin:0;line-height:1.6;${ALIGN_LEFT}">${escapeHtml(body).replace(/\r?\n/g, '<br>')}</p>`,
+    `<body style="margin:0;padding:0;background:#ffffff;${FONT};color:${INK}">`,
+    `<table ${TABLE} width="100%" bgcolor="#ffffff" style="background:#ffffff"><tr><td align="left" style="padding:0;${L}">`,
+    '<!--[if mso]><table role="presentation" width="560" align="left" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
+    `<table ${TABLE} width="560" bgcolor="#ffffff" style="width:100%;max-width:560px;background:#ffffff">`,
+    // 맨 위 6px 메뉴색 선 — 제목 색(#282f37)과 이어져 웨일ERP 메일로 읽히게(2026-11-18 사용자 지정, 머리 시안 B)
+    '<tr><td bgcolor="#282f37" height="6" style="height:6px;line-height:6px;font-size:0;background:#282f37">&nbsp;</td></tr>',
+    // 머리 영역 아래 옅은 구분선 — 머리와 본문을 가른다(2026-11-18 사용자 지정)
+    `<tr><td align="left" style="padding:14px 32px 12px;border-bottom:1px solid #e6e8eb;${L}">${header}</td></tr>`,
+    `<tr><td align="left" style="padding:28px 32px 28px;${L};${FONT};color:${INK}">`,
+    `<p style="margin:0 0 14px;font-size:22px;line-height:1.4;font-weight:bold;color:#282f37;${L}">${escapeHtml(mailHeading(subject))}</p>`,
+    bodyBlocks(body, fill).map(block).join(''),
     buttons,
-    `<p style="margin:32px 0 0;font-size:12px;color:#888888;${ALIGN_LEFT}">이 메일은 발신 전용입니다.</p>`,
-    '</td></tr></table>',
+    '</td></tr>',
+    // 굵은 회색 구분 띠 — 본문과 꼬리를 가른다
+    '<tr><td bgcolor="#f2f3f5" height="8" style="height:8px;line-height:8px;font-size:0;background:#f2f3f5">&nbsp;</td></tr>',
+    `<tr><td align="left" style="padding:22px 32px 32px;font-size:12px;line-height:1.8;color:#8a8f96;${L};${FONT}">${FOOTER_HTML}</td></tr>`,
+    '</table>',
     '<!--[if mso]></td></tr></table><![endif]-->',
     '</td></tr></table></body></html>',
   ].join('');

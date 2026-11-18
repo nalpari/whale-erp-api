@@ -102,7 +102,12 @@ describe('MailService', () => {
   const sent = () =>
     (
       transport.sendMail.mock.calls[0] as [
-        { subject: string; html: string; text: string },
+        {
+          subject: string;
+          html: string;
+          text: string;
+          attachments: { cid: string; contentType: string; content: Buffer }[];
+        },
       ]
     )[0];
 
@@ -127,9 +132,28 @@ describe('MailService', () => {
     await service.send(input);
 
     const { html } = sent();
+    // 빈 줄로 나뉜 글은 문단 하나씩
+    expect(html).toContain('>이서준 님이 요청하신 임시 비밀번호입니다.</p>');
+    expect(html).toContain('>임시 비밀번호: x8Rk-2mPq</p>');
+    // 제목은 메일 제목에서 [WHALE ERP] 를 뗀 것
+    expect(html).toContain('>임시 비밀번호를 보내 드립니다</p>');
+    // 꼬리: 발신 전용 안내, 한 줄 띄고 운영사 정보 — 회사명 굵게, 작고 옅은 「|」로 가른다(2026-11-18 사용자 지정)
     expect(html).toContain(
-      '이서준 님이 요청하신 임시 비밀번호입니다.<br><br>임시 비밀번호: x8Rk-2mPq<br><br>1시간 동안',
+      '본 메일은 발신전용으로 회신되지 않습니다.<br><br>(주)인터플러그<span style="margin:0 8px;font-size:10px;color:#c9cdd3">|</span>대표이사 이정선<span style="margin:0 8px;font-size:10px;color:#c9cdd3">|</span>사업자등록번호 105-87-63602',
     );
+    expect(html).toContain(
+      '전화 02-6928-0028<br>Copyrights© 2026 INTERPLUG. All Rights Reserved.</td>',
+    );
+    // 고래 로고는 공개 주소 없이 인라인 첨부(cid)로
+    expect(html).toContain('<img src="cid:whale-erp-logo"');
+    const { attachments } = sent();
+    expect(attachments).toEqual([
+      expect.objectContaining({
+        cid: 'whale-erp-logo',
+        contentType: 'image/png',
+      }),
+    ]);
+    expect(attachments[0].content.subarray(1, 4).toString()).toBe('PNG');
     expect(html).toContain(
       'href="https://erp.whale.test/login?token=t0ken&amp;next=1"',
     );
@@ -137,14 +161,24 @@ describe('MailService', () => {
     expect(html).toContain('WHALE ERP');
   });
 
-  it('공통 틀은 카드를 표로 가운데 두고 칸 · 글마다 왼쪽 정렬을 적는다(가운데 정렬 칸에 넣어 보여 주는 메일 화면 대비)', async () => {
+  it('공통 틀은 카드를 표로 왼쪽에 붙이고 칸 · 글마다 왼쪽 정렬을 적는다(가운데 정렬 칸에 넣어 보여 주는 메일 화면 대비)', async () => {
     await service.send(input);
 
     const { html } = sent();
     expect(html).toContain('<td align="left"');
+    // 카드 자리도 왼쪽 — 바깥 칸과 Outlook 전용 표 모두 가운데를 쓰지 않는다(2026-11-18 사용자 지정)
+    // 가운데는 버튼 글자 칸 하나뿐이다(버튼은 가득 채우고 글자만 가운데)
+    expect(html.match(/align="center"/g)).toHaveLength(1);
+    expect(html).toContain('<td align="center" bgcolor="#ffffff"');
+    expect(html).toContain(
+      '<td align="left" style="padding:0;text-align:left">',
+    );
+    expect(html).toContain(
+      '<!--[if mso]><table role="presentation" width="560" align="left"',
+    );
     // 카드 표 자체의 폭(Outlook 전용 주석 안의 560px 표와 따로 확인한다)
     expect(html).toContain(
-      'width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px',
+      'width="560" bgcolor="#ffffff" style="width:100%;max-width:560px',
     );
     const paragraphs = html.match(/<p [^>]*>/g) ?? [];
     // 머리 · 본문 · 버튼 하나 · 꼬리

@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-13T08:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T04:00:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, layout, send, record)
-    last_modified: 2026-11-13T08:10:00Z
+    last_modified: 2026-11-18T04:00:00Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; masks button links)
@@ -18,6 +18,10 @@ sources:
     resource: ../../src/mail/mail.config.ts
     title: MAIL_* env validation at startup
     last_modified: 2026-10-20T09:20:00Z
+  - id: mail-logo
+    resource: ../../src/mail/mail-logo.ts
+    title: Whale logo PNG sent as an inline (cid) attachment
+    last_modified: 2026-11-18T04:00:00Z
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
     title: MailModule (Gmail transport; not wired into AppModule) · optionalMailServiceProvider
@@ -58,19 +62,53 @@ complete HTML document) and sent those rows without a link and with their line
 breaks collapsed; that was corrected on 2026-10-08 after the team review of PR #6.
 
 `send` fills the body as text, then HTML-escapes **all of it** — the template's
-own words and the values — turns line breaks into `<br>`, and places it between
-the header (`WHALE ERP`) and the footer. Each button-link value becomes a
+own words and the values — and lays it out in the shared frame. Each button-link value becomes a
 「바로가기」 button. Escaping the whole body means an operator typing `<b>` in a
 template shows `<b>`, not bold: the body is text by policy, so markup in it is
 text too. A text part goes alongside — the body, then each link on its own
-paragraph — for clients that do not render HTML.
+paragraph — for clients that do not render HTML; only the HTML part gets the layout below.
 
-The frame is a table, not a centred `<div>`: an outer full-width table centres a
-560px card table (`width`/`align`, since some clients strip `max-width` and
-`margin:auto`), and the card cell and every paragraph carry `align="left"` /
-`text-align:left`; the card cell repeats the font and colour because many clients drop `<body>` styles. Outlook desktop ignores `max-width`, so an MSO-only wrapper table (`<!--[if mso]>`) holds the 560px width there. Without an explicit alignment, clients that show a message
+**Layout ("C 커머스 안내형", 2026-11-18 user decision — shaped like Coupang · Kurly · SSG order notices so
+the sender is obvious, a trust issue; a dark-band version was tried first and dropped).** One white sheet,
+card pinned left, topped by a 6px `#282f37` rule (the heading colour; header option B of five, user pick): the whale logo and `WHALE ERP` with 「매장 통합관리 서비스」 as a small admin-web-style tag (pale fill, light border, grey 12px) at the top left (logo and text in
+two table cells with `valign="middle"` so they line up in every client) above a thin `#e6e8eb` rule that separates the header from the body; a 22px bold heading in the admin web's menu-bar colour `#282f37` (body text 14px like the admin web's Body size, wordmark 16/12, footer 12 — user-picked scale) — the mail
+subject with its leading `[WHALE ERP]` removed (`mailHeading`), so no template needed a new field; the body
+split by `bodyBlocks` — consecutive `- 항목: 값` lines (a space after the colon, label up to 30 chars, so
+`- 10:00 …` and `- https://…` stay text) become rows in a grey rounded info box, `※` lines become grey
+text (same 14px as the rest of the body — mixed sizes looked off) (an empty `※` line is dropped), everything else a 14px paragraph, and the template's own sentences each
+get their own line (`sentences` — user request) while template lines broken mid-sentence are joined first (`joinBrokenLines`: a plain line not ending in `. ? !` runs on into the next; list lines starting with `-` `·` `•` or `1.` are never joined, and blank lines inside a value — paragraphs in an operator's reply — are kept); full-width buttons in the admin web's hover look (white, 1px
+slate `#6b7988` border, ink text, label centred, 14px like the rest of the body); an 8px grey band; then the footer: 「본 메일은 발신전용으로
+회신되지 않습니다.」, a blank line, (주)인터플러그 | 대표이사 이정선 | 사업자등록번호 …, address | phone (a small
+light `|`, no `·` or `:`), and 「Copyrights© 2026 INTERPLUG. All Rights Reserved.」 (user-specified; values match
+the guest-site footer). Background, box and button colours are also written as `bgcolor`.
+
+**The block shape comes from the template, not the filled body.** `send` passes the unfilled
+template body and `fillLine(values)`; `bodyBlocks` classifies each template line first, then fills
+it. Classifying the filled body let a value with line breaks — a BP 상호명 typed on the public
+signup form, an operator's free-text 답변 — fake an info row or an official-looking notice box in a
+mail from WHALE ERP (PR #296 review). Now a value's line breaks stay inside its paragraph, become
+spaces in a table cell, and sentence splitting never cuts a value (`1. …`, `Co. Ltd`).
+Band, button and footer colours are also written as `bgcolor`, because some
+dark-mode clients only invert `style` colours. The 29 seed EMAIL rows render sensibly without
+edits — their key values (아이디, 임시 비밀번호, 근무지, 제목 …) are already `- 항목: 값` lines.
+
+**The logo travels inside the mail.** Gmail and others do not show SVG or `data:` images, and the
+admin web has no public production address yet, so `send` attaches the PNG in `mail-logo.ts` as an
+inline attachment (`cid:whale-erp-logo`) and the band's `<img>` points at it — no hosting, no env
+key. The PNG is a dark whale on its own white square, so a client that inverts the whole mail in dark mode
+still shows it instead of a dark whale on a dark background.
+A client that blocks images shows an empty spot; the wordmark is text and stays. To change the
+logo, redraw front `public/guest/logo-whale.svg` + `logo-star.svg` in the same layout and
+re-encode.
+
+The frame is a table, not a `<div>`: an outer full-width table holds a 560px card
+table at its **left** edge, and the outer cell, the MSO wrapper, the card cell and
+every paragraph all carry `align="left"` / `text-align:left`; nothing in the frame
+says `center`. The card cell repeats the font and colour because many clients drop `<body>` styles. Outlook desktop ignores `max-width`, so an MSO-only wrapper table (`<!--[if mso]>`) holds the 560px width there. Without an explicit alignment, clients that show a message
 inside their own centred cell (Naver, Daum, Outlook) passed the centring on and
-the body read centred (2026-11-13 user report).
+the body read centred (2026-11-13 user report). The card itself was still centred
+after that fix, so the mail still looked centred; on 2026-11-18 the user asked for
+the card to sit on the left too (통합테스트).
 
 **Button links must be `http://` or `https://`** (any case). Anything else —
 `javascript:`, `data:`, a bare host, a protocol-relative `//…` — throws before
