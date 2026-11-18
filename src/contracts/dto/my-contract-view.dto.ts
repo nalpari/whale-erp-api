@@ -173,7 +173,7 @@ export class MyContractDetailDto extends ContractTermsDto {
   /** 지금 서명하면 받는가 — awaitingSignature 이고 본인 대조가 맞고 근무지가 운영 중일 때. 서명 API 와 같은 판정이다 */
   signable: boolean;
   /**
-   * 근무지 점포가 운영 중이 아닌가(미운영 · 폐점) — 그러면 서명 API 는 409 STORE_NOT_OPERATING 이고 signable 은 false 다.
+   * 근무지 점포가 운영 중이 아닌가(미운영 · 폐점 · 사업주 정보(대표자 · 사업자등록번호) 없음) — 그러면 서명 API 는 409 STORE_NOT_OPERATING 이고 signable 은 false 다.
    * 직원은 고칠 수 없어 근무지 관리자에게 문의한다(본사 사업자 인증 해제 등, 2026-11-18). 날인을 기다리는 계약만 보고 그 밖은 늘 false
    */
   storeNotOperating: boolean;

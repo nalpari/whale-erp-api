@@ -404,10 +404,14 @@ describe('MyContractViewsService', () => {
       });
     });
 
-    it.each(['NOT_OPERATING', 'CLOSED'])(
+    it.each([
+      ['미운영', { storeStatusCode: 'NOT_OPERATING' }],
+      ['폐점', { storeStatusCode: 'CLOSED' }],
+      ['사업주 정보 없음(인증 없이 운영인 옛 점포)', { businessProfile: null }],
+    ])(
       '근무지가 운영 중이 아니면(%s) storeNotOperating 이고 날인할 수 없다 — 날인 API 의 409 STORE_NOT_OPERATING 과 같은 판정',
-      async (storeStatusCode) => {
-        tx.store.findUnique.mockResolvedValue(store({ storeStatusCode }));
+      async (_, over) => {
+        tx.store.findUnique.mockResolvedValue(store(over));
         const d = await service().findOne(77, 41, NOW);
         expect(d).toMatchObject({
           awaitingSignature: true,

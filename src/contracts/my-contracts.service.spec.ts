@@ -5,6 +5,7 @@ import { StorageService } from '../storage/storage.service';
 import { ContractFilesService } from './contract-files.service';
 import { ContractNoticeService } from './contract-notice.service';
 import { MY_CONTRACT_STATUSES } from './my-contract-scope';
+import { STORE_OPEN_SELECT } from './contract-store-open';
 import {
   STORE_NOT_OPERATING_FOR_STAFF,
   MyContractsService,
@@ -117,8 +118,8 @@ describe('MyContractsService', () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
-      // 잠근 뒤 근무지 운영 확인(lockStoreOperating — 점포 행 FOR SHARE) — 기본은 운영 중
-      $queryRaw: jest.fn().mockResolvedValue([{ operating: true }]),
+      // 잠근 뒤 점포 행 공유 잠금(lockStore — FOR SHARE) — 행이 있다
+      $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
       contract: {
         findFirst: jest.fn().mockResolvedValue(mine()),
         // 전환 함수(기한 · 상태)가 잠근 뒤 읽는 값
@@ -148,10 +149,19 @@ describe('MyContractsService', () => {
       staffMember: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       // 날인 때 고정하는 사용자 칸(WHALEERP-131)과 근무지가 운영 중인가(storeOperating — 기본은 운영 중)
       store: {
-        findFirst: jest.fn().mockResolvedValue({ storeId: 3 }),
+        findFirst: jest.fn().mockResolvedValue({
+          storeStatusCode: 'OPERATING',
+          isDeleted: false,
+          businessProfile: {
+            bizCeoName: '김대표',
+            bizRegistrationNumber: '1234567890',
+          },
+        }),
         findUniqueOrThrow: jest.fn().mockResolvedValue({
           name: '강남점',
           phone: '0212345678',
+          storeStatusCode: 'OPERATING',
+          isDeleted: false,
           businessProfile: {
             bizTradeName: null,
             bizRegistrationNumber: '1234567890',
@@ -567,23 +577,39 @@ describe('MyContractsService', () => {
     });
 
     it('근무지가 운영 중이 아니면(미운영 · 폐점) 409 STORE_NOT_OPERATING — 올리기 전에 막고 아무것도 쓰지 않는다', async () => {
-      tx.store.findFirst.mockResolvedValue(null);
+      tx.store.findFirst.mockResolvedValue({
+        storeStatusCode: 'NOT_OPERATING',
+        isDeleted: false,
+        businessProfile: null,
+      });
       const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
       expect(bodyOf(e)).toMatchObject({
         code: 'STORE_NOT_OPERATING',
         message: STORE_NOT_OPERATING_FOR_STAFF,
       });
       expect(tx.store.findFirst).toHaveBeenCalledWith({
-        where: { storeId: 3, isDeleted: false, storeStatusCode: 'OPERATING' },
-        select: { storeId: true },
+        where: { storeId: 3 },
+        select: STORE_OPEN_SELECT,
       });
       expect(storage.put).not.toHaveBeenCalled();
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
     it('올리는 동안 근무지가 미운영이 됐으면 잠근 뒤 다시 봐 409 — 사용자 칸을 고정하지 않고 올린 서명을 지운다', async () => {
-      // 올리기 전에는 운영 중, 잠근 뒤(점포 행 FOR SHARE)에는 아니다(본사 사업자 인증 해제 등)
-      tx.$queryRaw.mockResolvedValue([{ operating: false }]);
+      // 올리기 전에는 운영 중, 잠근 뒤(점포 행 FOR SHARE) 다시 읽으니 사업주 정보가 비었다(본사 사업자 인증 해제 등)
+      tx.store.findUniqueOrThrow.mockResolvedValue({
+        name: '강남점',
+        phone: '0212345678',
+        storeStatusCode: 'OPERATING',
+        isDeleted: false,
+        businessProfile: {
+          bizTradeName: null,
+          bizRegistrationNumber: null,
+          bizCeoName: null,
+          bizAddress: null,
+          bizAddressDetail: null,
+        },
+      });
       const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
       expect(bodyOf(e)).toMatchObject({ code: 'STORE_NOT_OPERATING' });
       expect(storage.put).toHaveBeenCalled();
