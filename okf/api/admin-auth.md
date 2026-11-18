@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, the store list version (`stores-version`, `me/stores`) the header store picker refreshes by, and the login info version (`me/login-info-version`) the screen re-reads login-info by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/opus-5.5, at: 2026-11-18T01:30:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T05:10:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -860,7 +860,9 @@ BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules
   자신의 사업자정보는 "다른 번호로 바꾸기"(재인증) 말고 "아예 지우기"도 된다. `businessVerificationToken`과
   함께 보내면 400(같은 저장에서 "새로 반영"과 "지우기"를 동시에 받을 수 없다). 구독 기록이 있으면 막아야
   하지만(사용자 결정) 구독 자체가 아직 없어(관련 테이블 없음, front `S-JHQQNR`「1차 범위 밖」과 같은 이유)
-  지금은 검사하지 않는다 — 구독이 생기면 여기에 그 검사를 더한다.
+  지금은 검사하지 않는다 — 구독이 생기면 여기에 그 검사를 더한다. 플랫폼 BP 수정(`PUT /bp-masters/:id`)도
+  2026-11-18 부터 같은 `clearBusinessVerification` 을 받아 똑같이 지운다([BP masters](/api/bp-masters.md)) —
+  구독 검사도 그쪽에 함께 더한다.
 - `updatedAt` 라운드트립으로 동시 수정을 가린다(`sameMillisecond`, `admin-profile.service.ts`와 같은
   패턴) — 그사이 다른 저장이 있었으면 409. **이 `updatedAt` 은 본사 사업자정보 행의 것이다**(2026-11-17,
   전엔 `bp_codes`) — 플랫폼 BP 수정이 같은 행을 고치면 마이페이지 저장이 409 가 된다. 저장은 `bp_codes` 의
