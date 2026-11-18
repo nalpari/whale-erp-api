@@ -266,12 +266,22 @@ const FOOTER_HTML = [
 // 콜론 뒤에 빈칸이 있어야 표다 — 「- 10:00 이후」 · 「- https://…」 는 문단으로 둔다.
 const INFO_LINE = /^\s*-\s*([^:\n]{1,30}?)\s*:\s+(.+)$/;
 const NOTICE_LINE = /^\s*※\s*(.*)$/;
+/** 목록 줄(「- 」 · 「· 」 · 「• 」 · 「1. 」) — 앞 줄과 잇지 않는다 */
+const LIST_LINE = /^\s*(?:[-·•]|\d+[.)])\s*/;
 type BodyBlock =
   | { kind: 'text'; lines: string[] }
   | { kind: 'info'; rows: [string, string][] }
   | { kind: 'notice'; lines: string[] };
 
 const lines = (text: string) => text.split(/\r?\n/);
+/** 앞뒤 빈 줄만 버린다 */
+const trimBlank = (list: string[]) => {
+  let start = 0;
+  let end = list.length;
+  while (start < end && !list[start].trim()) start++;
+  while (end > start && !list[end - 1].trim()) end--;
+  return list.slice(start, end);
+};
 
 /**
  * 본문을 블록으로 나눈다. 빈 줄은 문단 사이 간격으로만 쓰고 버린다.
@@ -310,22 +320,21 @@ export function bodyBlocks(
     } else if (last?.kind === 'text') last.lines.push(...filled(line));
     else blocks.push({ kind: 'text', lines: filled(line) });
   }
+  // 앞뒤 빈 줄만 버린다 — 운영자 답변처럼 값 안에서 문단을 나눈 빈 줄은 남긴다(PR #296 리뷰)
   return blocks
-    .map((b) =>
-      b.kind === 'info' ? b : { ...b, lines: b.lines.filter((l) => l.trim()) },
-    )
+    .map((b) => (b.kind === 'info' ? b : { ...b, lines: trimBlank(b.lines) }))
     .filter((b) => b.kind === 'info' || b.lines.length);
 }
 
 /**
  * 문장 가운데서 끊은 템플릿 줄을 한 줄로 잇는다 — 「필요하면 계약 조건을 수정해 / 근로계약서를 다시 보내 주세요.」처럼
  * 템플릿이 글자 수에 맞춰 줄을 바꿔 둔 것이 메일에서 어색하게 끊겨 보였다(2026-11-18 사용자 지정). 문장 끝(. ? !)으로
- * 끝나지 않은 일반 줄 뒤에 일반 줄이 바로 오면 빈칸 하나로 잇는다. 빈 줄 · 「- 」로 시작하는 줄(표 · 목록) · 「※」 줄은 잇지 않는다.
+ * 끝나지 않은 일반 줄 뒤에 일반 줄이 바로 오면 빈칸 하나로 잇는다. 빈 줄 · 목록 줄(「- 」 · 「· 」 · 「• 」 · 「1. 」, 표 포함) ·
+ * 「※」 줄은 잇지 않는다 — 회원가입 완료 메일의 「· 직원 초대 …」 목록이 한 줄로 붙었다(PR #296 리뷰).
  */
 export function joinBrokenLines(source: string[]): string[] {
-  // 「- 」 목록 줄도 잇지 않는다(표가 아닌 목록 · 시각 줄)
   const plain = (line: string) =>
-    !!line.trim() && !/^\s*-/.test(line) && !NOTICE_LINE.test(line);
+    !!line.trim() && !LIST_LINE.test(line) && !NOTICE_LINE.test(line);
   const out: string[] = [];
   for (const line of source) {
     const prev = out.at(-1);
@@ -356,10 +365,13 @@ export function fillLine(values: Record<string, string>) {
  * 나눠 3.3% · 1.5배 · URL 같은 값은 그대로 둔다. 따옴표 · 괄호로 닫힌 문장 끝도 나눈다.
  */
 export function sentences(line: string): string[] {
-  return line
-    .split(/(?<=[.?!][)"'」』]?)\s+(?=\S)/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  return (
+    line
+      // 숫자 바로 뒤 마침표(「1. 첫째」 목록 번호)에서는 나누지 않는다
+      .split(/(?<=[^\d\s][.?!][)"'」』]?)\s+(?=\S)/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
 }
 
 /** 메일 제목 앞의 「[WHALE ERP]」를 떼어 본문 머리 제목으로 쓴다 */
