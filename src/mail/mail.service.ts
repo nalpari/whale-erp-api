@@ -289,7 +289,7 @@ export function bodyBlocks(
   // 템플릿 글을 문장마다 나눈 뒤 값을 채우고, 값 안의 줄바꿈은 그 자리의 줄바꿈으로 둔다
   const filled = (text: string) =>
     sentences(text).flatMap((s) => lines(fill(s)));
-  for (const line of lines(template)) {
+  for (const line of joinBrokenLines(lines(template))) {
     const last = blocks.at(-1);
     if (!line.trim()) {
       if (last?.kind === 'text') blocks.push({ kind: 'text', lines: [] });
@@ -315,6 +315,30 @@ export function bodyBlocks(
       b.kind === 'info' ? b : { ...b, lines: b.lines.filter((l) => l.trim()) },
     )
     .filter((b) => b.kind === 'info' || b.lines.length);
+}
+
+/**
+ * 문장 가운데서 끊은 템플릿 줄을 한 줄로 잇는다 — 「필요하면 계약 조건을 수정해 / 근로계약서를 다시 보내 주세요.」처럼
+ * 템플릿이 글자 수에 맞춰 줄을 바꿔 둔 것이 메일에서 어색하게 끊겨 보였다(2026-11-18 사용자 지정). 문장 끝(. ? !)으로
+ * 끝나지 않은 일반 줄 뒤에 일반 줄이 바로 오면 빈칸 하나로 잇는다. 빈 줄 · 「- 」로 시작하는 줄(표 · 목록) · 「※」 줄은 잇지 않는다.
+ */
+export function joinBrokenLines(source: string[]): string[] {
+  // 「- 」 목록 줄도 잇지 않는다(표가 아닌 목록 · 시각 줄)
+  const plain = (line: string) =>
+    !!line.trim() && !/^\s*-/.test(line) && !NOTICE_LINE.test(line);
+  const out: string[] = [];
+  for (const line of source) {
+    const prev = out.at(-1);
+    if (
+      prev !== undefined &&
+      plain(prev) &&
+      plain(line) &&
+      !/[.?!][)"'」』]?\s*$/.test(prev)
+    )
+      out[out.length - 1] = `${prev.trimEnd()} ${line.trim()}`;
+    else out.push(line);
+  }
+  return out;
 }
 
 /** 템플릿 한 줄의 `#{변수}` 를 채운다 — renderTemplate 이 이미 이름 · 필수 값을 검사한 뒤에만 쓴다 */

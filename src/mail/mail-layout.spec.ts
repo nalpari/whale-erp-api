@@ -1,5 +1,6 @@
 import {
   bodyBlocks,
+  joinBrokenLines,
   fillLine,
   mailHeading,
   mailHtml,
@@ -32,7 +33,8 @@ describe('bodyBlocks', () => {
         ],
       },
       { kind: 'notice', lines: ['처음 로그인할 때 비밀번호를 변경해 주세요.'] },
-      { kind: 'text', lines: ['둘째 문단', '이어지는 줄'] },
+      // 문장 끝 없이 끊긴 줄은 한 줄로 잇는다(joinBrokenLines)
+      { kind: 'text', lines: ['둘째 문단 이어지는 줄'] },
     ]);
   });
 
@@ -105,6 +107,33 @@ describe('bodyBlocks', () => {
 
   it('내용 없는 「※」 줄은 빈 안내 상자를 만들지 않는다', () => {
     expect(bodyBlocks('※\n본문')).toEqual([{ kind: 'text', lines: ['본문'] }]);
+  });
+
+  it('문장 가운데서 끊은 템플릿 줄은 한 줄로 잇는다 — 문장 끝 · 빈 줄 · 표 · 안내 줄은 잇지 않는다', () => {
+    expect(
+      joinBrokenLines([
+        '필요하면 계약 조건을 수정해',
+        '근로계약서를 다시 보내 주세요.',
+        '다음 문장입니다.',
+        '',
+        '- 근무지: 연남점',
+        '※ 안내',
+      ]),
+    ).toEqual([
+      '필요하면 계약 조건을 수정해 근로계약서를 다시 보내 주세요.',
+      '다음 문장입니다.',
+      '',
+      '- 근무지: 연남점',
+      '※ 안내',
+    ]);
+    expect(
+      bodyBlocks('필요하면 계약 조건을 수정해\n근로계약서를 다시 보내 주세요.'),
+    ).toEqual([
+      {
+        kind: 'text',
+        lines: ['필요하면 계약 조건을 수정해 근로계약서를 다시 보내 주세요.'],
+      },
+    ]);
   });
 
   it('빈 본문은 블록이 없다', () => {
