@@ -84,6 +84,8 @@ const MEMBERSHIP_NOT_FOUND = '소속을 찾을 수 없습니다.';
 
 const toDate = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** 일괄 · 기간 등록에서 예상 못 한 저장 오류가 연달아 이만큼 나면 남은 건은 시도하지 않는다(WHALEERP-731) */
+const SAVE_FAILURE_LIMIT = 3;
 /** 조회 기간의 최대 일수 — 월간 달력 6주 */
 const MAX_LIST_DAYS = 42;
 const isoDate = (date: Date) => date.toISOString().slice(0, 10);
@@ -756,7 +758,10 @@ export class WorkSchedulesService {
    * 일괄 · 기간 등록의 저장. 한 건마다 한 건 등록과 같은 규칙 · 같은 트랜잭션으로 따로 저장한다 — 한 건이 실패해도 앞뒤는
    * 그대로 두고 실패를 모은다. 예상 못 한 오류도 그 건의 실패(500)로 남기고 계속하므로 created · failed 가 저장 결과를 그대로
    * 보인다(커밋 뒤 응답 전에 끊기면 화면은 모른다 — 다시 불러 확인한다). 차례대로 저장하므로 같은 직원의 겹치는 두 건은 뒤 건이
-   * 409 로 실패한다.
+   * 409 로 실패한다. 예상 못 한 오류가 연달아 `SAVE_FAILURE_LIMIT` 번 나면(DB 연결 장애 등) 남은 건은 시도하지 않고 같은 실패로
+   * 채워 바로 응답한다 — 최대 500건을 하나씩 다시 시도하며 요청을 오래 붙잡지 않게(WHALEERP-731, 재영 리뷰). 같은 직원 행의
+   * 잠금 시간 초과가 이어져도 같다. 저장에 성공하거나 업무 규칙 · 입력(400 · 404 · 409)으로 거절되면 다시 센다 — 오류가 이어진
+   * 것이 아니다.
    */
   private async insertEach(
     scope: Scope,
@@ -770,7 +775,29 @@ export class WorkSchedulesService {
   }> {
     const created: ScheduleRow[] = [];
     const failed: RangeWorkScheduleFailureDto[] = [];
-    for (const { index, workDate, line } of items) {
+    // 기간 등록 화면에는 줄만 다시 보내는 길이 없다 — 그날만 다시 넣게 안내한다(재영 리뷰)
+    const saveFailed = (item: (typeof items)[number]) => ({
+      index: item.index,
+      workDate: item.workDate,
+      staffMemberId: item.line.staffMemberId,
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      code: 'WORK_SCHEDULE_SAVE_FAILED',
+      message:
+        via === 'range'
+          ? '저장하지 못했습니다. 잠시 뒤 그날만 다시 등록해 주세요.'
+          : '저장하지 못했습니다. 이 줄만 다시 시도해 주세요.',
+    });
+    let unexpectedInRow = 0;
+    for (const [i, item] of items.entries()) {
+      const { index, workDate, line } = item;
+      if (unexpectedInRow >= SAVE_FAILURE_LIMIT) {
+        // 남은 건은 시도하지 않는다 — 같은 실패로 채운다
+        this.logger.error(
+          `work schedule ${via} STOPPED after ${SAVE_FAILURE_LIMIT} unexpected failures in a row: ${items.length - i} rows not tried`,
+        );
+        failed.push(...items.slice(i).map(saveFailed));
+        break;
+      }
       try {
         const { date, span } = spanOf({ ...line, workDate });
         created.push(
@@ -783,6 +810,7 @@ export class WorkSchedulesService {
             }),
           ),
         );
+        unexpectedInRow = 0;
       } catch (error) {
         // 업무 규칙(400 · 404 · 409)이 아닌 오류(트랜잭션 시간 초과 · 연결 등)도 그 건의 실패로 남기고 다음으로 간다 —
         // 던지면 앞 건은 저장됐는데 알림이 빠지고 화면은 500 만 받아, 다시 보내면 저장된 건이 겹침 409 로 보인다(api 리뷰)
@@ -790,20 +818,11 @@ export class WorkSchedulesService {
           this.logger.error(
             `work schedule ${via} row ${index} ${workDate} FAILED staffMember ${line.staffMemberId}: ${error instanceof Error ? error.message : String(error)}`,
           );
-          failed.push({
-            index,
-            workDate,
-            staffMemberId: line.staffMemberId,
-            statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-            code: 'WORK_SCHEDULE_SAVE_FAILED',
-            // 기간 등록 화면에는 줄만 다시 보내는 길이 없다 — 그날만 다시 넣게 안내한다(재영 리뷰)
-            message:
-              via === 'range'
-                ? '저장하지 못했습니다. 잠시 뒤 그날만 다시 등록해 주세요.'
-                : '저장하지 못했습니다. 이 줄만 다시 시도해 주세요.',
-          });
+          failed.push(saveFailed(item));
+          unexpectedInRow += 1;
           continue;
         }
+        unexpectedInRow = 0;
         failed.push({
           index,
           workDate,

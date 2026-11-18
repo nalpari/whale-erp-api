@@ -4,12 +4,12 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
 tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T03:05:37Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T06:14:46Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-11-17T03:05:37Z
+    last_modified: 2026-11-17T06:14:46Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
@@ -106,6 +106,7 @@ every route — they all go through `scopeOf` — before the scope is read. 직�
 `POST /work-schedules/bulk` 는 근무일 하나에 직원별 줄(직원 · 시작 · 종료 · 휴게)이다. 화면이 줄마다 계약 값으로 미리 채워 보내고 서버는 받은 값을 그대로 저장한다(#199, 2026-10-08 재영).[^service]
 
 - 줄마다 한 건 등록과 같은 규칙 · 같은 잠금으로 **따로** 저장한다(줄마다 트랜잭션). 업무 규칙(400 · 404 · 409)에 걸린 줄은 `failed` 에 넣고 나머지는 저장한다. 예상 못 한 오류(트랜잭션 시간 초과 · 연결 등)도 그 줄만 `failed`(500, `WORK_SCHEDULE_SAVE_FAILED`)로 남기고 다음 줄로 간다 — 던지면 앞 줄은 저장됐는데 알림이 빠지고, 화면이 다시 보내면 저장된 줄이 겹침 409 로 보인다(api 리뷰). 그래서 `created` · `failed` 는 늘 실제 저장과 같다.
+- 예상 못 한 오류가 연달아 3번(`SAVE_FAILURE_LIMIT`) 나면(DB 연결 장애 등) 남은 줄 · 날은 시도하지 않고 같은 실패(500 `WORK_SCHEDULE_SAVE_FAILED`)로 채워 바로 응답한다 — 기간 등록 500건을 하나씩 다시 시도하며 요청을 오래 붙잡지 않게(WHALEERP-731, 재영 리뷰). 같은 직원 행의 잠금 시간 초과가 이어져도 같다. 저장에 성공하거나 업무 규칙 · 입력(400 · 404 · 409)으로 거절되면 다시 센다. 이미 저장한 건의 알림은 그대로 나간다. 로그 `work schedule bulk|range STOPPED after 3 unexpected failures in a row`.
 - 줄 형식(시각 30분 단위 · 줄 수 1~100 · 근무일)이 틀리면 DTO 가 요청 전체를 400 으로 막는다 — 아무 줄도 저장하지 않는다.
 - 줄 순서대로 저장하므로 같은 직원의 겹치는 두 줄은 뒤 줄이 409 다. 겹치지 않으면 쪼갠 근무로 둘 다 저장한다.
 - 알림은 다 저장한 뒤 바뀐 직원마다 한 번이다 — 같은 직원의 여러 줄은 알림 하나에 「…, …」로 묶는다(#201). 알림이 실패해도 저장은 되돌리지 않고 `work schedule notice FAILED` 로그만.
