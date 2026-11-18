@@ -62,6 +62,8 @@ describe('근로계약 목록 (e2e)', () => {
       findUnique: jest.fn(),
       count: jest.fn(),
     },
+    // 보내기 전에 보는 근무지 점포의 사용자 칸(대표자 · 사업자등록번호)
+    storeBusinessProfile: { findUnique: jest.fn() },
     invitation: {
       findMany: jest.fn(),
       count: jest.fn(),
@@ -182,6 +184,10 @@ describe('근로계약 목록 (e2e)', () => {
     prisma.store.findFirst
       .mockReset()
       .mockResolvedValue({ storeStatusCode: 'OPERATING' });
+    prisma.storeBusinessProfile.findUnique.mockReset().mockResolvedValue({
+      bizCeoName: '김대표',
+      bizRegistrationNumber: '1234567890',
+    });
     prisma.codeItem.findUnique.mockReset().mockResolvedValue({
       label: '10320',
       status: 'ACTIVE',
@@ -1850,6 +1856,17 @@ describe('근로계약 목록 (e2e)', () => {
       expect(sent.variables.링크).toMatch(
         /^https:\/\/staff\.e2e\.test\/invite#token=[A-Za-z0-9_-]{43}$/,
       );
+    });
+
+    it('근무지 점포의 대표자 · 사업자등록번호가 비면 409 EMPLOYER_INFO_MISSING — 보내지 않는다', async () => {
+      prisma.storeBusinessProfile.findUnique.mockResolvedValue({
+        bizCeoName: null,
+        bizRegistrationNumber: null,
+      });
+      const res = await send().expect(409);
+      expect(res.body).toMatchObject({ code: 'EMPLOYER_INFO_MISSING' });
+      expect(prisma.invitation.create).not.toHaveBeenCalled();
+      expect(alimtalk.send).not.toHaveBeenCalled();
     });
 
     it('계정이 있는 직원이면 소속 추가 확인 요청을 새로 보낸다 — 날인 기한은 수락 뒤라 null(WHALEERP-130)', async () => {

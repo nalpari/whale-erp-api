@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T04:43:16Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -683,8 +683,16 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   The staff list's `contract.canResend` covers only 발송 대기 · 서명 대기 (`INVITE_RESENDABLE` — 거부 · 만료 is resent
   from the 상세) and adds its 가입·인증 column policy for a 가입 전 직원 (a joined 직원 is false there, true here — the
   app notice).
-  Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503) or the account being 재직 at this
-  store already (409) still fail when sent.
+  Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503), the account being 재직 at this
+  store already (409) or an empty 사용자 칸 (409 `EMPLOYER_INFO_MISSING`, below) still fail when sent.
+- **Empty 사용자 칸 blocks sending and 날인** (2026-11-18 김민식). Every send — 저장하면 곧바로 보내기, `PUT` 고쳐 다시
+  보내기, `PATCH …/worker`, `POST …/send` — passes `ContractDeliveryService.prepare`, which first reads the 근무지 점포's
+  `store_business_profiles` and answers 409 `EMPLOYER_INFO_MISSING` (nothing written, the save rolls back) when the
+  대표자 or 사업자등록번호 is empty (`employerMissing`, blank counts as empty). 날인 (`POST /me/contracts/:id/sign`)
+  checks the same after the row lock and before 체결 완료 — the 사용자 칸 it would freeze (`employerOf`) must have both —
+  so a 계약 sent while the store had them but whose store lost them before 날인 (본사 사업자 인증 해제 makes the 본사
+  점포 미운영 and empties them) is not signed with blank 사용자 칸 forever; the uploaded signature is deleted. Applies to
+  every store, not only 본사 (사용자 결정). 상호 falls back to 점포명 and 소재지 may be empty — not checked.
 - `taxProfile` — the 직원's 신고 정보, read-only (WHALEERP-155, 2026-10-29 김민식): `{ status, rrnMasked, bankName,
   accountNumber }`. It hangs on the 직원 record (`StaffTaxProfile` is 1:1 by `staffMemberId`), not the contract, so an
   old contract shows the 직원's **current** values. The visibility check (`canManageStaffAccount`) uses the same target

@@ -62,6 +62,15 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     throw new Error(`처리 완료본이 생기지 않았다 contract=${contractId}`);
   }
 
+  /** 점포의 기본 사업자정보 — 상호 · 주소는 비우고 보내기 · 날인에 필요한 대표자 · 사업자등록번호만 둔다 */
+  const BASE_BIZ_NO = String(randomInt(1_000_000_000, 9_999_999_999));
+  const baseBiz = () => ({
+    bizTradeName: null,
+    bizAddress: null,
+    bizCeoName: '기본 대표',
+    bizRegistrationNumber: BASE_BIZ_NO,
+  });
+
   beforeAll(async () => {
     if (process.env.APP_ENV !== 'test' || !process.env.DATABASE_URL)
       throw new Error(
@@ -103,6 +112,8 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
         storeTypeCode: 'DIRECT',
         name: '날인 테스트 직영점',
         storeStatusCode: 'OPERATING',
+        // 근로계약서를 보내고 날인하려면 사용자 칸(대표자 · 사업자등록번호)이 있어야 한다
+        businessProfile: { create: baseBiz() },
       },
     }));
     const roleGroup = await prisma.roleGroup.findFirstOrThrow({
@@ -876,9 +887,9 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
         breakEndTime: new Date('1970-01-01T13:00:00.000Z'),
       },
     });
-    await prisma.storeBusinessProfile.create({
+    await prisma.storeBusinessProfile.update({
+      where: { storeId },
       data: {
-        storeId,
         bizTradeName: '날인 테스트 상호',
         bizRegistrationNumber: '1234567890',
         bizCeoName: '김대표',
@@ -907,7 +918,10 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
         ],
       });
     } finally {
-      await prisma.storeBusinessProfile.deleteMany({ where: { storeId } });
+      await prisma.storeBusinessProfile.update({
+        where: { storeId },
+        data: baseBiz(),
+      });
     }
 
     const { contractId: draft } = await pending(a);
@@ -918,9 +932,9 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     await get(`/me/contracts/${draft}`, auth).expect(404);
   });
   it('날인하면 사용자 칸을 그때 점포 정보로 고정하고, 응답 뒤 서명을 합성한 처리 완료본을 만든다 — 직원이 받는다(WHALEERP-131 · 149)', async () => {
-    await prisma.storeBusinessProfile.create({
+    await prisma.storeBusinessProfile.update({
+      where: { storeId },
       data: {
-        storeId,
         bizTradeName: '날인 때 상호',
         bizRegistrationNumber: '1234567890',
         bizCeoName: '김대표',
@@ -1011,7 +1025,10 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
         url: `https://storage.test/${copy.storageKey}`,
       });
     } finally {
-      await prisma.storeBusinessProfile.deleteMany({ where: { storeId } });
+      await prisma.storeBusinessProfile.update({
+        where: { storeId },
+        data: baseBiz(),
+      });
     }
   });
 });

@@ -16,8 +16,14 @@ import {
   ContractFilesService,
   EMPLOYER_STORE_SELECT,
   article2Of,
+  employerMissing,
+  employerMissingConflict,
   employerOf,
 } from './contract-files.service';
+
+/** 날인을 막을 때 직원에게 보이는 문장 — 사용자 칸(대표자 · 사업자등록번호)이 비었다 */
+export const EMPLOYER_MISSING_FOR_STAFF =
+  '근로계약서의 사용자(사업주) 정보가 비어 있어 지금은 서명할 수 없습니다. 근무지 관리자에게 문의해 주세요.';
 import { ContractNoticeService } from './contract-notice.service';
 import { STORAGE, requireStorage } from '../storage/storage.module';
 import type { OptionalStorage } from '../storage/storage.module';
@@ -197,6 +203,15 @@ export class MyContractsService {
         // 기한 · 퇴직일은 잠근 시각으로 다시 본다 — 요청이 들어온 시각이면 올리는 동안 기한이 지나도 받는다
         const lockedAt = now ?? new Date();
         this.checkSignable(c, sentAt, lockedAt);
+        // 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 날인째 되돌린다. 사용자 칸이 비면(보낸 뒤 점포 사업자정보가
+        // 지워짐 — 본사 사업자 인증 해제 등) 빈 칸이 고정되지 않게 날인을 받지 않는다
+        const store = await tx.store.findUniqueOrThrow({
+          where: { storeId: c.storeId },
+          select: EMPLOYER_STORE_SELECT,
+        });
+        const employer = employerOf(store);
+        if (employerMissing(employer))
+          throw employerMissingConflict(EMPLOYER_MISSING_FOR_STAFF);
         await signContract(tx, contractId, lockedAt);
         // 응답의 날인 시각은 이력의 처리 시각(DB 시계)과 같게 — 처리 완료본(131)도 이 값을 읽는다
         const history = await tx.contractStatusHistory.findFirstOrThrow({
@@ -218,12 +233,6 @@ export class MyContractsService {
           },
         });
         const account = c.staffMember.account!;
-        // 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 날인째 되돌린다
-        const store = await tx.store.findUniqueOrThrow({
-          where: { storeId: c.storeId },
-          select: EMPLOYER_STORE_SELECT,
-        });
-        const employer = employerOf(store);
         await tx.contractParty.update({
           where: { contractId },
           data: {

@@ -35,6 +35,14 @@ import {
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
 import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
+import {
+  employerMissing,
+  employerMissingConflict,
+} from './contract-files.service';
+
+/** 발송을 막을 때 관리자에게 보이는 문장 — 사용자 칸(대표자 · 사업자등록번호)이 비었다 */
+export const EMPLOYER_MISSING_FOR_ADMIN =
+  '근무지 점포의 사업자정보(대표자 · 사업자등록번호)가 없어 근로계약서를 보낼 수 없습니다. 점포 사업자정보를 먼저 등록해 주세요.';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   lockContract,
@@ -328,6 +336,18 @@ export class ContractDeliveryService {
     input: DeliveryInput,
     now: Date,
   ): Promise<PendingDelivery | null> {
+    // 사용자 칸이 빈 계약서는 보내지 않는다 — 처음 보내기 · 재발송 · 고쳐 다시 보내기가 모두 여기를 지난다
+    const biz = await tx.storeBusinessProfile.findUnique({
+      where: { storeId: input.storeId },
+      select: { bizCeoName: true, bizRegistrationNumber: true },
+    });
+    if (
+      employerMissing({
+        ceoName: biz?.bizCeoName ?? null,
+        registrationNumber: biz?.bizRegistrationNumber ?? null,
+      })
+    )
+      throw employerMissingConflict(EMPLOYER_MISSING_FOR_ADMIN);
     const channel = channelOf(input.joined, input.draftAction);
     if (channel !== 'APP') await this.assertCanInvite(tx, input.phone, channel);
     const { staffMemberId } = input.before;
