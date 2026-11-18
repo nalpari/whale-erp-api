@@ -387,7 +387,10 @@ describe('InquiriesService', () => {
       prisma.inquiry.findMany.mockResolvedValue([row]);
       prisma.inquiry.count.mockResolvedValue(31);
       prisma.bpCode.findMany.mockResolvedValue([
-        { bpCodeId: 17, tradeName: '㈜한강상회' },
+        {
+          bpCodeId: 17,
+          stores: [{ businessProfile: { bizTradeName: '㈜한강상회' } }],
+        },
       ]);
       prisma.store.findMany.mockResolvedValue([
         { storeId: 4, name: '온기식당 광화문점' },
@@ -473,7 +476,12 @@ describe('InquiriesService', () => {
       });
       const name = { contains: '\\_', mode: 'insensitive' };
       expect(prisma.bpCode.findMany).toHaveBeenCalledWith({
-        where: { tradeName: name },
+        // 상호명은 본사 점포 사업자정보에 있다 — 지운 BP 도 찾게 본사 삭제 여부는 보지 않는다
+        where: {
+          stores: {
+            some: { isHq: true, businessProfile: { bizTradeName: name } },
+          },
+        },
         select: { bpCodeId: true },
       });
       expect(prisma.store.findMany).toHaveBeenCalledWith({
@@ -491,7 +499,12 @@ describe('InquiriesService', () => {
       await service.list({ sender: '한강', page: 1, pageSize: 20 });
       const name = { contains: '한강', mode: 'insensitive' };
       expect(prisma.bpCode.findMany).toHaveBeenCalledWith({
-        where: { tradeName: name },
+        // 상호명은 본사 점포 사업자정보에 있다 — 지운 BP 도 찾게 본사 삭제 여부는 보지 않는다
+        where: {
+          stores: {
+            some: { isHq: true, businessProfile: { bizTradeName: name } },
+          },
+        },
         select: { bpCodeId: true },
       });
       expect(prisma.store.findMany).toHaveBeenCalledWith({
@@ -591,7 +604,10 @@ describe('InquiriesService', () => {
       prisma.inquiryReply.findMany.mockResolvedValue(replies);
       prisma.inquiryAttachment.findMany.mockResolvedValue(attachments);
       prisma.bpCode.findMany.mockResolvedValue([
-        { bpCodeId: 17, tradeName: '㈜한강상회' },
+        {
+          bpCodeId: 17,
+          stores: [{ businessProfile: { bizTradeName: '㈜한강상회' } }],
+        },
       ]);
       prisma.adminAccount.findMany.mockResolvedValue([
         { adminAccountId: 21, name: '정하윤', roleTypeCode: 'BM' },

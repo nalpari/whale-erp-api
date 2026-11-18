@@ -434,6 +434,8 @@ export class FacilitiesService implements OnModuleInit {
         storeId: true,
         storeCode: true,
         name: true,
+        storeTypeCode: true,
+        isHq: true,
         storeStatusCode: true,
       },
       orderBy: [{ name: 'asc' }, { storeId: 'asc' }],

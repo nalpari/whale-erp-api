@@ -10,6 +10,7 @@ import { AdminSessionService } from '../src/admin-session/admin-session.service'
 import { nextBpCode } from '../src/admin-signup/next-bp-code';
 import { PLATFORM_ADMIN_MAIL } from '../src/platform-admins/platform-admin-mail';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // BP 관리자 등록 · 수정이 BP 미사용 전환 · 삭제와 겹칠 때 둘 중 하나만 이기는지(bp_codes 행 잠금, PR #163 리뷰).
 // 연결 두 개가 필요해 실제 PostgreSQL 일회용 DB 에서 E2E_REAL_POSTGRES=1 로만 돈다 — PGlite 는 세션이 하나다.
@@ -87,7 +88,7 @@ describe('BP 관리자 등록 · 수정 · BP 잠금 (e2e, DB)', () => {
       });
       await prisma.roleGroup.deleteMany({ where: { bpCodeId: { in: bpIds } } });
       await prisma.adminAccount.deleteMany({ where: admins });
-      await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
+      await deleteBps(prisma, { where: { bpCodeId: { in: bpIds } } });
     }
     await app.close();
   });
@@ -97,7 +98,7 @@ describe('BP 관리자 등록 · 수정 · BP 잠금 (e2e, DB)', () => {
     const k = n + seq++;
     // BP 코드는 앱과 같은 채번으로 — 최댓값 + 1 이라, 직접 고른 연속 번호는 병렬 suite 의 BP 등록과 겹친다.
     const { bpCodeId } = await prisma.$transaction(async (tx) =>
-      tx.bpCode.create({
+      createBp(tx, {
         data: {
           bpCode: await nextBpCode(tx),
           accountStatusCode: 'ACTIVE',

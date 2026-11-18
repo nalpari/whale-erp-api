@@ -18,6 +18,7 @@ import {
 } from '../src/notifications/recipients';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
+import { createBp, deleteBps } from './hq-bp';
 
 // 운영 알림(WHALEERP-246~252)을 실제 DB 로 확인한다. 수신자 판정의 관계 조건(점포 매핑), 중복 방지 부분 유일
 // 인덱스, 받는 사람 CHECK 는 목으로는 증명되지 않는다.
@@ -58,7 +59,7 @@ describe('운영 알림 (e2e, DB)', () => {
     ops = app.get(OpsNotificationService);
 
     const bp = (code: number, name: string) =>
-      prisma.bpCode.create({
+      createBp(prisma, {
         data: {
           bpCode: `BP${code}`,
           isPlatform: false,
@@ -214,7 +215,7 @@ describe('운영 알림 (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: { storeId: { in: [directStoreId, franchiseStoreId] } },
     });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: { bpCodeId: { in: [bpCodeId, otherBpId] } },
     });
     await app.close();

@@ -4,7 +4,7 @@ title: Inquiry and lead handling
 description: 고객지원 문의하기(본인 문의 등록 · 목록 · 상세, 첨부, 5분 중복 409)와 커뮤니티 관리의 문의사항 · 도입문의 목록 · 상세와 처리 — 목록은 답변 대기(접수 · 처리중) · 답변 완료로 거르고, 플랫폼 관리자가 처리중으로 바꾸고 답변 · 내부 메모를 저장하며, 상담하지 않은 도입문의는 지운다. 동시 저장은 읽은 updatedAt 을 조건으로 건 UPDATE 로 막고, 문의 첫 답변만 등록자에게 운영 알림과 메일을 보낸다. 도입문의는 접수 때 운영자 알림과 문의자 접수 확인 메일, 첫 답변 때 문의자 답변 메일을 보내고, 운영자가 그 메일을 1분에 한 번 다시 보낼 수 있다.
 tags: [community, inquiry, lead, admin]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T06:50:00Z }
 sources:
   - id: lead-reply-mail-result
     resource: ../../prisma/migrations/20261019102805_team3_lead_reply_mail_result/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: support-inquiries-service
     resource: ../../src/inquiries/support-inquiries.service.ts
     title: SupportInquiriesService (create · list · get · attachmentDownloadUrl) — 고객지원 문의하기 (#281)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: support-inquiries-controller
     resource: ../../src/inquiries/support-inquiries.controller.ts
     title: /support-inquiries (문의하기 MN000036 메뉴 권한)
@@ -37,7 +37,7 @@ sources:
   - id: inquiries-service
     resource: ../../src/inquiries/inquiries.service.ts
     title: InquiriesService (list · get · attachmentDownloadUrl · startProcessing · reply · saveInternalMemo)
-    last_modified: 2026-11-13T07:05:00Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: inquiries-controller
     resource: ../../src/inquiries/inquiries.controller.ts
     title: /platform-inquiries (문의사항 MN000221 메뉴 권한 + 플랫폼 관리자)
@@ -136,8 +136,10 @@ Plane WHALEERP-274 · 332 · 590 — 관리자 웹 커뮤니티 관리에서 문
 `status` 는 세 값 그대로라 화면이 처리중을 따로 보일 수 있다.
 
 **보낸 곳 검색은 1팀 표에서 ID 를 먼저 찾는다.** `inquiries` 의 `bp_code_id` · `store_id` · `created_by` 는 팀 경계라
-Prisma 관계가 없다. `sender` 가 오면 BP 상호(`trade_name`) · 점포 이름 · 관리자 이름에 들어 있는 ID 를 각각 찾아 셋 중
-하나에 맞는 문의를 준다. 지운 BP · 점포 · 계정도 찾고 이름도 보인다 — 문의는 보낸 그때의 기록이다. 이름 하나에 맞는
+Prisma 관계가 없다. `sender` 가 오면 BP 상호 · 점포 이름 · 관리자 이름에 들어 있는 ID 를 각각 찾아 셋 중
+하나에 맞는 문의를 준다. 지운 BP · 점포 · 계정도 찾고 이름도 보인다 — 문의는 보낸 그때의 기록이다. BP 상호는
+2026-11-17 부터 `bp_codes.trade_name` 이 아니라 본사 점포 사업자정보(`store_business_profiles.biz_trade_name`)에 있어
+본사의 삭제 여부를 보지 않고 찾는다 — 지운 BP 는 본사도 지워져 있기 때문이다(`HQ_TRADE_NAME_SELECT` · `tradeNameOf`). 이름 하나에 맞는
 ID 가 아주 많아지면 `IN` 목록이 커진다; 그때는 SQL 조인으로 바꾼다.
 
 **검색어는 글자 그대로 찾는다.** Prisma 의 `contains` 는 LIKE 와일드카드를 이스케이프하지 않아, `sender=_` 하나로 모든

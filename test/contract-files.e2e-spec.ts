@@ -7,6 +7,7 @@ import { AppModule } from './../src/app.module';
 import { ContractFilesService } from '../src/contracts/contract-files.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STORAGE } from '../src/storage/storage.module';
+import { createBp, deleteBps } from './hq-bp';
 
 // 근로계약서 보낸 원본 · 처리 완료본 채우기(WHALEERP-131)를 실제 DB 로 확인한다 — 날인이 먼저 나가 완료본이 없는 체결 계약(백필),
 // 고정 전 계약은 지금 점포 정보, 발송 뒤 하루 안의 보낸 원본, 함께 만들어도 한 장(고유 인덱스). 저장소는 가짜다.
@@ -59,7 +60,7 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
       .toBuffer();
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -114,7 +115,7 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
     });
     await prisma.storeBusinessProfile.deleteMany({ where: { storeId } });
     await prisma.store.deleteMany({ where: { storeId } });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

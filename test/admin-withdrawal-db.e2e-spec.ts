@@ -11,6 +11,7 @@ import type { AdminLoginResponseDto } from '../src/auth/dto/admin-login.response
 import { hashPassword } from '../src/auth/password';
 import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 const PASSWORD = 'Whale-admin-1';
 // 실제 PostgreSQL 에서만 도는 동시성 검사. PGlite 는 세션이 하나라 연결이 서로 잠금을 기다리지 않는다.
@@ -72,6 +73,8 @@ describe('회원 탈퇴 (e2e, DB)', () => {
       await prisma.contract.deleteMany({ where: byStore });
       await prisma.staffMember.deleteMany({ where: byStore });
       await prisma.storeChangeHistory.deleteMany({ where: byStore });
+      // 본사 점포(is_hq)의 사업자정보 — 일반 점포보다 먼저 지워야 점포가 지워진다.
+      await prisma.storeBusinessProfile.deleteMany({ where: byStore });
       await prisma.store.deleteMany({ where: byStore });
       await prisma.bpChangeHistory.deleteMany({
         where: { bpCodeId: { in: bpIds } },
@@ -85,14 +88,14 @@ describe('회원 탈퇴 (e2e, DB)', () => {
         data: { updatedBy: null },
       });
       await prisma.adminAccount.deleteMany({ where: byAdmin });
-      await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
+      await deleteBps(prisma, { where: { bpCodeId: { in: bpIds } } });
     }
     await app?.close();
   });
 
   const seed = async () => {
     const n = randomInt(100_000, 999_999);
-    const { bpCodeId } = await prisma.bpCode.create({
+    const { bpCodeId, hqStoreId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         tradeName: `탈퇴 DB 테스트 ${n}`,
@@ -168,6 +171,7 @@ describe('회원 탈퇴 (e2e, DB)', () => {
       });
     return {
       bpCodeId,
+      hqStoreId,
       master,
       sub,
       token,
@@ -196,7 +200,13 @@ describe('회원 탈퇴 (e2e, DB)', () => {
       closing: { isBlocked: false },
     });
     expect(body).not.toHaveProperty('hasInProgressContract');
+    // 「점포 N개」(storeCount)는 본사를 세지 않지만, 폐점 확인은 본사 점포(이름 = 상호명)도 함께 본다 — 탈퇴로 함께 닫힌다.
     expect(body.closing.stores).toEqual([
+      expect.objectContaining({
+        storeId: s.hqStoreId,
+        storeName: expect.stringMatching(/^탈퇴 DB 테스트 /) as unknown,
+        isBlocked: false,
+      }),
       expect.objectContaining({
         storeId: s.open.storeId,
         storeName: '열린 점포',
@@ -280,7 +290,10 @@ describe('회원 탈퇴 (e2e, DB)', () => {
     const check = await eligibility(s.token).expect(200);
     const { closing } = check.body as WithdrawEligibilityResponseDto;
     expect(closing.isBlocked).toBe(true);
-    expect(closing.stores[0].openCheckIns).toEqual({
+    // 첫 줄은 본사 점포라 열린 점포를 id 로 찾는다.
+    expect(
+      closing.stores.find((st) => st.storeId === s.open.storeId)?.openCheckIns,
+    ).toEqual({
       count: 1,
       hiddenCount: 0,
     });

@@ -23,7 +23,7 @@ describe('AdminWithdrawalService.getEligibility', () => {
   let prisma: {
     adminAccount: { findFirst: jest.Mock; count: jest.Mock };
     bpCode: { findUniqueOrThrow: jest.Mock };
-    store: { findMany: jest.Mock };
+    store: { findMany: jest.Mock; count: jest.Mock };
   };
   let closings: { check: jest.Mock };
 
@@ -38,7 +38,7 @@ describe('AdminWithdrawalService.getEligibility', () => {
     prisma = {
       adminAccount: { findFirst: jest.fn(), count: jest.fn() },
       bpCode: { findUniqueOrThrow: jest.fn() },
-      store: { findMany: jest.fn() },
+      store: { findMany: jest.fn(), count: jest.fn().mockResolvedValue(0) },
     };
     closings = { check: jest.fn() };
     service = (
@@ -88,7 +88,7 @@ describe('AdminWithdrawalService.getEligibility', () => {
       accountStatusCode: 'ACTIVE',
     });
     prisma.bpCode.findUniqueOrThrow.mockResolvedValue({
-      tradeName: '웨일',
+      stores: [{ businessProfile: { bizTradeName: '웨일' } }],
       accountStatusCode: 'ACTIVE',
       isPlatform: true,
     });
@@ -105,13 +105,16 @@ describe('AdminWithdrawalService.getEligibility', () => {
       bpCodeId: 7,
     });
     prisma.bpCode.findUniqueOrThrow.mockResolvedValue({
-      tradeName: '웨일분식',
+      stores: [{ businessProfile: { bizTradeName: '웨일분식' } }],
     });
     prisma.adminAccount.count.mockResolvedValue(6);
+    // 본사(103)도 폐점 확인 대상이지만 「점포 N개」에는 세지 않는다(2026-11-17).
     prisma.store.findMany.mockResolvedValue([
       { storeId: 101 },
       { storeId: 102 },
+      { storeId: 103 },
     ]);
+    prisma.store.count.mockResolvedValue(2);
     closings.check.mockResolvedValue(closingOf(true));
 
     const result = await service.getEligibility(1);
@@ -122,6 +125,15 @@ describe('AdminWithdrawalService.getEligibility', () => {
       storeCount: 2,
       closing: closingOf(true),
     });
+    expect(prisma.store.count).toHaveBeenCalledWith({
+      where: {
+        bpCodeId: 7,
+        isDeleted: false,
+        storeStatusCode: { not: 'CLOSED' },
+        isHq: false,
+      },
+    });
+    expect(closings.check).toHaveBeenCalledWith(prisma, [101, 102, 103]);
     expect(prisma.adminAccount.count).toHaveBeenCalledWith({
       where: {
         bpCodeId: 7,
@@ -139,7 +151,7 @@ describe('AdminWithdrawalService.getEligibility', () => {
       },
       select: { storeId: true },
     });
-    expect(closings.check).toHaveBeenCalledWith(prisma, [101, 102]);
+    expect(closings.check).toHaveBeenCalledWith(prisma, [101, 102, 103]);
   });
 
   it('진행 중 계약은 보지 않는다 — 막힘은 폐점 확인의 isBlocked 뿐이다', async () => {
@@ -148,7 +160,7 @@ describe('AdminWithdrawalService.getEligibility', () => {
       bpCodeId: 7,
     });
     prisma.bpCode.findUniqueOrThrow.mockResolvedValue({
-      tradeName: '웨일분식',
+      stores: [{ businessProfile: { bizTradeName: '웨일분식' } }],
     });
     prisma.adminAccount.count.mockResolvedValue(0);
     prisma.store.findMany.mockResolvedValue([]);
@@ -181,6 +193,7 @@ describe('AdminWithdrawalService.execute', () => {
       updateMany: jest.Mock;
     };
     bpCode: { findUniqueOrThrow: jest.Mock; update: jest.Mock };
+    storeBusinessProfile: { updateMany: jest.Mock };
     adminChangeHistory: { createMany: jest.Mock };
     bpChangeHistory: { create: jest.Mock };
     adminSession: { updateMany: jest.Mock };
@@ -229,11 +242,12 @@ describe('AdminWithdrawalService.execute', () => {
       },
       bpCode: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({
-          tradeName: '웨일분식',
+          stores: [{ businessProfile: { bizTradeName: '웨일분식' } }],
           accountStatusCode: 'ACTIVE',
         }),
         update: jest.fn(),
       },
+      storeBusinessProfile: { updateMany: jest.fn() },
       adminChangeHistory: { createMany: jest.fn() },
       bpChangeHistory: { create: jest.fn() },
       adminSession: { updateMany: jest.fn() },
@@ -282,7 +296,7 @@ describe('AdminWithdrawalService.execute', () => {
 
   it('플랫폼 BP 면 403', async () => {
     prisma.bpCode.findUniqueOrThrow.mockResolvedValue({
-      tradeName: '웨일',
+      stores: [{ businessProfile: { bizTradeName: '웨일' } }],
       accountStatusCode: 'ACTIVE',
       isPlatform: true,
     });
@@ -440,16 +454,19 @@ describe('AdminWithdrawalService.execute', () => {
     });
     expect(prisma.bpCode.findUniqueOrThrow).toHaveBeenCalledWith({
       where: { bpCodeId: 7 },
-      select: { tradeName: true, accountStatusCode: true, isPlatform: true },
+      select: expect.objectContaining({
+        accountStatusCode: true,
+        isPlatform: true,
+      }) as object,
     });
     expect(prisma.bpCode.update).toHaveBeenCalledWith({
       where: { bpCodeId: 7 },
-      data: {
-        accountStatusCode: 'WITHDRAWN',
-        bizCeoPhone: null,
-        bizCeoEmail: null,
-        updatedBy: 1,
-      },
+      data: { accountStatusCode: 'WITHDRAWN', updatedBy: 1 },
+    });
+    // 대표자 연락처 · 이메일은 본사 사업자정보에서 지운다(2026-11-17).
+    expect(prisma.storeBusinessProfile.updateMany).toHaveBeenCalledWith({
+      where: { store: { bpCodeId: 7, isHq: true } },
+      data: { bizCeoPhone: null, bizCeoEmail: null, updatedBy: 1 },
     });
     // 폐점(점포 상태 · 폐점일 · 점포상태 이력 · 3팀 퇴직)은 폐점 서비스가 같은 트랜잭션에서 한다.
     expect(closings.close).toHaveBeenCalledWith(prisma, [101, 102], 1, now);

@@ -1,6 +1,7 @@
 // BP 휴일을 누가 어디까지 다루는가(WHALEERP-565, CONFIG-10)와, 휴일 상태에 따라 무엇을 할 수 있는가
 // (BP 휴일 변경 · 종료 정책, 2026-10-26). 메뉴 권한 자체는 가드가 경로마다 보고, 여기서는 그 위의 규칙을 본다.
 import { addDays } from '../staff-members/kst-date';
+import { canSeeHq } from '../stores/store-scope-type';
 import { holidayStateOf, type HolidayRule } from './holiday-dates';
 
 /** BP 휴일 관리 메뉴(MN000015)의 등록 · 수정 · 삭제 권한. */
@@ -16,7 +17,7 @@ export interface HolidayCaller {
   bpCodeId: number;
   /** 전체 점포 휴일과 예외 점포를 다루는가 — 플랫폼 계정 · BP 마스터 · 전체 점포 BP 관리자. */
   manageAll: boolean;
-  /** 다루는 점포. null 이면 그 BP 의 모든 점포. */
+  /** 다루는 점포. null 이면 그 BP 의 모든 점포(본사 포함 — 가맹 계정이 아닌 전체 점포 계정). */
   storeScope: ReadonlySet<number> | null;
   rights: HolidayRights;
 }
@@ -58,9 +59,13 @@ export function callerOf(account: {
   isPlatform: boolean;
   isAllStores: boolean;
   mappedStoreIds: readonly number[];
+  /** 본사를 뺀 그 BP 의 점포 — 본사를 다루지 않는 전체 점포 가맹 계정(FM · FA)의 범위. */
+  branchStoreIds?: readonly number[];
   rights: HolidayRights;
 }): HolidayCaller {
   const allStores = account.isPlatform || account.isAllStores;
+  // 가맹 계정은 전체 점포여도 본사를 다루지 않는다(2026-11-17) — 본사를 뺀 점포가 범위다. BP 관리자는 본사도 다른 점포처럼.
+  const seesHq = canSeeHq(account.roleTypeCode, account.isPlatform);
   return {
     adminAccountId: account.adminAccountId,
     bpCodeId: account.targetBpCodeId,
@@ -68,7 +73,11 @@ export function callerOf(account: {
       account.isPlatform ||
       account.roleTypeCode === 'BM' ||
       (HQ_ROLES.has(account.roleTypeCode) && account.isAllStores),
-    storeScope: allStores ? null : new Set(account.mappedStoreIds),
+    storeScope: !allStores
+      ? new Set(account.mappedStoreIds)
+      : seesHq
+        ? null
+        : new Set(account.branchStoreIds ?? []),
     rights: account.rights,
   };
 }

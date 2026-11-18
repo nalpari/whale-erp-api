@@ -413,6 +413,7 @@ export class HomeService {
       storeId: s.storeId,
       storeName: s.name,
       storeTypeCode: s.storeTypeCode,
+      isHq: s.isHq,
       staffCount: staff ? (staffByStore.get(s.storeId) ?? 0) : null,
       unsignedContractCount:
         unsignedContractCount === null
@@ -438,7 +439,9 @@ export class HomeService {
         a.storeName.localeCompare(b.storeName, 'ko') ||
         a.storeId - b.storeId,
     );
-    const direct = stores.filter((s) => s.storeTypeCode === 'DIRECT').length;
+    // 점포 카드의 수에는 본사를 세지 않는다(직영 · 가맹 · 전체 모두) — 표에는 본사 줄도 있다.
+    const branches = stores.filter((s) => !s.isHq);
+    const direct = branches.filter((s) => s.storeTypeCode === 'DIRECT').length;
     return {
       asOf: now,
       platform: false,
@@ -446,9 +449,9 @@ export class HomeService {
         staff,
         unsignedContractCount,
         stores: {
-          total: stores.length,
+          total: branches.length,
           direct,
-          franchise: stores.length - direct,
+          franchise: branches.length - direct,
           notOperating,
         },
         todayAttendance,
@@ -702,6 +705,7 @@ export class HomeService {
         name: true,
         storeTypeCode: true,
         storeStatusCode: true,
+        isHq: true,
       },
     });
     const stores = operatingOnly
@@ -723,7 +727,10 @@ export class HomeService {
     return {
       ids,
       stores,
-      notOperating: live.length - stores.length,
+      // 미운영 수도 점포 카드 아랫줄이라 본사를 세지 않는다.
+      notOperating:
+        live.filter((s) => !s.isHq).length -
+        stores.filter((s) => !s.isHq).length,
       shown,
       can: (area: Area) => readable.has(area),
       hides,

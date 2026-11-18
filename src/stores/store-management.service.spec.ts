@@ -92,7 +92,7 @@ function storeRow(overrides: Record<string, unknown> = {}) {
     updatedBy: null,
     bpCode: {
       bpCode: 'BP000003',
-      tradeName: '모리커피',
+      stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
       accountStatusCode: 'ACTIVE',
     },
     creator: { name: '김본사' },
@@ -228,7 +228,6 @@ describe('StoreManagementService', () => {
       },
       bpCode: {
         findFirst: jest.fn().mockResolvedValue({ accountStatusCode: 'ACTIVE' }),
-        count: jest.fn().mockResolvedValue(0),
       },
       store: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -318,7 +317,9 @@ describe('StoreManagementService', () => {
           phone: null,
           address: '서울특별시 서초구 서초대로 1',
           createdAt: new Date('2026-10-01T00:00:00Z'),
-          bpCode: { tradeName: '모리커피' },
+          bpCode: {
+            stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+          },
           businessProfile: { bizRegistrationNumber: '1234567890' },
           imageFiles: [],
         },
@@ -354,7 +355,7 @@ describe('StoreManagementService', () => {
       const args = prisma.store.findMany.mock.calls[0][0];
       expect(args.where).toEqual({
         AND: [
-          { isDeleted: false, bpCodeId: 3 },
+          { isDeleted: false, isHq: false, bpCodeId: 3 },
           {
             storeStatusCode: { in: ['NOT_OPERATING', 'OPERATING'] },
             storeTypeCode: { in: ['DIRECT', 'FRANCHISE'] },
@@ -391,6 +392,7 @@ describe('StoreManagementService', () => {
       await service.list(FM, OWN_BP, { page: 1, pageSize: 20 });
       expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
         isDeleted: false,
+        isHq: false,
         bpCodeId: 3,
         adminMappings: { some: { adminAccountId: 9, isDeleted: false } },
       });
@@ -401,6 +403,7 @@ describe('StoreManagementService', () => {
       await service.list(PM, PICKED_BP, { page: 1, pageSize: 20 });
       expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
         isDeleted: false,
+        isHq: false,
         bpCodeId: 8,
       });
     });
@@ -413,6 +416,7 @@ describe('StoreManagementService', () => {
       await service.list(PM, PICKED_BP, { page: 1, pageSize: 20 });
       expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
         isDeleted: false,
+        isHq: false,
         bpCodeId: 8,
       });
     });
@@ -438,7 +442,7 @@ describe('StoreManagementService', () => {
       });
       expect(prisma.store.findMany.mock.calls[0][0].where).toEqual({
         AND: [
-          { isDeleted: false, bpCodeId: 8 },
+          { isDeleted: false, isHq: false, bpCodeId: 8 },
           {
             storeStatusCode: { in: ['CLOSED'] },
             storeTypeCode: { in: ['FRANCHISE'] },
@@ -479,6 +483,7 @@ describe('StoreManagementService', () => {
       await service.list(PM, OWN_BP, { page: 1, pageSize: 20 });
       expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
         isDeleted: false,
+        isHq: false,
         bpCodeId: 3,
       });
     });
@@ -495,6 +500,7 @@ describe('StoreManagementService', () => {
       await service.list(PM, OWN_BP, { page: 1, pageSize: 20 });
       expect(prisma.store.findMany.mock.calls[0][0].where.AND[0]).toEqual({
         isDeleted: false,
+        isHq: false,
         bpCodeId: 3,
         adminMappings: { some: { adminAccountId: 1, isDeleted: false } },
       });
@@ -618,7 +624,7 @@ describe('StoreManagementService', () => {
         NotFoundException,
       );
       expect(prisma.store.findFirst.mock.calls[0][0].where).toEqual({
-        AND: [{ isDeleted: false, bpCodeId: 3 }, { storeId: 11 }],
+        AND: [{ isDeleted: false, isHq: false, bpCodeId: 3 }, { storeId: 11 }],
       });
     });
 
@@ -629,7 +635,7 @@ describe('StoreManagementService', () => {
         NotFoundException,
       );
       expect(prisma.store.findFirst.mock.calls[0][0].where).toEqual({
-        AND: [{ isDeleted: false, bpCodeId: 8 }, { storeId: 99 }],
+        AND: [{ isDeleted: false, isHq: false, bpCodeId: 8 }, { storeId: 99 }],
       });
     });
 
@@ -647,7 +653,7 @@ describe('StoreManagementService', () => {
         NotFoundException,
       );
       expect(prisma.store.findFirst.mock.calls[0][0].where).toEqual({
-        AND: [{ isDeleted: false, bpCodeId: 3 }, { storeId: 99 }],
+        AND: [{ isDeleted: false, isHq: false, bpCodeId: 3 }, { storeId: 99 }],
       });
     });
 
@@ -720,7 +726,7 @@ describe('StoreManagementService', () => {
         storeRow({
           bpCode: {
             bpCode: 'BP000003',
-            tradeName: '모리커피',
+            stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
             accountStatusCode: 'INACTIVE',
           },
         }),
@@ -979,26 +985,23 @@ describe('StoreManagementService', () => {
             store: {
               isDeleted: false,
               storeStatusCode: { in: ['NOT_OPERATING', 'OPERATING'] },
+              NOT: { isHq: true, bpCodeId: 3 },
+              bpCode: { isPlatform: false },
             },
           },
         });
       });
 
-      it('소속 BP 가 아닌 고객 BP 가 쓰는 번호면 국세청에 묻기 전에 409 — 소속 BP · 플랫폼 BP · 탈퇴 · 삭제 BP 는 뺀다', async () => {
-        prisma.bpCode.count.mockResolvedValue(1);
+      it('다른 BP(의 본사)가 쓰는 번호면 국세청에 묻기 전에 409 — 소속 BP 의 본사는 뺀다', async () => {
+        // BP 번호는 본사 점포 사업자정보에 있다 — 다른 BP 의 본사도 같은 점포 사업자정보 건수로 걸린다
+        prisma.storeBusinessProfile.count.mockResolvedValue(1);
         await expect(service.create(BM, OWN_BP, withIdentity)).rejects.toThrow(
           new ConflictException('이미 등록된 사업자등록번호입니다.'),
         );
         expect(verifier!.verify).not.toHaveBeenCalled();
-        expect(prisma.bpCode.count.mock.calls[0][0]).toEqual({
-          where: {
-            bizRegistrationNumber: '1234567890',
-            bpCodeId: { not: 3 },
-            isPlatform: false,
-            isDeleted: false,
-            accountStatusCode: { not: 'WITHDRAWN' },
-          },
-        });
+        expect(
+          prisma.storeBusinessProfile.count.mock.calls[0][0].where.store.NOT,
+        ).toEqual({ isHq: true, bpCodeId: 3 });
       });
 
       it('플랫폼이 등록하면 탭 BP 를 소속 BP 로 빼고 본다', async () => {
@@ -1011,22 +1014,22 @@ describe('StoreManagementService', () => {
         );
         prisma.store.findFirst.mockResolvedValue(null);
         await service.create(PM, PICKED_BP, withIdentity);
-        expect(prisma.bpCode.count.mock.calls[0][0].where.bpCodeId).toEqual({
-          not: 8,
-        });
+        expect(
+          prisma.storeBusinessProfile.count.mock.calls[0][0].where.store.NOT,
+        ).toEqual({ isHq: true, bpCodeId: 8 });
       });
 
-      it('잠그고 다시 볼 때도 BP 번호를 본다', async () => {
+      it('잠그고 다시 볼 때도 다른 BP 의 본사 번호를 본다', async () => {
         prisma.store.findFirst.mockResolvedValue(null);
-        prisma.bpCode.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+        tx.storeBusinessProfile.count.mockResolvedValue(1);
         await expect(
           service.create(BM, OWN_BP, withIdentity),
         ).rejects.toBeInstanceOf(ConflictException);
         expect(prisma.store.create).not.toHaveBeenCalled();
-        // 잠근 뒤 다시 셀 때도 소속 BP 를 뺀다
-        expect(prisma.bpCode.count.mock.calls[1][0].where.bpCodeId).toEqual({
-          not: 3,
-        });
+        // 잠근 뒤 다시 셀 때도 소속 BP 의 본사만 뺀다
+        expect(
+          tx.storeBusinessProfile.count.mock.calls[0][0].where.store.NOT,
+        ).toEqual({ isHq: true, bpCodeId: 3 });
       });
 
       it('국세청 정보와 맞지 않으면 400', async () => {
@@ -1091,7 +1094,7 @@ describe('StoreManagementService', () => {
   });
 
   describe('update', () => {
-    it('최초 인증은 부르는 사람이 아니라 그 점포의 소속 BP 를 빼고 BP 번호를 본다 — 겹치면 409', async () => {
+    it('최초 인증은 부르는 사람이 아니라 그 점포의 소속 BP 의 본사를 빼고 번호를 본다 — 다른 BP 의 본사와 겹치면 409', async () => {
       // 플랫폼 관리자(소속 BP 1)가 BP 3 의 점포를 고친다
       prisma.adminAccount.findFirst.mockResolvedValue(
         account(PM, {
@@ -1100,7 +1103,7 @@ describe('StoreManagementService', () => {
           bpCode: { isPlatform: true },
         }),
       );
-      prisma.bpCode.count.mockResolvedValue(1);
+      prisma.storeBusinessProfile.count.mockResolvedValue(1);
       await expect(
         service.update(
           PM,
@@ -1117,8 +1120,11 @@ describe('StoreManagementService', () => {
       ).rejects.toThrow(
         new ConflictException('이미 등록된 사업자등록번호입니다.'),
       );
-      expect(prisma.bpCode.count.mock.calls[0][0].where.bpCodeId).toEqual({
-        not: 3,
+      expect(
+        prisma.storeBusinessProfile.count.mock.calls[0][0].where,
+      ).toMatchObject({
+        storeId: { not: 11 },
+        store: { NOT: { isHq: true, bpCodeId: 3 } },
       });
       expect(verifier!.verify).not.toHaveBeenCalled();
     });
@@ -1138,7 +1144,7 @@ describe('StoreManagementService', () => {
         storeRow({
           bpCode: {
             bpCode: 'BP000003',
-            tradeName: '모리커피',
+            stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
             accountStatusCode: 'INACTIVE',
           },
         }),
@@ -1792,21 +1798,21 @@ describe('StoreManagementService', () => {
       ).toEqual({ not: 11 });
     });
 
-    it('다른 고객 BP 가 쓰는 번호면 DUPLICATE — BP 측은 자기 BP 를, 수정이면 그 점포의 BP 를 뺀다', async () => {
-      prisma.bpCode.count.mockResolvedValueOnce(1);
+    it('다른 BP(의 본사)가 쓰는 번호면 DUPLICATE — BP 측은 자기 BP 의 본사를, 수정이면 그 점포의 BP 의 본사를 뺀다', async () => {
+      prisma.storeBusinessProfile.count.mockResolvedValueOnce(1);
       await expect(service.verifyBusiness(BM, OWN_BP, input)).resolves.toEqual({
         result: 'DUPLICATE',
       });
       expect(verifier!.verify).not.toHaveBeenCalled();
-      expect(prisma.bpCode.count.mock.calls[0][0].where.bpCodeId).toEqual({
-        not: 3,
-      });
+      expect(
+        prisma.storeBusinessProfile.count.mock.calls[0][0].where.store.NOT,
+      ).toEqual({ isHq: true, bpCodeId: 3 });
 
       prisma.store.findFirst.mockResolvedValue(storeRow({ bpCodeId: 8 }));
       await service.verifyBusiness(BM, OWN_BP, { ...input, storeId: 11 });
-      expect(prisma.bpCode.count.mock.calls[1][0].where.bpCodeId).toEqual({
-        not: 8,
-      });
+      expect(
+        prisma.storeBusinessProfile.count.mock.calls[1][0].where.store.NOT,
+      ).toEqual({ isHq: true, bpCodeId: 8 });
     });
 
     it('플랫폼은 탭 BP 를 소속 BP 로 빼고 본다', async () => {
@@ -1818,12 +1824,12 @@ describe('StoreManagementService', () => {
         }),
       );
       await service.verifyBusiness(PM, PICKED_BP, input);
-      expect(prisma.bpCode.count.mock.calls[0][0].where.bpCodeId).toEqual({
-        not: 8,
-      });
+      expect(
+        prisma.storeBusinessProfile.count.mock.calls[0][0].where.store.NOT,
+      ).toEqual({ isHq: true, bpCodeId: 8 });
     });
 
-    it('인증 확인은 기억해 국세청을 한 번만 부르고(#51), 저장은 그 점포의 소속 BP 로 중복을 다시 봐 다른 BP 번호를 막는다', async () => {
+    it('인증 확인은 기억해 국세청을 한 번만 부르고(#51), 저장은 그 점포의 소속 BP 로 중복을 다시 봐 다른 BP 의 본사 번호를 막는다', async () => {
       prisma.adminAccount.findFirst.mockResolvedValue(
         account(PM, {
           roleTypeCode: 'PM',
@@ -1832,7 +1838,7 @@ describe('StoreManagementService', () => {
         }),
       );
       await service.verifyBusiness(PM, PICKED_BP, input);
-      prisma.bpCode.count.mockResolvedValue(1);
+      prisma.storeBusinessProfile.count.mockResolvedValue(1);
       await expect(
         service.update(
           PM,
@@ -1843,9 +1849,9 @@ describe('StoreManagementService', () => {
       ).rejects.toThrow(
         new ConflictException('이미 등록된 사업자등록번호입니다.'),
       );
-      expect(prisma.bpCode.count.mock.calls[1][0].where.bpCodeId).toEqual({
-        not: 3,
-      });
+      expect(
+        prisma.storeBusinessProfile.count.mock.calls[1][0].where.store.NOT,
+      ).toEqual({ isHq: true, bpCodeId: 3 });
       expect(verifier!.verify).toHaveBeenCalledTimes(1);
     });
 
@@ -1871,12 +1877,12 @@ describe('StoreManagementService', () => {
       address: null,
       addressDetail: null,
       createdAt: new Date('2026-10-01T00:00:00Z'),
-      bpCode: { tradeName: '모리커피' },
+      bpCode: { stores: [{ businessProfile: { bizTradeName: '모리커피' } }] },
       businessProfile: null,
     };
     const where = {
       AND: [
-        { isDeleted: false, bpCodeId: 3 },
+        { isDeleted: false, isHq: false, bpCodeId: 3 },
         {
           storeStatusCode: { in: ['CLOSED'] },
           storeTypeCode: { in: ['DIRECT', 'FRANCHISE'] },
@@ -2041,7 +2047,9 @@ describe('StoreManagementService', () => {
             phone: null,
             address: null,
             createdAt: new Date('2026-10-01T00:00:00Z'),
-            bpCode: { tradeName: '모리커피' },
+            bpCode: {
+              stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+            },
             businessProfile: null,
             imageFiles: [savedImage],
           },
@@ -2220,7 +2228,7 @@ describe('StoreManagementService', () => {
           storeRow({
             bpCode: {
               bpCode: 'BP000003',
-              tradeName: '모리커피',
+              stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
               accountStatusCode: 'INACTIVE',
             },
           }),
@@ -2574,7 +2582,7 @@ describe('StoreManagementService', () => {
           storeRow({
             bpCode: {
               bpCode: 'BP000003',
-              tradeName: '모리커피',
+              stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
               accountStatusCode: 'INACTIVE',
             },
           }),
@@ -2601,7 +2609,7 @@ describe('StoreManagementService', () => {
           storeRow({
             bpCode: {
               bpCode: 'BP000003',
-              tradeName: '모리커피',
+              stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
               accountStatusCode: 'INACTIVE',
             },
           }),
@@ -3023,7 +3031,7 @@ describe('StoreManagementService', () => {
         phone: null,
         address: null,
         createdAt: new Date('2026-10-01T00:00:00Z'),
-        bpCode: { tradeName: '모리커피' },
+        bpCode: { stores: [{ businessProfile: { bizTradeName: '모리커피' } }] },
         businessProfile: null,
         imageFiles: [
           {

@@ -13,6 +13,7 @@ import { MailService } from '../src/mail/mail.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { MAIL_SEND_FAILURE_MESSAGE } from '../src/staff-members/send-logs';
 import type { StaffMemberSendLogResponseDto } from '../src/staff-members/dto/staff-member-summary.response.dto';
+import { createBp, deleteBps } from './hq-bp';
 
 // 실제 MailService(템플릿 · 발송 이력)에 SMTP 만 바꿔 끼워, 관리자 초기화 → 직원 상세 발송 이력(WHALEERP-676)을 본다.
 describe('직원 비밀번호 초기화 메일 발송 이력 (e2e, DB)', () => {
@@ -53,7 +54,7 @@ describe('직원 비밀번호 초기화 메일 발송 이력 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -136,7 +137,7 @@ describe('직원 비밀번호 초기화 메일 발송 이력 (e2e, DB)', () => {
       where: { adminAccountId: adminId },
     });
     await prisma.store.deleteMany({ where: { storeId } });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

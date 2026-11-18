@@ -14,6 +14,7 @@ import {
   StaffMemberListResponseDto,
 } from '../src/staff-members/dto/staff-member-list.response.dto';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 목록(WHALEERP-329)을 실제 DB 로 확인한다. 가입 상태 필터는 초대 · 보류 관계 조건이라 목으로는 Prisma 가
 // 그 조건을 맞게 푸는지 증명되지 않는다.
@@ -55,7 +56,7 @@ describe('직원 목록 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const bp = (code: number, name: string) =>
-      prisma.bpCode.create({
+      createBp(prisma, {
         data: {
           bpCode: `BP${code}`,
           isPlatform: false,
@@ -459,7 +460,7 @@ describe('직원 목록 (e2e, DB)', () => {
         },
       },
     });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: { bpCodeId: { in: [bpCodeId, otherBpId] } },
     });
     await app.close();
@@ -2209,7 +2210,7 @@ describe('직원 목록 (e2e, DB)', () => {
     const consentedName = `범위동의${n}`;
 
     beforeAll(async () => {
-      ({ bpCodeId: scopeBpId } = await prisma.bpCode.create({
+      ({ bpCodeId: scopeBpId } = await createBp(prisma, {
         data: {
           // bp_code · store_code CHECK 는 6자리다 — n + offset 이 1_000_000 을 넘어 작은 수로 돌면 6자리로 채운다.
           bpCode: `BP${String((n + 10) % 1_000_000).padStart(6, '0')}`,
@@ -2314,7 +2315,7 @@ describe('직원 목록 (e2e, DB)', () => {
       await prisma.store.deleteMany({
         where: { storeId: { in: Object.values(store) } },
       });
-      await prisma.bpCode.deleteMany({ where: { bpCodeId: scopeBpId } });
+      await deleteBps(prisma, { where: { bpCodeId: scopeBpId } });
     });
 
     /** 나온 줄의 점포(겹치면 하나로) — 가맹 점포 줄은 BP 마스터에게 가린 행이라 직원 ID 가 없어 점포로 본다 */
@@ -2435,7 +2436,7 @@ describe('직원 목록 (e2e, DB)', () => {
 
     it.each([
       'storeTypes=',
-      'storeTypes=HQ',
+      'storeTypes=HEAD_OFFICE',
       'storeTypes=DIRECT,',
       'storeTypes=direct',
     ])('점포 유형 형식 오류는 400 — %s', async (query) => {

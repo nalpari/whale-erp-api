@@ -13,6 +13,7 @@ import {
 } from '../src/auth/dto/admin-login.response.dto';
 import { hashPassword } from '../src/auth/password';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 const PASSWORD = 'Whale-admin-1';
 const MIN = 60_000;
@@ -26,6 +27,8 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
   let passwordHash: string;
   let bpCodeId: number;
   let storeId: number;
+  /** BP 의 본사 점포 — BP 마스터의 업무 범위(로그인 정보 stores)에 든다. */
+  let hqStoreId: number;
   let roleGroupId: number;
   const adminIds: number[] = [];
 
@@ -43,7 +46,7 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
     passwordHash = await hashPassword(PASSWORD);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId, hqStoreId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         tradeName: '로그인 테스트 BP',
@@ -73,7 +76,7 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
     await prisma.adminStoreMapping.deleteMany({ where: byAdmin });
     await prisma.adminAccount.deleteMany({ where: byAdmin });
     await prisma.store.deleteMany({ where: { storeId } });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 
@@ -135,7 +138,10 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
     const infoBody = info.body as AdminLoginInfoResponseDto;
     expect(infoBody.account.bp.bpCodeId).toBe(bpCodeId);
     expect(infoBody.menus.length).toBeGreaterThan(0);
-    expect(infoBody.stores.map((s) => s.storeId)).toEqual([storeId]);
+    // BP 마스터는 본사 점포도 업무 범위로 받는다(2026-11-17).
+    expect(infoBody.stores.map((s) => s.storeId).sort((a, b) => a - b)).toEqual(
+      [storeId, hqStoreId].sort((a, b) => a - b),
+    );
     expect(infoBody.codes.STORE_TYPE.map((c) => c.value)).toEqual([
       'DIRECT',
       'FRANCHISE',
@@ -353,8 +359,9 @@ describe('관리자 웹 로그인 (e2e, DB)', () => {
         { value: 'DIRECT', label: '직영점포', order: 1 },
         { value: 'FRANCHISE', label: '가맹점포', order: 2 },
       ]);
-      // 초기 데이터의 그룹(1팀 12 · 3팀 5)과 최저임금(MINIMUM_WAGE, WHALEERP-595), 시설물 4(20261111153316).
-      expect(Object.keys(codes)).toHaveLength(22);
+      // 초기 데이터의 그룹(1팀 12 · 3팀 5)과 최저임금(MINIMUM_WAGE, WHALEERP-595), 시설물 4(20261111153316),
+      // 시설물 문서 종류(FACILITY_DOCUMENT, 20261116112631).
+      expect(Object.keys(codes)).toHaveLength(23);
       // 시설물 그룹은 지금 있던 그룹(마지막 MINIMUM_WAGE) 뒤에 붙는다 — 먼저 보이지 않는다. 이 뒤에 그룹이 더해져도 깨지지 않게
       // 끝자리 대신 순서만 본다.
       const order = Object.keys(codes);

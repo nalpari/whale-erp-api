@@ -11,6 +11,7 @@ import { AdminSessionService } from '../src/admin-session/admin-session.service'
 import { dateOnly } from '../src/common/date-only';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
+import { createBp, deleteBps } from './hq-bp';
 
 // BP 휴일 관리(MN000015)를 실제 DB 로 확인한다 — 경로로 찾는 메뉴 권한 · 대상 BP, 점포 기간 행(마이그레이션
 // 20261026135250), 잠금과 updatedAt 으로 막는 동시 수정, 날짜 계산이 DB 의 @db.Date 와 맞는지.
@@ -51,7 +52,7 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const bp = async (code: string) => {
-      const { bpCodeId } = await prisma.bpCode.create({
+      const { bpCodeId } = await createBp(prisma, {
         data: {
           bpCode: code,
           isPlatform: false,
@@ -178,7 +179,7 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
         where: { roleGroupId: { in: groupIds } },
       });
       await prisma.store.deleteMany({ where: { storeId: { in: storeIds } } });
-      await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
+      await deleteBps(prisma, { where: { bpCodeId: { in: bpIds } } });
     } finally {
       // 정리가 실패해도 앱을 닫는다 — 닫지 않으면 jest 가 끝나지 않는다.
       await app?.close();
@@ -679,11 +680,11 @@ describe('BP 휴일 관리 (e2e, DB)', () => {
       expect(
         rows.map((r) => [r.storeId, dateOnly(r.effectiveStartDate)]),
       ).toEqual([[storeB, day(1)]]);
-      // 오늘 등록한 점포 셋 중 서초점이 빠져 둘
+      // 오늘 등록한 점포 셋 중 서초점이 빠져 둘 + 본사 점포 — 「전체 점포」 휴일은 본사에도 적용된다(2026-11-17 사용자 결정)
       expect(
         (await call('get', `/bp-holidays/${id}?date=${day(1)}`, bmId)).body
           .appliedStoreCount,
-      ).toBe(2);
+      ).toBe(3);
       const [first] = await rowsOf(addDays(today, 1), id);
       expect(first).toMatchObject({
         date: day(1),

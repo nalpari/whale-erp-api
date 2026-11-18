@@ -4,7 +4,7 @@ title: BP admins
 description: 관리자 웹 「BP 관리자 관리」(MN000012) — BP 관리자 · 가맹 마스터 · 가맹 관리자 accounts of the tab's BP; who sees and edits whom by role and mapped stores, one franchise master per store, and the cascades a franchise master's save drags along.
 tags: [admin, account, permission, store, mail]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:56:00Z }
 sources:
   - id: bp-admin-rules
     resource: ../../src/bp-admins/bp-admin-rules.ts
@@ -13,7 +13,7 @@ sources:
   - id: bp-admins-service
     resource: ../../src/bp-admins/bp-admins.service.ts
     title: BpAdminsService (list · roleGroups · storeOptions · isLoginIdAvailable · isEmailAvailable · detail · histories · updateImpact · create · update · resetPassword)
-    last_modified: 2026-10-30T03:51:46Z
+    last_modified: 2026-11-17T07:56:00Z
   - id: bp-admins-controller
     resource: ../../src/bp-admins/bp-admins.controller.ts
     title: /bp-admins routes — menu permission by path (`/bp-admins`, MN000012) and the target BP from X-Bp-Code-Id
@@ -121,6 +121,9 @@ master. Anything else is 400 「선택할 수 없는 권한입니다.」.
   `stores`, never from the options. The save still checks both, because two people
   saving at once both see the store as a candidate.
 - **At least one store** remains, or 400.
+- **The 본사 점포 can be assigned to a BA, not to an FM · FA** (`stores.is_hq`, 2026-11-17). `store-options` includes it with `isHq`
+  for a BA target, and `allowedFor` removes it from the options and the save for FM · FA targets (mapping it is the
+  out-of-scope 400), since their matching targets are 가맹 점포. The detail's 「BP 점포 N개 중」 (`bpStoreCount`) now counts it — the 본사 can be assigned to a BA, so the denominator matches the mapping basis (2026-11-17 review) ([admin authentication](/api/admin-auth.md)).
 
 Mappings are `(admin_account_id, store_id)` rows with `is_deleted`. A removed store is
 flagged, a store re-added revives its flagged row, and only a first-time pair is
@@ -219,9 +222,9 @@ Registration and reset follow [platform admins](/api/platform-admins.md) through
 shared `admin-password.ts`: `password_hash = '!'`, a 12-character
 temporary password for one hour (`INITIAL` · `RESET`), the unsent flag written in the
 transaction and cleared only after the mail of a still-valid password went out.
-Registration mails `EMAIL_BP_ADMIN_CREATE` (관리자이름 · BP이름 = `trade_name` ·
+Registration mails `EMAIL_BP_ADMIN_CREATE` (관리자이름 · BP이름 = the 본사's `biz_trade_name` ·
 로그인아이디 · 임시비밀번호 · 링크) and keeps the account when the mail fails
-(`isMailSent: false`). `trade_name` is read before the transaction: read after the
+(`isMailSent: false`). The BP name is read before the transaction: read after the
 commit, a failure would answer 500 for an account that exists, and the screen's retry
 would hit the login id's 409. Reset mails `EMAIL_PASSWORD_RESET` and works on a 미사용
 account, like the platform screen, and clears the login lock

@@ -4,12 +4,20 @@ title: Store management
 description: 관리자 웹 「점포 정보 관리」(MN000002) — list, register, edit, status change and delete of 1팀 stores with their floors, 사업자정보, 대표 이미지 (`PUT · DELETE /stores/:id/image`), 엑셀 (`GET /stores/excel`, 공통 [엑셀](/api/excel-exports.md) 규칙) and change history; one-way status, operating needs 사업자 인증 and coordinates, and the 국세청 check uses the same client as BP signup. Platform accounts work in the BP picked in the header (`X-Bp-Code-Id`).
 tags: [admin, store, permission, storage]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T02:07:22Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T05:00:00Z }
 sources:
   - id: store-management-service
     resource: ../../src/stores/store-management.service.ts
     title: StoreManagementService (list · detail · histories · transitionCheck · create · update · remove · verifyBusiness · putImage · removeImage · excelCount · excelFile · excelScopeKey)
-    last_modified: 2026-11-06T02:00:00Z
+    last_modified: 2026-11-17T08:19:43Z
+  - id: hq-store
+    resource: ../../src/stores/hq-store.ts
+    title: 본사 점포 — createHqStore · saveHqProfile · syncHqStatus · hqStatusOf(운영 조건 = missingForOperation)
+    last_modified: 2026-11-18T05:00:00Z
+  - id: next-store-code
+    resource: ../../src/stores/next-store-code.ts
+    title: claimStoreCode — 점포코드 잠금 · 채번(점포 등록 · 본사 생성 공용)
+    last_modified: 2026-11-17T06:50:00Z
   - id: store-closings-service
     resource: ../../src/store-closings/store-closings.service.ts
     title: StoreClosingsService — 폐점 확인 · 저장(점포 폐점 · 회원 탈퇴 · BP 탈퇴가 같이 씀), retryOnDeadlock
@@ -60,8 +68,8 @@ sources:
     last_modified: 2026-11-04T07:00:00Z
   - id: api-enums
     resource: ../../src/enums/api-enums.ts
-    title: API 전용 enum — StoreOperationRequirement · StoreBusinessVerificationResult
-    last_modified: 2026-10-27T07:37:14Z
+    title: API 전용 enum — StoreOperationRequirement · StoreBusinessVerificationResult · StoreScopeType(DIRECT · FRANCHISE · HQ, GET /enums 로 제공, 한글은 store-scope-type.ts)
+    last_modified: 2026-11-17T08:19:43Z
   - id: stores-db-e2e
     resource: ../../test/stores-db.e2e-spec.ts
     title: 실제 DB e2e — 동시성은 E2E_REAL_POSTGRES=1 에서만
@@ -166,6 +174,20 @@ of that 400.
   written for the added mapping.
 - 403s use the shared admin wording (`auth/access-messages`) — the 관리자 웹 branches
   on it, so this module coins none of its own.
+
+**The 본사 점포 is not on this screen at all** (`stores.is_hq`, 2026-11-17). `scopeOf` adds
+`isHq: false`, so the 본사 is absent from the list, excel and count, and opening it by id —
+detail, transition check, histories, edit, delete, image, verification — is the same 404 as a
+store that does not exist. The 본사 is created by signup and platform BP registration, and edited
+only through 마이페이지 BP 사업자정보 and platform BP edit ([admin authentication](/api/admin-auth.md),
+[BP masters](/api/bp-masters.md)) via `saveHqProfile` in `src/stores/hq-store.ts`. **Its status
+is never chosen**: `hqStatusOf` uses this screen's `missingForOperation` — 사업자 인증, coordinates,
+BP 사용 (the address is not a condition) — so it is 운영 exactly when all three hold and drops back
+to 미운영 the moment one is lost, even from 운영 (user decision); only BP withdrawal or deletion
+closes it. Those writes record into the 본사's `store_change_histories` (design D5), which this
+screen's history route will not show because it 404s the 본사 — **no route reads 본사 history
+today**. Its code comes from the same `claimStoreCode` (`src/stores/next-store-code.ts`), so 본사
+and ordinary stores share one `ST` sequence and one lock. `StoreScopeType` (DIRECT 직영 · FRANCHISE 가맹 · HQ 본사) is an API enum served by `GET /enums`. In the 본사 coordinate block (`HqLocationDto`) `isLocationApplied` left out keeps the current value, sent alone it is applied, and only creation defaults it to 사용; latitude · longitude go together (one alone is a 400, `null` clears). `syncHqStatus` locks the live 본사 row (`SELECT … FOR NO KEY UPDATE`, as 폐점 does, so 본사 attendance, contract and facility inserts — whose foreign-key check takes `KEY SHARE` — are not held up; only BP 삭제 takes `FOR UPDATE`, because it must queue behind exactly those inserts) before reading the conditions — a BP status change and a coordinate or number save that overlap would otherwise each read the other's pre-commit values and leave, say, a 운영 본사 under a 미사용 BP. Every path that writes a 본사 locks the `bp_codes` row first and the 본사 row second — 플랫폼 BP 상태 변경 updates `bp_codes` then syncs, and 플랫폼 BP 수정 · 마이페이지 BP 사업자정보 now bump `bp_codes.updated_by` before touching the 본사 — so two concurrent requests on one BP queue instead of deadlocking (40P01). Only the live 본사 is written; a BP whose 본사 is missing (an invariant break) gets an error log from `tradeNameOf` · `hqBizOf` and a 500 from 마이페이지 BP 사업자정보 rather than a silent empty profile. The duplicate-number check here matches `BusinessVerificationService.isBizRegistrationNumberTaken` on live stores and on skipping the platform BP's 본사, and differs only in what it excludes: here the owner BP's 본사, there (re-verification, `excludeBpCodeId`) every store of that BP.
 
 This scope is the store screen's own. `AdminScopeService` keeps platform
 accounts out of customer stores unless the caller passes the tab BP, and its `hidesPersonalData` is for
@@ -398,8 +420,12 @@ through the shared [attachment storage](/api/storage.md), not the store form.[^s
 
 Unique **among undeleted 미운영 · 운영 stores**, across all BPs; a 폐점 or deleted
 store's number is free again. It also may not be the number of **another customer BP**
-(사용 · 미사용, not the platform BP, not 탈퇴 · 삭제) — the store's own BP's number is
-allowed (PL-OCJOFP, 2026-10-22). The BP condition is the same as signup · 마이페이지
+— the store's own BP's number is allowed (PL-OCJOFP, 2026-10-22). Since 2026-11-17 a BP's
+number lives in its 본사 점포's `store_business_profiles`, so this is **one query**
+(`isNumberTaken`): live stores of customer BPs, the 본사 included, excluding the owner BP's 본사
+and every platform-BP row. A withdrawn BP's 본사 is 폐점 and a deleted BP's is deleted, so their
+numbers come free by the same store rule — the old `bp_codes` 사용 · 미사용 condition is no longer
+separate. The condition must stay equal to signup · 마이페이지
 (`BusinessVerificationService.isBizRegistrationNumberTaken`). The owner BP is the
 store's BP on edit and the target BP otherwise (`targetBpCodeId` — the tab BP for the
 platform, the caller's own BP for BP-side callers). The save always re-checks duplicates

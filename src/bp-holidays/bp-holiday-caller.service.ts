@@ -7,6 +7,7 @@ import { isPlatformRole } from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { canSeeHq } from '../stores/store-scope-type';
 import { callerOf, type HolidayCaller } from './bp-holiday-access';
 
 /** BP 휴일 관리 메뉴(MN000015). 가드처럼 컨트롤러 경로로 찾는다 — 메뉴 URL 이 권한 키다. */
@@ -46,7 +47,9 @@ export class BpHolidayCallerService {
     // 가드는 헤더가 없으면 소속 BP(플랫폼 BP)를 정한다 — 플랫폼 BP 에는 점포 · 휴일이 없으니 고르라고 답한다.
     if (isPlatform && bp.bpCodeId === admin.bpCodeId)
       throw new BadRequestException('휴일을 볼 BP 를 골라 주세요.');
-    const [menu, mappings] = await Promise.all([
+    const seesHq = canSeeHq(admin.roleTypeCode, isPlatform);
+    const targetBpCodeId = isPlatform ? bp.bpCodeId : admin.bpCodeId;
+    const [menu, mappings, branches] = await Promise.all([
       this.prisma.roleGroupMenu.findFirst({
         where: {
           roleGroupId: admin.roleGroupId,
@@ -66,10 +69,18 @@ export class BpHolidayCallerService {
             where: { adminAccountId, isDeleted: false },
             select: { storeId: true },
           }),
+      // 본사를 다루지 못하는 전체 점포 계정은 본사를 뺀 점포가 범위다.
+      (isPlatform || admin.isAllStores) && !seesHq
+        ? this.prisma.store.findMany({
+            where: { bpCodeId: targetBpCodeId, isDeleted: false, isHq: false },
+            select: { storeId: true },
+          })
+        : Promise.resolve<{ storeId: number }[]>([]),
     ]);
     return callerOf({
       adminAccountId,
-      targetBpCodeId: isPlatform ? bp.bpCodeId : admin.bpCodeId,
+      targetBpCodeId,
+      branchStoreIds: branches.map((s) => s.storeId),
       roleTypeCode: admin.roleTypeCode,
       isPlatform,
       isAllStores: admin.isAllStores,

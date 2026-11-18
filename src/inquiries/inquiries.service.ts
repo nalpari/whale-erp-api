@@ -27,6 +27,7 @@ import {
   reasonOf,
 } from '../notifications/ops-notification.service';
 import { activeAdmin } from '../notifications/recipients';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { PrismaService } from '../prisma/prisma.service';
 import { withThumbnails } from './attachment-thumbnails';
 import type { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
@@ -409,7 +410,12 @@ export class InquiriesService {
     // ponytail: 이름에 맞는 ID 를 모두 IN 으로 넘긴다. 한 이름에 맞는 행이 수천이 되면 SQL 조인으로 바꾼다.
     const contains = containsText(name);
     const bps = await this.prisma.bpCode.findMany({
-      where: { tradeName: contains },
+      // 상호명은 본사 점포의 사업자정보에 있다. 지운 BP 는 본사도 지워져 있어 삭제 여부를 보지 않는다.
+      where: {
+        stores: {
+          some: { isHq: true, businessProfile: { bizTradeName: contains } },
+        },
+      },
       select: { bpCodeId: true },
     });
     const stores = await this.prisma.store.findMany({
@@ -430,9 +436,9 @@ export class InquiriesService {
   private async bpNames(ids: number[]): Promise<Map<number, string>> {
     const rows = await this.prisma.bpCode.findMany({
       where: { bpCodeId: { in: [...new Set(ids)] } },
-      select: { bpCodeId: true, tradeName: true },
+      select: { bpCodeId: true, ...HQ_TRADE_NAME_SELECT },
     });
-    return new Map(rows.map((r) => [r.bpCodeId, r.tradeName]));
+    return new Map(rows.map((r) => [r.bpCodeId, tradeNameOf(r)]));
   }
 
   private async storeNames(

@@ -47,6 +47,7 @@ import {
 import { dateOnly } from '../common/date-only';
 import { isBirthDateCorrectable } from './birth-date-correctable';
 import { linkedRecords } from './previous-records';
+import { matchesStoreScope } from '../stores/store-scope-type';
 
 /** 직원 목록에서 초대를 다시 보낼 수 있는 계약 상태 — 발송 대기 · 서명 대기(거부 · 만료는 근로계약 상세에서, WHALEERP-153) */
 const INVITE_RESENDABLE: readonly ContractStatus[] = [
@@ -197,7 +198,7 @@ export class StaffMemberListService {
     let stores = manageable.stores.filter(
       (s) =>
         (!query.storeIds || query.storeIds.includes(s.storeId)) &&
-        (!types || types.has(s.storeTypeCode)),
+        matchesStoreScope(s, query.storeTypes),
     );
     // 점포 유형은 상단 범위 직영 · 가맹이라 폐점 점포는 뺀다 — TO-DO 목록 · 범위 칩과 같다. 폐점 점포는 전체 · 점포를
     // 골라 본다(2026-10-22 재영)

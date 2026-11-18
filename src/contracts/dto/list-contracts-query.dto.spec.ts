@@ -43,7 +43,19 @@ describe('ListContractsQueryDto (근로계약 목록 쿼리)', () => {
     expect(check({ storeIds: ids(1001) }).failed).toEqual(['storeIds']);
   });
 
-  it.each(['', 'HQ', 'DIRECT,'])('점포 유형 %p 는 400', (storeTypes) =>
+  it.each(['', 'BRANCH', 'DIRECT,'])('점포 유형 %p 는 400', (storeTypes) =>
     expect(check({ storeTypes }).failed).toEqual(['storeTypes']),
   );
+
+  // 본사 점포(2026-11-17) — 점포 유형에 HQ(본사)가 더해졌다
+  it('점포 유형 HQ 를 받는다 — 다른 유형과 섞어도', () => {
+    expect(check({ storeTypes: 'HQ' })).toMatchObject({
+      dto: { storeTypes: ['HQ'] },
+      failed: [],
+    });
+    expect(check({ storeTypes: 'DIRECT,HQ' })).toMatchObject({
+      dto: { storeTypes: ['DIRECT', 'HQ'] },
+      failed: [],
+    });
+  });
 });

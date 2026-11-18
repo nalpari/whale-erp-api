@@ -136,6 +136,10 @@ export class FacilityStoreOptionDto {
   storeId: number;
   storeCode: string;
   name: string;
+  /** 점포 유형 코드 — DIRECT · FRANCHISE */
+  storeTypeCode: string;
+  /** 본사 점포인가(2026-11-17) — 가맹 마스터 · 가맹 관리자에게는 나오지 않고, 그 밖의 계정에게는 다른 점포처럼 업무 범위(전체 점포 · 매핑)대로 나온다 */
+  isHq: boolean;
   /** 점포 상태 — 미운영 NOT_OPERATING · 운영 OPERATING · 폐점 CLOSED */
   storeStatusCode: string;
 }

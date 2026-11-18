@@ -18,6 +18,7 @@ import {
   reasonOf,
 } from '../notifications/ops-notification.service';
 import { platformOperators } from '../notifications/recipients';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { PrismaService } from '../prisma/prisma.service';
 import { withThumbnails } from './attachment-thumbnails';
 import type { DownloadUrlResponseDto } from '../storage/dto/download-url.response.dto';
@@ -383,7 +384,7 @@ export class SupportInquiriesService {
       // 1팀 표라 Prisma 관계가 없다 — 차례로 읽는다.
       const bp = await this.prisma.bpCode.findUnique({
         where: { bpCodeId },
-        select: { tradeName: true },
+        select: HQ_TRADE_NAME_SELECT,
       });
       const store =
         storeId === null
@@ -396,7 +397,9 @@ export class SupportInquiriesService {
         templateCode: 'NTF_INQUIRY_RECEIVED',
         // 템플릿 예시 「모리커피 연남점」 — BP 이름에 점포 이름을 잇는다.
         variables: {
-          문의자: [bp?.tradeName, store?.name].filter(Boolean).join(' '),
+          문의자: [bp && tradeNameOf(bp), store?.name]
+            .filter(Boolean)
+            .join(' '),
           문의제목: title,
         },
         related: { type: 'INQUIRY', id: inquiryId },

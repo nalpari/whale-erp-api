@@ -20,6 +20,7 @@ import type {
 } from '../src/bulk-exports/dto/bulk-export.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STORAGE } from '../src/storage/storage.module';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 자료 일괄 저장(WHALEERP-336)을 실제 DB 로 확인한다 — 권한 유형 · 범위 · 부분 고유 인덱스 · 배열 포함(<@) 목록 ·
 // 내려받기 이력 · 기한 정리는 목으로 증명되지 않는다. S3 는 가짜로 바꾼다.
@@ -63,7 +64,7 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const bp = (k: number, tradeName: string) =>
-      prisma.bpCode.create({
+      createBp(prisma, {
         data: {
           bpCode: `BP${code(k)}`,
           isPlatform: false,
@@ -71,7 +72,8 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
           tradeName,
         },
       });
-    ({ bpCodeId } = await bp(0, '일괄 저장 BP'));
+    // 본사 점포(직원 없음)는 BP 마스터의 업무 범위에 든다 — 범위 전체 요청의 점포 수 · 점포 목록에 들어간다.
+    ({ bpCodeId, hqStoreId: store['본사'] } = await bp(0, '일괄 저장 BP'));
     ({ bpCodeId: otherBpId } = await bp(1, '다른 BP'));
     const mkStore = async (
       key: string,
@@ -257,10 +259,11 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
       await prisma.adminStoreMapping.deleteMany({ where: admins });
       await prisma.adminSession.deleteMany({ where: admins });
       await prisma.adminAccount.deleteMany({ where: admins });
+      // 본사 점포는 사업자정보와 함께 deleteBps 가 지운다.
       await prisma.store.deleteMany({
-        where: { storeId: { in: Object.values(store) } },
+        where: { storeId: { in: Object.values(store) }, isHq: false },
       });
-      await prisma.bpCode.deleteMany({
+      await deleteBps(prisma, {
         where: { bpCodeId: { in: [bpCodeId, otherBpId] } },
       });
     }
@@ -316,7 +319,7 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
     const res = await call('BM', 'get', '/staff-members/bulk-exports/preview');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      storeCount: 3,
+      storeCount: 4, // 직영 · 가맹 · 폐점가맹 · 본사
       staffCount: 2, // 재직 · 동의
       employedCount: 2,
       retiredCount: 0,
@@ -378,9 +381,12 @@ describe('직원 자료 일괄 저장 (e2e, DB)', () => {
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({
         requesterName: '관리자BM',
-        storeIds: [store['직영'], store['가맹'], store['폐점가맹']].sort(
-          (x, y) => x - y,
-        ),
+        storeIds: [
+          store['직영'],
+          store['가맹'],
+          store['폐점가맹'],
+          store['본사'],
+        ].sort((x, y) => x - y),
         staffCount: 2,
         status: 'PENDING',
         completedAt: null,

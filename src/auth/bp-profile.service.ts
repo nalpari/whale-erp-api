@@ -12,7 +12,15 @@ import {
   BusinessVerificationService,
   DUPLICATE_BIZ_REGISTRATION_NUMBER,
 } from '../admin-signup/business-verification.service';
+import {
+  HQ_PROFILE_SELECT,
+  type HqBiz,
+  hqBizOf,
+  hqLocationOf,
+  liveHqStoreId,
+} from '../bp-codes/hq-profile';
 import { sameMillisecond } from '../common/updated-at';
+import { hqLocationInput, saveHqProfile } from '../stores/hq-store';
 import { PrismaService } from '../prisma/prisma.service';
 import type { BpBusinessVerificationDto } from './dto/bp-business-verification.dto';
 import type { BpBusinessVerificationResponseDto } from './dto/bp-business-verification.response.dto';
@@ -31,15 +39,10 @@ const BP_MASTER = 'BM';
 const NTS_CALLS_PER_HOUR = 10;
 const NTS_WINDOW_MS = 3_600_000;
 
-type History = {
-  field: string;
-  beforeValue: string | null;
-  afterValue: string | null;
-};
-
 /**
- * 내 정보(마이페이지) 사업자정보 조회 · 수정 · 인증(manyfast F-AMTDCK > S-UOJVUR). BP 마스터 본인의
- * bp_codes 행만 다룬다 — 다른 BP 는 다루지 않는다(플랫폼 쪽 BP 수정은 F-EHHJLV, 아직 없음).
+ * 내 정보(마이페이지) 사업자정보 조회 · 수정 · 인증(manyfast F-AMTDCK > S-UOJVUR). BP 마스터 본인의 BP 만
+ * 다룬다. 상호명 · 사업자정보 · 좌표는 그 BP 의 본사 점포(stores.is_hq) 사업자정보와 좌표에 있다(2026-11-17) — 저장은
+ * 플랫폼 BP 수정(BpMastersService)과 같은 saveHqProfile 로 하고, 이력도 본사 점포 이력에 남는다.
  *
  * 사업자등록번호 · 대표자명 · 개업일자는 점포 사업자정보와 같은 두 단계다(2026-10-22 사용자 결정 —
  * 「인증하기」를 누르자마자 바로 저장되던 것을 고침): business-verification 은 검사만 하고 10분짜리
@@ -105,12 +108,15 @@ export class BpProfileService {
     const biz = input.businessVerificationToken
       ? await this.verifier.readToken(input.businessVerificationToken)
       : null;
+    const location = hqLocationInput(input);
 
     await this.prisma.$transaction(async (tx) => {
       const { bpCodeId, bp: target } = await this.findBpForUpdate(
         tx,
         adminAccountId,
       );
+      if (target.hqStoreId === null)
+        throw new Error(`BP ${bpCodeId} 에 본사 점포가 없습니다`);
 
       if (biz) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`stores:biz:${biz.bizRegistrationNumber}`}))`;
@@ -125,88 +131,61 @@ export class BpProfileService {
       }
 
       const clear = Boolean(input.clearBusinessVerification);
-      const data = {
-        tradeName: input.tradeName,
-        bizCeoPhone: input.bizCeoPhone ?? null,
-        bizCeoEmail: input.bizCeoEmail ?? null,
-        bizZipCode: input.bizZipCode ?? null,
-        bizAddress: input.bizAddress ?? null,
-        bizAddressDetail: input.bizAddressDetail ?? null,
-        bizCategory: input.bizCategory ?? null,
-        bizItem: input.bizItem ?? null,
-        ...(biz && {
-          bizRegistrationNumber: biz.bizRegistrationNumber,
-          bizCeoName: biz.bizCeoName,
-          bizOpenDate: new Date(`${biz.bizOpenDate}T00:00:00.000Z`),
-          bizVerifiedAt: new Date(),
-        }),
-        // clearBusinessVerification — 점포와 달리 BP 자신의 사업자정보는 지울 수 있다(2026-10-23 사용자
-        // 결정). 구독 기록이 있으면 막아야 하지만 구독 자체가 아직 없어 지금은 검사하지 않는다(DTO 주석 참고).
-        ...(clear && {
-          bizRegistrationNumber: null,
-          bizCeoName: null,
-          bizOpenDate: null,
-          bizVerifiedAt: null,
-        }),
-      };
-
-      const { count } = await tx.bpCode.updateMany({
-        where: { bpCodeId, updatedAt: sameMillisecond(input.updatedAt) },
-        data: { ...data, updatedBy: adminAccountId },
+      // BP 의 최종수정을 먼저 올린다 — 로그인 정보 버전(me/login-info-version)이 이 시각을 봐 상호명 변경을 알리고, BP 행을
+      // 본사 점포보다 먼저 잠가 상태 변경(bp_codes → 본사 점포)과 잠금 순서를 맞춘다(반대면 동시 요청이 교착한다).
+      await tx.bpCode.update({
+        where: { bpCodeId },
+        data: { updatedBy: adminAccountId },
+      });
+      // 동시 수정 검사 — 조회가 준 updatedAt 은 본사 사업자정보 행의 것이다. 읽은 그대로일 때만 저장한다.
+      const { count } = await tx.storeBusinessProfile.updateMany({
+        where: {
+          storeId: target.hqStoreId,
+          updatedAt: sameMillisecond(input.updatedAt),
+        },
+        data: { updatedBy: adminAccountId },
       });
       if (count === 0)
         throw new ConflictException(
           '다른 곳에서 먼저 수정했습니다. 최신 정보를 불러온 뒤 다시 저장해 주세요.',
         );
 
-      const changes = [
-        change('상호명', target.tradeName, data.tradeName),
-        change('대표자 연락처', target.bizCeoPhone, data.bizCeoPhone),
-        change('대표자 이메일', target.bizCeoEmail, data.bizCeoEmail),
-        change('사업장 우편번호', target.bizZipCode, data.bizZipCode),
-        change('사업장 기본주소', target.bizAddress, data.bizAddress),
-        change(
-          '사업장 상세주소',
-          target.bizAddressDetail,
-          data.bizAddressDetail,
-        ),
-        change('업태', target.bizCategory, data.bizCategory),
-        change('종목', target.bizItem, data.bizItem),
-        ...(biz
-          ? [
-              change(
-                '사업자등록번호',
-                target.bizRegistrationNumber,
-                biz.bizRegistrationNumber,
-              ),
-              change('대표자명', target.bizCeoName, biz.bizCeoName),
-              change('개업일자', dateOnly(target.bizOpenDate), biz.bizOpenDate),
-            ]
-          : []),
-        ...(clear
-          ? [
-              change('사업자등록번호', target.bizRegistrationNumber, null),
-              change('대표자명', target.bizCeoName, null),
-              change('개업일자', dateOnly(target.bizOpenDate), null),
-            ]
-          : []),
-      ].filter((c): c is History => c !== null);
-      if (changes.length)
-        await tx.bpChangeHistory.createMany({
-          data: changes.map((c) => ({
-            bpCodeId,
-            ...c,
-            changedBy: adminAccountId,
-            ...(biz &&
-              ['사업자등록번호', '대표자명', '개업일자'].includes(c.field) && {
-                note: '사업자 번호 인증',
-              }),
-            ...(clear &&
-              ['사업자등록번호', '대표자명', '개업일자'].includes(c.field) && {
-                note: '사업자 번호 인증 해제',
-              }),
-          })),
-        });
+      // 상호명 · 사업자정보 · 좌표는 본사 점포에 고치고 이력도 본사 점포에 남긴다(설계 D5, 2026-11-17).
+      // 사업자번호 · 좌표가 바뀌면 본사 운영 상태도 다시 정한다(지우면 미운영으로 내려간다 — 사용자 결정).
+      await saveHqProfile(tx, {
+        bpCodeId,
+        hqStoreId: target.hqStoreId,
+        before: target,
+        tradeName: input.tradeName,
+        biz: {
+          bizCeoPhone: input.bizCeoPhone ?? null,
+          bizCeoEmail: input.bizCeoEmail ?? null,
+          bizZipCode: input.bizZipCode ?? null,
+          bizAddress: input.bizAddress ?? null,
+          bizAddressDetail: input.bizAddressDetail ?? null,
+          bizCategory: input.bizCategory ?? null,
+          bizItem: input.bizItem ?? null,
+        },
+        verified: biz
+          ? {
+              bizRegistrationNumber: biz.bizRegistrationNumber,
+              bizCeoName: biz.bizCeoName,
+              bizOpenDate: new Date(`${biz.bizOpenDate}T00:00:00.000Z`),
+              bizVerifiedAt: new Date(),
+            }
+          : // clearBusinessVerification — 점포와 달리 BP 자신의 사업자정보는 지울 수 있다(2026-10-23 사용자
+            // 결정). 구독 기록이 있으면 막아야 하지만 구독 자체가 아직 없어 지금은 검사하지 않는다(DTO 주석 참고).
+            clear
+            ? {
+                bizRegistrationNumber: null,
+                bizCeoName: null,
+                bizOpenDate: null,
+                bizVerifiedAt: null,
+              }
+            : null,
+        location,
+        by: adminAccountId,
+      });
     });
   }
 
@@ -243,9 +222,25 @@ export class BpProfileService {
 
     const bp = await db.bpCode.findFirst({
       where: { bpCodeId: account.bpCodeId, isDeleted: false },
+      select: { bpCodeId: true, ...HQ_PROFILE_SELECT },
     });
     if (!bp) throw new NotFoundException(NOT_FOUND);
-    return bp;
+    // 상호명 · 사업자정보 · 좌표는 본사 점포에 있다(2026-11-17) — 예전 bp_codes 칸 이름으로 펼친다.
+    const hqStoreId = liveHqStoreId(bp);
+    const profile = bp.stores[0]?.businessProfile;
+    // 본사 · 사업자정보가 없으면 불변식이 깨진 것이다 — 1970 같은 가짜 수정 시각을 주면 저장이 늘 「먼저 수정」 409 가
+    // 되어 원인을 가린다. 500 으로 멈춘다.
+    if (hqStoreId === null || !profile)
+      throw new Error(
+        `BP ${bp.bpCodeId} 에 살아 있는 본사 점포 사업자정보가 없습니다`,
+      );
+    return {
+      bpCodeId: bp.bpCodeId,
+      ...hqBizOf(bp, bp.bpCodeId),
+      ...hqLocationOf(bp),
+      hqStoreId,
+      updatedAt: profile.updatedAt,
+    };
   }
 
   private async findBpForUpdate(tx: Tx, adminAccountId: number) {
@@ -267,36 +262,21 @@ export class BpProfileService {
       bizCategory: bp.bizCategory ?? '',
       bizItem: bp.bizItem ?? '',
       bizVerifiedAt: bp.bizVerifiedAt,
+      latitude: bp.latitude,
+      longitude: bp.longitude,
+      isLocationApplied: bp.isLocationApplied,
       updatedAt: bp.updatedAt,
     };
   }
 }
 
-type BpCodeRow = {
-  bpCodeId: number;
-  tradeName: string;
-  bizRegistrationNumber: string | null;
-  bizCeoName: string | null;
-  bizOpenDate: Date | null;
-  bizCeoPhone: string | null;
-  bizCeoEmail: string | null;
-  bizZipCode: string | null;
-  bizAddress: string | null;
-  bizAddressDetail: string | null;
-  bizCategory: string | null;
-  bizItem: string | null;
-  bizVerifiedAt: Date | null;
-  updatedAt: Date;
-};
+type BpCodeRow = HqBiz &
+  ReturnType<typeof hqLocationOf> & {
+    bpCodeId: number;
+    hqStoreId: number | null;
+    updatedAt: Date;
+  };
 
 function dateOnly(d: Date | null): string | null {
   return d ? d.toISOString().slice(0, 10) : null;
-}
-
-function change(
-  field: string,
-  beforeValue: string | null,
-  afterValue: string | null,
-): History | null {
-  return beforeValue === afterValue ? null : { field, beforeValue, afterValue };
 }

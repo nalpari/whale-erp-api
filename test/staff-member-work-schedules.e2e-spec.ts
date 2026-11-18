@@ -19,6 +19,7 @@ import {
 } from '../src/staff-members/kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from '../src/staff-members/staff-menu';
 import type { StaffMemberWorkScheduleListResponseDto } from '../src/staff-members/dto/staff-member-work-schedule-list.response.dto';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 상세의 근무스케줄 표(WHALEERP-185)를 실제 DB 로 확인한다. 정렬(근무일 내림차순 · 같은 날 시작 시각 오름차순)은 SQL
 // 이라, 그리고 영역 메뉴 권한은 권한 그룹 · 메뉴 url 조인이라 목으로는 증명되지 않는다.
@@ -86,7 +87,7 @@ describe('직원 상세 근무스케줄 표 (e2e, DB)', () => {
 
     const bp = async (code: number, name: string) =>
       (
-        await prisma.bpCode.create({
+        await createBp(prisma, {
           data: {
             bpCode: `BP${pad(code)}`,
             isPlatform: false,
@@ -264,7 +265,7 @@ describe('직원 상세 근무스케줄 표 (e2e, DB)', () => {
         storeId: { in: [directStoreId, franchiseStoreId, otherStoreId] },
       },
     });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: { bpCodeId: { in: [bpCodeId, otherBpId] } },
     });
     await app.close();

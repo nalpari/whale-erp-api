@@ -3,8 +3,10 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { AuthUser } from '../auth/auth.types';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { containsText } from '../common/contains-text';
 import { PrismaService } from '../prisma/prisma.service';
+import { canSeeHq } from '../stores/store-scope-type';
 import {
   HQ_SHARING_CONSENTED,
   HQ_SHARING_SELECT,
@@ -95,8 +97,21 @@ const STORE_SELECT = {
   storeCode: true,
   name: true,
   storeTypeCode: true,
+  isHq: true,
   storeStatusCode: true,
 } as const;
+
+/**
+ * 본사 점포 조건 — 본사도 일반 점포처럼 권한 · 매칭으로 본다(2026-11-17 사용자 결정). 가맹 마스터 · 가맹 관리자만 업무
+ * 범위 · 점포 선택지에서 본사가 빠진다(전체 점포여도) — 3팀 목록 · 작업이 모두 이 범위를 거치므로 본사 근무지 · 본사 직원도
+ * 함께 빠지고, 직접 부르면 범위 밖과 같다(403 · 404). BP 관리자는 전체 점포면 본사 포함, 아니면 본사에 매핑됐을 때만이다.
+ * 플랫폼 계정은 권한 유형(PM · PA)으로 본다 — 범위 계산(scopeAdmin)도 권한 유형으로 탭 BP 를 연다.
+ */
+function hqScope(roleTypeCode: string): Prisma.StoreWhereInput {
+  return canSeeHq(roleTypeCode, ['PM', 'PA'].includes(roleTypeCode))
+    ? {}
+    : { isHq: false };
+}
 const STORE_ORDER = [{ name: 'asc' as const }, { storeId: 'asc' as const }];
 /** 점포 목록 버전의 재료 — 점포 · 매핑 행 하나를 가리는 값(bpStoresVersion). */
 const ROW_VERSION_SELECT = {
@@ -278,19 +293,28 @@ export class AdminScopeService {
       }),
       ...(keyword && {
         OR: [
-          { tradeName: containsText(keyword) },
+          // 상호명은 본사 점포의 사업자정보에 있다(20261117150907_team1_hq_stores)
+          {
+            stores: {
+              some: {
+                isHq: true,
+                isDeleted: false,
+                businessProfile: { bizTradeName: containsText(keyword) },
+              },
+            },
+          },
           { bpCode: containsText(keyword) },
         ],
       }),
     };
-    const [items, total] = await this.prisma.$transaction([
+    const [rows, total] = await this.prisma.$transaction([
       this.prisma.bpCode.findMany({
         where,
         select: {
           bpCodeId: true,
           bpCode: true,
-          tradeName: true,
           accountStatusCode: true,
+          ...HQ_TRADE_NAME_SELECT,
         },
         // 최신 등록이 위 — BP 마스터 계정 목록(bp-masters ORDER_BY)과 같은 순서(2026-10-29 사용자 지정, 전엔 BP 코드 오름차순)
         orderBy: [{ createdAt: 'desc' }, { bpCodeId: 'desc' }],
@@ -299,6 +323,10 @@ export class AdminScopeService {
       }),
       this.prisma.bpCode.count({ where }),
     ]);
+    const items = rows.map(({ stores, ...bp }) => ({
+      ...bp,
+      tradeName: tradeNameOf({ stores }),
+    }));
     return { items, total };
   }
 
@@ -309,13 +337,14 @@ export class AdminScopeService {
   async listStores(adminAccountId: number) {
     const admin = await this.prisma.adminAccount.findFirst({
       where: { adminAccountId, isDeleted: false, accountStatusCode: 'ACTIVE' },
-      select: { bpCodeId: true, isAllStores: true },
+      select: { bpCodeId: true, isAllStores: true, roleTypeCode: true },
     });
     if (!admin) return [];
     return this.prisma.store.findMany({
       where: {
         bpCodeId: admin.bpCodeId,
         isDeleted: false,
+        ...hqScope(admin.roleTypeCode),
         ...(admin.isAllStores
           ? {}
           : { adminMappings: { some: { adminAccountId, isDeleted: false } } }),
@@ -436,15 +465,31 @@ export class AdminScopeService {
   /**
    * 고객 BP 의 미삭제 점포 전체(운영 상태와 상관없이). 없거나 삭제된 BP · 플랫폼 BP 면 null.
    * 탈퇴한 BP 도 기록을 봐야 하므로 막지 않는다. 누가 불러도 되는지는 부르는 쪽이 정한다.
+   * 관리자(admin)가 부르면 본사 점포는 hqScope 를 따른다 — 가맹마스터 · 가맹관리자(FM · FA)에게는 빠진다. 관리자 행을
+   * 찾지 못하면 본사를 뺀다(제한 쪽으로 닫는다). 직원 앱 계정은 소속 점포 목록이라 그대로다.
    */
-  async listBpStores(bpCodeId: number) {
+  async listBpStores(bpCodeId: number, user?: AuthUser) {
     const bp = await this.prisma.bpCode.findFirst({
       where: { bpCodeId, isDeleted: false, isPlatform: false },
       select: { bpCodeId: true },
     });
     if (!bp) return null;
+    // 관리자는 본사를 다루는 계정(가맹 계정이 아닌 계정, hqScope)일 때만 본사가 나온다. 직원 앱은 소속 점포 목록이라 그대로 둔다.
+    const admin =
+      user?.type === 'admin'
+        ? await this.prisma.adminAccount.findFirst({
+            where: { adminAccountId: user.id, isDeleted: false },
+            select: { roleTypeCode: true },
+          })
+        : null;
     return this.prisma.store.findMany({
-      where: { bpCodeId, isDeleted: false },
+      where: {
+        bpCodeId,
+        isDeleted: false,
+        // 관리자 행을 못 찾으면(그 사이 지워짐) 본사를 빼는 쪽으로 닫는다 — 제한 판정은 열리는 쪽으로 틀리지 않는다.
+        ...(user?.type === 'admin' &&
+          (admin ? hqScope(admin.roleTypeCode) : { isHq: false })),
+      },
       select: STORE_SELECT,
       orderBy: STORE_ORDER,
     });
@@ -468,8 +513,13 @@ export class AdminScopeService {
     if (!admin) return null;
     // 전체 점포 관리자도 그 BP 의 점포만이다. 매핑은 BP 를 넘지 않는다는 보장이 DB 에 없어 함께 본다.
     const store = await this.prisma.store.findFirst({
-      where: { storeId, bpCodeId: admin.bpCodeId, isDeleted: false },
-      select: { storeTypeCode: true, storeStatusCode: true },
+      where: {
+        storeId,
+        bpCodeId: admin.bpCodeId,
+        isDeleted: false,
+        ...hqScope(admin.roleTypeCode),
+      },
+      select: { storeTypeCode: true, storeStatusCode: true, isHq: true },
     });
     if (!store) return null;
     const managed = { roleTypeCode: admin.roleTypeCode, store };
@@ -495,11 +545,17 @@ export class AdminScopeService {
       where: {
         bpCodeId: admin.bpCodeId,
         isDeleted: false,
+        ...hqScope(admin.roleTypeCode),
         ...(admin.isAllStores
           ? {}
           : { adminMappings: { some: { adminAccountId, isDeleted: false } } }),
       },
-      select: { storeId: true, storeTypeCode: true, storeStatusCode: true },
+      select: {
+        storeId: true,
+        storeTypeCode: true,
+        storeStatusCode: true,
+        isHq: true,
+      },
       orderBy: { storeId: 'asc' },
     });
     return { roleTypeCode: admin.roleTypeCode, stores };

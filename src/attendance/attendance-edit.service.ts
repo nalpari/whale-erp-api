@@ -45,6 +45,7 @@ import type { AttendanceStoresQueryDto } from './dto/attendance-records.dto';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
 import { ATTENDANCE_BP_NOT_CHOSEN } from './attendance-target-bp';
+import { matchesStoreScope } from '../stores/store-scope-type';
 
 type Tx = Prisma.TransactionClient;
 
@@ -650,10 +651,10 @@ export class AttendanceEditService {
     const storeIds = access.storeIds.filter(
       (id) =>
         (!stores.storeIds || stores.storeIds.includes(id)) &&
-        (!stores.storeTypes ||
-          stores.storeTypes.some(
-            (t) => t === access.storeOf.get(id)?.storeTypeCode,
-          )),
+        matchesStoreScope(
+          access.storeOf.get(id) ?? { storeTypeCode: '' },
+          stores.storeTypes,
+        ),
     );
     if (!storeIds.length) return { items: [] };
     const [candidates, storeRows] = await Promise.all([

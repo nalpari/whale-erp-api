@@ -4,12 +4,12 @@ title: Facilities
 description: 관리자 웹 시설물 및 장비 관리(MN000022, /facilities) — 점포에 속한 시설물·장비의 목록 · 상세 · 등록 · 수정 · 논리 삭제와 문서(종류는 플랫폼고정 공통코드 FACILITY_DOCUMENT, 종류마다 1개), 엑셀 일괄 등록(PL-7 — 양식 · 미리보기 · 오류 파일 · 등록, 오류가 있으면 전부 막기 · 500줄). 점포는 등록 뒤 못 바꾸고, 폐점 점포는 등록 불가 · 기존 건은 조회만. 운영상태 FACILITY_STATUS(플랫폼고정), 분류 STORE_FACILITY · STORE_EQUIPMENT 와 점검 주기 INSPECTION_CYCLE 은 점포 BP 의 행(플랫폼제공, BP 적용 꺼 둠).
 tags: [admin, stores, facilities, storage, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-16T04:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
 sources:
   - id: facilities-service
     resource: ../../src/facilities/facilities.service.ts
     title: FacilitiesService — 범위 · 공통코드 · 담당자 · 폐점 조회만 · 문서
-    last_modified: 2026-11-16T04:00:00Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: facilities-controller
     resource: ../../src/facilities/facilities.controller.ts
     title: /facilities 경로와 메뉴 권한
@@ -17,7 +17,7 @@ sources:
   - id: facility-caller
     resource: ../../src/facilities/facility-caller.ts
     title: 다루는 관리자 · BP 와 점포 범위(화면 경로 · 일괄 등록 공용)
-    last_modified: 2026-11-12T01:24:38Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: facility-bulk
     resource: ../../src/facilities/facility-bulk.ts
     title: 일괄 등록 양식 · 파일 읽기 · 줄 검사 · 오류 파일
@@ -133,7 +133,12 @@ actions (PM000001 already had them). Other BP role groups get nothing until thei
 
 - **Scope is store management's**, not `AdminScopeService`'s: a platform account sees every store of
   the chosen BP, others their BP's stores (only mapped ones unless 전체 점포). Copied as `storeScope`
-  rather than shared — the two services already keep their own `scopeOf`.
+  rather than shared — the two services already keep their own `scopeOf`. **One deliberate difference:
+  the 본사 점포** (`stores.is_hq`, 2026-11-17). 점포 관리 hides it from everyone, but a 본사 can hold
+  facilities (user decision 2026-11-17), so `storeScope` keeps it — for everyone but FM · FA
+  (`canSeeHq`); for FM · FA it is `isHq: false`, the same 본사 rule as `AdminScopeService`. Copying
+  `scopeOf` back over `storeScope` would lose 본사 facilities. `GET /facilities/store-options` rows carry
+  `storeTypeCode` and `isHq` so the screen can mark the 본사, which is `DIRECT` in the database too.
 - **Store fixed after registration** (PL-1). The update DTO has no `storeId`, so the global
   whitelist pipe rejects it. Moving a unit means registering anew and setting the old one to 폐기.
 - **폐점 점포**: `POST` 400; existing rows are read-only — `PUT` · `DELETE` and both document routes

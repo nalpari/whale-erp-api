@@ -100,7 +100,10 @@ describe('SupportInquiriesService', () => {
       },
       codeItem: { count: jest.fn().mockResolvedValue(1) },
       bpCode: {
-        findUnique: jest.fn().mockResolvedValue({ tradeName: '모리커피' }),
+        // 상호명은 본사 점포 사업자정보에 있다(20261117150907_team1_hq_stores)
+        findUnique: jest.fn().mockResolvedValue({
+          stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+        }),
       },
       store: { findUnique: jest.fn().mockResolvedValue({ name: '연남점' }) },
       inquiry: {

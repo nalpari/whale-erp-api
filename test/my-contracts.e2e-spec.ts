@@ -14,6 +14,7 @@ import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STORAGE } from '../src/storage/storage.module';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 앱 날인 · 거부 · 수정 요청(WHALEERP-145)을 실제 DB 로 확인한다 — 내 계약만(남의 계약 · 후보 계정만 있는 계약 404),
 // 본인 대조, 체결 완료 · 이력 · 서명 행 · 주소 고정, 두 번 누르면 409, 거부 사유는 선택. 저장소는 가짜다.
@@ -87,7 +88,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       .toBuffer();
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -174,7 +175,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     }
     await prisma.storeBusinessProfile.deleteMany({ where: { storeId } });
     await prisma.store.deleteMany({ where: { storeId } });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

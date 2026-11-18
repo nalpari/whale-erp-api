@@ -8,6 +8,7 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { OTHER_BP_MESSAGE } from '../src/auth/menu-permission.guard';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // BP 공통코드 관리를 실제 DB 로 확인한다. 가드의 경로 메뉴(/bp-code-groups) · X-Bp-Code-Id 판정은 여기서만 증명된다.
 // 동시 등록은 「하나만 생기고 나머지는 409」까지만 본다 — 일회용 DB(PGlite)에서는 409 가 확인 단계에서 나는지
@@ -52,7 +53,7 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const bp = (bpCode: string) =>
-      prisma.bpCode.create({
+      createBp(prisma, {
         data: {
           bpCode,
           isPlatform: false,
@@ -201,7 +202,7 @@ describe('BP 공통코드 관리 (e2e, DB)', () => {
     }
     const bpIds = [bpA, bpB].flatMap((b) => (b ? [b.bpCodeId] : []));
     if (bpIds.length)
-      await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
+      await deleteBps(prisma, { where: { bpCodeId: { in: bpIds } } });
     await app?.close();
   });
 

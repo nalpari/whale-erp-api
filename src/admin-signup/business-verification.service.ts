@@ -21,8 +21,6 @@ export type BizVerificationTokenPayload = BizIdentity & {
   typ: 'biz-verification';
 };
 
-const WITHDRAWN = 'WITHDRAWN';
-
 export const DUPLICATE_BIZ_REGISTRATION_NUMBER =
   '이미 등록된 사업자등록번호입니다.';
 const MISMATCH = '입력한 사업자정보가 국세청 정보와 일치하지 않습니다.';
@@ -46,47 +44,34 @@ export class BusinessVerificationService {
   ) {}
 
   /**
-   * 사용·미사용 상태인 다른 고객 BP 나 미운영·운영 점포가 이 번호를 쓰는지. 탈퇴·삭제한 BP 와 폐점·삭제한
-   * 점포의 번호는 다시 쓸 수 있다(Manyfast S-CQGGZS). 점포 조건은 점포 등록(StoreManagementService
-   * .isNumberTaken)과 같다 — 다르면 점포에서는 다시 쓰는 번호가 가입에서만 막힌다. 플랫폼 BP 는 bp_codes 부분
-   * 고유 인덱스처럼 뺀다. 가입은 트랜잭션 안에서 한 번 더 부르려고 db 를 받는다.
-   * excludeBpCodeId — 재인증(이미 그 번호를 쓰고 있는 자기 자신)을 중복으로 보지 않는다. 그 BP 소속 점포의
-   * 번호도 BP 가 쓸 수 있어 점포 조건에서 뺀다(PL-OCJOFP). 마이페이지 BP 사업자정보 재인증(BpProfileService)만
-   * 쓴다 — 가입은 BP 가 아직 없어 소속 점포도 없다.
+   * 미운영·운영 점포(본사 점포 포함)가 이 번호를 쓰는지. BP 번호는 본사 점포 사업자정보에 있어(2026-11-17) BP · 점포
+   * 두 검사가 하나로 합쳐졌다 — 탈퇴한 BP 의 본사는 폐점, 삭제한 BP 의 본사는 삭제라 그 번호는 다시 쓸 수 있다
+   * (Manyfast S-CQGGZS). 조건은 점포 등록(StoreManagementService.isNumberTaken)과 같다 — 다르면 점포에서는 다시
+   * 쓰는 번호가 가입에서만 막힌다. 플랫폼 BP 의 본사 번호는 검사에서 뺀다(예전 bp_codes 검사와 같다). 가입은 트랜잭션 안에서 한 번 더 부르려고 db 를 받는다.
+   * excludeBpCodeId — 재인증(이미 그 번호를 쓰고 있는 자기 자신)을 중복으로 보지 않는다. 그 BP 의 본사 · 소속 점포의
+   * 번호는 BP 가 쓸 수 있다(PL-OCJOFP). 마이페이지 BP 사업자정보 재인증(BpProfileService)과 플랫폼 BP 수정이 쓴다.
    */
   async isBizRegistrationNumberTaken(
     bizRegistrationNumber: string,
     db: Prisma.TransactionClient | PrismaService = this.prisma,
     excludeBpCodeId?: number,
   ): Promise<boolean> {
-    const [bp, store] = await Promise.all([
-      db.bpCode.findFirst({
-        where: {
-          bizRegistrationNumber,
-          isPlatform: false,
+    const store = await db.storeBusinessProfile.findFirst({
+      where: {
+        bizRegistrationNumber,
+        store: {
           isDeleted: false,
-          accountStatusCode: { not: WITHDRAWN },
+          storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
+          // 플랫폼 BP 의 본사 번호는 검사에서 뺀다(예전 bp_codes 검사와 같다).
+          bpCode: { isPlatform: false },
           ...(excludeBpCodeId !== undefined && {
             bpCodeId: { not: excludeBpCodeId },
           }),
         },
-        select: { bpCodeId: true },
-      }),
-      db.storeBusinessProfile.findFirst({
-        where: {
-          bizRegistrationNumber,
-          store: {
-            isDeleted: false,
-            storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
-            ...(excludeBpCodeId !== undefined && {
-              bpCodeId: { not: excludeBpCodeId },
-            }),
-          },
-        },
-        select: { storeId: true },
-      }),
-    ]);
-    return bp !== null || store !== null;
+      },
+      select: { storeId: true },
+    });
+    return store !== null;
   }
 
   async verify(

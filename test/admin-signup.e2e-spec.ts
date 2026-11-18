@@ -13,6 +13,7 @@ import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
 import type { SendMailInput } from '../src/mail/mail.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { kstToday } from '../src/staff-members/kst-date';
+import { deleteBps, deleteHqStores, findHq } from './hq-bp';
 
 const PASSWORD = 'whale-2026!';
 
@@ -82,8 +83,13 @@ describe('BP 회원가입 (e2e, DB)', () => {
     await prisma.codeGroup.deleteMany({
       where: { groupCode: { in: groupCodes } },
     });
+    // 가입이 만든 본사 점포(이력 · 사업자정보 포함)는 등록자가 가입 계정이라 계정보다 먼저 지운다.
+    await deleteHqStores(
+      prisma,
+      accounts.map((a) => a.bpCodeId),
+    );
     await prisma.adminAccount.deleteMany({ where: { adminAccountId } });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: { bpCodeId: { in: accounts.map((a) => a.bpCodeId) } },
     });
     await app.close();
@@ -226,13 +232,24 @@ describe('BP 회원가입 (e2e, DB)', () => {
       accountStatusCode: 'ACTIVE',
       isAllStores: true,
       email: `${loginId}@test.invalid`,
-      bpCode: {
-        isPlatform: false,
-        accountStatusCode: 'ACTIVE',
-        tradeName: '㈜한강상회',
-      },
+      bpCode: { isPlatform: false, accountStatusCode: 'ACTIVE' },
       roleGroup: { roleCode: 'BM000001' },
     });
+    // 상호명은 BP 가 아니라 가입이 함께 만든 본사 점포(직영 · 미운영) 하나의 사업자정보에 있다.
+    const hqStores = await prisma.store.findMany({
+      where: { bpCodeId: account.bpCodeId, isHq: true },
+      include: { businessProfile: true },
+    });
+    expect(hqStores).toHaveLength(1);
+    expect(hqStores[0]).toMatchObject({
+      isHq: true,
+      isDeleted: false,
+      storeTypeCode: 'DIRECT',
+      storeStatusCode: 'NOT_OPERATING',
+      name: '㈜한강상회',
+      businessProfile: { bizTradeName: '㈜한강상회' },
+    });
+    expect(hqStores[0].storeCode).toMatch(/^ST[0-9]{6}$/);
     expect(account.bpCode.bpCode).toMatch(/^BP[0-9]{6}$/);
     expect(account.bpCode.bpCode).not.toBe('BP000000');
     await expect(verifyPassword(PASSWORD, account.passwordHash)).resolves.toBe(
@@ -339,9 +356,11 @@ describe('BP 회원가입 (e2e, DB)', () => {
     );
     expect(statuses.sort()).toEqual([201, 409]);
     // BP 를 먼저 만들고 계정에서 고유 위반이 나므로, 트랜잭션이 되돌리지 않으면 계정 없는 BP 가 남는다.
-    await expect(prisma.bpCode.count({ where: { tradeName } })).resolves.toBe(
-      1,
-    );
+    await expect(
+      prisma.storeBusinessProfile.count({
+        where: { bizTradeName: tradeName, store: { isHq: true } },
+      }),
+    ).resolves.toBe(1);
   });
 
   it('동시에 가입한 BP 는 서로 다른 BP 코드를 받는다', async () => {
@@ -379,7 +398,7 @@ describe('BP 회원가입 (e2e, DB)', () => {
         bizOpenDate: '2020-03-02',
       });
 
-    it('인증 토큰으로 가입하면 bp_codes 에 사업자정보와 인증 시각이 남는다', async () => {
+    it('인증 토큰으로 가입하면 본사 점포 사업자정보에 사업자정보와 인증 시각이 남는다', async () => {
       const bizRegistrationNumber = newBizNumber();
       const res = await verify(bizRegistrationNumber).expect(200);
       const { verificationToken } =
@@ -389,14 +408,14 @@ describe('BP 회원가입 (e2e, DB)', () => {
       await signup(payload).expect(201);
       const account = await prisma.adminAccount.findUniqueOrThrow({
         where: { loginId: String(payload.loginId) },
-        include: { bpCode: true },
       });
-      expect(account.bpCode).toMatchObject({
+      const { businessProfile } = await findHq(prisma, account.bpCodeId);
+      expect(businessProfile).toMatchObject({
         bizRegistrationNumber,
         bizCeoName: '정하윤',
         bizOpenDate: new Date('2020-03-02T00:00:00.000Z'),
       });
-      expect(account.bpCode.bizVerifiedAt).toBeInstanceOf(Date);
+      expect(businessProfile?.bizVerifiedAt).toBeInstanceOf(Date);
     });
 
     it('다른 BP 가 쓰는 번호는 인증에서도, 인증 뒤 가입에서도 409 다', async () => {
@@ -421,7 +440,7 @@ describe('BP 회원가입 (e2e, DB)', () => {
         prisma.adminAccount.count({ where: { loginId: String(late.loginId) } }),
       ).resolves.toBe(0);
       await expect(
-        prisma.bpCode.count({ where: { bizRegistrationNumber } }),
+        prisma.storeBusinessProfile.count({ where: { bizRegistrationNumber } }),
       ).resolves.toBe(1);
     });
 

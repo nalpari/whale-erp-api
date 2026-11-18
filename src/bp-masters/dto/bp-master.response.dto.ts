@@ -66,7 +66,12 @@ export class BpMasterDetailResponseDto extends BpMasterSummaryResponseDto {
   bizItem: string | null;
   /** 최종 인증 일시. null 이면 미인증. */
   bizVerifiedAt: Date | null;
-  /** 소속 점포 수 — 폐점 · 삭제한 점포는 세지 않는다. */
+  /** 본사 점포 위도 · 경도 — 본사 직원 출퇴근 반경 기준. 없으면 null(본사는 미운영). */
+  latitude: number | null;
+  longitude: number | null;
+  /** 본사 출퇴근 위치 적용 여부 */
+  isLocationApplied: boolean;
+  /** 소속 점포 수 — 본사 · 폐점 · 삭제한 점포는 세지 않는다. */
   storeCount: number;
   /** 하위 관리자 수 — 이 BP 의 BP 관리자 · 가맹 마스터 · 가맹 관리자 중 지우지 않은 계정. */
   subAdminCount: number;

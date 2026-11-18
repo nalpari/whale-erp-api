@@ -11,6 +11,7 @@ import { hashPassword } from '../src/auth/password';
 import * as mailService from '../src/mail/mail.service';
 import { EmailChangePinSender } from '../src/my-profile/email-change-pin-sender';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 앱 이메일 아이디 변경(WHALEERP-191)을 실제 DB 로 확인한다 — 새 이메일로 보낸 핀을 맞혀야만 바뀌고, 바꾼 뒤 새
 // 이메일로 로그인되고 옛 이메일은 안 된다. 중복 409, 지금 이메일 400, 틀린 핀 · 5회 · 만료 · 대체된 핀 400, 1분 간격 429,
@@ -55,7 +56,7 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
     await app.init();
     prisma = app.get(PrismaService);
 
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -121,7 +122,7 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
       await prisma.adminSession.deleteMany({ where: { adminAccountId: bmId } });
       await prisma.adminAccount.deleteMany({ where: { adminAccountId: bmId } });
     }
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

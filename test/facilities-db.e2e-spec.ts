@@ -20,6 +20,7 @@ import {
 } from '../src/facilities/facility-format';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STORAGE } from '../src/storage/storage.module';
+import { createBp, deleteBps } from './hq-bp';
 
 const PASSWORD = 'Whale-admin-1';
 const PDF = Buffer.from('%PDF-1.4\n%test\n');
@@ -176,7 +177,7 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
 
     const n = randomInt(100_000, 999_998);
     bpCode = `BP${n}`;
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode,
         tradeName: '시설물 DB 테스트 BP',
@@ -220,7 +221,7 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
 
     // 다른 BP — 점포 하나와 시설물 하나. 이 BP 의 데이터가 첫 BP 계정에게 보이면 안 된다.
     foreignBpCode = `BP${n + 1}`;
-    ({ bpCodeId: foreignBpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId: foreignBpCodeId } = await createBp(prisma, {
       data: {
         bpCode: foreignBpCode,
         tradeName: '시설물 DB 테스트 다른 BP',
@@ -385,6 +386,8 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
         where: { accountId: { in: accountIds } },
       });
       await prisma.adminStoreMapping.deleteMany({ where: byStore });
+      // 본사 점포(is_hq)의 사업자정보가 남으면 점포가 지워지지 않는다.
+      await prisma.storeBusinessProfile.deleteMany({ where: byStore });
       await prisma.store.deleteMany({ where: byStore });
       await prisma.codeItem.deleteMany({
         where: {
@@ -405,7 +408,7 @@ describe('시설물 및 장비 관리 (e2e, DB)', () => {
       await prisma.roleGroup.deleteMany({
         where: { roleGroupId: { in: roleGroupIds } },
       });
-      await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
+      await deleteBps(prisma, { where: { bpCodeId: { in: bpIds } } });
     }
     await app?.close();
   });

@@ -8,6 +8,7 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { OPTIONAL_MAIL_SERVICE } from '../src/mail/mail.module';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // 문의사항 · 도입문의 처리(WHALEERP-274)를 실제 DB 로 확인한다. 같은 문의에 동시에 답변할 때 한쪽만 409 가 되는
 // 것은 PostgreSQL 의 행 잠금 뒤 재평가에 달려 있어, 목으로는 가정만 할 수 있고 여기서만 증명된다.
@@ -38,7 +39,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
     await app.init();
     prisma = app.get(PrismaService);
 
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -111,7 +112,7 @@ describe('문의사항 · 도입문의 처리 (e2e, DB)', () => {
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: { in: [platformAdminId, bpAdminId] } },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

@@ -503,7 +503,9 @@ describe('AffiliationRequestsService', () => {
           storeId: 4,
           name: '모리커피 합정점',
           storeTypeCode: 'DIRECT',
-          bpCode: { tradeName: '모리커피' },
+          bpCode: {
+            stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+          },
         },
       ]);
       Object.assign(prisma, {
@@ -560,7 +562,9 @@ describe('AffiliationRequestsService', () => {
               storeId: 4,
               name: '모리커피 합정점',
               storeTypeCode: 'FRANCHISE',
-              bpCode: { tradeName: '모리커피' },
+              bpCode: {
+                stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+              },
             },
           ]),
         },

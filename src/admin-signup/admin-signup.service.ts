@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -21,6 +22,8 @@ import {
 } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
+import { createHqStore } from '../stores/hq-store';
+import { STORE_CODE_TX } from '../stores/next-store-code';
 import { validateAdminPassword } from './admin-password-policy';
 import {
   BusinessVerificationService,
@@ -58,9 +61,9 @@ const DUPLICATE_LOGIN_ID = '사용할 수 없는 아이디입니다.';
 const DUPLICATE_EMAIL = '이미 등록된 이메일입니다.';
 
 /**
- * BP 회원가입(manyfast F-JVTPSU). 한 번에 BP 와 그 BP 마스터 계정을 만든다 — 점포는 만들지 않는다.
- * 사업자정보 인증(국세청 진위확인)은 선택이다. 인증했으면 진위확인 토큰(BusinessVerificationService)을 받아
- * bp_codes 의 biz_registration_number · biz_ceo_name · biz_open_date · biz_verified_at 을 채운다.
+ * BP 회원가입(manyfast F-JVTPSU). 한 번에 BP 와 그 BP 마스터 계정, 본사 점포(stores.is_hq, 2026-11-17)를 만든다 —
+ * 상호명과 사업자정보는 본사 점포의 사업자정보에 둔다. 사업자정보 인증(국세청 진위확인)은 선택이다. 인증했으면 진위확인
+ * 토큰(BusinessVerificationService)을 받아 본사의 사업자등록번호 · 대표자명 · 개업일자 · 인증일시를 채운다.
  */
 @Injectable()
 export class AdminSignupService {
@@ -165,18 +168,7 @@ export class AdminSignupService {
             throw new ConflictException(DUPLICATE_BIZ_REGISTRATION_NUMBER);
         }
         const { bpCodeId } = await tx.bpCode.create({
-          data: {
-            bpCode,
-            isPlatform: false,
-            accountStatusCode: ACTIVE,
-            tradeName: input.tradeName,
-            ...(biz && {
-              bizRegistrationNumber: biz.bizRegistrationNumber,
-              bizCeoName: biz.bizCeoName,
-              bizOpenDate: new Date(`${biz.bizOpenDate}T00:00:00.000Z`),
-              bizVerifiedAt: now,
-            }),
-          },
+          data: { bpCode, isPlatform: false, accountStatusCode: ACTIVE },
           select: { bpCodeId: true },
         });
         const account = await tx.adminAccount.create({
@@ -222,9 +214,40 @@ export class AdminSignupService {
             }),
           ),
         });
+        // 상호명 · 사업자정보는 본사 점포에 둔다(2026-11-17) — 계정을 만든 뒤라 등록자가 가입한 BP 마스터다.
+        // 좌표가 없어 본사는 미운영으로 시작한다. 점포코드 잠금(stores:store_code)을 커밋 직전에만 쥐도록 맨 끝에서
+        // 만든다 — 앞에 두면 공통코드 복사 · 약관 이력이 끝날 때까지 모든 점포 등록 · 가입이 줄을 선다.
+        await createHqStore(tx, {
+          bpCodeId,
+          bpAccountStatusCode: ACTIVE,
+          tradeName: input.tradeName,
+          biz: biz
+            ? {
+                bizRegistrationNumber: biz.bizRegistrationNumber,
+                bizCeoName: biz.bizCeoName,
+                bizOpenDate: new Date(`${biz.bizOpenDate}T00:00:00.000Z`),
+                bizVerifiedAt: now,
+              }
+            : {},
+          by: account.adminAccountId,
+        });
         return account.adminAccountId;
-      });
+        // 본사 점포 생성이 점포코드 잠금 줄에 서므로 점포 등록과 같은 시간을 준다.
+      }, STORE_CODE_TX);
     } catch (e) {
+      // 등록이 몰려 시간을 넘겼다 — 장애가 아니라 다시 시도할 일이다(점포 등록과 같다).
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2028'
+      ) {
+        this.logger.error(
+          `가입 트랜잭션 시간 초과 loginId=${input.loginId}`,
+          e.stack,
+        );
+        throw new ServiceUnavailableException(
+          '가입이 몰렸습니다. 잠시 뒤 다시 시도해 주세요.',
+        );
+      }
       // 확인과 저장 사이에 다른 가입이 같은 아이디·이메일(또는 사업자등록번호)을 먼저 넣었다. 다시 보면 어느
       // 쪽인지 알 수 있다. 셋 다 비어 있으면 다른 고유 위반이므로 그대로 던진다.
       // 다시 확인하다 실패하면(DB 오류) 원래 위반을 던진다 — 재확인 오류가 원인을 덮지 않게.
@@ -234,8 +257,8 @@ export class AdminSignupService {
       )
         await this.ensureAvailable(input)
           .then(async () => {
-            // 사업자등록번호의 부분 고유 인덱스(bp_codes_biz_registration_number_key) 위반일 수도 있다 —
-            // 번호별 잠금을 잡지 않는 다른 경로가 먼저 넣은 경우다. 500 이 아니라 번호 409 로 알린다.
+            // 사업자등록번호는 DB 고유가 아니라 번호별 잠금 + 검사가 지킨다(본사 점포로 옮긴 뒤, 2026-11-17).
+            // 그래도 다른 고유 위반 뒤에 번호가 겹쳐 있으면 500 이 아니라 번호 409 로 알린다.
             if (
               biz &&
               (await this.verifications.isBizRegistrationNumberTaken(

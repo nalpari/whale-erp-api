@@ -13,6 +13,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, addMonths, kstToday } from '../src/staff-members/kst-date';
 import { purgeExpiredWorkSchedules } from '../src/work-schedules/work-schedule-purge';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
+import { createBp, deleteBps } from './hq-bp';
 
 // 근무스케줄 등록 · 수정 · 삭제를 실제 DB 로 확인한다(#198) — 겹침 금지 EXCLUDE 와 맞닿는 근무, 자정 넘김, 계약 기간 ·
 // 가입 · 퇴직일 · 본사 제공 동의 판정, 변경 이력. 목으로는 쿼리 모양만 보인다.
@@ -78,7 +79,7 @@ describe('근무스케줄 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -132,7 +133,7 @@ describe('근무스케줄 (e2e, DB)', () => {
         accountStatusCode: 'ACTIVE',
       },
     }));
-    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId: otherBpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${(n + 1) % 1_000_000}`,
         isPlatform: false,
@@ -322,7 +323,7 @@ describe('근무스케줄 (e2e, DB)', () => {
         },
       },
     });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: {
         bpCodeId: { in: [bpCodeId, otherBpCodeId].filter((id) => id) },
       },

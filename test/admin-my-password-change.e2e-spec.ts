@@ -12,6 +12,7 @@ import {
 } from '../src/auth/dto/admin-login.response.dto';
 import { hashPassword } from '../src/auth/password';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 const OWN = 'Own-pass-12!';
 const NEW = 'New-pass-12!';
@@ -36,7 +37,7 @@ describe('마이페이지 내 비밀번호 변경 (e2e, DB)', () => {
     await app.init();
     prisma = app.get(PrismaService);
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         tradeName: '내 비밀번호 변경 테스트 BP',
@@ -57,7 +58,7 @@ describe('마이페이지 내 비밀번호 변경 (e2e, DB)', () => {
     // (admin_login_logs_admin_account_id_fkey 는 Restrict, admin-password-change.e2e-spec.ts 와 같은 순서).
     await prisma.adminLoginLog.deleteMany({ where: byAdmin });
     await prisma.adminAccount.deleteMany({ where: byAdmin });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

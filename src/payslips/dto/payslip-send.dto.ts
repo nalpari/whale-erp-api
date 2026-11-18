@@ -13,7 +13,10 @@ import {
   Min,
 } from 'class-validator';
 
-import { STORE_TYPES, type StoreType } from '../../stores/store-format';
+import {
+  STORE_SCOPE_TYPES,
+  type StoreScopeType,
+} from '../../stores/store-scope-type';
 
 const MAX_ID = 2_147_483_647;
 
@@ -37,12 +40,19 @@ export class SendPayslipsDto {
   @Max(MAX_ID, { each: true })
   storeIds?: number[];
 
-  /** 점포 유형(상단 점포 범위의 직영 · 가맹, 목록과 같다). 주면 그 유형 점포만이고 폐점 점포는 뺀다 */
-  @ApiPropertyOptional({ enum: STORE_TYPES, isArray: true })
+  /**
+   * 점포 유형(상단 점포 범위, API enum StoreScopeType, 목록과 같다) — DIRECT(본사가 아닌 직영) · FRANCHISE(가맹) · HQ(본사).
+   * 주면 그 유형 점포만이고 폐점 점포는 뺀다
+   */
+  @ApiPropertyOptional({
+    enum: STORE_SCOPE_TYPES,
+    enumName: 'StoreScopeType',
+    isArray: true,
+  })
   @IsOptional()
   @IsArray()
-  @IsIn(STORE_TYPES, { each: true })
-  storeTypes?: StoreType[];
+  @IsIn(STORE_SCOPE_TYPES, { each: true })
+  storeTypes?: StoreScopeType[];
 
   /** 직원명 부분 일치(목록과 같다). 앞뒤 공백을 지우고 비면 없는 것으로 본다 */
   @Transform(({ value }: { value: unknown }) =>

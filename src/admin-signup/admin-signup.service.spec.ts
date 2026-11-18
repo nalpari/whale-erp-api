@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma } from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -7,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
+import { STORE_CODE_TX } from '../stores/next-store-code';
 import { AdminSignupService, type SignupInput } from './admin-signup.service';
 import { BusinessVerificationService } from './business-verification.service';
 
@@ -39,6 +45,9 @@ describe('AdminSignupService', () => {
     $executeRaw: jest.Mock;
     bpCode: { findFirst: jest.Mock; create: jest.Mock };
     adminAccount: { create: jest.Mock };
+    store: { findFirst: jest.Mock; create: jest.Mock };
+    storeBusinessProfile: { create: jest.Mock };
+    storeChangeHistory: { createMany: jest.Mock };
     termsAgreementLog: { createMany: jest.Mock };
     codeGroup: { findMany: jest.Mock };
     codeItem: { findMany: jest.Mock; createMany: jest.Mock };
@@ -83,6 +92,14 @@ describe('AdminSignupService', () => {
       adminAccount: {
         create: jest.fn().mockResolvedValue({ adminAccountId: 70 }),
       },
+      store: {
+        findFirst: jest.fn().mockResolvedValue({ storeCode: 'ST000009' }),
+        create: jest
+          .fn()
+          .mockResolvedValue({ storeId: 90, storeCode: 'ST000010' }),
+      },
+      storeBusinessProfile: { create: jest.fn().mockResolvedValue({}) },
+      storeChangeHistory: { createMany: jest.fn().mockResolvedValue({}) },
       termsAgreementLog: { createMany: jest.fn().mockResolvedValue({}) },
       codeGroup: { findMany: jest.fn().mockResolvedValue([]) },
       codeItem: {
@@ -203,9 +220,29 @@ describe('AdminSignupService', () => {
           bpCode: 'BP000004',
           isPlatform: false,
           accountStatusCode: 'ACTIVE',
-          tradeName: '㈜한강상회',
         },
         select: { bpCodeId: true },
+      });
+      // 상호명은 본사 점포(직영 · 미운영)와 그 사업자정보에 둔다 — 등록자는 가입한 BP 마스터(2026-11-17).
+      expect(tx.store.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            storeCode: 'ST000010',
+            bpCodeId: 40,
+            storeTypeCode: 'DIRECT',
+            name: '㈜한강상회',
+            isHq: true,
+            storeStatusCode: 'NOT_OPERATING',
+            createdBy: 70,
+          }) as unknown,
+        }),
+      );
+      expect(tx.storeBusinessProfile.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          storeId: 90,
+          bizTradeName: '㈜한강상회',
+          createdBy: 70,
+        }) as unknown,
       });
       expect(tx.adminAccount.create).toHaveBeenCalledWith({
         data: {
@@ -298,6 +335,27 @@ describe('AdminSignupService', () => {
       expect(jwt.signAsync).not.toHaveBeenCalled();
     });
 
+    // 본사 점포 생성이 점포코드 잠금 줄에 서므로 점포 등록과 같은 트랜잭션 시간을 쓴다.
+    it('가입 트랜잭션은 점포 등록과 같은 시간(STORE_CODE_TX)을 쓴다', async () => {
+      await service.signup(input());
+      expect(prisma.$transaction).toHaveBeenCalledWith(
+        expect.any(Function),
+        STORE_CODE_TX,
+      );
+    });
+
+    it('트랜잭션 시간을 넘기면(P2028) 503 — 장애가 아니라 다시 시도할 일이다', async () => {
+      prisma.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('timeout', {
+          code: 'P2028',
+          clientVersion: 'x',
+        }),
+      );
+      await expect(service.signup(input())).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+    });
+
     it('BP 마스터 권한 그룹은 BM000001 이다', async () => {
       await service.signup(input());
       expect(prisma.roleGroup.findFirst).toHaveBeenCalledWith(
@@ -359,7 +417,8 @@ describe('AdminSignupService', () => {
         return Promise.resolve({ bpCode: 'BP000003' });
       });
       await service.signup(input());
-      expect(order).toEqual(['lock', 'max']);
+      // 뒤의 lock 은 본사 점포의 점포코드 채번 잠금이다(2026-11-17).
+      expect(order.slice(0, 2)).toEqual(['lock', 'max']);
       // 삭제·탈퇴한 BP 의 코드도 다시 쓰지 않으므로 거르지 않는다.
       expect(tx.bpCode.findFirst).toHaveBeenCalledWith({
         orderBy: { bpCode: 'desc' },
@@ -450,11 +509,11 @@ describe('AdminSignupService', () => {
           }) as unknown,
         }),
       );
-      expect(tx.bpCode.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({ tradeName: '㈜한강상회' }) as unknown,
-        }),
-      );
+      expect(tx.storeBusinessProfile.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          bizTradeName: '㈜한강상회',
+        }) as unknown,
+      });
       expect(result).toEqual(
         expect.objectContaining({
           loginId: 'hangang01',
@@ -519,7 +578,7 @@ describe('AdminSignupService', () => {
   describe('사업자정보 인증 토큰', () => {
     it('토큰이 없으면 biz_* 를 비워 둔다', async () => {
       await service.signup(input());
-      const [{ data }] = tx.bpCode.create.mock.calls[0] as [
+      const [{ data }] = tx.storeBusinessProfile.create.mock.calls[0] as [
         { data: Record<string, unknown> },
       ];
       expect(data).not.toHaveProperty('bizRegistrationNumber');
@@ -530,16 +589,14 @@ describe('AdminSignupService', () => {
     it('토큰이 있으면 토큰의 값과 가입 시각을 저장한다', async () => {
       await service.signup(input({ bizVerificationToken: 'biz-token' }));
       expect(verifications.readToken).toHaveBeenCalledWith('biz-token');
-      expect(tx.bpCode.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          data: expect.objectContaining({
-            bizRegistrationNumber: '1234567890',
-            bizCeoName: '정하윤',
-            bizOpenDate: new Date('2020-03-02T00:00:00.000Z'),
-            bizVerifiedAt: now,
-          }) as unknown,
-        }),
-      );
+      expect(tx.storeBusinessProfile.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          bizRegistrationNumber: '1234567890',
+          bizCeoName: '정하윤',
+          bizOpenDate: new Date('2020-03-02T00:00:00.000Z'),
+          bizVerifiedAt: now,
+        }) as unknown,
+      });
     });
 
     it('토큰이 틀리면 트랜잭션 전에 400', async () => {

@@ -13,6 +13,7 @@ import type {
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
+import { createBp, deleteBps } from './hq-bp';
 
 // 로그인 후 홈 집계(WHALEERP-305 · 306)를 실제 DB 로 확인한다. 영역 메뉴 권한(권한 그룹 · 메뉴 url 조인), 본사 가림의 관계
 // 조건(AND 로 묶은 staffMember · 계정 동의), distinct + orderBy 는 목으로는 증명되지 않는다. 오늘 출퇴근(가려지는 출근 기록 ·
@@ -48,7 +49,7 @@ describe('로그인 후 홈 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     bpCodeId = (
-      await prisma.bpCode.create({
+      await createBp(prisma, {
         data: {
           bpCode: `BP${pad(n)}`,
           isPlatform: false,
@@ -408,7 +409,7 @@ describe('로그인 후 홈 (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: { storeId: { in: [directStoreId, franchiseStoreId] } },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

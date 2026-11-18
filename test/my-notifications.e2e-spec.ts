@@ -8,6 +8,7 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 알림함 · 알림 수신 설정(WHALEERP-265 · 268)을 실제 DB 로 — 내 것만 · 14일 보관 · 갈 곳 · 읽음 · 수신 설정 upsert.
 // 알림은 만드는 쪽(근무스케줄 저장 · TO-DO 수행 임박)을 거치지 않고 행으로 넣는다.
@@ -50,7 +51,7 @@ describe('직원 알림함 · 수신 설정 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -244,7 +245,7 @@ describe('직원 알림함 · 수신 설정 (e2e, DB)', () => {
       });
     }
     await prisma.store.deleteMany({ where: { storeId: { in: storeIds } } });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 
