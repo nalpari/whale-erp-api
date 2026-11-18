@@ -212,11 +212,14 @@ export class BpMastersController {
     return this.bpMasters.create(user.id, body);
   }
 
-  /** 수정. 마지막 저장이 남는다(동시 수정 확인 없음). */
+  /** 수정. 마지막 저장이 남는다(동시 수정 확인 없음). clearBusinessVerification 이면 본사 사업자정보 네 칸을 지운다. */
   @Put(':id')
   @MenuPermission('update', { platformOnly: true })
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiBadRequestResponse({ description: '입력 형식 · 인증 토큰 만료' })
+  @ApiBadRequestResponse({
+    description:
+      '입력 형식 · 인증 토큰 만료 · verificationToken 과 clearBusinessVerification 을 함께 보냄',
+  })
   @ApiNotFoundResponse({ description: NOT_FOUND_DESCRIPTION })
   @ApiConflictResponse({
     description: `이메일 · 사업자등록번호 중복 · ${WITHDRAWN_DESCRIPTION}`,

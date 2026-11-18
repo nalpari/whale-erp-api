@@ -1,6 +1,8 @@
 # Directory Update Log
 
 ## 2026-11-18
+* **Update**: [Store management](/api/stores.md) — `saveHqProfile` 주석: `verified` 는 진위확인 값 말고도 지울 때(마이페이지 · 플랫폼 BP 수정의 `clearBusinessVerification`) 네 칸 null 로도 온다, 이력은 세 값만 남는다(인증일시는 이력 항목 아님). 동작 변경 없음.
+* **Update**: [BP masters](/api/bp-masters.md) — BP 수정(`PUT /bp-masters/:id`)에 `clearBusinessVerification` 추가(사용자 요청): 마이페이지 `clearBusinessVerification` 처럼 본사의 사업자등록번호 · 대표자명 · 개업일자 · 인증일시를 지우고 세 값의 변경을 본사 점포 이력에 남기며(인증일시는 이력 항목이 아니다), 사업자번호가 없어진 운영 본사는 미운영으로 내려간다. 이미 비어 있으면 오류 없이 지우기로 바뀌는 것만 없고 나머지 저장은 평소와 같다, `verificationToken` 과 함께면 400(마이페이지와 같은 문구). 등록에는 없다. 구독 검사가 아직 없다는 메모를 함께 적고, [Admin authentication](/api/admin-auth.md) 의 마이페이지 지우기 설명에 이 경로를 잇는 한 줄을 더했다.
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 최종 리뷰 블로커 반영: 끊긴 줄 잇기(`joinBrokenLines`)가 「· 」 · 「• 」 · 「1. 」 목록 줄도 잇지 않는다(회원가입 완료 메일의 「· 직원 초대 …」 목록이 한 줄로 붙었다). 값 안에서 문단을 나눈 빈 줄(운영자 답변)은 남기고 앞뒤 빈 줄만 버린다.
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 맨 위 메뉴색 선 3 → 6px, 「매장 통합관리 서비스」는 가운뎃점 회색 글자 대신 관리자 웹 꼬리표(Tag) 모양(옅은 바탕 · 테두리 · 12px 회색)으로(사용자 지정 — 다른 느낌이 나되 튀지 않게).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 맨 위에 3px 메뉴색(#282f37) 선(머리 시안 다섯 가지 중 B, 사용자 결정 — 제목 색과 이어져 웨일ERP 메일로 읽힌다).
