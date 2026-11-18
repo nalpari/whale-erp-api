@@ -74,8 +74,8 @@ card pinned left: the whale logo and `WHALE ERP` · grey 「매장 통합관리 
 two table cells with `valign="middle"` so they line up in every client); a large bold heading — the mail
 subject with its leading `[WHALE ERP]` removed (`mailHeading`), so no template needed a new field; the body
 split by `bodyBlocks` — consecutive `- 항목: 값` lines (a space after the colon, label up to 30 chars, so
-`- 10:00 …` and `- https://…` stay text) become rows in a grey rounded info box, `※` lines become small grey
-text (an empty `※` line is dropped), everything else a 15px paragraph, and the template's own sentences each
+`- 10:00 …` and `- https://…` stay text) become rows in a grey rounded info box, `※` lines become grey
+text (same 15px as the rest of the body — mixed sizes looked off) (an empty `※` line is dropped), everything else a 15px paragraph, and the template's own sentences each
 get their own line (`sentences` — user request); full-width buttons in the admin web's hover look (white, 1px
 slate `#6b7988` border, ink text, label centred); an 8px grey band; then the footer: 「본 메일은 발신전용으로
 회신되지 않습니다.」, a blank line, (주)인터플러그 | 대표이사 이정선 | 사업자등록번호 …, address | phone (a small

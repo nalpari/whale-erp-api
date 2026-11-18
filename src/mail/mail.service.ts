@@ -369,6 +369,7 @@ export function mailHtml(
   const L = 'text-align:left';
   const FONT = "font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif";
   const INK = '#3c4046';
+  // 본문 글(문단 · 안내 · 정보 상자)은 모두 15px 하나로 — 크기가 섞여 어색했다(2026-11-18 사용자 지정). 안내는 색만 옅게
   const TABLE =
     'role="presentation" cellpadding="0" cellspacing="0" border="0"';
   const header =
@@ -380,7 +381,7 @@ export function mailHtml(
     if (b.kind === 'text')
       return `<p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#555b63;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
     if (b.kind === 'notice')
-      return `<p style="margin:0 0 14px;font-size:13px;line-height:1.7;color:#8a8f96;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
+      return `<p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#8a8f96;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
     const rows = b.rows
       .map(
         ([k, v], i) =>

@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-18
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 본문 글 크기를 15px 하나로: 「※」 안내 글도 13 → 15px(색만 옅게) — 문단 · 안내 · 정보 상자 크기가 섞여 어색했다(사용자 지정).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 틀을 「C 커머스 안내형」으로 바꿨다(사용자 결정, 짙은 띠형 대신): 흰 바탕 한 장, 왼쪽 위 짙은 고래 로고 · WHALE ERP · 매장 통합관리 서비스(그림 · 글자 칸을 나눠 세로 가운데), 큰 제목, 회색 둥근 정보 상자, 회색 안내 글, 폭을 채운 버튼, 굵은 회색 구분 띠, 꼬리는 그대로. 로고 PNG 를 흰 바탕 짙은 고래로 다시 그렸다.
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 꼬리 맨 아래에 「Copyrights© 2026 INTERPLUG. All Rights Reserved.」(로그인 전 홈 꼬리와 같은 줄, 사용자 지정).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 버튼을 표 · 안내 상자와 같은 폭으로 가득 채우고 글자는 가운데(사용자 지정 — 가장자리가 맞아 정돈돼 보인다).
