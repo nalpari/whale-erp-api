@@ -20,7 +20,7 @@ sources:
     last_modified: 2026-10-20T09:20:00Z
   - id: mail-logo
     resource: ../../src/mail/mail-logo.ts
-    title: White whale logo PNG sent as an inline (cid) attachment
+    title: Whale logo PNG sent as an inline (cid) attachment
     last_modified: 2026-11-18T04:00:00Z
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
@@ -68,17 +68,19 @@ template shows `<b>`, not bold: the body is text by policy, so markup in it is
 text too. A text part goes alongside — the body, then each link on its own
 paragraph — for clients that do not render HTML; only the HTML part gets the layout below.
 
-**Layout ("B 브랜드 띠형", 2026-11-18 user decision — make it look as official as Coupang ·
-Kurly · SSG notices, a trust issue).** Top to bottom: a dark band (`#282f37`, the admin web's
-menu bar) with the white whale logo and `WHALE ERP` wordmark followed by a small `·` and a grey 「매장 통합관리 서비스」 (user decision — dropped once, then put back with the dot); a heading — the mail subject with its leading
-`[WHALE ERP]` removed (`mailHeading`), so no template needed a new field; the body split by
-`bodyBlocks` — consecutive `- 항목: 값` lines (a space after the colon, label up to 30 chars, so
-`- 10:00 …` and `- https://…` stay text) become a grey-label info table, `※` lines become a
-notice box (an empty `※` line is dropped), everything else a paragraph, and the template's own
-sentences each get their own line (`sentences`: after `. ? !` followed by a space — user request);
-the buttons in the admin web's hover look — white, 1px slate `#6b7988` border, ink text, full width with the label centred so their edges line up with the table and notice box (user's pick); a grey footer with 「본 메일은 발신전용으로 회신되지 않습니다.」, a blank line, and, like
-Coupang's footer, (주)인터플러그 (not bold), 대표이사 이정선, 사업자등록번호 … on one line, address and phone on the next, and 「Copyrights© 2026 INTERPLUG. All Rights Reserved.」 last (as on the guest site) — separated by a small light `|` (10px, `#c9cdd3`) and no `·` or `:` — the mixed dots and colons looked cluttered
-(user-specified; address and phone match the guest-site footer).
+**Layout ("C 커머스 안내형", 2026-11-18 user decision — shaped like Coupang · Kurly · SSG order notices so
+the sender is obvious, a trust issue; a dark-band version was tried first and dropped).** One white sheet,
+card pinned left: the whale logo and `WHALE ERP` · grey 「매장 통합관리 서비스」 at the top left (logo and text in
+two table cells with `valign="middle"` so they line up in every client); a large bold heading — the mail
+subject with its leading `[WHALE ERP]` removed (`mailHeading`), so no template needed a new field; the body
+split by `bodyBlocks` — consecutive `- 항목: 값` lines (a space after the colon, label up to 30 chars, so
+`- 10:00 …` and `- https://…` stay text) become rows in a grey rounded info box, `※` lines become small grey
+text (an empty `※` line is dropped), everything else a 15px paragraph, and the template's own sentences each
+get their own line (`sentences` — user request); full-width buttons in the admin web's hover look (white, 1px
+slate `#6b7988` border, ink text, label centred); an 8px grey band; then the footer: 「본 메일은 발신전용으로
+회신되지 않습니다.」, a blank line, (주)인터플러그 | 대표이사 이정선 | 사업자등록번호 …, address | phone (a small
+light `|`, no `·` or `:`), and 「Copyrights© 2026 INTERPLUG. All Rights Reserved.」 (user-specified; values match
+the guest-site footer). Background, box and button colours are also written as `bgcolor`.
 
 **The block shape comes from the template, not the filled body.** `send` passes the unfilled
 template body and `fillLine(values)`; `bodyBlocks` classifies each template line first, then fills
@@ -93,8 +95,8 @@ edits — their key values (아이디, 임시 비밀번호, 근무지, 제목 �
 **The logo travels inside the mail.** Gmail and others do not show SVG or `data:` images, and the
 admin web has no public production address yet, so `send` attaches the PNG in `mail-logo.ts` as an
 inline attachment (`cid:whale-erp-logo`) and the band's `<img>` points at it — no hosting, no env
-key. The PNG's own background is the band colour, so a client that inverts the whole mail in dark
-mode (band turns light) still shows a white whale on a dark square instead of an invisible one.
+key. The PNG is a dark whale on its own white square, so a client that inverts the whole mail in dark mode
+still shows it instead of a dark whale on a dark background.
 A client that blocks images shows an empty spot; the wordmark is text and stays. To change the
 logo, redraw front `public/guest/logo-whale.svg` + `logo-star.svg` in the same layout and
 re-encode.

@@ -344,20 +344,20 @@ export function mailHeading(subject: string): string {
 }
 
 /**
- * 공통 메일 틀(2026-11-18 사용자 지정 「B 브랜드 띠형」 — 쿠팡 · 컬리 · SSG 안내 메일처럼 보낸 곳이 분명하게, 신뢰도).
- * 맨 위 짙은 띠(관리자 웹 메뉴 줄 #282f37)에 흰 로고 · 「WHALE ERP」, 그 아래 제목(메일 제목에서 [WHALE ERP] 를 뗀 것),
- * 본문 블록(문단 · 「- 항목: 값」 정보 표 · 「※」 안내 상자), 버튼, 회색 꼬리(발신 전용 안내 · 한 줄 띄고 운영사 정보, 회사명 굵게). 템플릿 42건은 고치지 않는다.
- * 본문 · 제목 · 값은 모두 이스케이프한다. 스타일은 `<style>` 을 버리는 메일 화면이 많아 인라인으로 둔다.
+ * 공통 메일 틀(2026-11-18 사용자 지정 「C 커머스 안내형」 — 쿠팡 · 마켓컬리 · SSG 주문 안내 메일의 짜임, 보낸 곳이 분명하게 · 신뢰도).
+ * 흰 바탕 한 장에 왼쪽 위 고래 로고 · 「WHALE ERP · 매장 통합관리 서비스」, 크게 굵은 제목(메일 제목에서 [WHALE ERP] 를 뗀 것),
+ * 본문 블록(문단 · 「- 항목: 값」 회색 둥근 정보 상자 · 「※」 회색 안내 글), 폭을 채우는 버튼, 굵은 회색 구분 띠,
+ * 꼬리(발신전용 안내 · 한 줄 띄고 운영사 정보 · 저작권). 템플릿은 고치지 않는다. 본문 · 제목 · 값은 모두 이스케이프하고,
+ * 스타일은 `<style>` 을 버리는 메일 화면이 많아 인라인으로 둔다.
  *
  * 카드는 표(table)로 왼쪽에 붙이고 칸과 글마다 왼쪽 정렬을 적는다. 정렬을 적지 않으면 네이버 · 다음 · Outlook 처럼
  * 받은 메일을 가운데 정렬 칸에 넣어 보여 주는 메일 화면에서 본문이 가운데로 물려받아 보였다(2026-11-13 사용자 지적).
- * 카드 자리도 바깥 칸 · Outlook 전용 표에 align="left" 를 적어 왼쪽에 둔다 — 글만 왼쪽이고 카드가 화면 가운데에 떠 있어
- * 여전히 가운데 정렬로 보였다(2026-11-18 사용자 지정, 통합테스트). 카드 폭은 `width:100%;max-width:560px`
- * 라 좁은 화면에서는 줄어들고, `max-width` 를 모르는 Outlook 데스크톱(Word 엔진)은 그 전용 주석(`<!--[if mso]>`) 안의
- * 560px 표가 폭을 잡는다. 글꼴 · 색은 body 스타일을 버리는 메일 화면이 많아 칸마다 다시 적는다.
- * 띠 · 버튼 색은 bgcolor 와 style 에 함께 적는다 — 다크 모드 메일 앱이 style 색만 뒤집는 경우가 있다.
- * 로고는 send 가 인라인 첨부(cid, mail-logo.ts)로 싣는 흰 고래 PNG 다 — 공개 주소가 없어도 보이고, SVG · data: 그림은
- * Gmail 등이 보이지 않는다. 그림을 막은 메일 화면에서는 alt 없이 빈 자리만 남고 「WHALE ERP」 글자는 그대로 보인다.
+ * 카드 자리도 바깥 칸 · Outlook 전용 표에 align="left" 를 적어 왼쪽에 둔다(2026-11-18 사용자 지정, 통합테스트).
+ * 카드 폭은 `width:100%;max-width:560px` 라 좁은 화면에서는 줄어들고, `max-width` 를 모르는 Outlook 데스크톱(Word 엔진)은
+ * 그 전용 주석(`<!--[if mso]>`) 안의 560px 표가 폭을 잡는다. 글꼴 · 색은 body 스타일을 버리는 메일 화면이 많아 칸마다 다시 적는다.
+ * 바탕 · 상자 · 버튼 색은 bgcolor 와 style 에 함께 적는다 — 다크 모드 메일 앱이 style 색만 뒤집는 경우가 있다.
+ * 로고 그림과 글자는 표의 두 칸에 나눠 valign="middle" 로 세로 가운데를 맞춘다 — 글자 줄의 vertical-align 은 메일 화면마다
+ * 어긋났다(2026-11-18 사용자 지정). 로고는 send 가 인라인 첨부(cid, mail-logo.ts)로 싣는 PNG 다.
  */
 export function mailHtml(
   subject: string,
@@ -369,39 +369,47 @@ export function mailHtml(
   const L = 'text-align:left';
   const FONT = "font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif";
   const INK = '#3c4046';
-  const logo = `<img src="cid:${MAIL_LOGO_CID}" width="34" height="34" alt="" style="display:inline-block;width:34px;height:34px;border:0;vertical-align:middle;margin-right:10px">`;
+  const TABLE =
+    'role="presentation" cellpadding="0" cellspacing="0" border="0"';
+  const header =
+    `<table ${TABLE}><tr>` +
+    `<td width="34" valign="middle" style="width:34px;vertical-align:middle;padding:0 10px 0 0"><img src="cid:${MAIL_LOGO_CID}" width="34" height="34" alt="" style="display:block;width:34px;height:34px;border:0"></td>` +
+    `<td valign="middle" style="vertical-align:middle;${L};${FONT};white-space:nowrap"><span style="font-size:17px;font-weight:800;color:#0c0c0c;letter-spacing:0.02em">${FROM_NAME}</span><span style="margin:0 7px;font-size:12px;color:#b9bec5">·</span><span style="font-size:12px;color:#8a8f96">${SERVICE_TAGLINE}</span></td>` +
+    '</tr></table>';
   const block = (b: BodyBlock): string => {
     if (b.kind === 'text')
-      return `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:${INK};${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
+      return `<p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#555b63;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
     if (b.kind === 'notice')
-      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 14px"><tr><td bgcolor="#f8f9fb" style="padding:12px 14px;background:#f8f9fb;border-left:3px solid #6b7988;font-size:13px;line-height:1.6;color:#555b63;${L}">${b.lines.map(escapeHtml).join('<br>')}</td></tr></table>`;
+      return `<p style="margin:0 0 14px;font-size:13px;line-height:1.7;color:#8a8f96;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
     const rows = b.rows
       .map(
         ([k, v], i) =>
-          `<tr><td width="120" bgcolor="#f8f9fb" style="width:120px;padding:11px 14px;background:#f8f9fb;color:#858b94;font-size:14px;border-bottom:1px solid #e9edf5;${i ? '' : 'border-top:1px solid #e9edf5;'}${L}">${escapeHtml(k)}</td><td style="padding:11px 14px;color:#222222;font-size:14px;font-weight:bold;word-break:break-all;border-bottom:1px solid #e9edf5;${i ? '' : 'border-top:1px solid #e9edf5;'}${L}">${escapeHtml(v)}</td></tr>`,
+          `<tr><td width="120" valign="top" style="width:120px;padding:14px 0;color:#8a8f96;font-size:15px;${i ? 'border-top:1px solid #e9ebef;' : ''}${L}">${escapeHtml(k)}</td><td valign="top" style="padding:14px 0 14px 12px;color:#111111;font-size:15px;font-weight:bold;word-break:break-all;${i ? 'border-top:1px solid #e9ebef;' : ''}${L}">${escapeHtml(v)}</td></tr>`,
       )
       .join('');
-    return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 18px;border-collapse:collapse">${rows}</table>`;
+    return `<table ${TABLE} width="100%" style="margin:6px 0 22px"><tr><td bgcolor="#f6f7f9" style="padding:6px 22px;background:#f6f7f9;border-radius:10px"><table ${TABLE} width="100%" style="border-collapse:collapse">${rows}</table></td></tr></table>`;
   };
   const buttons = links
     .map(
       (link) =>
-        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 0"><tr><td align="center" bgcolor="#ffffff" style="text-align:center;padding:14px 24px;border:1px solid #6b7988;border-radius:6px;background:#ffffff"><a href="${escapeHtml(link)}" style="display:inline-block;color:#3c4046;font-size:15px;font-weight:bold;text-decoration:none;border-radius:6px">바로가기</a></td></tr></table>`,
+        `<table ${TABLE} width="100%" style="margin:8px 0 6px"><tr><td align="center" bgcolor="#ffffff" style="text-align:center;padding:15px 24px;border:1px solid #6b7988;border-radius:8px;background:#ffffff"><a href="${escapeHtml(link)}" style="display:inline-block;color:#3c4046;font-size:16px;font-weight:bold;text-decoration:none">바로가기</a></td></tr></table>`,
     )
     .join('');
   return [
     '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>',
-    `<body style="margin:0;padding:0;background:#f4f5f7;${FONT};color:${INK}">`,
-    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7"><tr><td align="left" style="padding:24px;${L}">`,
+    `<body style="margin:0;padding:0;background:#ffffff;${FONT};color:${INK}">`,
+    `<table ${TABLE} width="100%" bgcolor="#ffffff" style="background:#ffffff"><tr><td align="left" style="padding:0;${L}">`,
     '<!--[if mso]><table role="presentation" width="560" align="left" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
-    '<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background:#ffffff;border-radius:6px;overflow:hidden">',
-    `<tr><td align="left" bgcolor="#282f37" style="padding:18px 32px;background:#282f37;${L}">${logo}<span style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.02em;vertical-align:middle;${FONT}">${FROM_NAME}</span><span style="margin:0 8px;font-size:13px;color:#8f9eaf;vertical-align:middle;${FONT}">·</span><span style="font-size:13px;color:#aeb6c0;vertical-align:middle;${FONT}">${SERVICE_TAGLINE}</span></td></tr>`,
-    `<tr><td align="left" style="padding:28px 32px 30px;${L};${FONT};color:${INK}">`,
-    `<p style="margin:0 0 18px;font-size:20px;line-height:1.4;font-weight:bold;color:#282f37;${L}">${escapeHtml(mailHeading(subject))}</p>`,
+    `<table ${TABLE} width="560" bgcolor="#ffffff" style="width:100%;max-width:560px;background:#ffffff">`,
+    `<tr><td align="left" style="padding:32px 32px 0;${L}">${header}</td></tr>`,
+    `<tr><td align="left" style="padding:32px 32px 28px;${L};${FONT};color:${INK}">`,
+    `<p style="margin:0 0 14px;font-size:24px;line-height:1.4;font-weight:bold;color:#111111;${L}">${escapeHtml(mailHeading(subject))}</p>`,
     bodyBlocks(body, fill).map(block).join(''),
     buttons,
     '</td></tr>',
-    `<tr><td align="left" bgcolor="#f0f1f3" style="padding:18px 32px;background:#f0f1f3;font-size:12px;line-height:1.7;color:#8a8f96;${L};${FONT}">${FOOTER_HTML}</td></tr>`,
+    // 굵은 회색 구분 띠 — 본문과 꼬리를 가른다
+    '<tr><td bgcolor="#f2f3f5" height="8" style="height:8px;line-height:8px;font-size:0;background:#f2f3f5">&nbsp;</td></tr>',
+    `<tr><td align="left" style="padding:22px 32px 32px;font-size:12px;line-height:1.8;color:#8a8f96;${L};${FONT}">${FOOTER_HTML}</td></tr>`,
     '</table>',
     '<!--[if mso]></td></tr></table><![endif]-->',
     '</td></tr></table></body></html>',

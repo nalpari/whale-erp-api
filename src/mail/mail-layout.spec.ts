@@ -156,7 +156,7 @@ describe('mailHtml', () => {
       [],
     );
     expect(html).toContain('첫 문장입니다.<br>둘째 문장입니다.</p>');
-    expect(html).toContain('안내 하나.<br>안내 둘.</td>');
+    expect(html).toContain('안내 하나.<br>안내 둘.</p>');
   });
 
   it('띠에 인라인 첨부(cid) 로고를 넣고, 값 · 제목을 모두 이스케이프한다', () => {
@@ -171,27 +171,33 @@ describe('mailHtml', () => {
     expect(html).not.toContain('<script>');
   });
 
-  it('정보 표 · 안내 상자를 그리고, 띠 · 버튼 색은 bgcolor 로도 적는다', () => {
+  it('커머스 안내형: 로고 · 글자 세로 가운데, 회색 둥근 정보 상자, 회색 안내 글, 폭을 채운 버튼, 구분 띠', () => {
     const html = mailHtml(
       '[WHALE ERP] 관리자 계정 생성',
       '- 로그인 아이디: it1118a\n※ 처음 로그인할 때 비밀번호를 변경해 주세요.',
       ['https://erp.whale.test/login'],
     );
+    // 머리: 로고 그림 칸과 글자 칸을 나눠 valign="middle" 로 세로 가운데(2026-11-18 사용자 지정)
+    expect(html).toContain(
+      '<td width="34" valign="middle" style="width:34px;vertical-align:middle;padding:0 10px 0 0"><img src="cid:whale-erp-logo"',
+    );
+    expect(html).toContain('<td valign="middle" style="vertical-align:middle;');
+    // 「WHALE ERP · 매장 통합관리 서비스」(가운뎃점으로 이어 작게)
+    expect(html).toContain('>WHALE ERP</span><span style="margin:0 7px;');
+    expect(html).toContain('>매장 통합관리 서비스</span>');
+    // 정보 상자: 회색 둥근 바탕
+    expect(html).toContain(
+      '<td bgcolor="#f6f7f9" style="padding:6px 22px;background:#f6f7f9;border-radius:10px">',
+    );
     expect(html).toContain('>로그인 아이디</td>');
     expect(html).toContain('>it1118a</td>');
-    expect(html).toContain('처음 로그인할 때 비밀번호를 변경해 주세요.</td>');
-    expect(html).toContain('bgcolor="#282f37"');
-    // 버튼: 관리자 웹 호버 모양 — 흰 바탕 · 회청 테두리 · 먹색 글자(2026-11-18 사용자 지정)
-    // 띠: 「WHALE ERP · 매장 통합관리 서비스」(가운뎃점으로 이어 작게)
+    expect(html).toContain('처음 로그인할 때 비밀번호를 변경해 주세요.</p>');
+    // 버튼: 관리자 웹 호버 모양(흰 바탕 · 회청 테두리 · 먹색 글자), 폭을 채우고 글자는 가운데
     expect(html).toContain(
-      'WHALE ERP</span><span style="margin:0 8px;font-size:13px;color:#8f9eaf;',
-    );
-    expect(html).toContain('>매장 통합관리 서비스</span>');
-    expect(html).toContain('border:1px solid #6b7988');
-    // 버튼은 표 · 안내 상자와 같은 폭으로 가득, 글자는 가운데(2026-11-18 사용자 지정)
-    expect(html).toContain(
-      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 0"><tr><td align="center" bgcolor="#ffffff"',
+      '<td align="center" bgcolor="#ffffff" style="text-align:center;padding:15px 24px;border:1px solid #6b7988;',
     );
     expect(html).toContain('style="display:inline-block;color:#3c4046;');
+    // 본문과 꼬리 사이 굵은 회색 띠
+    expect(html).toContain('<td bgcolor="#f2f3f5" height="8"');
   });
 });
