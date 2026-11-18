@@ -28,7 +28,7 @@ import {
   restoredStatusOf,
   SEND_VALID_MS,
 } from './contract-delivery.service';
-import { STORE_OPEN_SELECT } from './contract-store-open';
+import { OPERATING_STORE_WHERE } from './contract-store-open';
 
 // 직원 알림은 staff-notice.spec.ts 가 본다 — 여기서는 부르는지만 본다
 jest.mock('../notifications/staff-notice', () => ({
@@ -268,48 +268,23 @@ describe('ContractDeliveryService', () => {
   });
 
   describe('prepare', () => {
-    it.each([
-      ['미운영', { storeStatusCode: 'NOT_OPERATING' }],
-      ['폐점', { storeStatusCode: 'CLOSED' }],
-      ['지움', { isDeleted: true }],
-      ['사업주 정보 없음(인증 없이 운영인 옛 점포)', { businessProfile: null }],
-      [
-        '대표자 공백',
-        {
-          businessProfile: {
-            bizCeoName: ' ',
-            bizRegistrationNumber: '1234567890',
-          },
-        },
-      ],
-    ])(
-      '근무지가 운영 중이 아니면(%s) 409 STORE_NOT_OPERATING — 아무것도 쓰지 않는다',
-      async (_, over) => {
-        tx.store.findFirst.mockResolvedValue({
-          storeStatusCode: 'OPERATING',
-          isDeleted: false,
-          businessProfile: {
-            bizCeoName: '김대표',
-            bizRegistrationNumber: '1234567890',
-          },
-          ...over,
-        });
-        const error = await service()
-          .prepare(t(), input({ joined: true }), NOW)
-          .catch((e: unknown) => e);
-        expect(error).toBeInstanceOf(ConflictException);
-        expect((error as ConflictException).getResponse()).toMatchObject({
-          code: 'STORE_NOT_OPERATING',
-          message: STORE_NOT_OPERATING_FOR_ADMIN,
-        });
-        expect(tx.store.findFirst).toHaveBeenCalledWith({
-          where: { storeId: 11 },
-          select: STORE_OPEN_SELECT,
-        });
-        expect(tx.contract.update).not.toHaveBeenCalled();
-        expect(tx.invitation.updateMany).not.toHaveBeenCalled();
-      },
-    );
+    it('근무지가 운영 중이 아니면(미운영 · 폐점 · 지움 · 사업주 정보 없음) 409 STORE_NOT_OPERATING — 아무것도 쓰지 않는다', async () => {
+      tx.store.findFirst.mockResolvedValue(null);
+      const error = await service()
+        .prepare(t(), input({ joined: true }), NOW)
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'STORE_NOT_OPERATING',
+        message: STORE_NOT_OPERATING_FOR_ADMIN,
+      });
+      expect(tx.store.findFirst).toHaveBeenCalledWith({
+        where: { storeId: 11, ...OPERATING_STORE_WHERE },
+        select: { storeId: true },
+      });
+      expect(tx.contract.update).not.toHaveBeenCalled();
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+    });
 
     it('가입 초대 — 서명 기한 30일 · 초대(토큰은 해시로만) · 직원 가입 대기(INVITED), 이 저장의 이력 줄을 기억한다', async () => {
       const pending = (await service().prepare(

@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE } from '../storage/storage.module';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractFilesService } from './contract-files.service';
+import { OPERATING_STORE_WHERE } from './contract-store-open';
 import { ContractsService } from './contracts.service';
 
 // 작성 · 이어 쓰기의 근무지 선택지(GET /contracts/store-options, WHALEERP-638 — 옛 GET /stores/options). 대상 BP 는
@@ -66,11 +67,8 @@ describe('근로계약 근무지 선택지', () => {
     });
 
     const [args] = prisma.store.findMany.mock.calls[0];
-    const where = {
-      storeId: { in: [11] },
-      isDeleted: false,
-      storeStatusCode: 'OPERATING',
-    };
+    // 운영 중인 근무지만 — 운영 · 지움 아님 · 사업주 정보 있음(발송 · 날인과 같은 기준)
+    const where = { storeId: { in: [11] }, ...OPERATING_STORE_WHERE };
     expect(args).toEqual({
       where,
       select: { storeId: true, name: true, storeTypeCode: true, isHq: true },

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
   HttpStatus,
   Inject,
   Injectable,
@@ -14,13 +15,11 @@ import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ContractFilesService,
-  EMPLOYER_STORE_SELECT,
   article2Of,
   employerOf,
 } from './contract-files.service';
 import {
-  isOperatingStore,
-  lockStore,
+  readSignStore,
   storeNotOperatingConflict,
   storeOperating,
 } from './contract-store-open';
@@ -49,7 +48,7 @@ import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
 
 /** 날인을 막을 때 직원에게 보이는 문장 — 근무지 점포가 운영 중이 아니다 */
 export const STORE_NOT_OPERATING_FOR_STAFF =
-  '근무지가 운영 중이 아니라 지금은 서명할 수 없습니다. 근무지 관리자에게 문의해 주세요.';
+  '근무지가 운영 중이 아니거나 사업주 정보(대표자 · 사업자등록번호)가 없어 지금은 서명할 수 없습니다. 근무지 관리자에게 문의해 주세요.';
 
 /** 필기 서명 이미지 상한 — 화면 캔버스 PNG 한 장 */
 export const SIGNATURE_MAX_BYTES = 1024 * 1024;
@@ -204,31 +203,20 @@ export class MyContractsService {
     let historyId = 0;
     try {
       await this.prisma.$transaction(async (tx) => {
-        // 점포 행을 먼저 공유 잠금한다(lockStore) — 아래 판정과 고정할 사용자 칸 읽기 사이에 본사 사업자 인증 해제가 끼지
-        // 못하게 하고, 점포 폐점 · BP 탈퇴(점포 → 직원 순서로 잠금)와 같은 순서(점포 → 직원 → 계약)라 서로 교착하지 않는다
-        await lockStore(tx, seen.c.storeId);
         const c = await this.lockMine(tx, accountId, contractId, 'write');
         // 기한 · 퇴직일은 잠근 시각으로 다시 본다 — 요청이 들어온 시각이면 올리는 동안 기한이 지나도 받는다
         const lockedAt = now ?? new Date();
         this.checkSignable(c, sentAt, lockedAt);
-        // 서명 대기 계약은 근무지를 바꿀 수 없다 — 그래도 달라졌으면 잠근 점포가 아니라 다시 열게 한다
-        if (c.storeId !== seen.c.storeId)
-          throw new ConflictException(
-            '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
+        // 점포와 사업자정보를 한 문장으로 읽어 판정과 고정 값을 같은 시점으로 얻는다(readSignStore — 본사 사업자 인증 해제가 사이에
+        // 끼지 못한다). 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 날인째 되돌린다
+        const store = await readSignStore(tx, c.storeId);
+        if (!store)
+          throw new InternalServerErrorException(
+            `점포 ${c.storeId} 를 찾을 수 없습니다.`,
           );
-        // 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 날인째 되돌린다. 잠근 뒤 한 번 읽어 판정과 고정 값을 같이 얻는다
-        const store = await tx.store.findUniqueOrThrow({
-          where: { storeId: c.storeId },
-          // 사용자 칸 select 가 판정에 쓰는 대표자 · 사업자등록번호를 이미 담는다
-          select: {
-            ...EMPLOYER_STORE_SELECT,
-            storeStatusCode: true,
-            isDeleted: true,
-          },
-        });
         // 보낸 뒤 근무지가 운영 중이 아니게 됐으면(본사 사업자 인증 해제 · 사업주 정보 없음 등) 날인을 받지 않는다 — 빈 사용자 칸을
         // 고정하지 않는다
-        if (!isOperatingStore(store))
+        if (!store.operating)
           throw storeNotOperatingConflict(STORE_NOT_OPERATING_FOR_STAFF);
         const employer = employerOf(store);
         await signContract(tx, contractId, lockedAt);

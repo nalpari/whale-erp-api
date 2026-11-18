@@ -179,15 +179,9 @@ describe('근로계약 목록 (e2e)', () => {
     prisma.contract.count.mockReset().mockResolvedValue(0);
     prisma.contract.groupBy.mockReset().mockResolvedValue([]);
     prisma.store.findMany.mockReset().mockResolvedValue([]);
-    // 근무지 확인(checkStoreOpen)과 운영 확인(storeOperating — 운영 · 지움 아님 · 사업주 정보)이 함께 읽는다
-    prisma.store.findFirst.mockReset().mockResolvedValue({
-      storeStatusCode: 'OPERATING',
-      isDeleted: false,
-      businessProfile: {
-        bizCeoName: '김대표',
-        bizRegistrationNumber: '1234567890',
-      },
-    });
+    prisma.store.findFirst
+      .mockReset()
+      .mockResolvedValue({ storeStatusCode: 'OPERATING' });
     prisma.codeItem.findUnique.mockReset().mockResolvedValue({
       label: '10320',
       status: 'ACTIVE',
@@ -1859,12 +1853,15 @@ describe('근로계약 목록 (e2e)', () => {
     });
 
     it('근무지 점포가 운영 중이 아니면 409 STORE_NOT_OPERATING — 보내지 않는다', async () => {
-      // 사업주 정보 없이 운영으로 남은 옛 점포 — 운영 확인(storeOperating)이 운영 중이 아닌 것으로 본다
-      prisma.store.findFirst.mockResolvedValue({
-        storeStatusCode: 'OPERATING',
-        isDeleted: false,
-        businessProfile: null,
-      });
+      // 사업주 정보 없이 운영으로 남은 옛 점포 — 운영 확인(storeOperating, OPERATING_STORE_WHERE)에 걸리지 않는다
+      prisma.store.findFirst.mockImplementation(
+        (args: { where?: { businessProfile?: unknown } }) =>
+          Promise.resolve(
+            args.where?.businessProfile
+              ? null
+              : { storeStatusCode: 'OPERATING' },
+          ),
+      );
       const res = await send().expect(409);
       expect(res.body).toMatchObject({ code: 'STORE_NOT_OPERATING' });
       expect(prisma.invitation.create).not.toHaveBeenCalled();

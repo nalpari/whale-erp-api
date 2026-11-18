@@ -173,7 +173,7 @@ export class ContractsController {
     return this.contracts.list(user.id, query, bp);
   }
 
-  /** 작성 · 이어 쓰기의 근무지 선택지. 업무 범위(플랫폼 계정은 탭 BP) 안에서 지우지 않은 운영 중 점포(미운영 · 폐점 빼고, WHALEERP-722), 이름순. 작성 또는 수정 권한. */
+  /** 작성 · 이어 쓰기의 근무지 선택지. 업무 범위(플랫폼 계정은 탭 BP) 안에서 운영 중인 점포(운영 · 지움 아님 · 사업주 정보 있음 — 발송 · 날인과 같은 기준, WHALEERP-722), 이름순. 작성 또는 수정 권한. */
   // 가드가 대상 BP 를 정하는 근로계약 경로라 여기 둔다 — 메뉴 권한 없는 /stores/options 는 탭 BP 를 못 받았다(WHALEERP-638).
   // `:contractId` 보다 먼저 둔다.
   @Get('store-options')

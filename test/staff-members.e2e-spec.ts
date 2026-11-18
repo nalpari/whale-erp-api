@@ -77,6 +77,13 @@ describe('직원 목록 (e2e, DB)', () => {
           storeTypeCode,
           name,
           storeStatusCode: 'OPERATING',
+          // 운영 중인 근무지(선택지 · 발송)로 보려면 사업주 정보(대표자 · 사업자등록번호)가 있어야 한다
+          businessProfile: {
+            create: {
+              bizCeoName: '김대표',
+              bizRegistrationNumber: `${String(code).padStart(6, '0')}0000`,
+            },
+          },
         },
       });
     ({ bpCodeId } = await bp(n, '목록 테스트 BP'));
@@ -447,18 +454,18 @@ describe('직원 목록 (e2e, DB)', () => {
     await prisma.roleGroup.deleteMany({
       where: { roleGroupId: { in: [noReadRoleGroupId, readOnlyRoleGroupId] } },
     });
+    const seededStoreIds = [
+      directStoreId,
+      franchiseStoreId,
+      consentStoreId,
+      mixedStoreId,
+      otherBpStoreId,
+    ];
+    await prisma.storeBusinessProfile.deleteMany({
+      where: { storeId: { in: seededStoreIds } },
+    });
     await prisma.store.deleteMany({
-      where: {
-        storeId: {
-          in: [
-            directStoreId,
-            franchiseStoreId,
-            consentStoreId,
-            mixedStoreId,
-            otherBpStoreId,
-          ],
-        },
-      },
+      where: { storeId: { in: seededStoreIds } },
     });
     await deleteBps(prisma, {
       where: { bpCodeId: { in: [bpCodeId, otherBpId] } },
