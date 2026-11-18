@@ -1161,6 +1161,101 @@ describe('BpMastersService', () => {
       expect(data).not.toHaveProperty('bizRegistrationNumber');
       expect(data).not.toHaveProperty('bizVerifiedAt');
     });
+
+    // 마이페이지(bp-profile.service)의 clearBusinessVerification 과 같다 — 플랫폼 BP 수정에서도 지울 수 있다.
+    describe('clearBusinessVerification 을 실었으면', () => {
+      const verifiedBp = () =>
+        bp({
+          bizRegistrationNumber: '1058763602',
+          bizCeoName: '김하늘',
+          bizOpenDate: new Date('2020-01-02T00:00:00.000Z'),
+          bizVerifiedAt: new Date('2026-10-01T00:00:00.000Z'),
+        });
+
+      it('토큰과 함께 보내면 400 — 마이페이지와 같은 문구, 아무것도 고치지 않는다', async () => {
+        await expect(
+          service.update(CALLER, 12, {
+            ...updateInput,
+            verificationToken: 't',
+            clearBusinessVerification: true,
+          }),
+        ).rejects.toThrow(
+          new BadRequestException(
+            '사업자정보를 새로 반영하는 것과 지우는 것을 함께 요청할 수 없습니다.',
+          ),
+        );
+        expect(verifications.readToken).not.toHaveBeenCalled();
+        expect(prisma.bpCode.update).not.toHaveBeenCalled();
+      });
+
+      it('본사의 세 값과 인증일시를 지우고 본사 점포 이력에 남긴다', async () => {
+        prisma.bpCode.findFirst.mockResolvedValue(verifiedBp());
+        await service.update(CALLER, 12, {
+          ...updateInput,
+          clearBusinessVerification: true,
+        });
+        expect(prisma.storeBusinessProfile.update).toHaveBeenCalledWith(
+          partial({
+            where: { storeId: 120 },
+            data: partial({
+              bizRegistrationNumber: null,
+              bizCeoName: null,
+              bizOpenDate: null,
+              bizVerifiedAt: null,
+            }),
+          }),
+        );
+        for (const [field, beforeValue] of [
+          ['사업자등록번호', '1058763602'],
+          ['대표자명', '김하늘'],
+          ['개업일자', '2020-01-02'],
+        ])
+          expect(hqHistories()).toContainEqual(
+            partial({ field, beforeValue, afterValue: null }),
+          );
+      });
+
+      it('운영 중인 본사는 사업자번호가 없어지면 미운영으로 내린다', async () => {
+        prisma.bpCode.findFirst.mockResolvedValue(verifiedBp());
+        prisma.store.findFirst.mockResolvedValue({
+          storeId: 120,
+          storeStatusCode: 'OPERATING',
+          latitude: 37.5,
+          longitude: 127,
+          businessProfile: { bizRegistrationNumber: null },
+          bpCode: { accountStatusCode: 'ACTIVE' },
+        });
+        await service.update(CALLER, 12, {
+          ...updateInput,
+          clearBusinessVerification: true,
+        });
+        expect(prisma.store.update).toHaveBeenCalledWith({
+          where: { storeId: 120 },
+          data: { storeStatusCode: 'NOT_OPERATING', updatedBy: CALLER },
+        });
+      });
+
+      it('이미 인증이 없는 BP 면 바뀌는 것 없이 성공한다 — 사업자정보 이력도, 미운영 본사의 상태 변경도 없다', async () => {
+        prisma.store.findFirst.mockResolvedValue({
+          storeId: 120,
+          storeStatusCode: 'NOT_OPERATING',
+          latitude: null,
+          longitude: null,
+          businessProfile: { bizRegistrationNumber: null },
+          bpCode: { accountStatusCode: 'ACTIVE' },
+        });
+        await service.update(CALLER, 12, {
+          ...updateInput,
+          tradeName: '한강상회',
+          clearBusinessVerification: true,
+        });
+        expect(hqHistories()).toEqual([]);
+        for (const [arg] of prisma.store.update.mock.calls as [
+          { data: object },
+        ][])
+          expect(arg.data).not.toHaveProperty('storeStatusCode');
+      });
+    });
   });
 
   describe('changeStatus', () => {

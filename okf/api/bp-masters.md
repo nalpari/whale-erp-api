@@ -4,16 +4,16 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-18T04:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T05:10:00Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excelCount · excelFile · assertExcelCaller)
-    last_modified: 2026-11-18T04:00:00Z
+    last_modified: 2026-11-18T05:10:00Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
-    last_modified: 2026-11-06T03:00:00Z
+    last_modified: 2026-11-18T05:10:00Z
   - id: bp-master-excel
     resource: ../../src/bp-masters/bp-master-excel.ts
     title: BP 목록 엑셀 — 목록 표와 같은 열 · 서식, 연락처만 가림
@@ -113,6 +113,13 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   edit screen sends its `bpCodeId` so the BP's own number (and its stores') is not a
   duplicate. Ten calls per admin per hour, plus the controller's IP · account throttle —
   the 국세청 key and daily quota are shared by every BP.
+- **Edit can also clear them** — `clearBusinessVerification: true` (edit only, 2026-11-18 user request)
+  writes `null` to the 본사's 사업자등록번호 · 대표자명 · 개업일자 · `biz_verified_at`, exactly as
+  마이페이지's [사용안함] does: the changes go to the 본사 점포 history, and `saveHqProfile`'s status sync drops an
+  운영 본사 to 미운영 once it has no number. A BP that has nothing to clear succeeds with no change and no history
+  row. Sent together with `verificationToken` it is a 400 with 마이페이지's wording, before anything is read.
+  Like 마이페이지 it should refuse a BP with subscription records (user decision), but subscriptions do not exist
+  yet, so neither path checks — when they arrive, the check goes into both.
 - **Edit has no concurrency check** — the last save wins (S-CQGGZS), unlike
   플랫폼 관리자 수정. It always bumps `bp_codes.updated_at` / `updated_by`, because the
   detail's 「최종수정」 means the BP *or* its master. Changing the e-mail voids unused

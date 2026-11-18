@@ -6817,7 +6817,7 @@
             "description": ""
           },
           "400": {
-            "description": "입력 형식 · 인증 토큰 만료"
+            "description": "입력 형식 · 인증 토큰 만료 · verificationToken 과 clearBusinessVerification 을 함께 보냄"
           },
           "403": {
             "description": "메뉴 권한 없음 · 플랫폼 계정이 아님"
@@ -6834,7 +6834,7 @@
             "bearer": []
           }
         ],
-        "summary": "수정. 마지막 저장이 남는다(동시 수정 확인 없음).",
+        "summary": "수정. 마지막 저장이 남는다(동시 수정 확인 없음). clearBusinessVerification 이면 본사 사업자정보 네 칸을 지운다.",
         "tags": [
           "BpMasters"
         ]
@@ -25247,6 +25247,10 @@
       "UpdateBpMasterDto": {
         "type": "object",
         "properties": {
+          "clearBusinessVerification": {
+            "type": "boolean",
+            "description": "본사의 사업자등록번호 · 대표자명 · 개업일자 · 인증일시를 전부 비운다 — 마이페이지 사업자정보의\nclearBusinessVerification 과 같다(2026-11-18 사용자 요청). true 면 그 네 칸을 null 로 쓰고, 사업자번호가\n없어진 본사는 미운영으로 내려간다. 이미 비어 있으면 바뀌는 것 없이 성공한다. verificationToken 과 함께\n보내면 400(서비스에서 본다). 등록에는 두지 않는다. 구독 기록이 있으면 막아야 하지만(마이페이지와 같은\n사용자 결정) 구독 자체가 아직 없어 지금은 검사하지 않는다 — 구독이 생기면 마이페이지\n(BpProfileUpdateDto)와 함께 여기에도 그 검사를 더한다."
+          },
           "name": {
             "type": "string",
             "description": "BP 마스터 이름. 한글 · 영문 2~20자.",

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -494,6 +495,10 @@ export class BpMastersService {
     bpCodeId: number,
     raw: UpdateBpMasterDto,
   ): Promise<void> {
+    if (raw.verificationToken && raw.clearBusinessVerification)
+      throw new BadRequestException(
+        '사업자정보를 새로 반영하는 것과 지우는 것을 함께 요청할 수 없습니다.',
+      );
     const input = { ...raw, email: raw.email.trim().toLowerCase() };
     const biz = input.verificationToken
       ? await this.verifications.readToken(input.verificationToken)
@@ -530,7 +535,18 @@ export class BpMastersService {
           before: bp,
           tradeName: input.tradeName,
           biz: bizProfileOf(input),
-          verified: biz ? verifiedBizOf(biz) : null,
+          // clearBusinessVerification 은 마이페이지와 같이 네 칸을 지운다 — 사업자번호가 없어지면 saveHqProfile 의
+          // 상태 동기화가 본사를 미운영으로 내린다.
+          verified: biz
+            ? verifiedBizOf(biz)
+            : input.clearBusinessVerification
+              ? {
+                  bizRegistrationNumber: null,
+                  bizCeoName: null,
+                  bizOpenDate: null,
+                  bizVerifiedAt: null,
+                }
+              : null,
           location,
           by,
         });

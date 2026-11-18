@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEmail,
   IsInt,
   IsOptional,
@@ -131,7 +132,17 @@ export class CreateBpMasterDto extends BpMasterProfileDto {
 }
 
 /** BP 수정. 아이디 · BP 코드 · 가입경로 · 상태는 바꾸지 않는다. 동시 수정은 막지 않는다 — 마지막 저장이 남는다(S-CQGGZS). */
-export class UpdateBpMasterDto extends BpMasterProfileDto {}
+export class UpdateBpMasterDto extends BpMasterProfileDto {
+  /** 본사의 사업자등록번호 · 대표자명 · 개업일자 · 인증일시를 전부 비운다 — 마이페이지 사업자정보의
+   * clearBusinessVerification 과 같다(2026-11-18 사용자 요청). true 면 그 네 칸을 null 로 쓰고, 사업자번호가
+   * 없어진 본사는 미운영으로 내려간다. 이미 비어 있으면 바뀌는 것 없이 성공한다. verificationToken 과 함께
+   * 보내면 400(서비스에서 본다). 등록에는 두지 않는다. 구독 기록이 있으면 막아야 하지만(마이페이지와 같은
+   * 사용자 결정) 구독 자체가 아직 없어 지금은 검사하지 않는다 — 구독이 생기면 마이페이지
+   * (BpProfileUpdateDto)와 함께 여기에도 그 검사를 더한다. */
+  @IsOptional()
+  @IsBoolean()
+  clearBusinessVerification?: boolean;
+}
 
 /** 사업자 진위확인. 수정 화면은 bpCodeId 를 보내 자기 BP 가 쓰는 번호를 중복으로 보지 않게 한다. */
 export class VerifyBpMasterBusinessDto extends BpBusinessVerificationDto {
