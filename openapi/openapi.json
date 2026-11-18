@@ -28683,7 +28683,11 @@
           },
           "signable": {
             "type": "boolean",
-            "description": "지금 서명하면 받는가 — awaitingSignature 이고 본인 대조가 맞을 때. 서명 API 와 같은 판정이다"
+            "description": "지금 서명하면 받는가 — awaitingSignature 이고 본인 대조가 맞고 사용자 칸이 있을 때. 서명 API 와 같은 판정이다"
+          },
+          "employerMissing": {
+            "type": "boolean",
+            "description": "사용자 칸(대표자 · 사업자등록번호)이 비었는가 — 그러면 서명 API 는 409 EMPLOYER_INFO_MISSING 이고 signable 은 false 다.\n직원은 고칠 수 없어 근무지 관리자에게 문의한다(본사 사업자 인증 해제 등, 2026-11-18). 날인한 계약은 고정한 값을 보므로 늘 false"
           }
         },
         "required": [
@@ -28725,7 +28729,8 @@
           "contractId",
           "storeId",
           "awaitingSignature",
-          "signable"
+          "signable",
+          "employerMissing"
         ]
       },
       "NotificationRelatedType": {

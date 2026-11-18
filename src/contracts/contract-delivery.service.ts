@@ -39,10 +39,6 @@ import {
   employerMissing,
   employerMissingConflict,
 } from './contract-files.service';
-
-/** 발송을 막을 때 관리자에게 보이는 문장 — 사용자 칸(대표자 · 사업자등록번호)이 비었다 */
-export const EMPLOYER_MISSING_FOR_ADMIN =
-  '근무지 점포의 사업자정보(대표자 · 사업자등록번호)가 없어 근로계약서를 보낼 수 없습니다. 점포 사업자정보를 먼저 등록해 주세요.';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   lockContract,
@@ -58,6 +54,10 @@ import {
   sendFailureKindOf,
   type SendFailureKind,
 } from './contract-send-log';
+
+/** 발송을 막을 때 관리자에게 보이는 문장 — 사용자 칸(대표자 · 사업자등록번호)이 비었다 */
+export const EMPLOYER_MISSING_FOR_ADMIN =
+  '근무지 점포의 사업자정보(대표자 · 사업자등록번호)가 없어 근로계약서를 보낼 수 없습니다. 점포 사업자정보를 등록하거나 사업자 인증을 다시 받아 주세요(본사는 마이페이지 사업자정보).';
 
 // 템플릿 이름 · 관련 업무 유형 · 실패 판정은 발송 이력과 같이 쓰는 contract-send-log.ts 에 둔다
 export {

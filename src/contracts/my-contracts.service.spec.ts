@@ -562,36 +562,48 @@ describe('MyContractsService', () => {
       expect(storage.delete).toHaveBeenCalled();
     });
 
+    const emptyEmployer = {
+      name: '강남점',
+      phone: '0212345678',
+      businessProfile: {
+        bizTradeName: '모리커피',
+        bizRegistrationNumber: null,
+        bizCeoName: null,
+        bizAddress: '서울 강남구 테헤란로 1',
+        bizAddressDetail: null,
+      },
+    };
+
     it.each([
-      ['사업자정보가 없으면', null],
-      [
-        '대표자 · 사업자등록번호가 비면(본사 사업자 인증 해제)',
-        {
-          bizTradeName: '모리커피',
-          bizRegistrationNumber: null,
-          bizCeoName: null,
-          bizAddress: '서울 강남구 테헤란로 1',
-          bizAddressDetail: null,
-        },
-      ],
+      ['사업자정보가 없으면', { ...emptyEmployer, businessProfile: null }],
+      ['대표자 · 사업자등록번호가 비면(본사 사업자 인증 해제)', emptyEmployer],
     ])(
-      '보낸 뒤 근무지 점포의 %s 409 EMPLOYER_INFO_MISSING — 빈 사용자 칸을 고정하지 않고 올린 서명을 지운다',
-      async (_, businessProfile) => {
-        tx.store.findUniqueOrThrow.mockResolvedValue({
-          name: '강남점',
-          phone: '0212345678',
-          businessProfile,
-        });
+      '근무지 점포의 %s 409 EMPLOYER_INFO_MISSING — 올리기 전에 막고 아무것도 쓰지 않는다',
+      async (_, store) => {
+        tx.store.findUniqueOrThrow.mockResolvedValue(store);
         const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
         expect(bodyOf(e)).toMatchObject({
           code: 'EMPLOYER_INFO_MISSING',
           message: EMPLOYER_MISSING_FOR_STAFF,
         });
+        expect(storage.put).not.toHaveBeenCalled();
         expect(tx.contract.updateMany).not.toHaveBeenCalled();
-        expect(tx.contractParty.update).not.toHaveBeenCalled();
-        expect(storage.delete).toHaveBeenCalled();
       },
     );
+
+    it('올리는 동안 사용자 칸이 지워졌으면 잠근 뒤 다시 봐 409 — 빈 사용자 칸을 고정하지 않고 올린 서명을 지운다', async () => {
+      const filled: unknown = await tx.store.findUniqueOrThrow();
+      tx.store.findUniqueOrThrow
+        .mockReset()
+        .mockResolvedValueOnce(filled)
+        .mockResolvedValueOnce(emptyEmployer);
+      const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
+      expect(bodyOf(e)).toMatchObject({ code: 'EMPLOYER_INFO_MISSING' });
+      expect(storage.put).toHaveBeenCalled();
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+      expect(tx.contractParty.update).not.toHaveBeenCalled();
+      expect(storage.delete).toHaveBeenCalled();
+    });
   });
 
   describe('거부 · 수정 요청', () => {

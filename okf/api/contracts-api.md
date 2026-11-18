@@ -693,6 +693,10 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   so a 계약 sent while the store had them but whose store lost them before 날인 (본사 사업자 인증 해제 makes the 본사
   점포 미운영 and empties them) is not signed with blank 사용자 칸 forever; the uploaded signature is deleted. Applies to
   every store, not only 본사 (사용자 결정). 상호 falls back to 점포명 and 소재지 may be empty — not checked.
+  날인 checks it twice: before uploading the signature (no storage round trip for a request that must fail) and again
+  after the lock (it may have been emptied meanwhile). The 직원 앱 상세 (`GET /me/contracts/:id`) reports
+  `employerMissing: true` and `signable: false` for such a contract (same `employerMissing` judgement; a 날인한 계약
+  reads its frozen values, so it is always false) — the app shows why instead of the 본인 대조 notice.
 - `taxProfile` — the 직원's 신고 정보, read-only (WHALEERP-155, 2026-10-29 김민식): `{ status, rrnMasked, bankName,
   accountNumber }`. It hangs on the 직원 record (`StaffTaxProfile` is 1:1 by `staffMemberId`), not the contract, so an
   old contract shows the 직원's **current** values. The visibility check (`canManageStaffAccount`) uses the same target

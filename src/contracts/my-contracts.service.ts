@@ -20,10 +20,6 @@ import {
   employerMissingConflict,
   employerOf,
 } from './contract-files.service';
-
-/** 날인을 막을 때 직원에게 보이는 문장 — 사용자 칸(대표자 · 사업자등록번호)이 비었다 */
-export const EMPLOYER_MISSING_FOR_STAFF =
-  '근로계약서의 사용자(사업주) 정보가 비어 있어 지금은 서명할 수 없습니다. 근무지 관리자에게 문의해 주세요.';
 import { ContractNoticeService } from './contract-notice.service';
 import { STORAGE, requireStorage } from '../storage/storage.module';
 import type { OptionalStorage } from '../storage/storage.module';
@@ -46,6 +42,10 @@ import type {
 } from './dto/my-contract-action.dto';
 import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
 import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
+
+/** 날인을 막을 때 직원에게 보이는 문장 — 사용자 칸(대표자 · 사업자등록번호)이 비었다 */
+export const EMPLOYER_MISSING_FOR_STAFF =
+  '근로계약서의 사용자(사업주) 정보가 비어 있어 지금은 서명할 수 없습니다. 근무지 관리자에게 문의해 주세요.';
 
 /** 필기 서명 이미지 상한 — 화면 캔버스 PNG 한 장 */
 export const SIGNATURE_MAX_BYTES = 1024 * 1024;
@@ -170,13 +170,18 @@ export class MyContractsService {
       throw new BadRequestException('발송 일시 형식이 아닙니다.');
     // 남의 계약 · 상태 · 기한 · 대조가 틀린 요청은 저장소를 부르기 전에 막는다. 트랜잭션으로 묶는 건 Prisma 가 나눠 보내는
     // 관계 쿼리를 한 연결에서 차례로 보내려는 것이다(잠그지 않는다). 시점이 맞는지는 잠근 뒤 다시 대조하는 쪽이 맡는다
-    this.checkSignable(
-      await this.prisma.$transaction((tx) =>
-        this.mine(tx, accountId, contractId),
-      ),
-      sentAt,
-      now ?? new Date(),
-    );
+    const seen = await this.prisma.$transaction(async (tx) => {
+      const c = await this.mine(tx, accountId, contractId);
+      const store = await tx.store.findUniqueOrThrow({
+        where: { storeId: c.storeId },
+        select: EMPLOYER_STORE_SELECT,
+      });
+      return { c, store };
+    });
+    this.checkSignable(seen.c, sentAt, now ?? new Date());
+    // 사용자 칸이 빈 계약은 올리기 전에 막는다 — 잠근 뒤에 다시 본다(그사이 지워졌을 수 있다)
+    if (employerMissing(employerOf(seen.store)))
+      throw employerMissingConflict(EMPLOYER_MISSING_FOR_STAFF);
     assertUpload(signature, ['PNG'], SIGNATURE_MAX_BYTES);
     await checkSignatureImage(signature.buffer);
 

@@ -170,8 +170,13 @@ export class MyContractDetailDto extends ContractTermsDto {
   processedAt: string | null;
   /** 목록과 같다 — 서명 대기 · 기한 안 · 재직 중 */
   awaitingSignature: boolean;
-  /** 지금 서명하면 받는가 — awaitingSignature 이고 본인 대조가 맞을 때. 서명 API 와 같은 판정이다 */
+  /** 지금 서명하면 받는가 — awaitingSignature 이고 본인 대조가 맞고 사용자 칸이 있을 때. 서명 API 와 같은 판정이다 */
   signable: boolean;
+  /**
+   * 사용자 칸(대표자 · 사업자등록번호)이 비었는가 — 그러면 서명 API 는 409 EMPLOYER_INFO_MISSING 이고 signable 은 false 다.
+   * 직원은 고칠 수 없어 근무지 관리자에게 문의한다(본사 사업자 인증 해제 등, 2026-11-18). 날인한 계약은 고정한 값을 보므로 늘 false
+   */
+  employerMissing: boolean;
   /** 계약서 값과 계정 값이 다른 항목 — 서명 API 의 409 IDENTITY_MISMATCH 와 같다. 다르면 직원은 수정 요청을 낸다 */
   @ApiProperty({
     enum: IDENTITY_FIELDS,

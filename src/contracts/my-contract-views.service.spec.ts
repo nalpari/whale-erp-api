@@ -317,6 +317,7 @@ describe('MyContractViewsService', () => {
         sentAt: '2026-10-20T01:00:00.000Z',
         awaitingSignature: true,
         signable: true,
+        employerMissing: false,
         mismatches: [],
         workLocation: '홍대점',
         baseHours: 60.5,
@@ -401,6 +402,33 @@ describe('MyContractViewsService', () => {
       });
     });
 
+    it.each([
+      ['사업자정보가 없으면', null],
+      [
+        '대표자 · 사업자등록번호가 비면',
+        {
+          bizTradeName: '웨일 카페',
+          bizRegistrationNumber: ' ',
+          bizCeoName: null,
+          bizZipCode: null,
+          bizAddress: null,
+          bizAddressDetail: null,
+        },
+      ],
+    ])(
+      '근무지 점포의 %s employerMissing 이고 날인할 수 없다 — 날인 API 의 409 EMPLOYER_INFO_MISSING 과 같은 판정',
+      async (_, businessProfile) => {
+        tx.store.findUnique.mockResolvedValue(store({ businessProfile }));
+        const d = await service().findOne(77, 41, NOW);
+        expect(d).toMatchObject({
+          awaitingSignature: true,
+          signable: false,
+          employerMissing: true,
+          mismatches: [],
+        });
+      },
+    );
+
     it('체결 완료면 날인을 기다리지 않는다 — 대조가 맞아도 signable 은 false', async () => {
       tx.contract.findFirst.mockResolvedValue(detail({ status: 'SIGNED' }));
       const d = await service().findOne(77, 41, NOW);
@@ -459,6 +487,11 @@ describe('MyContractViewsService', () => {
         bizAddressDetail: '3층',
         storePhone: '0299990000',
       });
+      // 날인한 계약은 고정한 값을 보므로 지금 점포 사업자정보가 비어도 employerMissing 이 아니다
+      tx.store.findUnique.mockResolvedValue(store({ businessProfile: null }));
+      expect((await service().findOne(77, 41, NOW)).employerMissing).toBe(
+        false,
+      );
     });
 
     it('사업자 정보가 없으면 그 칸은 비운다', async () => {

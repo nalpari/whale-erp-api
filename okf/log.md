@@ -1,7 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-18
-* **Update**: [Contracts API](/api/contracts-api.md) — 근무지 점포의 대표자 · 사업자등록번호가 비면 근로계약서를 보내지도(저장하면 곧바로 보내기 · 고쳐 다시 보내기 · 근로자 정보 수정 · 재발송) 날인받지도 않는다 — 409 `EMPLOYER_INFO_MISSING`. 날인이 그 값을 고정해 처리 완료본에 빈 사용자 칸이 영영 남는 것을 막는다(본사는 사업자 인증을 풀면 두 값이 비고 미운영이 된다). 모든 점포에 적용(사용자 결정). 발송은 `ContractDeliveryService.prepare` 첫머리, 날인은 잠근 뒤 체결 완료 전에 본다.
+* **Update**: [Contracts API](/api/contracts-api.md) — 근무지 점포의 대표자 · 사업자등록번호가 비면 근로계약서를 보내지도(저장하면 곧바로 보내기 · 고쳐 다시 보내기 · 근로자 정보 수정 · 재발송) 날인받지도 않는다 — 409 `EMPLOYER_INFO_MISSING`. 날인이 그 값을 고정해 처리 완료본에 빈 사용자 칸이 영영 남는 것을 막는다(본사는 사업자 인증을 풀면 두 값이 비고 미운영이 된다). 모든 점포에 적용(사용자 결정). 발송은 `ContractDeliveryService.prepare` 첫머리, 날인은 서명을 올리기 전과 잠근 뒤 체결 완료 전 두 번 본다. 직원 앱 상세에 `employerMissing`(그러면 `signable` false)을 더했다.
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 최종 리뷰 블로커 반영: 끊긴 줄 잇기(`joinBrokenLines`)가 「· 」 · 「• 」 · 「1. 」 목록 줄도 잇지 않는다(회원가입 완료 메일의 「· 직원 초대 …」 목록이 한 줄로 붙었다). 값 안에서 문단을 나눈 빈 줄(운영자 답변)은 남기고 앞뒤 빈 줄만 버린다.
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 맨 위 메뉴색 선 3 → 6px, 「매장 통합관리 서비스」는 가운뎃점 회색 글자 대신 관리자 웹 꼬리표(Tag) 모양(옅은 바탕 · 테두리 · 12px 회색)으로(사용자 지정 — 다른 느낌이 나되 튀지 않게).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 맨 위에 3px 메뉴색(#282f37) 선(머리 시안 다섯 가지 중 B, 사용자 결정 — 제목 색과 이어져 웨일ERP 메일로 읽힌다).
