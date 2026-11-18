@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-18T01:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T02:10:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, layout, send, record)
-    last_modified: 2026-11-18T01:20:00Z
+    last_modified: 2026-11-18T02:10:00Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; masks button links)
@@ -17,7 +17,7 @@ sources:
   - id: mail-config
     resource: ../../src/mail/mail.config.ts
     title: MAIL_* env validation at startup
-    last_modified: 2026-10-20T09:20:00Z
+    last_modified: 2026-11-18T02:10:00Z
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
     title: MailModule (Gmail transport; not wired into AppModule) · optionalMailServiceProvider
@@ -58,12 +58,29 @@ complete HTML document) and sent those rows without a link and with their line
 breaks collapsed; that was corrected on 2026-10-08 after the team review of PR #6.
 
 `send` fills the body as text, then HTML-escapes **all of it** — the template's
-own words and the values — turns line breaks into `<br>`, and places it between
-the header (`WHALE ERP`) and the footer. Each button-link value becomes a
+own words and the values — and lays it out in the shared frame. Each button-link value becomes a
 「바로가기」 button. Escaping the whole body means an operator typing `<b>` in a
 template shows `<b>`, not bold: the body is text by policy, so markup in it is
 text too. A text part goes alongside — the body, then each link on its own
-paragraph — for clients that do not render HTML.
+paragraph — for clients that do not render HTML; only the HTML part gets the layout below.
+
+**Layout ("B 브랜드 띠형", 2026-11-18 user decision — make it look as official as Coupang ·
+Kurly · SSG notices, a trust issue).** Top to bottom: a dark band (`#282f37`, the admin web's
+menu bar) with the white `WHALE ERP` wordmark; a heading — the mail subject with its leading
+`[WHALE ERP]` removed (`mailHeading`), so no template needed a new field; the body split by
+`bodyBlocks` — consecutive `- 항목: 값` lines become a grey-label info table (split at the first
+colon, label up to 30 chars), `※` lines become a notice box, everything else a paragraph, and
+every paragraph and notice line breaks after each sentence (`sentences`: after `. ? !` followed
+by a space, so `3.3%` and URLs stay whole — user request); the buttons (`#4a7ae0`); a grey footer
+with 「발신 전용」 and the operator's 상호 · 사업자등록번호 · 주소 · 전화 (the same values as the
+guest-site footer). Band, button and footer colours are also written as `bgcolor`, because some
+dark-mode clients only invert `style` colours. The 29 seed EMAIL rows render sensibly without
+edits — their key values (아이디, 임시 비밀번호, 근무지, 제목 …) are already `- 항목: 값` lines.
+
+The logo image is optional: `MAIL_LOGO_URL` (https only — anything else is ignored at startup
+rather than refusing to boot) puts a 34px white logo PNG before the wordmark. It has to be a
+public PNG; Gmail and others do not show SVG or `data:` images, so without a hosted file the
+band shows the wordmark alone.
 
 The frame is a table, not a `<div>`: an outer full-width table holds a 560px card
 table at its **left** edge, and the outer cell, the MSO wrapper, the card cell and

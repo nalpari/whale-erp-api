@@ -5,6 +5,11 @@ export type MailConfig = {
   username: string;
   /** Gmail 앱 비밀번호(계정 비밀번호가 아니다) */
   password: string;
+  /**
+   * 메일 머리 띠의 흰 로고 PNG 주소(`MAIL_LOGO_URL`, https 만). 선택 — 없으면 로고 없이 「WHALE ERP」 글자만 보인다.
+   * 메일 화면이 바로 받아 갈 수 있는 공개 주소여야 한다(SVG · data: 는 Gmail 등이 보이지 않는다).
+   */
+  logoUrl?: string | null;
 };
 
 const KEYS = {
@@ -25,7 +30,22 @@ export function readMailConfig(
       throw new Error(`${key} 가 비어 있습니다. .env.<APP_ENV> 를 확인하세요.`);
     return value;
   };
-  return { username: read(KEYS.username), password: read(KEYS.password) };
+  return {
+    username: read(KEYS.username),
+    password: read(KEYS.password),
+    logoUrl: readLogoUrl(get('MAIL_LOGO_URL')),
+  };
+}
+
+/** https 주소만 받는다. 그 밖(http · 빈 값 · 이상한 값)은 로고 없이 보낸다 — 로고 하나 때문에 기동을 막지 않는다 */
+function readLogoUrl(value: string | undefined): string | null {
+  const url = value?.trim();
+  if (!url) return null;
+  try {
+    return new URL(url).protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

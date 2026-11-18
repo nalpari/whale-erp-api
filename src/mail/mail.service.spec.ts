@@ -127,9 +127,16 @@ describe('MailService', () => {
     await service.send(input);
 
     const { html } = sent();
-    expect(html).toContain(
-      '이서준 님이 요청하신 임시 비밀번호입니다.<br><br>임시 비밀번호: x8Rk-2mPq<br><br>1시간 동안',
-    );
+    // 빈 줄로 나뉜 글은 문단 하나씩
+    expect(html).toContain('>이서준 님이 요청하신 임시 비밀번호입니다.</p>');
+    expect(html).toContain('>임시 비밀번호: x8Rk-2mPq</p>');
+    // 제목은 메일 제목에서 [WHALE ERP] 를 뗀 것
+    expect(html).toContain('>임시 비밀번호를 보내 드립니다</p>');
+    // 꼬리: 발신 전용 · 운영사 정보
+    expect(html).toContain('이 메일은 발신 전용이라 회신할 수 없습니다.');
+    expect(html).toContain('사업자등록번호 105-87-63602');
+    // MAIL_LOGO_URL 이 없으면 로고 그림 없이 글자만
+    expect(html).not.toContain('<img');
     expect(html).toContain(
       'href="https://erp.whale.test/login?token=t0ken&amp;next=1"',
     );
