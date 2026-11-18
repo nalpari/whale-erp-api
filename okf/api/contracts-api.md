@@ -693,7 +693,8 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   점포는 미운영으로 본다」(사용자 결정): a 근무지 counts as 운영 only when it is `OPERATING`, not deleted, **and** has the
   대표자 · 사업자등록번호 that 날인 freezes into the 사용자 칸 (blank counts as empty) — `isOperatingStore` in
   `contract-store-open.ts`; `OPERATING_STORE_WHERE` is the same condition as a Prisma where, used by the 근무지
-  선택지 and the new-근무지 check of 722 too, so a store that can be chosen can also be sent). A store becomes 운영 only with 사업자 인증 · 좌표 · BP 사용 (`missingForOperation`) and the 본사
+  선택지 and the new-근무지 check of 722 too, so a store that can be chosen can also be sent. A store becomes 운영 only
+  with 사업자 인증 · 좌표 · BP 사용 (`missingForOperation`) and the 본사
   drops to 미운영 when its 사업자 인증 is cleared, but stores that were 운영 before that rule without 인증 remain, so the
   사용자 칸 is checked too. Every send — 저장하면 곧바로 보내기, `PUT` 고쳐 다시 보내기, `PATCH …/worker`, `POST …/send` —
   passes `ContractDeliveryService.prepare`, which checks it first (`storeOperating`) and answers 409
