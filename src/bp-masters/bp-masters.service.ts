@@ -725,6 +725,12 @@ export class BpMastersService {
          WHERE bp_code_id = ${bpCodeId} AND role_type_code = ${BP_MASTER} AND NOT is_deleted
            FOR UPDATE`;
       const { bp, master } = await this.findBp(tx, bpCodeId);
+      // 본사 행도 잠근 뒤 센다 — 본사 직원 · 계약 · 시설물 등록은 stores 외래키만 확인해 위 잠금에 막히지 않는다.
+      // FOR UPDATE 는 그 외래키의 KEY SHARE · 시설물의 FOR SHARE 와 충돌해, 그 순간의 등록을 기다렸다 본다
+      // (순서는 bp_codes → admin_accounts → 본사).
+      if (bp.hqStoreId !== null)
+        await tx.$queryRaw`
+          SELECT 1 FROM stores WHERE store_id = ${bp.hqStoreId} FOR UPDATE`;
       const reasons = await this.deletionReasons(tx, bp, master);
       if (reasons.length) throw new ConflictException(reasons.join(' '));
 

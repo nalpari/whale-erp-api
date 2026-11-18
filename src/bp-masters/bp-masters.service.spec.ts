@@ -1378,6 +1378,24 @@ describe('BpMastersService', () => {
       expect(prisma.bpCode.update).not.toHaveBeenCalled();
     });
 
+    // 본사 직원 · 시설물 등록은 stores 외래키만 확인해 bp_codes 잠금에 막히지 않는다 — 본사 행을 잠근 뒤 세야
+    // 그 순간의 등록을 기다렸다 본다(FOR UPDATE 는 외래키의 KEY SHARE · 시설물의 FOR SHARE 와 충돌한다).
+    it('본사 행을 FOR UPDATE 로 잠근 뒤 본사 직원 · 시설물을 센다', async () => {
+      await service.remove(CALLER, 12);
+      const calls = prisma.$queryRaw.mock.calls as [string[], ...unknown[]][];
+      const at = calls.findIndex(([sql]) =>
+        /FROM stores WHERE store_id = \? FOR UPDATE/.test(sql.join('?')),
+      );
+      expect(at).toBeGreaterThan(-1);
+      expect(calls[at][1]).toBe(120);
+      expect(prisma.$queryRaw.mock.invocationCallOrder[at]).toBeLessThan(
+        prisma.staffMember.count.mock.invocationCallOrder[0],
+      );
+      expect(prisma.$queryRaw.mock.invocationCallOrder[at]).toBeLessThan(
+        prisma.facility.count.mock.invocationCallOrder[0],
+      );
+    });
+
     it('조건을 서버에서 다시 보고 못 지우면 409', async () => {
       prisma.store.count.mockResolvedValue(1);
       await expect(service.remove(CALLER, 12)).rejects.toBeInstanceOf(

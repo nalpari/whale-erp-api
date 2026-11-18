@@ -4,12 +4,12 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-18T03:00:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T04:00:00Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excelCount · excelFile · assertExcelCaller)
-    last_modified: 2026-11-18T03:00:00Z
+    last_modified: 2026-11-18T04:00:00Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
@@ -163,7 +163,7 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   deleted for good. The order is always `bp_codes` → `admin_accounts`; login, refresh and
   password changes take only the account row, so the two cannot deadlock (PR #163 review). The BP and
   the master are flagged `is_deleted` together; the 아이디 stays taken. 「No undeleted store」 and
-  the detail's 소속 점포 수 do not count the 본사, but a 본사 that holds 직원 (`staff_members`) or live 시설물 refuses the delete with 409 「본사에 등록된 직원 · 시설물이 있어 삭제할 수 없습니다.」 (`deletionReasons`, 2026-11-17 review); deleting the BP also deletes and closes its 본사
+  the detail's 소속 점포 수 do not count the 본사, but a 본사 that holds 직원 (`staff_members`) or live 시설물 refuses the delete with 409 「본사에 등록된 직원 · 시설물이 있어 삭제할 수 없습니다.」 (`deletionReasons`, 2026-11-17 review) — counted only after the 본사 row is locked `FOR UPDATE` (after `bp_codes` and the BP 마스터 row), because 본사 직원 · 계약 · 시설물 inserts check only the `stores` foreign key and would slip past the `bp_codes` lock; deleting the BP also deletes and closes its 본사
   (「삭제」 history row), whose profile keeps the 상호명 so screens reading a deleted BP still show
   its name.
 - **회원 탈퇴 and the 본사** (`admin-withdrawal.service.ts`): the preview's 「점포 N개」 leaves the
