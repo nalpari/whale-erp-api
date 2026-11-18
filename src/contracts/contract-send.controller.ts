@@ -71,7 +71,7 @@ export class ContractSendController {
   })
   @ApiBadGatewayResponse({
     description:
-      '가입 초대 · 소속 추가 확인 요청 알림톡일 때만 — SEND_FAILED(나가지 않음 — 거절 · 토큰 단계 · 요청 전 오류, 되돌렸고 다시 보낼 수 있음, 본문 contractId · status) · SEND_UNCONFIRMED(접수 여부 모름 또는 되돌리기 실패 — 상세를 다시 읽을 것). 소속 추가 확인 요청 메일 실패는 오류가 아니다',
+      '가입 초대 · 소속 추가 확인 요청 알림톡일 때만(본문 contractId · delivery INVITE | AFFILIATION) — SEND_FAILED(나가지 않음 — 거절 · 토큰 단계 · 요청 전 오류, 되돌렸고 다시 보낼 수 있음, 본문 status · failure REJECTED 비즈뿌리오 거절 | NOT_SENT 보내기 전 실패) · SEND_UNCONFIRMED(접수 여부 모름 또는 되돌리기 실패 — 상세를 다시 읽을 것). 소속 추가 확인 요청 메일 실패는 오류가 아니다',
   })
   @ApiServiceUnavailableResponse({
     description:

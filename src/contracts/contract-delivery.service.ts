@@ -222,6 +222,8 @@ const failureOf = (e: unknown): { kind: SendFailureKind; code?: number } =>
  *   가입 대기(INVITED)로 둔다. 상태는 호출부가 `deliveredStatusOf` 로 정해 바꾼다.
  * - `dispatch` 는 커밋 뒤에 가입 초대 알림톡을 보낸다 — 알림톡은 롤백이 없어서다(공통 모듈 규칙). 확실히 나가지
  *   않았으면 보내기 직전으로 되돌려 502 SEND_FAILED, 메시지 요청 뒤 응답이 끊겼으면 되돌리지 않고 502 SEND_UNCONFIRMED.
+ *   본문 delivery(INVITE 가입 초대 · AFFILIATION 소속 추가 확인 요청)와 SEND_FAILED 의 failure(REJECTED 비즈뿌리오 거절 ·
+ *   NOT_SENT 보내기 전 실패)로 화면이 무엇을 왜 못 보냈는지 가린다(WHALEERP-735).
  *   가입한 직원의 근로계약서 발송 알림톡(WHALEERP-619)도 커밋 뒤에 보내지만, 되돌리지 않고 실패해도 저장은 그대로다.
  *
  * 초대 코드는 알림톡 본문에 싣는다. 초대 링크(STAFF_APP_URL 의 `/invite#token=…`)는 버튼 변수라 알림톡 버튼과 대체 문자
@@ -729,6 +731,7 @@ export class ContractDeliveryService {
             code: 'SEND_UNCONFIRMED',
             retryable: false,
             contractId,
+            delivery: pending.kind,
             message: `${what} 알림톡을 보내지 못했는데 되돌리지 못했습니다. 상세를 다시 열어 상태를 확인한 뒤 재발송해 주세요.`,
           });
         throw new BadGatewayException({
@@ -738,6 +741,8 @@ export class ContractDeliveryService {
           retryable: true,
           contractId,
           status,
+          delivery: pending.kind,
+          failure: failure.kind,
           message: `${
             failure.kind === 'REJECTED'
               ? `${what} 알림톡을 보내지 못했습니다(비즈뿌리오 ${failure.code}). 번호를 확인하고`
@@ -755,6 +760,7 @@ export class ContractDeliveryService {
         code: 'SEND_UNCONFIRMED',
         retryable: false,
         contractId,
+        delivery: pending.kind,
         message: `${what} 알림톡이 접수됐는지 알 수 없습니다. 직원에게 받았는지 확인한 뒤 다시 보내 주세요 — 다시 보내면 두 번 갈 수 있습니다.`,
       });
     }

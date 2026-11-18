@@ -1247,6 +1247,8 @@ describe('ContractDeliveryService', () => {
         retryable: true,
         contractId: 7,
         status: 'DRAFT',
+        delivery: 'INVITE',
+        failure: 'REJECTED',
       });
       expect(body.message).toContain('작성 중 상태로 두었습니다');
       expect(tx.invitation.delete).toHaveBeenCalledWith({
@@ -1319,7 +1321,12 @@ describe('ContractDeliveryService', () => {
       ],
     ])('%s 는 나가지 않았다 — 되돌리고 502 SEND_FAILED', async (_, failure) => {
       const body = await failWith(failure);
-      expect(body).toMatchObject({ code: 'SEND_FAILED', retryable: true });
+      expect(body).toMatchObject({
+        code: 'SEND_FAILED',
+        retryable: true,
+        delivery: 'INVITE',
+        failure: 'NOT_SENT',
+      });
       // 토큰 단계는 코드가 있어도 번호 탓이 아니다 — 발송 이력(sendFailureOf)과 같은 문구
       expect((body as { message: string }).message).not.toContain(
         '번호를 확인',
@@ -1337,6 +1344,7 @@ describe('ContractDeliveryService', () => {
         code: 'SEND_UNCONFIRMED',
         retryable: false,
         contractId: 7,
+        delivery: 'INVITE',
       });
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
@@ -1344,7 +1352,11 @@ describe('ContractDeliveryService', () => {
     it('되돌리기가 실패하면 502 SEND_UNCONFIRMED — DB 는 보낸 상태다', async () => {
       prisma.$transaction.mockRejectedValue(new Error('DB 끊김'));
       const body = await failWith(new BizppurioError('거절', 4100, 400));
-      expect(body).toMatchObject({ code: 'SEND_UNCONFIRMED', contractId: 7 });
+      expect(body).toMatchObject({
+        code: 'SEND_UNCONFIRMED',
+        contractId: 7,
+        delivery: 'INVITE',
+      });
     });
 
     it('재발송(발송 대기)이 거절되면 앞 초대를 되살리고 앞 발송의 일시 · 기한으로 — 이력은 쓰지 않는다', async () => {
@@ -1822,6 +1834,8 @@ describe('ContractDeliveryService', () => {
       expect(body).toMatchObject({
         code: 'SEND_FAILED',
         status: 'PENDING_SIGNATURE',
+        delivery: 'AFFILIATION',
+        failure: 'REJECTED',
       });
       expect(tx.contract.update.mock.calls[0][0].data).toMatchObject({
         status: 'PENDING_SIGNATURE',
