@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-18
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 맨 위 메뉴색 선 3 → 6px, 「매장 통합관리 서비스」는 가운뎃점 회색 글자 대신 관리자 웹 꼬리표(Tag) 모양(옅은 바탕 · 테두리 · 12px 회색)으로(사용자 지정 — 다른 느낌이 나되 튀지 않게).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 맨 위에 3px 메뉴색(#282f37) 선(머리 시안 다섯 가지 중 B, 사용자 결정 — 제목 색과 이어져 웨일ERP 메일로 읽힌다).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 제목 색을 거의 검정(#111) 대신 관리자 웹 메뉴 줄 색 #282f37 로(사용자 지정).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 머리 줄을 낮췄다: 로고 그림 34 → 24px, 「WHALE ERP」 17 → 16px, 위아래 여백 28 · 22 → 14 · 12px(사용자 지정 — 로고 줄이 너무 높았다).

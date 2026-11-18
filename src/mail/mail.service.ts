@@ -243,7 +243,7 @@ export class MailService {
  * 메일 꼬리의 운영사 정보 — 쿠팡 메일 꼬리처럼 「상호」 이름표 없이 회사명부터(2026-11-18 사용자 지정, 대표이사 이정선).
  * 주소 · 전화 · 사업자등록번호는 로그인 전 홈 꼬리(front guest-footer)와 같은 값(2026-10-22 재영).
  */
-/** 띠의 「WHALE ERP」 옆에 가운뎃점으로 이어 작게 붙이는 서비스 설명(2026-11-18 사용자 지정 — 한 번 뺐다가 점을 두고 다시 넣었다) */
+/** 「WHALE ERP」 옆에 관리자 웹 꼬리표(Tag) 모양으로 작게 붙이는 서비스 설명 — 다른 느낌이 나되 튀지 않게(2026-11-18 사용자 지정 — 한 번 뺐다가 점을 두고 다시 넣었다) */
 const SERVICE_TAGLINE = '매장 통합관리 서비스';
 
 // 꼬리 한 줄 안 항목 사이 구분자 — 작고 옅은 「|」(글자보다 작게 · 연한 회색), 정신없지 않게(2026-11-18 사용자 지정)
@@ -399,7 +399,7 @@ export function mailHtml(
   const header =
     `<table ${TABLE}><tr>` +
     `<td width="24" valign="middle" style="width:24px;vertical-align:middle;padding:0 8px 0 0"><img src="cid:${MAIL_LOGO_CID}" width="24" height="24" alt="" style="display:block;width:24px;height:24px;border:0"></td>` +
-    `<td valign="middle" style="vertical-align:middle;${L};${FONT};white-space:nowrap"><span style="font-size:16px;font-weight:800;color:#0c0c0c;letter-spacing:0.02em">${FROM_NAME}</span><span style="margin:0 7px;font-size:12px;color:#b9bec5">·</span><span style="font-size:12px;color:#8a8f96">${SERVICE_TAGLINE}</span></td>` +
+    `<td valign="middle" style="vertical-align:middle;${L};${FONT};white-space:nowrap"><span style="font-size:16px;font-weight:800;color:#0c0c0c;letter-spacing:0.02em">${FROM_NAME}</span><span style="display:inline-block;margin-left:10px;padding:2px 8px;font-size:12px;line-height:1.5;color:#858b94;background:#f8f9fb;border:1px solid #e9edf5;border-radius:2px;vertical-align:middle">${SERVICE_TAGLINE}</span></td>` +
     '</tr></table>';
   const block = (b: BodyBlock): string => {
     if (b.kind === 'text')
@@ -426,8 +426,8 @@ export function mailHtml(
     `<table ${TABLE} width="100%" bgcolor="#ffffff" style="background:#ffffff"><tr><td align="left" style="padding:0;${L}">`,
     '<!--[if mso]><table role="presentation" width="560" align="left" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
     `<table ${TABLE} width="560" bgcolor="#ffffff" style="width:100%;max-width:560px;background:#ffffff">`,
-    // 맨 위 3px 메뉴색 선 — 제목 색(#282f37)과 이어져 웨일ERP 메일로 읽히게(2026-11-18 사용자 지정, 머리 시안 B)
-    '<tr><td bgcolor="#282f37" height="3" style="height:3px;line-height:3px;font-size:0;background:#282f37">&nbsp;</td></tr>',
+    // 맨 위 6px 메뉴색 선 — 제목 색(#282f37)과 이어져 웨일ERP 메일로 읽히게(2026-11-18 사용자 지정, 머리 시안 B)
+    '<tr><td bgcolor="#282f37" height="6" style="height:6px;line-height:6px;font-size:0;background:#282f37">&nbsp;</td></tr>',
     // 머리 영역 아래 옅은 구분선 — 머리와 본문을 가른다(2026-11-18 사용자 지정)
     `<tr><td align="left" style="padding:14px 32px 12px;border-bottom:1px solid #e6e8eb;${L}">${header}</td></tr>`,
     `<tr><td align="left" style="padding:28px 32px 28px;${L};${FONT};color:${INK}">`,

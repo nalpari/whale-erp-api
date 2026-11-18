@@ -211,8 +211,10 @@ describe('mailHtml', () => {
       '<td width="24" valign="middle" style="width:24px;vertical-align:middle;padding:0 8px 0 0"><img src="cid:whale-erp-logo"',
     );
     expect(html).toContain('<td valign="middle" style="vertical-align:middle;');
-    // 「WHALE ERP · 매장 통합관리 서비스」(가운뎃점으로 이어 작게)
-    expect(html).toContain('>WHALE ERP</span><span style="margin:0 7px;');
+    // 「WHALE ERP」 옆 서비스 설명은 관리자 웹 꼬리표(Tag) 모양
+    expect(html).toContain(
+      '>WHALE ERP</span><span style="display:inline-block;margin-left:10px;padding:2px 8px;font-size:12px;',
+    );
     expect(html).toContain('>매장 통합관리 서비스</span>');
     // 정보 상자: 회색 둥근 바탕
     expect(html).toContain(
@@ -226,8 +228,8 @@ describe('mailHtml', () => {
       '<td align="center" bgcolor="#ffffff" style="text-align:center;padding:15px 24px;border:1px solid #6b7988;',
     );
     expect(html).toContain('style="display:inline-block;color:#3c4046;');
-    // 맨 위 3px 메뉴색 선(머리 시안 B)
-    expect(html).toContain('<tr><td bgcolor="#282f37" height="3"');
+    // 맨 위 6px 메뉴색 선(머리 시안 B)
+    expect(html).toContain('<tr><td bgcolor="#282f37" height="6"');
     // 머리 영역 아래 옅은 구분선
     expect(html).toContain(
       'padding:14px 32px 12px;border-bottom:1px solid #e6e8eb;',
