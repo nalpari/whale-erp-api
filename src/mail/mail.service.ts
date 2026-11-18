@@ -428,7 +428,7 @@ export function mailHtml(
     `<table ${TABLE} width="560" bgcolor="#ffffff" style="width:100%;max-width:560px;background:#ffffff">`,
     `<tr><td align="left" style="padding:32px 32px 0;${L}">${header}</td></tr>`,
     `<tr><td align="left" style="padding:32px 32px 28px;${L};${FONT};color:${INK}">`,
-    `<p style="margin:0 0 14px;font-size:24px;line-height:1.4;font-weight:bold;color:#111111;${L}">${escapeHtml(mailHeading(subject))}</p>`,
+    `<p style="margin:0 0 14px;font-size:22px;line-height:1.4;font-weight:bold;color:#111111;${L}">${escapeHtml(mailHeading(subject))}</p>`,
     bodyBlocks(body, fill).map(block).join(''),
     buttons,
     '</td></tr>',
