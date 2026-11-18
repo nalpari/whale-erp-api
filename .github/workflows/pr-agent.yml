@@ -6,7 +6,7 @@ on:
 jobs:
   pr_agent_job:
     # 댓글 명령(/review, /ask 등)은 저장소 소유자·멤버·협업자가 PR 에 단 것만 실행한다.
-    # 외부 사용자가 댓글로 ANTHROPIC_KEY 가 걸린 실행을 반복해서 일으키지 못하게 한다.
+    # 외부 사용자가 댓글로 OPENROUTER_KEY 가 걸린 실행을 반복해서 일으키지 못하게 한다.
     if: >-
       ${{ github.event.sender.type != 'Bot' &&
           (github.event_name != 'issue_comment' ||
@@ -29,9 +29,13 @@ jobs:
       - uses: the-pr-agent/pr-agent@a76cb9111b6a944094e874b3d467c4e546946e7b
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          config.model: "anthropic/claude-opus-5-5"
+          config.model: "openrouter/openai/gpt-6.2-sol"
+          config.fallback_models: '["openrouter/openai/gpt-6.1-sol"]'
+          # 고정한 pr-agent 가 gpt-6.2-sol 을 몰라서 토큰 한도와 reasoning_effort 대상을 직접 준다.
+          config.custom_model_max_tokens: "1050000"
+          config.additional_reasoning_effort_models: '["openrouter/openai/gpt-6.2-sol"]'
           config.response_language: "ko-KR"
-          ANTHROPIC.KEY: ${{ secrets.ANTHROPIC_KEY }}
+          OPENROUTER.KEY: ${{ secrets.OPENROUTER_KEY }}
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
           github_action_config.auto_improve: "true"
