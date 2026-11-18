@@ -218,7 +218,7 @@ export class ContractsController {
   })
   @ApiBadGatewayResponse({
     description:
-      '저장했지만 가입 초대 알림톡이 실패(본문 contractId): SEND_FAILED(나가지 않아 보내기 직전으로 되돌림 — status, 새 계약 · 작성 중에서 넘긴 것은 작성 중) · SEND_UNCONFIRMED(접수 여부 모름 — 상세를 다시 읽을 것)',
+      '저장했지만 가입 초대 · 소속 추가 확인 요청 알림톡이 실패(본문 contractId · delivery INVITE | AFFILIATION): SEND_FAILED(나가지 않아 보내기 직전으로 되돌림 — status, 새 계약 · 작성 중에서 넘긴 것은 작성 중. failure REJECTED 비즈뿌리오 거절 | NOT_SENT 보내기 전 실패) · SEND_UNCONFIRMED(접수 여부 모름 — 상세를 다시 읽을 것. 저장 뒤 상태를 읽지 못한 경우는 delivery 없음)',
   })
   create(
     @Body() body: CreateContractDto,
@@ -324,7 +324,7 @@ export class ContractsController {
   })
   @ApiBadGatewayResponse({
     description:
-      '저장했지만 가입 초대 알림톡이 실패(본문 contractId): SEND_FAILED(나가지 않아 보내기 직전으로 되돌림 — status, 새 계약 · 작성 중에서 넘긴 것은 작성 중) · SEND_UNCONFIRMED(접수 여부 모름 — 상세를 다시 읽을 것)',
+      '저장했지만 가입 초대 · 소속 추가 확인 요청 알림톡이 실패(본문 contractId · delivery INVITE | AFFILIATION): SEND_FAILED(나가지 않아 보내기 직전으로 되돌림 — status, 새 계약 · 작성 중에서 넘긴 것은 작성 중. failure REJECTED 비즈뿌리오 거절 | NOT_SENT 보내기 전 실패) · SEND_UNCONFIRMED(접수 여부 모름 — 상세를 다시 읽을 것. 저장 뒤 상태를 읽지 못한 경우는 delivery 없음)',
   })
   @ApiForbiddenResponse({
     description: `근로계약 관리 권한 없음(작성 중 이어 쓰기는 작성, 수정 요청은 수정) · 대체하는데 권한 없음(진행 중 계약은 수정, 작성 중 계약은 삭제 — 409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원) · ${BP_FORBIDDEN_DESCRIPTION}`,
@@ -365,7 +365,7 @@ export class ContractsController {
   })
   @ApiBadGatewayResponse({
     description:
-      '저장했지만 가입 초대 알림톡이 실패(본문 contractId): SEND_FAILED(나가지 않아 보내기 직전으로 되돌림 — status, 새 계약 · 작성 중에서 넘긴 것은 작성 중) · SEND_UNCONFIRMED(접수 여부 모름 — 상세를 다시 읽을 것)',
+      '저장했지만 가입 초대 · 소속 추가 확인 요청 알림톡이 실패(본문 contractId · delivery INVITE | AFFILIATION): SEND_FAILED(나가지 않아 보내기 직전으로 되돌림 — status, 새 계약 · 작성 중에서 넘긴 것은 작성 중. failure REJECTED 비즈뿌리오 거절 | NOT_SENT 보내기 전 실패) · SEND_UNCONFIRMED(접수 여부 모름 — 상세를 다시 읽을 것. 저장 뒤 상태를 읽지 못한 경우는 delivery 없음)',
   })
   updateWorker(
     @Param('contractId', ContractIdPipe) contractId: number,
