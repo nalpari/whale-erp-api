@@ -151,10 +151,6 @@ describe('직원 가입 (e2e, DB)', () => {
         storeTypeCode: 'DIRECT',
         name: '가입 테스트 직영점',
         storeStatusCode: 'OPERATING',
-        // 근로계약서를 보내려면 사용자 칸(대표자 · 사업자등록번호)이 있어야 한다
-        businessProfile: {
-          create: { bizCeoName: '김대표', bizRegistrationNumber: `${n}0000` },
-        },
       },
     }));
     ({ storeId: franchiseStoreId } = await prisma.store.create({
@@ -164,10 +160,6 @@ describe('직원 가입 (e2e, DB)', () => {
         storeTypeCode: 'FRANCHISE',
         name: '가입 테스트 가맹점',
         storeStatusCode: 'OPERATING',
-        // 근로계약서를 보내려면 사용자 칸(대표자 · 사업자등록번호)이 있어야 한다
-        businessProfile: {
-          create: { bizCeoName: '김대표', bizRegistrationNumber: `${n}0001` },
-        },
       },
     }));
     const roleGroup = await prisma.roleGroup.findFirstOrThrow({
@@ -236,9 +228,6 @@ describe('직원 가입 (e2e, DB)', () => {
     });
     await prisma.adminAccount.deleteMany({
       where: { adminAccountId: adminId },
-    });
-    await prisma.storeBusinessProfile.deleteMany({
-      where: { storeId: { in: [directStoreId, franchiseStoreId] } },
     });
     await prisma.store.deleteMany({
       where: { storeId: { in: [directStoreId, franchiseStoreId] } },

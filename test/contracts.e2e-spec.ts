@@ -62,8 +62,6 @@ describe('근로계약 목록 (e2e)', () => {
       findUnique: jest.fn(),
       count: jest.fn(),
     },
-    // 보내기 전에 보는 근무지 점포의 사용자 칸(대표자 · 사업자등록번호)
-    storeBusinessProfile: { findUnique: jest.fn() },
     invitation: {
       findMany: jest.fn(),
       count: jest.fn(),
@@ -184,10 +182,6 @@ describe('근로계약 목록 (e2e)', () => {
     prisma.store.findFirst
       .mockReset()
       .mockResolvedValue({ storeStatusCode: 'OPERATING' });
-    prisma.storeBusinessProfile.findUnique.mockReset().mockResolvedValue({
-      bizCeoName: '김대표',
-      bizRegistrationNumber: '1234567890',
-    });
     prisma.codeItem.findUnique.mockReset().mockResolvedValue({
       label: '10320',
       status: 'ACTIVE',
@@ -1858,13 +1852,18 @@ describe('근로계약 목록 (e2e)', () => {
       );
     });
 
-    it('근무지 점포의 대표자 · 사업자등록번호가 비면 409 EMPLOYER_INFO_MISSING — 보내지 않는다', async () => {
-      prisma.storeBusinessProfile.findUnique.mockResolvedValue({
-        bizCeoName: null,
-        bizRegistrationNumber: null,
-      });
+    it('근무지 점포가 운영 중이 아니면 409 STORE_NOT_OPERATING — 보내지 않는다', async () => {
+      // 근무지 확인(폐점 아님)은 지나고, 보내기 전 운영 확인(storeOperating)만 비게
+      prisma.store.findFirst.mockImplementation(
+        (args: { where: { storeStatusCode?: unknown } }) =>
+          Promise.resolve(
+            args.where.storeStatusCode === 'OPERATING'
+              ? null
+              : { storeStatusCode: 'NOT_OPERATING' },
+          ),
+      );
       const res = await send().expect(409);
-      expect(res.body).toMatchObject({ code: 'EMPLOYER_INFO_MISSING' });
+      expect(res.body).toMatchObject({ code: 'STORE_NOT_OPERATING' });
       expect(prisma.invitation.create).not.toHaveBeenCalled();
       expect(alimtalk.send).not.toHaveBeenCalled();
     });

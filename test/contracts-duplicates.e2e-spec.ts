@@ -108,13 +108,6 @@ describe('계약 중복 검사 (e2e, DB)', () => {
           storeTypeCode: 'DIRECT',
           name,
           storeStatusCode: 'OPERATING',
-          // 근로계약서를 보내려면 사용자 칸(대표자 · 사업자등록번호)이 있어야 한다
-          businessProfile: {
-            create: {
-              bizCeoName: '김대표',
-              bizRegistrationNumber: `${code.slice(2).padStart(6, '0')}0000`,
-            },
-          },
         },
       });
     ({ storeId } = await store(`ST${n}`, '중복 검사 점포'));

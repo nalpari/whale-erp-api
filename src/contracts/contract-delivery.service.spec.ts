@@ -18,7 +18,7 @@ import {
   ContractDeliveryService,
   deliveredStatusOf,
   type DeliveryInput,
-  EMPLOYER_MISSING_FOR_ADMIN,
+  STORE_NOT_OPERATING_FOR_ADMIN,
   hashInvitationCode,
   INVITATION_CODE_CHARS,
   newInvitationCode,
@@ -78,8 +78,7 @@ describe('ContractDeliveryService', () => {
       updateMany: jest.Mock;
       findUnique: jest.Mock;
     };
-    store: { findUnique: jest.Mock };
-    storeBusinessProfile: { findUnique: jest.Mock };
+    store: { findUnique: jest.Mock; findFirst: jest.Mock };
     notificationTemplate: { findUnique: jest.Mock };
     invitation: {
       findMany: jest.Mock;
@@ -142,13 +141,8 @@ describe('ContractDeliveryService', () => {
       },
       store: {
         findUnique: jest.fn().mockResolvedValue({ name: '모리커피 연남점' }),
-      },
-      // 근무지 점포의 사용자 칸 — 기본은 대표자 · 사업자등록번호가 있다
-      storeBusinessProfile: {
-        findUnique: jest.fn().mockResolvedValue({
-          bizCeoName: '김대표',
-          bizRegistrationNumber: '1234567890',
-        }),
+        // 근무지가 운영 중인가(storeOperating) — 기본은 운영 중
+        findFirst: jest.fn().mockResolvedValue({ storeId: 11 }),
       },
       notificationTemplate: {
         findUnique: jest.fn(({ where }: { where: { templateCode: string } }) =>
@@ -266,36 +260,23 @@ describe('ContractDeliveryService', () => {
   });
 
   describe('prepare', () => {
-    it.each([
-      ['사업자정보가 없으면', null],
-      [
-        '대표자가 비면',
-        { bizCeoName: ' ', bizRegistrationNumber: '1234567890' },
-      ],
-      [
-        '사업자등록번호가 비면',
-        { bizCeoName: '김대표', bizRegistrationNumber: null },
-      ],
-    ])(
-      '근무지 점포의 %s 409 EMPLOYER_INFO_MISSING — 아무것도 쓰지 않는다(사용자 칸이 빈 계약서를 보내지 않는다)',
-      async (_, biz) => {
-        tx.storeBusinessProfile.findUnique.mockResolvedValue(biz);
-        const error = await service()
-          .prepare(t(), input({ joined: true }), NOW)
-          .catch((e: unknown) => e);
-        expect(error).toBeInstanceOf(ConflictException);
-        expect((error as ConflictException).getResponse()).toMatchObject({
-          code: 'EMPLOYER_INFO_MISSING',
-          message: EMPLOYER_MISSING_FOR_ADMIN,
-        });
-        expect(tx.storeBusinessProfile.findUnique).toHaveBeenCalledWith({
-          where: { storeId: 11 },
-          select: { bizCeoName: true, bizRegistrationNumber: true },
-        });
-        expect(tx.contract.update).not.toHaveBeenCalled();
-        expect(tx.invitation.updateMany).not.toHaveBeenCalled();
-      },
-    );
+    it('근무지 점포가 운영 중이 아니면(미운영 · 폐점) 409 STORE_NOT_OPERATING — 아무것도 쓰지 않는다', async () => {
+      tx.store.findFirst.mockResolvedValue(null);
+      const error = await service()
+        .prepare(t(), input({ joined: true }), NOW)
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ConflictException);
+      expect((error as ConflictException).getResponse()).toMatchObject({
+        code: 'STORE_NOT_OPERATING',
+        message: STORE_NOT_OPERATING_FOR_ADMIN,
+      });
+      expect(tx.store.findFirst).toHaveBeenCalledWith({
+        where: { storeId: 11, isDeleted: false, storeStatusCode: 'OPERATING' },
+        select: { storeId: true },
+      });
+      expect(tx.contract.update).not.toHaveBeenCalled();
+      expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+    });
 
     it('가입 초대 — 서명 기한 30일 · 초대(토큰은 해시로만) · 직원 가입 대기(INVITED), 이 저장의 이력 줄을 기억한다', async () => {
       const pending = (await service().prepare(

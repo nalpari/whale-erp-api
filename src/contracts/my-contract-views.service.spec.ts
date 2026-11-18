@@ -292,6 +292,7 @@ describe('MyContractViewsService', () => {
       zipCode: '04002',
       address: '서울 마포구 와우산로 1',
       addressDetail: '1층',
+      storeStatusCode: 'OPERATING',
       businessProfile: {
         bizTradeName: '웨일 카페',
         bizRegistrationNumber: '1234567890',
@@ -317,7 +318,7 @@ describe('MyContractViewsService', () => {
         sentAt: '2026-10-20T01:00:00.000Z',
         awaitingSignature: true,
         signable: true,
-        employerMissing: false,
+        storeNotOperating: false,
         mismatches: [],
         workLocation: '홍대점',
         baseHours: 60.5,
@@ -402,43 +403,32 @@ describe('MyContractViewsService', () => {
       });
     });
 
-    it.each([
-      ['사업자정보가 없으면', null],
-      [
-        '대표자 · 사업자등록번호가 비면',
-        {
-          bizTradeName: '웨일 카페',
-          bizRegistrationNumber: ' ',
-          bizCeoName: null,
-          bizZipCode: null,
-          bizAddress: null,
-          bizAddressDetail: null,
-        },
-      ],
-    ])(
-      '근무지 점포의 %s employerMissing 이고 날인할 수 없다 — 날인 API 의 409 EMPLOYER_INFO_MISSING 과 같은 판정',
-      async (_, businessProfile) => {
-        tx.store.findUnique.mockResolvedValue(store({ businessProfile }));
+    it.each(['NOT_OPERATING', 'CLOSED'])(
+      '근무지가 운영 중이 아니면(%s) storeNotOperating 이고 날인할 수 없다 — 날인 API 의 409 STORE_NOT_OPERATING 과 같은 판정',
+      async (storeStatusCode) => {
+        tx.store.findUnique.mockResolvedValue(store({ storeStatusCode }));
         const d = await service().findOne(77, 41, NOW);
         expect(d).toMatchObject({
           awaitingSignature: true,
           signable: false,
-          employerMissing: true,
+          storeNotOperating: true,
           mismatches: [],
         });
       },
     );
 
     it.each(['SIGNED', 'REJECTED'] as const)(
-      '날인을 기다리지 않는 계약(%s, 고정한 값 없음)은 사업자정보가 없어도 employerMissing 이 아니다 — 끝난 계약에 문의 안내가 뜨지 않게',
+      '날인을 기다리지 않는 계약(%s)은 근무지가 미운영이어도 storeNotOperating 이 아니다 — 끝난 계약에 문의 안내가 뜨지 않게',
       async (status) => {
         tx.contract.findFirst.mockResolvedValue(detail({ status }));
-        tx.store.findUnique.mockResolvedValue(store({ businessProfile: null }));
+        tx.store.findUnique.mockResolvedValue(
+          store({ storeStatusCode: 'NOT_OPERATING' }),
+        );
         const d = await service().findOne(77, 41, NOW);
         expect(d).toMatchObject({
           awaitingSignature: false,
           signable: false,
-          employerMissing: false,
+          storeNotOperating: false,
         });
       },
     );
@@ -501,11 +491,6 @@ describe('MyContractViewsService', () => {
         bizAddressDetail: '3층',
         storePhone: '0299990000',
       });
-      // 날인한 계약은 고정한 값을 보므로 지금 점포 사업자정보가 비어도 employerMissing 이 아니다
-      tx.store.findUnique.mockResolvedValue(store({ businessProfile: null }));
-      expect((await service().findOne(77, 41, NOW)).employerMissing).toBe(
-        false,
-      );
     });
 
     it('사업자 정보가 없으면 그 칸은 비운다', async () => {

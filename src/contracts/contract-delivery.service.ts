@@ -36,10 +36,9 @@ import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
 import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import {
-  EMPLOYER_BIZ_SELECT,
-  employerMissing,
-  employerMissingConflict,
-} from './contract-employer';
+  storeNotOperatingConflict,
+  storeOperating,
+} from './contract-store-open';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   lockContract,
@@ -56,9 +55,9 @@ import {
   type SendFailureKind,
 } from './contract-send-log';
 
-/** 발송을 막을 때 관리자에게 보이는 문장 — 사용자 칸(대표자 · 사업자등록번호)이 비었다 */
-export const EMPLOYER_MISSING_FOR_ADMIN =
-  '근무지 점포의 사업자정보(대표자 · 사업자등록번호)가 없어 근로계약서를 보낼 수 없습니다. 점포 사업자정보를 등록하거나 사업자 인증을 다시 받아 주세요(본사는 마이페이지 사업자정보).';
+/** 발송을 막을 때 관리자에게 보이는 문장 — 근무지 점포가 운영 중이 아니다 */
+export const STORE_NOT_OPERATING_FOR_ADMIN =
+  '근무지 점포가 운영 중이 아니라 근로계약서를 보낼 수 없습니다. 점포를 운영으로 바꾼 뒤 보내 주세요(본사는 마이페이지 사업자정보 · 위치).';
 
 // 템플릿 이름 · 관련 업무 유형 · 실패 판정은 발송 이력과 같이 쓰는 contract-send-log.ts 에 둔다
 export {
@@ -339,13 +338,9 @@ export class ContractDeliveryService {
     input: DeliveryInput,
     now: Date,
   ): Promise<PendingDelivery | null> {
-    // 사용자 칸이 빈 계약서는 보내지 않는다 — 처음 보내기 · 재발송 · 고쳐 다시 보내기가 모두 여기를 지난다
-    const biz = await tx.storeBusinessProfile.findUnique({
-      where: { storeId: input.storeId },
-      select: EMPLOYER_BIZ_SELECT,
-    });
-    if (employerMissing(biz))
-      throw employerMissingConflict(EMPLOYER_MISSING_FOR_ADMIN);
+    // 운영 중이 아닌 근무지에서는 보내지 않는다 — 처음 보내기 · 재발송 · 고쳐 다시 보내기가 모두 여기를 지난다
+    if (!(await storeOperating(tx, input.storeId)))
+      throw storeNotOperatingConflict(STORE_NOT_OPERATING_FOR_ADMIN);
     const channel = channelOf(input.joined, input.draftAction);
     if (channel !== 'APP') await this.assertCanInvite(tx, input.phone, channel);
     const { staffMemberId } = input.before;

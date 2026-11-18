@@ -79,13 +79,7 @@ describe('근로계약서 파일 채우기 (e2e, DB)', () => {
       },
     }));
     await prisma.storeBusinessProfile.create({
-      // 근로계약서를 보내려면 대표자 · 사업자등록번호가 있어야 한다
-      data: {
-        storeId,
-        bizTradeName: '지금 상호',
-        bizCeoName: '김대표',
-        bizRegistrationNumber: `${n}0000`,
-      },
+      data: { storeId, bizTradeName: '지금 상호', bizCeoName: '김대표' },
     });
     const roleGroup = await prisma.roleGroup.findFirstOrThrow({
       where: { roleCode: 'BM000001' },

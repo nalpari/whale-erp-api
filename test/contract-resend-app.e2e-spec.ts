@@ -62,10 +62,6 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
         storeTypeCode: 'DIRECT',
         name: '모리커피 연남점',
         storeStatusCode: 'OPERATING',
-        // 근로계약서를 보내려면 사용자 칸(대표자 · 사업자등록번호)이 있어야 한다
-        businessProfile: {
-          create: { bizCeoName: '김대표', bizRegistrationNumber: `${n}0000` },
-        },
       },
     }));
     const roleGroup = await prisma.roleGroup.findFirstOrThrow({
@@ -279,7 +275,6 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
         where: { adminAccountId: adminId },
       });
     }
-    await prisma.storeBusinessProfile.deleteMany({ where: { storeId } });
     await prisma.store.deleteMany({ where: { storeId } });
     await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();

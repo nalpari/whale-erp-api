@@ -139,10 +139,6 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
         storeTypeCode: 'DIRECT',
         name: '소속 추가 점포',
         storeStatusCode: 'OPERATING',
-        // 근로계약서를 보내려면 사용자 칸(대표자 · 사업자등록번호)이 있어야 한다
-        businessProfile: {
-          create: { bizCeoName: '김대표', bizRegistrationNumber: `${n}0000` },
-        },
       },
     }));
     const roleGroup = await prisma.roleGroup.findFirstOrThrow({
