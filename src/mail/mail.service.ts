@@ -393,7 +393,7 @@ export function mailHtml(
   const L = 'text-align:left';
   const FONT = "font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif";
   const INK = '#3c4046';
-  // 본문 글(문단 · 안내 · 정보 상자)은 모두 15px 하나로 — 크기가 섞여 어색했다(2026-11-18 사용자 지정). 안내는 색만 옅게
+  // 본문 글(문단 · 안내 · 정보 상자 · 버튼)은 모두 14px 하나로 — 관리자 웹 본문(DESIGN.md Body 14px)과 같다 — 크기가 섞여 어색했다(2026-11-18 사용자 지정). 안내는 색만 옅게
   const TABLE =
     'role="presentation" cellpadding="0" cellspacing="0" border="0"';
   const header =
@@ -403,13 +403,13 @@ export function mailHtml(
     '</tr></table>';
   const block = (b: BodyBlock): string => {
     if (b.kind === 'text')
-      return `<p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#555b63;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
+      return `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#555b63;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
     if (b.kind === 'notice')
-      return `<p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#8a8f96;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
+      return `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#8a8f96;${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
     const rows = b.rows
       .map(
         ([k, v], i) =>
-          `<tr><td width="120" valign="top" style="width:120px;padding:14px 0;color:#8a8f96;font-size:15px;${i ? 'border-top:1px solid #e9ebef;' : ''}${L}">${escapeHtml(k)}</td><td valign="top" style="padding:14px 0 14px 12px;color:#111111;font-size:15px;font-weight:bold;word-break:break-all;${i ? 'border-top:1px solid #e9ebef;' : ''}${L}">${escapeHtml(v)}</td></tr>`,
+          `<tr><td width="120" valign="top" style="width:120px;padding:14px 0;color:#8a8f96;font-size:14px;${i ? 'border-top:1px solid #e9ebef;' : ''}${L}">${escapeHtml(k)}</td><td valign="top" style="padding:14px 0 14px 12px;color:#111111;font-size:14px;font-weight:bold;word-break:break-all;${i ? 'border-top:1px solid #e9ebef;' : ''}${L}">${escapeHtml(v)}</td></tr>`,
       )
       .join('');
     return `<table ${TABLE} width="100%" style="margin:6px 0 22px"><tr><td bgcolor="#f6f7f9" style="padding:6px 22px;background:#f6f7f9;border-radius:10px"><table ${TABLE} width="100%" style="border-collapse:collapse">${rows}</table></td></tr></table>`;
@@ -417,7 +417,7 @@ export function mailHtml(
   const buttons = links
     .map(
       (link) =>
-        `<table ${TABLE} width="100%" style="margin:8px 0 6px"><tr><td align="center" bgcolor="#ffffff" style="text-align:center;padding:15px 24px;border:1px solid #6b7988;border-radius:8px;background:#ffffff"><a href="${escapeHtml(link)}" style="display:inline-block;color:#3c4046;font-size:15px;font-weight:bold;text-decoration:none">바로가기</a></td></tr></table>`,
+        `<table ${TABLE} width="100%" style="margin:8px 0 6px"><tr><td align="center" bgcolor="#ffffff" style="text-align:center;padding:15px 24px;border:1px solid #6b7988;border-radius:8px;background:#ffffff"><a href="${escapeHtml(link)}" style="display:inline-block;color:#3c4046;font-size:14px;font-weight:bold;text-decoration:none">바로가기</a></td></tr></table>`,
     )
     .join('');
   return [

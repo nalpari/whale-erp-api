@@ -71,13 +71,13 @@ paragraph — for clients that do not render HTML; only the HTML part gets the l
 **Layout ("C 커머스 안내형", 2026-11-18 user decision — shaped like Coupang · Kurly · SSG order notices so
 the sender is obvious, a trust issue; a dark-band version was tried first and dropped).** One white sheet,
 card pinned left: the whale logo and `WHALE ERP` · grey 「매장 통합관리 서비스」 at the top left (logo and text in
-two table cells with `valign="middle"` so they line up in every client) above a thin `#e6e8eb` rule that separates the header from the body; a 22px bold heading (body text 15px, wordmark 17/12, footer 12 — user-picked scale) — the mail
+two table cells with `valign="middle"` so they line up in every client) above a thin `#e6e8eb` rule that separates the header from the body; a 22px bold heading (body text 14px like the admin web's Body size, wordmark 17/12, footer 12 — user-picked scale) — the mail
 subject with its leading `[WHALE ERP]` removed (`mailHeading`), so no template needed a new field; the body
 split by `bodyBlocks` — consecutive `- 항목: 값` lines (a space after the colon, label up to 30 chars, so
 `- 10:00 …` and `- https://…` stay text) become rows in a grey rounded info box, `※` lines become grey
-text (same 15px as the rest of the body — mixed sizes looked off) (an empty `※` line is dropped), everything else a 15px paragraph, and the template's own sentences each
+text (same 14px as the rest of the body — mixed sizes looked off) (an empty `※` line is dropped), everything else a 14px paragraph, and the template's own sentences each
 get their own line (`sentences` — user request) while template lines broken mid-sentence are joined first (`joinBrokenLines`: a plain line not ending in `. ? !` runs on into the next); full-width buttons in the admin web's hover look (white, 1px
-slate `#6b7988` border, ink text, label centred, 15px like the rest of the body); an 8px grey band; then the footer: 「본 메일은 발신전용으로
+slate `#6b7988` border, ink text, label centred, 14px like the rest of the body); an 8px grey band; then the footer: 「본 메일은 발신전용으로
 회신되지 않습니다.」, a blank line, (주)인터플러그 | 대표이사 이정선 | 사업자등록번호 …, address | phone (a small
 light `|`, no `·` or `:`), and 「Copyrights© 2026 INTERPLUG. All Rights Reserved.」 (user-specified; values match
 the guest-site footer). Background, box and button colours are also written as `bgcolor`.
