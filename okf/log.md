@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-18
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 머리(로고 · WHALE ERP) 아래 옅은 1px 구분선으로 머리와 본문을 가른다(사용자 지정).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 제목 글자를 24 → 22px 로(사용자 지정 — 제목 22 · 본문 15 · 띠 17/12 · 꼬리 12).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 템플릿이 문장 가운데서 끊어 둔 줄(문장 끝 . ? ! 로 끝나지 않은 일반 줄)은 메일에서 한 줄로 잇는다(`joinBrokenLines`, 사용자 지정 — 「계약 조건을 수정해 / 근로계약서를…」이 어색하게 끊겨 보였다).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 본문 글 크기를 15px 하나로: 「※」 안내 글도 13 → 15px(색만 옅게) — 문단 · 안내 · 정보 상자 크기가 섞여 어색했다(사용자 지정).

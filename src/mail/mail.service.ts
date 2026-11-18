@@ -426,8 +426,9 @@ export function mailHtml(
     `<table ${TABLE} width="100%" bgcolor="#ffffff" style="background:#ffffff"><tr><td align="left" style="padding:0;${L}">`,
     '<!--[if mso]><table role="presentation" width="560" align="left" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
     `<table ${TABLE} width="560" bgcolor="#ffffff" style="width:100%;max-width:560px;background:#ffffff">`,
-    `<tr><td align="left" style="padding:32px 32px 0;${L}">${header}</td></tr>`,
-    `<tr><td align="left" style="padding:32px 32px 28px;${L};${FONT};color:${INK}">`,
+    // 머리 영역 아래 옅은 구분선 — 머리와 본문을 가른다(2026-11-18 사용자 지정)
+    `<tr><td align="left" style="padding:28px 32px 22px;border-bottom:1px solid #e6e8eb;${L}">${header}</td></tr>`,
+    `<tr><td align="left" style="padding:28px 32px 28px;${L};${FONT};color:${INK}">`,
     `<p style="margin:0 0 14px;font-size:22px;line-height:1.4;font-weight:bold;color:#111111;${L}">${escapeHtml(mailHeading(subject))}</p>`,
     bodyBlocks(body, fill).map(block).join(''),
     buttons,

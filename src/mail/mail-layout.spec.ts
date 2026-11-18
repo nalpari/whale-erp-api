@@ -226,6 +226,10 @@ describe('mailHtml', () => {
       '<td align="center" bgcolor="#ffffff" style="text-align:center;padding:15px 24px;border:1px solid #6b7988;',
     );
     expect(html).toContain('style="display:inline-block;color:#3c4046;');
+    // 머리 영역 아래 옅은 구분선
+    expect(html).toContain(
+      'padding:28px 32px 22px;border-bottom:1px solid #e6e8eb;',
+    );
     // 본문과 꼬리 사이 굵은 회색 띠
     expect(html).toContain('<td bgcolor="#f2f3f5" height="8"');
   });
