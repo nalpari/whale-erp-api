@@ -77,7 +77,7 @@ menu bar) with the white whale logo and `WHALE ERP` wordmark followed by a small
 notice box (an empty `※` line is dropped), everything else a paragraph, and the template's own
 sentences each get their own line (`sentences`: after `. ? !` followed by a space — user request);
 the buttons in the admin web's hover look — white, 1px slate `#6b7988` border, ink text, full width with the label centred so their edges line up with the table and notice box (user's pick); a grey footer with 「본 메일은 발신전용으로 회신되지 않습니다.」, a blank line, and, like
-Coupang's footer, (주)인터플러그 (not bold), 대표이사 이정선, 사업자등록번호 … on one line and address, phone on the next — separated by a small light `|` (10px, `#c9cdd3`) and no `·` or `:` — the mixed dots and colons looked cluttered
+Coupang's footer, (주)인터플러그 (not bold), 대표이사 이정선, 사업자등록번호 … on one line, address and phone on the next, and 「Copyrights© 2026 INTERPLUG. All Rights Reserved.」 last (as on the guest site) — separated by a small light `|` (10px, `#c9cdd3`) and no `·` or `:` — the mixed dots and colons looked cluttered
 (user-specified; address and phone match the guest-site footer).
 
 **The block shape comes from the template, not the filled body.** `send` passes the unfilled

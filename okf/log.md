@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-18
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 꼬리 맨 아래에 「Copyrights© 2026 INTERPLUG. All Rights Reserved.」(로그인 전 홈 꼬리와 같은 줄, 사용자 지정).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 메일 버튼을 표 · 안내 상자와 같은 폭으로 가득 채우고 글자는 가운데(사용자 지정 — 가장자리가 맞아 정돈돼 보인다).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 띠에 흰 고래 로고를 넣는다: 공개 주소 없이 보이게 PNG(`src/mail/mail-logo.ts`, 띠 색 바탕이라 다크 모드에서도 보임)를 인라인 첨부(cid)로 싣는다. 그래서 `MAIL_LOGO_URL` 은 없앴다(`.env.example` · `mail.config.ts` main 그대로). 꼬리 운영사 정보는 점 · 콜론 없이 작고 옅은 「|」(10px · #c9cdd3)로만 가른다 — 「(주)인터플러그 | 대표이사 이정선 | 사업자등록번호 …」(사용자 지정, 점 · 콜론이 복잡해 보였다).
 * **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 띠의 「WHALE ERP」 옆에 「· 매장 통합관리 서비스」(가운뎃점으로 이어 작게, 사용자 지정 — 한 번 뺐다가 다시 넣었다). 꼬리 회사명은 굵게 하지 않는다.

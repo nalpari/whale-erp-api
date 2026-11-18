@@ -141,6 +141,9 @@ describe('MailService', () => {
     expect(html).toContain(
       '본 메일은 발신전용으로 회신되지 않습니다.<br><br>(주)인터플러그<span style="margin:0 8px;font-size:10px;color:#c9cdd3">|</span>대표이사 이정선<span style="margin:0 8px;font-size:10px;color:#c9cdd3">|</span>사업자등록번호 105-87-63602',
     );
+    expect(html).toContain(
+      '전화 02-6928-0028<br>Copyrights© 2026 INTERPLUG. All Rights Reserved.</td>',
+    );
     // 고래 로고는 공개 주소 없이 인라인 첨부(cid)로
     expect(html).toContain('<img src="cid:whale-erp-logo"');
     const { attachments } = sent();
