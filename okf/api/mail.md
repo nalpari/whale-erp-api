@@ -77,7 +77,7 @@ split by `bodyBlocks` — consecutive `- 항목: 값` lines (a space after the c
 `- 10:00 …` and `- https://…` stay text) become rows in a grey rounded info box, `※` lines become grey
 text (same 15px as the rest of the body — mixed sizes looked off) (an empty `※` line is dropped), everything else a 15px paragraph, and the template's own sentences each
 get their own line (`sentences` — user request) while template lines broken mid-sentence are joined first (`joinBrokenLines`: a plain line not ending in `. ? !` runs on into the next); full-width buttons in the admin web's hover look (white, 1px
-slate `#6b7988` border, ink text, label centred); an 8px grey band; then the footer: 「본 메일은 발신전용으로
+slate `#6b7988` border, ink text, label centred, 15px like the rest of the body); an 8px grey band; then the footer: 「본 메일은 발신전용으로
 회신되지 않습니다.」, a blank line, (주)인터플러그 | 대표이사 이정선 | 사업자등록번호 …, address | phone (a small
 light `|`, no `·` or `:`), and 「Copyrights© 2026 INTERPLUG. All Rights Reserved.」 (user-specified; values match
 the guest-site footer). Background, box and button colours are also written as `bgcolor`.

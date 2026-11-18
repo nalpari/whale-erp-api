@@ -417,7 +417,7 @@ export function mailHtml(
   const buttons = links
     .map(
       (link) =>
-        `<table ${TABLE} width="100%" style="margin:8px 0 6px"><tr><td align="center" bgcolor="#ffffff" style="text-align:center;padding:15px 24px;border:1px solid #6b7988;border-radius:8px;background:#ffffff"><a href="${escapeHtml(link)}" style="display:inline-block;color:#3c4046;font-size:16px;font-weight:bold;text-decoration:none">바로가기</a></td></tr></table>`,
+        `<table ${TABLE} width="100%" style="margin:8px 0 6px"><tr><td align="center" bgcolor="#ffffff" style="text-align:center;padding:15px 24px;border:1px solid #6b7988;border-radius:8px;background:#ffffff"><a href="${escapeHtml(link)}" style="display:inline-block;color:#3c4046;font-size:15px;font-weight:bold;text-decoration:none">바로가기</a></td></tr></table>`,
     )
     .join('');
   return [
