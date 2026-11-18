@@ -5,7 +5,10 @@ import { StorageService } from '../storage/storage.service';
 import { ContractFilesService } from './contract-files.service';
 import { ContractNoticeService } from './contract-notice.service';
 import { MY_CONTRACT_STATUSES } from './my-contract-scope';
-import { MyContractsService } from './my-contracts.service';
+import {
+  EMPLOYER_MISSING_FOR_STAFF,
+  MyContractsService,
+} from './my-contracts.service';
 
 const NOW = new Date('2026-10-21T05:00:00.000Z');
 const SENT = new Date('2026-10-20T01:00:00.000Z');
@@ -28,6 +31,7 @@ describe('MyContractsService', () => {
     contractParty: { update: jest.Mock };
     staffMember: { updateMany: jest.Mock };
     store: { findUniqueOrThrow: jest.Mock };
+    storeBusinessProfile: { findUnique: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let storage: { put: jest.Mock; delete: jest.Mock };
@@ -140,6 +144,13 @@ describe('MyContractsService', () => {
       },
       contractParty: { update: jest.fn() },
       staffMember: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      // 올리기 전에 보는 사용자 칸(대표자 · 사업자등록번호)
+      storeBusinessProfile: {
+        findUnique: jest.fn().mockResolvedValue({
+          bizCeoName: '김대표',
+          bizRegistrationNumber: '1234567890',
+        }),
+      },
       // 날인 때 고정하는 사용자 칸(WHALEERP-131)
       store: {
         findUniqueOrThrow: jest.fn().mockResolvedValue({
@@ -556,6 +567,49 @@ describe('MyContractsService', () => {
       const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
       expect(bodyOf(e)).toMatchObject({ code: 'STAFF_RETIRED' });
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
+      expect(storage.delete).toHaveBeenCalled();
+    });
+
+    const emptyEmployer = {
+      name: '강남점',
+      phone: '0212345678',
+      businessProfile: {
+        bizTradeName: '모리커피',
+        bizRegistrationNumber: null,
+        bizCeoName: null,
+        bizAddress: '서울 강남구 테헤란로 1',
+        bizAddressDetail: null,
+      },
+    };
+
+    it.each([
+      ['사업자정보가 없으면', null],
+      [
+        '대표자 · 사업자등록번호가 비면(본사 사업자 인증 해제)',
+        { bizCeoName: null, bizRegistrationNumber: ' ' },
+      ],
+    ])(
+      '근무지 점포의 %s 409 EMPLOYER_INFO_MISSING — 올리기 전에 막고 아무것도 쓰지 않는다',
+      async (_, biz) => {
+        tx.storeBusinessProfile.findUnique.mockResolvedValue(biz);
+        const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
+        expect(bodyOf(e)).toMatchObject({
+          code: 'EMPLOYER_INFO_MISSING',
+          message: EMPLOYER_MISSING_FOR_STAFF,
+        });
+        expect(storage.put).not.toHaveBeenCalled();
+        expect(tx.contract.updateMany).not.toHaveBeenCalled();
+      },
+    );
+
+    it('올리는 동안 사용자 칸이 지워졌으면 잠근 뒤 다시 봐 409 — 빈 사용자 칸을 고정하지 않고 올린 서명을 지운다', async () => {
+      // 올리기 전에는 있었고(사업자정보 행), 잠근 뒤 다시 읽은 점포에서는 비었다
+      tx.store.findUniqueOrThrow.mockResolvedValue(emptyEmployer);
+      const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
+      expect(bodyOf(e)).toMatchObject({ code: 'EMPLOYER_INFO_MISSING' });
+      expect(storage.put).toHaveBeenCalled();
+      expect(tx.contract.updateMany).not.toHaveBeenCalled();
+      expect(tx.contractParty.update).not.toHaveBeenCalled();
       expect(storage.delete).toHaveBeenCalled();
     });
   });

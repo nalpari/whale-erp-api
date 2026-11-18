@@ -18,6 +18,11 @@ import {
   article2Of,
   employerOf,
 } from './contract-files.service';
+import {
+  EMPLOYER_BIZ_SELECT,
+  employerMissing,
+  employerMissingConflict,
+} from './contract-employer';
 import { ContractNoticeService } from './contract-notice.service';
 import { STORAGE, requireStorage } from '../storage/storage.module';
 import type { OptionalStorage } from '../storage/storage.module';
@@ -40,6 +45,10 @@ import type {
 } from './dto/my-contract-action.dto';
 import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
 import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
+
+/** 날인을 막을 때 직원에게 보이는 문장 — 사용자 칸(대표자 · 사업자등록번호)이 비었다 */
+export const EMPLOYER_MISSING_FOR_STAFF =
+  '근로계약서의 사용자(사업주) 정보가 비어 있어 지금은 서명할 수 없습니다. 근무지 관리자에게 문의해 주세요.';
 
 /** 필기 서명 이미지 상한 — 화면 캔버스 PNG 한 장 */
 export const SIGNATURE_MAX_BYTES = 1024 * 1024;
@@ -164,13 +173,18 @@ export class MyContractsService {
       throw new BadRequestException('발송 일시 형식이 아닙니다.');
     // 남의 계약 · 상태 · 기한 · 대조가 틀린 요청은 저장소를 부르기 전에 막는다. 트랜잭션으로 묶는 건 Prisma 가 나눠 보내는
     // 관계 쿼리를 한 연결에서 차례로 보내려는 것이다(잠그지 않는다). 시점이 맞는지는 잠근 뒤 다시 대조하는 쪽이 맡는다
-    this.checkSignable(
-      await this.prisma.$transaction((tx) =>
-        this.mine(tx, accountId, contractId),
-      ),
-      sentAt,
-      now ?? new Date(),
-    );
+    const seen = await this.prisma.$transaction(async (tx) => {
+      const c = await this.mine(tx, accountId, contractId);
+      const biz = await tx.storeBusinessProfile.findUnique({
+        where: { storeId: c.storeId },
+        select: EMPLOYER_BIZ_SELECT,
+      });
+      return { c, biz };
+    });
+    this.checkSignable(seen.c, sentAt, now ?? new Date());
+    // 사용자 칸이 빈 계약은 올리기 전에 막는다 — 잠근 뒤에 다시 본다(그사이 지워졌을 수 있다)
+    if (employerMissing(seen.biz))
+      throw employerMissingConflict(EMPLOYER_MISSING_FOR_STAFF);
     assertUpload(signature, ['PNG'], SIGNATURE_MAX_BYTES);
     await checkSignatureImage(signature.buffer);
 
@@ -197,6 +211,15 @@ export class MyContractsService {
         // 기한 · 퇴직일은 잠근 시각으로 다시 본다 — 요청이 들어온 시각이면 올리는 동안 기한이 지나도 받는다
         const lockedAt = now ?? new Date();
         this.checkSignable(c, sentAt, lockedAt);
+        // 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 날인째 되돌린다. 사용자 칸이 비면(보낸 뒤 점포 사업자정보가
+        // 지워짐 — 본사 사업자 인증 해제 등) 빈 칸이 고정되지 않게 날인을 받지 않는다
+        const store = await tx.store.findUniqueOrThrow({
+          where: { storeId: c.storeId },
+          select: EMPLOYER_STORE_SELECT,
+        });
+        if (employerMissing(store.businessProfile))
+          throw employerMissingConflict(EMPLOYER_MISSING_FOR_STAFF);
+        const employer = employerOf(store);
         await signContract(tx, contractId, lockedAt);
         // 응답의 날인 시각은 이력의 처리 시각(DB 시계)과 같게 — 처리 완료본(131)도 이 값을 읽는다
         const history = await tx.contractStatusHistory.findFirstOrThrow({
@@ -218,12 +241,6 @@ export class MyContractsService {
           },
         });
         const account = c.staffMember.account!;
-        // 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 날인째 되돌린다
-        const store = await tx.store.findUniqueOrThrow({
-          where: { storeId: c.storeId },
-          select: EMPLOYER_STORE_SELECT,
-        });
-        const employer = employerOf(store);
         await tx.contractParty.update({
           where: { contractId },
           data: {

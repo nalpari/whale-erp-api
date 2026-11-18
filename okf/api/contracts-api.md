@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T05:47:36Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -13,7 +13,7 @@ sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-18T05:47:36Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
@@ -41,7 +41,7 @@ sources:
   - id: contract-delivery
     resource: ../../src/contracts/contract-delivery.service.ts
     title: 근로계약 보내기 (WHALEERP-136)
-    last_modified: 2026-11-17T06:50:00Z
+    last_modified: 2026-11-18T05:47:36Z
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
@@ -49,7 +49,7 @@ sources:
   - id: contract-files
     resource: ../../src/contracts/contract-files.service.ts
     title: 보낸 원본 · 처리 완료본 만들기 · 채우기 배치 (WHALEERP-131)
-    last_modified: 2026-10-29T07:30:00Z
+    last_modified: 2026-11-18T05:47:36Z
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
@@ -66,10 +66,14 @@ sources:
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: AdminScopeService
     last_modified: 2026-11-17T08:19:43Z
+  - id: contract-employer
+    resource: ../../src/contracts/contract-employer.ts
+    title: employerMissing · employerMissingConflict — 사용자 칸 판정과 409 EMPLOYER_INFO_MISSING
+    last_modified: 2026-11-18T05:47:36Z
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-18T05:47:36Z
   - id: contracts-menu
     resource: ../../src/contracts/contracts-menu.ts
     title: 근로계약 관리 메뉴 상수(CONTRACTS_MENU) — 서비스의 권한 재확인과 직원 목록 · 상세의 workDays 판정이 같이 쓴다
@@ -683,8 +687,20 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   The staff list's `contract.canResend` covers only 발송 대기 · 서명 대기 (`INVITE_RESENDABLE` — 거부 · 만료 is resent
   from the 상세) and adds its 가입·인증 column policy for a 가입 전 직원 (a joined 직원 is false there, true here — the
   app notice).
-  Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503) or the account being 재직 at this
-  store already (409) still fail when sent.
+  Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503), the account being 재직 at this
+  store already (409) or an empty 사용자 칸 (409 `EMPLOYER_INFO_MISSING`, below) still fail when sent.
+- **Empty 사용자 칸 blocks sending and 날인** (2026-11-18 김민식). Every send — 저장하면 곧바로 보내기, `PUT` 고쳐 다시
+  보내기, `PATCH …/worker`, `POST …/send` — passes `ContractDeliveryService.prepare`, which first reads the 근무지 점포's
+  `store_business_profiles` and answers 409 `EMPLOYER_INFO_MISSING` (nothing written, the save rolls back) when the
+  대표자 or 사업자등록번호 is empty (`employerMissing`, blank counts as empty). 날인 (`POST /me/contracts/:id/sign`)
+  checks the same after the row lock and before 체결 완료 — the 사용자 칸 it would freeze (`employerOf`) must have both —
+  so a 계약 sent while the store had them but whose store lost them before 날인 (본사 사업자 인증 해제 makes the 본사
+  점포 미운영 and empties them) is not signed with blank 사용자 칸 forever; the uploaded signature is deleted. Applies to
+  every store, not only 본사 (사용자 결정). 상호 falls back to 점포명 and 소재지 may be empty — not checked.
+  날인 checks it twice: before uploading the signature (no storage round trip for a request that must fail) and again
+  after the lock (it may have been emptied meanwhile). The 직원 앱 상세 (`GET /me/contracts/:id`) reports
+  `employerMissing: true` and `signable: false` for such a contract (same `employerMissing` judgement, only while it
+  awaits 날인 — frozen values or a contract not awaiting 날인 (거부 · 만료 · 종료 · 종이) is always false) — the app shows why instead of the 본인 대조 notice.
 - `taxProfile` — the 직원's 신고 정보, read-only (WHALEERP-155, 2026-10-29 김민식): `{ status, rrnMasked, bankName,
   accountNumber }`. It hangs on the 직원 record (`StaffTaxProfile` is 1:1 by `staffMemberId`), not the contract, so an
   old contract shows the 직원's **current** values. The visibility check (`canManageStaffAccount`) uses the same target
