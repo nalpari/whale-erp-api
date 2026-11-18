@@ -12,21 +12,7 @@ describe('readMailConfig', () => {
     expect(read()).toEqual({
       username: 'noreply@whale.test',
       password: 'abcd efgh ijkl mnop',
-      logoUrl: null,
     });
-  });
-
-  it('MAIL_LOGO_URL 은 https 주소만 받고, 그 밖은 로고 없이(null) 기동한다', () => {
-    expect(
-      read({ MAIL_LOGO_URL: ' https://erp.whale.test/mail/logo.png ' }).logoUrl,
-    ).toBe('https://erp.whale.test/mail/logo.png');
-    for (const bad of [
-      'http://erp.whale.test/logo.png',
-      'javascript:alert(1)',
-      'logo.png',
-      ' ',
-    ])
-      expect(read({ MAIL_LOGO_URL: bad }).logoUrl).toBeNull();
   });
 
   it.each(['MAIL_USERNAME', 'MAIL_PASSWORD'])(
@@ -52,7 +38,6 @@ describe('readOptionalMailConfig', () => {
     expect(readOptionalMailConfig((key) => env[key])).toEqual({
       username: 'noreply@whale.test',
       password: 'pw',
-      logoUrl: null,
     });
   });
 

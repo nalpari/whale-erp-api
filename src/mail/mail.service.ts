@@ -5,6 +5,7 @@ import { MAIL_CONFIG, type MailConfig } from './mail.config';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { isSendableEmail, MAX_EMAIL_LENGTH } from './mail-address';
 import { renderTemplate } from '../notification-templates/render-template';
+import { MAIL_LOGO_CID, MAIL_LOGO_PNG } from './mail-logo';
 
 export const MAIL_TRANSPORT = Symbol('MAIL_TRANSPORT');
 
@@ -78,7 +79,7 @@ export class MailService {
     @Inject(MAIL_TRANSPORT)
     private readonly transport: Pick<Transporter, 'sendMail'>,
     @Inject(MAIL_CONFIG)
-    private readonly config: Pick<MailConfig, 'username' | 'logoUrl'>,
+    private readonly config: Pick<MailConfig, 'username'>,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -115,10 +116,19 @@ export class MailService {
           mail.subject as string,
           mail.templateBody,
           mail.links,
-          this.config.logoUrl,
           fillLine(input.variables),
         ),
         text: [mail.body, ...mail.links].join('\n\n'),
+        // 띠의 고래 로고 — 공개 주소 없이 보이게 인라인 첨부(cid)로 싣는다
+        attachments: [
+          {
+            filename: 'whale-erp.png',
+            content: MAIL_LOGO_PNG,
+            contentType: 'image/png',
+            cid: MAIL_LOGO_CID,
+            contentDisposition: 'inline',
+          },
+        ],
       })) as { messageId: string };
       messageId = info.messageId;
     } catch (e) {
@@ -233,12 +243,25 @@ export class MailService {
  * 메일 꼬리의 운영사 정보 — 쿠팡 메일 꼬리처럼 「상호」 이름표 없이 회사명부터(2026-11-18 사용자 지정, 대표이사 이정선).
  * 주소 · 전화 · 사업자등록번호는 로그인 전 홈 꼬리(front guest-footer)와 같은 값(2026-10-22 재영).
  */
+/** 띠의 「WHALE ERP」 옆에 작게 붙이는 서비스 설명(2026-11-18 사용자 지정) */
+const SERVICE_TAGLINE = '매장 통합관리 서비스';
+
+// 꼬리 한 줄 안 항목 사이 간격 — 메일 화면이 빈칸을 줄이지 않게 nbsp 로
+const GAP = '&nbsp;&nbsp;&nbsp;';
 const FOOTER_HTML = [
   '본 메일은 발신전용으로 회신되지 않습니다.',
   '',
   // 회사명만 굵게(2026-11-18 사용자 지정)
-  '<b style="font-weight:bold;color:#5f656d">(주)인터플러그</b> · 대표이사: 이정선 · 사업자등록번호: 105-87-63602',
-  '(03787) 서울특별시 서대문구 연세로 5다길 22-3, 발리빌딩 3층 · 전화: 02-6928-0028',
+  // 기호(· : |) 없이 칸 사이 빈칸으로만 가른다 — 점 · 콜론이 섞여 복잡해 보였다(2026-11-18 사용자 지정)
+  [
+    '<b style="font-weight:bold;color:#5f656d">(주)인터플러그</b>',
+    '대표이사 이정선',
+    '사업자등록번호 105-87-63602',
+  ].join(GAP),
+  [
+    '03787 서울특별시 서대문구 연세로 5다길 22-3, 발리빌딩 3층',
+    '전화 02-6928-0028',
+  ].join(GAP),
 ].join('<br>');
 // 본문 블록 — 「- 항목: 값」 줄은 정보 표, 「※」 줄은 안내 상자, 나머지는 문단.
 // 콜론 뒤에 빈칸이 있어야 표다 — 「- 10:00 이후」 · 「- https://…」 는 문단으로 둔다.
@@ -334,22 +357,20 @@ export function mailHeading(subject: string): string {
  * 라 좁은 화면에서는 줄어들고, `max-width` 를 모르는 Outlook 데스크톱(Word 엔진)은 그 전용 주석(`<!--[if mso]>`) 안의
  * 560px 표가 폭을 잡는다. 글꼴 · 색은 body 스타일을 버리는 메일 화면이 많아 칸마다 다시 적는다.
  * 띠 · 버튼 색은 bgcolor 와 style 에 함께 적는다 — 다크 모드 메일 앱이 style 색만 뒤집는 경우가 있다.
- * 로고는 `MAIL_LOGO_URL`(https 의 흰 로고 PNG)이 있을 때만 그린다 — SVG · data: 그림은 Gmail 등이 보이지 않는다.
+ * 로고는 send 가 인라인 첨부(cid, mail-logo.ts)로 싣는 흰 고래 PNG 다 — 공개 주소가 없어도 보이고, SVG · data: 그림은
+ * Gmail 등이 보이지 않는다. 그림을 막은 메일 화면에서는 alt 없이 빈 자리만 남고 「WHALE ERP」 글자는 그대로 보인다.
  */
 export function mailHtml(
   subject: string,
   /** 값을 채우기 전 템플릿 본문 — 블록 모양은 이것으로 정한다(bodyBlocks) */
   body: string,
   links: readonly string[],
-  logoUrl?: string | null,
   fill?: (text: string) => string,
 ): string {
   const L = 'text-align:left';
   const FONT = "font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif";
   const INK = '#3c4046';
-  const logo = logoUrl
-    ? `<img src="${escapeHtml(logoUrl)}" width="34" height="34" alt="" style="display:inline-block;width:34px;height:34px;border:0;vertical-align:middle;margin-right:8px">`
-    : '';
+  const logo = `<img src="cid:${MAIL_LOGO_CID}" width="34" height="34" alt="" style="display:inline-block;width:34px;height:34px;border:0;vertical-align:middle;margin-right:10px">`;
   const block = (b: BodyBlock): string => {
     if (b.kind === 'text')
       return `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:${INK};${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
@@ -375,7 +396,7 @@ export function mailHtml(
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7"><tr><td align="left" style="padding:24px;${L}">`,
     '<!--[if mso]><table role="presentation" width="560" align="left" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
     '<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background:#ffffff;border-radius:6px;overflow:hidden">',
-    `<tr><td align="left" bgcolor="#282f37" style="padding:18px 32px;background:#282f37;${L}">${logo}<span style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.02em;vertical-align:middle;${FONT}">${FROM_NAME}</span></td></tr>`,
+    `<tr><td align="left" bgcolor="#282f37" style="padding:18px 32px;background:#282f37;${L}">${logo}<span style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.02em;vertical-align:middle;${FONT}">${FROM_NAME}</span><span style="margin-left:10px;font-size:13px;color:#aeb6c0;vertical-align:middle;${FONT}">${SERVICE_TAGLINE}</span></td></tr>`,
     `<tr><td align="left" style="padding:28px 32px 30px;${L};${FONT};color:${INK}">`,
     `<p style="margin:0 0 18px;font-size:20px;line-height:1.4;font-weight:bold;color:#282f37;${L}">${escapeHtml(mailHeading(subject))}</p>`,
     bodyBlocks(body, fill).map(block).join(''),

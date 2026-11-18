@@ -159,16 +159,13 @@ describe('mailHtml', () => {
     expect(html).toContain('안내 하나.<br>안내 둘.</td>');
   });
 
-  it('MAIL_LOGO_URL 이 있으면 띠에 로고 그림을 넣고, 값 · 제목 · 로고 주소를 모두 이스케이프한다', () => {
+  it('띠에 인라인 첨부(cid) 로고를 넣고, 값 · 제목을 모두 이스케이프한다', () => {
     const html = mailHtml(
       '[WHALE ERP] <b>제목</b>',
       '- 아이디: <script>x</script>',
       [],
-      'https://erp.whale.test/mail/logo.png?a=1&b="2"',
     );
-    expect(html).toContain(
-      '<img src="https://erp.whale.test/mail/logo.png?a=1&amp;b=&quot;2&quot;"',
-    );
+    expect(html).toContain('<img src="cid:whale-erp-logo"');
     expect(html).toContain('&lt;b&gt;제목&lt;/b&gt;');
     expect(html).toContain('&lt;script&gt;x&lt;/script&gt;');
     expect(html).not.toContain('<script>');
@@ -185,6 +182,11 @@ describe('mailHtml', () => {
     expect(html).toContain('처음 로그인할 때 비밀번호를 변경해 주세요.</td>');
     expect(html).toContain('bgcolor="#282f37"');
     // 버튼: 관리자 웹 호버 모양 — 흰 바탕 · 회청 테두리 · 먹색 글자(2026-11-18 사용자 지정)
+    // 띠: WHALE ERP 옆에 작은 서비스 설명
+    expect(html).toContain(
+      'WHALE ERP</span><span style="margin-left:10px;font-size:13px;',
+    );
+    expect(html).toContain('>매장 통합관리 서비스</span>');
     expect(html).toContain('border:1px solid #6b7988');
     expect(html).toContain('style="display:inline-block;color:#3c4046;');
   });

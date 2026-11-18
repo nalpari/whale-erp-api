@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-18T03:20:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T04:00:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, layout, send, record)
-    last_modified: 2026-11-18T03:20:00Z
+    last_modified: 2026-11-18T04:00:00Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; masks button links)
@@ -17,7 +17,11 @@ sources:
   - id: mail-config
     resource: ../../src/mail/mail.config.ts
     title: MAIL_* env validation at startup
-    last_modified: 2026-11-18T03:20:00Z
+    last_modified: 2026-10-20T09:20:00Z
+  - id: mail-logo
+    resource: ../../src/mail/mail-logo.ts
+    title: White whale logo PNG sent as an inline (cid) attachment
+    last_modified: 2026-11-18T04:00:00Z
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
     title: MailModule (Gmail transport; not wired into AppModule) · optionalMailServiceProvider
@@ -66,14 +70,14 @@ paragraph — for clients that do not render HTML; only the HTML part gets the l
 
 **Layout ("B 브랜드 띠형", 2026-11-18 user decision — make it look as official as Coupang ·
 Kurly · SSG notices, a trust issue).** Top to bottom: a dark band (`#282f37`, the admin web's
-menu bar) with the white `WHALE ERP` wordmark; a heading — the mail subject with its leading
+menu bar) with the white whale logo and `WHALE ERP` wordmark and, on the same line, a small grey 「매장 통합관리 서비스」; a heading — the mail subject with its leading
 `[WHALE ERP]` removed (`mailHeading`), so no template needed a new field; the body split by
 `bodyBlocks` — consecutive `- 항목: 값` lines (a space after the colon, label up to 30 chars, so
 `- 10:00 …` and `- https://…` stay text) become a grey-label info table, `※` lines become a
 notice box (an empty `※` line is dropped), everything else a paragraph, and the template's own
 sentences each get their own line (`sentences`: after `. ? !` followed by a space — user request);
 the buttons in the admin web's hover look — white, 1px slate `#6b7988` border, ink text (user's pick); a grey footer with 「본 메일은 발신전용으로 회신되지 않습니다.」, a blank line, and, like
-Coupang's footer, `**(주)인터플러그** · 대표이사: 이정선 · 사업자등록번호: …` (company name bold, `·` separators) then address and phone
+Coupang's footer, **(주)인터플러그** (bold), 대표이사 이정선, 사업자등록번호 … on one line and address, phone on the next — separated by spaces only, no `·` `:` `|` (the symbols looked cluttered)
 (user-specified; address and phone match the guest-site footer).
 
 **The block shape comes from the template, not the filled body.** `send` passes the unfilled
@@ -82,15 +86,18 @@ it. Classifying the filled body let a value with line breaks — a BP 상호명 
 signup form, an operator's free-text 답변 — fake an info row or an official-looking notice box in a
 mail from WHALE ERP (PR #296 review). Now a value's line breaks stay inside its paragraph, become
 spaces in a table cell, and sentence splitting never cuts a value (`1. …`, `Co. Ltd`).
-Known limit: with `MAIL_LOGO_URL` set, clients that invert the whole mail in dark mode turn the band
-light but leave the white PNG as is. Band, button and footer colours are also written as `bgcolor`, because some
+Band, button and footer colours are also written as `bgcolor`, because some
 dark-mode clients only invert `style` colours. The 29 seed EMAIL rows render sensibly without
 edits — their key values (아이디, 임시 비밀번호, 근무지, 제목 …) are already `- 항목: 값` lines.
 
-The logo image is optional: `MAIL_LOGO_URL` (https only — anything else is ignored at startup
-rather than refusing to boot) puts a 34px white logo PNG before the wordmark. It has to be a
-public PNG; Gmail and others do not show SVG or `data:` images, so without a hosted file the
-band shows the wordmark alone.
+**The logo travels inside the mail.** Gmail and others do not show SVG or `data:` images, and the
+admin web has no public production address yet, so `send` attaches the PNG in `mail-logo.ts` as an
+inline attachment (`cid:whale-erp-logo`) and the band's `<img>` points at it — no hosting, no env
+key. The PNG's own background is the band colour, so a client that inverts the whole mail in dark
+mode (band turns light) still shows a white whale on a dark square instead of an invisible one.
+A client that blocks images shows an empty spot; the wordmark is text and stays. To change the
+logo, redraw front `public/guest/logo-whale.svg` + `logo-star.svg` in the same layout and
+re-encode.
 
 The frame is a table, not a `<div>`: an outer full-width table holds a 560px card
 table at its **left** edge, and the outer cell, the MSO wrapper, the card cell and
