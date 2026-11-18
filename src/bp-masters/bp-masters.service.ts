@@ -53,6 +53,7 @@ import {
   saveHqProfile,
   syncHqStatus,
 } from '../stores/hq-store';
+import { STORE_CODE_TX } from '../stores/next-store-code';
 import { buildBpMasterWorkbook } from './bp-master-excel';
 import type { ChangeableBpStatus } from './dto/bp-master-status.dto';
 import type {
@@ -430,13 +431,24 @@ export class BpMastersService {
           by,
         });
         return { bpCodeId, bpCode, adminAccountId, issuedId };
-      })
+        // 본사 점포 생성이 점포코드 잠금 줄에 서므로 점포 등록과 같은 시간을 준다.
+      }, STORE_CODE_TX)
       .catch((error: unknown) => {
         // 확인과 INSERT 사이에 같은 아이디 · 이메일 · 사업자등록번호가 먼저 들어갔다.
         if (isAccountUniqueViolation(error))
           throw new ConflictException(
             '이미 사용 중인 아이디 또는 이메일입니다.',
           );
+        // 등록이 몰려 시간을 넘겼다 — 장애가 아니라 다시 시도할 일이다(점포 등록과 같다).
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2028'
+        ) {
+          this.logger.error(`BP 등록 트랜잭션 시간 초과 by=${by}`, error.stack);
+          throw new ServiceUnavailableException(
+            '등록이 몰렸습니다. 잠시 뒤 다시 등록해 주세요.',
+          );
+        }
         throw error;
       });
 

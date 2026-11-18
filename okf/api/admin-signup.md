@@ -4,12 +4,12 @@ title: BP signup (관리자 웹 회원가입)
 description: POST /auth/signup creates a customer BP and its BP 마스터 in one transaction, records the two required 약관 agreements, optionally stores 국세청-verified 사업자정보 from a 10-minute verification token, mails the applicant and the platform masters after commit, and returns a 10-minute signup token that is not an access token; what is deliberately left for later.
 tags: [auth, signup, bp, admin, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T03:00:00Z }
 sources:
   - id: signup-service
     resource: ../../src/admin-signup/admin-signup.service.ts
     title: AdminSignupService (availability, signup transaction, mails)
-    last_modified: 2026-11-17T07:56:00Z
+    last_modified: 2026-11-18T03:00:00Z
   - id: next-bp-code
     resource: ../../src/admin-signup/next-bp-code.ts
     title: nextBpCode — BP code numbering, shared with BP 마스터 등록
@@ -92,7 +92,7 @@ In one transaction the service writes:
   `biz_registration_number` · `biz_ceo_name` · `biz_open_date` from the token and
   `biz_verified_at` = signup time — and a 「등록」 row in `store_change_histories`. Signup has no
   coordinates, so the 본사 always starts 미운영. It takes the store-code lock
-  (`claimStoreCode`), so a signup queues behind store registrations; it is the last write of the transaction, so that lock is held only right before commit. It is written after the
+  (`claimStoreCode`), so a signup queues behind store registrations; it is the last write of the transaction, so that lock is held only right before commit. Because it queues there, the transaction runs on store registration's limits (`STORE_CODE_TX`, 5 s wait · 15 s run) instead of Prisma's 5 s, and running out of time (P2028) is a 503 「가입이 몰렸습니다」, not a 500. It is written after the
   account, so its `created_by` is the new BP 마스터. The 본사 never appears in 점포 관리
   ([Store management](/api/stores.md)).
 - `admin_accounts`: `role_type_code = BM`, role group `BM000001`, `join_path_code =

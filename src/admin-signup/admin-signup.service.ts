@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -22,6 +23,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import { createHqStore } from '../stores/hq-store';
+import { STORE_CODE_TX } from '../stores/next-store-code';
 import { validateAdminPassword } from './admin-password-policy';
 import {
   BusinessVerificationService,
@@ -230,8 +232,22 @@ export class AdminSignupService {
           by: account.adminAccountId,
         });
         return account.adminAccountId;
-      });
+        // 본사 점포 생성이 점포코드 잠금 줄에 서므로 점포 등록과 같은 시간을 준다.
+      }, STORE_CODE_TX);
     } catch (e) {
+      // 등록이 몰려 시간을 넘겼다 — 장애가 아니라 다시 시도할 일이다(점포 등록과 같다).
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2028'
+      ) {
+        this.logger.error(
+          `가입 트랜잭션 시간 초과 loginId=${input.loginId}`,
+          e.stack,
+        );
+        throw new ServiceUnavailableException(
+          '가입이 몰렸습니다. 잠시 뒤 다시 시도해 주세요.',
+        );
+      }
       // 확인과 저장 사이에 다른 가입이 같은 아이디·이메일(또는 사업자등록번호)을 먼저 넣었다. 다시 보면 어느
       // 쪽인지 알 수 있다. 셋 다 비어 있으면 다른 고유 위반이므로 그대로 던진다.
       // 다시 확인하다 실패하면(DB 오류) 원래 위반을 던진다 — 재확인 오류가 원인을 덮지 않게.

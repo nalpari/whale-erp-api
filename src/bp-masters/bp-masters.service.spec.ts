@@ -13,6 +13,7 @@ import { BusinessVerificationService } from '../admin-signup/business-verificati
 import { verifyPassword } from '../auth/password';
 import { PLATFORM_ADMIN_MAIL } from '../platform-admins/platform-admin-mail';
 import { PrismaService } from '../prisma/prisma.service';
+import { STORE_CODE_TX } from '../stores/next-store-code';
 import { BpMastersService } from './bp-masters.service';
 
 // jest 의 비대칭 매처 · mock.calls 는 any 다. 객체 안에 두거나 꺼내 쓸 때 lint 가 막지 않게 타입을 붙인다.
@@ -742,6 +743,28 @@ describe('BpMastersService', () => {
   });
 
   describe('create', () => {
+    // 본사 점포 생성이 점포코드 잠금 줄에 서므로 점포 등록과 같은 트랜잭션 시간을 쓴다.
+    it('등록 트랜잭션은 점포 등록과 같은 시간(STORE_CODE_TX)을 쓴다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue({ bpCode: 'BP000012' });
+      await service.create(CALLER, createInput);
+      expect(prisma.$transaction).toHaveBeenCalledWith(
+        expect.any(Function),
+        STORE_CODE_TX,
+      );
+    });
+
+    it('트랜잭션 시간을 넘기면(P2028) 503', async () => {
+      prisma.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('timeout', {
+          code: 'P2028',
+          clientVersion: 'x',
+        }),
+      );
+      await expect(service.create(CALLER, createInput)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+    });
+
     it('아이디가 이미 있으면 409', async () => {
       prisma.adminAccount.findFirst.mockResolvedValueOnce({
         adminAccountId: 9,

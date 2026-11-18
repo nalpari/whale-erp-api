@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Prisma } from '@prisma/client';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -7,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
+import { STORE_CODE_TX } from '../stores/next-store-code';
 import { AdminSignupService, type SignupInput } from './admin-signup.service';
 import { BusinessVerificationService } from './business-verification.service';
 
@@ -327,6 +333,27 @@ describe('AdminSignupService', () => {
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(mail.send).not.toHaveBeenCalled();
       expect(jwt.signAsync).not.toHaveBeenCalled();
+    });
+
+    // 본사 점포 생성이 점포코드 잠금 줄에 서므로 점포 등록과 같은 트랜잭션 시간을 쓴다.
+    it('가입 트랜잭션은 점포 등록과 같은 시간(STORE_CODE_TX)을 쓴다', async () => {
+      await service.signup(input());
+      expect(prisma.$transaction).toHaveBeenCalledWith(
+        expect.any(Function),
+        STORE_CODE_TX,
+      );
+    });
+
+    it('트랜잭션 시간을 넘기면(P2028) 503 — 장애가 아니라 다시 시도할 일이다', async () => {
+      prisma.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('timeout', {
+          code: 'P2028',
+          clientVersion: 'x',
+        }),
+      );
+      await expect(service.signup(input())).rejects.toThrow(
+        ServiceUnavailableException,
+      );
     });
 
     it('BP 마스터 권한 그룹은 BM000001 이다', async () => {

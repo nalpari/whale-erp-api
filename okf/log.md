@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-18
+* **Update**: [Admin signup](/api/admin-signup.md) · [BP masters](/api/bp-masters.md) — 본사 점포 적대적 리뷰(PR #295) 블로커 반영: 가입 · 플랫폼 BP 등록 트랜잭션이 본사 생성으로 점포코드 잠금 줄에 서므로 점포 등록과 같은 `STORE_CODE_TX`(대기 5초 · 실행 15초)를 쓰고, 시간 초과(P2028)는 500 이 아니라 503 이다.
 * **Update**: [Store management](/api/stores.md) · [BP masters](/api/bp-masters.md) · [Admin authentication](/api/admin-auth.md) — 본사 점포 코드 리뷰(PR #295) 반영: 플랫폼 BP 수정 · 마이페이지 BP 사업자정보가 `bp_codes` 행(최종수정)을 본사 점포보다 먼저 잠근다 — 상태 변경(bp_codes → 본사)과 잠금 순서가 반대라 같은 BP 동시 요청이 교착(40P01 → 500)할 수 있었다. 플랫폼 BP 저장의 계정 고유 위반 판별은 adapter-pg 가 싣는 제약 이름(`driverAdapterError.cause.constraint.index`, 없으면 메시지)으로 본다(`meta.target` 은 오지 않는다).
 
 ## 2026-11-17
