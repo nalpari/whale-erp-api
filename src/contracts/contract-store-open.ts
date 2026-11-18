@@ -1,4 +1,8 @@
-import { ConflictException, HttpStatus } from '@nestjs/common';
+import {
+  ConflictException,
+  HttpStatus,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import type { StoreStatus } from '../stores/store-format';
 
@@ -26,7 +30,7 @@ export async function storeOperating(
 /**
  * storeOperating 과 같은 판정을 점포 행 공유 잠금(FOR SHARE)과 함께 — 날인이 고정할 사용자 칸을 읽기 전에 부른다. 본사 사업자
  * 인증 해제(사업자정보 비우기 + 미운영 전환, 한 트랜잭션 — syncHqStatus 가 본사 행을 FOR NO KEY UPDATE 로 잡는다)와 줄을
- * 세워, 운영으로 판정한 뒤 빈 사용자 칸을 읽어 고정하는 틈을 없앤다. 점포 행이 없으면 거짓이다.
+ * 세워, 운영으로 판정한 뒤 빈 사용자 칸을 읽어 고정하는 틈을 없앤다. 점포 행이 없으면 500(데이터 깨짐).
  */
 export async function lockStoreOperating(
   tx: Pick<Prisma.TransactionClient, '$queryRaw'>,
@@ -35,7 +39,12 @@ export async function lockStoreOperating(
   const rows = await tx.$queryRaw<{ operating: boolean }[]>`
     SELECT ("store_status_code" = 'OPERATING' AND NOT "is_deleted") AS "operating"
     FROM "stores" WHERE "store_id" = ${storeId} FOR SHARE`;
-  return rows[0]?.operating === true;
+  // 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 그 트랜잭션째 되돌린다(운영 아님으로 알리지 않는다)
+  if (!rows.length)
+    throw new InternalServerErrorException(
+      `점포 ${storeId} 를 찾을 수 없습니다.`,
+    );
+  return rows[0].operating;
 }
 
 /** 근무지 행으로 본 운영 여부 — 직원 앱 상세처럼 점포를 이미 읽은 곳에서 storeOperating 과 같은 판정을 한다 */

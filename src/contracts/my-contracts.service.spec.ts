@@ -592,6 +592,10 @@ describe('MyContractsService', () => {
       expect(storage.delete).toHaveBeenCalled();
       const [sql] = tx.$queryRaw.mock.calls[0] as [TemplateStringsArray];
       expect(sql.join('?')).toMatch(/FOR SHARE/);
+      // 점포 → 직원 → 계약 순서로 잠근다 — 점포 폐점 · BP 탈퇴(점포 → 직원)와 같은 순서라 교착하지 않는다
+      expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.$executeRaw.mock.invocationCallOrder[0],
+      );
     });
   });
 

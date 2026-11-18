@@ -701,7 +701,9 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   that must fail) and again after the row lock before 체결 완료 (the store may have dropped meanwhile — the uploaded
   signature is then deleted). The second check takes the store row `FOR SHARE` (`lockStoreOperating`) before reading the
   사용자 칸 it freezes, so a 본사 사업자 인증 해제 (empties the 사용자 칸 and sets 미운영 in one transaction; `syncHqStatus`
-  holds the 본사 row `FOR NO KEY UPDATE`) cannot commit between the judgement and the read. The 직원 앱 상세 (`GET /me/contracts/:id`) reports `storeNotOperating: true` and
+  holds the 본사 row `FOR NO KEY UPDATE`) cannot commit between the judgement and the read. It locks the store **before**
+  the 직원 · 계약 rows (점포 → 직원 → 계약), the same order as 점포 폐점 · BP 탈퇴 (`retireStores` locks 점포 → 직원), so the
+  two do not deadlock; a missing store row is a 500 (broken data), not 미운영. The 직원 앱 상세 (`GET /me/contracts/:id`) reports `storeNotOperating: true` and
   `signable: false` while such a contract awaits 날인 (always false otherwise) — the app shows why instead of the 본인
   대조 notice.
 - `taxProfile` — the 직원's 신고 정보, read-only (WHALEERP-155, 2026-10-29 김민식): `{ status, rrnMasked, bankName,

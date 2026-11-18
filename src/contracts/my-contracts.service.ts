@@ -203,15 +203,21 @@ export class MyContractsService {
     let historyId = 0;
     try {
       await this.prisma.$transaction(async (tx) => {
+        // 점포 행을 먼저 공유 잠금한다(lockStoreOperating) — 판정과 아래 사용자 칸 읽기 사이에 본사 사업자 인증 해제가 끼지
+        // 못하게 하고, 점포 폐점 · BP 탈퇴(점포 → 직원 순서로 잠금)와 같은 순서(점포 → 직원 → 계약)라 서로 교착하지 않는다
+        const operating = await lockStoreOperating(tx, seen.c.storeId);
         const c = await this.lockMine(tx, accountId, contractId, 'write');
         // 기한 · 퇴직일은 잠근 시각으로 다시 본다 — 요청이 들어온 시각이면 올리는 동안 기한이 지나도 받는다
         const lockedAt = now ?? new Date();
         this.checkSignable(c, sentAt, lockedAt);
-        // 보낸 뒤 근무지가 미운영이 됐으면(본사 사업자 인증 해제 등) 날인을 받지 않는다 — 운영 점포라야 고정할 사용자 칸이 있다.
-        // 점포 행을 공유 잠금해 판정과 아래 사용자 칸 읽기 사이에 인증 해제가 끼지 못하게 한다(lockStoreOperating)
-        if (!(await lockStoreOperating(tx, c.storeId)))
+        // 서명 대기 계약은 근무지를 바꿀 수 없다 — 그래도 달라졌으면 잠근 점포가 아니라 다시 열게 한다
+        if (c.storeId !== seen.c.storeId)
+          throw new ConflictException(
+            '다른 요청이 먼저 근로계약을 고쳤습니다. 다시 열어 주세요.',
+          );
+        // 보낸 뒤 근무지가 미운영이 됐으면(본사 사업자 인증 해제 등) 날인을 받지 않는다 — 운영 점포라야 고정할 사용자 칸이 있다
+        if (!operating)
           throw storeNotOperatingConflict(STORE_NOT_OPERATING_FOR_STAFF);
-        // 점포는 계약의 외래키라 늘 있다 — 없으면 데이터가 깨진 것이라 날인째 되돌린다
         const store = await tx.store.findUniqueOrThrow({
           where: { storeId: c.storeId },
           select: EMPLOYER_STORE_SELECT,
