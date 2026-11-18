@@ -103,7 +103,8 @@ const text = (v: string | Date | null | undefined): string | null =>
  * 같이 바꾸고(본사는 점포 관리에서 고칠 수 없다), 사업장 주소는 본사 점포 주소로, location 을 주면 좌표 · 위치 적용도
  * 넣는다. 바뀐 칸만 본사 점포 이력에 남기고(설계 D5, 2026-11-17), 끝에서 상태를 다시 정한다.
  * biz 는 받은 칸만 고친다(빠진 칸은 그대로) — 전체 치환인 호출자는 빈 칸을 null 로 채워 넘긴다.
- * verified 는 진위확인을 통과한 세 값과 인증일시(없으면 그대로 둔다).
+ * verified 는 진위확인을 통과한 세 값과 인증일시, 또는 지울 때(clearBusinessVerification — 마이페이지 · 플랫폼 BP 수정)
+ * 네 칸 모두 null(없으면 그대로 둔다). 이력은 세 값만 남는다 — 인증일시는 HQ_FIELD_LABELS 에 없다.
  */
 export async function saveHqProfile(
   tx: Tx,
