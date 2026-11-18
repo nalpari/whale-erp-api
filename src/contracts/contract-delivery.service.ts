@@ -341,12 +341,7 @@ export class ContractDeliveryService {
       where: { storeId: input.storeId },
       select: { bizCeoName: true, bizRegistrationNumber: true },
     });
-    if (
-      employerMissing({
-        ceoName: biz?.bizCeoName ?? null,
-        registrationNumber: biz?.bizRegistrationNumber ?? null,
-      })
-    )
+    if (employerMissing(biz))
       throw employerMissingConflict(EMPLOYER_MISSING_FOR_ADMIN);
     const channel = channelOf(input.joined, input.draftAction);
     if (channel !== 'APP') await this.assertCanInvite(tx, input.phone, channel);

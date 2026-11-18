@@ -180,7 +180,7 @@ export class MyContractsService {
     });
     this.checkSignable(seen.c, sentAt, now ?? new Date());
     // 사용자 칸이 빈 계약은 올리기 전에 막는다 — 잠근 뒤에 다시 본다(그사이 지워졌을 수 있다)
-    if (employerMissing(employerOf(seen.store)))
+    if (employerMissing(seen.store.businessProfile))
       throw employerMissingConflict(EMPLOYER_MISSING_FOR_STAFF);
     assertUpload(signature, ['PNG'], SIGNATURE_MAX_BYTES);
     await checkSignatureImage(signature.buffer);
@@ -215,7 +215,7 @@ export class MyContractsService {
           select: EMPLOYER_STORE_SELECT,
         });
         const employer = employerOf(store);
-        if (employerMissing(employer))
+        if (employerMissing(store.businessProfile))
           throw employerMissingConflict(EMPLOYER_MISSING_FOR_STAFF);
         await signContract(tx, contractId, lockedAt);
         // 응답의 날인 시각은 이력의 처리 시각(DB 시계)과 같게 — 처리 완료본(131)도 이 값을 읽는다

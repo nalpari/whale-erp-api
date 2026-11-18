@@ -202,13 +202,10 @@ export class MyContractViewsService {
     // 당사자 행에 적힌 값(날인 때 고정 · 백필)이 있으면 사용자 칸 · 제2조를 그 값으로 — 처리 완료본과 같은 함수 · 같은 조건
     // (WHALEERP-131). 점포명 · 점포 주소 · 사업장 우편번호(고정하지 않는다 — 직원 앱이 보이지 않는다)는 지금 값이다
     const fixed = snapshotOf(party);
-    // 날인 때 고정한 값이 없으면 지금 점포 사업자정보로 본다 — 날인 API 와 같은 판정(employerMissing)
+    // 날인을 기다리는 계약만 지금 점포 사업자정보로 본다 — 날인 API 와 같은 판정. 고정한 값이 있거나(날인 · 백필) 날인 대기가
+    // 아닌 계약(거부 · 만료 · 종료 · 종이 계약)은 늘 false
     const missingEmployer =
-      !fixed &&
-      employerMissing({
-        ceoName: biz?.bizCeoName ?? null,
-        registrationNumber: biz?.bizRegistrationNumber ?? null,
-      });
+      item.awaitingSignature && !fixed && employerMissing(biz);
     const article2 = article2Of(c, store.name, fixed);
     // 직원 레코드 직무는 NOT NULL 이라 날인 · 백필이 적은 직무도 늘 있다 — 칸 타입(string)을 맞추려고만 잇는다
     const jobTitle = article2.jobTitle ?? c.staffMember.jobTitle;

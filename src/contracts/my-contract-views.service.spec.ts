@@ -429,6 +429,20 @@ describe('MyContractViewsService', () => {
       },
     );
 
+    it.each(['SIGNED', 'REJECTED'] as const)(
+      '날인을 기다리지 않는 계약(%s, 고정한 값 없음)은 사업자정보가 없어도 employerMissing 이 아니다 — 끝난 계약에 문의 안내가 뜨지 않게',
+      async (status) => {
+        tx.contract.findFirst.mockResolvedValue(detail({ status }));
+        tx.store.findUnique.mockResolvedValue(store({ businessProfile: null }));
+        const d = await service().findOne(77, 41, NOW);
+        expect(d).toMatchObject({
+          awaitingSignature: false,
+          signable: false,
+          employerMissing: false,
+        });
+      },
+    );
+
     it('체결 완료면 날인을 기다리지 않는다 — 대조가 맞아도 signable 은 false', async () => {
       tx.contract.findFirst.mockResolvedValue(detail({ status: 'SIGNED' }));
       const d = await service().findOne(77, 41, NOW);
