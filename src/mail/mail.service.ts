@@ -243,18 +243,18 @@ export class MailService {
  * 메일 꼬리의 운영사 정보 — 쿠팡 메일 꼬리처럼 「상호」 이름표 없이 회사명부터(2026-11-18 사용자 지정, 대표이사 이정선).
  * 주소 · 전화 · 사업자등록번호는 로그인 전 홈 꼬리(front guest-footer)와 같은 값(2026-10-22 재영).
  */
+/** 띠의 「WHALE ERP」 옆에 가운뎃점으로 이어 작게 붙이는 서비스 설명(2026-11-18 사용자 지정 — 한 번 뺐다가 점을 두고 다시 넣었다) */
+const SERVICE_TAGLINE = '매장 통합관리 서비스';
+
 // 꼬리 한 줄 안 항목 사이 구분자 — 작고 옅은 「|」(글자보다 작게 · 연한 회색), 정신없지 않게(2026-11-18 사용자 지정)
 const GAP = '<span style="margin:0 8px;font-size:10px;color:#c9cdd3">|</span>';
 const FOOTER_HTML = [
   '본 메일은 발신전용으로 회신되지 않습니다.',
   '',
-  // 회사명만 굵게(2026-11-18 사용자 지정)
   // 점 · 콜론은 쓰지 않고 작은 「|」 하나로만 가른다 — 점 · 콜론이 섞여 복잡해 보였다(2026-11-18 사용자 지정)
-  [
-    '<b style="font-weight:bold;color:#5f656d">(주)인터플러그</b>',
-    '대표이사 이정선',
-    '사업자등록번호 105-87-63602',
-  ].join(GAP),
+  ['(주)인터플러그', '대표이사 이정선', '사업자등록번호 105-87-63602'].join(
+    GAP,
+  ),
   [
     '03787 서울특별시 서대문구 연세로 5다길 22-3, 발리빌딩 3층',
     '전화 02-6928-0028',
@@ -393,7 +393,7 @@ export function mailHtml(
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7"><tr><td align="left" style="padding:24px;${L}">`,
     '<!--[if mso]><table role="presentation" width="560" align="left" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
     '<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background:#ffffff;border-radius:6px;overflow:hidden">',
-    `<tr><td align="left" bgcolor="#282f37" style="padding:18px 32px;background:#282f37;${L}">${logo}<span style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.02em;vertical-align:middle;${FONT}">${FROM_NAME}</span></td></tr>`,
+    `<tr><td align="left" bgcolor="#282f37" style="padding:18px 32px;background:#282f37;${L}">${logo}<span style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.02em;vertical-align:middle;${FONT}">${FROM_NAME}</span><span style="margin:0 8px;font-size:13px;color:#8f9eaf;vertical-align:middle;${FONT}">·</span><span style="font-size:13px;color:#aeb6c0;vertical-align:middle;${FONT}">${SERVICE_TAGLINE}</span></td></tr>`,
     `<tr><td align="left" style="padding:28px 32px 30px;${L};${FONT};color:${INK}">`,
     `<p style="margin:0 0 18px;font-size:20px;line-height:1.4;font-weight:bold;color:#282f37;${L}">${escapeHtml(mailHeading(subject))}</p>`,
     bodyBlocks(body, fill).map(block).join(''),

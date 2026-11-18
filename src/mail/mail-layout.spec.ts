@@ -182,8 +182,11 @@ describe('mailHtml', () => {
     expect(html).toContain('처음 로그인할 때 비밀번호를 변경해 주세요.</td>');
     expect(html).toContain('bgcolor="#282f37"');
     // 버튼: 관리자 웹 호버 모양 — 흰 바탕 · 회청 테두리 · 먹색 글자(2026-11-18 사용자 지정)
-    // 띠에는 「WHALE ERP」만 — 직원 앱 사용자도 받는 메일이라 「매장 통합관리 서비스」는 두지 않는다(2026-11-18 사용자 지정)
-    expect(html).not.toContain('매장 통합관리 서비스');
+    // 띠: 「WHALE ERP · 매장 통합관리 서비스」(가운뎃점으로 이어 작게)
+    expect(html).toContain(
+      'WHALE ERP</span><span style="margin:0 8px;font-size:13px;color:#8f9eaf;',
+    );
+    expect(html).toContain('>매장 통합관리 서비스</span>');
     expect(html).toContain('border:1px solid #6b7988');
     expect(html).toContain('style="display:inline-block;color:#3c4046;');
   });
