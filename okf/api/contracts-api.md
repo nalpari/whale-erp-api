@@ -195,10 +195,10 @@ a 직원 not yet joined has no account, so counts as not consented)
   is 404 「근무지 점포를 찾을 수 없습니다.」 even when kept at the same store, so
   it cannot move on to 발송 대기 (api #21 재리뷰). A **new** 근무지 must also be
   운영 중 (WHALEERP-722; since 2026-11-18 the shared 운영 기준 `OPERATING_STORE_WHERE` — `OPERATING`, not deleted,
-  with 대표자 · 사업자등록번호, see below): a new contract or a move to another store that is not 운영 중 is 400 「운영 중인
-  점포만 근무지로 고를 수 있습니다.」, told only after the scope check so a store
+  with 대표자 · 사업자등록번호, see below): a new contract or a move to another store that is not 운영 중 is 400 「운영 중이고 사업자 정보(대표자 · 사업자등록번호)가 있는 점포만 근무지로 고를 수 있습니다.」, told only after the scope check so a store
   outside the scope stays 404. A contract already at a 미운영 store is left as
-  it is — kept at the same store it is still saved and sent (2026-11-17 김민식).
+  it is — kept at the same store it is still saved (2026-11-17 김민식), but since 2026-11-18 it is not sent (409
+  `STORE_NOT_OPERATING`, below).
   `GET /contracts/store-options` lists 운영 중 stores only (the same `OPERATING_STORE_WHERE`). An account that is deleted, inactive or unknown gets 403
   on the list (`getManageableStores` is null).[^admin-scope]
 - **The BP is the tab's, not the account's** (WHALEERP-618, 2026-10-29). Every
@@ -398,7 +398,7 @@ What it refuses, before writing:
   and turn the age check into NaN, a 500), an integer above 2147483647
   (`storeId`, `wageAmount`, 수당 — the column would 500).
 - **404** — the store is missing, deleted, `CLOSED`, or outside the admin scope.
-- **400** — the store is not 운영 중 (미운영, or 운영 without 대표자 · 사업자등록번호 — `OPERATING_STORE_WHERE`, WHALEERP-722): 「운영 중인 점포만 근무지로 고를 수 있습니다.」
+- **400** — the store is not 운영 중 (미운영, or 운영 without 대표자 · 사업자등록번호 — `OPERATING_STORE_WHERE`, WHALEERP-722): 「운영 중이고 사업자 정보(대표자 · 사업자등록번호)가 있는 점포만 근무지로 고를 수 있습니다.」
 - **409** — someone with the same phone has **joined** (`join_status = JOINED`)
   and is `EMPLOYED` at that store (the mockup's 「이 점포 재직 중 → 차단」,
   decided from records alone). Records not joined yet are ignored: they are
@@ -691,7 +691,8 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   store already (409) or a 근무지 not 운영 (409 `STORE_NOT_OPERATING`, below) still fail when sent.
 - **Only a 운영 근무지 sends and takes 날인** (2026-11-18 김민식, replaces api #300's 사용자 칸 check). 「사업주 정보가 없는
   점포는 미운영으로 본다」(사용자 결정): a 근무지 counts as 운영 only when it is `OPERATING`, not deleted, **and** has the
-  대표자 · 사업자등록번호 that 날인 freezes into the 사용자 칸 (blank counts as empty) — `isOperatingStore` in
+  대표자 · 사업자등록번호 that 날인 freezes into the 사용자 칸 (empty = null or `''`; whitespace-only cannot be stored —
+  the 진위확인 대표자명 is trimmed to 1~50 chars and the number is 10 digits) — `isOperatingStore` in
   `contract-store-open.ts`; `OPERATING_STORE_WHERE` is the same condition as a Prisma where, used by the 근무지
   선택지 and the new-근무지 check of 722 too, so a store that can be chosen can also be sent. A store becomes 운영 only
   with 사업자 인증 · 좌표 · BP 사용 (`missingForOperation`) and the 본사

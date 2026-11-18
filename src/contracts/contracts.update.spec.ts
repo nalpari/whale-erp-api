@@ -1458,7 +1458,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
           ),
       );
       await expect(service.update(9, 7, dto({ storeId: 12 }))).rejects.toThrow(
-        '운영 중인 점포만 근무지로 고를 수 있습니다.',
+        '운영 중이고 사업자 정보(대표자 · 사업자등록번호)가 있는 점포만 근무지로 고를 수 있습니다.',
       );
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });

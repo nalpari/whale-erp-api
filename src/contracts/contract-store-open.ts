@@ -23,7 +23,10 @@ export const OPERATING_STORE_WHERE = {
   },
 } satisfies Prisma.StoreWhereInput;
 
-/** OPERATING_STORE_WHERE 와 같은 판정을 이미 읽은 점포 행으로(직원 앱 상세 · 날인) */
+/**
+ * OPERATING_STORE_WHERE 와 같은 판정을 이미 읽은 점포 행으로(직원 앱 상세 · 날인). 빈 값은 null 과 '' — where 와 같게 둔다.
+ * 공백만 든 값은 저장되지 않는다(점포 진위확인 대표자명은 trim 뒤 1~50자, 번호는 숫자 10자리).
+ */
 export const isOperatingStore = (store: {
   storeStatusCode: string;
   isDeleted: boolean;

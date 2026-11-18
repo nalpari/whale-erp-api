@@ -970,7 +970,8 @@ function sameStore(storeId: number, scoped: number): void {
 }
 const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다.';
 /** 미운영 점포는 새 근무지로 고를 수 없다(WHALEERP-722). */
-const STORE_NOT_OPERATING = '운영 중인 점포만 근무지로 고를 수 있습니다.';
+const STORE_NOT_OPERATING =
+  '운영 중이고 사업자 정보(대표자 · 사업자등록번호)가 있는 점포만 근무지로 고를 수 있습니다.';
 /** 플랫폼 계정이 BP 를 고르지 않음(X-Bp-Code-Id 없음) — 점포 정보 관리와 같은 400 이다. */
 const BP_NOT_CHOSEN = '근로계약을 볼 BP 를 골라 주세요.';
 
