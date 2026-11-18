@@ -227,9 +227,10 @@ export class MailService {
  * 머리 · 꼬리 사이에 넣고, 링크마다 버튼을 붙인다. 스타일은 메일 클라이언트가
  * `<style>` 을 버리는 경우가 많아 인라인으로 둔다.
  *
- * 카드는 표(table)로 가운데에 두고 안쪽 칸과 글마다 왼쪽 정렬을 적는다. 정렬을 적지 않으면 네이버 · 다음 · Outlook 처럼
- * 받은 메일을 가운데 정렬 칸에 넣어 보여 주는 메일 화면에서 본문이 가운데로 물려받아 보였다. `max-width` · `margin:auto`
- * 를 지우는 메일 화면도 있어 가운데 두기는 표의 align 으로 한다(2026-11-13 사용자 지적). 카드 폭은 `width:100%;max-width:560px`
+ * 카드는 표(table)로 왼쪽에 붙이고 안쪽 칸과 글마다 왼쪽 정렬을 적는다. 정렬을 적지 않으면 네이버 · 다음 · Outlook 처럼
+ * 받은 메일을 가운데 정렬 칸에 넣어 보여 주는 메일 화면에서 본문이 가운데로 물려받아 보였다(2026-11-13 사용자 지적).
+ * 카드 자리도 바깥 칸 · Outlook 전용 표에 align="left" 를 적어 왼쪽에 둔다 — 글만 왼쪽이고 카드가 화면 가운데에 떠 있어
+ * 여전히 가운데 정렬로 보였다(2026-11-18 사용자 지정, 통합테스트). 카드 폭은 `width:100%;max-width:560px`
  * 라 좁은 화면에서는 줄어들고, `max-width` 를 모르는 Outlook 데스크톱(Word 엔진)은 그 전용 주석(`<!--[if mso]>`) 안의
  * 560px 표가 폭을 잡는다. 글꼴 · 색은 body 스타일을 버리는 메일 화면이 많아 카드 칸에 다시 적는다.
  */
@@ -245,8 +246,8 @@ function mailHtml(body: string, links: readonly string[]): string {
   return [
     '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>',
     `<body style="margin:0;padding:0;background:#f4f5f7;${FONT};color:#222222">`,
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7"><tr><td align="center" style="padding:24px">',
-    '<!--[if mso]><table role="presentation" width="560" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f5f7"><tr><td align="left" style="padding:24px;${ALIGN_LEFT}">`,
+    '<!--[if mso]><table role="presentation" width="560" align="left" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
     '<table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background:#ffffff;border-radius:8px"><tr>',
     `<td align="left" style="padding:32px;${ALIGN_LEFT};${FONT};color:#222222">`,
     `<p style="margin:0 0 24px;font-size:18px;font-weight:bold;${ALIGN_LEFT}">${FROM_NAME}</p>`,

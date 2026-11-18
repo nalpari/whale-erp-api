@@ -137,11 +137,19 @@ describe('MailService', () => {
     expect(html).toContain('WHALE ERP');
   });
 
-  it('공통 틀은 카드를 표로 가운데 두고 칸 · 글마다 왼쪽 정렬을 적는다(가운데 정렬 칸에 넣어 보여 주는 메일 화면 대비)', async () => {
+  it('공통 틀은 카드를 표로 왼쪽에 붙이고 칸 · 글마다 왼쪽 정렬을 적는다(가운데 정렬 칸에 넣어 보여 주는 메일 화면 대비)', async () => {
     await service.send(input);
 
     const { html } = sent();
     expect(html).toContain('<td align="left"');
+    // 카드 자리도 왼쪽 — 바깥 칸과 Outlook 전용 표 모두 가운데를 쓰지 않는다(2026-11-18 사용자 지정)
+    expect(html).not.toContain('align="center"');
+    expect(html).toContain(
+      '<td align="left" style="padding:24px;text-align:left">',
+    );
+    expect(html).toContain(
+      '<!--[if mso]><table role="presentation" width="560" align="left"',
+    );
     // 카드 표 자체의 폭(Outlook 전용 주석 안의 560px 표와 따로 확인한다)
     expect(html).toContain(
       'width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px',

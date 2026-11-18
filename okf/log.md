@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-18
+* **Update**: [Mail (Gmail SMTP)](/api/mail.md) — 공통 메일 틀의 카드도 왼쪽에 붙인다(2026-11-18 사용자 지정, 통합테스트). 11-13 에 글만 왼쪽으로 맞추고 560px 카드는 바깥 칸 `align="center"` 로 가운데에 두어 메일이 여전히 가운데 정렬로 보였다 — 바깥 칸 · Outlook 전용 표도 `align="left"` 로, 틀에 `center` 가 남지 않는다. 단위 테스트 갱신.
+
 ## 2026-11-17
 * **Update**: [Work schedules](/api/work-schedules.md) — 일괄 · 기간 등록에서 예상 못 한 저장 오류가 연달아 3번 나면 남은 건은 시도하지 않고 같은 실패로 채워 바로 응답한다(WHALEERP-731, 재영 리뷰 — DB 장애 때 500건을 하나씩 다시 시도하며 요청을 붙잡지 않게). 저장 성공 · 업무 규칙 거절이면 다시 센다.
 * **Update**: [Work schedules](/api/work-schedules.md) — 기간 등록의 예상 못 한 저장 오류 안내를 「잠시 뒤 그날만 다시 등록해 주세요」로(WHALEERP-730, 재영 리뷰 — 기간 화면에는 줄만 다시 보내는 길이 없다).
