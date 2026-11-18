@@ -1334,6 +1334,30 @@ describe('ContractDeliveryService', () => {
       expect(tx.invitation.delete).toHaveBeenCalled();
     });
 
+    it.each([
+      [
+        '토큰 단계 실패',
+        new BizppurioError('/v1/token failed: http=400 code=3010', 3010, 400, {
+          path: '/v1/token',
+        }),
+        { code: 'SEND_FAILED', failure: 'NOT_SENT' },
+      ],
+      [
+        '메시지 요청 뒤 끊김',
+        new BizppurioError('socket hang up', undefined, undefined, {
+          path: '/v3/message',
+        }),
+        { code: 'SEND_UNCONFIRMED' },
+      ],
+    ])(
+      '소속 추가 확인 요청 %s 도 delivery AFFILIATION 을 싣는다(WHALEERP-735)',
+      async (_, failure, expected) => {
+        prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
+        const body = await failWith(failure, affiliationPending());
+        expect(body).toMatchObject({ ...expected, delivery: 'AFFILIATION' });
+      },
+    );
+
     it('메시지 요청 뒤 응답이 끊기면 되돌리지 않고 502 SEND_UNCONFIRMED(계약 ID)', async () => {
       const body = await failWith(
         new BizppurioError('socket hang up', undefined, undefined, {
