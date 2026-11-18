@@ -208,7 +208,7 @@ describe('mailHtml', () => {
     );
     // 머리: 로고 그림 칸과 글자 칸을 나눠 valign="middle" 로 세로 가운데(2026-11-18 사용자 지정)
     expect(html).toContain(
-      '<td width="28" valign="middle" style="width:28px;vertical-align:middle;padding:0 8px 0 0"><img src="cid:whale-erp-logo"',
+      '<td width="24" valign="middle" style="width:24px;vertical-align:middle;padding:0 8px 0 0"><img src="cid:whale-erp-logo"',
     );
     expect(html).toContain('<td valign="middle" style="vertical-align:middle;');
     // 「WHALE ERP · 매장 통합관리 서비스」(가운뎃점으로 이어 작게)
@@ -228,7 +228,7 @@ describe('mailHtml', () => {
     expect(html).toContain('style="display:inline-block;color:#3c4046;');
     // 머리 영역 아래 옅은 구분선
     expect(html).toContain(
-      'padding:20px 32px 18px;border-bottom:1px solid #e6e8eb;',
+      'padding:14px 32px 12px;border-bottom:1px solid #e6e8eb;',
     );
     // 본문과 꼬리 사이 굵은 회색 띠
     expect(html).toContain('<td bgcolor="#f2f3f5" height="8"');

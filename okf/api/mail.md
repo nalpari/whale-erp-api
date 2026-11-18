@@ -71,7 +71,7 @@ paragraph — for clients that do not render HTML; only the HTML part gets the l
 **Layout ("C 커머스 안내형", 2026-11-18 user decision — shaped like Coupang · Kurly · SSG order notices so
 the sender is obvious, a trust issue; a dark-band version was tried first and dropped).** One white sheet,
 card pinned left: the whale logo and `WHALE ERP` · grey 「매장 통합관리 서비스」 at the top left (logo and text in
-two table cells with `valign="middle"` so they line up in every client) above a thin `#e6e8eb` rule that separates the header from the body; a 22px bold heading (body text 14px like the admin web's Body size, wordmark 17/12, footer 12 — user-picked scale) — the mail
+two table cells with `valign="middle"` so they line up in every client) above a thin `#e6e8eb` rule that separates the header from the body; a 22px bold heading (body text 14px like the admin web's Body size, wordmark 16/12, footer 12 — user-picked scale) — the mail
 subject with its leading `[WHALE ERP]` removed (`mailHeading`), so no template needed a new field; the body
 split by `bodyBlocks` — consecutive `- 항목: 값` lines (a space after the colon, label up to 30 chars, so
 `- 10:00 …` and `- https://…` stay text) become rows in a grey rounded info box, `※` lines become grey
