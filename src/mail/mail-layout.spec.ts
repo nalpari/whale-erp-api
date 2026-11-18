@@ -188,6 +188,10 @@ describe('mailHtml', () => {
     );
     expect(html).toContain('>매장 통합관리 서비스</span>');
     expect(html).toContain('border:1px solid #6b7988');
+    // 버튼은 표 · 안내 상자와 같은 폭으로 가득, 글자는 가운데(2026-11-18 사용자 지정)
+    expect(html).toContain(
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 0"><tr><td align="center" bgcolor="#ffffff"',
+    );
     expect(html).toContain('style="display:inline-block;color:#3c4046;');
   });
 });

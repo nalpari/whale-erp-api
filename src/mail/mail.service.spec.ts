@@ -164,7 +164,9 @@ describe('MailService', () => {
     const { html } = sent();
     expect(html).toContain('<td align="left"');
     // 카드 자리도 왼쪽 — 바깥 칸과 Outlook 전용 표 모두 가운데를 쓰지 않는다(2026-11-18 사용자 지정)
-    expect(html).not.toContain('align="center"');
+    // 가운데는 버튼 글자 칸 하나뿐이다(버튼은 가득 채우고 글자만 가운데)
+    expect(html.match(/align="center"/g)).toHaveLength(1);
+    expect(html).toContain('<td align="center" bgcolor="#ffffff"');
     expect(html).toContain(
       '<td align="left" style="padding:24px;text-align:left">',
     );

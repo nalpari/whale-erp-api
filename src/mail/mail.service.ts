@@ -384,7 +384,7 @@ export function mailHtml(
   const buttons = links
     .map(
       (link) =>
-        `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 0"><tr><td bgcolor="#ffffff" style="padding:12px 24px;border:1px solid #6b7988;border-radius:6px;background:#ffffff"><a href="${escapeHtml(link)}" style="display:inline-block;color:#3c4046;font-size:15px;font-weight:bold;text-decoration:none;border-radius:6px">바로가기</a></td></tr></table>`,
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 0"><tr><td align="center" bgcolor="#ffffff" style="text-align:center;padding:14px 24px;border:1px solid #6b7988;border-radius:6px;background:#ffffff"><a href="${escapeHtml(link)}" style="display:inline-block;color:#3c4046;font-size:15px;font-weight:bold;text-decoration:none;border-radius:6px">바로가기</a></td></tr></table>`,
     )
     .join('');
   return [
