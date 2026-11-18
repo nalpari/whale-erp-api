@@ -137,9 +137,9 @@ describe('MailService', () => {
     expect(html).toContain('>임시 비밀번호: x8Rk-2mPq</p>');
     // 제목은 메일 제목에서 [WHALE ERP] 를 뗀 것
     expect(html).toContain('>임시 비밀번호를 보내 드립니다</p>');
-    // 꼬리: 발신 전용 안내, 한 줄 띄고 운영사 정보 — 회사명 굵게, 기호 없이 빈칸으로 가른다(2026-11-18 사용자 지정)
+    // 꼬리: 발신 전용 안내, 한 줄 띄고 운영사 정보 — 회사명 굵게, 작고 옅은 「|」로 가른다(2026-11-18 사용자 지정)
     expect(html).toContain(
-      '본 메일은 발신전용으로 회신되지 않습니다.<br><br><b style="font-weight:bold;color:#5f656d">(주)인터플러그</b>&nbsp;&nbsp;&nbsp;대표이사 이정선&nbsp;&nbsp;&nbsp;사업자등록번호 105-87-63602',
+      '본 메일은 발신전용으로 회신되지 않습니다.<br><br><b style="font-weight:bold;color:#5f656d">(주)인터플러그</b><span style="margin:0 8px;font-size:10px;color:#c9cdd3">|</span>대표이사 이정선<span style="margin:0 8px;font-size:10px;color:#c9cdd3">|</span>사업자등록번호 105-87-63602',
     );
     // 고래 로고는 공개 주소 없이 인라인 첨부(cid)로
     expect(html).toContain('<img src="cid:whale-erp-logo"');

@@ -70,14 +70,14 @@ paragraph — for clients that do not render HTML; only the HTML part gets the l
 
 **Layout ("B 브랜드 띠형", 2026-11-18 user decision — make it look as official as Coupang ·
 Kurly · SSG notices, a trust issue).** Top to bottom: a dark band (`#282f37`, the admin web's
-menu bar) with the white whale logo and `WHALE ERP` wordmark and, on the same line, a small grey 「매장 통합관리 서비스」; a heading — the mail subject with its leading
+menu bar) with the white whale logo and `WHALE ERP` wordmark  (no service tagline — staff-app users get these mails too, so 「매장 통합관리 서비스」 was dropped, user decision); a heading — the mail subject with its leading
 `[WHALE ERP]` removed (`mailHeading`), so no template needed a new field; the body split by
 `bodyBlocks` — consecutive `- 항목: 값` lines (a space after the colon, label up to 30 chars, so
 `- 10:00 …` and `- https://…` stay text) become a grey-label info table, `※` lines become a
 notice box (an empty `※` line is dropped), everything else a paragraph, and the template's own
 sentences each get their own line (`sentences`: after `. ? !` followed by a space — user request);
 the buttons in the admin web's hover look — white, 1px slate `#6b7988` border, ink text (user's pick); a grey footer with 「본 메일은 발신전용으로 회신되지 않습니다.」, a blank line, and, like
-Coupang's footer, **(주)인터플러그** (bold), 대표이사 이정선, 사업자등록번호 … on one line and address, phone on the next — separated by spaces only, no `·` `:` `|` (the symbols looked cluttered)
+Coupang's footer, **(주)인터플러그** (bold), 대표이사 이정선, 사업자등록번호 … on one line and address, phone on the next — separated by a small light `|` (10px, `#c9cdd3`) and no `·` or `:` — the mixed dots and colons looked cluttered
 (user-specified; address and phone match the guest-site footer).
 
 **The block shape comes from the template, not the filled body.** `send` passes the unfilled
