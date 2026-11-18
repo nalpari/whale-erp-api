@@ -426,6 +426,8 @@ export function mailHtml(
     `<table ${TABLE} width="100%" bgcolor="#ffffff" style="background:#ffffff"><tr><td align="left" style="padding:0;${L}">`,
     '<!--[if mso]><table role="presentation" width="560" align="left" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->',
     `<table ${TABLE} width="560" bgcolor="#ffffff" style="width:100%;max-width:560px;background:#ffffff">`,
+    // 맨 위 3px 메뉴색 선 — 제목 색(#282f37)과 이어져 웨일ERP 메일로 읽히게(2026-11-18 사용자 지정, 머리 시안 B)
+    '<tr><td bgcolor="#282f37" height="3" style="height:3px;line-height:3px;font-size:0;background:#282f37">&nbsp;</td></tr>',
     // 머리 영역 아래 옅은 구분선 — 머리와 본문을 가른다(2026-11-18 사용자 지정)
     `<tr><td align="left" style="padding:14px 32px 12px;border-bottom:1px solid #e6e8eb;${L}">${header}</td></tr>`,
     `<tr><td align="left" style="padding:28px 32px 28px;${L};${FONT};color:${INK}">`,

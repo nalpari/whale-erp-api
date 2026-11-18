@@ -226,6 +226,8 @@ describe('mailHtml', () => {
       '<td align="center" bgcolor="#ffffff" style="text-align:center;padding:15px 24px;border:1px solid #6b7988;',
     );
     expect(html).toContain('style="display:inline-block;color:#3c4046;');
+    // 맨 위 3px 메뉴색 선(머리 시안 B)
+    expect(html).toContain('<tr><td bgcolor="#282f37" height="3"');
     // 머리 영역 아래 옅은 구분선
     expect(html).toContain(
       'padding:14px 32px 12px;border-bottom:1px solid #e6e8eb;',
