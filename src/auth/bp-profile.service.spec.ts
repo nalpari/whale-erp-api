@@ -281,6 +281,18 @@ describe('BpProfileService', () => {
       );
     });
 
+    // 상태 변경(bp_codes → 본사 점포)과 같은 순서로 잠근다 — 반대면 동시에 들어온 두 요청이 교착(40P01)한다.
+    it('BP 행을 본사 사업자정보 · 점포보다 먼저 잠근다', async () => {
+      await service.update(1, input);
+      const bpAt = prisma.bpCode.update.mock.invocationCallOrder[0];
+      expect(bpAt).toBeLessThan(
+        prisma.storeBusinessProfile.updateMany.mock.invocationCallOrder[0],
+      );
+      expect(bpAt).toBeLessThan(
+        prisma.storeBusinessProfile.update.mock.invocationCallOrder[0],
+      );
+    });
+
     it('값이 그대로면 변경 이력을 남기지 않는다', async () => {
       prisma.bpCode.findFirst.mockResolvedValue(
         bp({ tradeName: '새 상호명', bizCeoPhone: '0212345678' }),

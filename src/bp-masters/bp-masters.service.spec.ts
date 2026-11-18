@@ -939,6 +939,25 @@ describe('BpMastersService', () => {
       );
     });
 
+    // adapter-pg 가 제약 이름을 싣는 자리(driverAdapterError.cause.constraint.index)로도 가린다.
+    it('제약 이름이 driverAdapterError 에 있는 이메일 위반도 409', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue({ bpCode: 'BP000012' });
+      prisma.adminAccount.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('unique', {
+          code: 'P2002',
+          clientVersion: 'x',
+          meta: {
+            driverAdapterError: {
+              cause: { constraint: { index: 'admin_accounts_email_key' } },
+            },
+          },
+        }),
+      );
+      await expect(service.create(CALLER, createInput)).rejects.toThrow(
+        new ConflictException('이미 사용 중인 아이디 또는 이메일입니다.'),
+      );
+    });
+
     // 사업자번호는 DB 고유가 아니다(본사 점포로 옮긴 뒤) — 다른 고유 위반(점포코드 등)을 409 로 숨기지 않는다.
     it('계정이 아닌 고유 위반은 409 로 바꾸지 않고 그대로 던진다', async () => {
       prisma.bpCode.findFirst.mockResolvedValue({ bpCode: 'BP000012' });
@@ -1011,6 +1030,14 @@ describe('BpMastersService', () => {
           afterValue: '01099998888',
         }),
       ]);
+    });
+
+    // 상태 변경(bp_codes → 본사 점포)과 같은 순서로 잠근다 — 반대면 동시에 들어온 두 요청이 교착(40P01)한다.
+    it('BP 행을 본사 점포보다 먼저 잠근다 — 상태 변경과 잠금 순서가 같다', async () => {
+      await service.update(CALLER, 12, updateInput);
+      expect(prisma.bpCode.update.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.storeBusinessProfile.update.mock.invocationCallOrder[0],
+      );
     });
 
     it('계정 칸만 바뀌어도 BP 의 최종수정을 올린다', async () => {

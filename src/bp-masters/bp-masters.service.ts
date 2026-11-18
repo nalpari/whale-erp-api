@@ -505,7 +505,13 @@ export class BpMastersService {
         if (biz)
           await this.assertNumberFree(tx, biz.bizRegistrationNumber, bpCodeId);
 
-        // 상호명 · 사업자정보 · 좌표는 본사 점포에 고치고 이력도 본사 점포에 남긴다(설계 D5). BP 행은 최종수정만 올린다.
+        // BP 행(최종수정)을 본사 점포보다 먼저 잠근다 — 상태 변경(changeStatus)이 bp_codes → 본사 점포 순서로 잠그므로
+        // 반대로 잡으면 같은 BP 에 동시에 들어온 두 요청이 교착(40P01)한다.
+        await tx.bpCode.update({
+          where: { bpCodeId },
+          data: { updatedBy: by },
+        });
+        // 상호명 · 사업자정보 · 좌표는 본사 점포에 고치고 이력도 본사 점포에 남긴다(설계 D5).
         await saveHqProfile(tx, {
           bpCodeId,
           hqStoreId: bp.hqStoreId,
@@ -515,10 +521,6 @@ export class BpMastersService {
           verified: biz ? verifiedBizOf(biz) : null,
           location,
           by,
-        });
-        await tx.bpCode.update({
-          where: { bpCodeId },
-          data: { updatedBy: by },
         });
         await tx.adminAccount.update({
           where: { adminAccountId },
@@ -1101,6 +1103,11 @@ function isAccountUniqueViolation(error: unknown): boolean {
     error.code !== 'P2002'
   )
     return false;
-  const where = `${error.message} ${JSON.stringify(error.meta?.target ?? '')}`;
-  return /admin_accounts_(login_id|email)/.test(where);
+  // adapter-pg 는 PostgreSQL 이 준 제약 이름을 driverAdapterError.cause.constraint.index 에 싣고, 메시지에도
+  // 「constraint: 이름」으로 쓴다(meta.target 은 없다) — bp-admins 의 isEmailKeyViolation 과 같은 자리를 본다.
+  const index = (
+    error.meta?.driverAdapterError as
+      { cause?: { constraint?: { index?: string } } } | undefined
+  )?.cause?.constraint?.index;
+  return /admin_accounts_(login_id|email)/.test(index ?? error.message);
 }

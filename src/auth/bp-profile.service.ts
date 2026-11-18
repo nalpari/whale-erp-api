@@ -131,6 +131,12 @@ export class BpProfileService {
       }
 
       const clear = Boolean(input.clearBusinessVerification);
+      // BP 의 최종수정을 먼저 올린다 — 로그인 정보 버전(me/login-info-version)이 이 시각을 봐 상호명 변경을 알리고, BP 행을
+      // 본사 점포보다 먼저 잠가 상태 변경(bp_codes → 본사 점포)과 잠금 순서를 맞춘다(반대면 동시 요청이 교착한다).
+      await tx.bpCode.update({
+        where: { bpCodeId },
+        data: { updatedBy: adminAccountId },
+      });
       // 동시 수정 검사 — 조회가 준 updatedAt 은 본사 사업자정보 행의 것이다. 읽은 그대로일 때만 저장한다.
       const { count } = await tx.storeBusinessProfile.updateMany({
         where: {
@@ -179,11 +185,6 @@ export class BpProfileService {
             : null,
         location,
         by: adminAccountId,
-      });
-      // BP 의 최종수정도 올린다 — 로그인 정보 버전(me/login-info-version)이 이 시각을 봐 상호명 변경을 알린다.
-      await tx.bpCode.update({
-        where: { bpCodeId },
-        data: { updatedBy: adminAccountId },
       });
     });
   }
