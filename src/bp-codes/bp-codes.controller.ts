@@ -86,7 +86,7 @@ export class BpCodesController {
     if (access === 'unavailable')
       throw new ForbiddenException(ACCOUNT_UNAVAILABLE_MESSAGE);
     if (access === 'denied') throw new NotFoundException(NOT_FOUND_MESSAGE);
-    const items = await this.scope.listBpStores(bpCodeId);
+    const items = await this.scope.listBpStores(bpCodeId, user);
     if (!items) throw new NotFoundException(NOT_FOUND_MESSAGE);
     return { items, total: items.length };
   }

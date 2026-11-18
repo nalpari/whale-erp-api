@@ -6,6 +6,7 @@ import {
 import { adminNames } from '../common/admin-names';
 import { containsText } from '../common/contains-text';
 import { dateOnly } from '../common/date-only';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { PrismaService } from '../prisma/prisma.service';
 import { addDays, kstDayStart, parseDateOnly } from '../staff-members/kst-date';
 import { actionsOf, inScope, type HolidayCaller } from './bp-holiday-access';
@@ -96,7 +97,7 @@ export class BpHolidaysService {
       }),
       this.prisma.bpCode.findUniqueOrThrow({
         where: { bpCodeId: caller.bpCodeId },
-        select: { tradeName: true },
+        select: HQ_TRADE_NAME_SELECT,
       }),
       this.prisma.publicHoliday.findMany({
         where: { holidayDate: { gte: from, lte: to } },
@@ -112,7 +113,7 @@ export class BpHolidaysService {
     for (const h of holidays) {
       const actions = actionsOf(caller, managedOf(h), today);
       for (const date of datesBetween(h, from, to)) {
-        const target = this.targetOn(h, date, caller, bp.tradeName);
+        const target = this.targetOn(h, date, caller, tradeNameOf(bp));
         if (!target) continue;
         items.push({
           date: dateOnly(date),

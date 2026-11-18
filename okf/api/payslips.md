@@ -4,8 +4,16 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-13T06:12:05Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
 sources:
+  - id: payslip-shared
+    resource: ../../src/payslips/payslip-shared.ts
+    title: pickedStores — 목록 · 발송의 점포 조건(storeIds · storeTypes, 본사 HQ 포함)
+    last_modified: 2026-11-17T06:50:00Z
+  - id: payslip-list-query
+    resource: ../../src/payslips/dto/payslip-list.query.dto.ts
+    title: 목록 쿼리 — storeTypes 는 StoreScopeType(DIRECT · FRANCHISE · HQ)
+    last_modified: 2026-11-17T08:19:43Z
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
     title: PayslipListService (관리자 목록 · 상세, 가림 · 상태 건수)
@@ -54,7 +62,9 @@ sources:
 
 급여명세서 관리 화면(WHALEERP-330)을 한 번에 그린다. 쿼리는 `month`(YYYY-MM, 필수 — 급여 기간 시작일이 그 달인
 명세서), `status`(쉼표 목록, 없으면 전체), `storeIds`(쉼표 목록 1000개까지, 직원 목록과 같은 이름 · 검증 — 관리 범위 밖 ID 는 조용히
-빠지고 남는 게 없으면 0건), `storeTypes`(쉼표 목록 DIRECT · FRANCHISE — 상단 점포 범위의 직영 · 가맹, 주면 그 유형의 폐점 아닌 점포만,
+빠지고 남는 게 없으면 0건), `storeTypes`(쉼표 목록 DIRECT · FRANCHISE · HQ — 상단 점포 범위의 직영 · 가맹 · 본사, 주면 그 유형의 폐점 아닌 점포만; HQ 는 2026-11-17 부터 받는
+값이고(API enum `StoreScopeType`) 본사도 `store_type_code` 가 DIRECT 라 DIRECT 는 본사가 아닌 직영이다 — `matchesStoreScope` · `payslip-shared.ts`. 발송(`POST /payslips/send`)의 `storeTypes` 도 같다. OpenAPI 에도 다른 3팀 목록처럼 `enum` · `enumName: 'StoreScopeType'` · 배열로 나온다(2026-11-17 리뷰 — 전에는 문자열 하나로 적혀 있었다).
+본사도 권한 · 매핑대로 관리 범위에 들어가고 가맹 마스터 · 가맹 관리자만 뺀다,
 `storeIds` 와 함께면 둘 다 맞는 점포, 직원 목록과 같다 — `pickedStores`), `staffName`(직원명 부분 일치, 대소문자 무시, `%` · `_` 는 글자 그대로 — `containsText`, 50자),
 `reviewPending`(true 면 검토 대기만 — 아래, false · 없음은 거르지 않음), `page`, `pageSize`(20 · 50 · 100 만, 기본 20). 점포를 고르지 않으면 관리자의 관리 범위(`AdminScopeService.getManageableStores`)
 전체다. 정렬은 직원 이름, 마지막에 `payslipId`.

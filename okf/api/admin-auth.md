@@ -4,7 +4,7 @@ title: Admin authentication
 description: 관리자 웹 login (1팀 admin_accounts) — login · refresh · logout over admin_sessions, temporary-password login, 아이디 찾기 (masked login id), GET /auth/admin/login-info for the screen, the per-request menu-permission guard, the public 공통코드 API (platform BP only), a platform user's stores and 공통코드 of a picked BP, the store list version (`stores-version`, `me/stores`) the header store picker refreshes by, and the login info version (`me/login-info-version`) the screen re-reads login-info by.
 tags: [auth, jwt, security, session, admin, codes]
 status: stable
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T01:30:00Z }
 sources:
   - id: access-messages
     resource: ../../src/auth/access-messages.ts
@@ -17,7 +17,7 @@ sources:
   - id: admin-auth-service
     resource: ../../src/auth/admin-auth.service.ts
     title: 관리자 웹 login · refresh · logout · signup-session
-    last_modified: 2026-10-29T06:02:57Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: password
     resource: ../../src/auth/password.ts
     title: verifyPassword — scrypt 형식이 아닌 저장값('!')도 더미 해시로 한 번 대조
@@ -33,7 +33,7 @@ sources:
   - id: bp-profile-service
     resource: ../../src/auth/bp-profile.service.ts
     title: BpProfileService — 마이페이지 사업자정보(S-UOJVUR) 조회 · 수정(토큰 반영 · 지우기) · 사업자 번호 검사
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-18T01:30:00Z
   - id: admin-login-id-find-service
     resource: ../../src/auth/admin-login-id-find.service.ts
     title: POST /auth/admin/login-id-find-attempts — 아이디 찾기(가린 아이디)
@@ -45,7 +45,7 @@ sources:
   - id: admin-login-info-service
     resource: ../../src/auth/admin-login-info.service.ts
     title: Login info — account, menu tree with CRUD, managed stores, codes; its version (account · role group · group menus · menus · BP rows)
-    last_modified: 2026-11-03T01:00:00Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: menu-permission-guard
     resource: ../../src/auth/menu-permission.guard.ts
     title: '@MenuPermission(action | action[], { platformOnly }) — menu by the controller path, per-request check, target BP (X-Bp-Code-Id → @TargetBp())'
@@ -73,11 +73,15 @@ sources:
   - id: bp-codes-controller
     resource: ../../src/bp-codes/bp-codes.controller.ts
     title: GET /bp-codes · /bp-codes/{bpCodeId}/stores · stores-version · code-items — 플랫폼 사용자의 BP 선택과 진입
-    last_modified: 2026-10-30T07:00:00Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
-    title: AdminScopeService — 직원 · 점포 판정의 탭 BP 인자(scopeAdmin)
-    last_modified: 2026-10-30T07:00:00Z
+    title: AdminScopeService — 직원 · 점포 판정의 탭 BP 인자(scopeAdmin), 본사 점포 범위(hqScope)
+    last_modified: 2026-11-17T08:19:43Z
+  - id: store-scope-type
+    resource: ../../src/stores/store-scope-type.ts
+    title: StoreScopeType(DIRECT · FRANCHISE · HQ) · matchesStoreScope · canSeeHq(가맹 마스터 · 가맹 관리자만 본사 제외)
+    last_modified: 2026-11-17T08:19:43Z
 ---
 
 # Routes
@@ -546,6 +550,19 @@ the guard's check. `hidesPersonalData` stays BM · BA only: PM · PA see franchi
 without HQ consent (재영 2026-10-26). Omitting the argument keeps the old
 own-BP rule, which is what every caller does until it moves.
 
+**The 본사 점포 is handled like any other store by permission and mapping** (`stores.is_hq`, 2026-11-17;
+`canSeeHq` in `src/stores/store-scope-type.ts`: `isPlatform || role not FM · FA`). Platform accounts, BM and BA see it under the normal rule — 전체 점포 includes it, otherwise only if mapped to it. `hqScope` adds `isHq: false` only for FM · FA (their matching targets are 가맹 점포) in `getManageableStores`, `managedStore` (behind `canManageStore` · `canManageStaffAt`),
+`listStores` (login-info · `me/stores`) and the admin call of `listBpStores`
+(`GET /bp-codes/{id}/stores`); 직원 앱 callers of `listBpStores` still get every store. An FM or FA —
+even with `is_all_stores` — therefore has no 본사 근무지 and no 본사 직원: every 3팀 list
+and action that goes through this scope drops them, and naming the 본사 directly is the same
+403 · 404 as any out-of-scope store. The platform judgement here is the role type (PM · PA),
+as `scopeAdmin` opens the tab BP by role type. `AdminStoreDto` (login-info, `me/stores`,
+`GET /bp-codes/{id}/stores`) carries `isHq` next to `storeTypeCode`; a 본사's `storeTypeCode` is
+always `DIRECT` (CHECK `stores_is_hq_direct`), so a screen telling 직영 from 본사 must read
+`isHq`. `GET /bp-codes` and the BP name everywhere now come from the 본사's profile
+(`HQ_TRADE_NAME_SELECT` · `tradeNameOf`); its keyword matches the live 본사's 상호.
+
 **A guard runs before pipes and the handler**, so a caller without the right —
 or a non-platform caller on a platform screen — now gets 403 even for a
 malformed body or query (400) or an id outside `1..2147483647` (404). A missing
@@ -805,8 +822,14 @@ from.
 # 마이페이지 사업자정보 (S-UOJVUR)
 
 BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules.ts`)는 가맹 마스터(`FM`)도
-포함해 여기 쓰면 안 된다. 그 밖의 권한은 모두 403. `BpProfileService`가 `bp_codes` 행(로그인한 관리자의
-`bpCodeId`)을 직접 다룬다 — 플랫폼 쪽 BP 수정(F-EHHJLV)은 아직 없다.
+포함해 여기 쓰면 안 된다. 그 밖의 권한은 모두 403. 2026-11-17 부터 상호명 · 사업자정보는 `bp_codes` 가
+아니라 **그 BP 본사 점포(`stores.is_hq`)의 `store_business_profiles`** 에 있어, `BpProfileService` 는
+본사 행을 읽고(`HQ_PROFILE_SELECT`) 저장은 `saveHqProfile`(`src/stores/hq-store.ts`)로 한다 — 플랫폼 BP
+수정([BP masters](/api/bp-masters.md))과 같은 함수다. 응답 모양은 그대로(`tradeName` · `biz*`)이고,
+본사 좌표 `latitude` · `longitude` · `isLocationApplied` 가 조회 응답과 저장 본문에 더해졌다(위도 · 경도는
+함께; 하나만 보내면 400, 둘 다 생략하면 그대로, `null` 이면 지움. `isLocationApplied` 는 좌표 없이 혼자 보내도 반영되고, 생략하면 현재 값 그대로이며, 본사를 처음 만들 때만 사용으로 시작한다 — 2026-11-17 리뷰 반영). 이 세 칸은 「전체 치환」의 예외다 — 다른 선택 칸은 빼면 지워진다. 살아 있는 본사의 사업자정보가 없으면(BP 마다 본사가 있어야 하므로 불변식이 깨진 것) 조회는 빈 값으로 덮지 않고 500 이다. 저장하면 본사 점포명 · 주소 · 좌표도 같이 바뀌고 본사 운영
+상태를 다시 정한다 — 운영 조건(사업자 인증 · 좌표 · BP 사용)을 잃으면 **묻지 않고 미운영으로 내려간다**
+(2026-11-17 사용자 결정).
 
 - **사업자등록번호 · 대표자명 · 개업일자는 검사만 먼저 하고, 실제 반영은 저장(`PATCH`)에서만 한다** — 점포
   사업자정보와 같은 두 단계(2026-10-22 사용자 결정, 「인증하자마자 바로 저장」하던 첫 버전을 고침).
@@ -823,12 +846,13 @@ BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules
   먼저 들어왔을 수 있어서다.
 - **BP 자신의 번호와 그 BP 소속 점포(직영 · 가맹 가리지 않음)의 번호는 서로 중복으로 보지 않는다**
   (2026-10-22 사용자 결정, `PL-OCJOFP`). `isBizRegistrationNumberTaken()`/`verify()`의
-  `excludeBpCodeId` 인자가 이 BP 의 `bp_codes` 행뿐 아니라 `store.bpCodeId` 도 같이 뺀다 — 마이페이지
-  재인증(`BpProfileService.requestVerification`)만 넘긴다. 점포가 몇 개든 "그 번호를 쓰는 살아 있는
-  점포는 전체에서 하나뿐" 규칙(기존 `isNumberTaken`, 폐점 · 삭제 제외)은 그대로라, 다른 점포가 같은 번호를
-  쓰려면 먼저 기존 점포를 삭제하거나 폐점해야 한다 — 따로 구현하지 않아도 되는, 기존 중복 규칙의 자연스러운
-  결과다. 반대 방향(점포가 자기 BP 의 번호를 쓰는 것)은 점포 등록 · 수정의 `isNumberTaken`이 애초에
-  `bp_codes`를 보지 않아 막힌 적이 없다.
+  `excludeBpCodeId` 인자가 이 BP 의 본사와 소속 점포(`store.bpCodeId`)를 함께 뺀다 — 마이페이지
+  재인증(`BpProfileService.requestVerification`)과 플랫폼 BP 수정이 넘긴다. BP 번호가 본사 사업자정보로
+  옮겨져 검사는 `store_business_profiles` 한 번이다(살아 있는 점포, 플랫폼 BP 행 제외). 점포가 몇 개든 "그
+  번호를 쓰는 살아 있는 점포는 전체에서 하나뿐" 규칙(`isNumberTaken`, 폐점 · 삭제 제외)은 그대로라, 다른 점포가
+  같은 번호를 쓰려면 먼저 기존 점포를 삭제하거나 폐점해야 한다. 반대 방향(점포가 자기 BP 의 번호를 쓰는 것)은
+  `isNumberTaken` 이 소속 BP 의 본사만 빼서 계속 된다. **DB 고유 인덱스(`bp_codes_biz_registration_number_key`)는
+  칸과 함께 사라졌다** — 위 번호별 잠금 + 재검사가 유일한 보장이다.
 - **그 밖의 항목(상호명 · 대표자 연락처 · 대표자 이메일 · 사업장주소 · 업태 · 종목)은 인증 여부와 관계없이
   `PATCH`로 바로 저장한다.**
 - **`clearBusinessVerification: true`를 보내면 사업자등록번호 · 대표자명 · 개업일자 · `bizVerifiedAt`을
@@ -838,11 +862,15 @@ BP 마스터(`roleTypeCode === 'BM'`) 전용 — `isBpMaster()`(`role-menu-rules
   하지만(사용자 결정) 구독 자체가 아직 없어(관련 테이블 없음, front `S-JHQQNR`「1차 범위 밖」과 같은 이유)
   지금은 검사하지 않는다 — 구독이 생기면 여기에 그 검사를 더한다.
 - `updatedAt` 라운드트립으로 동시 수정을 가린다(`sameMillisecond`, `admin-profile.service.ts`와 같은
-  패턴) — 그사이 다른 저장이 있었으면 409. 검사만 하는 `business-verification`은 저장이 아니라
-  `updatedAt`을 받지 않는다.
-- 바뀐 항목마다 `bp_change_histories`에 한 줄(`field` · `beforeValue` · `afterValue` · `changedBy`) —
-  값이 같으면 쓰지 않는다. 토큰으로 반영된 세 값은 `note: '사업자 번호 인증'`, `clearBusinessVerification`
-  으로 지운 세 값은 `note: '사업자 번호 인증 해제'`로 구분한다.
+  패턴) — 그사이 다른 저장이 있었으면 409. **이 `updatedAt` 은 본사 사업자정보 행의 것이다**(2026-11-17,
+  전엔 `bp_codes`) — 플랫폼 BP 수정이 같은 행을 고치면 마이페이지 저장이 409 가 된다. 저장은 `bp_codes` 의
+  `updated_by` 도 올려 로그인 정보 버전(`me/login-info-version`)이 상호명 변경을 알린다. 검사만 하는
+  `business-verification`은 저장이 아니라 `updatedAt`을 받지 않는다.
+- 바뀐 항목마다 **본사 점포의 `store_change_histories`** 에 한 줄(`field` · `beforeValue` · `afterValue` ·
+  `changedBy`, 5년 보존) — 값이 같으면 쓰지 않는다(설계 D5, 2026-11-17 사용자 확인. 전엔
+  `bp_change_histories`). 좌표는 「위도 · 경도」 · 「위치 적용」, 상태가 바뀌면 「점포상태」 줄도 남는다. 예전의
+  `note: '사업자 번호 인증'` · `'사업자 번호 인증 해제'` 구분은 점포 이력에 칸이 없어 없어졌다. 점포 관리는 본사를
+  404 로 숨기므로 **이 이력을 읽는 화면 · 경로는 아직 없다**.
 - `AuthModule`이 `BusinessVerificationService`를 직접 provider로 둔다(`AdminSignupModule`이 반대로
   `AuthModule`을 import 해 그 방향은 순환이 된다) — `NtsModule`도 같이 import 한다.
 

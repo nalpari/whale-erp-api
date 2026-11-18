@@ -14,6 +14,7 @@ import {
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
 import { STORAGE } from '../src/storage/storage.module';
+import { createBp, deleteBps } from './hq-bp';
 
 // 비로그인 홈 · 고객지원의 공지사항 · FAQ 조회를 실제 DB 로 확인한다. 노출 판정(노출 대상 · 게시 상태 · 지움 ·
 // 게시 기간)과 정렬(고정 먼저, 게시일 = 시작일 없으면 등록 일시)은 SQL 이라 목으로는 증명되지 않는다.
@@ -54,7 +55,7 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
     await app.init();
     prisma = app.get(PrismaService);
 
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -281,7 +282,7 @@ describe('공지사항 · FAQ 공개 · 고객지원 조회 (e2e, DB)', () => {
         where: { roleGroupId: faqOnlyGroupId },
       });
     }
-    if (bpCodeId) await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    if (bpCodeId) await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

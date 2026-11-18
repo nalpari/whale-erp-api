@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   HttpException,
@@ -12,6 +13,7 @@ import { BusinessVerificationService } from '../admin-signup/business-verificati
 import { verifyPassword } from '../auth/password';
 import { PLATFORM_ADMIN_MAIL } from '../platform-admins/platform-admin-mail';
 import { PrismaService } from '../prisma/prisma.service';
+import { STORE_CODE_TX } from '../stores/next-store-code';
 import { BpMastersService } from './bp-masters.service';
 
 // jest 의 비대칭 매처 · mock.calls 는 any 다. 객체 안에 두거나 꺼내 쓸 때 lint 가 막지 않게 타입을 붙인다.
@@ -52,7 +54,16 @@ describe('BpMastersService', () => {
       updateMany: jest.Mock;
       findUniqueOrThrow: jest.Mock;
     };
-    store: { count: jest.Mock };
+    store: {
+      count: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
+    storeBusinessProfile: { create: jest.Mock; update: jest.Mock };
+    staffMember: { count: jest.Mock };
+    facility: { count: jest.Mock };
+    storeChangeHistory: { createMany: jest.Mock };
     roleGroup: { findFirst: jest.Mock };
     codeGroup: { findMany: jest.Mock };
     codeItem: { findMany: jest.Mock; createMany: jest.Mock };
@@ -85,33 +96,72 @@ describe('BpMastersService', () => {
     withdrawReasonDetail: null,
     ...overrides,
   });
-  /** 사용 중인 고객 BP 12, 그 BP 마스터 50 */
+  /** 본사 사업자정보 칸 — BP 상호명 · 사업자정보는 본사 점포에 있다(2026-11-17). */
+  const HQ_KEYS = [
+    'tradeName',
+    'bizRegistrationNumber',
+    'bizCeoName',
+    'bizOpenDate',
+    'bizCeoPhone',
+    'bizCeoEmail',
+    'bizZipCode',
+    'bizAddress',
+    'bizAddressDetail',
+    'bizCategory',
+    'bizItem',
+    'bizVerifiedAt',
+    'latitude',
+    'longitude',
+    'isLocationApplied',
+  ];
+  /** 사용 중인 고객 BP 12, 그 BP 마스터 50, 본사 점포 120 */
   const bp = (
     overrides: Record<string, unknown> = {},
     masterOverrides: Record<string, unknown> = {},
-  ) => ({
-    bpCodeId: 12,
-    bpCode: 'BP000012',
-    accountStatusCode: 'ACTIVE',
-    tradeName: '한강상회',
-    bizRegistrationNumber: null,
-    bizCeoName: null,
-    bizOpenDate: null,
-    bizCeoPhone: null,
-    bizCeoEmail: null,
-    bizZipCode: null,
-    bizAddress: null,
-    bizAddressDetail: null,
-    bizCategory: null,
-    bizItem: null,
-    bizVerifiedAt: null,
-    createdAt,
-    updatedAt,
-    creator: { name: '플랫폼' },
-    updater: null,
-    adminAccounts: [master(masterOverrides)],
-    ...overrides,
-  });
+  ) => {
+    const hq: Record<string, unknown> = {
+      tradeName: '한강상회',
+      bizRegistrationNumber: null,
+      bizCeoName: null,
+      bizOpenDate: null,
+      bizCeoPhone: null,
+      bizCeoEmail: null,
+      bizZipCode: null,
+      bizAddress: null,
+      bizAddressDetail: null,
+      bizCategory: null,
+      bizItem: null,
+      bizVerifiedAt: null,
+      latitude: null,
+      longitude: null,
+      isLocationApplied: true,
+    };
+    const rest: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(overrides))
+      (HQ_KEYS.includes(k) ? hq : rest)[k] = v;
+    const { tradeName, latitude, longitude, isLocationApplied, ...biz } = hq;
+    return {
+      bpCodeId: 12,
+      bpCode: 'BP000012',
+      accountStatusCode: 'ACTIVE',
+      stores: [
+        {
+          storeId: 120,
+          latitude,
+          longitude,
+          isLocationApplied,
+          storeStatusCode: 'NOT_OPERATING',
+          businessProfile: { bizTradeName: tradeName, ...biz, updatedAt },
+        },
+      ],
+      createdAt,
+      updatedAt,
+      creator: { name: '플랫폼' },
+      updater: null,
+      adminAccounts: [master(masterOverrides)],
+      ...rest,
+    };
+  };
   const createInput = {
     loginId: 'hangang01',
     name: '김하늘',
@@ -152,7 +202,23 @@ describe('BpMastersService', () => {
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ updatedAt }),
       },
-      store: { count: jest.fn().mockResolvedValue(0) },
+      store: {
+        count: jest.fn().mockResolvedValue(0),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest
+          .fn()
+          .mockResolvedValue({ storeId: 130, storeCode: 'ST000130' }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      storeBusinessProfile: {
+        create: jest.fn().mockResolvedValue({}),
+        update: jest.fn().mockResolvedValue({}),
+      },
+      staffMember: { count: jest.fn().mockResolvedValue(0) },
+      facility: { count: jest.fn().mockResolvedValue(0) },
+      storeChangeHistory: {
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       roleGroup: { findFirst: jest.fn().mockResolvedValue({ roleGroupId: 2 }) },
       codeGroup: { findMany: jest.fn().mockResolvedValue([]) },
       codeItem: {
@@ -193,6 +259,12 @@ describe('BpMastersService', () => {
     }).compile();
     return module.get(BpMastersService);
   };
+
+  /** 본사 점포 이력(store_change_histories) — BP 상호명 · 사업자정보 변경은 여기에 남는다(설계 D5). */
+  const hqHistories = () =>
+    prisma.storeChangeHistory.createMany.mock.calls.flatMap(
+      ([arg]: [{ data: object[] }]) => arg.data,
+    );
 
   const bpHistories = () =>
     prisma.bpChangeHistory.createMany.mock.calls.flatMap(
@@ -256,17 +328,36 @@ describe('BpMastersService', () => {
       expect(firstArg<ListWhere>(prisma.bpCode.count).where).toEqual(
         listWhere(),
       );
+      // 인증 여부는 본사 점포 사업자정보에 있다(2026-11-17).
       expect(listWhere()).toEqual(
         partial({
           accountStatusCode: { in: ['INACTIVE'] },
-          bizVerifiedAt: { not: null },
+          stores: {
+            some: {
+              isHq: true,
+              isDeleted: false,
+              businessProfile: { bizVerifiedAt: { not: null } },
+            },
+          },
         }),
       );
     });
 
-    it('미인증은 최종 인증일시가 없는 것', async () => {
+    it('미인증은 본사에 최종 인증일시가 없는 것', async () => {
       await service.list({ page: 1, pageSize: 20, verification: 'UNVERIFIED' });
-      expect(listWhere()).toEqual(partial({ bizVerifiedAt: null }));
+      expect(listWhere()).toEqual(
+        partial({
+          NOT: {
+            stores: {
+              some: {
+                isHq: true,
+                isDeleted: false,
+                businessProfile: { bizVerifiedAt: { not: null } },
+              },
+            },
+          },
+        }),
+      );
     });
 
     it('탈퇴 BP 는 이름 · 연락처 · 이메일을 내지 않는다', async () => {
@@ -324,7 +415,21 @@ describe('BpMastersService', () => {
         keyword: '105-87',
       });
       expect(listWhere().AND).toEqual([
-        { OR: [{ bizRegistrationNumber: { contains: '10587' } }] },
+        {
+          OR: [
+            {
+              stores: {
+                some: {
+                  isHq: true,
+                  isDeleted: false,
+                  businessProfile: {
+                    bizRegistrationNumber: { contains: '10587' },
+                  },
+                },
+              },
+            },
+          ],
+        },
       ]);
     });
 
@@ -337,21 +442,35 @@ describe('BpMastersService', () => {
         bpCode: { contains: 'BP00', mode: 'insensitive' },
       });
       expect(OR).toContainEqual({
-        tradeName: { contains: 'BP00', mode: 'insensitive' },
+        stores: {
+          some: {
+            isHq: true,
+            isDeleted: false,
+            businessProfile: {
+              bizTradeName: { contains: 'BP00', mode: 'insensitive' },
+            },
+          },
+        },
       });
     });
 
     it('검색 기준 없이 숫자 모양이 아닌 검색어는 사업자등록번호로 찾지 않는다 — hangang01 이 01 이 든 번호를 모두 찾지 않게', async () => {
       await service.list({ page: 1, pageSize: 20, keyword: 'hangang01' });
       const [{ OR }] = listWhere().AND as { OR: object[] }[];
-      expect(OR.some((c) => 'bizRegistrationNumber' in c)).toBe(false);
+      expect(JSON.stringify(OR)).not.toContain('bizRegistrationNumber');
     });
 
     it('검색 기준 없이 숫자 · 하이픈만인 검색어는 숫자만 남겨 사업자등록번호로도 찾는다', async () => {
       await service.list({ page: 1, pageSize: 20, keyword: '105-87' });
       const [{ OR }] = listWhere().AND as { OR: object[] }[];
       expect(OR).toContainEqual({
-        bizRegistrationNumber: { contains: '10587' },
+        stores: {
+          some: {
+            isHq: true,
+            isDeleted: false,
+            businessProfile: { bizRegistrationNumber: { contains: '10587' } },
+          },
+        },
       });
     });
   });
@@ -374,7 +493,7 @@ describe('BpMastersService', () => {
       );
     });
 
-    it('점포 수는 폐점 · 삭제를 빼고, 하위 관리자는 BA · FM · FA 중 지우지 않은 것', async () => {
+    it('점포 수는 본사 · 폐점 · 삭제를 빼고, 하위 관리자는 BA · FM · FA 중 지우지 않은 것', async () => {
       prisma.store.count.mockResolvedValueOnce(3).mockResolvedValueOnce(4);
       prisma.adminAccount.count.mockResolvedValue(2);
       const detail = await service.detail(12);
@@ -382,6 +501,7 @@ describe('BpMastersService', () => {
       expect(prisma.store.count).toHaveBeenCalledWith({
         where: {
           bpCodeId: 12,
+          isHq: false,
           isDeleted: false,
           storeStatusCode: { not: 'CLOSED' },
         },
@@ -623,6 +743,28 @@ describe('BpMastersService', () => {
   });
 
   describe('create', () => {
+    // 본사 점포 생성이 점포코드 잠금 줄에 서므로 점포 등록과 같은 트랜잭션 시간을 쓴다.
+    it('등록 트랜잭션은 점포 등록과 같은 시간(STORE_CODE_TX)을 쓴다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue({ bpCode: 'BP000012' });
+      await service.create(CALLER, createInput);
+      expect(prisma.$transaction).toHaveBeenCalledWith(
+        expect.any(Function),
+        STORE_CODE_TX,
+      );
+    });
+
+    it('트랜잭션 시간을 넘기면(P2028) 503', async () => {
+      prisma.$transaction.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('timeout', {
+          code: 'P2028',
+          clientVersion: 'x',
+        }),
+      );
+      await expect(service.create(CALLER, createInput)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+    });
+
     it('아이디가 이미 있으면 409', async () => {
       prisma.adminAccount.findFirst.mockResolvedValueOnce({
         adminAccountId: 9,
@@ -660,15 +802,30 @@ describe('BpMastersService', () => {
       });
 
       expect(prisma.bpCode.create).toHaveBeenCalledWith({
-        data: partial({
+        data: {
           bpCode: 'BP000013',
           isPlatform: false,
           accountStatusCode: 'ACTIVE',
-          tradeName: '한강상회',
           createdBy: CALLER,
           updatedBy: CALLER,
-        }),
+        },
         select: { bpCodeId: true },
+      });
+      // 상호명은 본사 점포(직영)와 그 사업자정보에 둔다(2026-11-17).
+      expect(prisma.store.create).toHaveBeenCalledWith(
+        partial({
+          data: partial({
+            bpCodeId: 13,
+            storeTypeCode: 'DIRECT',
+            name: '한강상회',
+            isHq: true,
+            storeStatusCode: 'NOT_OPERATING',
+            createdBy: CALLER,
+          }),
+        }),
+      );
+      expect(prisma.storeBusinessProfile.create).toHaveBeenCalledWith({
+        data: partial({ storeId: 130, bizTradeName: '한강상회' }),
       });
       expect(prisma.adminAccount.create).toHaveBeenCalledWith({
         data: partial({
@@ -755,16 +912,14 @@ describe('BpMastersService', () => {
         prisma,
         undefined,
       );
-      expect(prisma.bpCode.create).toHaveBeenCalledWith(
-        partial({
-          data: partial({
-            bizRegistrationNumber: '1058763602',
-            bizCeoName: '김하늘',
-            bizOpenDate: new Date('2020-03-02T00:00:00.000Z'),
-            bizVerifiedAt: anyDate,
-          }),
+      expect(prisma.storeBusinessProfile.create).toHaveBeenCalledWith({
+        data: partial({
+          bizRegistrationNumber: '1058763602',
+          bizCeoName: '김하늘',
+          bizOpenDate: new Date('2020-03-02T00:00:00.000Z'),
+          bizVerifiedAt: anyDate,
         }),
-      );
+      });
     });
 
     it('그 사이 같은 번호가 들어왔으면 409', async () => {
@@ -797,14 +952,44 @@ describe('BpMastersService', () => {
     it('확인과 저장 사이에 같은 아이디 · 이메일이 먼저 들어왔으면 409', async () => {
       prisma.bpCode.findFirst.mockResolvedValue({ bpCode: 'BP000012' });
       prisma.adminAccount.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          'Unique constraint failed on the constraint: `admin_accounts_login_id_key`',
+          { code: 'P2002', clientVersion: 'x' },
+        ),
+      );
+      await expect(service.create(CALLER, createInput)).rejects.toThrow(
+        new ConflictException('이미 사용 중인 아이디 또는 이메일입니다.'),
+      );
+    });
+
+    // adapter-pg 가 제약 이름을 싣는 자리(driverAdapterError.cause.constraint.index)로도 가린다.
+    it('제약 이름이 driverAdapterError 에 있는 이메일 위반도 409', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue({ bpCode: 'BP000012' });
+      prisma.adminAccount.create.mockRejectedValue(
         new Prisma.PrismaClientKnownRequestError('unique', {
           code: 'P2002',
           clientVersion: 'x',
+          meta: {
+            driverAdapterError: {
+              cause: { constraint: { index: 'admin_accounts_email_key' } },
+            },
+          },
         }),
       );
-      await expect(service.create(CALLER, createInput)).rejects.toBeInstanceOf(
-        ConflictException,
+      await expect(service.create(CALLER, createInput)).rejects.toThrow(
+        new ConflictException('이미 사용 중인 아이디 또는 이메일입니다.'),
       );
+    });
+
+    // 사업자번호는 DB 고유가 아니다(본사 점포로 옮긴 뒤) — 다른 고유 위반(점포코드 등)을 409 로 숨기지 않는다.
+    it('계정이 아닌 고유 위반은 409 로 바꾸지 않고 그대로 던진다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue({ bpCode: 'BP000012' });
+      const storeCode = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on the constraint: `stores_store_code_key`',
+        { code: 'P2002', clientVersion: 'x' },
+      );
+      prisma.store.create.mockRejectedValue(storeCode);
+      await expect(service.create(CALLER, createInput)).rejects.toBe(storeCode);
     });
   });
 
@@ -826,11 +1011,20 @@ describe('BpMastersService', () => {
       expect(prisma.bpCode.update).not.toHaveBeenCalled();
     });
 
-    it('BP 와 BP 마스터를 고치고 바뀐 칸마다 이력을 남긴다', async () => {
+    it('본사 사업자정보 · BP 마스터를 고치고 바뀐 칸마다 이력을 남긴다 — 상호명 · 사업자정보 이력은 본사 점포에(설계 D5)', async () => {
       await service.update(CALLER, 12, updateInput);
+      expect(prisma.storeBusinessProfile.update).toHaveBeenCalledWith({
+        where: { storeId: 120 },
+        data: partial({ bizTradeName: '한강상회 본점', updatedBy: CALLER }),
+      });
+      // 본사 점포명도 상호명을 따른다 — 본사는 점포 관리에서 고칠 수 없다.
+      expect(prisma.store.update).toHaveBeenCalledWith({
+        where: { storeId: 120 },
+        data: partial({ name: '한강상회 본점', updatedBy: CALLER }),
+      });
       expect(prisma.bpCode.update).toHaveBeenCalledWith({
         where: { bpCodeId: 12 },
-        data: partial({ tradeName: '한강상회 본점', updatedBy: CALLER }),
+        data: { updatedBy: CALLER },
       });
       expect(prisma.adminAccount.update).toHaveBeenCalledWith({
         where: { adminAccountId: 50 },
@@ -841,9 +1035,10 @@ describe('BpMastersService', () => {
           updatedBy: CALLER,
         },
       });
-      expect(bpHistories()).toEqual([
+      expect(bpHistories()).toEqual([]);
+      expect(hqHistories()).toEqual([
         partial({
-          bpCodeId: 12,
+          storeId: 120,
           field: '상호명',
           beforeValue: '한강상회',
           afterValue: '한강상회 본점',
@@ -858,6 +1053,14 @@ describe('BpMastersService', () => {
           afterValue: '01099998888',
         }),
       ]);
+    });
+
+    // 상태 변경(bp_codes → 본사 점포)과 같은 순서로 잠근다 — 반대면 동시에 들어온 두 요청이 교착(40P01)한다.
+    it('BP 행을 본사 점포보다 먼저 잠근다 — 상태 변경과 잠금 순서가 같다', async () => {
+      await service.update(CALLER, 12, updateInput);
+      expect(prisma.bpCode.update.mock.invocationCallOrder[0]).toBeLessThan(
+        prisma.storeBusinessProfile.update.mock.invocationCallOrder[0],
+      );
     });
 
     it('계정 칸만 바뀌어도 BP 의 최종수정을 올린다', async () => {
@@ -899,7 +1102,7 @@ describe('BpMastersService', () => {
       });
     });
 
-    it('인증 토큰을 실으면 세 값과 인증일시를 바꾸고 그 줄에 「사업자 번호 인증」을 단다', async () => {
+    it('인증 토큰을 실으면 본사의 세 값과 인증일시를 바꾸고 본사 점포 이력에 남긴다', async () => {
       await service.update(CALLER, 12, {
         ...updateInput,
         verificationToken: 't',
@@ -909,7 +1112,7 @@ describe('BpMastersService', () => {
         prisma,
         12,
       );
-      expect(prisma.bpCode.update).toHaveBeenCalledWith(
+      expect(prisma.storeBusinessProfile.update).toHaveBeenCalledWith(
         partial({
           data: partial({
             bizRegistrationNumber: '1058763602',
@@ -917,15 +1120,43 @@ describe('BpMastersService', () => {
           }),
         }),
       );
-      expect(bpHistories()).toContainEqual(
-        partial({ field: '사업자등록번호', note: '사업자 번호 인증' }),
+      expect(hqHistories()).toContainEqual(
+        partial({
+          field: '사업자등록번호',
+          beforeValue: null,
+          afterValue: '1058763602',
+        }),
       );
+    });
+
+    it('좌표를 실으면 본사 점포에 넣고, 위도 · 경도를 함께 생략하면 그대로 둔다', async () => {
+      await service.update(CALLER, 12, {
+        ...updateInput,
+        latitude: 37.498095,
+        longitude: 127.02761,
+        isLocationApplied: true,
+      });
+      expect(prisma.store.update).toHaveBeenCalledWith({
+        where: { storeId: 120 },
+        data: partial({ latitude: 37.498095, longitude: 127.02761 }),
+      });
+      prisma.store.update.mockClear();
+      await service.update(CALLER, 12, updateInput);
+      expect(
+        firstArg<{ data: object }>(prisma.store.update).data,
+      ).not.toHaveProperty('latitude');
+    });
+
+    it('위도만 보내면 400', async () => {
+      await expect(
+        service.update(CALLER, 12, { ...updateInput, latitude: 37.5 }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('토큰이 없으면 인증 쪽 세 값은 그대로 둔다', async () => {
       await service.update(CALLER, 12, updateInput);
       const { data } = firstArg<{ data: Record<string, unknown> }>(
-        prisma.bpCode.update,
+        prisma.storeBusinessProfile.update,
       );
       expect(data).not.toHaveProperty('bizRegistrationNumber');
       expect(data).not.toHaveProperty('bizVerifiedAt');
@@ -933,6 +1164,58 @@ describe('BpMastersService', () => {
   });
 
   describe('changeStatus', () => {
+    it('미사용으로 바꾸면 운영 중인 본사도 미운영으로 내리고 본사 점포 이력을 남긴다', async () => {
+      prisma.store.findFirst.mockResolvedValue({
+        storeId: 120,
+        storeStatusCode: 'OPERATING',
+        latitude: 37.5,
+        longitude: 127,
+        businessProfile: { bizRegistrationNumber: '1058763602' },
+        bpCode: { accountStatusCode: 'INACTIVE' },
+      });
+      await service.changeStatus(CALLER, 12, 'INACTIVE');
+      expect(prisma.store.update).toHaveBeenCalledWith({
+        where: { storeId: 120 },
+        data: { storeStatusCode: 'NOT_OPERATING', updatedBy: CALLER },
+      });
+      expect(hqHistories()).toEqual([
+        partial({
+          field: '점포상태',
+          beforeValue: '운영',
+          afterValue: '미운영',
+        }),
+      ]);
+    });
+
+    it('다시 사용으로 바꾸면 사업자번호 · 좌표를 갖춘 미운영 본사를 운영으로 올리고 본사 점포 이력을 남긴다', async () => {
+      prisma.bpCode.findFirst.mockResolvedValue(
+        bp({ accountStatusCode: 'INACTIVE' }),
+      );
+      prisma.store.findFirst.mockResolvedValue({
+        storeId: 120,
+        storeStatusCode: 'NOT_OPERATING',
+        latitude: 37.5,
+        longitude: 127,
+        businessProfile: { bizRegistrationNumber: '1058763602' },
+        bpCode: { accountStatusCode: 'ACTIVE' },
+      });
+      await service.changeStatus(CALLER, 12, 'ACTIVE');
+      expect(prisma.store.findFirst).toHaveBeenCalledWith(
+        partial({ where: { bpCodeId: 12, isHq: true, isDeleted: false } }),
+      );
+      expect(prisma.store.update).toHaveBeenCalledWith({
+        where: { storeId: 120 },
+        data: { storeStatusCode: 'OPERATING', updatedBy: CALLER },
+      });
+      expect(hqHistories()).toEqual([
+        partial({
+          field: '점포상태',
+          beforeValue: '미운영',
+          afterValue: '운영',
+        }),
+      ]);
+    });
+
     it('탈퇴한 BP 는 409', async () => {
       prisma.bpCode.findFirst.mockResolvedValue(
         bp({ accountStatusCode: 'WITHDRAWN' }),
@@ -1080,6 +1363,39 @@ describe('BpMastersService', () => {
   });
 
   describe('remove', () => {
+    // 본사는 「등록된 점포」에 세지 않지만, 본사에 직원 · 시설물이 있으면 쓰인 BP 다 — 함께 지우면 그 자료가 모든 범위에서 사라진다.
+    it.each([
+      ['직원', 'staffMember'],
+      ['시설물', 'facility'],
+    ] as const)('본사에 %s 이 있으면 409', async (_, model) => {
+      prisma[model].count.mockResolvedValue(1);
+      await expect(service.remove(CALLER, 12)).rejects.toThrow(
+        '본사에 등록된 직원 · 시설물이 있어 삭제할 수 없습니다.',
+      );
+      expect(prisma[model].count).toHaveBeenCalledWith({
+        where: expect.objectContaining({ storeId: 120 }) as object,
+      });
+      expect(prisma.bpCode.update).not.toHaveBeenCalled();
+    });
+
+    // 본사 직원 · 시설물 등록은 stores 외래키만 확인해 bp_codes 잠금에 막히지 않는다 — 본사 행을 잠근 뒤 세야
+    // 그 순간의 등록을 기다렸다 본다(FOR UPDATE 는 외래키의 KEY SHARE · 시설물의 FOR SHARE 와 충돌한다).
+    it('본사 행을 FOR UPDATE 로 잠근 뒤 본사 직원 · 시설물을 센다', async () => {
+      await service.remove(CALLER, 12);
+      const calls = prisma.$queryRaw.mock.calls as [string[], ...unknown[]][];
+      const at = calls.findIndex(([sql]) =>
+        /FROM stores WHERE store_id = \? FOR UPDATE/.test(sql.join('?')),
+      );
+      expect(at).toBeGreaterThan(-1);
+      expect(calls[at][1]).toBe(120);
+      expect(prisma.$queryRaw.mock.invocationCallOrder[at]).toBeLessThan(
+        prisma.staffMember.count.mock.invocationCallOrder[0],
+      );
+      expect(prisma.$queryRaw.mock.invocationCallOrder[at]).toBeLessThan(
+        prisma.facility.count.mock.invocationCallOrder[0],
+      );
+    });
+
     it('조건을 서버에서 다시 보고 못 지우면 409', async () => {
       prisma.store.count.mockResolvedValue(1);
       await expect(service.remove(CALLER, 12)).rejects.toBeInstanceOf(
@@ -1102,11 +1418,23 @@ describe('BpMastersService', () => {
       expect(accountLock).toBeLessThan(read);
     });
 
-    it('BP 와 BP 마스터를 함께 논리 삭제하고 이력을 남긴다', async () => {
+    it('BP · BP 마스터 · 본사 점포를 함께 논리 삭제하고 이력을 남긴다 — 「등록된 점포」에 본사는 세지 않는다', async () => {
       await service.remove(CALLER, 12);
       expect(prisma.store.count).toHaveBeenCalledWith({
-        where: { bpCodeId: 12, isDeleted: false },
+        where: { bpCodeId: 12, isHq: false, isDeleted: false },
       });
+      expect(prisma.store.update).toHaveBeenCalledWith({
+        where: { storeId: 120 },
+        data: {
+          isDeleted: true,
+          storeStatusCode: 'CLOSED',
+          closedDate: anyDate,
+          updatedBy: CALLER,
+        },
+      });
+      expect(hqHistories()).toEqual([
+        partial({ storeId: 120, field: '삭제', beforeValue: '한강상회' }),
+      ]);
       expect(prisma.bpCode.update).toHaveBeenCalledWith({
         where: { bpCodeId: 12 },
         data: { isDeleted: true, updatedBy: CALLER },

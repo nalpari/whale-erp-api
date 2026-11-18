@@ -61,6 +61,7 @@ const stores = [1, 2, 3, 4, 5, 6, 7, 8].map((storeId) => ({
   storeStatusCode: storeId === 4 ? 'CLOSED' : 'OPERATING',
   bpCodeId: BP,
   isDeleted: false,
+  isHq: false,
 }));
 
 const group = (
@@ -199,7 +200,10 @@ describe('BpAdminsService', () => {
         count: jest.fn().mockResolvedValue(0),
       },
       bpCode: {
-        findFirst: jest.fn().mockResolvedValue({ tradeName: '모리커피' }),
+        // 상호명은 본사 점포 사업자정보에 있다(20261117150907_team1_hq_stores)
+        findFirst: jest.fn().mockResolvedValue({
+          stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+        }),
       },
       temporaryPassword: {
         create: jest.fn().mockResolvedValue({ temporaryPasswordId: 7 }),
@@ -469,6 +473,33 @@ describe('BpAdminsService', () => {
         adminAccountId: 21,
       });
       expect(ids(r)).toEqual([1, 2, 3, 6, 7, 8]);
+    });
+
+    // 본사도 일반 점포처럼 맡길 수 있다 — 가맹 마스터 · 가맹 관리자에게만 빼고(2026-11-17)
+    it('본사 점포는 BP 관리자 후보에는 나오고(isHq) 가맹 마스터 후보에는 없다', async () => {
+      const hqStore = {
+        storeId: 2,
+        storeCode: 'ST000002',
+        name: '점포2',
+        storeTypeCode: 'DIRECT',
+        storeStatusCode: 'OPERATING',
+        bpCodeId: BP,
+        isDeleted: false,
+        isHq: true,
+      };
+      const original = stores[1];
+      stores[1] = hqStore;
+      try {
+        const ba = await service.storeOptions(1, bp, { roleTypeCode: 'BA' });
+        expect(ids(ba)).toContain(2);
+        const fm = await service.storeOptions(1, bp, {
+          roleTypeCode: 'FM',
+          adminAccountId: 21,
+        });
+        expect(ids(fm)).not.toContain(2);
+      } finally {
+        stores[1] = original;
+      }
     });
   });
 
@@ -1082,6 +1113,77 @@ describe('BpAdminsService', () => {
     });
   });
 
+  // 본사도 일반 점포처럼 맡길 수 있다 — 가맹 마스터 · 가맹 관리자에게만 안 된다(2026-11-17, allowedFor)
+  describe('본사 점포 배정', () => {
+    /** 점포 2 를 잠시 본사로 바꿔 fn 을 돌린다 — storeOptions 의 본사 테스트와 같은 방식. */
+    const withHq = async (fn: () => Promise<void>) => {
+      const original = stores[1];
+      stores[1] = { ...original, isHq: true };
+      try {
+        await fn();
+      } finally {
+        stores[1] = original;
+      }
+    };
+    const createInput = (o: Record<string, unknown>) => ({
+      loginId: 'newuser1',
+      name: '새사람',
+      phone: '01099998888',
+      email: 'New@Whale.test',
+      roleTypeCode: 'BA' as const,
+      roleGroupId: 11,
+      isAllStores: false,
+      storeIds: [2],
+      ...o,
+    });
+    const updateInput = (id: number, storeIds: number[]) => {
+      const a = accounts.find((x) => x.adminAccountId === id)!;
+      return {
+        name: a.name,
+        phone: a.phone,
+        email: a.email,
+        roleGroupId: a.roleGroupId,
+        isAllStores: a.isAllStores,
+        storeIds,
+        accountStatus: 'ACTIVE' as const,
+        updatedAt: updatedAt.toISOString(),
+      };
+    };
+
+    it('create — 가맹 마스터에게 본사 점포를 맡기면 400(범위 밖), 계정은 없다', () =>
+      withHq(async () => {
+        await expect(
+          service.create(
+            1,
+            bp,
+            createInput({ roleTypeCode: 'FM', roleGroupId: 13 }),
+          ),
+        ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다.');
+        expect(prisma.adminAccount.create).not.toHaveBeenCalled();
+      }));
+
+    it('create — BP 관리자에게는 본사 점포를 맡길 수 있다', () =>
+      withHq(async () => {
+        await service.create(1, bp, createInput({}));
+        expect(prisma.adminAccount.create).toHaveBeenCalled();
+      }));
+
+    it('update — 가맹 마스터에게 본사 점포를 더하면 400, 바꾸지 않는다', () =>
+      withHq(async () => {
+        await expect(
+          service.update(1, bp, 21, updateInput(21, [2, 3])),
+        ).rejects.toThrow('점포 범위를 벗어나 저장하지 않았습니다.');
+        expect(prisma.adminAccount.updateMany).not.toHaveBeenCalled();
+      }));
+
+    it('update — BP 관리자에게는 본사 점포를 더할 수 있다', () =>
+      withHq(async () => {
+        await service.update(1, bp, 40, updateInput(40, [1, 2, 5]));
+        expect(prisma.adminStoreMapping.createMany).toHaveBeenCalledWith(
+          partial({ data: [partial({ adminAccountId: 40, storeId: 2 })] }),
+        );
+      }));
+  });
   describe('updateImpact', () => {
     it('미사용이 되는 가맹 관리자와 매핑이 빠지는 가맹 관리자를 센다', async () => {
       const res = await service.updateImpact(1, bp, 20, {

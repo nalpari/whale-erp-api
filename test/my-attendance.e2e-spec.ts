@@ -9,6 +9,7 @@ import { AdminSessionService } from '../src/admin-session/admin-session.service'
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 앱 출퇴근 등록을 실제 DB 로 확인한다(WHALEERP-210 · 211 · 212) — 계정 행 잠금으로 동시 출근 · 퇴근 중 하나만 남는지,
 // 열린 출근이 계정의 모든 소속에서 하나인지, 확인자료(수집 · 이용) 두 줄, 위치를 보지 않는 근무지, 일시 중지 403, 서명 대기
@@ -43,7 +44,7 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -194,7 +195,7 @@ describe('직원 앱 출퇴근 (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: { storeId: { in: [gpsStoreId, plainStoreId] } },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

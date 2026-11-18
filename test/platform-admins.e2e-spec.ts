@@ -17,6 +17,7 @@ import type {
   PlatformAdminListResponseDto,
 } from '../src/platform-admins/dto/platform-admin.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // 경합은 연결 두 개가 필요하다 — PGlite 는 한 세션에서 차례로 돌린다. 실제 PostgreSQL 일회용 DB 에서 E2E_REAL_POSTGRES=1 로.
 const onRealPostgres = process.env.E2E_REAL_POSTGRES === '1' ? it : it.skip;
@@ -62,7 +63,7 @@ describe('플랫폼 관리자 관리 (e2e, DB)', () => {
     const platformBp = await prisma.bpCode.findFirstOrThrow({
       where: { bpCode: 'BP000000' },
     });
-    ({ bpCodeId: customerBpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId: customerBpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -177,7 +178,7 @@ describe('플랫폼 관리자 관리 (e2e, DB)', () => {
         });
       }
       if (customerBpCodeId !== undefined)
-        await prisma.bpCode.deleteMany({
+        await deleteBps(prisma, {
           where: { bpCodeId: customerBpCodeId },
         });
     }

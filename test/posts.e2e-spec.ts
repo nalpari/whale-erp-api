@@ -8,6 +8,7 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { STORAGE } from '../src/storage/storage.module';
+import { createBp, deleteBps } from './hq-bp';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0]);
 const PDF = Buffer.from('%PDF-1.4');
@@ -47,7 +48,7 @@ describe('공지사항 · FAQ 관리 (e2e, DB)', () => {
     await app.listen(0);
     prisma = app.get(PrismaService);
 
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -119,7 +120,7 @@ describe('공지사항 · FAQ 관리 (e2e, DB)', () => {
     const groups = { roleGroupId: noticeReaderGroupId };
     await prisma.roleGroupMenu.deleteMany({ where: groups });
     await prisma.roleGroup.deleteMany({ where: groups });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

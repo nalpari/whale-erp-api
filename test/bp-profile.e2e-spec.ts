@@ -11,6 +11,13 @@ import type { AdminLoginResponseDto } from '../src/auth/dto/admin-login.response
 import { hashPassword } from '../src/auth/password';
 import { NtsBusinessClient } from '../src/nts/nts-business.client';
 import { PrismaService } from '../src/prisma/prisma.service';
+import {
+  createBp,
+  deleteBps,
+  deleteHqStores,
+  findHq,
+  freeStoreCode,
+} from './hq-bp';
 
 const PASSWORD = 'Whale-admin-1';
 
@@ -26,6 +33,7 @@ describe('마이페이지 BP 사업자정보 (e2e, DB)', () => {
   const nts = { verify: jest.fn().mockResolvedValue('MATCH') };
   const bpCodeIds: number[] = [];
   const adminIds: number[] = [];
+  const storeIds: number[] = [];
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -52,9 +60,20 @@ describe('마이페이지 BP 사업자정보 (e2e, DB)', () => {
     await prisma.bpChangeHistory.deleteMany({
       where: { bpCodeId: { in: bpCodeIds } },
     });
+    const byStore = { storeId: { in: storeIds } };
+    await prisma.storeBusinessProfile.deleteMany({ where: byStore });
+    await prisma.store.deleteMany({ where: byStore });
+    // 본사 점포 이력 · 사업자정보의 created_by · updated_by 가 BM 을 가리키므로 계정보다 먼저 지운다.
+    await deleteHqStores(prisma, bpCodeIds);
+    // 저장이 BP 행의 수정자를 그 BM 으로 남긴다 — 계정을 지우기 전에 비운다.
+    await prisma.bpCode.updateMany({
+      where: { bpCodeId: { in: bpCodeIds } },
+      data: { updatedBy: null },
+    });
+    await prisma.adminLoginLog.deleteMany({ where: byAdmin });
     await prisma.adminSession.deleteMany({ where: byAdmin });
     await prisma.adminAccount.deleteMany({ where: byAdmin });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpCodeIds } } });
+    await deleteBps(prisma, { where: { bpCodeId: { in: bpCodeIds } } });
     await app.close();
   });
 
@@ -65,7 +84,7 @@ describe('마이페이지 BP 사업자정보 (e2e, DB)', () => {
   /** BM 마스터 한 명과 그 소속 BP 를 새로 만들고, 로그인한 접근 토큰을 돌려준다. */
   async function createBm(roleTypeCode = 'BM') {
     const n = randomBytes(4).readUInt32BE();
-    const bp = await prisma.bpCode.create({
+    const bp = await createBp(prisma, {
       data: {
         bpCode: `BP${n.toString().slice(0, 6).padStart(6, '0')}`,
         tradeName: 'e2e 테스트 BP',
@@ -267,9 +286,56 @@ describe('마이페이지 BP 사업자정보 (e2e, DB)', () => {
     expect(statuses).toEqual([204, 409]);
 
     // 트랜잭션 안에서 다시 본 중복에 막히므로, 진 쪽의 번호는 DB 에 남지 않는다 — 이긴 쪽 하나뿐이다.
+    // BP 번호는 본사 점포 사업자정보에 있다.
     await expect(
-      prisma.bpCode.count({ where: { bizRegistrationNumber } }),
+      prisma.storeBusinessProfile.count({ where: { bizRegistrationNumber } }),
     ).resolves.toBe(1);
+  });
+
+  it('자기 BP 점포가 먼저 쓰는 번호는 BP 사업자정보에 인증 · 저장할 수 있고, 다른 BP 는 409 다', async () => {
+    const [mine, other] = await Promise.all([createBm(), createBm()]);
+    const bizRegistrationNumber = newBizNumber();
+    // BP A 의 일반 점포(본사 아님)가 그 번호로 먼저 등록돼 있다.
+    const { storeId } = await prisma.store.create({
+      data: {
+        storeCode: await freeStoreCode(prisma),
+        bpCodeId: mine.bpCodeId,
+        storeTypeCode: 'DIRECT',
+        name: 'e2e 번호 선점 점포',
+        storeStatusCode: 'NOT_OPERATING',
+      },
+    });
+    storeIds.push(storeId);
+    await prisma.storeBusinessProfile.create({
+      data: { storeId, bizRegistrationNumber, bizCeoName: '김하늘' },
+    });
+
+    const verified = await verify(mine.accessToken, {
+      bizRegistrationNumber,
+      bizCeoName: '김하늘',
+      bizOpenDate: '2020-03-02',
+    }).expect(200);
+    const profile = (await getProfile(mine.accessToken).expect(200))
+      .body as BpProfileResponseDto;
+    await updateProfile(mine.accessToken, {
+      tradeName: '한강상회',
+      updatedAt: profile.updatedAt,
+      businessVerificationToken: (
+        verified.body as BpBusinessVerificationResponseDto
+      ).verificationToken,
+    }).expect(204);
+    const { businessProfile } = await findHq(prisma, mine.bpCodeId);
+    expect(businessProfile?.bizRegistrationNumber).toBe(bizRegistrationNumber);
+
+    // 다른 BP 에는 (본사 · 일반 점포 어느 쪽이든) 이미 쓰는 번호다.
+    const res = await verify(other.accessToken, {
+      bizRegistrationNumber,
+      bizCeoName: '남도현',
+      bizOpenDate: '2021-03-15',
+    }).expect(409);
+    expect((res.body as { message: string }).message).toBe(
+      '이미 등록된 사업자등록번호입니다.',
+    );
   });
 
   it('동시 수정(updatedAt 이 지금과 다름)이면 409', async () => {

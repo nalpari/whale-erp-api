@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-16T01:17:40Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -25,7 +25,7 @@ sources:
   - id: admin-scope
     resource: ../../src/admin-scope/admin-scope.service.ts
     title: Which stores an 관리자 manages
-    last_modified: 2026-10-29T07:10:00Z
+    last_modified: 2026-11-17T07:26:26Z
   - id: kst-date
     resource: ../../src/staff-members/kst-date.ts
     title: KST "today" and date-only helpers
@@ -389,6 +389,10 @@ per store (`canManageStaffAccount`, 2026-10-14 재영).
 Platform 관리자 (PM · PA) belong to the platform BP and so manage no customer
 store under this rule alone; `AdminScopeService` gives them all of a BP's stores when the
 route passes the tab BP (`@TargetBp()`, 2026-10-26).
+
+본사 점포 직원 (`stores.is_hq`, 2026-11-17) are in scope by permission and mapping like any store; the
+scope drops the 본사 only for FM · FA, even with 전체 점포, so 퇴직 처리 of a 본사 직원 by them is
+the same out-of-scope answer as any other store ([admin authentication](/api/admin-auth.md)).
 
 The BP is the tab's BP (2026-11-05 재영): the four routes take `@TargetBp()` and hand it to
 `canManageStaffMember(id, staffMemberId, bp)`. A 플랫폼 계정 handles the 직원 of the customer BP it picked in

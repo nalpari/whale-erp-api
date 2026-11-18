@@ -4,7 +4,7 @@ title: BP holidays
 description: 관리자 웹 「BP 휴일 관리」(MN000015) — rule-stored holidays whose dates are computed when read, month calendar · list, detail, change history, overlap check, create, update, force termination and deletion; past dates never change, stores join from today and leave as of yesterday.
 tags: [admin, holiday, bp, team1]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-16T02:24:11Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
 sources:
   - id: bp-holidays-controller
     resource: ../../src/bp-holidays/bp-holidays.controller.ts
@@ -17,7 +17,7 @@ sources:
   - id: bp-holiday-access
     resource: ../../src/bp-holidays/bp-holiday-access.ts
     title: who manages what — manageAll, store scope, per-state actions
-    last_modified: 2026-10-29T05:17:36Z
+    last_modified: 2026-11-17T07:26:26Z
   - id: holiday-dates
     resource: ../../src/bp-holidays/holiday-dates.ts
     title: date computation for DAY · PERIOD · REPEAT
@@ -37,7 +37,7 @@ sources:
   - id: bp-holidays-service
     resource: ../../src/bp-holidays/bp-holidays.service.ts
     title: list · detail · histories · overlaps
-    last_modified: 2026-11-16T02:24:11Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: store-periods-migration
     resource: ../../prisma/migrations/20261026135250_team1_bp_holiday_store_periods/migration.sql
     title: target · excluded stores become one row per period
@@ -169,6 +169,16 @@ period, with an identity key instead of `(bp_holiday_id, store_id)`:[^store-peri
 
 `bp-holiday-access.ts`, matching the store module's scope (`is_all_stores`,
 `admin_store_mappings`):[^bp-holiday-access]
+
+**The 본사 점포 counts as a store here** (`stores.is_hq`, 2026-11-17): a 전체 점포 holiday applies to
+it like any live store (user decision 2026-11-17 — 본사 직원 get the BP's holidays). The store scope
+follows the same 본사 rule as `AdminScopeService` and BP 관리자 관리 (`canSeeHq` — only FM · FA lose
+it): a 전체 점포 BA has `storeScope` `null` (본사 included), while a 전체 점포 FA gets the BP's stores without the 본사 (`branchStoreIds`,
+loaded by `BpHolidayCallerService`) instead of `null`, so an FA cannot name the 본사 in a 특정 점포
+holiday or manage a holiday whose open stores include it (a 전체 점포 FM gets the same `branchStoreIds`). `manageAll` is
+unchanged — platform accounts, BM and a 전체 점포 BA manage 전체 점포 holidays, which are BP-wide rules; FM · FA never do,
+even with 전체 점포. The BP name the screen shows comes from the
+본사's profile (`tradeNameOf`).
 
 - **manageAll** — platform accounts, BP 마스터, and BP 관리자 with 전체 점포. Only they
   create or change 전체 점포 holidays and their excluded stores. 가맹 roles never do, even

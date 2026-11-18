@@ -205,6 +205,42 @@ describe('StaffMemberListService', () => {
       expect(where().AND).toContainEqual({ storeId: { in: [5, 7] } });
     });
 
+    // 본사 점포(2026-11-17) — HQ 는 본사만, DIRECT 는 본사가 아닌 직영(본사도 store_type_code 는 DIRECT), 없으면 본사 포함 전부
+    it('HQ · DIRECT · 유형 없음으로 본사를 가른다', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 1, storeTypeCode: 'DIRECT', isHq: false },
+          { storeId: 2, storeTypeCode: 'FRANCHISE', isHq: false },
+          { storeId: 3, storeTypeCode: 'DIRECT', isHq: true },
+        ],
+      });
+
+      prisma.store.findMany.mockResolvedValueOnce([{ storeId: 3 }]);
+      await service.list(9, { storeTypes: ['HQ'] });
+      expect(openStoreCalls()[0].where).toEqual({
+        storeId: { in: [3] },
+        storeStatusCode: { not: 'CLOSED' },
+      });
+      expect(where().AND).toContainEqual({ storeId: { in: [3] } });
+
+      prisma.store.findMany.mockClear();
+      prisma.staffMember.findMany.mockClear();
+      prisma.store.findMany.mockResolvedValueOnce([{ storeId: 1 }]);
+      await service.list(9, { storeTypes: ['DIRECT'] });
+      expect(openStoreCalls()[0].where).toEqual({
+        storeId: { in: [1] },
+        storeStatusCode: { not: 'CLOSED' },
+      });
+      expect(where().AND).toContainEqual({ storeId: { in: [1] } });
+
+      prisma.store.findMany.mockClear();
+      prisma.staffMember.findMany.mockClear();
+      await service.list(9, {});
+      expect(openStoreCalls()).toEqual([]);
+      expect(where().AND).toContainEqual({ storeId: { in: [1, 2, 3] } });
+    });
+
     it('개인 칸으로 거를 때 가림 갈래도 남은 점포로만 나뉜다', async () => {
       prisma.store.findMany.mockResolvedValueOnce([{ storeId: 6 }]);
       await service.list(9, { storeTypes: ['FRANCHISE'], keyword: '홍길동' });

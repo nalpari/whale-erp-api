@@ -15,6 +15,7 @@ import { AdminLoginResponseDto } from '../src/auth/dto/admin-login.response.dto'
 import { hashPassword } from '../src/auth/password';
 import { BpListResponseDto } from '../src/bp-codes/dto/bp-list.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 const PASSWORD = 'Whale-admin-1';
 
@@ -50,7 +51,7 @@ describe('BP 선택 목록 (e2e, DB)', () => {
       [1, 'INACTIVE', false, 10],
       [0, 'ACTIVE', false, 30],
     ] as const) {
-      const bp = await prisma.bpCode.create({
+      const bp = await createBp(prisma, {
         data: {
           bpCode: `BP${n + i}`,
           tradeName: `고래커피 ${tag}-${i}`,
@@ -116,7 +117,7 @@ describe('BP 선택 목록 (e2e, DB)', () => {
     await prisma.adminSession.deleteMany({ where: byAdmin });
     await prisma.adminAccount.deleteMany({ where: byAdmin });
     // 역순으로 채우므로 beforeAll 이 중간에 실패하면 앞쪽이 비어 있다.
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: { bpCodeId: { in: bpIds.filter((id) => id !== undefined) } },
     });
     await app.close();

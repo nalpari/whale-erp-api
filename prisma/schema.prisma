@@ -2237,30 +2237,7 @@ model BpCode {
   isPlatform            Boolean   @default(false) @map("is_platform")
   /// BP 상태 코드 — 공통코드 `ACCOUNT_STATUS`(사용·미사용·탈퇴), 기본 사용. 시스템만 변경, 플랫폼 BP 는 사용 고정
   accountStatusCode     String    @map("account_status_code")
-  /// 상호명 — 1~50자
-  tradeName             String    @map("trade_name")
-  /// 사업자등록번호 — 탈퇴하지 않은 고객 BP끼리 고유(부분 유일). 플랫폼 BP 는 검사에서 제외
-  bizRegistrationNumber String?   @map("biz_registration_number")
-  /// 대표자명 — 인증 결과만
-  bizCeoName            String?   @map("biz_ceo_name")
-  /// 개업일자 — 인증 결과만
-  bizOpenDate           DateTime? @map("biz_open_date") @db.Date
-  /// 대표자 연락처 — BP 탈퇴 때 삭제(개인정보)
-  bizCeoPhone           String?   @map("biz_ceo_phone")
-  /// 대표자 이메일 — BP 탈퇴 때 삭제(개인정보)
-  bizCeoEmail           String?   @map("biz_ceo_email")
-  /// 사업장 우편번호
-  bizZipCode            String?   @map("biz_zip_code")
-  /// 사업장 기본주소
-  bizAddress            String?   @map("biz_address")
-  /// 사업장 상세주소
-  bizAddressDetail      String?   @map("biz_address_detail")
-  /// 업태 — 50자
-  bizCategory           String?   @map("biz_category")
-  /// 종목 — 50자
-  bizItem               String?   @map("biz_item")
-  /// 최종 인증일시
-  bizVerifiedAt         DateTime? @map("biz_verified_at") @db.Timestamptz(6)
+  // 상호명 · 사업자정보는 본사 점포(stores.is_hq)의 store_business_profiles 로 옮겼다(20261117150907_team1_hq_stores)
   /// 삭제 여부 — 오등록 BP 삭제 때만 true. BP 탈퇴는 바꾸지 않음
   isDeleted             Boolean   @default(false) @map("is_deleted")
   /// 등록 일시
@@ -2633,6 +2610,8 @@ model Store {
   storeStatusCode   String    @map("store_status_code")
   /// 삭제 여부 — 미운영만 삭제 가능
   isDeleted         Boolean   @default(false) @map("is_deleted")
+  /// 본사 점포 여부 — BP 마다 살아 있는 본사 하나(부분 유일, SQL 전용), 직영 고정(CHECK). 점포 관리에서 보이지 않는다
+  isHq              Boolean   @default(false) @map("is_hq")
   /// 등록 일시
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   /// 등록자
@@ -2741,6 +2720,8 @@ model StoreBusinessProfile {
   bizOpenDate           DateTime? @map("biz_open_date") @db.Date
   /// 대표자 연락처 — 숫자 9~12자리(12자리는 050X 평생번호)
   bizCeoPhone           String?   @map("biz_ceo_phone")
+  /// 대표자 이메일 — 본사 점포만(플랫폼 BP 등록). BP 탈퇴 때 삭제(개인정보)
+  bizCeoEmail           String?   @map("biz_ceo_email")
   /// 사업자 우편번호
   bizZipCode            String?   @map("biz_zip_code")
   /// 사업자 기본주소

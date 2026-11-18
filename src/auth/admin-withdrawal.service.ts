@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
 import type { OptionalMailService } from '../mail/mail.module';
 import { PrismaService } from '../prisma/prisma.service';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { kstToday } from '../staff-members/kst-date';
 import {
   retryOnDeadlock,
@@ -98,18 +99,23 @@ export class AdminWithdrawalService {
 
     const { bpCodeId } = account;
     const bpCode = await findWithdrawableBp(this.prisma, bpCodeId);
-    const [adminCount, storeIds] = await Promise.all([
+    const [adminCount, storeIds, storeCount] = await Promise.all([
       this.prisma.adminAccount.count({
         where: subAdminWhere(bpCodeId, adminAccountId),
       }),
       openStoreIds(this.prisma, bpCodeId),
+      // 「점포 N개」에 본사는 세지 않는다 — 본사는 사용자가 등록한 점포가 아니다. 폐점 확인은 본사도 함께 본다
+      // (본사 직원의 계약 · 스케줄도 탈퇴로 끝난다).
+      this.prisma.store.count({
+        where: { ...openStoreWhere(bpCodeId), isHq: false },
+      }),
     ]);
     const closing = await this.storeClosings.check(this.prisma, storeIds);
 
     return {
       bpName: bpCode.tradeName,
       adminCount,
-      storeCount: storeIds.length,
+      storeCount,
       closing,
     };
   }
@@ -226,8 +232,12 @@ export class AdminWithdrawalService {
 
             await tx.bpCode.update({
               where: { bpCodeId },
+              data: { accountStatusCode: WITHDRAWN, updatedBy: adminAccountId },
+            });
+            // 대표자 연락처 · 이메일(개인정보)은 본사 사업자정보에 있다(2026-11-17). 본사 점포는 위 폐점에 함께 닫힌다.
+            await tx.storeBusinessProfile.updateMany({
+              where: { store: { bpCodeId, isHq: true } },
               data: {
-                accountStatusCode: WITHDRAWN,
                 bizCeoPhone: null,
                 bizCeoEmail: null,
                 updatedBy: adminAccountId,
@@ -355,8 +365,15 @@ async function findWithdrawableBp(
 ): Promise<{ tradeName: string; accountStatusCode: string }> {
   const bpCode = await db.bpCode.findUniqueOrThrow({
     where: { bpCodeId },
-    select: { tradeName: true, accountStatusCode: true, isPlatform: true },
+    select: {
+      accountStatusCode: true,
+      isPlatform: true,
+      ...HQ_TRADE_NAME_SELECT,
+    },
   });
   if (bpCode.isPlatform) throw new ForbiddenException(PLATFORM_BP);
-  return bpCode;
+  return {
+    tradeName: tradeNameOf(bpCode),
+    accountStatusCode: bpCode.accountStatusCode,
+  };
 }

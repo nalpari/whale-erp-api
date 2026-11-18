@@ -25,6 +25,13 @@ describe('AdminLoginInfoService', () => {
     tradeName: '웨일상사',
     isPlatform: false,
   };
+  // DB 가 주는 모양 — 상호명은 본사 점포 사업자정보에 있다(20261117150907_team1_hq_stores)
+  const bpRow = {
+    bpCodeId: bp.bpCodeId,
+    bpCode: bp.bpCode,
+    isPlatform: bp.isPlatform,
+    stores: [{ businessProfile: { bizTradeName: bp.tradeName } }],
+  };
   const account = (over: Record<string, unknown> = {}) => ({
     adminAccountId: 7,
     loginId: 'bpmaster1',
@@ -36,7 +43,7 @@ describe('AdminLoginInfoService', () => {
     joinPathCode: 'SIGNUP',
     termsAgreedAt: new Date('2026-10-01T00:00:00Z'),
     accountStatusCode: 'ACTIVE',
-    bpCode: bp,
+    bpCode: bpRow,
     ...over,
   });
   const store = {
@@ -133,6 +140,28 @@ describe('AdminLoginInfoService', () => {
     });
     expect(codes.forBp).toHaveBeenCalledWith('BP000123');
     expect(scope.listStores).toHaveBeenCalledWith(7);
+    // 상호명은 본사 점포(살아 있는 것 먼저)의 사업자정보에서 읽는다
+    expect(prisma.adminAccount.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          bpCode: {
+            select: {
+              bpCodeId: true,
+              bpCode: true,
+              isPlatform: true,
+              stores: {
+                where: { isHq: true },
+                orderBy: [{ isDeleted: 'asc' }, { storeId: 'asc' }],
+                take: 1,
+                select: {
+                  businessProfile: { select: { bizTradeName: true } },
+                },
+              },
+            },
+          },
+        }) as unknown,
+      }),
+    );
   });
 
   it('사용 중 메뉴 중 사용 중 서비스의 것만, 계정 권한 그룹의 권한만 읽는다', async () => {
@@ -190,7 +219,7 @@ describe('AdminLoginInfoService', () => {
 
   it('플랫폼 계정의 관리 점포는 빈 목록 — BP 를 골라 일한다', async () => {
     prisma.adminAccount.findUnique.mockResolvedValue(
-      account({ bpCode: { ...bp, bpCode: 'BP000000', isPlatform: true } }),
+      account({ bpCode: { ...bpRow, bpCode: 'BP000000', isPlatform: true } }),
     );
     const info = await service.get(7);
     expect(info.stores).toEqual([]);
@@ -378,7 +407,7 @@ describe('AdminLoginInfoService', () => {
 
     it('플랫폼 계정은 빈 목록 — BP 를 골라 일한다', async () => {
       prisma.adminAccount.findUnique.mockResolvedValue(
-        account({ bpCode: { ...bp, bpCode: 'BP000000', isPlatform: true } }),
+        account({ bpCode: { ...bpRow, bpCode: 'BP000000', isPlatform: true } }),
       );
       await expect(service.stores(7)).resolves.toEqual([]);
       expect(scope.listStores).not.toHaveBeenCalled();

@@ -73,7 +73,7 @@ describe('근로계약 근무지 선택지', () => {
     };
     expect(args).toEqual({
       where,
-      select: { storeId: true, name: true },
+      select: { storeId: true, name: true, storeTypeCode: true, isHq: true },
       orderBy: [{ name: 'asc' }, { storeId: 'asc' }],
       skip: 50,
       take: 50,

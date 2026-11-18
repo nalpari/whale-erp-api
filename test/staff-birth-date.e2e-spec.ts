@@ -8,6 +8,7 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 생년월일 정정(WHALEERP-602)을 실제 DB 로 확인한다. 계정 하나가 여러 BP 소속에 걸쳐 같이 바뀌는 것, 이력이 같은
 // 트랜잭션에 남는 것, 계약서 값이 그대로인 것은 목으로는 증명되지 않는다.
@@ -47,7 +48,7 @@ describe('직원 생년월일 정정 (e2e, DB)', () => {
 
     const n = randomInt(100_000, 999_998);
     const makeBp = async (suffix: number) => {
-      const bp = await prisma.bpCode.create({
+      const bp = await createBp(prisma, {
         data: {
           bpCode: `BP${n + suffix}`,
           isPlatform: false,
@@ -173,7 +174,7 @@ describe('직원 생년월일 정정 (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: { storeId: { in: [storeId, otherBpStoreId] } },
     });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: { bpCodeId: { in: [bpCodeId, otherBpCodeId] } },
     });
     await app.close();

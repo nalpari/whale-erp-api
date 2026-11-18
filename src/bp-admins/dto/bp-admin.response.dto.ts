@@ -92,6 +92,8 @@ export class BpAdminStoreOptionDto {
   name: string;
   @ApiProperty({ enum: STORE_TYPES, enumName: 'StoreType' })
   storeTypeCode: StoreType;
+  /** 본사 점포인가(2026-11-17) — BP 관리자 선택지에만 나온다(가맹 마스터 · 가맹 관리자 선택지에는 없다) */
+  isHq: boolean;
   /** NOT_OPERATING · OPERATING — 폐점은 선택지에 없다 */
   storeStatusCode: string;
 }

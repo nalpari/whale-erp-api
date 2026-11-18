@@ -9,6 +9,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // BP 권한 그룹 관리(MN000013)를 실제 DB 로 확인한다. 역할 5종의 범위, 가맹 마스터별 이름 중복(부분 고유 인덱스),
 // 상한(기준 고정 권한 ∩ 본인 권한), 삭제의 관리자 이관은 단위 테스트가 목으로 가정만 하므로 여기서만 증명된다.
@@ -61,7 +62,7 @@ describe('BP 권한 그룹 관리 (e2e, DB)', () => {
       where: { menuCode: 'MN000013' },
     });
 
-    ({ bpCodeId: bpId } = await prisma.bpCode.create({
+    ({ bpCodeId: bpId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -155,7 +156,7 @@ describe('BP 권한 그룹 관리 (e2e, DB)', () => {
         where: { adminAccountId: { in: adminIds } },
       });
     if (bpId !== undefined)
-      await prisma.bpCode.deleteMany({ where: { bpCodeId: bpId } });
+      await deleteBps(prisma, { where: { bpCodeId: bpId } });
     await app.close();
   });
 

@@ -23,7 +23,6 @@ const identity: BizIdentity = {
 
 describe('BusinessVerificationService', () => {
   let prisma: {
-    bpCode: { findFirst: jest.Mock };
     storeBusinessProfile: { findFirst: jest.Mock };
   };
   let client: { verify: jest.Mock };
@@ -33,7 +32,6 @@ describe('BusinessVerificationService', () => {
 
   beforeEach(() => {
     prisma = {
-      bpCode: { findFirst: jest.fn().mockResolvedValue(null) },
       storeBusinessProfile: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     client = { verify: jest.fn().mockResolvedValue('MATCH') };
@@ -51,29 +49,17 @@ describe('BusinessVerificationService', () => {
 
   afterEach(() => error.mockRestore());
 
-  it('다른 BP 가 쓰는 번호면 국세청을 부르지 않고 409', async () => {
-    prisma.bpCode.findFirst.mockResolvedValue({ bpCodeId: 3 });
+  it('다른 BP(의 본사 점포)가 쓰는 번호면 국세청을 부르지 않고 409', async () => {
+    prisma.storeBusinessProfile.findFirst.mockResolvedValue({ storeId: 3 });
     await expect(service.verify(identity)).rejects.toThrow(
       new ConflictException('이미 등록된 사업자등록번호입니다.'),
     );
     expect(client.verify).not.toHaveBeenCalled();
   });
 
-  it('BP 중복은 플랫폼 BP 와 삭제·탈퇴를 빼고 본다 — bp_codes 부분 고유 인덱스와 같은 조건', async () => {
-    await service.verify(identity);
-    expect(prisma.bpCode.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          bizRegistrationNumber: '1234567890',
-          isPlatform: false,
-          isDeleted: false,
-          accountStatusCode: { not: 'WITHDRAWN' },
-        },
-      }),
-    );
-  });
-
-  it('점포 사업자정보가 쓰는 번호여도 409 — 폐점·삭제한 점포는 뺀다(점포 등록과 같은 규칙)', async () => {
+  // BP 번호는 본사 점포 사업자정보로 옮겨 갔다(2026-11-17) — BP · 점포 두 검사가 점포 하나로 합쳐진다. 탈퇴한 BP 의
+  // 본사는 폐점, 삭제한 BP 의 본사는 삭제라 아래 조건에서 함께 빠진다(예전 bp_codes 부분 고유 인덱스와 같은 결과).
+  it('점포 사업자정보(본사 포함)가 쓰는 번호면 409 — 폐점·삭제한 점포는 뺀다(점포 등록과 같은 규칙)', async () => {
     prisma.storeBusinessProfile.findFirst.mockResolvedValue({ storeId: 9 });
     await expect(service.verify(identity)).rejects.toBeInstanceOf(
       ConflictException,
@@ -85,6 +71,7 @@ describe('BusinessVerificationService', () => {
           store: {
             isDeleted: false,
             storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
+            bpCode: { isPlatform: false },
           },
         },
       }),
@@ -92,19 +79,8 @@ describe('BusinessVerificationService', () => {
     expect(client.verify).not.toHaveBeenCalled();
   });
 
-  it('재인증(excludeBpCodeId)은 자기 BP 와 그 BP 소속 점포의 번호를 중복으로 보지 않는다', async () => {
+  it('재인증(excludeBpCodeId)은 자기 BP 의 본사 · 점포 번호를 중복으로 보지 않는다', async () => {
     await service.verify(identity, 7);
-    expect(prisma.bpCode.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          bizRegistrationNumber: '1234567890',
-          isPlatform: false,
-          isDeleted: false,
-          accountStatusCode: { not: 'WITHDRAWN' },
-          bpCodeId: { not: 7 },
-        },
-      }),
-    );
     expect(prisma.storeBusinessProfile.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
@@ -113,6 +89,7 @@ describe('BusinessVerificationService', () => {
             isDeleted: false,
             storeStatusCode: { in: [...LIVE_STORE_STATUSES] },
             bpCodeId: { not: 7 },
+            bpCode: { isPlatform: false },
           },
         },
       }),
@@ -182,12 +159,13 @@ describe('BusinessVerificationService', () => {
 
   it('isBizRegistrationNumberTaken 은 넘긴 트랜잭션으로 본다', async () => {
     const tx = {
-      bpCode: { findFirst: jest.fn().mockResolvedValue({ bpCodeId: 1 }) },
-      storeBusinessProfile: { findFirst: jest.fn().mockResolvedValue(null) },
+      storeBusinessProfile: {
+        findFirst: jest.fn().mockResolvedValue({ storeId: 1 }),
+      },
     };
     await expect(
       service.isBizRegistrationNumberTaken('1234567890', tx as never),
     ).resolves.toBe(true);
-    expect(prisma.bpCode.findFirst).not.toHaveBeenCalled();
+    expect(prisma.storeBusinessProfile.findFirst).not.toHaveBeenCalled();
   });
 });

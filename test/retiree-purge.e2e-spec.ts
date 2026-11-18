@@ -13,6 +13,7 @@ import {
 } from '../src/staff-members/retiree-purge';
 import { STORAGE } from '../src/storage/storage.module';
 import { StorageService } from '../src/storage/storage.service';
+import { createBp } from './hq-bp';
 
 // 퇴직자 근로계약 · 신고 정보 · 계정 변경 이력 파기(WHALEERP-645)를 실제 DB 로 확인한다 — 외래키(모두 RESTRICT)가 지우는
 // 순서를 막지 않는지, 급여명세서가 가리키는 레코드는 건너뛰는지, 퇴직일 + 3년 당일 · 퇴직 예정은 남는지. 목으로는 쿼리
@@ -134,7 +135,7 @@ describe('퇴직자 보존 기간 파기 (e2e, DB)', () => {
     app = moduleFixture.createNestApplication();
     await app.init();
     prisma = app.get(PrismaService);
-    const { bpCodeId } = await prisma.bpCode.create({
+    const { bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,

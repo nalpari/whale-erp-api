@@ -46,6 +46,7 @@ import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
 import { ATTENDANCE_BP_NOT_CHOSEN } from './attendance-target-bp';
 import { checkOutExpired, openCheckInsOf } from './open-check-ins';
+import { matchesStoreScope } from '../stores/store-scope-type';
 
 const STAFF_NOT_FOUND = '직원을 찾을 수 없습니다.';
 const STORE_NOT_FOUND = '점포를 찾을 수 없습니다.';
@@ -396,10 +397,10 @@ export class AttendanceRecordsService {
     const picked = [...storeOf.keys()].filter(
       (id) =>
         (!query.storeIds || query.storeIds.includes(id)) &&
-        (!query.storeTypes ||
-          query.storeTypes.some(
-            (type) => type === storeOf.get(id)?.storeTypeCode,
-          )),
+        matchesStoreScope(
+          storeOf.get(id) ?? { storeTypeCode: '' },
+          query.storeTypes,
+        ),
     );
     const stores = picked.length
       ? await this.prisma.store.findMany({

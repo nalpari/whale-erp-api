@@ -13,6 +13,7 @@ import {
   AdminSessionService,
   IssuedAdminSession,
 } from '../admin-session/admin-session.service';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   ATTEMPT_LOCK_MS,
@@ -56,9 +57,9 @@ const ACCOUNT_SELECT = {
     select: {
       bpCodeId: true,
       bpCode: true,
-      tradeName: true,
       isPlatform: true,
       accountStatusCode: true,
+      ...HQ_TRADE_NAME_SELECT,
     },
   },
 } satisfies Prisma.AdminAccountSelect;
@@ -79,8 +80,8 @@ function canSignIn(account: FoundAccount): boolean {
 
 /** 응답의 bp — BP 상태는 로그인 판정에만 쓰고 내보내지 않는다. */
 function publicBp(bp: FoundAccount['bpCode']) {
-  const { bpCodeId, bpCode, tradeName, isPlatform } = bp;
-  return { bpCodeId, bpCode, tradeName, isPlatform };
+  const { bpCodeId, bpCode, isPlatform } = bp;
+  return { bpCodeId, bpCode, tradeName: tradeNameOf(bp), isPlatform };
 }
 
 type Verified =

@@ -8,6 +8,7 @@ import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
+import { createBp, deleteBps } from './hq-bp';
 
 // 급여명세서 지급 항목 계산을 실제 DB 로 확인한다(WHALEERP-227) — 초안의 기본급 · 주휴수당 · 연장수당이 근로계약 · 출퇴근
 // 기록으로 채워지고, 가산 적용을 끄면 다시 계산되고, 「출퇴근으로 다시 계산」이 고친 값을 버리고 검토 사유를 모두 새로 판정하는 것.
@@ -43,7 +44,7 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     await app.init();
     prisma = app.get(PrismaService);
 
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -169,7 +170,7 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       await prisma.adminAccount.deleteMany({ where: { adminAccountId: bmId } });
     }
     await prisma.store.deleteMany({ where: { storeId } });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 
@@ -325,7 +326,7 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       ).items.map((i) => i.payslipId);
     expect(await ids('DIRECT')).toEqual([payslipId]);
     expect(await ids('FRANCHISE')).toEqual([]);
-    await send('get', '/payslips?month=2026-09&storeTypes=HQ', 400);
+    await send('get', '/payslips?month=2026-09&storeTypes=HEAD_OFFICE', 400);
   });
 
   it('점포 · 월 요약 — 명세서의 지급 합계를 고용형태별로 센다(WHALEERP-621)', async () => {

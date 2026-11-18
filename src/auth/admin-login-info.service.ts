@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { CodesService } from '../codes/codes.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from './access-messages';
@@ -109,8 +110,8 @@ export class AdminLoginInfoService {
           select: {
             bpCodeId: true,
             bpCode: true,
-            tradeName: true,
             isPlatform: true,
+            ...HQ_TRADE_NAME_SELECT,
           },
         },
       },
@@ -181,7 +182,12 @@ export class AdminLoginInfoService {
         name: account.name,
         email: account.email,
         roleTypeCode: account.roleTypeCode,
-        bp: account.bpCode,
+        bp: {
+          bpCodeId: account.bpCode.bpCodeId,
+          bpCode: account.bpCode.bpCode,
+          tradeName: tradeNameOf(account.bpCode),
+          isPlatform: account.bpCode.isPlatform,
+        },
         isPasswordChangeRequired: account.isPasswordChangeRequired,
         temporaryPasswordExpiresAt: temporary?.expiresAt ?? null,
         // 시스템에서 만든 계정(플랫폼등록)은 첫 로그인 때 약관 동의를 함께 받는다(front auth.md, S-VFGQLI).

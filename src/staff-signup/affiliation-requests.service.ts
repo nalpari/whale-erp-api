@@ -25,6 +25,7 @@ import {
 import { storeManagers } from '../notifications/recipients';
 import { noticeStaff } from '../notifications/staff-notice';
 import { employmentTypeLabel } from '../enums/employment-type-label';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   AffiliationRequestDto,
@@ -143,7 +144,7 @@ export class AffiliationRequestsService {
         storeId: true,
         name: true,
         storeTypeCode: true,
-        bpCode: { select: { tradeName: true } },
+        bpCode: { select: HQ_TRADE_NAME_SELECT },
       },
     });
     const byId = new Map(stores.map((s) => [s.storeId, s]));
@@ -158,7 +159,7 @@ export class AffiliationRequestsService {
         invitationType:
           r.invitationType as AffiliationRequestDto['invitationType'],
         storeName: store?.name ?? '',
-        bpName: store?.bpCode.tradeName ?? '',
+        bpName: store ? tradeNameOf(store.bpCode) : '',
         employmentType,
         employmentTypeLabel: employmentTypeLabel(employmentType),
         jobTitle,

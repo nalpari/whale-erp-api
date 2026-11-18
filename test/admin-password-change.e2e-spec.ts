@@ -18,6 +18,7 @@ import { AdminLoginInfoResponseDto } from '../src/auth/dto/admin-login-info.resp
 import { PASSWORD_CHANGE_REQUIRED_MESSAGE } from '../src/auth/access-messages';
 import { hashPassword } from '../src/auth/password';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 const TEMP = 'Temp-pass-12';
 const NEW = 'New-pass-12!';
@@ -43,7 +44,7 @@ describe('관리자 강제 비밀번호 변경 (e2e, DB)', () => {
     await app.init();
     prisma = app.get(PrismaService);
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         tradeName: '강제 변경 테스트 BP',
@@ -63,7 +64,7 @@ describe('관리자 강제 비밀번호 변경 (e2e, DB)', () => {
     await prisma.adminSession.deleteMany({ where: byAdmin });
     await prisma.temporaryPassword.deleteMany({ where: byAdmin });
     await prisma.adminAccount.deleteMany({ where: byAdmin });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

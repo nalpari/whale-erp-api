@@ -19,6 +19,7 @@ import {
   BUSINESS_VERIFICATION_RESULT_LABELS,
   OPERATION_REQUIREMENT_LABELS,
 } from '../stores/store-format';
+import { STORE_SCOPE_TYPE_LABELS } from '../stores/store-scope-type';
 
 /**
  * DB 에 없는 API 전용 enum 의 한글. DB enum 은 db-enums.generated.ts(enum 타입 설명에서 생성)에 있고,
@@ -36,6 +37,8 @@ export const API_ENUMS: EnumSource = {
   StaffSendResult: Object.entries(STAFF_SEND_RESULT_LABELS),
   /** 커뮤니티 관리 문의사항 · 도입문의 목록의 답변 상태 거르기 (WHALEERP-332) */
   InquiryAnswerStatus: Object.entries(ANSWER_STATUS_LABELS),
+  /** 상단 점포 범위의 유형 — 3팀 목록(직원 · 근로계약 · 급여명세서 · TO-DO · 출퇴근)의 storeTypes(직영은 본사 아닌 직영, 2026-11-17) */
+  StoreScopeType: Object.entries(STORE_SCOPE_TYPE_LABELS),
   /** 점포를 운영으로 바꾸는 데 모자란 것 — 점포 상세 · 전환 확인의 missingForOperation (MN000002) */
   StoreOperationRequirement: Object.entries(OPERATION_REQUIREMENT_LABELS),
   /** 저장 전 사업자 인증 결과 — POST /stores/business-verifications (MN000002) */

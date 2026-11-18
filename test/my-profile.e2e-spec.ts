@@ -20,6 +20,7 @@ import type {
 import type { MyProfileResponseDto } from '../src/my-profile/dto/my-profile.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
+import { createBp, deleteBps } from './hq-bp';
 
 // 직원 앱 내 정보(GET /me/profile) · 소속 근무지(GET /me/memberships) · 소속의 신고 정보를 실제 DB 로 확인한다 — 소속
 // 고르기(체결 완료 · 가입 완료 · 퇴직 전, 임시저장만 있는 레코드 제외), 남의 레코드를 경로 id 로 열 수 없는지, 신고 정보
@@ -66,7 +67,7 @@ describe('내 정보 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -266,7 +267,7 @@ describe('내 정보 (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: { storeId: { in: [directStoreId, franchiseStoreId] } },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

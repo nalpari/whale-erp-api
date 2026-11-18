@@ -10,6 +10,7 @@ import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
+import { createBp, deleteBps } from './hq-bp';
 
 // 관리자 웹 출·퇴근 현황 조회를 실제 DB 로 확인한다(WHALEERP-217 · 219) — 메뉴 권한 · 업무 범위 밖 점포 빠짐, 하루 · 기간 조회, 짝 퇴근,
 // 상태 판정, 본사 계정에게 동의 없는 가맹 직원은 줄도 상태별 건수도 빠지는 것(ATT-30), 점포의 열린 출근(WHALEERP-644).
@@ -51,7 +52,7 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
 
     const n = randomInt(100_000, 999_999);
     const bp = (offset: number) =>
-      prisma.bpCode.create({
+      createBp(prisma, {
         data: {
           bpCode: `BP${(n + offset) % 1_000_000}`,
           isPlatform: false,
@@ -248,7 +249,7 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
         storeId: { in: [directStoreId, franchiseStoreId, otherStoreId] },
       },
     });
-    await prisma.bpCode.deleteMany({
+    await deleteBps(prisma, {
       where: { bpCodeId: { in: [bpCodeId, otherBpCodeId] } },
     });
     await app.close();

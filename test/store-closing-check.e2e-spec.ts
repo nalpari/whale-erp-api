@@ -9,6 +9,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 import { RetirementService } from '../src/staff-members/retirement.service';
 import { storeClosingCheck } from '../src/staff-members/store-closing-check';
+import { createBp, deleteBps } from './hq-bp';
 
 // 폐점 확인(WHALEERP-647 · 650)을 실제 DB 로 확인한다 — 관계 조건(가입 전 임시저장만 있는 레코드 빼기, 점포의 대기 계약)과
 // 본사 역할에게 가려지는 직원은 첫 건 없이 수만 세는 것, 트랜잭션 안에서 부르는 것, 여러 점포의 합계, retireStore 실제 결과와의 일치.
@@ -42,7 +43,7 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -262,7 +263,7 @@ describe('폐점 확인 storeClosingCheck (e2e, DB)', () => {
     await prisma.store.deleteMany({
       where: { storeId: { in: [storeId, otherStoreId] } },
     });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

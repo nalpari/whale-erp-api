@@ -9,6 +9,7 @@ import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // 플랫폼 권한 관리(MN000214)를 실제 DB 로 확인한다. 권한 저장이 다음 요청의 판정을 바꾸는 것, BP 마스터 회수가
 // BA 그룹의 칸까지 끄는 것, 삭제의 관리자 이관은 단위 테스트가 목으로 가정만 하므로 여기서만 증명된다.
@@ -96,7 +97,7 @@ describe('플랫폼 권한 관리 (e2e, DB)', () => {
       group: { updatedBy: bmGroup.updatedBy },
     };
 
-    ({ bpCodeId: customerBpId } = await prisma.bpCode.create({
+    ({ bpCodeId: customerBpId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -268,7 +269,7 @@ describe('플랫폼 권한 관리 (e2e, DB)', () => {
       });
     }
     if (customerBpId !== undefined)
-      await prisma.bpCode.deleteMany({ where: { bpCodeId: customerBpId } });
+      await deleteBps(prisma, { where: { bpCodeId: customerBpId } });
     await app.close();
   });
 

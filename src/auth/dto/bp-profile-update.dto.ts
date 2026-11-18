@@ -9,6 +9,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { IsUpdatedAt } from '../../common/updated-at';
+import { HqLocationDto } from '../../stores/dto/hq-location.dto';
 import {
   emptyToNull,
   trimText,
@@ -33,9 +34,10 @@ const PHONE_PATTERN = /^[0-9]{9,12}$/;
  * "이 칸은 그대로 두겠다"는 뜻으로) 그 칸도 null 로 지워진다. 화면(bp-profile-tab.tsx)은 조회로 받은
  * 값을 그대로 form 에 채워 두고 저장마다 전체를 다시 보내 이 문제를 피한다 — 새 호출자를 추가할 때는
  * 반드시 모든 선택 칸을 함께 보내야 한다(코드 리뷰로 찾음, 2026-10-22 — class-validator 의 @IsOptional
- * 은 "칸이 없어도 된다"는 뜻이라 "안 바뀐다"로 오해하기 쉽다).
+ * 은 "칸이 없어도 된다"는 뜻이라 "안 바뀐다"로 오해하기 쉽다). 예외는 HqLocationDto 에서 온 본사 좌표 칸이다 — 위도 ·
+ * 경도와 isLocationApplied 는 생략하면 그대로 두고, 좌표는 null 을 보내야 지운다(2026-11-17).
  */
-export class BpProfileUpdateDto {
+export class BpProfileUpdateDto extends HqLocationDto {
   /** 상호명. 1~50자. @example 한강상회 */
   @Transform(trimText)
   @Length(1, 50, { message: '상호명은 1~50자로 입력해 주세요.' })

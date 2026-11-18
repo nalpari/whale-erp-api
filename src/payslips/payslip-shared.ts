@@ -1,6 +1,7 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import type { PayslipItemCategory, Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
+import { matchesStoreScope } from '../stores/store-scope-type';
 
 /** 날짜만 있는 값(@db.Date — Prisma 는 UTC 자정 Date)을 YYYY-MM-DD 로. */
 export const dateOnly = (date: Date) => date.toISOString().slice(0, 10);
@@ -87,7 +88,7 @@ export async function storeNames(
  * 폐점 점포는 전체 · 점포를 골라 본다).
  */
 export async function pickedStores<
-  S extends { storeId: number; storeTypeCode: string },
+  S extends { storeId: number; storeTypeCode: string; isHq?: boolean },
 >(
   prisma: Pick<PrismaService, 'store'>,
   manageable: readonly S[],
@@ -97,7 +98,7 @@ export async function pickedStores<
   const stores = manageable.filter(
     (s) =>
       (!storeIds || storeIds.includes(s.storeId)) &&
-      (!storeTypes || storeTypes.includes(s.storeTypeCode)),
+      matchesStoreScope(s, storeTypes),
   );
   if (!storeTypes || stores.length === 0) return stores;
   const open = new Set(

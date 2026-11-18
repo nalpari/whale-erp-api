@@ -34,6 +34,7 @@ import {
 } from '../alimtalk/alimtalk-buttons';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
+import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   lockContract,
@@ -496,7 +497,7 @@ export class ContractDeliveryService {
       : null;
     const store = await tx.store.findUnique({
       where: { storeId: input.storeId },
-      select: { name: true, bpCode: { select: { tradeName: true } } },
+      select: { name: true, bpCode: { select: HQ_TRADE_NAME_SELECT } },
     });
     return {
       ...input,
@@ -506,7 +507,7 @@ export class ContractDeliveryService {
       invitationId: invitation.invitationId,
       unlockAttemptId: null,
       affiliation: {
-        bpName: store?.bpCode.tradeName ?? '',
+        bpName: store ? tradeNameOf(store.bpCode) : '',
         // 알림톡 · 메일 변수는 빈 문자열이어도 렌더된다
         employmentType: employmentTypeLabel(employmentType) ?? '',
         email: account?.email ?? null,

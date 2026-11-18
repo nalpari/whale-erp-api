@@ -22,6 +22,7 @@ import type {
   StoreDetailResponseDto,
   StoreListResponseDto,
 } from '../src/stores/dto/store.response.dto';
+import { createBp, deleteBps } from './hq-bp';
 
 const PASSWORD = 'Whale-admin-1';
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
@@ -36,6 +37,8 @@ describe('점포 정보 관리 (e2e, DB)', () => {
   let app: INestApplication<App>;
   let prisma: PrismaService;
   let bpCodeId: number;
+  /** BP 의 본사 점포 — 점포 관리 목록 · 상세에 나오지 않는다. */
+  let hqStoreId: number;
   /** 두 번째 고객 BP — 플랫폼 계정이 모든 BP 를 보는지, 고객 BP 소속 PM 이 못 보는지 가른다. */
   let otherBpCodeId: number;
   /** 메뉴 권한이 하나도 없는 권한 그룹 */
@@ -121,14 +124,14 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     prisma = app.get(PrismaService);
 
     const n = randomInt(100_000, 999_998);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId, hqStoreId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         tradeName: '점포 관리 DB 테스트 BP',
         accountStatusCode: 'ACTIVE',
       },
     }));
-    ({ bpCodeId: otherBpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId: otherBpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n + 1}`,
         tradeName: '점포 관리 DB 테스트 다른 BP',
@@ -244,7 +247,7 @@ describe('점포 정보 관리 (e2e, DB)', () => {
         await prisma.roleGroup.deleteMany({
           where: { roleGroupId: emptyRoleGroupId },
         });
-      await prisma.bpCode.deleteMany({ where: { bpCodeId: { in: bpIds } } });
+      await deleteBps(prisma, { where: { bpCodeId: { in: bpIds } } });
     }
     await app?.close();
   });
@@ -757,6 +760,16 @@ describe('점포 정보 관리 (e2e, DB)', () => {
     expect(ids).toContain(mine.storeId);
     expect(ids).not.toContain(others.storeId);
     await call('get', `/stores/${others.storeId}`, baToken).expect(404);
+  });
+
+  it('본사 점포는 BP 마스터의 점포 관리 목록에 나오지 않고, 상세는 404 다', async () => {
+    const regular = await create('본사 아닌 점포');
+    const list = (await call('get', '/stores?pageSize=100').expect(200))
+      .body as StoreListResponseDto;
+    const ids = list.items.map((i) => i.storeId);
+    expect(ids).toContain(regular.storeId);
+    expect(ids).not.toContain(hqStoreId);
+    await call('get', `/stores/${hqStoreId}`).expect(404);
   });
 
   it('플랫폼 계정(PM, 플랫폼 BP)은 상단에서 고른 BP(X-Bp-Code-Id)의 점포만 보고, 그 BP 에 등록한다', async () => {

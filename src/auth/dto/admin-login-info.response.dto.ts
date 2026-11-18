@@ -54,6 +54,8 @@ export class AdminStoreDto {
   name: string;
   /** 공통코드 `STORE_TYPE` */
   storeTypeCode: string;
+  /** 본사 점포인가(2026-11-17) — 본사는 storeTypeCode 가 늘 DIRECT 다. 가맹 마스터 · 가맹 관리자에게는 나오지 않고, 그 밖의 계정에게는 다른 점포처럼 업무 범위(전체 점포 · 매핑)대로 나온다 */
+  isHq: boolean;
   /** 공통코드 `STORE_STATUS` */
   storeStatusCode: string;
 }

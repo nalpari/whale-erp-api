@@ -8,6 +8,7 @@ import { AppModule } from './../src/app.module';
 import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { noticeStaff } from '../src/notifications/staff-notice';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { createBp, deleteBps } from './hq-bp';
 
 // 근로계약서 발송 · 급여명세서 발송 직원 알림(#259)을 실제 DB 로 — 마이그레이션이 넣은 템플릿이 호출부가 넘기는 변수로
 // 렌더되는지, 수신 설정을 끈 묶음은 앱 푸시 발송 대기가 없는지, 알림함이 눌러 열 곳(내 계약 · 내 명세서)을 주는지.
@@ -41,7 +42,7 @@ describe('직원 알림 — 근로계약서 · 급여명세서 발송 (e2e, DB)'
     prisma = app.get(PrismaService);
 
     const n = randomInt(100_000, 999_999);
-    ({ bpCodeId } = await prisma.bpCode.create({
+    ({ bpCodeId } = await createBp(prisma, {
       data: {
         bpCode: `BP${n}`,
         isPlatform: false,
@@ -174,7 +175,7 @@ describe('직원 알림 — 근로계약서 · 급여명세서 발송 (e2e, DB)'
         where: { adminAccountId: adminId },
       });
     await prisma.store.deleteMany({ where: { storeId } });
-    await prisma.bpCode.deleteMany({ where: { bpCodeId } });
+    await deleteBps(prisma, { where: { bpCodeId } });
     await app.close();
   });
 

@@ -377,7 +377,7 @@ describe('근로계약 목록 (e2e)', () => {
     ]);
 
     await get('/contracts?storeIds=a', 'admin').expect(400);
-    await get('/contracts?storeTypes=HQ', 'admin').expect(400);
+    await get('/contracts?storeTypes=HEAD_OFFICE', 'admin').expect(400);
   });
 
   it('사용 중인 관리자 계정이 아니면 403', async () => {
@@ -1748,7 +1748,10 @@ describe('근로계약 목록 (e2e)', () => {
       });
       prisma.store.findUnique.mockResolvedValue({
         name: '모리커피 연남점',
-        bpCode: { tradeName: '모리커피' },
+        // 상호명은 BP 본사 점포의 사업자정보에서 읽는다(HQ_TRADE_NAME_SELECT).
+        bpCode: {
+          stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+        },
       });
     };
 
@@ -1862,7 +1865,10 @@ describe('근로계약 목록 (e2e)', () => {
       });
       prisma.store.findUnique.mockResolvedValue({
         name: '모리커피 연남점',
-        bpCode: { tradeName: '모리커피' },
+        // 상호명은 BP 본사 점포의 사업자정보에서 읽는다(HQ_TRADE_NAME_SELECT).
+        bpCode: {
+          stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
+        },
       });
       const res = await send().expect(200);
       expect(res.body).toMatchObject({

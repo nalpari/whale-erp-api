@@ -4,6 +4,7 @@ import { isPlatformRole } from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import type { PrismaService } from '../prisma/prisma.service';
+import { canSeeHq } from '../stores/store-scope-type';
 
 // 시설물·장비를 다루는 관리자와 그 점포 범위 — 화면 경로(FacilitiesService)와 엑셀 일괄 등록(FacilityBulkService)이 같이 쓴다.
 
@@ -71,11 +72,15 @@ export async function loadFacilityCaller(
   };
 }
 
-/** 이 관리자가 보는 점포 — 점포 정보 관리의 범위와 같다(store-management.service scopeOf). */
+/**
+ * 이 관리자가 보는 점포 — 점포 정보 관리의 범위와 같다(store-management.service scopeOf). 다만 본사 점포도 시설물을
+ * 둘 수 있어(2026-11-17 사용자 결정) 넣는다 — 가맹 마스터 · 가맹 관리자에게는 빼고(canSeeHq), 그 밖에는 다른 점포처럼.
+ */
 export function storeScope(caller: FacilityCaller): Prisma.StoreWhereInput {
   return {
     isDeleted: false,
     bpCodeId: caller.targetBpCodeId,
+    ...(!canSeeHq(caller.roleTypeCode, caller.isPlatform) && { isHq: false }),
     ...(!caller.isPlatform &&
       !caller.isAllStores && {
         adminMappings: {

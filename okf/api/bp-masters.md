@@ -4,12 +4,12 @@ title: BP masters
 description: 관리자 웹 「BP 마스터 계정 관리」(MN000203, /bp-masters) — the platform's list · register · edit · status change · password reset · delete of customer BPs together with their one BP 마스터 account; history merged from two tables, 미사용 cascading to every account of the BP, and deletion only for an unused 오등록.
 tags: [admin, bp, account, permission, mail, excel]
 status: draft
-generated: { by: claude-code/sonnet-5.5, at: 2026-11-13T07:05:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T04:00:00Z }
 sources:
   - id: bp-masters-service
     resource: ../../src/bp-masters/bp-masters.service.ts
     title: BpMastersService (list · detail · histories · verifyBusiness · create · update · changeStatus · resetPassword · remove · excelCount · excelFile · assertExcelCaller)
-    last_modified: 2026-11-06T02:00:00Z
+    last_modified: 2026-11-18T04:00:00Z
   - id: bp-masters-controller
     resource: ../../src/bp-masters/bp-masters.controller.ts
     title: /bp-masters routes — path-form @MenuPermission with platformOnly, route order before :id
@@ -29,11 +29,15 @@ sources:
   - id: bp-master-response-dto
     resource: ../../src/bp-masters/dto/bp-master.response.dto.ts
     title: 상세 · 이력 응답 — withdrawal(탈퇴 일시 · 사유)
-    last_modified: 2026-10-28T01:57:16Z
+    last_modified: 2026-11-17T06:50:00Z
   - id: admin-withdrawal-service
     resource: ../../src/auth/admin-withdrawal.service.ts
     title: 회원 탈퇴 — status_changed_at · 사유를 BP 마스터 본인 행에 쓴다, WITHDRAW_REASON_LABEL
-    last_modified: 2026-11-13T07:05:00Z
+    last_modified: 2026-11-17T06:50:00Z
+  - id: hq-profile
+    resource: ../../src/bp-codes/hq-profile.ts
+    title: BP 상호명 · 사업자정보 · 좌표를 본사 점포에서 읽는 select 조각과 펼침(tradeNameOf · hqBizOf · hqLocationOf · liveHqStoreId)
+    last_modified: 2026-11-17T08:19:43Z
   - id: bp-masters-e2e
     resource: ../../test/bp-masters.e2e-spec.ts
     title: e2e on a real database — 403 for BP accounts, concurrent register, code copy, history paging, cascade, delete, withdrawn BP (histories 409 · detail withdrawal)
@@ -48,8 +52,12 @@ sources:
 
 The platform side of a customer BP. One BP has exactly one BP 마스터 (`role_type_code = 'BM'`),
 so the screen treats the pair as one thing: the list row, the detail and the edit form mix
-`bp_codes` columns (BP 코드, 상호명, 사업자정보, BP 상태) with the master's
+the BP (BP 코드 and BP 상태 from `bp_codes`; 상호명 and 사업자정보 from its 본사 점포's
+`store_business_profiles` since 2026-11-17) with the master's
 `admin_accounts` columns (아이디, 이름, 연락처, 이메일, 가입경로, 최근 로그인).[^bp-masters-service]
+The response keeps the old field names in the old places (`tradeName`, `biz*` — `flatBp`), so
+front saw no shape change; the detail and the form added the 본사's `latitude` · `longitude` ·
+`isLocationApplied`, and the list's 사업자 인증 filter and keyword search read the live 본사.
 The platform BP (`BP000000`) and deleted BPs are outside it (404). A 탈퇴 BP is shown but
 never changed — every write answers 409 — and its 이름 · 연락처 · 이메일 come back `null`
 whatever the row still holds, so the screen prints 「탈퇴로 삭제됨」 and the name search
@@ -76,7 +84,9 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   `nextBpCode` under the same advisory lock as signup[^next-bp-code]), the master
   (`BM000001`, `isAllStores = true`, `PLATFORM_REGISTERED`, no 약관 yet), the 플랫폼제공
   공통코드 rows for the new BP (`copyProvidedItems`, exactly as signup does), and a 1-hour
-  초기 비밀번호. The account starts with the locked hash `'!'` and 「미발송」 on; the mail
+  초기 비밀번호, plus the BP's 본사 점포 (`createHqStore` — 상호명, 사업자정보 and, if sent,
+  coordinates; [Store management](/api/stores.md)). With a verified number and coordinates the
+  본사 starts 운영, otherwise 미운영. Creating the 본사 queues on the store-code lock, so the transaction runs on store registration's limits (`STORE_CODE_TX`) and a timeout (P2028) is a 503, as 점포 등록's is. The account starts with the locked hash `'!'` and 「미발송」 on; the mail
   (`EMAIL_BP_REGISTER`) goes after commit and only a sent mail turns 미발송 off. A failed
   or impossible mail leaves the BP registered with `isMailSent: false` — the way back is
   비밀번호 초기화. This flow is the same code as 플랫폼 관리자 등록
@@ -97,7 +107,9 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   `POST /bp-masters/business-verifications` checks (duplicate first, then 국세청) and
   returns a 10-minute token; register and edit write the three values and `biz_verified_at`
   only when the token rides along, re-checking the number inside the transaction under
-  the per-number lock `stores:biz:<번호>` that store saves, signup and 마이페이지 take. The
+  the per-number lock `stores:biz:<번호>` that store saves, signup and 마이페이지 take. Since the 본사 move
+  the number is no longer unique in the database, so a `P2002` on register · edit answers 409 only when it names
+  `admin_accounts`' `login_id` or `email`; any other unique violation is a real 500, not a misleading 「중복」. The
   edit screen sends its `bpCodeId` so the BP's own number (and its stores') is not a
   duplicate. Ten calls per admin per hour, plus the controller's IP · account throttle —
   the 국세청 key and daily quota are shared by every BP.
@@ -107,14 +119,25 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   live temporary passwords, used or not (the old inbox could still use them) and, if one was voided and the
   account has no usable password yet (`'!'`), turns 미발송 back on — the shared
   `voidTempPasswordsForEmailChange`, same as 플랫폼 관리자 (see [Platform admins](/api/platform-admins.md)).
+  The 상호명, 사업자정보 and coordinates are written to the 본사 by `saveHqProfile`, which also
+  renames the 본사 점포, copies the business address into its address and re-derives its status —
+  **clearing the number or the coordinates drops a 운영 본사 to 미운영 without asking** (user
+  decision 2026-11-17). Latitude and longitude come together; leaving both out keeps the stored
+  coordinates (an older screen that does not know them cannot wipe them), `null` clears them. `isLocationApplied` left out likewise keeps the current value, and sent alone (without coordinates) it is applied; only when the 본사 is first created does it default to 사용 (it used to default to 사용 on every save). Only one of latitude · longitude is a 400. These three are the exception to the form's 「전체 치환」. The 상호명 and 사업자정보 are read from the live 본사 only; when it is missing (it must exist for every BP) `tradeNameOf` · `hqBizOf` return empty values but log an error, and the edit path stops with 500 instead of writing to a deleted 본사 (`liveHqStoreId`). Platform BP registration writes the 본사 last in its transaction, so the store-code advisory lock is held only until commit.
 - **미사용 cascades, 사용 does not.** Turning a BP 미사용 turns every active account of the
   BP (BM · BA · FM · FA) 미사용 in the same transaction; sessions and passwords stay, and
   the menu-permission check refuses them from the next request. Turning it back 사용 lifts
   only the BP and its master — the master re-enables the others one by one. The BP update
   is conditioned on the status it read, so two admins flipping at once get one 409 rather
-  than a history line with the wrong 「전」.
-- **History is two tables, read as one.** BP columns and status go to
+  than a history line with the wrong 「전」. BP 사용 is a 본사 운영 condition, so the same
+  transaction re-syncs the 본사 (`syncHqStatus`): 미사용 drops it to 미운영, 사용 restores it if the
+  other conditions hold.
+- **History is two tables, read as one.** BP status goes to
   `bp_change_histories`; the master's 이름 · 연락처 · 이메일 go to `admin_change_histories`.
+  **상호명, 사업자정보 and coordinates no longer do** — since 2026-11-17 their changes are written
+  to the 본사's `store_change_histories` (design D5, user-confirmed), which this route does not
+  merge and 점포 관리 will not open for a 본사, so no screen shows them yet; older
+  `bp_change_histories` rows for those fields stay where they were.
   The master's own status change is *not* written to the account history — it always
   equals the BP status, and the merged view would show it twice. Cascaded sub-accounts do
   get an account-history line. `GET /bp-masters/:id/histories` merges with one
@@ -139,7 +162,14 @@ account with a stray permission row still gets 403.[^bp-masters-controller] The 
   read without the lock an uncommitted login was missed and a BP in use the same instant got
   deleted for good. The order is always `bp_codes` → `admin_accounts`; login, refresh and
   password changes take only the account row, so the two cannot deadlock (PR #163 review). The BP and
-  the master are flagged `is_deleted` together; the 아이디 stays taken.
+  the master are flagged `is_deleted` together; the 아이디 stays taken. 「No undeleted store」 and
+  the detail's 소속 점포 수 do not count the 본사, but a 본사 that holds 직원 (`staff_members`) or live 시설물 refuses the delete with 409 「본사에 등록된 직원 · 시설물이 있어 삭제할 수 없습니다.」 (`deletionReasons`, 2026-11-17 review) — counted only after the 본사 row is locked `FOR UPDATE` (after `bp_codes` and the BP 마스터 row), because 본사 직원 · 계약 · 시설물 inserts check only the `stores` foreign key and would slip past the `bp_codes` lock; deleting the BP also deletes and closes its 본사
+  (「삭제」 history row), whose profile keeps the 상호명 so screens reading a deleted BP still show
+  its name.
+- **회원 탈퇴 and the 본사** (`admin-withdrawal.service.ts`): the preview's 「점포 N개」 leaves the
+  본사 out, while the 폐점 itself closes it with the other stores (본사 직원's contracts and
+  schedules end too), and the 대표자 연락처 · 이메일 are cleared on the 본사 profile, where they now
+  live.
 
 # Excel
 
@@ -163,7 +193,7 @@ no file. The same check runs again as `assertRequester` when the file is downloa
 
 # Not yet
 
-- 소속 점포 수 is a number only; linking it to the store list waits for the front.
+- 소속 점포 수 is a number only (본사 not counted); linking it to the store list waits for the front.
 - Withdrawal itself is not here — it is the BP master's own 회원 탈퇴 (PR #162); this screen only reads it.
 
 [^bp-masters-service]: BpMastersService

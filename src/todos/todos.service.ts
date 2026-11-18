@@ -47,6 +47,7 @@ import {
 } from './dto/todo.response.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
 import { ACTIVE_STAFF, compareTodos, groupStatus } from './todo-rules';
+import { matchesStoreScope } from '../stores/store-scope-type';
 
 const TODO_NOT_FOUND = 'TO-DO 를 찾을 수 없습니다.';
 const STORE_NOT_FOUND = '근무지 점포를 찾을 수 없습니다.';
@@ -303,10 +304,10 @@ export class TodosService {
       (id) =>
         (!query.storeId || id === query.storeId) &&
         (!query.storeIds || query.storeIds.includes(id)) &&
-        (!query.storeTypes ||
-          query.storeTypes.some(
-            (type) => type === storeOf.get(id)?.storeTypeCode,
-          )),
+        matchesStoreScope(
+          storeOf.get(id) ?? { storeTypeCode: '' },
+          query.storeTypes,
+        ),
     );
     // 점포 유형은 상단 범위 직영 · 가맹이라 폐점 점포는 뺀다 — 범위 칩 · 점포 목록과 같다. 폐점 점포는 전체 · 점포를 골라 본다(2026-10-22 재영)
     if (query.storeTypes && ids.length)
