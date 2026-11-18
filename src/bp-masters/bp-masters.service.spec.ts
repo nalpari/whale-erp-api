@@ -1215,16 +1215,32 @@ describe('BpMastersService', () => {
           );
       });
 
-      it('운영 중인 본사는 사업자번호가 없어지면 미운영으로 내린다', async () => {
-        prisma.bpCode.findFirst.mockResolvedValue(verifiedBp());
-        prisma.store.findFirst.mockResolvedValue({
-          storeId: 120,
-          storeStatusCode: 'OPERATING',
-          latitude: 37.5,
-          longitude: 127,
-          businessProfile: { bizRegistrationNumber: null },
-          bpCode: { accountStatusCode: 'ACTIVE' },
+      // 상태 판정의 다시 읽기(store.findFirst)가 방금 쓴 사업자번호를 돌려주게 한다 — 고정값이면 지우기가 빠져도 통과한다.
+      const operatingHqAfterWrite = () =>
+        prisma.store.findFirst.mockImplementation(() => {
+          const written = (
+            prisma.storeBusinessProfile.update.mock.calls as [
+              { data: { bizRegistrationNumber?: string | null } },
+            ][]
+          ).at(-1)?.[0].data;
+          return Promise.resolve({
+            storeId: 120,
+            storeStatusCode: 'OPERATING',
+            latitude: 37.5,
+            longitude: 127,
+            businessProfile: {
+              bizRegistrationNumber:
+                written && 'bizRegistrationNumber' in written
+                  ? written.bizRegistrationNumber
+                  : '1058763602',
+            },
+            bpCode: { accountStatusCode: 'ACTIVE' },
+          });
         });
+
+      it('운영 중인 본사는 사업자번호가 없어지면 미운영으로 내리고 「점포상태」 이력을 남긴다', async () => {
+        prisma.bpCode.findFirst.mockResolvedValue(verifiedBp());
+        operatingHqAfterWrite();
         await service.update(CALLER, 12, {
           ...updateInput,
           clearBusinessVerification: true,
@@ -1233,6 +1249,36 @@ describe('BpMastersService', () => {
           where: { storeId: 120 },
           data: { storeStatusCode: 'NOT_OPERATING', updatedBy: CALLER },
         });
+        expect(hqHistories()).toContainEqual(
+          partial({
+            field: '점포상태',
+            beforeValue: '운영',
+            afterValue: '미운영',
+          }),
+        );
+      });
+
+      it('지우지 않고 저장하면 운영 중인 본사는 그대로다 — 대조', async () => {
+        prisma.bpCode.findFirst.mockResolvedValue(verifiedBp());
+        operatingHqAfterWrite();
+        await service.update(CALLER, 12, updateInput);
+        for (const [arg] of prisma.store.update.mock.calls as [
+          { data: object },
+        ][])
+          expect(arg.data).not.toHaveProperty('storeStatusCode');
+      });
+
+      it('false 와 토큰을 함께 보내면 400 이 아니라 토큰을 반영한다', async () => {
+        await service.update(CALLER, 12, {
+          ...updateInput,
+          verificationToken: 't',
+          clearBusinessVerification: false,
+        });
+        expect(prisma.storeBusinessProfile.update).toHaveBeenCalledWith(
+          partial({
+            data: partial({ bizRegistrationNumber: '1058763602' }),
+          }),
+        );
       });
 
       it('이미 인증이 없는 BP 면 바뀌는 것 없이 성공한다 — 사업자정보 이력도, 미운영 본사의 상태 변경도 없다', async () => {
