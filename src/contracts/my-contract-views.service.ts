@@ -8,6 +8,7 @@ import { dateOnly } from '../common/date-only';
 import { PrismaService } from '../prisma/prisma.service';
 import { storeNames } from '../payslips/payslip-shared';
 import { article2Of, snapshotOf } from './contract-files.service';
+import { isOperatingStore } from './contract-store-open';
 import { contractArticles } from './contract-template';
 import { CONTRACT_TERMS_SELECT, contractTermsOf } from './contract-terms';
 import { employedOn, signDeadlinePassed } from './contract-status';
@@ -156,6 +157,7 @@ export class MyContractViewsService {
           phone: true,
           // 날인할 수 있는가(signable · storeNotOperating) — 운영 중인 근무지에서만 날인받는다
           storeStatusCode: true,
+          isDeleted: true,
           zipCode: true,
           address: true,
           addressDetail: true,
@@ -200,9 +202,8 @@ export class MyContractViewsService {
     // 당사자 행에 적힌 값(날인 때 고정 · 백필)이 있으면 사용자 칸 · 제2조를 그 값으로 — 처리 완료본과 같은 함수 · 같은 조건
     // (WHALEERP-131). 점포명 · 점포 주소 · 사업장 우편번호(고정하지 않는다 — 직원 앱이 보이지 않는다)는 지금 값이다
     const fixed = snapshotOf(party);
-    // 날인을 기다리는 계약만 근무지가 운영 중인지 본다 — 날인 API 와 같은 판정(storeOperating). 날인 대기가 아니면 늘 false
-    const notOperating =
-      item.awaitingSignature && store.storeStatusCode !== 'OPERATING';
+    // 날인을 기다리는 계약만 근무지가 운영 중인지 본다 — 날인 API 와 같은 판정(isOperatingStore). 날인 대기가 아니면 늘 false
+    const notOperating = item.awaitingSignature && !isOperatingStore(store);
     const article2 = article2Of(c, store.name, fixed);
     // 직원 레코드 직무는 NOT NULL 이라 날인 · 백필이 적은 직무도 늘 있다 — 칸 타입(string)을 맞추려고만 잇는다
     const jobTitle = article2.jobTitle ?? c.staffMember.jobTitle;

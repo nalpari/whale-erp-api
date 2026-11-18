@@ -692,14 +692,16 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
 - **Only a 운영 근무지 sends and takes 날인** (2026-11-18 김민식, api #300 judged the 사용자 칸 and was replaced by this).
   Every send — 저장하면 곧바로 보내기, `PUT` 고쳐 다시 보내기, `PATCH …/worker`, `POST …/send` — passes
   `ContractDeliveryService.prepare`, which first checks the 근무지 점포 is 운영 (`storeOperating` in
-  `contract-store-open.ts`: `OPERATING`, not deleted) and answers 409 `STORE_NOT_OPERATING` otherwise (nothing written,
+  `contract-store-open.ts`: `OPERATING`, not deleted; the 직원 앱 상세 uses the same `isOperatingStore`) and answers 409 `STORE_NOT_OPERATING` otherwise (nothing written,
   the save rolls back). A store becomes 운영 only with 사업자 인증 · 좌표 · BP 사용 (`missingForOperation`), so a 운영
   store always has the 대표자 · 사업자등록번호 that 날인 freezes into the 사용자 칸 (`employerOf`); the 본사 점포 drops to
   미운영 when its 사업자 인증 is cleared. Stores that were 운영 before that rule without 인증 exist only as old test data.
   Saving a 작성 중 계약 at its own 미운영 근무지 is still allowed (722) — only sending is blocked. 날인
   (`POST /me/contracts/:id/sign`) checks it twice: before uploading the signature (no storage round trip for a request
   that must fail) and again after the row lock before 체결 완료 (the store may have dropped meanwhile — the uploaded
-  signature is then deleted). The 직원 앱 상세 (`GET /me/contracts/:id`) reports `storeNotOperating: true` and
+  signature is then deleted). The second check takes the store row `FOR SHARE` (`lockStoreOperating`) before reading the
+  사용자 칸 it freezes, so a 본사 사업자 인증 해제 (empties the 사용자 칸 and sets 미운영 in one transaction; `syncHqStatus`
+  holds the 본사 row `FOR NO KEY UPDATE`) cannot commit between the judgement and the read. The 직원 앱 상세 (`GET /me/contracts/:id`) reports `storeNotOperating: true` and
   `signable: false` while such a contract awaits 날인 (always false otherwise) — the app shows why instead of the 본인
   대조 notice.
 - `taxProfile` — the 직원's 신고 정보, read-only (WHALEERP-155, 2026-10-29 김민식): `{ status, rrnMasked, bankName,

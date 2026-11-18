@@ -293,6 +293,7 @@ describe('MyContractViewsService', () => {
       address: '서울 마포구 와우산로 1',
       addressDetail: '1층',
       storeStatusCode: 'OPERATING',
+      isDeleted: false,
       businessProfile: {
         bizTradeName: '웨일 카페',
         bizRegistrationNumber: '1234567890',

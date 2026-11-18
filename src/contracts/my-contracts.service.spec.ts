@@ -20,6 +20,7 @@ describe('MyContractsService', () => {
   let png: Buffer;
   let tx: {
     $executeRaw: jest.Mock;
+    $queryRaw: jest.Mock;
     contract: {
       findFirst: jest.Mock;
       findUnique: jest.Mock;
@@ -116,6 +117,8 @@ describe('MyContractsService', () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
+      // 잠근 뒤 근무지 운영 확인(lockStoreOperating — 점포 행 FOR SHARE) — 기본은 운영 중
+      $queryRaw: jest.fn().mockResolvedValue([{ operating: true }]),
       contract: {
         findFirst: jest.fn().mockResolvedValue(mine()),
         // 전환 함수(기한 · 상태)가 잠근 뒤 읽는 값
@@ -145,7 +148,7 @@ describe('MyContractsService', () => {
       staffMember: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
       // 날인 때 고정하는 사용자 칸(WHALEERP-131)과 근무지가 운영 중인가(storeOperating — 기본은 운영 중)
       store: {
-        findFirst: jest.fn().mockResolvedValue({ storeId: 5 }),
+        findFirst: jest.fn().mockResolvedValue({ storeId: 3 }),
         findUniqueOrThrow: jest.fn().mockResolvedValue({
           name: '강남점',
           phone: '0212345678',
@@ -570,21 +573,25 @@ describe('MyContractsService', () => {
         code: 'STORE_NOT_OPERATING',
         message: STORE_NOT_OPERATING_FOR_STAFF,
       });
+      expect(tx.store.findFirst).toHaveBeenCalledWith({
+        where: { storeId: 3, isDeleted: false, storeStatusCode: 'OPERATING' },
+        select: { storeId: true },
+      });
       expect(storage.put).not.toHaveBeenCalled();
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
     it('올리는 동안 근무지가 미운영이 됐으면 잠근 뒤 다시 봐 409 — 사용자 칸을 고정하지 않고 올린 서명을 지운다', async () => {
-      // 올리기 전에는 운영 중, 잠근 뒤에는 아니다(본사 사업자 인증 해제 등)
-      tx.store.findFirst
-        .mockResolvedValueOnce({ storeId: 5 })
-        .mockResolvedValueOnce(null);
+      // 올리기 전에는 운영 중, 잠근 뒤(점포 행 FOR SHARE)에는 아니다(본사 사업자 인증 해제 등)
+      tx.$queryRaw.mockResolvedValue([{ operating: false }]);
       const e = await thrown(service().sign(77, 41, file(), SENT_ISO, NOW));
       expect(bodyOf(e)).toMatchObject({ code: 'STORE_NOT_OPERATING' });
       expect(storage.put).toHaveBeenCalled();
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
       expect(tx.contractParty.update).not.toHaveBeenCalled();
       expect(storage.delete).toHaveBeenCalled();
+      const [sql] = tx.$queryRaw.mock.calls[0] as [TemplateStringsArray];
+      expect(sql.join('?')).toMatch(/FOR SHARE/);
     });
   });
 
