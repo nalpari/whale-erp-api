@@ -134,7 +134,9 @@ describe('MailService', () => {
     expect(html).toContain('>임시 비밀번호를 보내 드립니다</p>');
     // 꼬리: 발신 전용 · 운영사 정보
     expect(html).toContain('이 메일은 발신 전용이라 회신할 수 없습니다.');
-    expect(html).toContain('사업자등록번호 105-87-63602');
+    expect(html).toContain(
+      '(주)인터플러그 | 대표이사: 이정선 | 사업자등록번호: 105-87-63602',
+    );
     // MAIL_LOGO_URL 이 없으면 로고 그림 없이 글자만
     expect(html).not.toContain('<img');
     expect(html).toContain(

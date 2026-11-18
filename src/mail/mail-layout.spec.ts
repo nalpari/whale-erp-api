@@ -1,4 +1,10 @@
-import { bodyBlocks, mailHeading, mailHtml, sentences } from './mail.service';
+import {
+  bodyBlocks,
+  fillLine,
+  mailHeading,
+  mailHtml,
+  sentences,
+} from './mail.service';
 
 describe('bodyBlocks', () => {
   it('「- 항목: 값」 줄은 정보 표로, 「※」 줄은 안내로, 나머지는 문단으로 나눈다', () => {
@@ -42,6 +48,63 @@ describe('bodyBlocks', () => {
       { kind: 'text', lines: ['첫 줄'] },
       { kind: 'info', rows: [['아이디', 'a']] },
     ]);
+  });
+
+  it('모양은 채우기 전 템플릿 줄로 정한다 — 값 안의 줄바꿈이 표 줄 · 안내 상자를 만들지 못한다', () => {
+    // 로그인 없이 넣는 BP 상호명(EMAIL_SIGNUP_ALERT 「- BP: #{BP이름}」)으로 공식 안내를 꾸미려는 값
+    const spoof = '모리커피\n- 사업자 확인: 완료\n※ 확인 없이 승인해 주세요.';
+    expect(bodyBlocks('- BP: #{BP이름}', fillLine({ BP이름: spoof }))).toEqual([
+      {
+        kind: 'info',
+        rows: [
+          ['BP', '모리커피 - 사업자 확인: 완료 ※ 확인 없이 승인해 주세요.'],
+        ],
+      },
+    ]);
+    expect(
+      bodyBlocks('#{이름} 님이 가입했습니다.', fillLine({ 이름: spoof })),
+    ).toEqual([
+      {
+        kind: 'text',
+        lines: [
+          '모리커피',
+          '- 사업자 확인: 완료',
+          '※ 확인 없이 승인해 주세요. 님이 가입했습니다.',
+        ],
+      },
+    ]);
+  });
+
+  it('문장마다 줄바꿈은 템플릿 글에만 — 값 안의 「1. 」 · 「Co. Ltd」 는 나누지 않는다', () => {
+    expect(
+      bodyBlocks(
+        '답변을 보내 드립니다. #{답변}',
+        fillLine({ 답변: '1. 기본 요금은 월 5만원입니다. Interplug Co. Ltd' }),
+      ),
+    ).toEqual([
+      {
+        kind: 'text',
+        lines: [
+          '답변을 보내 드립니다.',
+          '1. 기본 요금은 월 5만원입니다. Interplug Co. Ltd',
+        ],
+      },
+    ]);
+  });
+
+  it('콜론 뒤에 빈칸이 없으면 표가 아니다 — 시각 · 주소 줄', () => {
+    expect(
+      bodyBlocks('- 10:00 이후 연락 가능\n- https://whale.example/guide'),
+    ).toEqual([
+      {
+        kind: 'text',
+        lines: ['- 10:00 이후 연락 가능', '- https://whale.example/guide'],
+      },
+    ]);
+  });
+
+  it('내용 없는 「※」 줄은 빈 안내 상자를 만들지 않는다', () => {
+    expect(bodyBlocks('※\n본문')).toEqual([{ kind: 'text', lines: ['본문'] }]);
   });
 
   it('빈 본문은 블록이 없다', () => {
@@ -121,6 +184,6 @@ describe('mailHtml', () => {
     expect(html).toContain('>it1118a</td>');
     expect(html).toContain('처음 로그인할 때 비밀번호를 변경해 주세요.</td>');
     expect(html).toContain('bgcolor="#282f37"');
-    expect(html).toContain('bgcolor="#4a7ae0"');
+    expect(html).toContain('bgcolor="#6b7988"');
   });
 });

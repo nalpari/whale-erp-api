@@ -4,12 +4,12 @@ title: Mail (Gmail SMTP)
 description: Shared MailService that fills an EMAIL template's plain-text body, wraps it in the common mail layout with button links, sends it through Gmail, and records every attempt in mail_send_logs; what each failure means.
 tags: [notification, mail, smtp, gmail]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-18T02:10:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-18T03:20:00Z }
 sources:
   - id: mail-service
     resource: ../../src/mail/mail.service.ts
     title: MailService (validate, look up, render, layout, send, record)
-    last_modified: 2026-11-18T02:10:00Z
+    last_modified: 2026-11-18T03:20:00Z
   - id: mail-render
     resource: ../../src/notification-templates/render-template.ts
     title: renderTemplate (shared with alimtalk; masks button links)
@@ -17,7 +17,7 @@ sources:
   - id: mail-config
     resource: ../../src/mail/mail.config.ts
     title: MAIL_* env validation at startup
-    last_modified: 2026-11-18T02:10:00Z
+    last_modified: 2026-11-18T03:20:00Z
   - id: mail-module
     resource: ../../src/mail/mail.module.ts
     title: MailModule (Gmail transport; not wired into AppModule) · optionalMailServiceProvider
@@ -68,12 +68,22 @@ paragraph — for clients that do not render HTML; only the HTML part gets the l
 Kurly · SSG notices, a trust issue).** Top to bottom: a dark band (`#282f37`, the admin web's
 menu bar) with the white `WHALE ERP` wordmark; a heading — the mail subject with its leading
 `[WHALE ERP]` removed (`mailHeading`), so no template needed a new field; the body split by
-`bodyBlocks` — consecutive `- 항목: 값` lines become a grey-label info table (split at the first
-colon, label up to 30 chars), `※` lines become a notice box, everything else a paragraph, and
-every paragraph and notice line breaks after each sentence (`sentences`: after `. ? !` followed
-by a space, so `3.3%` and URLs stay whole — user request); the buttons (`#4a7ae0`); a grey footer
-with 「발신 전용」 and the operator's 상호 · 사업자등록번호 · 주소 · 전화 (the same values as the
-guest-site footer). Band, button and footer colours are also written as `bgcolor`, because some
+`bodyBlocks` — consecutive `- 항목: 값` lines (a space after the colon, label up to 30 chars, so
+`- 10:00 …` and `- https://…` stay text) become a grey-label info table, `※` lines become a
+notice box (an empty `※` line is dropped), everything else a paragraph, and the template's own
+sentences each get their own line (`sentences`: after `. ? !` followed by a space — user request);
+the buttons (slate `#6b7988`, user's pick over blue); a grey footer with 「발신 전용」 and, like
+Coupang's footer, `(주)인터플러그 | 대표이사: 이정선 | 사업자등록번호: …` then address and phone
+(user-specified; address and phone match the guest-site footer).
+
+**The block shape comes from the template, not the filled body.** `send` passes the unfilled
+template body and `fillLine(values)`; `bodyBlocks` classifies each template line first, then fills
+it. Classifying the filled body let a value with line breaks — a BP 상호명 typed on the public
+signup form, an operator's free-text 답변 — fake an info row or an official-looking notice box in a
+mail from WHALE ERP (PR #296 review). Now a value's line breaks stay inside its paragraph, become
+spaces in a table cell, and sentence splitting never cuts a value (`1. …`, `Co. Ltd`).
+Known limit: with `MAIL_LOGO_URL` set, clients that invert the whole mail in dark mode turn the band
+light but leave the white PNG as is. Band, button and footer colours are also written as `bgcolor`, because some
 dark-mode clients only invert `style` colours. The 29 seed EMAIL rows render sensibly without
 edits — their key values (아이디, 임시 비밀번호, 근무지, 제목 …) are already `- 항목: 값` lines.
 

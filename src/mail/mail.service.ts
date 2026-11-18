@@ -110,11 +110,13 @@ export class MailService {
         from: { name: FROM_NAME, address: this.config.username },
         to,
         subject: mail.subject as string,
+        // 블록 모양은 채우기 전 템플릿 본문으로 정한다 — 값 안의 줄바꿈이 표 · 안내를 꾸미지 못하게
         html: mailHtml(
           mail.subject as string,
-          mail.body,
+          mail.templateBody,
           mail.links,
           this.config.logoUrl,
+          fillLine(input.variables),
         ),
         text: [mail.body, ...mail.links].join('\n\n'),
       })) as { messageId: string };
@@ -178,7 +180,7 @@ export class MailService {
         `메일 템플릿 ${templateCode} 의 버튼 링크는 http(s) 주소여야 합니다`,
       );
 
-    return mail;
+    return { ...mail, templateBody: template.body };
   }
 
   /**
@@ -227,23 +229,42 @@ export class MailService {
   }
 }
 
-/** 메일 꼬리의 운영사 정보 — 로그인 전 홈 꼬리(front guest-footer)와 같은 값(2026-10-22 재영) */
+/**
+ * 메일 꼬리의 운영사 정보 — 쿠팡 메일 꼬리처럼 「상호」 이름표 없이 회사명부터(2026-11-18 사용자 지정, 대표이사 이정선).
+ * 주소 · 전화 · 사업자등록번호는 로그인 전 홈 꼬리(front guest-footer)와 같은 값(2026-10-22 재영).
+ */
 const OPERATOR_LINES = [
-  '상호 인터플러그 · 사업자등록번호 105-87-63602',
-  '03787 서울특별시 서대문구 연세로 5다길 22-3, 발리빌딩 3층 · 02-6928-0028',
+  '(주)인터플러그 | 대표이사: 이정선 | 사업자등록번호: 105-87-63602',
+  '(03787) 서울특별시 서대문구 연세로 5다길 22-3, 발리빌딩 3층 | 전화: 02-6928-0028',
 ];
-// 본문 블록 — 「- 항목: 값」 줄은 정보 표, 「※」 줄은 안내 상자, 나머지는 문단
-const INFO_LINE = /^\s*-\s*([^:\n]{1,30}?)\s*:\s*(.+)$/;
+// 본문 블록 — 「- 항목: 값」 줄은 정보 표, 「※」 줄은 안내 상자, 나머지는 문단.
+// 콜론 뒤에 빈칸이 있어야 표다 — 「- 10:00 이후」 · 「- https://…」 는 문단으로 둔다.
+const INFO_LINE = /^\s*-\s*([^:\n]{1,30}?)\s*:\s+(.+)$/;
 const NOTICE_LINE = /^\s*※\s*(.*)$/;
 type BodyBlock =
   | { kind: 'text'; lines: string[] }
   | { kind: 'info'; rows: [string, string][] }
   | { kind: 'notice'; lines: string[] };
 
-/** 일반 글 본문을 블록으로 나눈다. 빈 줄은 문단 사이 간격으로만 쓰고 버린다 */
-export function bodyBlocks(body: string): BodyBlock[] {
+const lines = (text: string) => text.split(/\r?\n/);
+
+/**
+ * 본문을 블록으로 나눈다. 빈 줄은 문단 사이 간격으로만 쓰고 버린다.
+ *
+ * 모양(표 · 안내 · 문단)은 **값을 채우기 전 템플릿 줄**로 정하고, 값은 그 뒤에 `fill` 로 채운다. 채운 본문으로 정하면
+ * 값 안의 줄바꿈이 새 표 줄 · 안내 상자를 만들어, 로그인 없이 넣는 상호명 같은 값이 공식 안내처럼 보이게 꾸밀 수 있었다
+ * (PR #296 리뷰). 값 안의 줄바꿈은 그 문단 · 안내 안의 줄바꿈으로만 남고, 표 값에서는 빈칸이 된다.
+ * 문장마다 줄바꿈(`sentences`)도 템플릿 글에만 건다 — 운영자 답변 · 상호명 같은 값 안의 「1. 」 · 「Co. Ltd」 는 나누지 않는다.
+ */
+export function bodyBlocks(
+  template: string,
+  fill: (text: string) => string = (text) => text,
+): BodyBlock[] {
   const blocks: BodyBlock[] = [];
-  for (const line of body.split(/\r?\n/)) {
+  // 템플릿 글을 문장마다 나눈 뒤 값을 채우고, 값 안의 줄바꿈은 그 자리의 줄바꿈으로 둔다
+  const filled = (text: string) =>
+    sentences(text).flatMap((s) => lines(fill(s)));
+  for (const line of lines(template)) {
     const last = blocks.at(-1);
     if (!line.trim()) {
       if (last?.kind === 'text') blocks.push({ kind: 'text', lines: [] });
@@ -252,15 +273,33 @@ export function bodyBlocks(body: string): BodyBlock[] {
     const info = INFO_LINE.exec(line);
     const notice = NOTICE_LINE.exec(line);
     if (info) {
-      if (last?.kind === 'info') last.rows.push([info[1], info[2]]);
-      else blocks.push({ kind: 'info', rows: [[info[1], info[2]]] });
+      const row: [string, string] = [
+        fill(info[1]).replace(/\s*\r?\n\s*/g, ' '),
+        fill(info[2]).replace(/\s*\r?\n\s*/g, ' '),
+      ];
+      if (last?.kind === 'info') last.rows.push(row);
+      else blocks.push({ kind: 'info', rows: [row] });
     } else if (notice) {
-      if (last?.kind === 'notice') last.lines.push(notice[1]);
-      else blocks.push({ kind: 'notice', lines: [notice[1]] });
-    } else if (last?.kind === 'text') last.lines.push(line);
-    else blocks.push({ kind: 'text', lines: [line] });
+      if (last?.kind === 'notice') last.lines.push(...filled(notice[1]));
+      else blocks.push({ kind: 'notice', lines: filled(notice[1]) });
+    } else if (last?.kind === 'text') last.lines.push(...filled(line));
+    else blocks.push({ kind: 'text', lines: filled(line) });
   }
-  return blocks.filter((b) => b.kind !== 'text' || b.lines.length);
+  return blocks
+    .map((b) =>
+      b.kind === 'info' ? b : { ...b, lines: b.lines.filter((l) => l.trim()) },
+    )
+    .filter((b) => b.kind === 'info' || b.lines.length);
+}
+
+/** 템플릿 한 줄의 `#{변수}` 를 채운다 — renderTemplate 이 이미 이름 · 필수 값을 검사한 뒤에만 쓴다 */
+export function fillLine(values: Record<string, string>) {
+  return (text: string) =>
+    text.replace(/#\{([^}]+)\}/g, (_, name: string) =>
+      Object.hasOwn(values, name) && typeof values[name] === 'string'
+        ? values[name]
+        : '',
+    );
 }
 
 /**
@@ -296,9 +335,11 @@ export function mailHeading(subject: string): string {
  */
 export function mailHtml(
   subject: string,
+  /** 값을 채우기 전 템플릿 본문 — 블록 모양은 이것으로 정한다(bodyBlocks) */
   body: string,
   links: readonly string[],
   logoUrl?: string | null,
+  fill?: (text: string) => string,
 ): string {
   const L = 'text-align:left';
   const FONT = "font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif";
@@ -308,9 +349,9 @@ export function mailHtml(
     : '';
   const block = (b: BodyBlock): string => {
     if (b.kind === 'text')
-      return `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:${INK};${L}">${b.lines.flatMap(sentences).map(escapeHtml).join('<br>')}</p>`;
+      return `<p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:${INK};${L}">${b.lines.map(escapeHtml).join('<br>')}</p>`;
     if (b.kind === 'notice')
-      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 14px"><tr><td bgcolor="#f8f9fb" style="padding:12px 14px;background:#f8f9fb;border-left:3px solid #4a7ae0;font-size:13px;line-height:1.6;color:#555b63;${L}">${b.lines.flatMap(sentences).map(escapeHtml).join('<br>')}</td></tr></table>`;
+      return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 14px"><tr><td bgcolor="#f8f9fb" style="padding:12px 14px;background:#f8f9fb;border-left:3px solid #6b7988;font-size:13px;line-height:1.6;color:#555b63;${L}">${b.lines.map(escapeHtml).join('<br>')}</td></tr></table>`;
     const rows = b.rows
       .map(
         ([k, v], i) =>
@@ -322,7 +363,7 @@ export function mailHtml(
   const buttons = links
     .map(
       (link) =>
-        `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 0"><tr><td bgcolor="#4a7ae0" style="border-radius:6px;background:#4a7ae0"><a href="${escapeHtml(link)}" style="display:inline-block;padding:13px 24px;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;border-radius:6px">바로가기</a></td></tr></table>`,
+        `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:10px 0 0"><tr><td bgcolor="#6b7988" style="padding:13px 24px;border-radius:6px;background:#6b7988"><a href="${escapeHtml(link)}" style="display:inline-block;color:#ffffff;font-size:15px;font-weight:bold;text-decoration:none;border-radius:6px">바로가기</a></td></tr></table>`,
     )
     .join('');
   return [
@@ -334,7 +375,7 @@ export function mailHtml(
     `<tr><td align="left" bgcolor="#282f37" style="padding:18px 32px;background:#282f37;${L}">${logo}<span style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:0.02em;vertical-align:middle;${FONT}">${FROM_NAME}</span></td></tr>`,
     `<tr><td align="left" style="padding:28px 32px 30px;${L};${FONT};color:${INK}">`,
     `<p style="margin:0 0 18px;font-size:20px;line-height:1.4;font-weight:bold;color:#282f37;${L}">${escapeHtml(mailHeading(subject))}</p>`,
-    bodyBlocks(body).map(block).join(''),
+    bodyBlocks(body, fill).map(block).join(''),
     buttons,
     '</td></tr>',
     `<tr><td align="left" bgcolor="#f0f1f3" style="padding:18px 32px;background:#f0f1f3;font-size:12px;line-height:1.7;color:#8a8f96;${L};${FONT}">이 메일은 발신 전용이라 회신할 수 없습니다.<br>${OPERATOR_LINES.map(escapeHtml).join('<br>')}</td></tr>`,
