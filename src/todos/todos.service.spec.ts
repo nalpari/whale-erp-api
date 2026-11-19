@@ -61,7 +61,9 @@ const mockDb = () => ({
   $queryRaw: jest.fn().mockResolvedValue([]),
   staffMember: { findMany: jest.fn().mockResolvedValue([]) },
   store: {
-    findMany: jest.fn().mockResolvedValue([{ storeId: 3, name: '연남점' }]),
+    findMany: jest
+      .fn()
+      .mockResolvedValue([{ storeId: 3, name: '연남점', isHq: false }]),
   },
   adminAccount: {
     findMany: jest.fn().mockResolvedValue([]),
@@ -518,6 +520,7 @@ describe('TodosService', () => {
         doneCount: 1,
         dueDate: '2026-10-21',
         storeName: '연남점',
+        storeIsHq: false,
         assignees: [
           { staffMemberId: 12, staffMemberName: '직원2' },
           { staffMemberId: 13, staffMemberName: '직원3' },
@@ -863,6 +866,10 @@ describe('TodosService', () => {
           performerStaffMember: { staffMemberId: 11, name: '나직원' },
         }),
       );
+      // 본사 점포면 storeIsHq true(stores.is_hq 그대로)
+      db.store.findMany.mockResolvedValueOnce([
+        { storeId: 3, name: '연남점', isHq: true },
+      ]);
 
       await expect(
         service.changeMyStatus(3, 7, 'DONE', NOW),
@@ -872,6 +879,7 @@ describe('TodosService', () => {
         dueDate: '2026-10-20',
         dueTime: '18:00',
         storeName: '연남점',
+        storeIsHq: true,
         performer: { staffMemberId: 11, staffMemberName: '나직원' },
       });
 
@@ -1151,6 +1159,7 @@ describe('TodosService', () => {
       expect(detail).toMatchObject({
         todoId: 7,
         storeName: '연남점',
+        storeIsHq: false,
         createdByName: '김관리',
         assignees: [{ staffMemberId: 11, staffMemberName: '나직원' }],
         groupTodos: [

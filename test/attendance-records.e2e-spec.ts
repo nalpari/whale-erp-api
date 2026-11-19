@@ -292,6 +292,8 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
     const row = (res.body as { items: Row[] }).items.find(
       (r) => r.staffMemberId === directStaffId,
     )!;
+    // 본사 여부는 stores.is_hq 그대로(본사 아닌 직영)
+    expect(row).toMatchObject({ storeIsHq: false });
     expect(row.schedules).toEqual([
       expect.objectContaining({ startTime: '09:00', endTime: '18:00' }),
     ]);
@@ -885,6 +887,11 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
           (i) => i.staffMemberId,
         ),
       ).not.toContain(hiddenStaffId);
+      // 선택지 줄도 본사 여부를 싣는다(가맹 점포라 false)
+      const optionItems = (options.body as { items: { storeIsHq: boolean }[] })
+        .items;
+      expect(optionItems.length).toBeGreaterThan(0);
+      expect(optionItems.every((i) => i.storeIsHq === false)).toBe(true);
     });
 
     it('대신 등록 — 위치정보 동의 없는 직원은 대신 등록(isProxy)으로 등록된다 · 3개월 지난 날은 400', async () => {

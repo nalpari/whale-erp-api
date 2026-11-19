@@ -10,6 +10,8 @@ export class PayslipCandidateDto {
   staffName: string;
   storeId: number;
   storeName: string;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다 */
+  storeIsHq: boolean;
   /** 계약 유형 — 유효한 근로계약의 값, 없으면 직원 레코드의 값 */
   @ApiProperty({ enum: EmploymentType, enumName: 'EmploymentType' })
   employmentType: EmploymentType;

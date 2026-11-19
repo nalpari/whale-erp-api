@@ -141,6 +141,8 @@ export class AttendanceDayItemDto {
   phone: string;
   storeId: number;
   storeName: string;
+  /** 본사 점포(stores.is_hq) — 관리자 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false */
+  storeIsHq: boolean;
   @ApiProperty({ enum: EmploymentType, enumName: 'EmploymentType' })
   employmentType: EmploymentType;
   @ApiProperty({ enum: EmploymentStatus, enumName: 'EmploymentStatus' })

@@ -4,12 +4,12 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T07:11:43Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
     title: TodosService — 등록 · 목록 · 상세 · 수정 · 상태 변경 · 삭제 · 내 TO-DO
-    last_modified: 2026-11-17T06:50:00Z
+    last_modified: 2026-11-19T06:58:12Z
   - id: todo-rules
     resource: ../../src/todos/todo-rules.ts
     title: 재직 직원 기준 · 정렬 · 묶음 상태 · 수행 예정 일시 계산
@@ -48,6 +48,8 @@ TO-DO (#109). Three controllers over one service:[^todos-controllers]
 | `GET /staff-members/:id/todos` | menu `/staff-members` (MN000005) read **and** `/todos` read (service, `requireAreaRead` — otherwise 403 「조회 권한이 없습니다.」, before the scope 404) | 직원 상세의 TO-DO 영역 (#118; area rule since 2026-10-22, same as [직원 상세 요약](/api/staff-members.md)) |
 | `GET /me/todos` | `account` token | 내 TO-DO (근무 탭 · 홈 카드) |
 | `PATCH /me/todos/:todoId/status` | `account` token | 대기 ↔ 진행 중 ↔ 완료 |
+
+목록 · 상세 · 등록 응답의 줄마다 `storeIsHq`(stores.is_hq, 본사 아니면 false)가 실린다 — 관리자 화면은 본사를 「[본사] 상호」로 보인다(2026-11-19). 이름 칸 `storeName` 은 상호 그대로. 같은 DTO 를 쓰는 직원 앱(`GET /me/todos` · `PATCH /me/todos/:todoId/status`)에도 실리지만 직원 앱은 쓰지 않는다.
 
 # Rows, groups and why there is no group table
 

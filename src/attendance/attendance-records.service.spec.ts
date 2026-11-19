@@ -61,7 +61,7 @@ describe('AttendanceRecordsService — 점포 범위(storeTypes, 본사 점포)'
     await expect(storeIdsOf(['HQ'])).resolves.toEqual([3]);
     expect(prisma.store.findMany).toHaveBeenCalledWith({
       where: { storeId: { in: [3] }, storeStatusCode: { not: 'CLOSED' } },
-      select: { storeId: true, name: true },
+      select: { storeId: true, name: true, isHq: true },
     });
   });
 
@@ -73,7 +73,7 @@ describe('AttendanceRecordsService — 점포 범위(storeTypes, 본사 점포)'
     await expect(storeIdsOf()).resolves.toEqual([1, 2, 3]);
     expect(prisma.store.findMany).toHaveBeenCalledWith({
       where: { storeId: { in: [1, 2, 3] } },
-      select: { storeId: true, name: true },
+      select: { storeId: true, name: true, isHq: true },
     });
   });
 });

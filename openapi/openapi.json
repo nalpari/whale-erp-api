@@ -25559,6 +25559,10 @@
           "storeName": {
             "type": "string"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다"
+          },
           "periodStartDate": {
             "type": "string",
             "description": "급여 기간 시작일(YYYY-MM-DD)"
@@ -25588,6 +25592,7 @@
           "staffName",
           "storeId",
           "storeName",
+          "storeIsHq",
           "periodStartDate",
           "periodEndDate",
           "isAttendanceConfirmed",
@@ -25722,6 +25727,10 @@
           "storeName": {
             "type": "string"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다"
+          },
           "contractId": {
             "type": "number",
             "nullable": true,
@@ -25743,6 +25752,7 @@
           "staffName",
           "storeId",
           "storeName",
+          "storeIsHq",
           "contractId",
           "payslipId",
           "hasAttendance"
@@ -26306,6 +26316,10 @@
           "storeName": {
             "type": "string"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다"
+          },
           "contractId": {
             "type": "number"
           },
@@ -26403,6 +26417,7 @@
           "staffName",
           "storeId",
           "storeName",
+          "storeIsHq",
           "contractId",
           "periodStartDate",
           "periodEndDate",
@@ -33113,6 +33128,10 @@
             "nullable": true,
             "description": "점포가 지워졌어도 이름은 보인다"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false"
+          },
           "title": {
             "type": "string"
           },
@@ -33150,6 +33169,7 @@
           "assignmentGroupId",
           "storeId",
           "storeName",
+          "storeIsHq",
           "title",
           "isUrgent",
           "todoCount",
@@ -33433,6 +33453,10 @@
           "storeId": {
             "type": "number"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false"
+          },
           "title": {
             "type": "string"
           },
@@ -33486,6 +33510,7 @@
           "createdByName",
           "todoId",
           "storeId",
+          "storeIsHq",
           "title",
           "isUrgent",
           "createdBy",
@@ -33694,6 +33719,10 @@
           "storeId": {
             "type": "number"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false"
+          },
           "title": {
             "type": "string"
           },
@@ -33713,6 +33742,7 @@
           "performer",
           "todoId",
           "storeId",
+          "storeIsHq",
           "title",
           "isUrgent"
         ]
@@ -35115,6 +35145,10 @@
           "storeName": {
             "type": "string"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 관리자 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false"
+          },
           "schedules": {
             "type": "array",
             "items": {
@@ -35144,6 +35178,7 @@
           "phone",
           "storeId",
           "storeName",
+          "storeIsHq",
           "schedules",
           "pairs",
           "isPayslipConfirmed"
@@ -35274,6 +35309,10 @@
           "storeName": {
             "type": "string"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 관리자 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false"
+          },
           "schedules": {
             "type": "array",
             "items": {
@@ -35302,6 +35341,7 @@
           "phone",
           "storeId",
           "storeName",
+          "storeIsHq",
           "schedules",
           "pairs",
           "isPayslipConfirmed"
@@ -35380,6 +35420,10 @@
           "storeName": {
             "type": "string"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 관리자 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false"
+          },
           "schedules": {
             "type": "array",
             "items": {
@@ -35415,6 +35459,7 @@
           "phone",
           "storeId",
           "storeName",
+          "storeIsHq",
           "schedules",
           "pairs",
           "isPayslipConfirmed",
@@ -35562,6 +35607,10 @@
           "storeName": {
             "type": "string"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 관리자 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false"
+          },
           "isProxy": {
             "type": "boolean",
             "description": "대신 등록(위치정보 동의 없음 · 일시 중지). false 면 위치정보에 동의한 직원 — 기록 없는 날만 출근 · 퇴근을 함께 넣어 보정한다"
@@ -35576,6 +35625,7 @@
           "name",
           "storeId",
           "storeName",
+          "storeIsHq",
           "isProxy",
           "isPayslipConfirmed"
         ]
