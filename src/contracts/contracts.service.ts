@@ -124,6 +124,38 @@ import {
 import { matchesStoreScope } from '../stores/store-scope-type';
 import { OPERATING_STORE_WHERE, storeOperating } from './contract-store-open';
 
+/**
+ * 점포 이름 검색 — 화면은 본사 점포를 「[본사] 상호」로 보이므로(WHALEERP-750) 보이는 대로 쳐도 찾는다. 앞의 「[본사]」를 떼면
+ * 본사 점포 중 남은 글자를 이름에 담은 것이고(남은 글자가 없으면 본사 점포 전부), 이름에 그 글자가 그대로 든 점포도 함께다. 「본사」만 치면 이름에 본사가 든 점포와 본사 점포,
+ * 그 밖에는 이름 일부(대소문자 무시)다.
+ */
+export function storeNameWhere(text: string): Prisma.StoreWhereInput {
+  const byName = { name: { contains: text, mode: 'insensitive' } } as const;
+  // 「본사」만 치면 이름에 본사가 든 점포와 본사 점포 모두
+  if (text.trim() === '본사') return { OR: [byName, { isHq: true }] };
+  const hq = /^\s*\[본사\]\s*/.exec(text);
+  if (!hq) return byName;
+  const rest = text.slice(hq[0].length).trim();
+  // 이름에 「[본사]」가 그대로 든 매장도 놓치지 않게 이름 그대로 찾는 것과 함께 본다
+  return {
+    OR: [
+      byName,
+      {
+        isHq: true,
+        ...(rest && { name: { contains: rest, mode: 'insensitive' } }),
+      },
+    ],
+  };
+}
+
+/** 목록 · 상세의 근무지 칸 — 점포가 없으면(데이터 깨짐) 이름 null · 본사 아님 */
+const storeFieldsOf = (
+  store: { name: string; isHq: boolean } | null | undefined,
+) => ({
+  storeName: store?.name ?? null,
+  storeIsHq: store?.isHq ?? false,
+});
+
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
@@ -1600,7 +1632,7 @@ export class ContractsService {
     // stores 는 1팀 테이블이라 Prisma 관계가 없다. 이름만 따로 읽는다(지운 점포여도 이름은 보인다).
     const store = await this.prisma.store.findUnique({
       where: { storeId: c.storeId },
-      select: { name: true },
+      select: { name: true, isHq: true },
     });
     // 종이 계약 날인본. 관계를 함께 읽으면 Prisma 가 쿼리를 동시에 보내 PGlite(e2e)가 연결을 끊어 따로 읽는다.
     // 직원 앱 날인의 필기 서명(SIGNATURE)은 처리 완료본(WHALEERP-131)에 합성할 재료라 관리자에게 보이지 않는다(WHALEERP-145)
@@ -1681,7 +1713,7 @@ export class ContractsService {
       // 고용 형태는 그 계약에 적은 값이다(아래) — 계약 칸이 빈 옛 계약만 직원 레코드 값.
       employmentType: c.employmentType ?? c.staffMember.employmentType,
       storeId: c.storeId,
-      storeName: store?.name ?? null,
+      ...storeFieldsOf(store),
       birthDate: birth ? isoDate(birth) : null,
       gender: c.contractParty?.enteredGender ?? null,
       isForeigner: c.contractParty?.isForeigner ?? false,
@@ -2533,10 +2565,7 @@ export class ContractsService {
     // stores 는 1팀 테이블이라 Prisma 관계가 없다. 이름에 맞는 점포 id 를 먼저 구한다.
     if (storeName) {
       const stores = await this.prisma.store.findMany({
-        where: {
-          storeId: { in: storeIds },
-          name: { contains: storeName, mode: 'insensitive' },
-        },
+        where: { storeId: { in: storeIds }, ...storeNameWhere(storeName) },
         select: { storeId: true },
       });
       storeIds = stores.map((s) => s.storeId);
@@ -2607,9 +2636,9 @@ export class ContractsService {
 
     const stores = await this.prisma.store.findMany({
       where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
-      select: { storeId: true, name: true },
+      select: { storeId: true, name: true, isHq: true },
     });
-    const storeNames = new Map(stores.map((s) => [s.storeId, s.name]));
+    const storeById = new Map(stores.map((s) => [s.storeId, s]));
 
     return {
       total,
@@ -2619,7 +2648,7 @@ export class ContractsService {
         staffMemberId: r.staffMemberId,
         staffMemberName: r.staffMember.name,
         storeId: r.storeId,
-        storeName: storeNames.get(r.storeId) ?? null,
+        ...storeFieldsOf(storeById.get(r.storeId)),
         employmentType: r.employmentType,
         contractMethod: r.contractMethod,
         startDate: r.startDate ? isoDate(r.startDate) : null,

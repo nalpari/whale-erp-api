@@ -445,7 +445,7 @@ export class StaffMemberListService {
     const [storeRows, contracts] = await Promise.all([
       this.prisma.store.findMany({
         where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
-        select: { storeId: true, name: true, storeTypeCode: true },
+        select: { storeId: true, name: true, storeTypeCode: true, isHq: true },
       }),
       this.prisma.contract.findMany({
         // 임시저장 · 거부 · 만료로 끝난 재계약은 「최근 계약」으로 세우지 않는다(NOT_IDLE_RENEWAL)
@@ -490,6 +490,7 @@ export class StaffMemberListService {
         storeId: r.storeId,
         name: store.name,
         storeType: store.storeTypeCode,
+        isHq: store.isHq,
       };
       if (hidden(maskingStoreOf.get(r.storeId), hqSharingConsentedOf(r))) {
         // ID 도 내지 않는다. 직원 단위 API 도 막혀 있지만(canManageStaffMember), 목록이 열쇠를 건넬 이유가 없다.

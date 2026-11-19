@@ -4,7 +4,7 @@ title: Staff member list, detail and detail summary
 description: PUT /staff-members/:id/birth-date — the 관리자 생년월일 정정 (WHALEERP-602; 상세의 birthDateCorrectable 이 버튼 표시 판정), GET /staff-members — the 관리자 웹 직원 목록 in one call (점포 조건 storeIds · storeTypes 로 상단 점포 범위와 잇는다), GET /staff-members/:id — one 직원 in the same shape plus the account e-mail, 직무 · 입사일 · 생년월일 (초대·가입 상태, 연결 보류, 최근 계약, 재직), and GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos,send-logs} — the 상세 요약 areas (send-logs 는 가입 초대 · 소속 추가 확인 요청 · 서명 요청 알림톡과 비밀번호 초기화 메일 발송 이력), each behind its own menu read permission, and GET /staff-members/:id/work-schedules — the 근무스케줄 표 with a period filter, pages and the period's work-minute total; the derived StaffJoinState, 본사 제공 동의 masking, and why out-of-scope stores are not an error.
 tags: [staff, list, admin, masking, invitation]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T04:54:46Z }
 sources:
   - id: hq-sharing
     resource: ../../src/admin-scope/hq-sharing.ts
@@ -13,7 +13,7 @@ sources:
   - id: staff-member-list-service
     resource: ../../src/staff-members/staff-member-list.service.ts
     title: StaffMemberListService (scope · where · page · assemble · mask · findOne)
-    last_modified: 2026-11-17T06:50:00Z
+    last_modified: 2026-11-19T04:54:46Z
   - id: contract-terms
     resource: ../../src/contracts/contract-terms.ts
     title: 근무 요일 select · 변환(workDaysOf) — 목록 · 상세 contract.workDays 가 계약서 근무 조건과 같이 쓴다
@@ -37,7 +37,7 @@ sources:
   - id: response-dto
     resource: ../../src/staff-members/dto/staff-member-list.response.dto.ts
     title: 응답 — 목록 한 줄(StaffMemberListItemDto) · 상세(StaffMemberDetailResponseDto, 계정 이메일 · 직무 · 입사일 · 생년월일 · 재직 이력)
-    last_modified: 2026-11-13T08:17:28Z
+    last_modified: 2026-11-19T04:54:46Z
   - id: summary-controller
     resource: ../../src/staff-members/staff-member-summary.controller.ts
     title: GET /staff-members/:id/summary/{contracts,work-schedules,payslips,todos} (WHALEERP-183)
@@ -45,11 +45,11 @@ sources:
   - id: summary-service
     resource: ../../src/staff-members/staff-member-summary.service.ts
     title: StaffMemberSummaryService — 영역 메뉴 권한 → 범위 → 영역 읽기
-    last_modified: 2026-11-13T07:05:00Z
+    last_modified: 2026-11-19T04:54:46Z
   - id: summary-dto
     resource: ../../src/staff-members/dto/staff-member-summary.response.dto.ts
     title: 상세 요약 응답 DTO
-    last_modified: 2026-11-13T07:05:00Z
+    last_modified: 2026-11-19T04:54:46Z
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: 명세서 공용 조각 — 줄 금액 amountOf(기본급 기준) · BASE_PAY_ITEM_CODE
@@ -136,6 +136,10 @@ null 은 「근로계약 조회 권한 없음」, `[]` 는 「근무 요일 없�
 목록과 같은 형식). 화면의 「가입·인증」 묶음(가입 대기 =
 `INVITED,EXPIRED,REJECTED`)을 그대로 받아 하나라도 맞으면 낸다. 빈 값은 400 이라 「하나도 고르지 않음」은 api 로
 표현되지 않는다 — 화면이 부르지 않고 0건으로 그린다. 파라미터를 빼면 전체가 나오므로 둘을 바꿔 쓰면 안 된다.
+
+**본사 점포 표시**(WHALEERP-726 · 750, 2026-11-19): 목록 · 상세의 `store` 에 `isHq`(본사 점포, `stores.is_hq`)를 실어
+화면이 근무지 선택칸과 같은 「[본사] 상호」로 보인다. 상세 요약 근무스케줄(`…/summary/work-schedules`)과 근무스케줄 표(`GET /staff-members/:id/work-schedules`) 항목에도 `storeIsHq`.
+본사는 `storeTypes=HQ` 로 거를 수 있다(DIRECT 는 본사가 아닌 직영).
 
 **점포 조건은 상단 점포 범위와 잇는다**(2026-10-22 재영 「3팀 목록에 상단 점포 범위 연동」). `storeIds` · `storeTypes` 는
 근로계약 목록(`ListContractsQueryDto`, api #132)과 **형식만** 같다 — 반복(`storeIds=1&storeIds=2`)과 쉼표(`storeIds=1,2`)를

@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-19
+* **Update**: [Staff members](/api/staff-members.md) · [Contracts API](/api/contracts-api.md) · [Bulk exports](/api/bulk-exports.md) — 본사 근무지를 목록 · 상세에서도 「[본사] 상호」로 보이게(WHALEERP-726 · 750): 직원 목록 · 상세 `store.isHq`, 직원 상세 요약 근무스케줄 · 근무스케줄 표 `storeIsHq`, 근로계약 목록 · 상세 `storeIsHq`. 직원 자료 일괄 저장의 폴더 · 직원 CSV 점포 칸은 api 가 「[본사] 상호」로 쓴다(`storeLabelOf`, src/stores/store-label.ts). 근로계약 목록 점포 이름 검색은 보이는 「[본사] 상호」 · 「본사」로도 찾는다(`storeNameWhere`).
+
 ## 2026-11-18
 * **Update**: [Contracts API](/api/contracts-api.md) — 근로계약서 발송 · 날인 막기를 사용자 칸(대표자 · 사업자등록번호) 대신 **근무지 점포 운영 여부**로 판정한다(사용자 결정 — 운영 점포는 사업자 인증 · 좌표 · BP 사용이 있어야 되므로 사용자 칸이 늘 있다). 운영 = `OPERATING` · 지움 아님 · 사업주 정보(대표자 · 사업자등록번호) 있음(`isOperatingStore` — 인증 없이 운영인 옛 점포는 미운영으로 본다). 409 `EMPLOYER_INFO_MISSING` → `STORE_NOT_OPERATING`, 직원 앱 상세 `employerMissing` → `storeNotOperating`, `contract-employer.ts` → `contract-store-open.ts`. 근무지 선택지 · 새 근무지 검사(722)도 같은 조건(`OPERATING_STORE_WHERE`)을 쓴다 — 고를 수 있으면 보낼 수 있다. 날인은 점포 · 사업자정보를 한 SQL 문장(`readSignStore`)으로 읽어 판정 · 고정한다(점포 행은 잠그지 않아 폐점 · 재발송과 교착하지 않는다).
 * **Update**: [Contracts API](/api/contracts-api.md) — 근무지 점포의 대표자 · 사업자등록번호가 비면 근로계약서를 보내지도(저장하면 곧바로 보내기 · 고쳐 다시 보내기 · 근로자 정보 수정 · 재발송) 날인받지도 않는다 — 409 `EMPLOYER_INFO_MISSING`. 날인이 그 값을 고정해 처리 완료본에 빈 사용자 칸이 영영 남는 것을 막는다(본사는 사업자 인증을 풀면 두 값이 비고 미운영이 된다). 모든 점포에 적용(사용자 결정). 발송은 `ContractDeliveryService.prepare` 첫머리, 날인은 서명을 올리기 전과 잠근 뒤 체결 완료 전 두 번 본다. 직원 앱 상세에 `employerMissing`(그러면 `signable` false)을 더했다.

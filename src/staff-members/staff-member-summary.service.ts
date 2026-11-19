@@ -237,21 +237,22 @@ export class StaffMemberSummaryService {
     const stores = rows.length
       ? await this.prisma.store.findMany({
           where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
-          select: { storeId: true, name: true },
+          select: { storeId: true, name: true, isHq: true },
         })
       : [];
-    const nameOf = new Map(stores.map((s) => [s.storeId, s.name]));
+    const storeOf = new Map(stores.map((s) => [s.storeId, s]));
     const items = rows.map((r) => {
-      const storeName = nameOf.get(r.storeId);
+      const store = storeOf.get(r.storeId);
       // 근무스케줄의 점포는 외래키로 묶여 있다. 못 찾으면 데이터가 깨진 것이라 빈 칸으로 내보내지 않는다(직원 목록과 같다)
-      if (storeName === undefined)
+      if (store === undefined)
         throw new InternalServerErrorException(
           `근무스케줄 ${r.workScheduleId} 의 점포 ${r.storeId} 를 찾을 수 없습니다.`,
         );
       return {
         workScheduleId: r.workScheduleId,
         storeId: r.storeId,
-        storeName,
+        storeName: store.name,
+        storeIsHq: store.isHq,
         workDate: dateOnly(workDateOf(r.startAt)),
         startTime: kstTimeOf(r.startAt),
         endTime: kstTimeOf(r.endAt),

@@ -200,6 +200,60 @@ describe('archivePlan — zip 구성', () => {
       '강남_역삼점/김, _철수__11/근로계약서/100_서명 완료본 (2).pdf',
     ]);
   });
+
+  it('점포 폴더 이름이 겹치면(본사 「[본사] 상호」와 그 이름 그대로인 매장 등) 점포 ID 를 붙여 나눈다', () => {
+    const i = input();
+    i.storeNames = new Map([
+      [1, '[본사] 도레미'],
+      [2, '[본사] 도레미'],
+    ]);
+    i.attendance = [];
+    i.payslips = [];
+    i.contracts = [
+      {
+        ...i.contracts[0],
+        staffMemberId: 10,
+        documents: [{ kind: 'SIGNED_COPY', storageKey: 'a.pdf' }],
+      },
+      {
+        ...i.contracts[0],
+        contractId: 101,
+        staffMemberId: 11,
+        documents: [{ kind: 'SIGNED_COPY', storageKey: 'b.pdf' }],
+      },
+    ];
+    expect(archivePlan(i).files.map((f) => f.path)).toEqual([
+      '[본사] 도레미_1/유하람_10/근로계약서/100_서명 완료본.pdf',
+      '[본사] 도레미_2/김, _철수__11/근로계약서/101_서명 완료본.pdf',
+    ]);
+  });
+
+  it('붙인 이름이 다른 점포의 원래 이름과 겹치면 한 번 더 붙인다 — 어떤 두 점포도 같은 폴더를 쓰지 않는다', () => {
+    const i = input();
+    i.storeNames = new Map([
+      [1, '도레미'],
+      [2, '도레미'],
+      [3, '도레미_1'],
+    ]);
+    i.staff = [
+      { staffMemberId: 10, storeId: 1, name: '가', phone: '01000000001' },
+      { staffMemberId: 11, storeId: 2, name: '나', phone: '01000000002' },
+      { staffMemberId: 12, storeId: 3, name: '다', phone: '01000000003' },
+    ];
+    i.attendance = [];
+    i.payslips = [];
+    i.contracts = [10, 11, 12].map((staffMemberId) => ({
+      ...i.contracts[0],
+      contractId: staffMemberId * 10,
+      staffMemberId,
+      documents: [
+        { kind: 'SIGNED_COPY' as const, storageKey: `${staffMemberId}.pdf` },
+      ],
+    }));
+    const folders = archivePlan(i).files.map((f) => f.path.split('/')[0]);
+    expect(folders).toEqual(['도레미_1_1', '도레미_2', '도레미_1']);
+    expect(new Set(folders).size).toBe(3);
+  });
 });
 
 describe('zipArchive', () => {

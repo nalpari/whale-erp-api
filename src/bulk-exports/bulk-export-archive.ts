@@ -123,9 +123,33 @@ export function archivePlan(input: ArchiveInput): ArchivePlan {
     const s = staffById.get(staffMemberId)!;
     return [storeName(s.storeId), s.staffMemberId, s.name, s.phone];
   };
+  // 점포 폴더 이름이 겹치면(같은 이름의 점포 둘, 본사 「[본사] 상호」와 그 이름 그대로인 매장) 점포 ID 를 붙여 나눈다. 겹치지 않는
+  // 이름은 먼저 잡아 두고, 붙인 이름도 이미 잡힌 이름과 겹치면 한 번 더 붙인다 — 어떤 두 점포도 같은 폴더를 쓰지 않는다
+  const storeIds = [...new Set(input.staff.map((s) => s.storeId))].sort(
+    (a, b) => a - b,
+  );
+  const baseOf = (storeId: number) =>
+    safeName(storeName(storeId)) || String(storeId);
+  const counts = new Map<string, number>();
+  for (const id of storeIds)
+    counts.set(baseOf(id), (counts.get(baseOf(id)) ?? 0) + 1);
+  const folderNameOf = new Map<number, string>();
+  const taken = new Set<string>();
+  for (const id of storeIds)
+    if (counts.get(baseOf(id)) === 1) {
+      folderNameOf.set(id, baseOf(id));
+      taken.add(baseOf(id));
+    }
+  for (const id of storeIds) {
+    if (folderNameOf.has(id)) continue;
+    let name = `${baseOf(id)}_${id}`;
+    while (taken.has(name)) name = `${name}_${id}`;
+    folderNameOf.set(id, name);
+    taken.add(name);
+  }
   const folder = (staffMemberId: number) => {
     const s = staffById.get(staffMemberId)!;
-    return `${safeName(storeName(s.storeId)) || s.storeId}/${safeName(s.name)}_${s.staffMemberId}`;
+    return `${folderNameOf.get(s.storeId)!}/${safeName(s.name)}_${s.staffMemberId}`;
   };
   const used = new Set<string>();
   const unique = (path: string) => {

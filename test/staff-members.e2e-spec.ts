@@ -527,6 +527,7 @@ describe('직원 목록 (e2e, DB)', () => {
       storeId: franchiseStoreId,
       name: '가맹점',
       storeType: 'FRANCHISE',
+      isHq: false,
     });
   });
 

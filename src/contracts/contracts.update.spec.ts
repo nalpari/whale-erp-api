@@ -317,6 +317,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
         employmentType: 'PART_TIME',
         storeId: 11,
         storeName: '모리커피 성수점',
+        storeIsHq: false,
         birthDate: '1998-07-12',
         gender: 'FEMALE',
         isForeigner: true,
@@ -402,7 +403,7 @@ describe('ContractsService 이어 쓰기 (findOne · update)', () => {
       });
       expect(prisma.store.findUnique).toHaveBeenCalledWith({
         where: { storeId: 11 },
-        select: { name: true },
+        select: { name: true, isHq: true },
       });
       // 직원 필기 서명은 처리 완료본(131)의 재료라 관리자 상세에 싣지 않는다(WHALEERP-145)
       expect(prisma.contractDocument.findMany).toHaveBeenCalledWith(

@@ -4,12 +4,12 @@ title: Bulk exports (직원 자료 일괄 저장)
 description: BP 마스터 · 가맹마스터가 업무 범위 직원의 근로계약서 · 출퇴근 기록 · 급여명세서 · 근무스케줄을 zip 하나로 받는다 — 1분 배치가 만들고 7일 보관, 같은 BP · 같은 권한 유형 · 점포를 모두 관리하는 마스터가 목록 · 내려받기를 쓰고, 알림은 없다.
 tags: [admin, staff, batch, storage, zip, team3]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T06:50:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T04:54:46Z }
 sources:
   - id: bulk-exports-service
     resource: ../../src/bulk-exports/bulk-exports.service.ts
     title: BulkExportsService — preview · request · list · download · processPending · purgeExpiredFiles · buildArchive
-    last_modified: 2026-11-17T06:50:00Z
+    last_modified: 2026-11-19T04:54:46Z
   - id: bulk-export-policy
     resource: ../../src/bulk-exports/bulk-export-policy.ts
     title: 담을 직원 · 범위 · 볼 수 있는가 · 파일 이름
@@ -85,7 +85,11 @@ list. Empty means every store the caller manages.
   (not `SENT_ORIGINAL`, not `SIGNATURE`), plus `SENT` payslips rendered with `renderPayslipPdf` through the
   same `DETAIL_SELECT` · `toSummary` as the staff app. PDFs and images are stored at level 0, CSVs deflated.
   CSVs carry a UTF-8 BOM and CRLF. A cell that starts with `= + - @` gets a leading `'` so Excel does not
-  run it as a formula. Paths are `{점포명}/{이름}_{직원 레코드 ID}/…`, with path characters replaced by `_`.
+  run it as a formula. Paths are `{점포명}/{이름}_{직원 레코드 ID}/…`, with path characters replaced by `_`; the 본사
+  점포 is named 「[본사] 상호」 in the paths and the CSVs' 점포 column, as on screen (`storeLabelOf`, WHALEERP-750);
+  the payslip PDFs inside keep the plain 상호 — they are the same document the staff app exports.
+  Two stores whose folder names come out the same (same name, or a 본사 「[본사] 상호」 and a shop literally named so)
+  get `_{storeId}` appended so their staff folders do not share a store folder.
   A name made only of dots (`.`, `..`) becomes `_`, so an unzip tool cannot climb out of the folder (zip-slip).
   A duplicate path gets ` (2)`.
 - **Everything is in memory** (`ponytail:` in `zipArchive`). The upgrade path is fflate's streaming `Zip`

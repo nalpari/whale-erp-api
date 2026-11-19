@@ -69,8 +69,18 @@ describe('StaffMemberListService', () => {
       },
       store: {
         findMany: jest.fn().mockResolvedValue([
-          { storeId: 5, name: '모리커피 서초점', storeTypeCode: 'DIRECT' },
-          { storeId: 6, name: '모리커피 청담점', storeTypeCode: 'FRANCHISE' },
+          {
+            storeId: 5,
+            name: '모리커피 서초점',
+            storeTypeCode: 'DIRECT',
+            isHq: false,
+          },
+          {
+            storeId: 6,
+            name: '모리커피 청담점',
+            storeTypeCode: 'FRANCHISE',
+            isHq: false,
+          },
         ]),
       },
       contract: { findMany: jest.fn().mockResolvedValue([]) },
@@ -101,6 +111,22 @@ describe('StaffMemberListService', () => {
     (mock.mock.calls[0] as [Record<string, unknown>])[0];
   const where = () =>
     firstArg(prisma.staffMember.findMany).where as { AND: unknown[] };
+
+  it('본사 점포 직원이면 store.isHq — 화면이 「[본사] 상호」로 보인다(WHALEERP-726 · 750)', async () => {
+    prisma.store.findMany.mockResolvedValue([
+      { storeId: 5, name: '도레미커피', storeTypeCode: 'DIRECT', isHq: true },
+    ]);
+    const result = await service.list(9, {});
+    expect(result?.items[0].store).toEqual({
+      storeId: 5,
+      name: '도레미커피',
+      storeType: 'DIRECT',
+      isHq: true,
+    });
+    expect(firstArg(prisma.store.findMany).select).toMatchObject({
+      isHq: true,
+    });
+  });
 
   it('사용 중인 관리자가 아니면 null', async () => {
     scope.getManageableStores.mockResolvedValue(null);
@@ -450,7 +476,12 @@ describe('StaffMemberListService', () => {
       isMasked: true,
       name: null,
       phone: null,
-      store: { storeId: 6, name: '모리커피 청담점', storeType: 'FRANCHISE' },
+      store: {
+        storeId: 6,
+        name: '모리커피 청담점',
+        storeType: 'FRANCHISE',
+        isHq: false,
+      },
       employmentType: null,
       joinState: null,
       invitation: null,
