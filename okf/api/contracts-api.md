@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T06:10:51Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T08:05:22Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -13,7 +13,7 @@ sources:
   - id: contracts-controller
     resource: ../../src/contracts/contracts.controller.ts
     title: ContractsController
-    last_modified: 2026-11-18T07:58:05Z
+    last_modified: 2026-11-19T08:05:22Z
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
@@ -29,7 +29,7 @@ sources:
   - id: contract-duplicates
     resource: ../../src/contracts/contract-duplicates.ts
     title: 계약 중복 검사 (WHALEERP-129)
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-19T08:05:22Z
   - id: contract-status
     resource: ../../src/contracts/contract-status.ts
     title: 계약 상태 전환 (WHALEERP-151)
@@ -430,11 +430,14 @@ What it refuses, before writing:
   times. Touching ends (16:00 종업 · 16:00 시업) do not count; breaks are not
   subtracted. A record that has retired counts only up to its `retired_date`
   — 퇴직 처리 does not close a 체결 완료 contract, which would otherwise block
-  other stores for good. The body is only `code` and the message 「다른 점포
-  근로계약과 근무 시간이 겹칩니다.」 — no store, contract, weekday or time: the other
-  store may belong to another BP, and the overlapping times would let anyone
-  with a phone number map someone else's 근무 패턴 (운영 정책 CTR-26, 재영
-  2026-10-13).
+  other stores for good. The body carries the overlapping 요일 · 시간 so the admin
+  can fix the schedule at once (WHALEERP-744, 2026-11-19 사용자 결정): message
+  「월 14:00~16:00 근무가 다른 점포 근로계약과 겹칩니다.」 (several joined with ` · `,
+  요일 순) and `overlaps: [{ weekday, startTime, endTime }]` — only the part that
+  overlaps what the admin entered, never the store, BP or contract. This replaces
+  운영 정책 CTR-26 (재영 2026-10-13), which sent only the code and 「다른 점포
+  근로계약과 근무 시간이 겹칩니다.」 so that a phone number could not map someone
+  else's 근무 패턴; the user accepted that trade-off.
 
 **주휴일 is chosen by the admin** (노무사 확인 2026-10-14, 질문 4 — 주휴일은 특정
 요일로 정해야 한다; until then it was always NULL, 2026-10-08). `weeklyHoliday` is

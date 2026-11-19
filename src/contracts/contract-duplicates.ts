@@ -1,5 +1,6 @@
 import { ConflictException, HttpStatus } from '@nestjs/common';
 import { ContractStatus, Prisma, Weekday } from '@prisma/client';
+import { DB_ENUMS } from '../enums/db-enums.generated';
 import { lockContract, lockStaffMember, transition } from './contract-status';
 import { IN_PROGRESS, SIGNED_ONCE } from './signed-contract';
 
@@ -417,15 +418,29 @@ export function shiftOverlaps(mine: Shift[], others: Shift[]): Shift[] {
   return merged;
 }
 
+const WEEKDAY_LABEL = new Map<string, string>(DB_ENUMS.Weekday);
+const hhmm = (m: number) =>
+  `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+/** 「토 10:00~14:00 · 일 09:00~12:00」 — 겹친 구간(내 입력과 겹친 부분만) */
+export const overlapText = (overlaps: Shift[]) =>
+  overlaps
+    .map(
+      (o) =>
+        `${WEEKDAY_LABEL.get(o.weekday) ?? o.weekday} ${hhmm(o.start)}~${hhmm(o.end)}`,
+    )
+    .join(' · ');
+
 /** 둘 중 이른 날짜(YYYY-MM-DD). 없는 쪽은 끝없음이다. */
 const earlier = (a: string | null, b: string | null) =>
   a === null ? b : b === null ? a : a < b ? a : b;
 
 /**
- * 다른 점포에서 같은 번호로 근무 시간을 차지하는 계약과 기간 · 요일 · 시간이 겹치면 409. 겹쳤다는 것만 알린다 —
- * 다른 점포는 다른 BP 일 수 있어, 겹친 요일 · 시각을 주면 번호만으로 남의 근무 패턴을 캐낼 수 있다(운영 정책
- * CTR-26, 2026-10-13 재영). 퇴직한 직원 레코드의 계약은 퇴직일까지만 본다 — 퇴직 처리는 체결 완료 계약을 닫지
- * 않아, 그대로 두면 다른 점포의 새 계약을 영영 막는다.
+ * 다른 점포에서 같은 번호로 근무 시간을 차지하는 계약과 기간 · 요일 · 시간이 겹치면 409. 관리자가 바로 고칠 수 있게
+ * 겹친 요일 · 시간(내가 넣은 근무와 겹친 부분만)을 문장과 `overlaps` 로 알린다 — 점포 · BP 는 드러내지 않는다
+ * (WHALEERP-744, 2026-11-19 사용자 결정 — 예전엔 운영 정책 CTR-26(2026-10-13 재영)대로 겹쳤다는 것만 알렸다).
+ * 퇴직한 직원 레코드의 계약은 퇴직일까지만 본다 — 퇴직 처리는 체결 완료 계약을 닫지 않아, 그대로 두면 다른 점포의
+ * 새 계약을 영영 막는다.
  */
 export async function checkWorkTimeOverlap(
   db: Prisma.TransactionClient,
@@ -483,6 +498,11 @@ export async function checkWorkTimeOverlap(
     statusCode: HttpStatus.CONFLICT,
     error: 'Conflict',
     code: 'WORK_TIME_OVERLAP',
-    message: '다른 점포 근로계약과 근무 시간이 겹칩니다.',
+    message: `${overlapText(overlaps)} 근무가 다른 점포 근로계약과 겹칩니다.`,
+    overlaps: overlaps.map((o) => ({
+      weekday: o.weekday,
+      startTime: hhmm(o.start),
+      endTime: hhmm(o.end),
+    })),
   });
 }

@@ -493,6 +493,7 @@ describe('ContractSendService (재발송)', () => {
         .catch((e: unknown) => e);
       expect((error as ConflictException).getResponse()).toMatchObject({
         code: 'WORK_TIME_OVERLAP',
+        message: '월 12:00~16:00 근무가 다른 점포 근로계약과 겹칩니다.',
       });
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
