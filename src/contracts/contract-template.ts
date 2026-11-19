@@ -9,7 +9,8 @@ import {
 
 // 근로계약서 조항 템플릿(WHALEERP-131). 직원 앱 화면(상세 `articles`)과 보낸 원본 · 처리 완료본 PDF 가 같은 조항을 쓴다.
 // 문구는 직원 앱이 그리던 원안(whale-erp-staff contracts/_components/contract-document.tsx)을 옮긴 것이다 — 휴일 · 연차유급휴가 ·
-// 연장 · 야간 · 휴일 가산 문구는 노무사 검토(PAY-5) 전이라 원안 그대로 둔다. 문구를 바꾸면 이미 만든 PDF 는 그대로지만, 앱 화면은
+// 연장 · 야간 · 휴일 가산 문구는 노무사 검토(PAY-5) 전이라 원안 그대로 둔다. 제9조만 원안의 「사용자는 …」을 PDF 당사자 칸과
+// 같은 「사업주는 …」으로 바꿨다(2026-11-19). 문구를 바꾸면 이미 만든 PDF 는 그대로지만, 앱 화면은
 // 이 템플릿으로 다시 그리므로 체결한 계약의 본문도 바뀌어 보인다.
 
 export type ContractTerms = ReturnType<typeof contractTermsOf>;
