@@ -674,10 +674,10 @@ export class AttendanceEditService {
       }),
       this.prisma.store.findMany({
         where: { storeId: { in: storeIds } },
-        select: { storeId: true, name: true },
+        select: { storeId: true, name: true, isHq: true },
       }),
     ]);
-    const storeNameOf = new Map(storeRows.map((s) => [s.storeId, s.name]));
+    const labelOf = new Map(storeRows.map((s) => [s.storeId, s]));
     const items: ProxyStaffResponseDto['items'] = [];
     for (const c of candidates) {
       if (access.hides(c.storeId, hqSharingConsentedOf(c))) continue;
@@ -686,7 +686,8 @@ export class AttendanceEditService {
         staffMemberId: c.staffMemberId,
         name: c.name,
         storeId: c.storeId,
-        storeName: storeNameOf.get(c.storeId) ?? '',
+        storeName: labelOf.get(c.storeId)?.name ?? '',
+        storeIsHq: labelOf.get(c.storeId)?.isHq ?? false,
         isPayslipConfirmed: await payslipConfirmed(
           this.prisma,
           c.staffMemberId,

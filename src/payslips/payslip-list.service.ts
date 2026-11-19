@@ -35,7 +35,7 @@ import {
   monthRange,
   pickedStores,
   REPLACED_BY_WITHHOLDING,
-  storeNames,
+  storeLabels,
 } from './payslip-shared';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
@@ -369,7 +369,7 @@ export class PayslipListService {
     if (rows.length === 0)
       return { items: [], total, statusCounts, reviewPendingCount };
 
-    const names = await storeNames(
+    const labelOf = await storeLabels(
       this.prisma,
       rows.map((r) => r.storeId),
     );
@@ -377,7 +377,8 @@ export class PayslipListService {
     const items = rows.map((r): PayslipListItemDto => {
       const shown = {
         storeId: r.storeId,
-        storeName: names(r.storeId),
+        storeName: labelOf(r.storeId).name,
+        storeIsHq: labelOf(r.storeId).isHq,
         periodStartDate: dateOnly(r.periodStartDate),
         periodEndDate: dateOnly(r.periodEndDate),
       };
@@ -518,7 +519,7 @@ export class PayslipListService {
         where: { payslipId },
         select: DETAIL_SELECT,
       }),
-      storeNames(this.prisma, [found.storeId]),
+      storeLabels(this.prisma, [found.storeId]),
     ]);
     const [changedByName, confirmable] = await Promise.all([
       adminNames(
@@ -546,7 +547,8 @@ export class PayslipListService {
       staffMemberId: p.staffMemberId,
       staffName: p.staffMember.name,
       storeId: p.storeId,
-      storeName: names(p.storeId),
+      storeName: names(p.storeId).name,
+      storeIsHq: names(p.storeId).isHq,
       contractId: p.contractId,
       periodStartDate: dateOnly(p.periodStartDate),
       periodEndDate: dateOnly(p.periodEndDate),

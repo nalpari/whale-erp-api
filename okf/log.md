@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-19
+* **Update**: [Payslips](/api/payslips.md) · [TO-DO](/api/todos.md) · [Attendance](/api/attendance.md) — 본사 근무지를 급여명세서 · TO-DO · 근태 화면에서도 「[본사] 상호」로(사용자 결정): 급여명세서 목록 · 상세 · 작성 대상, TO-DO 목록 · 상세 · 등록, 근태 일별 · 기간 줄 · 대신 등록 선택지에 `storeIsHq`. 2026-11-17 의 「3팀 목록 행에는 `isHq` 를 싣지 않는다(front 합의)」는 726 · 750 과 이번 변경으로 대체됐다. 세 화면에는 점포명 검색 · 엑셀이 없다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 근로계약서 제9조를 「사용자는 …」 → 「사업주는 계약을 체결하면 곧바로 계약서를 근로자에게 교부한다」(당사자 칸 「사업주」와 같게, 표준근로계약서). 템플릿을 직원 앱과 같이 써 앱의 서명한 계약도 새 문구로 보이고, 처리 완료본 PDF 는 만든 때 문구 그대로다.
 * **Update**: [Contracts API](/api/contracts-api.md) — 근로계약서 PDF 의 사업주 칸: 머리를 「사용자」 → 「사업주」, 「상호」 → 「사업체명」, 「소재지」 → 「주소」(표준근로계약서 표기, WHALEERP-752). 전화번호는 근무지 점포 연락처이고 없으면 「-」 대신 줄을 뺀다(WHALEERP-753).
 * **Update**: [Staff members](/api/staff-members.md) · [Contracts API](/api/contracts-api.md) · [Bulk exports](/api/bulk-exports.md) — 본사 근무지를 목록 · 상세에서도 「[본사] 상호」로 보이게(WHALEERP-726 · 750): 직원 목록 · 상세 `store.isHq`, 직원 상세 요약 근무스케줄 · 근무스케줄 표 `storeIsHq`, 근로계약 목록 · 상세 `storeIsHq`. 직원 자료 일괄 저장의 폴더 · 직원 CSV 점포 칸은 api 가 「[본사] 상호」로 쓴다(`storeLabelOf`, src/stores/store-label.ts). 근로계약 목록 점포 이름 검색은 보이는 「[본사] 상호」 · 「본사」로도 찾는다(`storeNameWhere`).

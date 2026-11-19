@@ -73,7 +73,8 @@ type Punch = Prisma.AttendanceRecordGetPayload<{ select: typeof PUNCH_SELECT }>;
 /** 점포 조건으로 고른 점포와, 점포마다 본사에게 가려지는지 */
 type Scope = {
   storeIds: number[];
-  nameOf: Map<number, string>;
+  /** 점포 이름 · 본사 여부(관리자 화면은 「[본사] 상호」) */
+  labelOf: Map<number, { name: string; isHq: boolean }>;
   hides: (storeId: number, consented: boolean) => boolean;
 };
 
@@ -234,12 +235,12 @@ export class AttendanceRecordsService {
     if (!member) throw new NotFoundException('소속을 찾을 수 없습니다.');
     const store = await this.prisma.store.findUniqueOrThrow({
       where: { storeId: member.storeId },
-      select: { name: true },
+      select: { name: true, isHq: true },
     });
     const { rows } = await this.rows(
       {
         storeIds: [member.storeId],
-        nameOf: new Map([[member.storeId, store.name]]),
+        labelOf: new Map([[member.storeId, store]]),
         hides: () => false,
       },
       from,
@@ -408,12 +409,12 @@ export class AttendanceRecordsService {
             storeId: { in: picked },
             ...(query.storeTypes ? { storeStatusCode: { not: 'CLOSED' } } : {}),
           },
-          select: { storeId: true, name: true },
+          select: { storeId: true, name: true, isHq: true },
         })
       : [];
     return {
       storeIds: stores.map((s) => s.storeId),
-      nameOf: new Map(stores.map((s) => [s.storeId, s.name])),
+      labelOf: new Map(stores.map((s) => [s.storeId, s])),
       hides: (storeId, consented) =>
         hidesPersonalData(
           manageable.roleTypeCode,
@@ -582,7 +583,8 @@ export class AttendanceRecordsService {
         name: person.name,
         phone: person.phone,
         storeId: person.storeId,
-        storeName: scope.nameOf.get(person.storeId) ?? '',
+        storeName: scope.labelOf.get(person.storeId)?.name ?? '',
+        storeIsHq: scope.labelOf.get(person.storeId)?.isHq ?? false,
         employmentType: person.employmentType,
         employmentStatus: person.employmentStatus,
         schedules: d.schedules.map((s) => ({

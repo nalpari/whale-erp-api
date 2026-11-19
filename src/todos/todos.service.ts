@@ -365,14 +365,15 @@ export class TodosService {
       (query.page - 1) * query.pageSize,
       query.page * query.pageSize,
     );
-    const names = await this.storeNames(page);
+    const stores = await this.storesOf(page);
     return {
       total: lines.length,
       items: page.map(({ dueDate, dueTime, ...line }) => ({
         ...line,
         dueDate: isoDate(dueDate),
         dueTime: hhmm(dueTime),
-        storeName: names.get(line.storeId) ?? null,
+        storeName: stores.get(line.storeId)?.name ?? null,
+        storeIsHq: stores.get(line.storeId)?.isHq ?? false,
       })),
     };
   }
@@ -890,10 +891,11 @@ export class TodosService {
     rows: ItemRow[],
     hide: Hide = SHOW_ALL,
   ): Promise<TodoItemDto[]> {
-    const names = await this.storeNames(rows);
+    const stores = await this.storesOf(rows);
     return rows.map(({ performerStaffMember, dueDate, dueTime, ...r }) => ({
       ...r,
-      storeName: names.get(r.storeId) ?? null,
+      storeName: stores.get(r.storeId)?.name ?? null,
+      storeIsHq: stores.get(r.storeId)?.isHq ?? false,
       dueDate: isoDate(dueDate),
       dueTime: hhmm(dueTime),
       performer: staffOf(
@@ -904,16 +906,16 @@ export class TodosService {
     }));
   }
 
-  /** stores 는 1팀 테이블이라 Prisma 관계가 없다 — 점포 id 로 따로 묻는다. */
-  private async storeNames(
+  /** stores 는 1팀 테이블이라 Prisma 관계가 없다 — 점포 id 로 이름 · 본사 여부(화면은 「[본사] 상호」)를 따로 묻는다. */
+  private async storesOf(
     rows: { storeId: number }[],
-  ): Promise<Map<number, string>> {
+  ): Promise<Map<number, { name: string; isHq: boolean }>> {
     if (rows.length === 0) return new Map();
     const stores = await this.prisma.store.findMany({
       where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
-      select: { storeId: true, name: true },
+      select: { storeId: true, name: true, isHq: true },
     });
-    return new Map(stores.map((s) => [s.storeId, s.name]));
+    return new Map(stores.map((s) => [s.storeId, s]));
   }
 }
 
@@ -962,7 +964,7 @@ function rowFilter(query: TodoPageQueryDto): Prisma.TodoWhereInput {
 function toLine(
   rows: ListRow[],
   hide: Hide,
-): Omit<TodoListItemDto, 'dueDate' | 'dueTime' | 'storeName'> & {
+): Omit<TodoListItemDto, 'dueDate' | 'dueTime' | 'storeName' | 'storeIsHq'> & {
   dueDate: Date;
   dueTime: Date | null;
 } {

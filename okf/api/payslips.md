@@ -4,12 +4,12 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T08:19:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T06:58:12Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: pickedStores — 목록 · 발송의 점포 조건(storeIds · storeTypes, 본사 HQ 포함)
-    last_modified: 2026-11-17T06:50:00Z
+    last_modified: 2026-11-19T06:58:12Z
   - id: payslip-list-query
     resource: ../../src/payslips/dto/payslip-list.query.dto.ts
     title: 목록 쿼리 — storeTypes 는 StoreScopeType(DIRECT · FRANCHISE · HQ)
@@ -17,7 +17,7 @@ sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
     title: PayslipListService (관리자 목록 · 상세, 가림 · 상태 건수)
-    last_modified: 2026-11-13T06:12:05Z
+    last_modified: 2026-11-19T06:58:12Z
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
     title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년). DETAIL_SELECT · toSummary 는 직원 자료 일괄 저장도 쓴다
@@ -33,7 +33,7 @@ sources:
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
-    last_modified: 2026-10-30T02:31:31Z
+    last_modified: 2026-11-19T06:58:12Z
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
@@ -53,10 +53,12 @@ sources:
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답 · 쿼리(my-payslip.response.dto.ts · my-payslip-list.query.dto.ts)
-    last_modified: 2026-11-13T06:12:05Z
+    last_modified: 2026-11-19T06:58:12Z
 ---
 
 # 관리자 목록 (GET /payslips)
+
+목록 · 상세 · 작성 대상(`GET /payslips/candidates`)의 본사 점포 줄에는 `storeIsHq`(stores.is_hq)가 함께 실린다 — 관리자 화면은 「[본사] 상호」로 보인다(2026-11-19). 이름 칸 `storeName` 은 상호 그대로. 점포 이름 · 본사 여부는 `storeLabels`(payslip-shared.ts)로 읽고, 직원 앱 · 발송 · 일괄 저장 PDF 는 이름만(`storeNames`).
 
 이 문서의 모든 관리자 경로(`/payslips…`)는 메서드마다 경로 방식 `@MenuPermission(action)` 으로 권한을 본다 — 메뉴는 컨트롤러 경로 `/payslips` 의 MN000009(CLAUDE.md 인증).
 

@@ -32,7 +32,7 @@ import {
   reviewReasonsOf,
   validContractWhere,
 } from './payslip-attendance-reasons';
-import { dateOnly, monthRange, storeNames } from './payslip-shared';
+import { dateOnly, monthRange, storeLabels } from './payslip-shared';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
 import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
@@ -110,7 +110,7 @@ export class PayslipDraftService {
     if (!manageable) return null;
     const period = payPeriod(month);
     const list = await this.loadCandidates(manageable, month);
-    const names = await storeNames(
+    const names = await storeLabels(
       this.prisma,
       list.map((c) => c.storeId),
     );
@@ -124,7 +124,8 @@ export class PayslipDraftService {
         employmentType: c.employmentType,
         payslipId: c.payslipId,
         hasAttendance: c.hasAttendance,
-        storeName: names(c.storeId),
+        storeName: names(c.storeId).name,
+        storeIsHq: names(c.storeId).isHq,
         contractId: c.contractIds[0] ?? null,
       })),
     };

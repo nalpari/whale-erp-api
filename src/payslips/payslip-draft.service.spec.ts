@@ -122,8 +122,9 @@ describe('PayslipDraftService', () => {
       },
       store: {
         findMany: jest.fn().mockResolvedValue([
-          { storeId: 5, name: '모리커피 서초점' },
-          { storeId: 6, name: '모리커피 청담점' },
+          { storeId: 5, name: '모리커피 서초점', isHq: false },
+          // 본사 점포 — 화면은 「[본사] 상호」로 보인다
+          { storeId: 6, name: '모리커피 청담점', isHq: true },
         ]),
       },
     };
@@ -196,6 +197,7 @@ describe('PayslipDraftService', () => {
             staffName: '서지안',
             storeId: 5,
             storeName: '모리커피 서초점',
+            storeIsHq: false,
             employmentType: 'PART_TIME',
             contractId: 7,
             payslipId: null,
@@ -206,6 +208,7 @@ describe('PayslipDraftService', () => {
             staffName: '이도윤',
             storeId: 6,
             storeName: '모리커피 청담점',
+            storeIsHq: true,
             employmentType: 'FULL_TIME',
             contractId: null,
             payslipId: 55,

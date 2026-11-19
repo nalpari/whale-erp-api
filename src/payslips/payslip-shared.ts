@@ -60,26 +60,35 @@ export const ITEM_ORDER = [
 ] satisfies Prisma.PayslipItemOrderByWithRelationInput[];
 
 /**
- * 점포 ID → 이름. 점포는 다른 팀 표라 Prisma 관계 없이 따로 읽는다. 명세서의 점포는 외래키로 묶여 있어, 못 찾으면
- * 데이터가 깨진 것이라 빈 칸으로 내보내지 않고 500 이다.
+ * 점포 ID → 이름 · 본사 여부. 점포는 다른 팀 표라 Prisma 관계 없이 따로 읽는다. 명세서의 점포는 외래키로 묶여 있어, 못 찾으면
+ * 데이터가 깨진 것이라 빈 칸으로 내보내지 않고 500 이다. 관리자 화면은 본사 점포를 「[본사] 상호」로 보인다.
  */
+export async function storeLabels(
+  prisma: Pick<PrismaService, 'store'>,
+  storeIds: number[],
+): Promise<(storeId: number) => { name: string; isHq: boolean }> {
+  const rows = await prisma.store.findMany({
+    where: { storeId: { in: [...new Set(storeIds)] } },
+    select: { storeId: true, name: true, isHq: true },
+  });
+  const byId = new Map(rows.map((s) => [s.storeId, s]));
+  return (storeId) => {
+    const store = byId.get(storeId);
+    if (store === undefined)
+      throw new InternalServerErrorException(
+        `점포 ${storeId} 를 찾을 수 없습니다.`,
+      );
+    return { name: store.name, isHq: store.isHq };
+  };
+}
+
+/** 점포 ID → 이름(storeLabels 의 이름만) — 직원 앱 · 발송 · 파일처럼 본사 표시를 싣지 않는 곳 */
 export async function storeNames(
   prisma: Pick<PrismaService, 'store'>,
   storeIds: number[],
 ): Promise<(storeId: number) => string> {
-  const rows = await prisma.store.findMany({
-    where: { storeId: { in: [...new Set(storeIds)] } },
-    select: { storeId: true, name: true },
-  });
-  const byId = new Map(rows.map((s) => [s.storeId, s.name]));
-  return (storeId) => {
-    const name = byId.get(storeId);
-    if (name === undefined)
-      throw new InternalServerErrorException(
-        `점포 ${storeId} 를 찾을 수 없습니다.`,
-      );
-    return name;
-  };
+  const label = await storeLabels(prisma, storeIds);
+  return (storeId) => label(storeId).name;
 }
 
 /**
