@@ -1219,9 +1219,9 @@ apply to reading.
   보낸 원본 · 처리 완료본 PDFs use: `{ title, blocks }`, a block being `TEXT` (`text`), `TABLE` (제3조 요일 표:
   `header`, `tableRows[{ cells, off }]`) or `VALUES` (`values[{ label, value }]`, empty values left out). The first
   `TEXT` follows the title on the same line. The wording is the 직원 앱's 원안 moved here as is (휴일 · 연차 · 가산
-  조항 wait for the 노무사 review, PAY-5); a change re-renders signed contracts in the app but not their PDFs. One
+  조항 wait for the 노무사 review, PAY-5); a change re-renders signed contracts in the app but not their PDFs.
   제9조 names the 사업주 as the one who hands over the contract — 「사업주는 계약을 체결하면 곧바로 계약서를 근로자에게
-  교부한다」 (2026-11-19, the same term as the PDF 사업주 칸; it was 「사용자는 …」).
+  교부한다」 (2026-11-19, the same term as the PDF 사업주 칸; it was 「사용자는 …」). One
   addition: an old contract with no 주휴일 but 주 15시간 이상 says 「주휴일이 정해지지 않았다.」 instead of the 15시간 미만
   sentence, which would contradict its own 제3조. 제3조's hours use `weeklyMinutesOf` / `dayMinutesOf`
   (`contract-terms.ts`), the same calculation as the save check.
