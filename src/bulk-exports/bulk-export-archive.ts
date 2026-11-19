@@ -123,9 +123,22 @@ export function archivePlan(input: ArchiveInput): ArchivePlan {
     const s = staffById.get(staffMemberId)!;
     return [storeName(s.storeId), s.staffMemberId, s.name, s.phone];
   };
+  // 점포 폴더 이름이 겹치면(같은 이름의 점포 둘, 본사 「[본사] 상호」와 그 이름 그대로인 매장) 점포 ID 를 붙여 나눈다
+  const folderNameOf = new Map<number, string>();
+  const storeIds = [...new Set(input.staff.map((s) => s.storeId))];
+  const baseOf = (storeId: number) =>
+    safeName(storeName(storeId)) || String(storeId);
+  const counts = new Map<string, number>();
+  for (const id of storeIds)
+    counts.set(baseOf(id), (counts.get(baseOf(id)) ?? 0) + 1);
+  for (const id of storeIds)
+    folderNameOf.set(
+      id,
+      counts.get(baseOf(id))! > 1 ? `${baseOf(id)}_${id}` : baseOf(id),
+    );
   const folder = (staffMemberId: number) => {
     const s = staffById.get(staffMemberId)!;
-    return `${safeName(storeName(s.storeId)) || s.storeId}/${safeName(s.name)}_${s.staffMemberId}`;
+    return `${folderNameOf.get(s.storeId)!}/${safeName(s.name)}_${s.staffMemberId}`;
   };
   const used = new Set<string>();
   const unique = (path: string) => {

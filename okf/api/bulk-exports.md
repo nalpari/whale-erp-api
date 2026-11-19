@@ -88,6 +88,8 @@ list. Empty means every store the caller manages.
   run it as a formula. Paths are `{점포명}/{이름}_{직원 레코드 ID}/…`, with path characters replaced by `_`; the 본사
   점포 is named 「[본사] 상호」 in the paths and the CSVs' 점포 column, as on screen (`storeLabelOf`, WHALEERP-750);
   the payslip PDFs inside keep the plain 상호 — they are the same document the staff app exports.
+  Two stores whose folder names come out the same (same name, or a 본사 「[본사] 상호」 and a shop literally named so)
+  get `_{storeId}` appended so their staff folders do not share a store folder.
   A name made only of dots (`.`, `..`) becomes `_`, so an unzip tool cannot climb out of the folder (zip-slip).
   A duplicate path gets ` (2)`.
 - **Everything is in memory** (`ponytail:` in `zipArchive`). The upgrade path is fflate's streaming `Zip`
