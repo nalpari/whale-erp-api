@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T04:54:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T05:39:42Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -1250,8 +1250,11 @@ apply to reading.
 # 근로계약서 파일: 보낸 원본 · 처리 완료본
 
 WHALEERP-131 (2026-10-29). `ContractFilesService` renders A4 PDFs (`contract-pdf.ts`, pdfkit, the payslip PDF's
-Pretendard fonts) from the clause template above plus the 사용자 · 근로자 칸 and a 서명 칸. Electronic contracts
-only — a 종이 계약 has no body.
+Pretendard fonts) from the clause template above plus the 사업주 · 근로자 칸 and a 서명 칸. Electronic contracts
+only — a 종이 계약 has no body. The employer block is headed 「사업주」 with 사업체명 · 대표자 · 사업자등록번호 · 주소 ·
+전화번호, as in the 고용노동부 표준근로계약서 (WHALEERP-752, 2026-11-19 — 「사용자」 read like an app user). 전화번호 is
+the 근무지 점포's 연락처; it is optional, so when there is none the row is left out instead of 「-」 (WHALEERP-753 — not
+filled from the 대표자 or BP 연락처).
 
 - **보낸 원본 (`SENT_ORIGINAL`)** — one per 발송: `contract_documents.sent_at` = the contract's `sent_at`. Made after
   a send that went out (or that the 직원 answered first) — `ContractsService.settledResult` (저장 · 고쳐 보냄 · 근로자

@@ -34,16 +34,16 @@ const input: ContractPdfInput = {
 };
 
 describe('contractPdfModel (보낸 원본 · 처리 완료본, WHALEERP-131)', () => {
-  it('처리 완료본은 체결일(한국 날짜)과 사용자 · 근로자 칸, 번호는 끊어 쓴다', () => {
+  it('처리 완료본은 체결일(한국 날짜)과 사업주 · 근로자 칸(표준근로계약서 표기, WHALEERP-752), 번호는 끊어 쓴다', () => {
     expect(contractPdfModel(input)).toEqual({
       title: '근로계약서 · 파트타이머',
       articles: input.articles,
       dateLine: ['계약 체결일', '2026년 10월 30일'],
       employer: [
-        ['상호', '고래상회'],
+        ['사업체명', '고래상회'],
         ['대표자', '김대표'],
         ['사업자등록번호', '123-45-67890'],
-        ['소재지', '서울 강남구 테헤란로 1 2층'],
+        ['주소', '서울 강남구 테헤란로 1 2층'],
         ['전화번호', '02-1234-5678'],
       ],
       worker: [
@@ -75,6 +75,22 @@ describe('contractPdfModel (보낸 원본 · 처리 완료본, WHALEERP-131)', (
     expect(m.worker[1]).toEqual(['생년월일', '-']);
     expect(m.worker[2]).toEqual(['주소', '-']);
   });
+
+  it.each([null, ''])(
+    '근무지 점포 연락처가 없으면(%p) 사업주 전화번호 줄을 뺀다 — 「-」로 두지 않는다(WHALEERP-753)',
+    (phone) => {
+      const m = contractPdfModel({
+        ...input,
+        employer: { ...input.employer, phone },
+      });
+      expect(m.employer.map(([label]) => label)).toEqual([
+        '사업체명',
+        '대표자',
+        '사업자등록번호',
+        '주소',
+      ]);
+    },
+  );
 
   it('파일 이름 — 처리 완료본은 계약마다 하나, 보낸 원본은 발송 시각(한국)을 붙인다', () => {
     expect(contractPdfFileName(input)).toBe('근로계약서-처리완료본-7.pdf');

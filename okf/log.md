@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-19
+* **Update**: [Contracts API](/api/contracts-api.md) — 근로계약서 PDF 의 사업주 칸: 머리를 「사용자」 → 「사업주」, 「상호」 → 「사업체명」, 「소재지」 → 「주소」(표준근로계약서 표기, WHALEERP-752). 전화번호는 근무지 점포 연락처이고 없으면 「-」 대신 줄을 뺀다(WHALEERP-753).
 * **Update**: [Staff members](/api/staff-members.md) · [Contracts API](/api/contracts-api.md) · [Bulk exports](/api/bulk-exports.md) — 본사 근무지를 목록 · 상세에서도 「[본사] 상호」로 보이게(WHALEERP-726 · 750): 직원 목록 · 상세 `store.isHq`, 직원 상세 요약 근무스케줄 · 근무스케줄 표 `storeIsHq`, 근로계약 목록 · 상세 `storeIsHq`. 직원 자료 일괄 저장의 폴더 · 직원 CSV 점포 칸은 api 가 「[본사] 상호」로 쓴다(`storeLabelOf`, src/stores/store-label.ts). 근로계약 목록 점포 이름 검색은 보이는 「[본사] 상호」 · 「본사」로도 찾는다(`storeNameWhere`).
 
 ## 2026-11-18
