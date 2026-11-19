@@ -236,8 +236,9 @@ export function contractArticles(c: ContractTemplateInput): ContractArticle[] {
     },
     {
       title: '제9조(계약서 교부)',
+      // 당사자 칸과 같은 「사업주」 — 고용노동부 표준근로계약서 교부 조항(「사업주는 …」)과 같게(2026-11-19 사용자 결정)
       blocks: [
-        text('사용자는 계약을 체결하면 곧바로 계약서를 근로자에게 교부한다.'),
+        text('사업주는 계약을 체결하면 곧바로 계약서를 근로자에게 교부한다.'),
       ],
     },
     {

@@ -1254,7 +1254,9 @@ Pretendard fonts) from the clause template above plus the 사업주 · 근로자
 only — a 종이 계약 has no body. The employer block is headed 「사업주」 with 사업체명 · 대표자 · 사업자등록번호 · 주소 ·
 전화번호, as in the 고용노동부 표준근로계약서 (WHALEERP-752, 2026-11-19 — 「사용자」 read like an app user). 전화번호 is
 the 근무지 점포's 연락처; it is optional, so when there is none the row is left out instead of 「-」 (WHALEERP-753 — not
-filled from the 대표자 or BP 연락처).
+filled from the 대표자 or BP 연락처). 제9조 reads 「사업주는 계약을 체결하면 곧바로 계약서를 근로자에게 교부한다」 for the same reason (2026-11-19; the
+  template is shared with the 직원 앱, so signed contracts in the app show the new wording too — the 처리 완료본 PDF keeps the
+  text it was made with).
 
 - **보낸 원본 (`SENT_ORIGINAL`)** — one per 발송: `contract_documents.sent_at` = the contract's `sent_at`. Made after
   a send that went out (or that the 직원 answered first) — `ContractsService.settledResult` (저장 · 고쳐 보냄 · 근로자

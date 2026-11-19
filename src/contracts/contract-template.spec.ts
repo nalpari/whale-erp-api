@@ -67,6 +67,15 @@ describe('contractArticles (근로계약서 조항 템플릿, WHALEERP-131)', ()
     ]);
   });
 
+  it('제9조 — 교부 주체는 당사자 칸과 같은 「사업주」(표준근로계약서, 2026-11-19)', () => {
+    expect(article(base, 9).blocks).toEqual([
+      {
+        type: 'TEXT',
+        text: '사업주는 계약을 체결하면 곧바로 계약서를 근로자에게 교부한다.',
+      },
+    ]);
+  });
+
   it('머리는 고용 형태 한글을 붙인다(없으면 근로계약서만)', () => {
     expect(contractHeading('FULL_TIME')).toBe('근로계약서 · 정직원');
     expect(contractHeading(null)).toBe('근로계약서');
