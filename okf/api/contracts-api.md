@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T05:39:42Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T06:10:51Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -45,7 +45,7 @@ sources:
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
-    last_modified: 2026-10-29T07:30:00Z
+    last_modified: 2026-11-19T06:10:51Z
   - id: contract-files
     resource: ../../src/contracts/contract-files.service.ts
     title: 보낸 원본 · 처리 완료본 만들기 · 채우기 배치 (WHALEERP-131)
@@ -1219,7 +1219,9 @@ apply to reading.
   보낸 원본 · 처리 완료본 PDFs use: `{ title, blocks }`, a block being `TEXT` (`text`), `TABLE` (제3조 요일 표:
   `header`, `tableRows[{ cells, off }]`) or `VALUES` (`values[{ label, value }]`, empty values left out). The first
   `TEXT` follows the title on the same line. The wording is the 직원 앱's 원안 moved here as is (휴일 · 연차 · 가산
-  조항 wait for the 노무사 review, PAY-5); a change re-renders signed contracts in the app but not their PDFs. One
+  조항 wait for the 노무사 review, PAY-5); a change re-renders signed contracts in the app but not their PDFs.
+  제9조 names the 사업주 as the one who hands over the contract — 「사업주는 계약을 체결하면 곧바로 계약서를 근로자에게
+  교부한다」 (2026-11-19, the same term as the PDF 사업주 칸; it was 「사용자는 …」). One
   addition: an old contract with no 주휴일 but 주 15시간 이상 says 「주휴일이 정해지지 않았다.」 instead of the 15시간 미만
   sentence, which would contradict its own 제3조. 제3조's hours use `weeklyMinutesOf` / `dayMinutesOf`
   (`contract-terms.ts`), the same calculation as the save check.
