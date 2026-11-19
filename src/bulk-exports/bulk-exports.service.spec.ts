@@ -94,7 +94,7 @@ describe('BulkExportsService.download — 볼 수 있는가', () => {
   });
 });
 
-function archiveFixture() {
+function archiveFixture(isHq = false) {
   const staffFind = jest
     .fn()
     .mockResolvedValue([
@@ -103,7 +103,9 @@ function archiveFixture() {
   const { prisma, touched } = fakePrisma({
     staffMember: { findMany: staffFind },
     store: {
-      findMany: jest.fn().mockResolvedValue([{ storeId: 1, name: '판교점' }]),
+      findMany: jest
+        .fn()
+        .mockResolvedValue([{ storeId: 1, name: '판교점', isHq }]),
     },
     contract: {
       findMany: jest.fn().mockResolvedValue([
@@ -217,6 +219,24 @@ describe('BulkExportsService.buildArchive — 읽는 표', () => {
       'staffMemberId',
       'storeId',
     ]);
+  });
+});
+
+describe('BulkExportsService.buildArchive — 본사 점포 이름', () => {
+  it('본사 점포 직원은 폴더 · 목록 CSV 점포 칸이 「[본사] 상호」 — 화면과 같다(WHALEERP-750)', async () => {
+    const { service } = archiveFixture(true);
+    const { buffer } = await service.buildArchive(
+      'BM',
+      [{ storeId: 1, storeTypeCode: 'DIRECT', storeStatusCode: 'OPERATING' }],
+      new Date('2026-10-29T01:00:00.000Z'),
+    );
+    const files = unzipSync(buffer);
+    expect(Object.keys(files)).toContain(
+      '[본사] 판교점/유하람_10/근로계약서/100_종이 계약 근로계약서.pdf',
+    );
+    expect(Buffer.from(files['근로계약_목록.csv']).toString('utf8')).toContain(
+      '[본사] 판교점',
+    );
   });
 });
 

@@ -21012,6 +21012,10 @@
             "type": "string",
             "description": "근무지 점포 이름"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다(WHALEERP-750)"
+          },
           "startTime": {
             "type": "string",
             "description": "시작 HH:mm(한국 시각)"
@@ -21025,6 +21029,7 @@
           "workScheduleId",
           "workDate",
           "storeName",
+          "storeIsHq",
           "startTime",
           "endTime"
         ]

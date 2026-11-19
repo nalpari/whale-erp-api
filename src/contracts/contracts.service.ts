@@ -124,6 +124,12 @@ import {
 import { matchesStoreScope } from '../stores/store-scope-type';
 import { OPERATING_STORE_WHERE, storeOperating } from './contract-store-open';
 
+/** 목록 한 줄의 근무지 칸 — 점포가 없으면(데이터 깨짐) 이름 null · 본사 아님 */
+const storeFieldsOf = (store: { name: string; isHq: boolean } | undefined) => ({
+  storeName: store?.name ?? null,
+  storeIsHq: store?.isHq ?? false,
+});
+
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
@@ -2620,8 +2626,7 @@ export class ContractsService {
         staffMemberId: r.staffMemberId,
         staffMemberName: r.staffMember.name,
         storeId: r.storeId,
-        storeName: storeById.get(r.storeId)?.name ?? null,
-        storeIsHq: storeById.get(r.storeId)?.isHq ?? false,
+        ...storeFieldsOf(storeById.get(r.storeId)),
         employmentType: r.employmentType,
         contractMethod: r.contractMethod,
         startDate: r.startDate ? isoDate(r.startDate) : null,

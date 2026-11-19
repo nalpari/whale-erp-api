@@ -138,7 +138,7 @@ null 은 「근로계약 조회 권한 없음」, `[]` 는 「근무 요일 없�
 표현되지 않는다 — 화면이 부르지 않고 0건으로 그린다. 파라미터를 빼면 전체가 나오므로 둘을 바꿔 쓰면 안 된다.
 
 **본사 점포 표시**(WHALEERP-726 · 750, 2026-11-19): 목록 · 상세의 `store` 에 `isHq`(본사 점포, `stores.is_hq`)를 실어
-화면이 근무지 선택칸과 같은 「[본사] 상호」로 보인다. 상세 요약 근무스케줄(`…/summary/work-schedules`) 항목에도 `storeIsHq`.
+화면이 근무지 선택칸과 같은 「[본사] 상호」로 보인다. 상세 요약 근무스케줄(`…/summary/work-schedules`)과 근무스케줄 표(`GET /staff-members/:id/work-schedules`) 항목에도 `storeIsHq`.
 본사는 `storeTypes=HQ` 로 거를 수 있다(DIRECT 는 본사가 아닌 직영).
 
 **점포 조건은 상단 점포 범위와 잇는다**(2026-10-22 재영 「3팀 목록에 상단 점포 범위 연동」). `storeIds` · `storeTypes` 는

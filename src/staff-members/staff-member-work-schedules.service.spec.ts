@@ -236,8 +236,9 @@ describe('StaffMemberWorkSchedulesService', () => {
     ];
     aggregate = { total: 2, minutes: 720 };
     prisma.store.findMany.mockResolvedValue([
-      { storeId: 5, name: '강남점' },
-      { storeId: 6, name: '역삼점' },
+      { storeId: 5, name: '강남점', isHq: false },
+      // 본사 점포면 storeIsHq — 화면이 「[본사] 상호」로 보인다(WHALEERP-750)
+      { storeId: 6, name: '역삼점', isHq: true },
     ]);
     await expect(service.list(9, 30, {}, undefined, NOW)).resolves.toEqual({
       items: [
@@ -245,6 +246,7 @@ describe('StaffMemberWorkSchedulesService', () => {
           workScheduleId: 7,
           workDate: '2026-10-25',
           storeName: '강남점',
+          storeIsHq: false,
           startTime: '22:00',
           endTime: '02:00',
         },
@@ -252,6 +254,7 @@ describe('StaffMemberWorkSchedulesService', () => {
           workScheduleId: 8,
           workDate: '2026-10-19',
           storeName: '역삼점',
+          storeIsHq: true,
           startTime: '09:00',
           endTime: '17:00',
         },

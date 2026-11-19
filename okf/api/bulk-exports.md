@@ -86,7 +86,8 @@ list. Empty means every store the caller manages.
   same `DETAIL_SELECT` · `toSummary` as the staff app. PDFs and images are stored at level 0, CSVs deflated.
   CSVs carry a UTF-8 BOM and CRLF. A cell that starts with `= + - @` gets a leading `'` so Excel does not
   run it as a formula. Paths are `{점포명}/{이름}_{직원 레코드 ID}/…`, with path characters replaced by `_`; the 본사
-  점포 is named 「[본사] 상호」 in the paths and the staff CSV's 점포 column, as on screen (`storeLabelOf`, WHALEERP-750).
+  점포 is named 「[본사] 상호」 in the paths and the CSVs' 점포 column, as on screen (`storeLabelOf`, WHALEERP-750);
+  the payslip PDFs inside keep the plain 상호 — they are the same document the staff app exports.
   A name made only of dots (`.`, `..`) becomes `_`, so an unzip tool cannot climb out of the folder (zip-slip).
   A duplicate path gets ` (2)`.
 - **Everything is in memory** (`ponytail:` in `zipArchive`). The upgrade path is fflate's streaming `Zip`

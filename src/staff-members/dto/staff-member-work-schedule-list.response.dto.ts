@@ -4,6 +4,8 @@ export class StaffMemberWorkScheduleListItemDto {
   workDate: string;
   /** 근무지 점포 이름 */
   storeName: string;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다(WHALEERP-750) */
+  storeIsHq: boolean;
   /** 시작 HH:mm(한국 시각) */
   startTime: string;
   /** 종료 HH:mm(한국 시각). 시작보다 이르면 다음 날이다 */

@@ -590,15 +590,17 @@ describe('StaffMemberSummaryService', () => {
         // 10-24(토) 22:00~다음 날 02:00, 휴게 0 → 240분
         schedule(2, '2026-10-24T13:00:00Z', '2026-10-24T17:00:00Z', 0),
       ]);
+      // 본사 점포면 storeIsHq — 화면이 「[본사] 상호」로 보인다(WHALEERP-750)
       prisma.store.findMany.mockResolvedValue([
-        { storeId: 5, name: '모리커피 서초점' },
+        { storeId: 5, name: '도레미커피', isHq: true },
       ]);
       const res = await service.workSchedules(9, 30, undefined, undefined, NOW);
       expect(res.items).toEqual([
         {
           workScheduleId: 1,
           storeId: 5,
-          storeName: '모리커피 서초점',
+          storeName: '도레미커피',
+          storeIsHq: true,
           workDate: '2026-10-20',
           startTime: '09:00',
           endTime: '17:00',
@@ -608,7 +610,8 @@ describe('StaffMemberSummaryService', () => {
         {
           workScheduleId: 2,
           storeId: 5,
-          storeName: '모리커피 서초점',
+          storeName: '도레미커피',
+          storeIsHq: true,
           workDate: '2026-10-24',
           startTime: '22:00',
           endTime: '02:00',
