@@ -74,7 +74,7 @@ type EmployerStore = Prisma.StoreGetPayload<{
   select: typeof EMPLOYER_STORE_SELECT;
 }>;
 
-/** 점포 정보 → 사용자 칸. 상호가 없으면 점포명, 소재지는 사업자 주소, 전화번호는 점포 연락처(직원 앱 상세와 같은 칸) */
+/** 점포 정보 → 사업주 칸(근로기준법의 사용자). 상호가 없으면 점포명, 주소는 사업자 주소, 전화번호는 점포 연락처(직원 앱 상세와 같은 칸) */
 export const employerOf = (store: EmployerStore) => ({
   // 빈 상호도 점포명으로 — 고정 값의 상호가 빈 문자열이면 「고정했는가」를 가르지 못한다(pr-review-toolkit)
   name: store.businessProfile?.bizTradeName || store.name,

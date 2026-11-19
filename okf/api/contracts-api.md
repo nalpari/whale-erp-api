@@ -1258,12 +1258,12 @@ filled from the 대표자 or BP 연락처).
 
 - **보낸 원본 (`SENT_ORIGINAL`)** — one per 발송: `contract_documents.sent_at` = the contract's `sent_at`. Made after
   a send that went out (or that the 직원 answered first) — `ContractsService.settledResult` (저장 · 고쳐 보냄 · 근로자
-  정보 수정) and `ContractSendService.send` (재발송) call `afterSent` without waiting. 사용자 칸 = the store now;
+  정보 수정) and `ContractSendService.send` (재발송) call `afterSent` without waiting. 사업주 칸 = the store now;
   근로자 주소 is always empty (it is fixed at 날인, so it was not on the contract when sent — even when the batch
   makes the file after the 직원 signed); the 서명 칸 is empty and a note says it is the pre-signature copy.
   A re-send makes a new one; earlier ones stay. File `근로계약서-보낸원본-{id}-{KST yyyymmddHHMM}.pdf`.
 - **처리 완료본 (`SIGNED_COPY`)** — one per contract, needs the `SIGNATURE` row; the PNG is read back from storage
-  and drawn in the 서명 칸. 사용자 칸 = the values on the party row (`employer_*`, fixed at 날인). A contract signed
+  and drawn in the 서명 칸. 사업주 칸 = the values on the party row (`employer_*`, fixed at 날인). A contract signed
   before those columns existed is made with the store's current values, logged, and those values are written to
   `employer_*` · `fixed_work_location` · `fixed_job_title` in the same transaction as the file row so the app detail
   shows what the PDF shows; `employer_fixed_at`
