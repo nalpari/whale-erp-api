@@ -216,12 +216,13 @@ describe('계약 중복 검사 (e2e, DB)', () => {
         adminId,
       ),
     );
-    // 겹쳤다는 것만 — 다른 점포의 요일 · 시각은 싣지 않는다(CTR-26)
+    // 내 근무와 겹친 요일 · 시각만 — 점포는 드러내지 않는다(WHALEERP-744). 월 10-16 × 월 14-20 → 월 14-16
     expect(body).toEqual({
       statusCode: 409,
       error: 'Conflict',
       code: 'WORK_TIME_OVERLAP',
-      message: '다른 점포 근로계약과 근무 시간이 겹칩니다.',
+      message: '월 14:00~16:00 근무가 다른 점포 근로계약과 겹칩니다.',
+      overlaps: [{ weekday: 'MON', startTime: '14:00', endTime: '16:00' }],
     });
     expect(await recordsOf(phone, otherStoreId)).toHaveLength(0);
 

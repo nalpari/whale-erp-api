@@ -4,7 +4,7 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
 tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T07:45:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T08:16:31Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
@@ -105,7 +105,7 @@ every route — they all go through `scopeOf` — before the scope is read. 직�
 
 # Overlap
 
-같은 직원 레코드의 지우지 않은 근무스케줄끼리만 막는다 — 직원 레코드가 점포마다 따로라 「같은 점포 · 같은 직원」과 같다(결정 3). 다른 점포의 겹침은 계약 단계(CTR-26) 몫이다.
+같은 직원 레코드의 지우지 않은 근무스케줄끼리만 막는다 — 직원 레코드가 점포마다 따로라 「같은 점포 · 같은 직원」과 같다(결정 3). 다른 점포의 겹침은 계약 단계(`WORK_TIME_OVERLAP`, WHALEERP-744) 몫이다.
 서버가 먼저 `start < 상대 end AND end > 상대 start` 로 찾아 409 `WORK_SCHEDULE_OVERLAP` 을 주고, 동시 저장은 DB 의 `work_schedules_no_overlap`(EXCLUDE, `tstzrange [)`)이 막아 오류 메시지의 제약 이름으로 같은 409 로 바꾼다. 맞닿는 근무(13:00 끝 · 13:00 시작)와 쪼갠 근무는 받는다.
 
 # Bulk

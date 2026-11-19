@@ -462,7 +462,7 @@ describe('checkWorkTimeOverlap', () => {
     });
   });
 
-  it('겹치면 409 — 겹쳤다는 것만 알리고 요일 · 시각 · 점포는 드러내지 않는다 (CTR-26)', async () => {
+  it('겹치면 409 — 내 근무와 겹친 요일 · 시각만 알리고 점포는 드러내지 않는다 (WHALEERP-744)', async () => {
     const { db: d } = db([other]);
     const error = await checkWorkTimeOverlap(
       d as unknown as Prisma.TransactionClient,
@@ -473,7 +473,27 @@ describe('checkWorkTimeOverlap', () => {
       statusCode: 409,
       error: 'Conflict',
       code: 'WORK_TIME_OVERLAP',
-      message: '다른 점포 근로계약과 근무 시간이 겹칩니다.',
+      // 월 10-16(나) × 월 14-20(다른 점포) → 월 14-16. 화요일은 내 근무가 없어 겹치지 않는다
+      message: '월 14:00~16:00 근무가 다른 점포 근로계약과 겹칩니다.',
+      overlaps: [{ weekday: 'MON', startTime: '14:00', endTime: '16:00' }],
+    });
+  });
+
+  it('겹친 구간이 여럿이면 「 · 」로 잇는다', async () => {
+    const both = {
+      ...other,
+      contractWorkDays: [
+        ...other.contractWorkDays,
+        { weekday: 'WED', startTime: t('09:00'), endTime: t('11:00') },
+      ],
+    };
+    const error = await checkWorkTimeOverlap(
+      db([both]).db as unknown as Prisma.TransactionClient,
+      dto(),
+    ).catch((e: ConflictException) => e);
+    expect((error as ConflictException).getResponse()).toMatchObject({
+      message:
+        '월 14:00~16:00 · 수 10:00~11:00 근무가 다른 점포 근로계약과 겹칩니다.',
     });
   });
 
