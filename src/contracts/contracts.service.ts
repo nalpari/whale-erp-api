@@ -126,7 +126,7 @@ import { OPERATING_STORE_WHERE, storeOperating } from './contract-store-open';
 
 /**
  * 점포 이름 검색 — 화면은 본사 점포를 「[본사] 상호」로 보이므로(WHALEERP-750) 보이는 대로 쳐도 찾는다. 앞의 「[본사]」를 떼면
- * 본사 점포 중 남은 글자를 이름에 담은 것이고, 남은 글자가 없으면 본사 점포 전부다. 「본사」만 치면 이름에 본사가 든 점포와 본사 점포,
+ * 본사 점포 중 남은 글자를 이름에 담은 것이고(남은 글자가 없으면 본사 점포 전부), 이름에 그 글자가 그대로 든 점포도 함께다. 「본사」만 치면 이름에 본사가 든 점포와 본사 점포,
  * 그 밖에는 이름 일부(대소문자 무시)다.
  */
 export function storeNameWhere(text: string): Prisma.StoreWhereInput {
@@ -136,9 +136,15 @@ export function storeNameWhere(text: string): Prisma.StoreWhereInput {
   const hq = /^\s*\[본사\]\s*/.exec(text);
   if (!hq) return byName;
   const rest = text.slice(hq[0].length).trim();
+  // 이름에 「[본사]」가 그대로 든 매장도 놓치지 않게 이름 그대로 찾는 것과 함께 본다
   return {
-    isHq: true,
-    ...(rest && { name: { contains: rest, mode: 'insensitive' } }),
+    OR: [
+      byName,
+      {
+        isHq: true,
+        ...(rest && { name: { contains: rest, mode: 'insensitive' } }),
+      },
+    ],
   };
 }
 

@@ -609,10 +609,18 @@ describe('ContractsService', () => {
 describe('storeNameWhere — 점포 이름 검색(WHALEERP-750)', () => {
   it('보이는 「[본사] 상호」 그대로 쳐도 본사 점포를 찾는다', () => {
     expect(storeNameWhere('[본사] 도레미')).toEqual({
-      isHq: true,
-      name: { contains: '도레미', mode: 'insensitive' },
+      OR: [
+        // 이름에 「[본사]」가 그대로 든 매장도 찾는다
+        { name: { contains: '[본사] 도레미', mode: 'insensitive' } },
+        { isHq: true, name: { contains: '도레미', mode: 'insensitive' } },
+      ],
     });
-    expect(storeNameWhere('[본사]')).toEqual({ isHq: true });
+    expect(storeNameWhere('[본사]')).toEqual({
+      OR: [
+        { name: { contains: '[본사]', mode: 'insensitive' } },
+        { isHq: true },
+      ],
+    });
   });
   it('「본사」만 치면 이름에 본사가 든 점포와 본사 점포', () => {
     expect(storeNameWhere('본사')).toEqual({
