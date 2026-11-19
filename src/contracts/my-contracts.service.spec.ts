@@ -15,7 +15,7 @@ const NOW = new Date('2026-10-21T05:00:00.000Z');
 const SENT = new Date('2026-10-20T01:00:00.000Z');
 const SENT_ISO = SENT.toISOString();
 const HISTORY_AT = new Date('2026-10-21T05:00:00.123Z');
-/** readSignStore 가 읽는 점포 · 사업자정보 한 줄 — 기본은 운영 중이고 사용자 칸이 있다 */
+/** readSignStore 가 읽는 점포 · 사업자정보 한 줄 — 기본은 운영 중이고 사업주 칸이 있다 */
 const signStoreRow = (o: Record<string, unknown> = {}) => ({
   name: '강남점',
   phone: '0212345678',
@@ -132,7 +132,7 @@ describe('MyContractsService', () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation();
     tx = {
       $executeRaw: jest.fn().mockResolvedValue(1),
-      // 날인 트랜잭션의 점포 · 사업자정보 한 문장 읽기(readSignStore) — 날인 때 고정하는 사용자 칸(WHALEERP-131)
+      // 날인 트랜잭션의 점포 · 사업자정보 한 문장 읽기(readSignStore) — 날인 때 고정하는 사업주 칸(WHALEERP-131)
       $queryRaw: jest.fn().mockResolvedValue([signStoreRow()]),
       contract: {
         findFirst: jest.fn().mockResolvedValue(mine()),
@@ -241,7 +241,7 @@ describe('MyContractsService', () => {
           address: '서울 마포구 동교로 1',
           addressDetail: '2층',
           filledAt: NOW,
-          // 사용자 칸은 날인 시점 점포 정보 — 상호가 없으면 점포명(WHALEERP-131)
+          // 사업주 칸은 날인 시점 점포 정보 — 상호가 없으면 점포명(WHALEERP-131)
           employerName: '강남점',
           employerCeoName: '김대표',
           employerRegistrationNumber: '1234567890',
@@ -587,7 +587,7 @@ describe('MyContractsService', () => {
       expect(tx.contract.updateMany).not.toHaveBeenCalled();
     });
 
-    it('올리는 동안 근무지가 운영 중이 아니게 됐으면 날인 트랜잭션에서 다시 봐 409 — 사용자 칸을 고정하지 않고 올린 서명을 지운다', async () => {
+    it('올리는 동안 근무지가 운영 중이 아니게 됐으면 날인 트랜잭션에서 다시 봐 409 — 사업주 칸을 고정하지 않고 올린 서명을 지운다', async () => {
       // 올리기 전에는 운영 중, 날인 트랜잭션에서 다시 읽으니 사업주 정보가 비었다(본사 사업자 인증 해제 등)
       tx.$queryRaw.mockResolvedValue([
         signStoreRow({ bizCeoName: null, bizRegistrationNumber: null }),

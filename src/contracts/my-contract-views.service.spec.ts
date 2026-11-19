@@ -310,7 +310,7 @@ describe('MyContractViewsService', () => {
       tx.store.findUnique.mockResolvedValue(store());
     });
 
-    it('계약서에 그릴 값 · 근로자 칸 · 사용자 칸 · 본인인증 정보, 본인 대조가 맞으면 날인할 수 있다', async () => {
+    it('계약서에 그릴 값 · 근로자 칸 · 사업주 칸 · 본인인증 정보, 본인 대조가 맞으면 날인할 수 있다', async () => {
       const d = await service().findOne(77, 41, NOW);
       expect(d).toMatchObject({
         contractId: 41,
@@ -462,7 +462,7 @@ describe('MyContractViewsService', () => {
       });
     });
 
-    it('날인한 계약은 사용자 칸을 날인 때 고정한 값으로 준다 — 처리 완료본과 같다(WHALEERP-131)', async () => {
+    it('날인한 계약은 사업주 칸을 날인 때 고정한 값으로 준다 — 처리 완료본과 같다(WHALEERP-131)', async () => {
       tx.contract.findFirst.mockResolvedValue(
         detail({
           status: 'SIGNED',

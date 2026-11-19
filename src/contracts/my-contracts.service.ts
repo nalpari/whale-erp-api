@@ -136,7 +136,7 @@ type MyContract = Prisma.ContractGetPayload<{ select: typeof MINE_SELECT }>;
  * - 퇴직했거나 퇴직일이 지난 직원(배치 전)은 409 STAFF_RETIRED — 퇴직한 뒤 날인하지 않게(CTR-25). 퇴직 확정과 같은 순서로
  *   직원 행 → 계약 행을 잠가, 퇴직 확정이 대기 계약을 닫는 사이 날인이 끼어들지 못하게 한다(api #101 리뷰).
  * - 처리 완료본(서명을 합성한 PDF)은 커밋 뒤 ContractFilesService 가 만든다(WHALEERP-131) — 응답은 기다리지 않고, 실패하면
- *   채우기 배치가 다시 만든다. 날인 트랜잭션은 서명 이미지 · 상태와 완료본에 쓸 근로자 주소 · 사용자 칸(점포 정보)을 고정한다.
+ *   채우기 배치가 다시 만든다. 날인 트랜잭션은 서명 이미지 · 상태와 완료본에 쓸 근로자 주소 · 사업주 칸(점포 정보)을 고정한다.
  * - 날인 · 거부가 커밋되면 그 계약을 맡은 사업자 관리자에게 알린다(운영 알림 · 메일, WHALEERP-154). 응답은 알림을 기다리지
  *   않는다 — SMTP 가 멈춰도 날인은 끝났다. 알림은 실패해도 던지지 않는다.
  */
@@ -214,7 +214,7 @@ export class MyContractsService {
           throw new InternalServerErrorException(
             `점포 ${c.storeId} 를 찾을 수 없습니다.`,
           );
-        // 보낸 뒤 근무지가 운영 중이 아니게 됐으면(본사 사업자 인증 해제 · 사업주 정보 없음 등) 날인을 받지 않는다 — 빈 사용자 칸을
+        // 보낸 뒤 근무지가 운영 중이 아니게 됐으면(본사 사업자 인증 해제 · 사업주 정보 없음 등) 날인을 받지 않는다 — 빈 사업주 칸을
         // 고정하지 않는다
         if (!store.operating)
           throw storeNotOperatingConflict(STORE_NOT_OPERATING_FOR_STAFF);

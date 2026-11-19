@@ -33,7 +33,7 @@ export class MyContractViewsController {
     return this.contracts.list(user.id);
   }
 
-  /** 내 근로계약 상세 — 계약서에 그릴 값 · 사용자 칸 · 본인 대조 미리보기(서명할 수 있는지 · 다른 항목) */
+  /** 내 근로계약 상세 — 계약서에 그릴 값 · 사업주 칸 · 본인 대조 미리보기(서명할 수 있는지 · 다른 항목) */
   @Get(':contractId')
   @ApiOkResponse({ type: MyContractDetailDto })
   @ApiNotFoundResponse({

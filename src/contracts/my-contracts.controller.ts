@@ -107,7 +107,7 @@ export class MyContractsController {
       '서명 이미지 없음 · PNG 가 아님 · 1MB 넘음 · 읽을 수 없는 이미지 · 발송 일시 없음 · 형식 · 시간대 없음',
   })
   @ApiConflictResponse({
-    description: `${STATE_CONFLICT} · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨) · STORE_NOT_OPERATING(보낸 뒤 근무지가 운영 중이 아니게 됨 — 미운영 · 폐점 · 사업주 정보 없음. 빈 사용자 칸을 고정하지 않는다)`,
+    description: `${STATE_CONFLICT} · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨) · STORE_NOT_OPERATING(보낸 뒤 근무지가 운영 중이 아니게 됨 — 미운영 · 폐점 · 사업주 정보 없음. 빈 사업주 칸을 고정하지 않는다)`,
   })
   @ApiServiceUnavailableResponse({
     description: '첨부파일 저장소가 설정되지 않음 · 저장소 오류',

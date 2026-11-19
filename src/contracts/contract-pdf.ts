@@ -63,7 +63,17 @@ const or = (v: string | null) => (v === null || v === '' ? '-' : v);
 export function contractPdfModel(input: ContractPdfInput): ContractPdfModel {
   const { employer: e, worker: w } = input;
   const signed = input.kind === 'SIGNED_COPY';
+  // 사업주 칸 — 고용노동부 표준근로계약서처럼 「사업주」(사업체명 · 대표자 · 사업자등록번호 · 주소 · 전화번호, WHALEERP-752).
+  // 전화번호는 근무지 점포 연락처이고, 점포 연락처는 필수가 아니라 없으면 「-」 대신 줄을 뺀다(대표자 · BP 연락처로 채우지
+  // 않는다, WHALEERP-753)
+  const employer: [string, string][] = [
+    ['사업체명', e.name],
+    ['대표자', or(e.ceoName)],
+    ['사업자등록번호', or(bizNumberText(e.registrationNumber))],
+    ['주소', or(joinAddress(e.address, e.addressDetail))],
+  ];
   const employerPhone = phoneText(e.phone);
+  if (employerPhone) employer.push(['전화번호', employerPhone]);
   return {
     title: input.heading,
     articles: input.articles,
@@ -71,17 +81,7 @@ export function contractPdfModel(input: ContractPdfInput): ContractPdfModel {
       signed && input.signedAt
         ? ['계약 체결일', kstDate(input.signedAt)]
         : ['발송일', kstDate(input.sentAt)],
-    // 사업주 칸 — 고용노동부 표준근로계약서처럼 「사업주」(사업체명 · 대표자 · 사업자등록번호 · 주소 · 전화번호, WHALEERP-752). 전화번호는 근무지 점포
-    // 연락처이고, 점포 연락처는 필수가 아니라 없으면 「-」 대신 줄을 뺀다(대표자 · BP 연락처로 채우지 않는다, WHALEERP-753)
-    employer: [
-      ['사업체명', e.name],
-      ['대표자', or(e.ceoName)],
-      ['사업자등록번호', or(bizNumberText(e.registrationNumber))],
-      ['주소', or(joinAddress(e.address, e.addressDetail))],
-      ...(employerPhone
-        ? [['전화번호', employerPhone] satisfies [string, string]]
-        : []),
-    ],
+    employer,
     worker: [
       ['성명', w.name],
       ['생년월일', or(w.birthDate && dateLabel(w.birthDate))],

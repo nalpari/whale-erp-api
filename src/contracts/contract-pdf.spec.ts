@@ -144,7 +144,7 @@ describe('renderContractPdf', () => {
     ).toBeGreaterThan(2);
   });
 
-  it('제3조 표와 체결일 · 사용자 · 근로자 · 서명 칸은 어느 길이의 본문 뒤에서도 한 장에 그린다', async () => {
+  it('제3조 표와 체결일 · 사업주 · 근로자 · 서명 칸은 어느 길이의 본문 뒤에서도 한 장에 그린다', async () => {
     const table = {
       type: 'TABLE' as const,
       header: ['요일', '시업', '종업', '휴게', '근로'],

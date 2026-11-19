@@ -693,21 +693,21 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
   app notice).
   Policy only: a landline (409 `SEND_PHONE_NOT_MOBILE`), missing send settings (503), the account being 재직 at this
   store already (409) or a 근무지 not 운영 (409 `STORE_NOT_OPERATING`, below) still fail when sent.
-- **Only a 운영 근무지 sends and takes 날인** (2026-11-18 김민식, replaces api #300's 사용자 칸 check). 「사업주 정보가 없는
+- **Only a 운영 근무지 sends and takes 날인** (2026-11-18 김민식, replaces api #300's 사업주 칸 check). 「사업주 정보가 없는
   점포는 미운영으로 본다」(사용자 결정): a 근무지 counts as 운영 only when it is `OPERATING`, not deleted, **and** has the
-  대표자 · 사업자등록번호 that 날인 freezes into the 사용자 칸 (empty = null or `''`; whitespace-only cannot be stored —
+  대표자 · 사업자등록번호 that 날인 freezes into the 사업주 칸 (empty = null or `''`; whitespace-only cannot be stored —
   the 진위확인 대표자명 is trimmed to 1~50 chars and the number is 10 digits) — `isOperatingStore` in
   `contract-store-open.ts`; `OPERATING_STORE_WHERE` is the same condition as a Prisma where, used by the 근무지
   선택지 and the new-근무지 check of 722 too, so a store that can be chosen can also be sent. A store becomes 운영 only
   with 사업자 인증 · 좌표 · BP 사용 (`missingForOperation`) and the 본사
   drops to 미운영 when its 사업자 인증 is cleared, but stores that were 운영 before that rule without 인증 remain, so the
-  사용자 칸 is checked too. Every send — 저장하면 곧바로 보내기, `PUT` 고쳐 다시 보내기, `PATCH …/worker`, `POST …/send` —
+  사업주 칸 is checked too. Every send — 저장하면 곧바로 보내기, `PUT` 고쳐 다시 보내기, `PATCH …/worker`, `POST …/send` —
   passes `ContractDeliveryService.prepare`, which checks it first (`storeOperating`) and answers 409
   `STORE_NOT_OPERATING` otherwise (nothing written, the save rolls back). Saving a 작성 중 계약 at its own 미운영 근무지 is
   still allowed (722) — only sending is blocked. 날인 (`POST /me/contracts/:id/sign`) checks it before uploading the
   signature (no storage round trip for a request that must fail) and again inside the 날인 transaction, after the 직원 ·
   계약 row locks: `readSignStore` reads the store and its 사업자정보 in **one SQL statement** (LEFT JOIN), so the judgement
-  and the 사용자 칸 it freezes come from one committed state — a 본사 사업자 인증 해제 (empties the 사용자 칸 and sets
+  and the 사업주 칸 it freezes come from one committed state — a 본사 사업자 인증 해제 (empties the 사업주 칸 and sets
   미운영 in one transaction) cannot slip in between. The store row is not locked, so 날인 adds no lock-order conflict
   with 점포 폐점 · 재발송; a missing row is a 500. The uploaded signature is deleted when it fails. The 직원 앱 상세
   (`GET /me/contracts/:id`) reports `storeNotOperating: true` and `signable: false` while such a contract awaits 날인
@@ -1145,7 +1145,7 @@ WHALEERP-145 (2026-10-21). `MyContractsController`, `me/contracts`, account toke
   `kind = SIGNATURE` (`서명-{id}.png`, sha256) and **copies the account's address into
   `contract_parties` (`zip_code` · `address` · `address_detail`, `filled_at` now)** so the signed contract
   does not change with later address edits (`filled_at` is set here — the column note 「가입 완료 시」 is
-  the logical ERD's older wording). The same update **fixes the 사용자 칸 at signing time** — `employer_name`
+  the logical ERD's older wording). The same update **fixes the 사업주 칸 at signing time** — `employer_name`
   (상호, else 점포명) · `employer_ceo_name` · `employer_registration_number` · `employer_address` ·
   `employer_address_detail` (사업자 주소) · `employer_phone` (점포 연락처) · `employer_fixed_at` from the store and its
   `store_business_profiles` (`employerOf` in `contract-files.service.ts`), and **제2조 too** — `fixed_work_location`
@@ -1198,9 +1198,9 @@ apply to reading.
   - `worker` — the contract's 근로자 칸 (관리자 entered 이름 · 번호 · 생년월일 · 성별 · 외국인 여부, the
     직원 레코드's 직무, and the address fixed at 날인 — empty before). An old contract with no party row
     shows the 직원 레코드's 이름 · 번호 like the 관리자 detail; the 대조 still uses an empty contract.
-  - `employer` — the 사용자 칸: the store's name · phone · address and its `store_business_profiles` 상호 ·
+  - `employer` — the 사업주 칸: the store's name · phone · address and its `store_business_profiles` 상호 ·
     사업자등록번호 · 대표자 · 사업장 주소 (null until registered). A missing store row is broken data → 500. Once
-    the party row holds the 사용자 칸 (fixed at 날인, or written by the backfill), `tradeName` · `ceoName` · `registrationNumber` · `bizAddress` ·
+    the party row holds the 사업주 칸 (fixed at 날인, or written by the backfill), `tradeName` · `ceoName` · `registrationNumber` · `bizAddress` ·
     `bizAddressDetail` · `storePhone` are the fixed values (the 처리 완료본's), `tradeName` holding the 점포명 when the
     store had no 상호; `storeName`, the store address and `bizZipCode` stay live.
   - `account` — 「본인인증으로 확인된 정보」: the account's 이름 · 번호 · 생년월일 · 성별 · 외국인 여부 ·
