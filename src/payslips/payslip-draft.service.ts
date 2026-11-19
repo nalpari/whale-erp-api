@@ -110,7 +110,7 @@ export class PayslipDraftService {
     if (!manageable) return null;
     const period = payPeriod(month);
     const list = await this.loadCandidates(manageable, month);
-    const names = await storeLabels(
+    const labelOf = await storeLabels(
       this.prisma,
       list.map((c) => c.storeId),
     );
@@ -124,8 +124,8 @@ export class PayslipDraftService {
         employmentType: c.employmentType,
         payslipId: c.payslipId,
         hasAttendance: c.hasAttendance,
-        storeName: names(c.storeId).name,
-        storeIsHq: names(c.storeId).isHq,
+        storeName: labelOf(c.storeId).name,
+        storeIsHq: labelOf(c.storeId).isHq,
         contractId: c.contractIds[0] ?? null,
       })),
     };

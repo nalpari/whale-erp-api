@@ -4,7 +4,7 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T06:58:12Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T07:11:43Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
@@ -49,7 +49,7 @@ TO-DO (#109). Three controllers over one service:[^todos-controllers]
 | `GET /me/todos` | `account` token | 내 TO-DO (근무 탭 · 홈 카드) |
 | `PATCH /me/todos/:todoId/status` | `account` token | 대기 ↔ 진행 중 ↔ 완료 |
 
-목록 · 상세 · 등록 응답의 본사 점포 줄에는 `storeIsHq`(stores.is_hq)가 함께 실린다 — 관리자 화면은 「[본사] 상호」로 보인다(2026-11-19). 이름 칸 `storeName` 은 상호 그대로.
+목록 · 상세 · 등록 응답의 줄마다 `storeIsHq`(stores.is_hq, 본사 아니면 false)가 실린다 — 관리자 화면은 본사를 「[본사] 상호」로 보인다(2026-11-19). 이름 칸 `storeName` 은 상호 그대로. 같은 DTO 를 쓰는 직원 앱(`GET /me/todos` · `PATCH /me/todos/:todoId/status`)에도 실리지만 직원 앱은 쓰지 않는다.
 
 # Rows, groups and why there is no group table
 

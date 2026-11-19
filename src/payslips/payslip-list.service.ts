@@ -514,7 +514,7 @@ export class PayslipListService {
     )
       return null;
 
-    const [p, names] = await Promise.all([
+    const [p, labelOf] = await Promise.all([
       this.prisma.payslip.findUniqueOrThrow({
         where: { payslipId },
         select: DETAIL_SELECT,
@@ -547,8 +547,8 @@ export class PayslipListService {
       staffMemberId: p.staffMemberId,
       staffName: p.staffMember.name,
       storeId: p.storeId,
-      storeName: names(p.storeId).name,
-      storeIsHq: names(p.storeId).isHq,
+      storeName: labelOf(p.storeId).name,
+      storeIsHq: labelOf(p.storeId).isHq,
       contractId: p.contractId,
       periodStartDate: dateOnly(p.periodStartDate),
       periodEndDate: dateOnly(p.periodEndDate),

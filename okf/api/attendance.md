@@ -4,7 +4,7 @@ title: Attendance
 description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(출퇴근 탭 진입 · 버튼 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T06:58:12Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T07:11:43Z }
 sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
@@ -130,7 +130,7 @@ sources:
 같은 범위를 쓴다.
 
 - `GET /attendance-records/daily?date=` — 그날. 줄은 근무스케줄을 받을 수 있는 직원(근무스케줄 관리의 `schedulable`)과 그날 근무스케줄 ·
-  출퇴근 기록이 있는 직원이다 — 퇴직한 직원도 그날 기록이 있으면 나온다. 점포 · 이름순. 일별 · 기간 줄과 대신 등록 선택지(`proxy-staff`)의 본사 점포 줄에는 `storeIsHq`(stores.is_hq)가 함께 실린다 — 관리자 화면은 「[본사] 상호」로 보인다(2026-11-19). 이름 칸 `storeName` 은 상호 그대로.
+  출퇴근 기록이 있는 직원이다 — 퇴직한 직원도 그날 기록이 있으면 나온다. 점포 · 이름순. 일별 · 기간 줄과 대신 등록 선택지(`proxy-staff`)의 줄마다 `storeIsHq`(stores.is_hq, 본사 아니면 false)가 실린다 — 관리자 화면은 본사를 「[본사] 상호」로 보인다(2026-11-19). 이름 칸 `storeName` 은 상호 그대로. 같은 DTO 를 상속하는 직원 앱 `GET /me/attendance/records` 에도 실리지만 직원 앱은 쓰지 않는다.
 - `GET /attendance-records?from=&to=&staffMemberId=` — 기간(92일 이하, 관리자 보정 범위 최근 3개월). 근무스케줄이나 기록이 있는 직원 ·
   날만(휴무 줄 없음), 날짜 내림차순. 직원을 주면 그 직원만이고, 점포 조건 안의 직원이 아니거나 본사에게 가려지는 직원이면 404.
 - `GET /attendance-records/open-check-ins?storeId=`(WHALEERP-644) — 점포 하나의 열린 출근(퇴근하지 않은 출근). 폐점을 맡은 쪽이 폐점 전에

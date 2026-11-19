@@ -866,6 +866,10 @@ describe('TodosService', () => {
           performerStaffMember: { staffMemberId: 11, name: '나직원' },
         }),
       );
+      // 본사 점포면 storeIsHq true(stores.is_hq 그대로)
+      db.store.findMany.mockResolvedValueOnce([
+        { storeId: 3, name: '연남점', isHq: true },
+      ]);
 
       await expect(
         service.changeMyStatus(3, 7, 'DONE', NOW),
@@ -875,7 +879,7 @@ describe('TodosService', () => {
         dueDate: '2026-10-20',
         dueTime: '18:00',
         storeName: '연남점',
-        storeIsHq: false,
+        storeIsHq: true,
         performer: { staffMemberId: 11, staffMemberName: '나직원' },
       });
 
