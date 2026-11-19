@@ -9310,7 +9310,7 @@
             "description": "내 계약이 아님 — 없는 id · 남의 계약 · 작성 중 · 소속 추가 확인을 기다리는 계약(후보 계정만). 모두 같은 본문"
           },
           "409": {
-            "description": "CONTRACT_STATUS_CONFLICT(직원 서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남) · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨) · STORE_NOT_OPERATING(보낸 뒤 근무지가 운영 중이 아니게 됨 — 미운영 · 폐점 · 사업주 정보 없음. 빈 사용자 칸을 고정하지 않는다)"
+            "description": "CONTRACT_STATUS_CONFLICT(직원 서명 대기가 아님 — 본문 status 에 지금 상태, 이미 처리했으면 그 결과) · SIGN_DEADLINE_PASSED(서명 기한이 지남) · STAFF_RETIRED(퇴직했거나 퇴직일이 지남) · IDENTITY_MISMATCH(mismatches: name · phone · birthDate · gender · isForeigner) · CONTRACT_RESENT(그사이 다시 발송됨) · STORE_NOT_OPERATING(보낸 뒤 근무지가 운영 중이 아니게 됨 — 미운영 · 폐점 · 사업주 정보 없음. 빈 사업주 칸을 고정하지 않는다)"
           },
           "429": {
             "description": "경로마다 계정당 10분에 20번(서명 · 서명 거절 · 수정 요청을 따로 센다)"
@@ -9517,7 +9517,7 @@
             "bearer": []
           }
         ],
-        "summary": "내 근로계약 상세 — 계약서에 그릴 값 · 사용자 칸 · 본인 대조 미리보기(서명할 수 있는지 · 다른 항목)",
+        "summary": "내 근로계약 상세 — 계약서에 그릴 값 · 사업주 칸 · 본인 대조 미리보기(서명할 수 있는지 · 다른 항목)",
         "tags": [
           "MyContractViews"
         ]

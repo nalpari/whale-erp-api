@@ -55,7 +55,7 @@ const SOURCE_SELECT = {
   },
 } satisfies Prisma.ContractSelect;
 
-/** 점포 정보 — 날인 때 고정하는 사용자 칸(MyContractsService.sign)도 이 select 로 읽는다 */
+/** 점포 정보 — 날인 때 고정하는 사업주 칸(MyContractsService.sign)도 이 select 로 읽는다 */
 export const EMPLOYER_STORE_SELECT = {
   name: true,
   phone: true,
@@ -74,7 +74,7 @@ type EmployerStore = Prisma.StoreGetPayload<{
   select: typeof EMPLOYER_STORE_SELECT;
 }>;
 
-/** 점포 정보 → 사용자 칸. 상호가 없으면 점포명, 소재지는 사업자 주소, 전화번호는 점포 연락처(직원 앱 상세와 같은 칸) */
+/** 점포 정보 → 사업주 칸(근로기준법의 사용자). 상호가 없으면 점포명, 주소는 사업자 주소, 전화번호는 점포 연락처(직원 앱 상세와 같은 칸) */
 export const employerOf = (store: EmployerStore) => ({
   // 빈 상호도 점포명으로 — 고정 값의 상호가 빈 문자열이면 「고정했는가」를 가르지 못한다(pr-review-toolkit)
   name: store.businessProfile?.bizTradeName || store.name,
@@ -85,7 +85,7 @@ export const employerOf = (store: EmployerStore) => ({
   phone: store.phone,
 });
 
-/** 날인 때(또는 백필이) 당사자 행에 적은 값이 있는가 — 둘은 사용자 칸 · 제2조를 함께 적고 상호(없으면 점포명)는 늘 채운다 */
+/** 날인 때(또는 백필이) 당사자 행에 적은 값이 있는가 — 둘은 사업주 칸 · 제2조를 함께 적고 상호(없으면 점포명)는 늘 채운다 */
 export const snapshotOf = <
   P extends {
     employerName: string | null;
@@ -137,7 +137,7 @@ export type ContractFileSource = {
 };
 
 /**
- * 읽은 값 → PDF 칸. 처리 완료본의 사용자 칸은 계약 당사자 행에 적힌 값(날인 때 고정, 또는 백필로 만들 때 적은 값)이고, 적힌 값이
+ * 읽은 값 → PDF 칸. 처리 완료본의 사업주 칸은 계약 당사자 행에 적힌 값(날인 때 고정, 또는 백필로 만들 때 적은 값)이고, 적힌 값이
  * 없으면(고정 전에 체결되고 아직 완료본이 없는 계약) 지금 점포 정보다. 보낸 원본은 늘 지금 점포 정보다(WHALEERP-131, 2026-10-29
  * 김민식). 근로자 칸은 계약서 값 — 주소는 날인 때 고정한 값이라 보낸 원본에는 보통 없다.
  */
@@ -364,7 +364,7 @@ export class ContractFilesService {
     const backfill = kind === 'SIGNED_COPY' && !input.employerFixed;
     if (backfill)
       this.logger.warn(
-        `처리 완료본 사용자 칸을 날인 시점 값이 없어 지금 점포 정보로 만든다 contract=${contractId}`,
+        `처리 완료본 사업주 칸을 날인 시점 값이 없어 지금 점포 정보로 만든다 contract=${contractId}`,
       );
     const pdf = await renderContractPdf(
       contractPdfModel(input),

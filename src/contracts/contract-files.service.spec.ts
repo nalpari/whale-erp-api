@@ -169,7 +169,7 @@ describe('pdfInputOf', () => {
     signedAt: SIGNED_AT,
   });
 
-  it('처리 완료본은 날인 때 고정한 사용자 칸을 쓴다', () => {
+  it('처리 완료본은 날인 때 고정한 사업주 칸을 쓴다', () => {
     const input = pdfInputOf(
       'SIGNED_COPY',
       source({

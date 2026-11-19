@@ -3,9 +3,9 @@ import type { Prisma } from '@prisma/client';
 import type { StoreStatus } from '../stores/store-format';
 
 /**
- * 운영 중인 근무지 — 운영(OPERATING)이고 지우지 않았고 날인이 고정할 사용자 칸(대표자 · 사업자등록번호)이 있다. 「사업주 정보가
+ * 운영 중인 근무지 — 운영(OPERATING)이고 지우지 않았고 날인이 고정할 사업주 칸(대표자 · 사업자등록번호)이 있다. 「사업주 정보가
  * 없는 점포는 미운영으로 본다」(2026-11-18 사용자 결정) — 점포는 사업자 인증 · 좌표 · BP 사용이 있어야 운영이 되고(missingForOperation)
- * 본사는 인증을 풀면 미운영으로 내려가지만, 그 규칙 전에 인증 없이 운영으로 들어온 점포가 남아 있어 사용자 칸도 함께 본다.
+ * 본사는 인증을 풀면 미운영으로 내려가지만, 그 규칙 전에 인증 없이 운영으로 들어온 점포가 남아 있어 사업주 칸도 함께 본다.
  * 근무지 선택지 · 새 근무지 검사(722) · 발송 · 날인 · 직원 앱 상세가 모두 이 기준 하나를 쓴다(조건은 이 where 와 isOperatingStore).
  */
 export const OPERATING_STORE_WHERE = {
@@ -52,7 +52,7 @@ export async function storeOperating(
   return store !== null;
 }
 
-/** 날인이 판정 · 고정에 쓰는 점포 값 — 사용자 칸(employerOf 의 입력)과 운영 여부 */
+/** 날인이 판정 · 고정에 쓰는 점포 값 — 사업주 칸(employerOf 의 입력)과 운영 여부 */
 export type SignStore = {
   name: string;
   phone: string | null;

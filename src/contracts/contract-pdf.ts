@@ -5,7 +5,7 @@ import { bizNumberText, phoneText } from '../stores/store-excel';
 import { dateLabel, type ContractArticle } from './contract-template';
 
 // 근로계약서 보낸 원본 · 처리 완료본 PDF(WHALEERP-131). 조항은 직원 앱 화면과 같은 템플릿(contract-template)에서 오고, 이 파일은
-// 끝의 사용자 · 근로자 칸과 서명을 더한다. 데이터 → 칸(contractPdfModel)과 칸 → PDF(renderContractPdf)를 나눠 칸은 단위 테스트로 본다.
+// 끝의 사업주 · 근로자 칸과 서명을 더한다. 데이터 → 칸(contractPdfModel)과 칸 → PDF(renderContractPdf)를 나눠 칸은 단위 테스트로 본다.
 // 글꼴은 급여명세서 PDF 와 같은 Pretendard(payslips/assets/fonts, nest-cli.json assets 가 dist 로 복사한다).
 
 const FONT_DIR = join(__dirname, '..', 'payslips', 'assets', 'fonts');
@@ -19,7 +19,7 @@ export interface ContractPdfInput {
   contractId: number;
   heading: string;
   articles: ContractArticle[];
-  /** 사용자 칸 — 처리 완료본은 날인 때 고정한 값, 보낸 원본 · 고정 전 체결 계약은 만드는 때의 점포 정보 */
+  /** 사업주 칸(근로기준법의 사용자) — 처리 완료본은 날인 때 고정한 값, 보낸 원본 · 고정 전 체결 계약은 만드는 때의 점포 정보 */
   employer: {
     name: string;
     ceoName: string | null;
@@ -63,6 +63,17 @@ const or = (v: string | null) => (v === null || v === '' ? '-' : v);
 export function contractPdfModel(input: ContractPdfInput): ContractPdfModel {
   const { employer: e, worker: w } = input;
   const signed = input.kind === 'SIGNED_COPY';
+  // 사업주 칸 — 고용노동부 표준근로계약서처럼 「사업주」(사업체명 · 대표자 · 사업자등록번호 · 주소 · 전화번호, WHALEERP-752).
+  // 전화번호는 근무지 점포 연락처이고, 점포 연락처는 필수가 아니라 없으면 「-」 대신 줄을 뺀다(대표자 · BP 연락처로 채우지
+  // 않는다, WHALEERP-753)
+  const employer: [string, string][] = [
+    ['사업체명', e.name],
+    ['대표자', or(e.ceoName)],
+    ['사업자등록번호', or(bizNumberText(e.registrationNumber))],
+    ['주소', or(joinAddress(e.address, e.addressDetail))],
+  ];
+  const employerPhone = phoneText(e.phone);
+  if (employerPhone) employer.push(['전화번호', employerPhone]);
   return {
     title: input.heading,
     articles: input.articles,
@@ -70,13 +81,7 @@ export function contractPdfModel(input: ContractPdfInput): ContractPdfModel {
       signed && input.signedAt
         ? ['계약 체결일', kstDate(input.signedAt)]
         : ['발송일', kstDate(input.sentAt)],
-    employer: [
-      ['상호', e.name],
-      ['대표자', or(e.ceoName)],
-      ['사업자등록번호', or(bizNumberText(e.registrationNumber))],
-      ['소재지', or(joinAddress(e.address, e.addressDetail))],
-      ['전화번호', or(phoneText(e.phone))],
-    ],
+    employer,
     worker: [
       ['성명', w.name],
       ['생년월일', or(w.birthDate && dateLabel(w.birthDate))],
@@ -226,7 +231,7 @@ export function renderContractPdf(
   }
 
   doc.moveDown(1.2);
-  // 체결일 · 사용자 · 근로자 칸 · 서명 칸은 한 장에 둔다 — 줄 높이를 재서 모자라면 통째로 다음 장으로(긴 주소는 여러 줄)
+  // 체결일 · 사업주 · 근로자 칸 · 서명 칸은 한 장에 둔다 — 줄 높이를 재서 모자라면 통째로 다음 장으로(긴 주소는 여러 줄)
   const parties = [model.dateLine, ...model.employer, ...model.worker];
   ensure(
     parties.reduce((sum, [l, v]) => sum + rowHeight(l, v) + 4, 0) +
@@ -239,7 +244,7 @@ export function renderContractPdf(
   row(model.dateLine[0], model.dateLine[1]);
   doc.moveDown(0.6);
   for (const [head, rows] of [
-    ['사용자', model.employer],
+    ['사업주', model.employer],
     ['근로자', model.worker],
   ] as const) {
     doc.font('B').fontSize(11).fillColor(INK).text(head, left, doc.y);

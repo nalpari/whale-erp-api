@@ -92,7 +92,7 @@ export class MyContractViewsService {
     return { items, total: items.length };
   }
 
-  /** 내 계약 상세 — 계약서에 그릴 값 · 사용자 칸 · 본인 대조 미리보기 */
+  /** 내 계약 상세 — 계약서에 그릴 값 · 사업주 칸 · 본인 대조 미리보기 */
   async findOne(
     accountId: number,
     contractId: number,
@@ -199,10 +199,10 @@ export class MyContractViewsService {
     );
     const biz = store.businessProfile;
     const terms = contractTermsOf(c);
-    // 당사자 행에 적힌 값(날인 때 고정 · 백필)이 있으면 사용자 칸 · 제2조를 그 값으로 — 처리 완료본과 같은 함수 · 같은 조건
+    // 당사자 행에 적힌 값(날인 때 고정 · 백필)이 있으면 사업주 칸 · 제2조를 그 값으로 — 처리 완료본과 같은 함수 · 같은 조건
     // (WHALEERP-131). 점포명 · 점포 주소 · 사업장 우편번호(고정하지 않는다 — 직원 앱이 보이지 않는다)는 지금 값이다
     const fixed = snapshotOf(party);
-    // 날인을 기다리는 계약만 근무지가 운영 중인지 본다(운영 · 지움 아님 · 사용자 칸 있음) — 날인 API 와 같은 판정(isOperatingStore).
+    // 날인을 기다리는 계약만 근무지가 운영 중인지 본다(운영 · 지움 아님 · 사업주 칸 있음) — 날인 API 와 같은 판정(isOperatingStore).
     // 날인 대기가 아니면 늘 false
     const notOperating = item.awaitingSignature && !isOperatingStore(store);
     const article2 = article2Of(c, store.name, fixed);
