@@ -479,7 +479,7 @@ describe('checkWorkTimeOverlap', () => {
     });
   });
 
-  it('겹친 구간이 여럿이면 요일 순으로 「 · 」로 잇는다', async () => {
+  it('겹친 구간이 여럿이면 「 · 」로 잇는다', async () => {
     const both = {
       ...other,
       contractWorkDays: [

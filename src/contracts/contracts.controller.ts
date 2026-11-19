@@ -250,7 +250,7 @@ export class ContractsController {
   })
   @ApiConflictResponse({
     description:
-      '이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 대체할 계약을 다른 요청이 먼저 고침 · SIGNED_CONTRACT_OVERLAP(종이 계약 — 기간이 겹치는 서명 완료 계약, contracts 목록. 잘못 올린 계약이면 correctSignedContracts 와 그 id 를 모두 replaceContractIds 로) · RENEWAL_SIGNED_OVERLAP(종이 재계약이 직전 계약이 아닌 서명 완료와 겹침 — 바로잡기 없이 막음)',
+      '이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(overlaps — 겹친 요일 · 시간) · 대체할 계약을 다른 요청이 먼저 고침 · SIGNED_CONTRACT_OVERLAP(종이 계약 — 기간이 겹치는 서명 완료 계약, contracts 목록. 잘못 올린 계약이면 correctSignedContracts 와 그 id 를 모두 replaceContractIds 로) · RENEWAL_SIGNED_OVERLAP(종이 재계약이 직전 계약이 아닌 서명 완료와 겹침 — 바로잡기 없이 막음)',
   })
   @ApiServiceUnavailableResponse({
     description:
@@ -316,7 +316,7 @@ export class ContractsController {
   })
   @ApiConflictResponse({
     description:
-      '작성 중 · 직원 수정 요청이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음 — 저장하지 않음)',
+      '작성 중 · 직원 수정 요청이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(overlaps — 겹친 요일 · 시간) · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음 — 저장하지 않음)',
   })
   @ApiServiceUnavailableResponse({
     description:
@@ -354,7 +354,7 @@ export class ContractsController {
   })
   @ApiConflictResponse({
     description:
-      'CONTRACT_STATUS_CONFLICT(서명 요청 전 · 직원 서명 대기 · 직원 수정 요청이 아님) · 새 번호로 이 점포에 재직 중 · CONTRACT_IN_PROGRESS(새 번호의 같은 점포 진행 중 계약 — replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음 — 저장하지 않음)',
+      'CONTRACT_STATUS_CONFLICT(서명 요청 전 · 직원 서명 대기 · 직원 수정 요청이 아님) · 새 번호로 이 점포에 재직 중 · CONTRACT_IN_PROGRESS(새 번호의 같은 점포 진행 중 계약 — replaceContractIds 로 대체) · WORK_TIME_OVERLAP(overlaps — 겹친 요일 · 시간) · 다른 요청이 먼저 고침 · SEND_PHONE_NOT_MOBILE(가입 초대인데 휴대폰 번호가 아님) · STORE_NOT_OPERATING(근무지 점포가 운영 중이 아니라 — 미운영 · 폐점 · 사업주 정보 없음 — 보내지 않음 — 저장하지 않음)',
   })
   @ApiForbiddenResponse({
     description: `근로계약 관리 수정 권한 없음 · 새 번호의 같은 점포 작성 중 계약을 대체하는데 삭제 권한 없음(409 로 묻기 전에 403) · 직원 앱 토큰 · 사용 중인 관리자 계정이 아님 · 번호를 바꾸는데 점포 직원 관리 권한이 없음(동의로만 보이는 직원) · ${BP_FORBIDDEN_DESCRIPTION}`,
@@ -391,7 +391,7 @@ export class ContractsController {
   })
   @ApiConflictResponse({
     description:
-      '작성 중이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP · 다른 요청이 먼저 고침 · SIGNED_CONTRACT_OVERLAP(종이 계약 — 기간이 겹치는 서명 완료 계약, contracts 목록. 잘못 올린 계약이면 correctSignedContracts 와 그 id 를 모두 replaceContractIds 로) · RENEWAL_SIGNED_OVERLAP(종이 재계약이 직전 계약이 아닌 서명 완료와 겹침 — 바로잡기 없이 막음)',
+      '작성 중이 아님 · 이 점포에 같은 번호로 재직 중 · CONTRACT_IN_PROGRESS(contracts 목록: contractId · status · name · startDate · endDate, replaceContractIds 로 대체) · WORK_TIME_OVERLAP(overlaps — 겹친 요일 · 시간) · 다른 요청이 먼저 고침 · SIGNED_CONTRACT_OVERLAP(종이 계약 — 기간이 겹치는 서명 완료 계약, contracts 목록. 잘못 올린 계약이면 correctSignedContracts 와 그 id 를 모두 replaceContractIds 로) · RENEWAL_SIGNED_OVERLAP(종이 재계약이 직전 계약이 아닌 서명 완료와 겹침 — 바로잡기 없이 막음)',
   })
   @ApiServiceUnavailableResponse({
     description:
