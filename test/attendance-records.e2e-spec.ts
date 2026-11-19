@@ -888,11 +888,10 @@ describe('출·퇴근 현황 조회 (e2e, DB)', () => {
         ),
       ).not.toContain(hiddenStaffId);
       // 선택지 줄도 본사 여부를 싣는다(가맹 점포라 false)
-      expect(
-        (options.body as { items: { storeIsHq: boolean }[] }).items.every(
-          (i) => i.storeIsHq === false,
-        ),
-      ).toBe(true);
+      const optionItems = (options.body as { items: { storeIsHq: boolean }[] })
+        .items;
+      expect(optionItems.length).toBeGreaterThan(0);
+      expect(optionItems.every((i) => i.storeIsHq === false)).toBe(true);
     });
 
     it('대신 등록 — 위치정보 동의 없는 직원은 대신 등록(isProxy)으로 등록된다 · 3개월 지난 날은 400', async () => {

@@ -58,7 +58,7 @@ sources:
 
 # 관리자 목록 (GET /payslips)
 
-목록 · 상세 · 작성 대상(`GET /payslips/candidates`)의 줄마다 `storeIsHq`(stores.is_hq, 본사 아니면 false)가 실린다 — 관리자 화면은 본사를 「[본사] 상호」로 보인다(2026-11-19). 이름 칸 `storeName` 은 상호 그대로. 점포 이름 · 본사 여부는 `storeLabels`(payslip-shared.ts)로 읽고, 직원 앱 · 발송 · 일괄 저장 PDF 는 이름만(`storeNames`).
+목록 · 상세 · 작성 대상(`GET /payslips/candidates`)의 줄마다 `storeIsHq`(stores.is_hq, 본사 아니면 false)가 실린다 — 관리자 화면은 본사를 「[본사] 상호」로 보인다(2026-11-19). 이름 칸 `storeName` 은 상호 그대로. 점포 이름 · 본사 여부는 `storeInfoOf`(payslip-shared.ts)로 읽고, 직원 앱 · 발송 · 일괄 저장 PDF 는 이름만(`storeNames`).
 
 이 문서의 모든 관리자 경로(`/payslips…`)는 메서드마다 경로 방식 `@MenuPermission(action)` 으로 권한을 본다 — 메뉴는 컨트롤러 경로 `/payslips` 의 MN000009(CLAUDE.md 인증).
 

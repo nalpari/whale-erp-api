@@ -61,9 +61,10 @@ export const ITEM_ORDER = [
 
 /**
  * 점포 ID → 이름 · 본사 여부. 점포는 다른 팀 표라 Prisma 관계 없이 따로 읽는다. 명세서의 점포는 외래키로 묶여 있어, 못 찾으면
- * 데이터가 깨진 것이라 빈 칸으로 내보내지 않고 500 이다. 관리자 화면은 본사 점포를 「[본사] 상호」로 보인다.
+ * 데이터가 깨진 것이라 빈 칸으로 내보내지 않고 500 이다. 관리자 화면은 본사 점포를 「[본사] 상호」로 보인다 — 글자를 만드는
+ * storeLabelOf(src/stores/store-label.ts)와 달리 이름 · 본사 여부를 따로 준다.
  */
-export async function storeLabels(
+export async function storeInfoOf(
   prisma: Pick<PrismaService, 'store'>,
   storeIds: number[],
 ): Promise<(storeId: number) => { name: string; isHq: boolean }> {
@@ -82,12 +83,18 @@ export async function storeLabels(
   };
 }
 
-/** 점포 ID → 이름(storeLabels 의 이름만) — 직원 앱 · 발송 · 파일처럼 본사 표시를 싣지 않는 곳 */
+/** 응답 칸 storeName · storeIsHq */
+export const storeFieldsOf = (s: { name: string; isHq: boolean }) => ({
+  storeName: s.name,
+  storeIsHq: s.isHq,
+});
+
+/** 점포 ID → 이름(storeInfoOf 의 이름만) — 직원 앱 · 발송 · 파일처럼 본사 표시를 싣지 않는 곳 */
 export async function storeNames(
   prisma: Pick<PrismaService, 'store'>,
   storeIds: number[],
 ): Promise<(storeId: number) => string> {
-  const label = await storeLabels(prisma, storeIds);
+  const label = await storeInfoOf(prisma, storeIds);
   return (storeId) => label(storeId).name;
 }
 

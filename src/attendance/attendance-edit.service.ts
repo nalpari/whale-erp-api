@@ -677,7 +677,7 @@ export class AttendanceEditService {
         select: { storeId: true, name: true, isHq: true },
       }),
     ]);
-    const labelOf = new Map(storeRows.map((s) => [s.storeId, s]));
+    const infoOf = new Map(storeRows.map((s) => [s.storeId, s]));
     const items: ProxyStaffResponseDto['items'] = [];
     for (const c of candidates) {
       if (access.hides(c.storeId, hqSharingConsentedOf(c))) continue;
@@ -686,8 +686,8 @@ export class AttendanceEditService {
         staffMemberId: c.staffMemberId,
         name: c.name,
         storeId: c.storeId,
-        storeName: labelOf.get(c.storeId)?.name ?? '',
-        storeIsHq: labelOf.get(c.storeId)?.isHq ?? false,
+        storeName: infoOf.get(c.storeId)?.name ?? '',
+        storeIsHq: infoOf.get(c.storeId)?.isHq ?? false,
         isPayslipConfirmed: await payslipConfirmed(
           this.prisma,
           c.staffMemberId,

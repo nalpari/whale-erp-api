@@ -74,7 +74,7 @@ type Punch = Prisma.AttendanceRecordGetPayload<{ select: typeof PUNCH_SELECT }>;
 type Scope = {
   storeIds: number[];
   /** 점포 이름 · 본사 여부(관리자 화면은 「[본사] 상호」) */
-  labelOf: Map<number, { name: string; isHq: boolean }>;
+  infoOf: Map<number, { name: string; isHq: boolean }>;
   hides: (storeId: number, consented: boolean) => boolean;
 };
 
@@ -240,7 +240,7 @@ export class AttendanceRecordsService {
     const { rows } = await this.rows(
       {
         storeIds: [member.storeId],
-        labelOf: new Map([[member.storeId, store]]),
+        infoOf: new Map([[member.storeId, store]]),
         hides: () => false,
       },
       from,
@@ -414,7 +414,7 @@ export class AttendanceRecordsService {
       : [];
     return {
       storeIds: stores.map((s) => s.storeId),
-      labelOf: new Map(stores.map((s) => [s.storeId, s])),
+      infoOf: new Map(stores.map((s) => [s.storeId, s])),
       hides: (storeId, consented) =>
         hidesPersonalData(
           manageable.roleTypeCode,
@@ -583,8 +583,8 @@ export class AttendanceRecordsService {
         name: person.name,
         phone: person.phone,
         storeId: person.storeId,
-        storeName: scope.labelOf.get(person.storeId)?.name ?? '',
-        storeIsHq: scope.labelOf.get(person.storeId)?.isHq ?? false,
+        storeName: scope.infoOf.get(person.storeId)?.name ?? '',
+        storeIsHq: scope.infoOf.get(person.storeId)?.isHq ?? false,
         employmentType: person.employmentType,
         employmentStatus: person.employmentStatus,
         schedules: d.schedules.map((s) => ({

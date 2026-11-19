@@ -372,8 +372,7 @@ export class TodosService {
         ...line,
         dueDate: isoDate(dueDate),
         dueTime: hhmm(dueTime),
-        storeName: stores.get(line.storeId)?.name ?? null,
-        storeIsHq: stores.get(line.storeId)?.isHq ?? false,
+        ...storeFieldsOf(stores.get(line.storeId)),
       })),
     };
   }
@@ -894,8 +893,7 @@ export class TodosService {
     const stores = await this.storesOf(rows);
     return rows.map(({ performerStaffMember, dueDate, dueTime, ...r }) => ({
       ...r,
-      storeName: stores.get(r.storeId)?.name ?? null,
-      storeIsHq: stores.get(r.storeId)?.isHq ?? false,
+      ...storeFieldsOf(stores.get(r.storeId)),
       dueDate: isoDate(dueDate),
       dueTime: hhmm(dueTime),
       performer: staffOf(
@@ -918,6 +916,12 @@ export class TodosService {
     return new Map(stores.map((s) => [s.storeId, s]));
   }
 }
+
+/** 응답 칸 storeName · storeIsHq — 점포 행이 없으면 이름 null · 본사 아님 */
+const storeFieldsOf = (s: { name: string; isHq: boolean } | undefined) => ({
+  storeName: s?.name ?? null,
+  storeIsHq: s?.isHq ?? false,
+});
 
 /** 배정 대상 · 수행 방식 조합을 확인하고 저장할 수행 방식을 정한다. 개인은 각자 수행만이다. */
 function checkAssignment(dto: CreateTodoDto): TodoExecutionMode {

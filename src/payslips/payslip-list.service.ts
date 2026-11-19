@@ -35,7 +35,8 @@ import {
   monthRange,
   pickedStores,
   REPLACED_BY_WITHHOLDING,
-  storeLabels,
+  storeFieldsOf,
+  storeInfoOf,
 } from './payslip-shared';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
@@ -369,7 +370,7 @@ export class PayslipListService {
     if (rows.length === 0)
       return { items: [], total, statusCounts, reviewPendingCount };
 
-    const labelOf = await storeLabels(
+    const infoOf = await storeInfoOf(
       this.prisma,
       rows.map((r) => r.storeId),
     );
@@ -377,8 +378,7 @@ export class PayslipListService {
     const items = rows.map((r): PayslipListItemDto => {
       const shown = {
         storeId: r.storeId,
-        storeName: labelOf(r.storeId).name,
-        storeIsHq: labelOf(r.storeId).isHq,
+        ...storeFieldsOf(infoOf(r.storeId)),
         periodStartDate: dateOnly(r.periodStartDate),
         periodEndDate: dateOnly(r.periodEndDate),
       };
@@ -514,12 +514,12 @@ export class PayslipListService {
     )
       return null;
 
-    const [p, labelOf] = await Promise.all([
+    const [p, infoOf] = await Promise.all([
       this.prisma.payslip.findUniqueOrThrow({
         where: { payslipId },
         select: DETAIL_SELECT,
       }),
-      storeLabels(this.prisma, [found.storeId]),
+      storeInfoOf(this.prisma, [found.storeId]),
     ]);
     const [changedByName, confirmable] = await Promise.all([
       adminNames(
@@ -547,8 +547,7 @@ export class PayslipListService {
       staffMemberId: p.staffMemberId,
       staffName: p.staffMember.name,
       storeId: p.storeId,
-      storeName: labelOf(p.storeId).name,
-      storeIsHq: labelOf(p.storeId).isHq,
+      ...storeFieldsOf(infoOf(p.storeId)),
       contractId: p.contractId,
       periodStartDate: dateOnly(p.periodStartDate),
       periodEndDate: dateOnly(p.periodEndDate),
