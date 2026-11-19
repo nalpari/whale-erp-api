@@ -17,6 +17,7 @@ import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { DETAIL_SELECT, toSummary } from '../payslips/my-payslips.service';
 import { payslipPdfModel, renderPayslipPdf } from '../payslips/payslip-pdf';
 import { dateOnly, storeNames } from '../payslips/payslip-shared';
+import { storeLabelOf } from '../stores/store-label';
 import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE, type OptionalStorage } from '../storage/storage.module';
@@ -330,7 +331,7 @@ export class BulkExportsService {
     };
     const stores_ = await this.prisma.store.findMany({
       where: { storeId: { in: stores.map((s) => s.storeId) } },
-      select: { storeId: true, name: true },
+      select: { storeId: true, name: true, isHq: true },
     });
     const contracts = await this.prisma.contract.findMany({
       where: { ...byStaff, status: { not: 'DRAFT' } },
@@ -407,7 +408,8 @@ export class BulkExportsService {
         })
       : [];
 
-    const storeName = new Map(stores_.map((s) => [s.storeId, s.name]));
+    // 본사 점포는 「[본사] 상호」 — 직원 목록 파일의 점포 칸 · 폴더 이름이 화면과 같게(WHALEERP-750)
+    const storeName = new Map(stores_.map((s) => [s.storeId, storeLabelOf(s)]));
     const adminById = new Map(admins.map((a) => [a.adminAccountId, a]));
     const plan = archivePlan({
       storeNames: storeName,

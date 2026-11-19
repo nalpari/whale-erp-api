@@ -19,6 +19,8 @@ export class StaffMemberStoreDto {
   name: string;
   /** 공통코드 STORE_TYPE — DIRECT 직영 · FRANCHISE 가맹 */
   storeType: string;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다(WHALEERP-726 · 750) */
+  isHq: boolean;
 }
 
 export class StaffMemberInvitationDto {

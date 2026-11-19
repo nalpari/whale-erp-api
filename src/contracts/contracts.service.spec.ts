@@ -161,6 +161,7 @@ describe('ContractsService', () => {
         staffMemberName: '권도윤',
         storeId: 11,
         storeName: '모리커피 서초점',
+        storeIsHq: false,
         employmentType: 'PART_TIME',
         contractMethod: 'ELECTRONIC',
         startDate: '2026-09-01',
@@ -565,6 +566,17 @@ describe('ContractsService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('본사 점포 계약이면 storeIsHq — 화면이 「[본사] 상호」로 보인다(WHALEERP-726 · 750)', async () => {
+    prisma.store.findMany.mockResolvedValue([
+      { storeId: 11, name: '도레미커피', isHq: true },
+    ]);
+    const result = await service.list(1, { page: 1, pageSize: 20 });
+    expect(result.items[0]).toMatchObject({
+      storeName: '도레미커피',
+      storeIsHq: true,
+    });
+  });
+
   it('점포 이름은 이 페이지에 나온 점포만 한 번에 읽는다', async () => {
     prisma.contract.findMany.mockResolvedValueOnce([
       row,
@@ -576,7 +588,7 @@ describe('ContractsService', () => {
     expect(prisma.store.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.store.findMany).toHaveBeenCalledWith({
       where: { storeId: { in: [11] } },
-      select: { storeId: true, name: true },
+      select: { storeId: true, name: true, isHq: true },
     });
   });
 

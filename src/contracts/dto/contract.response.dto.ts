@@ -25,6 +25,8 @@ export class ContractListItemDto {
   storeId: number;
   /** 점포가 지워졌어도 이름은 보인다 */
   storeName: string | null;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다(WHALEERP-726 · 750). 점포 행이 없으면 false */
+  storeIsHq: boolean;
   // 임시저장한 계약은 아래 칸이 비어 있을 수 있다(근로계약은 키만 NOT NULL).
   @ApiProperty({
     enum: EmploymentType,
@@ -270,6 +272,8 @@ export class ContractDetailDto extends ContractTermsDto {
   /** 점포가 지워졌어도 이름은 보인다. 점포 행이 없으면 null */
   @ApiProperty({ nullable: true, type: String })
   storeName: string | null;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다(WHALEERP-726 · 750). 점포 행이 없으면 false */
+  storeIsHq: boolean;
   /** YYYY-MM-DD */
   @ApiProperty({ nullable: true, type: String })
   birthDate: string | null;

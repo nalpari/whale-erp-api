@@ -1600,7 +1600,7 @@ export class ContractsService {
     // stores 는 1팀 테이블이라 Prisma 관계가 없다. 이름만 따로 읽는다(지운 점포여도 이름은 보인다).
     const store = await this.prisma.store.findUnique({
       where: { storeId: c.storeId },
-      select: { name: true },
+      select: { name: true, isHq: true },
     });
     // 종이 계약 날인본. 관계를 함께 읽으면 Prisma 가 쿼리를 동시에 보내 PGlite(e2e)가 연결을 끊어 따로 읽는다.
     // 직원 앱 날인의 필기 서명(SIGNATURE)은 처리 완료본(WHALEERP-131)에 합성할 재료라 관리자에게 보이지 않는다(WHALEERP-145)
@@ -1682,6 +1682,7 @@ export class ContractsService {
       employmentType: c.employmentType ?? c.staffMember.employmentType,
       storeId: c.storeId,
       storeName: store?.name ?? null,
+      storeIsHq: store?.isHq ?? false,
       birthDate: birth ? isoDate(birth) : null,
       gender: c.contractParty?.enteredGender ?? null,
       isForeigner: c.contractParty?.isForeigner ?? false,
@@ -2607,9 +2608,9 @@ export class ContractsService {
 
     const stores = await this.prisma.store.findMany({
       where: { storeId: { in: [...new Set(rows.map((r) => r.storeId))] } },
-      select: { storeId: true, name: true },
+      select: { storeId: true, name: true, isHq: true },
     });
-    const storeNames = new Map(stores.map((s) => [s.storeId, s.name]));
+    const storeById = new Map(stores.map((s) => [s.storeId, s]));
 
     return {
       total,
@@ -2619,7 +2620,8 @@ export class ContractsService {
         staffMemberId: r.staffMemberId,
         staffMemberName: r.staffMember.name,
         storeId: r.storeId,
-        storeName: storeNames.get(r.storeId) ?? null,
+        storeName: storeById.get(r.storeId)?.name ?? null,
+        storeIsHq: storeById.get(r.storeId)?.isHq ?? false,
         employmentType: r.employmentType,
         contractMethod: r.contractMethod,
         startDate: r.startDate ? isoDate(r.startDate) : null,

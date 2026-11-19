@@ -80,6 +80,8 @@ export class StaffMemberWeekScheduleItemDto {
   workScheduleId: number;
   storeId: number;
   storeName: string;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다(WHALEERP-750) */
+  storeIsHq: boolean;
   /** 근무일(YYYY-MM-DD) — 시작 일시의 한국 날짜 */
   workDate: string;
   /** 시작 HH:mm(한국 시각) */

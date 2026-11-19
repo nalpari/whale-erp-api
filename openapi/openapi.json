@@ -19998,12 +19998,17 @@
           "storeType": {
             "type": "string",
             "description": "공통코드 STORE_TYPE — DIRECT 직영 · FRANCHISE 가맹"
+          },
+          "isHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다(WHALEERP-726 · 750)"
           }
         },
         "required": [
           "storeId",
           "name",
-          "storeType"
+          "storeType",
+          "isHq"
         ]
       },
       "InvitationType": {
@@ -20647,6 +20652,10 @@
           "storeName": {
             "type": "string"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다(WHALEERP-750)"
+          },
           "workDate": {
             "type": "string",
             "description": "근무일(YYYY-MM-DD) — 시작 일시의 한국 날짜"
@@ -20671,6 +20680,7 @@
           "workScheduleId",
           "storeId",
           "storeName",
+          "storeIsHq",
           "workDate",
           "startTime",
           "endTime",
@@ -27004,6 +27014,10 @@
             "nullable": true,
             "description": "점포가 지워졌어도 이름은 보인다"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다(WHALEERP-726 · 750). 점포 행이 없으면 false"
+          },
           "staffRetired": {
             "type": "boolean",
             "description": "직원이 퇴직했는가(재직 상태 퇴직) — 상태 칸에 「퇴직」을 붙인다. 퇴직 예정(퇴직일 전)은 false"
@@ -27027,6 +27041,7 @@
           "staffMemberName",
           "storeId",
           "storeName",
+          "storeIsHq",
           "staffRetired"
         ]
       },
@@ -27835,6 +27850,10 @@
           "storeId": {
             "type": "number"
           },
+          "storeIsHq": {
+            "type": "boolean",
+            "description": "본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다(WHALEERP-726 · 750). 점포 행이 없으면 false"
+          },
           "isForeigner": {
             "type": "boolean",
             "description": "외국인 여부 — 체크하지 않았으면 false"
@@ -27910,6 +27929,7 @@
           "phone",
           "jobTitle",
           "storeId",
+          "storeIsHq",
           "isForeigner",
           "resendCount",
           "canResend",

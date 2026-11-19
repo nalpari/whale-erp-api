@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-18T07:58:05Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T04:54:46Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-11-18T07:58:05Z
+    last_modified: 2026-11-19T04:54:46Z
   - id: minimum-wage
     resource: ../../src/contracts/minimum-wage.ts
     title: 최저임금 공통코드 · 수습 중 시급 검사
@@ -53,7 +53,7 @@ sources:
   - id: contract-response-dto
     resource: ../../src/contracts/dto/contract.response.dto.ts
     title: 근로계약 응답 DTO — 목록 statusCounts · staffJoinState · staffRetired, 상세 칸
-    last_modified: 2026-11-13T09:09:00Z
+    last_modified: 2026-11-19T04:54:46Z
   - id: list-query
     resource: ../../src/contracts/dto/list-contracts-query.dto.ts
     title: ListContractsQueryDto
@@ -224,7 +224,8 @@ a 직원 not yet joined has no account, so counts as not consented)
   Prisma relation to `contracts`, so `include` cannot reach it. A `storeName`
   filter first looks up matching `store_id`s (no match → `storeId: { in: [] }`,
   an empty page, not an error); names for the page are read in one
-  `store.findMany` over the page's ids.
+  `store.findMany` over the page's ids. Each row also carries `storeIsHq` (the 본사 점포, `stores.is_hq`) so the
+  screen shows 「[본사] 상호」 like the 근무지 선택칸 (WHALEERP-726 · 750, 2026-11-19); a missing store is false.
 - **`status` arrives as a string when there is one.** The query parser only
   makes an array for repeated keys; the DTO's `@Transform` wraps a single value
   so `@IsEnum({ each: true })` sees an array.[^list-query]
@@ -630,7 +631,7 @@ row and sends, as `POST` does. The path id goes through `ContractIdPipe`: anythi
 
 `GET` also feeds the 상세 screen: `storeName` (read from `stores` separately —
 it is a 1팀 table with no Prisma relation; a deleted store still shows its
-name), `draftAction`, and `histories` (newest first, ties broken by the later
+name) with `storeIsHq` (본사 점포 → 「[본사] 상호」 on screen, WHALEERP-750), `draftAction`, and `histories` (newest first, ties broken by the later
 row id, `changedAt` as ISO 8601).
 
 It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026-10-23), all ISO 8601 or null:
