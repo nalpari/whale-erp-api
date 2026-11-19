@@ -419,15 +419,15 @@ export function shiftOverlaps(mine: Shift[], others: Shift[]): Shift[] {
 }
 
 const WEEKDAY_LABEL = new Map<string, string>(DB_ENUMS.Weekday);
-const hhmm = (m: number) =>
+const minutesToHhmm = (m: number) =>
   `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
 /** 「토 10:00~14:00 · 일 09:00~12:00」 — 겹친 구간(내 입력과 겹친 부분만) */
-export const overlapText = (overlaps: Shift[]) =>
+const overlapText = (overlaps: Shift[]) =>
   overlaps
     .map(
       (o) =>
-        `${WEEKDAY_LABEL.get(o.weekday) ?? o.weekday} ${hhmm(o.start)}~${hhmm(o.end)}`,
+        `${WEEKDAY_LABEL.get(o.weekday) ?? o.weekday} ${minutesToHhmm(o.start)}~${minutesToHhmm(o.end)}`,
     )
     .join(' · ');
 
@@ -501,8 +501,8 @@ export async function checkWorkTimeOverlap(
     message: `${overlapText(overlaps)} 근무가 다른 점포 근로계약과 겹칩니다.`,
     overlaps: overlaps.map((o) => ({
       weekday: o.weekday,
-      startTime: hhmm(o.start),
-      endTime: hhmm(o.end),
+      startTime: minutesToHhmm(o.start),
+      endTime: minutesToHhmm(o.end),
     })),
   });
 }

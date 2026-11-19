@@ -494,6 +494,7 @@ describe('ContractSendService (재발송)', () => {
       expect((error as ConflictException).getResponse()).toMatchObject({
         code: 'WORK_TIME_OVERLAP',
         message: '월 12:00~16:00 근무가 다른 점포 근로계약과 겹칩니다.',
+        overlaps: [{ weekday: 'MON', startTime: '12:00', endTime: '16:00' }],
       });
       // 다른 점포 이름은 싣지 않는다(WHALEERP-744)
       expect(
