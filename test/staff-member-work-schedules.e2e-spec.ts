@@ -308,6 +308,7 @@ describe('직원 상세 근무스케줄 표 (e2e, DB)', () => {
       workScheduleId: ids.sunday22,
       workDate: ymd(addDays(monday, 6)),
       storeName: '근무표 직영점',
+      storeIsHq: false,
       startTime: '22:00',
       endTime: '00:00',
     });

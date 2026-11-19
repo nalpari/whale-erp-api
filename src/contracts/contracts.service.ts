@@ -124,8 +124,28 @@ import {
 import { matchesStoreScope } from '../stores/store-scope-type';
 import { OPERATING_STORE_WHERE, storeOperating } from './contract-store-open';
 
-/** 목록 한 줄의 근무지 칸 — 점포가 없으면(데이터 깨짐) 이름 null · 본사 아님 */
-const storeFieldsOf = (store: { name: string; isHq: boolean } | undefined) => ({
+/**
+ * 점포 이름 검색 — 화면은 본사 점포를 「[본사] 상호」로 보이므로(WHALEERP-750) 보이는 대로 쳐도 찾는다. 앞의 「[본사]」를 떼면
+ * 본사 점포 중 남은 글자를 이름에 담은 것이고, 남은 글자가 없으면 본사 점포 전부다. 「본사」만 치면 이름에 본사가 든 점포와 본사 점포,
+ * 그 밖에는 이름 일부(대소문자 무시)다.
+ */
+export function storeNameWhere(text: string): Prisma.StoreWhereInput {
+  const byName = { name: { contains: text, mode: 'insensitive' } } as const;
+  // 「본사」만 치면 이름에 본사가 든 점포와 본사 점포 모두
+  if (text.trim() === '본사') return { OR: [byName, { isHq: true }] };
+  const hq = /^\s*\[본사\]\s*/.exec(text);
+  if (!hq) return byName;
+  const rest = text.slice(hq[0].length).trim();
+  return {
+    isHq: true,
+    ...(rest && { name: { contains: rest, mode: 'insensitive' } }),
+  };
+}
+
+/** 목록 · 상세의 근무지 칸 — 점포가 없으면(데이터 깨짐) 이름 null · 본사 아님 */
+const storeFieldsOf = (
+  store: { name: string; isHq: boolean } | null | undefined,
+) => ({
   storeName: store?.name ?? null,
   storeIsHq: store?.isHq ?? false,
 });
@@ -1687,8 +1707,7 @@ export class ContractsService {
       // 고용 형태는 그 계약에 적은 값이다(아래) — 계약 칸이 빈 옛 계약만 직원 레코드 값.
       employmentType: c.employmentType ?? c.staffMember.employmentType,
       storeId: c.storeId,
-      storeName: store?.name ?? null,
-      storeIsHq: store?.isHq ?? false,
+      ...storeFieldsOf(store),
       birthDate: birth ? isoDate(birth) : null,
       gender: c.contractParty?.enteredGender ?? null,
       isForeigner: c.contractParty?.isForeigner ?? false,
@@ -2540,10 +2559,7 @@ export class ContractsService {
     // stores 는 1팀 테이블이라 Prisma 관계가 없다. 이름에 맞는 점포 id 를 먼저 구한다.
     if (storeName) {
       const stores = await this.prisma.store.findMany({
-        where: {
-          storeId: { in: storeIds },
-          name: { contains: storeName, mode: 'insensitive' },
-        },
+        where: { storeId: { in: storeIds }, ...storeNameWhere(storeName) },
         select: { storeId: true },
       });
       storeIds = stores.map((s) => s.storeId);

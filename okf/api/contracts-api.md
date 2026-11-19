@@ -226,6 +226,9 @@ a 직원 not yet joined has no account, so counts as not consented)
   an empty page, not an error); names for the page are read in one
   `store.findMany` over the page's ids. Each row also carries `storeIsHq` (the 본사 점포, `stores.is_hq`) so the
   screen shows 「[본사] 상호」 like the 근무지 선택칸 (WHALEERP-726 · 750, 2026-11-19); a missing store is false.
+  The `storeName` search follows what is shown (`storeNameWhere`): 「[본사] 도레미」 finds 본사 점포 whose name holds
+  「도레미」, 「[본사]」 alone every 본사 점포, 「본사」 alone both names holding 본사 and every 본사 점포; anything else is a
+  case-insensitive name part as before.
 - **`status` arrives as a string when there is one.** The query parser only
   makes an array for repeated keys; the DTO's `@Transform` wraps a single value
   so `@IsEnum({ each: true })` sees an array.[^list-query]

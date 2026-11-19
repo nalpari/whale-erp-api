@@ -7,7 +7,7 @@ import { STORAGE } from '../storage/storage.module';
 import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { ContractDeliveryService } from './contract-delivery.service';
 import { ContractFilesService } from './contract-files.service';
-import { ContractsService } from './contracts.service';
+import { ContractsService, storeNameWhere } from './contracts.service';
 import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
 
 // 보내기(ContractDeliveryService)는 따로 시험한다 — 여기서는 무엇을 넘기는지만 본다. 기본은 앱으로 받음(보낼 것 없음)
@@ -603,5 +603,25 @@ describe('ContractsService', () => {
       statusCounts: { ...zero, PENDING_SIGNATURE: 30, SIGNED: 11 },
     });
     expect(prisma.store.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('storeNameWhere — 점포 이름 검색(WHALEERP-750)', () => {
+  it('보이는 「[본사] 상호」 그대로 쳐도 본사 점포를 찾는다', () => {
+    expect(storeNameWhere('[본사] 도레미')).toEqual({
+      isHq: true,
+      name: { contains: '도레미', mode: 'insensitive' },
+    });
+    expect(storeNameWhere('[본사]')).toEqual({ isHq: true });
+  });
+  it('「본사」만 치면 이름에 본사가 든 점포와 본사 점포', () => {
+    expect(storeNameWhere('본사')).toEqual({
+      OR: [{ name: { contains: '본사', mode: 'insensitive' } }, { isHq: true }],
+    });
+  });
+  it('그 밖에는 이름 일부(대소문자 무시)', () => {
+    expect(storeNameWhere('서초')).toEqual({
+      name: { contains: '서초', mode: 'insensitive' },
+    });
   });
 });
