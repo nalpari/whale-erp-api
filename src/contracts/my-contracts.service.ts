@@ -46,9 +46,9 @@ import type {
 import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
 import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
 
-/** 날인을 막을 때 직원에게 보이는 문장 — 근무지 점포가 운영 중이 아니다. 화면 안내라 사업주 정보를 「관리자(근무지) 정보」로 부른다(2026-11-19 사용자 결정 — 계약서 본문 · PDF 는 「사업주」) */
+/** 날인을 막을 때 직원에게 보이는 문장 — 근무지 점포가 운영 중이 아니다 */
 export const STORE_NOT_OPERATING_FOR_STAFF =
-  '근무지가 운영 중이 아니거나 관리자(근무지) 정보(대표자 · 사업자등록번호)가 없어 지금은 서명할 수 없습니다. 근무지 관리자에게 문의해 주세요.';
+  '근무지가 운영 중이 아니거나 사업주 정보(대표자 · 사업자등록번호)가 없어 지금은 서명할 수 없습니다. 근무지 관리자에게 문의해 주세요.';
 
 /** 필기 서명 이미지 상한 — 화면 캔버스 PNG 한 장 */
 export const SIGNATURE_MAX_BYTES = 1024 * 1024;
