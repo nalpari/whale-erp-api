@@ -1844,6 +1844,60 @@ describe('근무스케줄 (e2e, DB)', () => {
       ).toBe(1);
     });
 
+    it('미운영 점포도 등록 · 일괄 · 지난 주 복사(미리보기 포함)는 400 WORK_SCHEDULE_STORE_NOT_OPERATING(WHALEERP-723)', async () => {
+      await prisma.store.update({
+        where: { storeId: closedStoreId },
+        data: { storeStatusCode: 'NOT_OPERATING' },
+      });
+      try {
+        const notOperating = {
+          code: 'WORK_SCHEDULE_STORE_NOT_OPERATING',
+          message: '미운영 점포는 근무스케줄을 등록할 수 없습니다.',
+        };
+        const one = await post(closedStaffId, day(4), '09:00', '13:00');
+        expect(one.status).toBe(400);
+        expect(one.body).toMatchObject(notOperating);
+        const bulk = await asAdmin('post', '/work-schedules/bulk', {
+          workDate: day(4),
+          rows: [
+            {
+              staffMemberId: closedStaffId,
+              startTime: '09:00',
+              endTime: '13:00',
+              breakMinutes: 0,
+            },
+          ],
+        });
+        expect(bulk.status).toBe(201);
+        expect(bulk.body).toMatchObject({
+          created: [],
+          failed: [{ index: 0, statusCode: 400, ...notOperating }],
+        });
+        const preview = await asAdmin(
+          'get',
+          `/work-schedules/copy-last-week?storeId=${closedStoreId}&weekStart=${mondayAhead}`,
+        );
+        expect(preview.status).toBe(400);
+        expect(preview.body).toMatchObject(notOperating);
+        const copy = await asAdmin('post', '/work-schedules/copy-last-week', {
+          storeId: closedStoreId,
+          weekStart: mondayAhead,
+        });
+        expect(copy.status).toBe(400);
+        expect(copy.body).toMatchObject(notOperating);
+        expect(
+          await prisma.workSchedule.count({
+            where: { storeId: closedStoreId },
+          }),
+        ).toBe(1);
+      } finally {
+        await prisma.store.update({
+          where: { storeId: closedStoreId },
+          data: { storeStatusCode: 'CLOSED' },
+        });
+      }
+    });
+
     it('이미 있는 근무스케줄의 조회 · 변경 이력 · 수정 · 삭제는 된다', async () => {
       const list = await asAdmin(
         'get',

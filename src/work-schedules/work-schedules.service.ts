@@ -258,27 +258,41 @@ const copyHiddenStaff = () =>
   });
 
 /**
- * 폐점 점포에는 근무스케줄을 새로 만들지 않는다 — 등록 · 일괄 · 지난 주 복사(운영 정책 ATT-33, 2026-10-22 재영, WHALEERP-614).
- * 점포 선택에는 그대로 보이고, 이미 있는 근무스케줄의 조회 · 이력 · 수정 · 삭제는 막지 않는다
+ * 폐점 · 미운영 점포에는 근무스케줄을 새로 만들지 않는다 — 등록 · 일괄 · 지난 주 복사(폐점: 운영 정책 ATT-33, 2026-10-22 재영,
+ * WHALEERP-614 / 미운영: WHALEERP-723, 2026-11-19 사용자 결정). 점포 선택에는 그대로 보이고(지난 이력 조회), 이미 있는 근무스케줄의
+ * 조회 · 이력 · 수정 · 삭제는 막지 않는다. 미운영은 점포 상태(NOT_OPERATING)로 본다
  */
-const storeClosed = () =>
-  new BadRequestException({
-    statusCode: HttpStatus.BAD_REQUEST,
-    error: 'Bad Request',
+const STORE_BLOCKED = {
+  CLOSED: {
     code: 'WORK_SCHEDULE_STORE_CLOSED',
     message: '폐점 점포는 근무스케줄을 등록할 수 없습니다.',
-  });
+  },
+  NOT_OPERATING: {
+    code: 'WORK_SCHEDULE_STORE_NOT_OPERATING',
+    message: '미운영 점포는 근무스케줄을 등록할 수 없습니다.',
+  },
+} as const;
 
-/** 폐점 점포인가. 점포는 1팀 표라 직원 레코드에서 관계로 닿지 않아 따로 읽는다(저장 알림과 같다) */
-async function isClosedStore(
+const STORE_BLOCKED_CODES = new Set<string>(
+  Object.values(STORE_BLOCKED).map((b) => b.code),
+);
+
+/** 근무스케줄을 새로 만들 수 없는 점포면 400. 점포는 1팀 표라 직원 레코드에서 관계로 닿지 않아 따로 읽는다(저장 알림과 같다) */
+async function assertStoreOpen(
   db: Tx | PrismaService,
   storeId: number,
-): Promise<boolean> {
+): Promise<void> {
   const store = await db.store.findUnique({
     where: { storeId },
     select: { storeStatusCode: true },
   });
-  return store?.storeStatusCode === 'CLOSED';
+  const status = store?.storeStatusCode;
+  if (status && Object.hasOwn(STORE_BLOCKED, status))
+    throw new BadRequestException({
+      statusCode: HttpStatus.BAD_REQUEST,
+      error: 'Bad Request',
+      ...STORE_BLOCKED[status as keyof typeof STORE_BLOCKED],
+    });
 }
 
 const overlap = () =>
@@ -895,7 +909,7 @@ export class WorkSchedulesService {
     if (scope.storeHides(storeId) === null)
       throw new NotFoundException(STORE_NOT_FOUND);
     // 미리보기도 막는다 — 할 수 없는 복사를 보이지 않는다
-    if (await isClosedStore(this.prisma, storeId)) throw storeClosed();
+    await assertStoreOpen(this.prisma, storeId);
     const sourceMonday = addDays(monday, -7);
     // 복사 트랜잭션이 커밋된 뒤에 보낼 메일 — 직원마다 한 통
     const mails: (ScheduleMail | null)[] = [];
@@ -1020,6 +1034,8 @@ export class WorkSchedulesService {
           if (!(error instanceof HttpException)) throw error;
           // 넣는 사이 본사 제공 동의가 철회됐다 — 그 직원만 빼지 않고 복사 전체를 막는다(Q9)
           if (codeOf(error) === 'WORK_SCHEDULE_HIDDEN') throw copyHiddenStaff();
+          // 앞에서 본 뒤 점포가 폐점 · 미운영이 됐다 — 날마다 빼지 않고 복사 전체를 같은 400 으로 막는다(WHALEERP-614 · 723)
+          if (STORE_BLOCKED_CODES.has(codeOf(error) ?? '')) throw error;
           // 날짜 단위로 모은다 — 같은 날 쪼갠 근무가 둘 다 빠져도 한 번이다. 그날 일부만 복사되면 copied 와 함께 나온다
           const workDate = isoDate(date);
           if (!line.head.excluded.some((e) => e.workDate === workDate))
@@ -1109,7 +1125,7 @@ export class WorkSchedulesService {
       input.date,
       true,
     );
-    if (await isClosedStore(tx, staff.storeId)) throw storeClosed();
+    await assertStoreOpen(tx, staff.storeId);
     await this.checkOverlap(tx, input.staffMemberId, input.span);
     const row = await tx.workSchedule.create({
       data: {

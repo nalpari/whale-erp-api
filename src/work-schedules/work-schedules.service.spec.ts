@@ -223,6 +223,19 @@ describe('WorkSchedulesService', () => {
       expect(db.workSchedule.create).not.toHaveBeenCalled();
     });
 
+    it('미운영 점포 직원이면 400 WORK_SCHEDULE_STORE_NOT_OPERATING — 저장하지 않는다(WHALEERP-723)', async () => {
+      db.store.findUnique.mockResolvedValueOnce({
+        storeStatusCode: 'NOT_OPERATING',
+      });
+      await expect(service.create(ADMIN, body)).rejects.toMatchObject({
+        response: {
+          code: 'WORK_SCHEDULE_STORE_NOT_OPERATING',
+          message: '미운영 점포는 근무스케줄을 등록할 수 없습니다.',
+        },
+      });
+      expect(db.workSchedule.create).not.toHaveBeenCalled();
+    });
+
     it('업무 범위 밖 직원은 404', async () => {
       db.staffMember.findUnique.mockResolvedValue(staffRow({ storeId: 99 }));
       await expect(service.create(ADMIN, body)).rejects.toBeInstanceOf(
@@ -947,6 +960,20 @@ describe('WorkSchedulesService', () => {
       expect(db.workSchedule.count).not.toHaveBeenCalled();
     });
 
+    it('미운영 점포도 미리보기 · 복사 모두 400 WORK_SCHEDULE_STORE_NOT_OPERATING(WHALEERP-723)', async () => {
+      for (const apply of [false, true]) {
+        db.store.findUnique.mockResolvedValueOnce({
+          storeStatusCode: 'NOT_OPERATING',
+        });
+        await expect(
+          service.copyLastWeek(ADMIN, 3, '2026-10-19', apply),
+        ).rejects.toMatchObject({
+          response: { code: 'WORK_SCHEDULE_STORE_NOT_OPERATING' },
+        });
+      }
+      expect(db.workSchedule.count).not.toHaveBeenCalled();
+    });
+
     it('넣을 주에 한 건이라도 있으면 409 WORK_SCHEDULE_WEEK_NOT_EMPTY', async () => {
       db.workSchedule.count.mockResolvedValue(1);
       await expect(
@@ -1050,6 +1077,28 @@ describe('WorkSchedulesService', () => {
       ).rejects.toMatchObject({
         response: { code: 'WORK_SCHEDULE_COPY_HIDDEN_STAFF' },
       });
+    });
+
+    it('넣는 사이 점포가 미운영이 되면 날마다 빼지 않고 복사 전체를 400 으로 막는다(WHALEERP-723)', async () => {
+      db.workSchedule.findMany.mockResolvedValue([
+        scheduleRow({
+          startAt: new Date('2026-10-12T00:00:00Z'),
+          endAt: new Date('2026-10-12T04:00:00Z'),
+        }),
+      ]);
+      db.staffMember.findMany.mockResolvedValueOnce([
+        { staffMemberId: 11, name: '가', retiredDate: null, account: null },
+      ]);
+      // 앞 검사(복사 시작)는 운영, 넣을 때(insert)는 미운영
+      db.store.findUnique
+        .mockResolvedValueOnce({ storeStatusCode: 'OPERATING' })
+        .mockResolvedValue({ storeStatusCode: 'NOT_OPERATING' });
+      await expect(
+        service.copyLastWeek(ADMIN, 3, '2026-10-19', true),
+      ).rejects.toMatchObject({
+        response: { code: 'WORK_SCHEDULE_STORE_NOT_OPERATING' },
+      });
+      expect(db.workSchedule.create).not.toHaveBeenCalled();
     });
 
     it('제외는 날짜 단위로 모은다 — 같은 날 쪼갠 근무가 둘 다 빠져도 한 번', async () => {
