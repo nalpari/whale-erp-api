@@ -114,6 +114,8 @@ export class ProxyStaffItemDto {
   name: string;
   storeId: number;
   storeName: string;
+  /** 본사 점포(stores.is_hq) — 관리자 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false */
+  storeIsHq: boolean;
   /** 대신 등록(위치정보 동의 없음 · 일시 중지). false 면 위치정보에 동의한 직원 — 기록 없는 날만 출근 · 퇴근을 함께 넣어 보정한다 */
   isProxy: boolean;
   /** 그 날짜가 확정 · 발송된 급여명세서 기간 안이다 — 등록하기 전에 경고한다(218) */

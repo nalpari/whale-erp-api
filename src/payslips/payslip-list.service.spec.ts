@@ -141,8 +141,9 @@ describe('PayslipListService', () => {
       },
       store: {
         findMany: jest.fn().mockResolvedValue([
-          { storeId: 5, name: '모리커피 서초점' },
-          { storeId: 6, name: '모리커피 청담점' },
+          { storeId: 5, name: '모리커피 서초점', isHq: false },
+          // 본사 점포 — 화면은 「[본사] 상호」로 보인다
+          { storeId: 6, name: '모리커피 청담점', isHq: true },
         ]),
       },
       adminAccount: {
@@ -387,6 +388,7 @@ describe('PayslipListService', () => {
           staffName: '서지안',
           storeId: 5,
           storeName: '모리커피 서초점',
+          storeIsHq: false,
           periodStartDate: '2026-09-01',
           periodEndDate: '2026-09-30',
           employmentType: 'PART_TIME',
@@ -650,6 +652,7 @@ describe('PayslipListService', () => {
           staffName: null,
           storeId: 6,
           storeName: '모리커피 청담점',
+          storeIsHq: true,
           periodStartDate: '2026-09-01',
           periodEndDate: '2026-09-30',
           employmentType: null,
@@ -856,6 +859,7 @@ describe('PayslipListService', () => {
         staffName: '서지안',
         storeId: 5,
         storeName: '모리커피 서초점',
+        storeIsHq: false,
         contractId: 7,
         periodStartDate: '2026-09-01',
         periodEndDate: '2026-09-30',

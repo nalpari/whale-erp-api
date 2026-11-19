@@ -24,6 +24,8 @@ export class PayslipListItemDto {
   staffName: string | null;
   storeId: number;
   storeName: string;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다 */
+  storeIsHq: boolean;
   /** 급여 기간 시작일(YYYY-MM-DD) */
   periodStartDate: string;
   /** 급여 기간 종료일(YYYY-MM-DD) */
@@ -168,6 +170,8 @@ export class PayslipDetailResponseDto {
   staffName: string;
   storeId: number;
   storeName: string;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다 */
+  storeIsHq: boolean;
   contractId: number;
   /** YYYY-MM-DD */
   periodStartDate: string;

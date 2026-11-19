@@ -26,6 +26,8 @@ export class TodoListItemDto {
   storeId: number;
   /** 점포가 지워졌어도 이름은 보인다 */
   storeName: string | null;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false */
+  storeIsHq: boolean;
   title: string;
   @ApiProperty({ enum: TodoAssigneeType, enumName: 'TodoAssigneeType' })
   assigneeType: TodoAssigneeType;
@@ -123,6 +125,8 @@ export class TodoDetailDto {
   storeId: number;
   @ApiProperty({ nullable: true, type: String })
   storeName: string | null;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false */
+  storeIsHq: boolean;
   title: string;
   @ApiProperty({ nullable: true, type: String })
   body: string | null;
@@ -160,6 +164,8 @@ export class TodoItemDto {
   storeId: number;
   @ApiProperty({ nullable: true, type: String })
   storeName: string | null;
+  /** 본사 점포(stores.is_hq) — 화면은 「[본사] 상호」로 보인다. 점포 행이 없으면 false */
+  storeIsHq: boolean;
   title: string;
   @ApiProperty({ nullable: true, type: String })
   body: string | null;
