@@ -4,12 +4,12 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
 tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T06:14:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T07:22:17Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
     title: WorkSchedulesService — 선택지 · 기본값 · 등록 · 수정 · 삭제
-    last_modified: 2026-11-17T06:14:46Z
+    last_modified: 2026-11-19T07:22:17Z
   - id: rules
     resource: ../../src/work-schedules/work-schedule-rules.ts
     title: 근무일 + 시각 → 순간, 근무일 계산, 계약 휴게 → 분
@@ -21,7 +21,7 @@ sources:
   - id: controller
     resource: ../../src/work-schedules/work-schedules.controller.ts
     title: /work-schedules
-    last_modified: 2026-11-17T01:27:06Z
+    last_modified: 2026-11-19T07:22:17Z
   - id: notice
     resource: ../../src/work-schedules/work-schedule-notice.ts
     title: 저장 알림 — 직원 알림 · 앱 푸시 발송 대기(#201)
@@ -76,6 +76,10 @@ every route — they all go through `scopeOf` — before the scope is read. 직�
 - 가입 완료(`join_status = JOINED`). 종이 계약으로 체결 완료여도 가입 전이면 400 `WORK_SCHEDULE_NOT_JOINED`(TO-DO 와 같다, 2026-10-21 재영).
 - 근무일을 덮는 체결 완료 계약(`start_date <= 근무일`, `end_date` 가 비었거나 `>=`). 「체결 완료」는 한 번이라도 체결된 계약이다 — 지금 `SIGNED` 이거나, `ENDED` 이면서 상태 이력에 `SIGNED` 가 있는 것(대체 · 만료로 끝난 계약, 운영 정책 PAY-11 v181 · 2026-10-21 재영 A안). 날인 전에 끝난 계약은 넣지 않는다. 종료일이 비면 체결 완료는 기간의 정함이 없고, 종료된 계약은 종료 처리한 날(`ENDED` 로 바뀐 이력 시각의 한국 날짜)이 끝이다(PAY-11 v182 — where 로는 「그 시각 ≥ 근무일 한국 0시」). 없으면 400 `WORK_SCHEDULE_NO_CONTRACT`. 그 계약이 `source_contract_id` 로 한 번 남는다(STAFF-14).
 - 퇴직일이 있으면 근무일 ≤ 퇴직일. 넘으면 400 `WORK_SCHEDULE_AFTER_RETIREMENT`(CTR-24). 이미 퇴직한 직원도 재직 중이던 지난 날짜는 받는다 — 지난 날짜도 경고 없이 고친다(결정 9).
+- 근무지 점포가 폐점(`CLOSED`)이면 400 `WORK_SCHEDULE_STORE_CLOSED`(WHALEERP-614), 미운영(`NOT_OPERATING`)이면 400
+  `WORK_SCHEDULE_STORE_NOT_OPERATING` 「미운영 점포는 근무스케줄을 등록할 수 없습니다.」(WHALEERP-723, 2026-11-19 사용자 결정) — 등록 · 일괄 ·
+  지난 주 복사(미리보기 포함)만 막고, 이미 있는 근무스케줄의 조회 · 이력 · 수정 · 삭제는 된다. 점포 선택지에는 그대로 보인다(지난 이력 조회).
+  판정은 점포 상태 하나다(`assertStoreOpen`) — 근로계약의 운영 기준(사업주 정보 있음)과 달리 사업주 정보는 보지 않는다.
 - 본사 계정(BM · BA)이 가맹 점포를 보면 본사 제공 동의한 직원만. 선택지에서 빠지고 등록은 400, 그 직원의 근무스케줄 수정 · 삭제는 404(ATT-30). 폐점한 가맹 점포는 동의한 직원도 없는 것으로 본다(ATT-30 v227 — 선택지 · 변경 이력은 `hiddenStoreStaffWhere`).
 - 업무 범위 밖 점포 · 직원 · 근무스케줄은 404. 직원 앱 토큰은 메뉴 권한 가드가 403. 매핑으로 점포 하나만 관리하는 가맹관리자로 e2e 에 고정했다(#206) — 본사 역할(BM · BA)로 보면 범위 밖 점포를 「유형 모름」으로 한 번 더 가려 404 가 나므로, 범위 필터가 빠져도 시험이 통과한다. 범위 필터를 시험하려면 가림이 없는 가맹 역할을 쓴다.
 
