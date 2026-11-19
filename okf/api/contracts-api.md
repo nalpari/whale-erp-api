@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T05:39:42Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-19T06:10:51Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -45,7 +45,7 @@ sources:
   - id: contract-template
     resource: ../../src/contracts/contract-template.ts
     title: 근로계약서 조항 템플릿 (WHALEERP-131)
-    last_modified: 2026-10-29T07:30:00Z
+    last_modified: 2026-11-19T06:10:51Z
   - id: contract-files
     resource: ../../src/contracts/contract-files.service.ts
     title: 보낸 원본 · 처리 완료본 만들기 · 채우기 배치 (WHALEERP-131)
@@ -1220,6 +1220,8 @@ apply to reading.
   `header`, `tableRows[{ cells, off }]`) or `VALUES` (`values[{ label, value }]`, empty values left out). The first
   `TEXT` follows the title on the same line. The wording is the 직원 앱's 원안 moved here as is (휴일 · 연차 · 가산
   조항 wait for the 노무사 review, PAY-5); a change re-renders signed contracts in the app but not their PDFs. One
+  제9조 names the 사업주 as the one who hands over the contract — 「사업주는 계약을 체결하면 곧바로 계약서를 근로자에게
+  교부한다」 (2026-11-19, the same term as the PDF 사업주 칸; it was 「사용자는 …」).
   addition: an old contract with no 주휴일 but 주 15시간 이상 says 「주휴일이 정해지지 않았다.」 instead of the 15시간 미만
   sentence, which would contradict its own 제3조. 제3조's hours use `weeklyMinutesOf` / `dayMinutesOf`
   (`contract-terms.ts`), the same calculation as the save check.
@@ -1254,9 +1256,7 @@ Pretendard fonts) from the clause template above plus the 사업주 · 근로자
 only — a 종이 계약 has no body. The employer block is headed 「사업주」 with 사업체명 · 대표자 · 사업자등록번호 · 주소 ·
 전화번호, as in the 고용노동부 표준근로계약서 (WHALEERP-752, 2026-11-19 — 「사용자」 read like an app user). 전화번호 is
 the 근무지 점포's 연락처; it is optional, so when there is none the row is left out instead of 「-」 (WHALEERP-753 — not
-filled from the 대표자 or BP 연락처). 제9조 reads 「사업주는 계약을 체결하면 곧바로 계약서를 근로자에게 교부한다」 for the same reason (2026-11-19; the
-  template is shared with the 직원 앱, so signed contracts in the app show the new wording too — the 처리 완료본 PDF keeps the
-  text it was made with).
+filled from the 대표자 or BP 연락처).
 
 - **보낸 원본 (`SENT_ORIGINAL`)** — one per 발송: `contract_documents.sent_at` = the contract's `sent_at`. Made after
   a send that went out (or that the 직원 answered first) — `ContractsService.settledResult` (저장 · 고쳐 보냄 · 근로자
