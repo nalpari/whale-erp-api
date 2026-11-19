@@ -1079,6 +1079,28 @@ describe('WorkSchedulesService', () => {
       });
     });
 
+    it('넣는 사이 점포가 미운영이 되면 날마다 빼지 않고 복사 전체를 400 으로 막는다(WHALEERP-723)', async () => {
+      db.workSchedule.findMany.mockResolvedValue([
+        scheduleRow({
+          startAt: new Date('2026-10-12T00:00:00Z'),
+          endAt: new Date('2026-10-12T04:00:00Z'),
+        }),
+      ]);
+      db.staffMember.findMany.mockResolvedValueOnce([
+        { staffMemberId: 11, name: '가', retiredDate: null, account: null },
+      ]);
+      // 앞 검사(복사 시작)는 운영, 넣을 때(insert)는 미운영
+      db.store.findUnique
+        .mockResolvedValueOnce({ storeStatusCode: 'OPERATING' })
+        .mockResolvedValue({ storeStatusCode: 'NOT_OPERATING' });
+      await expect(
+        service.copyLastWeek(ADMIN, 3, '2026-10-19', true),
+      ).rejects.toMatchObject({
+        response: { code: 'WORK_SCHEDULE_STORE_NOT_OPERATING' },
+      });
+      expect(db.workSchedule.create).not.toHaveBeenCalled();
+    });
+
     it('제외는 날짜 단위로 모은다 — 같은 날 쪼갠 근무가 둘 다 빠져도 한 번', async () => {
       db.workSchedule.findMany.mockResolvedValue([
         scheduleRow({

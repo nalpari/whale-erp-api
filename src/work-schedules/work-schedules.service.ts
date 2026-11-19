@@ -273,6 +273,10 @@ const STORE_BLOCKED = {
   },
 } as const;
 
+const STORE_BLOCKED_CODES = new Set<string>(
+  Object.values(STORE_BLOCKED).map((b) => b.code),
+);
+
 /** 근무스케줄을 새로 만들 수 없는 점포면 400. 점포는 1팀 표라 직원 레코드에서 관계로 닿지 않아 따로 읽는다(저장 알림과 같다) */
 async function assertStoreOpen(
   db: Tx | PrismaService,
@@ -283,11 +287,11 @@ async function assertStoreOpen(
     select: { storeStatusCode: true },
   });
   const status = store?.storeStatusCode;
-  if (status === 'CLOSED' || status === 'NOT_OPERATING')
+  if (status && Object.hasOwn(STORE_BLOCKED, status))
     throw new BadRequestException({
       statusCode: HttpStatus.BAD_REQUEST,
       error: 'Bad Request',
-      ...STORE_BLOCKED[status],
+      ...STORE_BLOCKED[status as keyof typeof STORE_BLOCKED],
     });
 }
 
@@ -1030,6 +1034,8 @@ export class WorkSchedulesService {
           if (!(error instanceof HttpException)) throw error;
           // 넣는 사이 본사 제공 동의가 철회됐다 — 그 직원만 빼지 않고 복사 전체를 막는다(Q9)
           if (codeOf(error) === 'WORK_SCHEDULE_HIDDEN') throw copyHiddenStaff();
+          // 앞에서 본 뒤 점포가 폐점 · 미운영이 됐다 — 날마다 빼지 않고 복사 전체를 같은 400 으로 막는다(WHALEERP-614 · 723)
+          if (STORE_BLOCKED_CODES.has(codeOf(error) ?? '')) throw error;
           // 날짜 단위로 모은다 — 같은 날 쪼갠 근무가 둘 다 빠져도 한 번이다. 그날 일부만 복사되면 copied 와 함께 나온다
           const workDate = isoDate(date);
           if (!line.head.excluded.some((e) => e.workDate === workDate))
