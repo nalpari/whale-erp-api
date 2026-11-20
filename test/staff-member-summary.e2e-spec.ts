@@ -769,7 +769,11 @@ describe('직원 상세 요약 (e2e, DB)', () => {
       const res = await get(`/staff-members/${draftId}/summary/contracts`);
       expect(res.status).toBe(200);
       const body = res.body as StaffMemberContractSummaryResponseDto;
-      expect(body.contract).not.toBeNull();
+      // 가장 최근 계약(더 새 임시저장)이 그대로 온다
+      expect(body.contract).toMatchObject({
+        contractId: expect.any(Number) as unknown,
+        status: 'DRAFT',
+      });
       expect(body).toMatchObject({
         canViewPayrollAccount: true,
         payrollAccount: null,
