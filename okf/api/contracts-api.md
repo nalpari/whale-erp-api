@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T08:23:04Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-20T02:01:07Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -17,7 +17,7 @@ sources:
   - id: contracts-service
     resource: ../../src/contracts/contracts.service.ts
     title: ContractsService
-    last_modified: 2026-11-19T04:54:46Z
+    last_modified: 2026-11-20T02:01:07Z
   - id: minimum-wage
     resource: ../../src/contracts/minimum-wage.ts
     title: 최저임금 공통코드 · 수습 중 시급 검사
@@ -733,7 +733,7 @@ It also carries the 발송 · 처리 정보 the 상세 shows (WHALEERP-328, 2026
     TAX-08); the row is neither read nor decrypted. It is judged on the 직원 record's store, not the contract's — the 신고
     정보 belongs to the record (the two can differ when a 가입한 직원's 임시저장 moves to another 근무지).
   - `UNAVAILABLE` — no `PERSONAL_DATA_ENCRYPTION_KEY`, or a column will not decrypt / the decrypted 주민번호 is malformed.
-    Unlike the 직원 상세 요약 (503/500 for the whole area), **the detail still returns 200** — only this field fails.
+    Like the 직원 상세 요약 (`payrollAccountUnavailable`, WHALEERP-758), **the detail still returns 200** — only this field fails.
     The log names the record and column, never the value.
 
   Every value field is null unless `status` is `OK`. The 관리자웹 shows `NONE` and `HIDDEN` alike as 「-」.

@@ -711,6 +711,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
         bankName: 'KB국민은행',
         accountNumber: '22223333444455',
       },
+      payrollAccountUnavailable: false,
     });
   });
 
@@ -732,6 +733,7 @@ describe('직원 상세 요약 (e2e, DB)', () => {
       contract: null,
       canViewPayrollAccount: false,
       payrollAccount: null,
+      payrollAccountUnavailable: false,
     });
     expect(JSON.stringify(res.body)).not.toContain('22223333444455');
   });
@@ -742,6 +744,47 @@ describe('직원 상세 요약 (e2e, DB)', () => {
     const body = res.body as StaffMemberContractSummaryResponseDto;
     expect(body.canViewPayrollAccount).toBe(true);
     expect(body.payrollAccount).toBeNull();
+  });
+
+  it('근로계약 요약의 급여 계좌 — 신고 정보를 풀 수 없으면 계좌만 볼 수 없음, 계약 칸은 그대로 온다(WHALEERP-758)', async () => {
+    // 다른 직원(지안)의 암호문 — AAD 가 달라 풀리지 않는다
+    await prisma.staffTaxProfile.create({
+      data: {
+        staffMemberId: draftId,
+        rrnEncrypted: encryptPersonalData(
+          key,
+          '9807121234567',
+          staffTaxProfileAad('rrn_encrypted', jianId),
+        ),
+        bankCode: 'B004',
+        payrollAccountNumberEncrypted: encryptPersonalData(
+          key,
+          '31313131313131',
+          staffTaxProfileAad('payroll_account_number_encrypted', jianId),
+        ),
+        purpose: '취득 신고 · 원천징수 · 급여 이체',
+      },
+    });
+    try {
+      const res = await get(`/staff-members/${draftId}/summary/contracts`);
+      expect(res.status).toBe(200);
+      const body = res.body as StaffMemberContractSummaryResponseDto;
+      // 가장 최근 계약(더 새 임시저장)이 그대로 온다
+      expect(body.contract).toMatchObject({
+        contractId: expect.any(Number) as unknown,
+        status: 'DRAFT',
+      });
+      expect(body).toMatchObject({
+        canViewPayrollAccount: true,
+        payrollAccount: null,
+        payrollAccountUnavailable: true,
+      });
+      expect(JSON.stringify(body)).not.toContain('31313131313131');
+    } finally {
+      await prisma.staffTaxProfile.delete({
+        where: { staffMemberId: draftId },
+      });
+    }
   });
 
   it('신고 정보가 있어도 본사 역할에게 가려진 직원이면 요약 경로가 막힌다(404) — 계좌가 새지 않는다', async () => {

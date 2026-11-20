@@ -70,10 +70,16 @@ export class StaffMemberContractSummaryResponseDto {
   /**
    * 신고 정보의 급여 계좌 — 은행 이름 · 계좌번호 전체(하이픈 없음, 가리지 않음). 신고 정보가 없으면 null. 계약이 없어도
    * 신고 정보가 있으면 오고, 급여 지급 방식(계좌 · 현금)과 상관없다. canViewPayrollAccount 가 false 이면 신고 정보를
-   * 읽지 않고 항상 null
+   * 읽지 않고 항상 null. 신고 정보를 풀 수 없으면(키 없음 · 복호화 실패) null 이고 payrollAccountUnavailable 이 true
    */
   @ApiProperty({ type: StaffMemberPayrollAccountDto, nullable: true })
   payrollAccount: StaffMemberPayrollAccountDto | null;
+  /**
+   * 신고 정보는 있지만 지금 풀 수 없다(암호화 키 없음 · 복호화 실패). 이때 payrollAccount 는 null 이고 계약 칸은 그대로 온다 —
+   * 화면은 「급여 계좌」 줄만 「지금 볼 수 없음」으로 보인다(WHALEERP-758). canViewPayrollAccount 가 false 이거나 신고 정보가
+   * 없으면 false
+   */
+  payrollAccountUnavailable: boolean;
 }
 
 export class StaffMemberWeekScheduleItemDto {

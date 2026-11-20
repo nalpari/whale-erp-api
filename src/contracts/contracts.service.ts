@@ -1749,8 +1749,8 @@ export class ContractsService {
 
   /**
    * 근로계약 상세의 신고 정보(WHALEERP-155) — 주민등록번호는 가려서, 급여 계좌는 전체를. 기준은 직원 상세 급여 계좌와 같다
-   * (canManageStaffAccount, 재영 2026-10-29) — 본사 역할이 가맹 점포 직원을 보면 읽지도 풀지도 않고 HIDDEN. 직원 상세와 달리
-   * 키가 없거나 풀 수 없어도 던지지 않고 UNAVAILABLE 이다 — 계약 상세는 그대로 열려야 한다. 원문은 응답 · 로그 · 오류 어디에도
+   * (canManageStaffAccount, 재영 2026-10-29) — 본사 역할이 가맹 점포 직원을 보면 읽지도 풀지도 않고 HIDDEN. 직원 상세 요약과 같이
+   * 키가 없거나 풀 수 없어도 던지지 않고 UNAVAILABLE 이다 — 계약 상세는 그대로 열려야 한다(WHALEERP-758). 원문은 응답 · 로그 · 오류 어디에도
    * 싣지 않는다 — 로그에는 어느 레코드의 어느 칸인지만 남긴다(가림 함수의 오류도 입력을 싣지 않는다).
    */
   private async taxProfileOf(
