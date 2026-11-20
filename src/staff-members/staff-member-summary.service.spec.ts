@@ -4,7 +4,6 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { randomBytes } from 'node:crypto';
@@ -200,6 +199,7 @@ describe('StaffMemberSummaryService', () => {
         contract: null,
         canViewPayrollAccount: true,
         payrollAccount: null,
+        payrollAccountUnavailable: false,
       });
     });
 
@@ -226,6 +226,7 @@ describe('StaffMemberSummaryService', () => {
             bankName: 'KB국민은행',
             accountNumber: '12345678901234',
           },
+          payrollAccountUnavailable: false,
         });
         expect(firstArg(prisma.staffTaxProfile.findUnique)).toMatchObject({
           where: { staffMemberId: 30 },
@@ -283,25 +284,31 @@ describe('StaffMemberSummaryService', () => {
         });
       });
 
-      it('풀 수 없으면(다른 직원 암호문) 500 — 계좌번호는 오류 · 로그에 남지 않는다', async () => {
+      it('풀 수 없으면(다른 직원 암호문) 계좌만 볼 수 없음 — 계약 칸은 그대로, 계좌번호는 로그에 남지 않는다(WHALEERP-758)', async () => {
         const errors = jest
           .spyOn(Logger.prototype, 'error')
           .mockImplementation();
+        prisma.contract.findFirst.mockResolvedValue(contract());
         prisma.staffTaxProfile.findUnique.mockResolvedValue(
           profile({
             payrollAccountNumberEncrypted: sealed('99998888777766', 31),
           }),
         );
-        const err = await service
-          .contract(9, 30, undefined, NOW)
-          .catch((e: unknown) => e);
-        expect(err).toBeInstanceOf(InternalServerErrorException);
-        expect(
-          JSON.stringify([(err as Error).message, errors.mock.calls]),
-        ).not.toMatch(/99998888777766|12345678901234/);
+        const res = await service.contract(9, 30, undefined, NOW);
+        expect(res.contract?.contractId).toBe(70);
+        expect(res).toMatchObject({
+          canViewPayrollAccount: true,
+          payrollAccount: null,
+          payrollAccountUnavailable: true,
+        });
+        expect(errors).toHaveBeenCalled();
+        expect(JSON.stringify(errors.mock.calls)).not.toMatch(
+          /99998888777766|12345678901234/,
+        );
+        expect(prisma.codeItem.findFirst).not.toHaveBeenCalled();
       });
 
-      it('키가 비어 있으면 503 — 신고 정보가 있을 때만', async () => {
+      it('키가 비어 있으면 계좌만 볼 수 없음 — 신고 정보가 있을 때만, 계약 칸은 그대로(WHALEERP-758)', async () => {
         const keyless = await Test.createTestingModule({
           providers: [
             StaffMemberSummaryService,
@@ -315,16 +322,21 @@ describe('StaffMemberSummaryService', () => {
           contract: null,
           canViewPayrollAccount: true,
           payrollAccount: null,
+          payrollAccountUnavailable: false,
         });
+        prisma.contract.findFirst.mockResolvedValue(contract());
         prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
         jest.spyOn(Logger.prototype, 'error').mockImplementation();
-        await expect(
-          svc.contract(9, 30, undefined, NOW),
-        ).rejects.toBeInstanceOf(ServiceUnavailableException);
+        const res = await svc.contract(9, 30, undefined, NOW);
+        expect(res.contract?.contractId).toBe(70);
+        expect(res).toMatchObject({
+          payrollAccount: null,
+          payrollAccountUnavailable: true,
+        });
       });
 
       describe('canViewPayrollAccount — 본사 역할은 가맹 직원의 급여 계좌를 못 본다(동의와 상관없이)', () => {
-        it('볼 수 없으면(본사 + 가맹 동의 직원) false · null — 신고 정보를 읽지도 풀지도 않는다(키가 없어도 503 이 아니다)', async () => {
+        it('볼 수 없으면(본사 + 가맹 동의 직원) false · null — 신고 정보를 읽지도 풀지도 않는다(키가 없어도 볼 수 없음이 아니다)', async () => {
           scope.canManageStaffAccount.mockResolvedValue(false);
           prisma.staffTaxProfile.findUnique.mockResolvedValue(profile());
           const keyless = await Test.createTestingModule({
@@ -345,6 +357,7 @@ describe('StaffMemberSummaryService', () => {
               contract: null,
               canViewPayrollAccount: false,
               payrollAccount: null,
+              payrollAccountUnavailable: false,
             });
           expect(scope.canManageStaffAccount).toHaveBeenCalledWith(9, 30, BP);
           expect(prisma.staffTaxProfile.findUnique).not.toHaveBeenCalled();
@@ -404,6 +417,7 @@ describe('StaffMemberSummaryService', () => {
       await expect(service.contract(9, 30, undefined, NOW)).resolves.toEqual({
         canViewPayrollAccount: true,
         payrollAccount: null,
+        payrollAccountUnavailable: false,
         contract: {
           contractId: 70,
           employmentType: 'FULL_TIME',

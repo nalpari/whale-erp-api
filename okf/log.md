@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-20
+* **Update**: [Staff members](/api/staff-members.md) — 직원 상세 요약 근로계약(`GET /staff-members/:id/summary/contracts`): 신고 정보를 풀 수 없으면(키 없음 · 복호화 실패) 503 · 500 대신 `payrollAccount: null` + `payrollAccountUnavailable: true` 로 계좌만 빼고 계약 칸은 그대로 준다(WHALEERP-758). 근로계약 상세 신고 정보의 `UNAVAILABLE` 과 같다. 마이그레이션 없음.
+
 ## 2026-11-19
 * **Update**: [Contracts API](/api/contracts-api.md) — 다른 점포 근무 시간 겹침(409 `WORK_TIME_OVERLAP`)이 겹친 요일 · 시간을 알린다(WHALEERP-744, 사용자 결정): 문장 「월 14:00~16:00 근무가 다른 점포 근로계약과 겹칩니다.」 + `overlaps[{ weekday, startTime, endTime }]`, 내 근무와 겹친 구간만 · 점포는 싣지 않는다. 운영 정책 CTR-26(겹쳤다는 것만)을 대체한다.
 * **Update**: [Work schedules](/api/work-schedules.md) — 미운영(`NOT_OPERATING`) 점포도 폐점처럼 근무스케줄 등록 · 일괄 · 지난 주 복사를 400 `WORK_SCHEDULE_STORE_NOT_OPERATING` 으로 막는다(WHALEERP-723, 사용자 결정). 이미 있는 근무스케줄은 그대로 다룬다. 폐점 규칙(WHALEERP-614)도 처음 적었다.

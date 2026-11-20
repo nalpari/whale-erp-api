@@ -5,7 +5,6 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma, StatusChangeActor } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
@@ -82,6 +81,14 @@ const toRecentPayslip = (p: PayslipRow): StaffMemberRecentPayslipDto => {
   };
 };
 
+/** 급여 계좌를 보이지 않을 때(볼 수 없는 관리자 · 신고 정보 없음) */
+const NO_ACCOUNT = { payrollAccount: null, payrollAccountUnavailable: false };
+/** 신고 정보는 있지만 풀 수 없을 때(키 없음 · 복호화 실패, WHALEERP-758) */
+const ACCOUNT_UNAVAILABLE = {
+  payrollAccount: null,
+  payrollAccountUnavailable: true,
+};
+
 /**
  * 직원 상세 요약(WHALEERP-183)의 영역들 — 근로계약 · 근무스케줄 · 급여명세서 · TO-DO · 발송 이력(WHALEERP-136). 영역마다 경로가 따로라 한 영역이
  * 실패해도 나머지는 그대로 온다. 경로는 직원 정보 관리 조회 권한(컨트롤러)을 거치고, 여기서 그 영역 메뉴의 조회 권한을
@@ -129,13 +136,13 @@ export class StaffMemberSummaryService {
       staffMemberId,
       bp,
     );
-    const payrollAccount = canViewPayrollAccount
+    const account = canViewPayrollAccount
       ? await this.payrollAccount(staffMemberId)
-      : null;
-    if (!c) return { contract: null, canViewPayrollAccount, payrollAccount };
+      : NO_ACCOUNT;
+    if (!c) return { contract: null, canViewPayrollAccount, ...account };
     return {
       canViewPayrollAccount,
-      payrollAccount,
+      ...account,
       contract: {
         contractId: c.contractId,
         employmentType: c.employmentType,
@@ -151,25 +158,24 @@ export class StaffMemberSummaryService {
 
   /**
    * 신고 정보의 급여 계좌 — 은행 이름 · 계좌번호 전체(하이픈 없음, 가리지 않음, 2026-10-29 노영주). 신고 정보가 없으면 null.
-   * 급여 지급 방식과 상관없이 준다. 키가 없으면 503, 풀 수 없으면 500 — 직원 앱 신고 정보 조회와 같다(요약 전체가 실패).
-   * 계좌번호는 로그 · 오류에 남기지 않는다.
+   * 급여 지급 방식과 상관없이 준다. 키가 없거나 풀 수 없으면 계좌만 null · payrollAccountUnavailable true 로 두고 계약 칸은
+   * 그대로 준다 — 근로계약 상세의 신고 정보(UNAVAILABLE)와 같다(WHALEERP-758). 계좌번호는 로그 · 오류에 남기지 않는다.
    */
-  private async payrollAccount(
-    staffMemberId: number,
-  ): Promise<StaffMemberPayrollAccountDto | null> {
+  private async payrollAccount(staffMemberId: number): Promise<{
+    payrollAccount: StaffMemberPayrollAccountDto | null;
+    payrollAccountUnavailable: boolean;
+  }> {
     const profile = await this.prisma.staffTaxProfile.findUnique({
       where: { staffMemberId },
       select: { bankCode: true, payrollAccountNumberEncrypted: true },
     });
-    if (!profile) return null;
+    if (!profile) return NO_ACCOUNT;
     const key = this.key;
     if (!key) {
       this.logger.error(
         `PERSONAL_DATA_ENCRYPTION_KEY 가 비어 신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId}`,
       );
-      throw new ServiceUnavailableException(
-        '신고 정보를 지금 볼 수 없습니다. 잠시 뒤 다시 시도해 주세요.',
-      );
+      return ACCOUNT_UNAVAILABLE;
     }
     let accountNumber: string;
     try {
@@ -183,13 +189,14 @@ export class StaffMemberSummaryService {
         `신고 정보를 풀 수 없습니다 — staffMemberId=${staffMemberId} 칸=payroll_account_number_encrypted: ${(err as Error).message}`,
         (err as Error).stack,
       );
-      throw new InternalServerErrorException('신고 정보를 읽을 수 없습니다.', {
-        cause: err,
-      });
+      return ACCOUNT_UNAVAILABLE;
     }
     return {
-      bankName: await bankNameOf(this.prisma, profile.bankCode),
-      accountNumber,
+      payrollAccount: {
+        bankName: await bankNameOf(this.prisma, profile.bankCode),
+        accountNumber,
+      },
+      payrollAccountUnavailable: false,
     };
   }
 
