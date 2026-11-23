@@ -4,7 +4,7 @@ title: Staff retirement
 description: How a 관리자 retires a 직원 레코드 — the date is stored now, the record turns RETIRED the day after by a midnight batch that also clears schedules, personal TO-DO assignments and unsigned contracts; contracts are never shortened.
 tags: [staff, retirement, batch, admin]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-23T06:00:00Z }
 sources:
   - id: retirement-service
     resource: ../../src/staff-members/retirement.service.ts
@@ -292,8 +292,8 @@ the change route is the way to move the date.
 
 A record that has not joined yet is accepted once it has received a 근로계약서 — 재직 starts with
 the contract, not with 가입 (WHALEERP-125 「재직과 매장 정보」, CTR-25, 2026-10-19 재영). One with
-임시저장 contracts only is not counted as 재직 and is 409 「임시저장 근로계약만 있는 직원은 퇴직 처리
-대신 임시저장을 지워 주세요.」.
+임시저장 contracts only is not counted as 재직 and is 409 「작성 중인 근로계약서가 있습니다. 해당 계약서를
+삭제한 후 퇴직 처리해 주세요.」 (wording 2026-11-23; front shows a button to that draft).
 
 Other refusals: RETIRED is 409; changing to the same
 date is 409 (it would only stack log rows); a date older than 3 months (calendar

@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-23
+* **Update**: [Staff retirement](/api/staff-retirement.md) — 작성 중 근로계약만 있는 직원의 퇴직 409 문구를 「작성 중인 근로계약서가 있습니다. 해당 계약서를 삭제한 후 퇴직 처리해 주세요.」로(통합테스트 사용자 지정). 관리자 웹이 이 경우 그 계약으로 가는 버튼을 둔다.
+
 ## 2026-11-20
 * **Update**: [Staff members](/api/staff-members.md) — 직원 상세 요약 근로계약(`GET /staff-members/:id/summary/contracts`): 신고 정보를 풀 수 없으면(키 없음 · 복호화 실패) 503 · 500 대신 `payrollAccount: null` + `payrollAccountUnavailable: true` 로 계좌만 빼고 계약 칸은 그대로 준다(WHALEERP-758). 근로계약 상세 신고 정보의 `UNAVAILABLE` 과 같다 — [Contracts API](/api/contracts-api.md) 의 대비 문장도 맞췄다. 마이그레이션 없음.
 
