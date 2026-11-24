@@ -149,7 +149,7 @@ check before it writes, and `hasSmsFallback()` says whether `BIZPPURIO_SMS_FROM`
 the only way a button link reaches anyone when Kakao rejects the 알림톡 — an unapproved body or button
 makes the 알림톡 itself fail (근로계약 가입 초대 ·
 소속 추가 확인 요청 require it until the 가입 초대 is also seen arriving as 알림톡 with the button (full address)
-opening in a real send — api #74 review; the 소속 추가 확인 요청 was, 2026-11-24 dev contract 90).
+opening in a real send — api #74 review; the 소속 추가 확인 요청 already has been, 2026-11-24 dev contract 90).
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s
