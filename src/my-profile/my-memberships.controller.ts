@@ -10,6 +10,7 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiConflictResponse,
   ApiForbiddenResponse,
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
@@ -62,12 +63,15 @@ export class MyMembershipsController {
     return this.memberships.list(user.id, query.includeRetired ?? false);
   }
 
-  /** 그 소속의 신고 정보 (TAX-8). 주민등록번호 · 계좌번호는 가린 값만 준다 */
+  /**
+   * 그 소속의 신고 정보 (TAX-8). 주민등록번호 · 계좌번호는 가린 값만 준다.
+   * 퇴직한 소속도 같은 가린 값으로 주고 `editable: false` 다 — 조회만 된다(WHALEERP-765, 퇴직 후 3년. 지나면 파기 배치가 지워 `taxProfile: null`).
+   */
   @Get(':staffMemberId/tax-profile')
   @ApiOkResponse({ type: MyTaxProfileResponseDto })
   @ApiNotFoundResponse({
     description:
-      '내 소속이 아님 — 없는 id · 범위 밖 id, 남의 레코드, 퇴직했거나 서명 완료 근로계약이 없는 내 레코드. 모두 같은 본문',
+      '내 소속이 아님 — 없는 id · 범위 밖 id, 남의 레코드, 서명 완료 근로계약이 없거나 가입 전인 내 레코드. 모두 같은 본문',
   })
   @ApiServiceUnavailableResponse({
     description: '신고 정보가 있는데 서버에 암호화 키가 없음',
@@ -88,6 +92,7 @@ export class MyMembershipsController {
    * 고칠 때는 주민등록번호만 또는 급여 계좌(은행 · 계좌번호 함께)만 보낸다. 주민등록번호를 새로 받으면 수집 일시가 바뀌고
    * 이전 값은 남기지 않는다. 급여 계좌는 다음 급여부터 쓴다. 응답은 조회와 같다(가린 값만).
    * 이미 낸 신고 정보를 고칠 때는 `currentPassword`(지금 비밀번호)도 보낸다 — 처음 작성에는 필요 없다(2026-10-23).
+   * 퇴직한 소속은 고치기 · 처음 넣기 모두 409 다(WHALEERP-765).
    */
   // 계정마다 10분에 10번 — 훔친 토큰으로 지금 비밀번호를 맞혀 보는 것을 늦춘다(이메일 변경 핀 요청과 같은 값). 틀려도
   // 로그인 잠금 횟수는 세지 않는다. 처음 작성 · 고치기 모두 센다.
@@ -103,6 +108,10 @@ export class MyMembershipsController {
   })
   @ApiNotFoundResponse({
     description: '내 소속이 아님 — 조회와 같은 본문',
+  })
+  @ApiConflictResponse({
+    description:
+      'STAFF_RETIRED — 퇴직한 소속(조회의 editable: false)이라 고치기 · 처음 넣기 모두 막힘. 「퇴직한 근무지의 신고 정보는 조회만 할 수 있습니다.」 내 소속 확인 뒤 · 비밀번호 전에 본다',
   })
   @ApiTooManyRequestsResponse({ description: '계정 · IP 요청 한도' })
   @ApiServiceUnavailableResponse({
