@@ -274,20 +274,27 @@ describe('MyMembershipsService', () => {
     });
 
     it('퇴직한 내 소속도 가린 값으로 보인다 — 조회만(editable: false)', async () => {
-      const service = await build();
-      findFirst.mockResolvedValue(
-        taxRow({
-          employmentStatus: 'RETIRED',
-          retiredDate: d('2026-09-30'),
-          staffTaxProfile: taxProfile(31),
-        }),
-      );
-      const res = await service.taxProfile(12, 31);
-      expect(res.editable).toBe(false);
-      expect(res.taxProfile).toMatchObject({
-        rrnMasked: '980304-1******',
-        payrollAccountNumberMasked: '********6789',
-      });
+      // 보존 기간(퇴직 + 3년) 안으로 시계를 고정한다 — 실제 시계면 2029-10-01 부터 파기 판정으로 바뀐다(PR #313 pr-agent)
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date('2026-10-20T03:00:00Z')); // 한국 2026-10-20 12:00
+      try {
+        const service = await build();
+        findFirst.mockResolvedValue(
+          taxRow({
+            employmentStatus: 'RETIRED',
+            retiredDate: d('2026-09-30'),
+            staffTaxProfile: taxProfile(31),
+          }),
+        );
+        const res = await service.taxProfile(12, 31);
+        expect(res.editable).toBe(false);
+        expect(res.taxProfile).toMatchObject({
+          rrnMasked: '980304-1******',
+          payrollAccountNumberMasked: '********6789',
+        });
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('보존 기간(퇴직 + 3년)이 지난 퇴직 레코드는 파기 배치 전이어도 신고 정보를 풀지 않는다 — 당일까지는 보인다', async () => {
