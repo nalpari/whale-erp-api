@@ -5,6 +5,7 @@ import type {
   MyPayslipDetailResponseDto,
   MyPayslipItemDto,
 } from './dto/my-payslip.response.dto';
+import { amountOf as lineAmountOf, isItemCodeShown } from './payslip-shared';
 
 // 직원 앱 「명세서 내보내기」(PAY-2)의 PDF. 직원 앱 급여 상세(whale-erp-staff `(app)/pay/[payslipId]`)와 같은 칸 · 같은 줄 규칙이다.
 // 다른 점: 다시 보낸 명세서도 발송일(마지막 발송)과 끝 안내를 넣는다 — 상세는 데모 resent 대로 둘 다 뺀다.
@@ -16,8 +17,6 @@ const REGULAR = join(FONT_DIR, 'Pretendard-Regular.otf');
 const BOLD = join(FONT_DIR, 'Pretendard-Bold.otf');
 
 const TIME_ZONE = 'Asia/Seoul';
-/** 3.3% 를 켜면 빠지는 기본 공제(PAY-03) — 직원 앱 · 관리자 화면의 isItemShown 과 같다. */
-const REPLACED_BY_WITHHOLDING = new Set(['INCOME_TAX', 'LOCAL_INCOME_TAX']);
 
 export interface PayslipPdfRow {
   name: string;
@@ -36,14 +35,6 @@ export interface PayslipPdfModel {
 }
 
 const won = (amount: number) => `${amount.toLocaleString('ko-KR')}원`;
-
-/** 직원 앱 isItemShown — 원천징수 둘은 3.3% 를 켰을 때만, 그때 소득세 · 지방소득세는 뺀다. */
-function isShown(item: MyPayslipItemDto, withholding: boolean): boolean {
-  if (item.itemCategory === 'WITHHOLDING') return withholding;
-  if (item.itemCategory === 'BASIC')
-    return !(withholding && REPLACED_BY_WITHHOLDING.has(item.itemCode));
-  return true;
-}
 
 const rowOf = (item: MyPayslipItemDto): PayslipPdfRow => ({
   name: item.itemName,
@@ -101,7 +92,15 @@ export function payslipPdfModel(
   const employmentType =
     DB_ENUMS.EmploymentType.find(([v]) => v === p.employmentType)?.[1] ??
     p.employmentType;
-  const items = p.items.filter((i) => isShown(i, p.isWithholdingApplied));
+  // 보이는 줄은 관리자 화면 · 직원 앱과 같은 규칙(isItemCodeShown — 3.3% 원천징수 · 4대보험 가입, 미가입이어도 0 아닌 금액은 보인다,
+  // WHALEERP-756)
+  const items = p.items.filter((i) =>
+    isItemCodeShown(
+      { ...i, amount: lineAmountOf(i) },
+      p.isWithholdingApplied,
+      p,
+    ),
+  );
   return {
     title: '급여명세서',
     info: [

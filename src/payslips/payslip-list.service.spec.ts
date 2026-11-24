@@ -3,15 +3,36 @@ import { Test } from '@nestjs/testing';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayslipListService } from './payslip-list.service';
+import { validContractWhere } from './payslip-attendance-reasons';
 import {
   HQ_SHARING_CONSENTED,
   HQ_SHARING_CONSENT_VERSION,
 } from '../admin-scope/hq-sharing';
+import { payslipInsurance, payslipInsuranceMany } from './payslip-insurance';
+
+// 4대보험 가입 여부를 어느 계약에서 세는지는 payslip-insurance.spec 이 본다. 여기서는 기본으로 둘 다 가입(줄이 모두 보이는 예전
+// 동작)이고, 미가입은 그 시험에서 바꾼다(WHALEERP-756)
+jest.mock('./payslip-insurance', () => ({
+  ...jest.requireActual<object>('./payslip-insurance'),
+  payslipInsurance: jest.fn(),
+  payslipInsuranceMany: jest.fn(),
+}));
+const BOTH_INSURED = {
+  isHealthPensionInsured: true,
+  isEmploymentInjuryInsured: true,
+};
+const insuranceOne = payslipInsurance as jest.Mock;
+const insuranceMany = payslipInsuranceMany as jest.Mock;
+beforeEach(() => {
+  insuranceOne.mockReset().mockResolvedValue(BOTH_INSURED);
+  insuranceMany.mockReset().mockResolvedValue(() => BOTH_INSURED);
+});
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 
 const row = (over: object = {}) => ({
   payslipId: 40,
+  staffMemberId: 30,
   storeId: 5,
   periodStartDate: d('2026-09-01'),
   periodEndDate: d('2026-09-30'),
@@ -496,6 +517,9 @@ describe('PayslipListService', () => {
           where: { isEntered: false, itemCategory: { not: 'EARNING' } },
           select: {
             itemCategory: true,
+            isEntered: true,
+            adjustedAmount: true,
+            calculatedAmount: true,
             payslipItemMaster: { select: { itemCode: true } },
           },
         });
@@ -529,6 +553,81 @@ describe('PayslipListService', () => {
       expect(result!.items[0].pendingReviewReasons).toEqual([]);
     });
 
+    it.each([
+      // [건강보험 · 국민연금, 고용보험 · 산재보험, 넣지 않은 기본 공제, 공제 미입력]
+      [false, false, ['NATIONAL_PENSION', 'EMPLOYMENT_INSURANCE'], false],
+      [true, false, ['EMPLOYMENT_INSURANCE'], false],
+      [true, false, ['LONG_TERM_CARE_INSURANCE'], true],
+      [false, true, ['HEALTH_INSURANCE'], false],
+      [false, true, ['EMPLOYMENT_INSURANCE'], true],
+    ])(
+      '보이지 않는 4대보험 줄이 비어 있어도 공제 미입력이 아니다 — 가입 %s · %s, 빈 줄 %j → %s(WHALEERP-756)',
+      async (health, employment, codes, missing) => {
+        insuranceMany.mockResolvedValue(() => ({
+          isHealthPensionInsured: health,
+          isEmploymentInjuryInsured: employment,
+        }));
+        prisma.payslip.findMany.mockResolvedValue([
+          row({
+            status: 'DRAFTING',
+            payslipItems: codes.map((itemCode) => ({
+              itemCategory: 'BASIC',
+              payslipItemMaster: { itemCode },
+            })),
+          }),
+        ]);
+        const result = await service.list(9, { month });
+        expect(result!.items[0].pendingReviewReasons).toEqual(
+          missing ? ['DEDUCTION_MISSING'] : [],
+        );
+      },
+    );
+
+    it('가입 여부는 쪽 전체를 한 번에 읽는다 — 가린 줄 · 확정 · 발송된 줄은 읽지 않는다(WHALEERP-756)', async () => {
+      prisma.payslip.findMany.mockResolvedValue([
+        row({ payslipId: 40, staffMemberId: 30, status: 'DRAFTING' }),
+        row({ payslipId: 41, staffMemberId: 31, status: 'REVIEWING' }),
+        row({ payslipId: 42, staffMemberId: 32, status: 'SENT' }),
+        // 가맹 점포의 동의 안 한 직원 — BM 에게 가린다
+        row({
+          payslipId: 43,
+          staffMemberId: 33,
+          storeId: 6,
+          status: 'DRAFTING',
+        }),
+      ]);
+      await service.list(9, { month });
+      expect(insuranceMany).toHaveBeenCalledTimes(1);
+      const [db, asked] = insuranceMany.mock.calls[0] as [
+        unknown,
+        { payslipId: number }[],
+      ];
+      expect(db).toBe(prisma);
+      expect(asked.map((r) => r.payslipId)).toEqual([40, 41]);
+    });
+
+    // 공제 미입력 where 조각(WHALEERP-756) — 9월 명세서의 급여 기간은 9/1 ~ 9/30 이다
+    const unentered = (line: object) => ({
+      payslipItems: { some: { isEntered: false, ...line } },
+    });
+    const basic = (codes: string[]) => ({
+      itemCategory: 'BASIC',
+      payslipItemMaster: { itemCode: { in: codes } },
+    });
+    const insured = (field: string) => ({
+      staffMember: {
+        contracts: {
+          some: {
+            [field]: true,
+            ...validContractWhere(
+              new Date('2026-09-01T00:00:00.000Z'),
+              new Date('2026-09-30T00:00:00.000Z'),
+            ),
+          },
+        },
+      },
+    });
+
     it('검토 대기만 — 확인 안 한 사유 넷 중 하나가 남았거나 보이는 공제가 빈 명세서, BM · BA 에게 가린 줄은 뺀다 · 건수도 가린 줄을 뺀다', async () => {
       prisma.payslip.count.mockResolvedValueOnce(1).mockResolvedValueOnce(8);
       const result = await service.list(9, { month, reviewPending: true });
@@ -550,37 +649,52 @@ describe('PayslipListService', () => {
               },
             },
           },
-          // 공제 미입력 — 3.3% 를 끄면 기본 · 추가 공제, 켜면 소득세 · 지방소득세 대신 원천징수(운영 정책 v221 PAY-06)
+          // 공제 미입력 — 추가 공제, 3.3% 를 켜면 원천징수 · 끄면 소득세 · 지방소득세, 4대보험은 그 달에 효력이 있던 계약에서 가입한
+          // 것만(운영 정책 v221 PAY-06, WHALEERP-756)
           {
             OR: [
-              {
-                isWithholdingApplied: false,
-                payslipItems: {
-                  some: {
-                    isEntered: false,
-                    itemCategory: { in: ['BASIC', 'ADDITIONAL'] },
-                  },
-                },
-              },
+              unentered({ itemCategory: 'ADDITIONAL' }),
               {
                 isWithholdingApplied: true,
-                payslipItems: {
-                  some: {
-                    isEntered: false,
-                    OR: [
-                      { itemCategory: { in: ['ADDITIONAL', 'WITHHOLDING'] } },
-                      {
-                        itemCategory: 'BASIC',
-                        payslipItemMaster: {
-                          itemCode: {
-                            notIn: ['INCOME_TAX', 'LOCAL_INCOME_TAX'],
-                          },
-                        },
-                      },
+                ...unentered({ itemCategory: 'WITHHOLDING' }),
+              },
+              {
+                isWithholdingApplied: false,
+                ...unentered(basic(['INCOME_TAX', 'LOCAL_INCOME_TAX'])),
+              },
+              {
+                AND: [
+                  insured('isHealthPensionInsured'),
+                  unentered(
+                    basic([
+                      'NATIONAL_PENSION',
+                      'HEALTH_INSURANCE',
+                      'LONG_TERM_CARE_INSURANCE',
+                    ]),
+                  ),
+                ],
+              },
+              {
+                AND: [
+                  insured('isEmploymentInjuryInsured'),
+                  unentered(basic(['EMPLOYMENT_INSURANCE'])),
+                ],
+              },
+              unentered({
+                itemCategory: 'BASIC',
+                payslipItemMaster: {
+                  itemCode: {
+                    notIn: [
+                      'INCOME_TAX',
+                      'LOCAL_INCOME_TAX',
+                      'NATIONAL_PENSION',
+                      'HEALTH_INSURANCE',
+                      'LONG_TERM_CARE_INSURANCE',
+                      'EMPLOYMENT_INSURANCE',
                     ],
                   },
                 },
-              },
+              }),
             ],
           },
         ],
@@ -836,6 +950,8 @@ describe('PayslipListService', () => {
       });
       await expect(service.findOne(9, 41)).resolves.toBeNull();
       expect(prisma.payslip.findUniqueOrThrow).not.toHaveBeenCalled();
+      // 가입 여부도 읽지 않는다 — 가린 명세서의 계약 체크가 새지 않게(WHALEERP-756)
+      expect(insuranceOne).not.toHaveBeenCalled();
     });
 
     it('확인한 출퇴근 누락 사유만 남았으면 상세도 출퇴근 확인(true) — 목록과 같은 판정(확정 뒤, PR #169 리뷰)', async () => {
@@ -855,6 +971,26 @@ describe('PayslipListService', () => {
       expect(result!.isAttendanceConfirmed).toBe(true);
     });
 
+    it('4대보험 가입 여부를 그 명세서의 직원 레코드 · 급여 기간으로 세어 싣는다(WHALEERP-756)', async () => {
+      insuranceOne.mockResolvedValue({
+        isHealthPensionInsured: true,
+        isEmploymentInjuryInsured: false,
+      });
+      const result = await service.findOne(9, 40);
+      expect(result).toMatchObject({
+        isHealthPensionInsured: true,
+        isEmploymentInjuryInsured: false,
+      });
+      expect(insuranceOne).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          staffMemberId: 30,
+          periodStartDate: d('2026-09-01'),
+          periodEndDate: d('2026-09-30'),
+        }),
+      );
+    });
+
     it('지급 · 공제 항목 · 실지급액 · 검토 대기 사유 · 처리 이력 · 발송 이력을 담는다', async () => {
       const result = await service.findOne(9, 40);
       expect(result).toEqual({
@@ -872,6 +1008,8 @@ describe('PayslipListService', () => {
         status: 'REVIEWING',
         isPremiumApplied: true,
         isWithholdingApplied: true,
+        isHealthPensionInsured: true,
+        isEmploymentInjuryInsured: true,
         grossPayAmount: 1_000_000,
         totalDeductionAmount: 33_000,
         netPayAmount: 967_000,
