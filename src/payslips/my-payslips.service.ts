@@ -47,6 +47,8 @@ export const DETAIL_SELECT = {
       calculatedAmount: true,
       adjustedAmount: true,
       isEntered: true,
+      workMinutes: true,
+      calculationText: true,
       payslipItemMaster: { select: { itemCode: true } },
     },
   },

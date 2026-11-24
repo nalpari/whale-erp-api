@@ -6,6 +6,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { AdminSessionService } from '../src/admin-session/admin-session.service';
+import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { addDays, kstDayStart, kstToday } from '../src/staff-members/kst-date';
 import { createBp, deleteBps } from './hq-bp';
@@ -157,6 +158,7 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     await prisma.payslipReviewReason.deleteMany({ where: payslip });
     await prisma.payslipItem.deleteMany({ where: payslip });
     await prisma.payslip.deleteMany({ where: mine });
+    await prisma.authSession.deleteMany({ where: { accountId } });
     await prisma.attendanceRecord.deleteMany({
       where: { ...mine, kind: 'CHECK_OUT' },
     });
@@ -212,6 +214,8 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       calculatedAmount: number | null;
       adjustedAmount: number | null;
       isEntered: boolean;
+      workMinutes: number | null;
+      calculationText: string | null;
     }[];
     logs: { summary: string }[];
     reviewReasons: {
@@ -234,6 +238,13 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
           i.itemCode,
           i.isEntered ? (i.adjustedAmount ?? i.calculatedAmount) : null,
         ]),
+    );
+  /** 항목 코드별 [시간(분), 계산식] (WHALEERP-755) */
+  const basis = (d: { items: Detail['items'] }) =>
+    Object.fromEntries(
+      d.items
+        .filter((i) => i.workMinutes !== null || i.calculationText !== null)
+        .map((i) => [i.itemCode, [i.workMinutes, i.calculationText]]),
     );
   /** 화면이 하는 임시저장 — 지금 보이는 값을 그대로 다시 보낸다 */
   const save = (d: Detail, over: object) =>
@@ -278,6 +289,12 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       OVERTIME_PAY: 30_000,
     });
     expect(d.grossPayAmount).toBe(800_000);
+    // 시간 · 한 줄 계산식(WHALEERP-755) — 주휴는 개근 주마다 실근무 15시간 ÷ 5
+    expect(basis(d)).toEqual({
+      BASE_PAY: [3_900, '65.0시간 × 10,000원'],
+      WEEKLY_HOLIDAY_PAY: [720, '4주 · 12.0시간 × 10,000원'],
+      OVERTIME_PAY: [120, '2.0시간 × 10,000원 × 1.5배'],
+    });
     // 계약 근무 요일을 모두 출퇴근했다 — 출퇴근 검토 대기 사유가 없다(WHALEERP-229)
     expect(d.reviewReasons).toEqual([]);
   });
@@ -291,6 +308,94 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
       OVERTIME_PAY: 20_000,
     });
     expect(d.grossPayAmount).toBe(790_000);
+    expect(basis(d).OVERTIME_PAY).toEqual([120, '2.0시간 × 10,000원 × 1배']);
+  });
+
+  it('계산값을 고치면 「2.0시간 · 직접 입력」, 야간수당은 시간을 함께 받아 「2.0시간」 — 발송 뒤 직원 앱도 같은 글자(WHALEERP-755)', async () => {
+    const before = await detail();
+    const masterOf = (code: string) =>
+      before.items.find((i) => i.itemCode === code)!.payslipItemMasterId;
+    // 시간 없이 야간수당 금액만 넣으면 400
+    const res = await request(app.getHttpServer())
+      .put(`/payslips/${payslipId}`)
+      .set('Authorization', `Bearer ${await token()}`)
+      .send({
+        updatedAt: before.updatedAt,
+        isPremiumApplied: before.isPremiumApplied,
+        isWithholdingApplied: before.isWithholdingApplied,
+        items: [
+          { payslipItemMasterId: masterOf('NIGHT_WORK_PAY'), amount: 30_000 },
+        ],
+      })
+      .expect(400);
+    expect((res.body as { message: string }).message).toBe(
+      '야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
+    );
+
+    await save(before, {
+      items: [
+        { payslipItemMasterId: masterOf('OVERTIME_PAY'), amount: 25_000 },
+        {
+          payslipItemMasterId: masterOf('NIGHT_WORK_PAY'),
+          amount: 30_000,
+          workMinutes: 120,
+        },
+      ],
+    });
+    const d = await detail();
+    expect(basis(d)).toMatchObject({
+      OVERTIME_PAY: [120, '2.0시간 · 직접 입력'],
+      NIGHT_WORK_PAY: [120, '2.0시간'],
+    });
+
+    // 발송된 명세서로 두고 직원 앱 상세를 본다 — 관리자 상세와 같은 글자
+    await prisma.payslip.update({
+      where: { payslipId },
+      data: { status: 'SENT' },
+    });
+    const sendLog = await prisma.payslipLog.create({
+      data: { payslipId, logType: 'SEND', summary: '발송', changedBy: bmId },
+    });
+    const session = await app.get(AuthSessionService).issue({
+      accountId,
+      deviceIdentifier: `paycalc-e2e-${accountId}`,
+    });
+    const staffToken = await app.get(JwtService).signAsync({
+      sub: accountId,
+      type: 'account',
+      email: `paycalc-${n}@test.invalid`,
+      typ: 'access',
+      sid: session.authSessionId,
+    });
+    const mine = await request(app.getHttpServer())
+      .get(`/me/payslips/${payslipId}`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .expect(200);
+    expect(basis(mine.body as { items: Detail['items'] })).toEqual(basis(d));
+    await request(app.getHttpServer())
+      .get(`/me/payslips/${payslipId}/pdf`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .expect(200);
+    await prisma.payslipLog.delete({
+      where: { payslipLogId: sendLog.payslipLogId },
+    });
+    await prisma.payslip.update({
+      where: { payslipId },
+      data: { status: 'DRAFTING' },
+    });
+
+    // 계산값으로 되돌리면 식이 돌아오고, 야간수당은 0원으로 되돌려 다음 시험이 시간 없이 저장하게 둔다
+    await save(await detail(), {
+      items: [
+        { payslipItemMasterId: masterOf('OVERTIME_PAY'), amount: 20_000 },
+        { payslipItemMasterId: masterOf('NIGHT_WORK_PAY'), amount: 0 },
+      ],
+    });
+    expect(basis(await detail())).toEqual({
+      BASE_PAY: [3_900, '65.0시간 × 10,000원'],
+      WEEKLY_HOLIDAY_PAY: [720, '4주 · 12.0시간 × 10,000원'],
+      OVERTIME_PAY: [120, '2.0시간 × 10,000원 × 1배'],
+    });
   });
 
   it('출퇴근으로 다시 계산 — 관리자가 고친 기본급을 버리고 계산값으로', async () => {
@@ -470,6 +575,11 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     expect(d.reviewReasons.every((r) => r.acknowledgedAt === null)).toBe(true);
     // 앞 계약 45시간(연장 2시간 뺀) × 10,000 + 새 계약 9/28 · 9/30 의 10시간 × 12,000
     expect(amounts(d).BASE_PAY).toBe(570_000);
+    // 시급이 바뀌면 시급별 구간을 「 + 」로(WHALEERP-755)
+    expect(basis(d).BASE_PAY).toEqual([
+      3_300,
+      '45.0시간 × 10,000원 + 10.0시간 × 12,000원',
+    ]);
     expect(d.logs.map((l) => l.summary)).toContainEqual(
       expect.stringContaining(
         '계약 만료 후 기록 해소 · 기간 중 계약 변경 추가',

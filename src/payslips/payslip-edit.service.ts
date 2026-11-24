@@ -35,10 +35,14 @@ import {
 } from './payslip-attendance-reasons';
 import {
   amountsOf,
+  basisOf,
   CALCULATED_ITEM_CODES,
   calculatePayslip,
   CalculatedItemCode,
+  ENTERED_HOURS_ITEM_CODES,
+  enteredBasis,
 } from './payslip-calculation';
+import { hoursText, PayBasis, PayResult } from './pay-calculation';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 import {
   amountOf,
@@ -103,6 +107,8 @@ const LINE_SELECT = {
   calculatedAmount: true,
   adjustedAmount: true,
   isEntered: true,
+  workMinutes: true,
+  calculationText: true,
   payslipItemMaster: {
     select: {
       payslipItemMasterId: true,
@@ -120,6 +126,8 @@ interface Line {
   calculatedAmount: number | null;
   adjustedAmount: number | null;
   isEntered: boolean;
+  workMinutes: number | null;
+  calculationText: string | null;
   payslipItemMaster: { itemCode: string; isSystemCalculated: boolean };
 }
 
@@ -248,6 +256,10 @@ export class PayslipEditService {
    * 계산한다(2026-10-26 재영). 화면이 보낸 값이 바꾸기 전 계산값과 같으면(고친 값이 없던 줄) 관리자가 고치지 않은 것으로 보고
    * 새 계산값을 따르고, 다르면 고친 값으로 남긴다. 앞서 고쳐 둔 값(adjustedAmount)은 그대로 돌려보내도 지키고 계산값 칸만 새로 둔다
    * (PR #159 리뷰).
+   *
+   * 시간 · 계산식(WHALEERP-755, 2026-11-20 김지영) — 계산 항목을 계산값과 다른 금액으로 고치면 시간은 계산 때 값 그대로 두고 식을
+   * 「직접 입력」(연장수당은 「8.0시간 · 직접 입력」)으로 바꾼다. 계산값으로 되돌리면 식을 다시 만든다. 야간 · 휴일근무수당은 받은
+   * 시간(분)과 식 「2.0시간」을 남기고, 금액이 0보다 큰데 시간이 없으면 400 이다. 작성 중 · 검토 중만 고치므로 발송한 식은 바뀌지 않는다.
    */
   async save(
     adminAccountId: number,
@@ -263,10 +275,12 @@ export class PayslipEditService {
         '3.3% 원천징수는 파트타이머 명세서에만 적용할 수 있습니다.',
       );
     const wanted = new Map<number, number | null>();
-    for (const { payslipItemMasterId, amount } of dto.items) {
+    const wantedMinutes = new Map<number, number | null>();
+    for (const { payslipItemMasterId, amount, workMinutes } of dto.items) {
       if (wanted.has(payslipItemMasterId))
         throw new BadRequestException('같은 항목을 두 번 보냈습니다.');
       wanted.set(payslipItemMasterId, amount);
+      wantedMinutes.set(payslipItemMasterId, workMinutes ?? null);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -276,16 +290,17 @@ export class PayslipEditService {
       });
       const lines = await this.lines(tx, payslipId);
       const changes: string[] = [];
-      const fresh =
+      const calculate = async () =>
+        calculatePayslip(tx, {
+          ...current,
+          contractIds: await this.contractIdsOf(tx, current),
+          isPremiumApplied: dto.isPremiumApplied,
+        });
+      let pay: PayResult | null =
         dto.isPremiumApplied !== current.isPremiumApplied
-          ? amountsOf(
-              await calculatePayslip(tx, {
-                ...current,
-                contractIds: await this.contractIdsOf(tx, current),
-                isPremiumApplied: dto.isPremiumApplied,
-              }),
-            )
+          ? await calculate()
           : null;
+      const fresh = pay && amountsOf(pay);
       if (dto.isPremiumApplied !== current.isPremiumApplied)
         changes.push(`가산 적용 ${dto.isPremiumApplied ? '켬' : '해제'}`);
       if (dto.isWithholdingApplied !== current.isWithholdingApplied)
@@ -316,14 +331,59 @@ export class PayslipEditService {
             amount = null;
           base = { ...l, calculatedAmount: fresh[code] };
         }
+        const value = this.nextValue(base, amount);
+        // 시간 · 계산식(WHALEERP-755). undefined 면 그대로 둔다
+        let basis: PayBasis | undefined;
+        if (code !== null && base.calculatedAmount !== null) {
+          // 고친 금액이 그대로면(앞서 고쳐 둔 값을 돌려보냄) 식도 그대로 둔다
+          if (value.adjustedAmount !== null) {
+            if (recalculated || value.adjustedAmount !== l.adjustedAmount)
+              basis = enteredBasis(
+                code,
+                recalculated ? basisOf(pay!)[code].minutes : l.workMinutes,
+              );
+          } else if (recalculated) basis = basisOf(pay!)[code];
+          else if (l.adjustedAmount !== null) {
+            // 고친 값을 계산값으로 되돌렸다 — 고칠 때 식을 「직접 입력」으로 덮어 남은 식이 없어 지금 데이터로 다시 만든다. 그사이 출퇴근이
+            // 바뀌어 다시 셈한 금액이 계산값과 다르면 맞는 식이 없어 비운다(관리자 화면은 「계산값」만 보인다)
+            pay ??= await calculate();
+            basis =
+              amountsOf(pay)[code] === base.calculatedAmount
+                ? basisOf(pay)[code]
+                : { minutes: l.workMinutes, text: null };
+          }
+        } else if (recalculated) basis = basisOf(pay!).OVERTIME_PAY;
+        else if (
+          (ENTERED_HOURS_ITEM_CODES as readonly string[]).includes(
+            l.payslipItemMaster.itemCode,
+          )
+        ) {
+          // 야간 · 휴일근무수당 — 관리자가 넣은 시간, 식은 시간만(시급 · 배율은 관리자가 금액에 넣는다)
+          const minutes = wantedMinutes.get(masterId) ?? null;
+          if (amount !== null && amount > 0 && minutes === null)
+            throw new BadRequestException(
+              '야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
+            );
+          basis = {
+            minutes,
+            text: minutes === null ? null : hoursText(minutes),
+          };
+        }
         const next = {
           ...(recalculated && { calculatedAmount: base.calculatedAmount }),
-          ...this.nextValue(base, amount),
+          ...value,
+          ...(basis && {
+            workMinutes: basis.minutes,
+            calculationText: basis.text,
+          }),
         };
         if (
           base.calculatedAmount !== l.calculatedAmount ||
           next.adjustedAmount !== l.adjustedAmount ||
-          next.isEntered !== l.isEntered
+          next.isEntered !== l.isEntered ||
+          (basis &&
+            (basis.minutes !== l.workMinutes ||
+              basis.text !== l.calculationText))
         ) {
           await tx.payslipItem.update({
             where: { payslipItemId: l.payslipItemId },
@@ -373,7 +433,13 @@ export class PayslipEditService {
           };
           await tx.payslipItem.create({ data });
           changes.push(`항목 추가 ${m.name}`);
-          kept.push({ ...data, payslipItemId: 0, payslipItemMaster: m });
+          kept.push({
+            ...data,
+            workMinutes: null,
+            calculationText: null,
+            payslipItemId: 0,
+            payslipItemMaster: m,
+          });
         }
       }
       if (removed.length > 0) {
@@ -404,7 +470,7 @@ export class PayslipEditService {
 
   /**
    * 출퇴근으로 다시 계산(WHALEERP-227, 데모 「출퇴근으로 다시 계산」). 작성 중 · 검토 중만(아니면 409). 기본급 · 주휴수당 ·
-   * 연장수당을 지금 출퇴근 기록과 명세서의 가산 값으로 다시 계산하고, 관리자가 고친 값은 버린다(계산값으로 돌린다). 합계를 다시
+   * 연장수당을 지금 출퇴근 기록과 명세서의 가산 값으로 다시 계산하고(시간 · 계산식도, WHALEERP-755), 관리자가 고친 값은 버린다(계산값으로 돌린다). 합계를 다시
    * 셈하고 바뀐 것을 처리 이력(수정)에 남긴다 — 바뀐 것이 없어도 「출퇴근으로 다시 계산」 한 줄은 남는다.
    * 검토 대기 사유(출퇴근 누락 · 기간 중 계약 변경 · 계약 만료 후 기록 · 확인 필요 기록 포함, WHALEERP-229)도 지금 데이터로 모두
    * 새로 판정한다 — 앞서 「확인」한 표시는 지우고 다시 붙인다(2026-10-26 재영). 보정한 뒤 다시
@@ -424,9 +490,8 @@ export class PayslipEditService {
         updatedAt: new Date(),
       });
       const contractIds = await this.contractIdsOf(tx, current);
-      const fresh = amountsOf(
-        await calculatePayslip(tx, { ...current, contractIds }),
-      );
+      const pay = await calculatePayslip(tx, { ...current, contractIds });
+      const fresh = amountsOf(pay);
       const changes: string[] = [];
       const lines: Line[] = [];
       for (const l of await this.lines(tx, payslipId)) {
@@ -439,12 +504,16 @@ export class PayslipEditService {
           calculatedAmount: fresh[code],
           adjustedAmount: null,
           isEntered: fresh[code] !== null,
+          workMinutes: basisOf(pay)[code].minutes,
+          calculationText: basisOf(pay)[code].text,
         };
         const after = { ...l, ...next };
         if (
           next.calculatedAmount !== l.calculatedAmount ||
           l.adjustedAmount !== null ||
-          next.isEntered !== l.isEntered
+          next.isEntered !== l.isEntered ||
+          next.workMinutes !== l.workMinutes ||
+          next.calculationText !== l.calculationText
         )
           await tx.payslipItem.update({
             where: { payslipItemId: l.payslipItemId },

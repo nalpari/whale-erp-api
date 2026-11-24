@@ -78,6 +78,12 @@ export interface PayInput {
   isEmploymentMixed?: boolean;
 }
 
+/** 명세서 한 줄의 계산 근거(WHALEERP-755) — 쓴 시간(분)과 한 줄 계산식. 계산하지 않은 항목은 둘 다 null */
+export interface PayBasis {
+  minutes: number | null;
+  text: string | null;
+}
+
 export interface PayResult {
   /** 원. 계산할 수 없으면(시급 · 월 기본시간 없음) null */
   basePay: number | null;
@@ -90,6 +96,57 @@ export interface PayResult {
   overtimeMinutes: number;
   /** 주휴를 받은 주 수 */
   weeklyHolidayWeeks: number;
+  /**
+   * 금액마다 시간 · 한 줄 계산식(근로기준법 시행령 제27조의2 5호 — 계산방법, 연장근로 시간 수. WHALEERP-755, 2026-11-20 김지영).
+   * 금액과 같은 분 · 같은 시급으로 적고, 시급이 둘 이상이면 시급별 구간을 「 + 」로 잇는다
+   */
+  basis: {
+    basePay: PayBasis;
+    weeklyHolidayPay: PayBasis;
+    overtimePay: PayBasis;
+  };
+}
+
+const NO_BASIS: PayBasis = { minutes: null, text: null };
+/** 「8.0시간」 — 소수 첫째 자리 */
+export const hoursText = (minutes: number) =>
+  `${(minutes / 60).toFixed(1)}시간`;
+const wageText = (wage: number) => `${wage.toLocaleString('ko-KR')}원`;
+const addTo = <K>(map: Map<K, number>, key: K, n: number) =>
+  map.set(key, (map.get(key) ?? 0) + n);
+
+/** calculation_text 칸 길이(varchar(200)) */
+export const CALCULATION_TEXT_MAX = 200;
+
+/** 식의 한 구간 — 그 구간이 나타내는 금액(반올림 전, 원)과 글자 */
+type Segment = [value: number, text: string];
+
+/**
+ * 구간을 「 + 」로 이은 한 줄 계산식. 식이 나타내는 금액(구간 값의 합)이 실제 금액(반올림 전 값)과 다르면 식을 내지 않는다(null) —
+ * 0 분 이하 구간을 뺐을 때처럼 식을 다시 셈한 값이 금액과 맞지 않으면 직원에게 보이지 않는다(WHALEERP-755 리뷰). 반올림 뒤가 아니라 전
+ * 값으로 견준다 — 구간별로 나눈 소수 오차가 .5 경계에서 반올림을 뒤집을 수 있어서다(그만큼만 봐준다).
+ * 200자(칸 길이)를 넘어도 null 이다 — 넘기면 저장이 500 이 된다. 한 달에 계약 조건(시급 · 월 기본시간)이 6~7번 바뀌어야 넘친다.
+ */
+function formula(segments: readonly Segment[], raw: number): string | null {
+  const implied = segments.reduce((s, [value]) => s + value, 0);
+  if (Math.abs(implied - raw) > 1e-6) return null;
+  const text = segments.map(([, t]) => t).join(' + ');
+  return text.length > CALCULATION_TEXT_MAX ? null : text;
+}
+
+/**
+ * 시급별 분을 구간으로 — 먼저 넣은 시급부터. 0 분 이하 구간은 빼고(그래서 금액과 어긋나면 formula 가 식을 내지 않는다), 다 빠지면(연장
+ * 없음 등) 기간 끝 계약 시급으로 0 분 한 구간을 적는다 — 0원 줄도 같은 모양의 식이 보이게.
+ */
+function wageSegments(
+  minutesByWage: ReadonlyMap<number, number>,
+  fallbackWage: number,
+  segment: (wage: number, minutes: number) => Segment,
+): Segment[] {
+  const shown = [...minutesByWage].filter(([, m]) => m > 0);
+  return (shown.length ? shown : [[fallbackWage, 0]]).map(([wage, m]) =>
+    segment(wage, m),
+  );
 }
 
 const inRange = (day: string, from: string, to: string | null) =>
@@ -322,6 +379,11 @@ export function calculatePay(input: PayInput): PayResult {
       workedMinutes,
       overtimeMinutes,
       weeklyHolidayWeeks,
+      basis: {
+        basePay: NO_BASIS,
+        weeklyHolidayPay: NO_BASIS,
+        overtimePay: NO_BASIS,
+      },
     };
   // 기간 앞 날(달을 걸친 주를 이 달이 맡은 몫)의 연장은 앞 계약 시급, 그 계약에 시급이 없으면 기간 계약으로
   const wageOf = (day: string) =>
@@ -329,6 +391,23 @@ export function calculatePay(input: PayInput): PayResult {
     contractOn(input.contracts, day)!.hourlyWage!;
 
   const rate = input.isPremiumApplied ? OVERTIME_RATE : 1;
+  // 계산식 — 0원 줄의 시급, 연장 구간의 날짜 순서
+  const fallbackWage = contractOn(
+    input.contracts,
+    input.periodEnd,
+  )!.hourlyWage!;
+  const overtimeDays = [...overtime].sort(([a], [b]) => a.localeCompare(b));
+  const overtimeText = (
+    minutesByWage: ReadonlyMap<number, number>,
+    raw: number,
+  ) =>
+    formula(
+      wageSegments(minutesByWage, fallbackWage, (wage, m) => [
+        (m / 60) * wage * rate,
+        `${hoursText(m)} × ${wageText(wage)} × ${rate}배`,
+      ]),
+      raw,
+    );
   if (!partTime) {
     const total = periodDays(input).length;
     const effective = daysByContract(input, false);
@@ -340,28 +419,84 @@ export function calculatePay(input: PayInput): PayResult {
       overtimeOf.set(terms, (overtimeOf.get(terms) ?? 0) + m);
     }
     let overtimePay = 0;
+    const payableOf = new Map<ContractTerms, number>();
     for (const [terms, m] of overtimeOf) {
       const included =
         (terms.includedOvertimeMinutes * (employedDays.get(terms) ?? 0)) /
         total;
-      overtimePay +=
-        (Math.max(0, m - included) / 60) * terms.hourlyWage! * rate;
+      const payable = Math.max(0, m - included);
+      payableOf.set(terms, payable);
+      overtimePay += (payable / 60) * terms.hourlyWage! * rate;
     }
+    const noBaseHours = [...effective.keys()].some(
+      (terms) => terms.baseHours === null,
+    );
+    // 계산식 — 기본급은 시급 · 월 기본시간이 같은 계약끼리 날 수를 모은다(재직 역일이 기간 전체면 일할 꼬리를 뺀다). 연장은 계약이
+    // 시작한 순서로 그 계약의 지급 분(포괄을 뺀 분)을 시급별로 모은다
+    const monthly = new Map<
+      string,
+      { wage: number; hours: number; days: number }
+    >();
+    for (const [terms, days] of employed) {
+      const key = `${terms.hourlyWage}/${terms.baseHours}`;
+      const g = monthly.get(key) ?? {
+        wage: terms.hourlyWage!,
+        hours: terms.baseHours!,
+        days: 0,
+      };
+      g.days += days;
+      monthly.set(key, g);
+    }
+    const payable = new Map<number, number>();
+    for (const [terms, m] of [...payableOf].sort(([a], [b]) =>
+      a.start.localeCompare(b.start),
+    ))
+      addTo(payable, terms.hourlyWage!, m);
+    const payableMinutes = [...payable.values()].reduce((s, m) => s + m, 0);
+    const baseRaw = noBaseHours
+      ? 0
+      : employed.reduce(
+          (s, [terms, days]) =>
+            s + (terms.hourlyWage! * terms.baseHours! * days) / total,
+          0,
+        );
     return {
-      basePay: [...effective.keys()].some((terms) => terms.baseHours === null)
-        ? null
-        : won(
-            employed.reduce(
-              (s, [terms, days]) =>
-                s + (terms.hourlyWage! * terms.baseHours! * days) / total,
-              0,
-            ),
-          ),
+      basePay: noBaseHours ? null : won(baseRaw),
       weeklyHolidayPay: 0,
       overtimePay: won(overtimePay),
       workedMinutes,
       overtimeMinutes,
       weeklyHolidayWeeks,
+      basis: {
+        basePay: noBaseHours
+          ? NO_BASIS
+          : {
+              minutes: null,
+              text: formula(
+                (monthly.size
+                  ? [...monthly.values()]
+                  : [
+                      {
+                        wage: fallbackWage,
+                        hours: contractOn(input.contracts, input.periodEnd)!
+                          .baseHours!,
+                        days: 0,
+                      },
+                    ]
+                ).map(({ wage, hours, days }): Segment => [
+                  (wage * hours * days) / total,
+                  `${wageText(wage)} × 월 ${hours}시간` +
+                    (days === total ? '' : ` × ${days}일 / ${total}일`),
+                ]),
+                baseRaw,
+              ),
+            },
+        weeklyHolidayPay: { minutes: null, text: '기본급에 포함' },
+        overtimePay: {
+          minutes: Math.round(payableMinutes),
+          text: overtimeText(payable, overtimePay),
+        },
+      },
     };
   }
   let basePay = 0;
@@ -369,20 +504,71 @@ export function calculatePay(input: PayInput): PayResult {
     basePay += (input.worked[day] ?? 0) * wageOf(day);
   let overtimePay = 0;
   for (const [day, m] of overtime) overtimePay += m * wageOf(day);
+  // 계산식 — 기본급은 날마다 그날 시급으로 근무 분을 모으고 연장 분을 뺀다. 주휴는 그 주 마지막 날 계약 시급별로 주 수와
+  // min(실근무, 40시간) ÷ 5 를 모은다. 연장은 날짜 순으로 그날 시급별
+  const baseByWage = new Map<number, number>();
+  for (const day of periodDays(input))
+    addTo(baseByWage, wageOf(day), input.worked[day] ?? 0);
+  const overtimeByWage = new Map<number, number>();
+  for (const [day, m] of overtimeDays) {
+    addTo(baseByWage, wageOf(day), -m);
+    addTo(overtimeByWage, wageOf(day), m);
+  }
+  type Holiday = { weeks: number; minutes: number };
+  const holidayByWage = new Map<number, Holiday>();
+  for (const { terms, workedMinutes: m } of holidayWeeks) {
+    const g = holidayByWage.get(terms.hourlyWage!) ?? { weeks: 0, minutes: 0 };
+    g.weeks += 1;
+    g.minutes += Math.min(m, WEEKLY_LIMIT) / 5;
+    holidayByWage.set(terms.hourlyWage!, g);
+  }
+  const holidayMinutes = holidayWeeks.reduce(
+    (s, { workedMinutes: m }) => s + Math.min(m, WEEKLY_LIMIT) / 5,
+    0,
+  );
+  const holidayRaw = holidayWeeks.reduce(
+    (s, { terms, workedMinutes }) =>
+      s + (Math.min(workedMinutes, WEEKLY_LIMIT) / 5 / 60) * terms.hourlyWage!,
+    0,
+  );
+  const sum = (map: ReadonlyMap<number, number>) =>
+    [...map.values()].reduce((s, m) => s + m, 0);
   return {
     basePay: won(Math.max(0, basePay - overtimePay) / 60),
-    weeklyHolidayPay: won(
-      holidayWeeks.reduce(
-        (s, { terms, workedMinutes }) =>
-          s +
-          (Math.min(workedMinutes, WEEKLY_LIMIT) / 5 / 60) * terms.hourlyWage!,
-        0,
-      ),
-    ),
+    weeklyHolidayPay: won(holidayRaw),
     overtimePay: won((overtimePay / 60) * rate),
     workedMinutes,
     overtimeMinutes,
     weeklyHolidayWeeks,
+    basis: {
+      basePay: {
+        minutes: Math.max(0, sum(baseByWage)),
+        text: formula(
+          wageSegments(baseByWage, fallbackWage, (wage, m) => [
+            (m * wage) / 60,
+            `${hoursText(m)} × ${wageText(wage)}`,
+          ]),
+          Math.max(0, basePay - overtimePay) / 60,
+        ),
+      },
+      weeklyHolidayPay: {
+        minutes: Math.round(holidayMinutes),
+        text: formula(
+          (holidayByWage.size
+            ? [...holidayByWage]
+            : [[fallbackWage, { weeks: 0, minutes: 0 }] as [number, Holiday]]
+          ).map(([wage, { weeks, minutes }]): Segment => [
+            (minutes / 60) * wage,
+            `${weeks}주 · ${hoursText(minutes)} × ${wageText(wage)}`,
+          ]),
+          holidayRaw,
+        ),
+      },
+      overtimePay: {
+        minutes: sum(overtimeByWage),
+        text: overtimeText(overtimeByWage, (overtimePay / 60) * rate),
+      },
+    },
   };
 }
 

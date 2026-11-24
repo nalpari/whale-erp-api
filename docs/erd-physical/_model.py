@@ -232,7 +232,11 @@ ADD = {
                  (None, "", "생성 일시", "datetime", "created_at", ""),
                  (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "payslip_items": [("payslip_item_master_id", "", "항목 이름", "text", "item_name", "발송 당시 이름을 박아 둔다 — 급여 항목 표가 바뀌어도 발행 문서는 그대로"),
-                      ("item_name", "", "비과세 여부", "bool", "is_tax_free", "발송 당시 값을 박아 둔다")],
+                      ("item_name", "", "비과세 여부", "bool", "is_tax_free", "발송 당시 값을 박아 둔다"),
+                      # 임금명세서 기재사항(근로기준법 시행령 제27조의2 5호) — 계산방법과 연장 · 야간 · 휴일근로 시간 수. 기간 중 시급이 바뀌면
+                      # 금액만으로 식을 다시 만들 수 없고 발송한 문서의 식은 바뀌지 않아야 해서 api 가 만들어 박아 둔다 (WHALEERP-755, 2026-11-20 김지영)
+                      (None, "", "근무시간", "int", "work_minutes", "계산 · 입력에 쓴 시간(분) — 기본급(파트타이머) · 주휴 · 연장은 계산 때, 야간 · 휴일근무수당은 관리자가 넣는다 (WHALEERP-755, 2026-11-24)"),
+                      (None, "", "계산식", "text", "calculation_text", "한 줄 계산식 — 관리자가 계산값과 다른 금액으로 고치면 「직접 입력」. 계산하지 않으면 NULL (WHALEERP-755, 2026-11-24)")],
     "notification_recipients": [(None, "", "생성 일시", "datetime", "created_at", "")],
     "posts": [(None, "FK", "등록 관리자", "id", "created_by", ""),
               (None, "", "등록 일시", "datetime", "created_at", "")],
@@ -446,6 +450,8 @@ PHYS = {
     ("payslip_item_masters", "is_tax_free"): {"default": "false"},
     ("payslip_item_masters", "is_system_calculated"): {"default": "false"},
     ("payslip_item_masters", "is_active"): {"default": "true"},
+    # 한 줄 계산식 — 화면 한 줄 · PDF 한 줄에 드는 길이로 막는다 (WHALEERP-755)
+    ("payslip_items", "calculation_text"): {"type": "varchar(200)"},
 }
 
 # PK · 외래키 말고는 NOT NULL 을 두지 않는 테이블. 근로계약서를 다 채우지 않고 임시저장할 수 있게 한다(2026-10-08).

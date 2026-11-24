@@ -84,6 +84,18 @@ describe('SavePayslipDto (금액 저장)', () => {
     (amount) => expect(save({ amount }).failed).toEqual(['items']),
   );
 
+  it.each([undefined, null, 0, 30, 120, 44_640])(
+    '근무시간 %p 분은 받는다 — 30분 단위(WHALEERP-755)',
+    (workMinutes) =>
+      expect(save({ amount: 0, workMinutes }).failed).toEqual([]),
+  );
+
+  it.each([-30, 45, 1.5, 44_670, '120'])(
+    '근무시간 %p 분은 400 — 음수 · 30분 단위가 아님 · 한 달 넘음',
+    (workMinutes) =>
+      expect(save({ amount: 0, workMinutes }).failed).toEqual(['items']),
+  );
+
   it('금액 칸이 아예 없으면 400', () => {
     const dto = plainToInstance(SavePayslipDto, {
       updatedAt: '2026-10-21T01:00:00.000Z',

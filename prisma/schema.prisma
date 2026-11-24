@@ -1500,6 +1500,10 @@ model PayslipItem {
   adjustedAmount      Int?                @map("adjusted_amount")
   /// 입력 여부 — 공제 미입력과 0 구분
   isEntered           Boolean             @default(false) @map("is_entered")
+  /// 근무시간 — 계산 · 입력에 쓴 시간(분) — 기본급(파트타이머) · 주휴 · 연장은 계산 때, 야간 · 휴일근무수당은 관리자가 넣는다 (WHALEERP-755, 2026-11-24)
+  workMinutes         Int?                @map("work_minutes")
+  /// 계산식 — 한 줄 계산식 — 관리자가 계산값과 다른 금액으로 고치면 「직접 입력」. 계산하지 않으면 NULL (WHALEERP-755, 2026-11-24)
+  calculationText     String?             @map("calculation_text") @db.VarChar(200)
   payslip             Payslip             @relation(fields: [payslipId], references: [payslipId], onDelete: Restrict, onUpdate: NoAction, map: "payslip_items_payslip_id_fkey")
   payslipItemMaster   PayslipItemMaster   @relation(fields: [payslipItemMasterId], references: [payslipItemMasterId], onDelete: Restrict, onUpdate: NoAction, map: "payslip_items_payslip_item_master_id_fkey")
 

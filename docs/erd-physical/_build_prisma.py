@@ -122,6 +122,8 @@ def ftype(c):
     t = c.type
     if t.startswith("numeric("):
         return "Decimal", "@db.Decimal" + t[len("numeric"):].replace(",", ", ")
+    if t.startswith("varchar("):
+        return "String", "@db.VarChar" + t[len("varchar"):]
     return {"integer": ("Int", ""), "integer[]": ("Int[]", ""), "text": ("String", ""), "boolean": ("Boolean", ""),
             "timestamptz(6)": ("DateTime", "@db.Timestamptz(6)"), "date": ("DateTime", "@db.Date"),
             "jsonb": ("Json", ""), "bytea": ("Bytes", ""), "time": ("DateTime", "@db.Time(6)")}[t]

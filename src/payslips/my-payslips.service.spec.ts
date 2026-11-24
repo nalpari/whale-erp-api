@@ -45,6 +45,8 @@ const item = {
   calculatedAmount: 1_000_000,
   adjustedAmount: null,
   isEntered: true,
+  workMinutes: 3_900,
+  calculationText: '65.0시간 × 10,320원',
   payslipItemMaster: { itemCode: 'BASE_PAY' },
 };
 
@@ -365,7 +367,7 @@ describe('MyPayslipsService', () => {
       });
     });
 
-    it('항목은 급여 항목 순서로, 항목 코드를 붙여 담는다', async () => {
+    it('항목은 급여 항목 순서로, 항목 코드를 붙여 담는다 — 시간 · 계산식도(WHALEERP-755)', async () => {
       await expect(service.findOne(3, 40, NOW)).resolves.toEqual({
         ...shown,
         isWithholdingApplied: true,
@@ -379,13 +381,19 @@ describe('MyPayslipsService', () => {
             calculatedAmount: 1_000_000,
             adjustedAmount: null,
             isEntered: true,
+            workMinutes: 3_900,
+            calculationText: '65.0시간 × 10,320원',
           },
         ],
       });
       const select = firstArg(prisma.payslip.findFirst).select as Record<
         string,
-        { orderBy?: unknown }
+        { orderBy?: unknown; select?: unknown }
       >;
+      expect(select.payslipItems.select).toMatchObject({
+        workMinutes: true,
+        calculationText: true,
+      });
       expect(select.payslipItems.orderBy).toEqual([
         { payslipItemMaster: { sortOrder: 'asc' } },
         { payslipItemId: 'asc' },

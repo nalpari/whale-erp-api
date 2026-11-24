@@ -99,6 +99,13 @@ export class PayslipItemDto {
   adjustedAmount: number | null;
   /** 입력 여부 — 공제 미입력과 0 을 가른다 */
   isEntered: boolean;
+  /** 계산 · 입력에 쓴 시간(분) — 기본급(파트타이머) · 주휴 · 연장은 계산 때, 야간 · 휴일근무수당은 관리자가 넣은 값. 없으면 null(WHALEERP-755) */
+  workMinutes: number | null;
+  /**
+   * 한 줄 계산식(「8.0시간 × 10,320원 × 1.5배」, WHALEERP-755). 관리자가 계산값과 다른 금액으로 고치면 「직접 입력」(연장수당은
+   * 「8.0시간 · 직접 입력」), 야간 · 휴일근무수당은 「2.0시간」. 계산하지 않은 줄 · 2026-11-24 전에 만든 줄은 null
+   */
+  calculationText: string | null;
 }
 
 export class PayslipReviewReasonDto {
