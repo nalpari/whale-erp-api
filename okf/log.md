@@ -1,7 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-24
-* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) — 소속 추가 확인 요청 알림톡(`TALK_STAFF_AFFILIATION_V2`)이 실제 발송에서 알림톡으로 닿고 [요청 확인하기] 버튼(전체 `https://` 주소)이 열리는 것을 확인했다(2026-11-24 개발 서버 계약 90, WHALEERP-745 · 738 배포 뒤). 가입 초대는 아직 확인 전이라 대체 문자 발신번호가 없으면 막는 검사는 그대로다. 주석 · 문서만, 동작 변경 없음.
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) — 소속 추가 확인 요청 알림톡(`TALK_STAFF_AFFILIATION_V2`)이 실제 발송에서 알림톡으로 닿고 [요청 확인하기] 버튼(전체 `https://` 주소)이 열리는 것을 확인했다(2026-11-24 개발 서버 계약 90, WHALEERP-745 · 738 배포 뒤). 가입 초대는 아직 확인 전이라 대체 문자 발신번호가 없으면 막는 검사는 그대로다. `POST /contracts/:contractId/send` 503 설명(controller · openapi)의 「https 가 아님(가입 초대만)」을 「두 초대 모두」로 고쳤다(#323 이후 실제 동작). 주석 · 문서 · OpenAPI 설명만, 동작 변경 없음.
 * **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) · [Notification templates](/api/notification-templates.md) · [Naming](/conventions/naming.md) — 소속 추가 확인 요청 알림톡 · 메일 첫 줄을 「#{근무지}에서」로(사업자 뺌, WHALEERP-745), 알림톡에 [요청 확인하기] 버튼(링크 = 직원 앱 `/affiliations`, WHALEERP-738). 카카오 새 코드 `TALK_STAFF_AFFILIATION_V2`(2026-11-24 김민식 등록 · 같은 날 승인), 마이그레이션 `20261124170903_team3_staff_affiliation_kakao_reregistered`. 소속 추가 확인 요청도 직원 앱 주소(https)가 없으면 쓰기 전에 503. 코드 · 마이그레이션을 함께 배포한다.
 * **Update**: [Payslips](/api/payslips.md) — 주휴 식의 실근무에 주 40시간 상한을 적용한 값임을 「실근무(주 40시간까지)」로 적는다(PR #317 pr-agent, WHALEERP-755).
 * **Update**: [Payslips](/api/payslips.md) — 최종 게이트: 금액을 정수 분자 ÷ 분모(`roundDiv`)로 셈해 부동소수 .5 경계의 1원 차를 없앴다(주휴 · 정직원 포괄 연장에서 1원 오르는 경우가 있다), 주휴 식은 「N주 · 실근무 15시간 15분 ÷ 5 × 시급」, 식 판정은 보이는 값으로 셈한 원 = 금액 하나로, 0.5분 미만 정직원 연장은 시간 · 식을 비운다.
