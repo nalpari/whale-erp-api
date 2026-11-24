@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-24
+* **Update**: [Payslips](/api/payslips.md) — 최종 게이트: 금액을 정수 분자 ÷ 분모(`roundDiv`)로 셈해 부동소수 .5 경계의 1원 차를 없앴다(주휴 · 정직원 포괄 연장에서 1원 오르는 경우가 있다), 주휴 식은 「N주 · 실근무 15시간 15분 ÷ 5 × 시급」, 식 판정은 보이는 값으로 셈한 원 = 금액 하나로, 0.5분 미만 정직원 연장은 시간 · 식을 비운다.
 * **Update**: [Payslips](/api/payslips.md) — 재영 리뷰: 야간 · 휴일근무수당 금액이 있는데 근무시간이 0 이어도 시간이 없는 것으로 본다(임시저장 400 · 확정 422 `WORK_HOURS_MISSING`). 금액 0 · 시간 0 은 통과.
 * **Update**: [Payslips](/api/payslips.md) — 재영 리뷰: 시간 글자는 6의 배수 분만 「7.8시간」, 아니면 「7시간 50분」(`hoursText`), 식은 보이는 값으로 다시 곱한 금액이 실제 금액과 맞을 때만 낸다(470분이 「7.8시간」으로 적혀 식과 금액이 어긋났다).
 * **Update**: [Payslips](/api/payslips.md) — 되돌리기 순서(api 를 되돌릴 때는 화면 먼저 — 새 화면의 `workMinutes` 를 옛 api 가 400 으로 막는다), 확정 422 문서(`ApiUnprocessableEntityResponse`)에 `WORK_HOURS_MISSING` 을 더했다(WHALEERP-755, 동작 변경 없음).
