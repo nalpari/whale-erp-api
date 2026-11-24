@@ -48,6 +48,8 @@ const detail = (
     },
   ],
   isWithholdingApplied: true,
+  isHealthPensionInsured: true,
+  isEmploymentInjuryInsured: true,
   items: [
     item(1, 'EARNING', 'BASE_PAY', '기본급', {
       calculatedAmount: 1_000_000,
@@ -127,6 +129,78 @@ describe('payslip PDF', () => {
       '지방소득세',
       '연말(중도)정산',
     ]);
+  });
+
+  describe('4대보험 줄은 근로계약의 가입 체크대로(WHALEERP-756)', () => {
+    const insuranceLines = [
+      item(11, 'BASIC', 'NATIONAL_PENSION', '국민연금', { adjustedAmount: 0 }),
+      item(12, 'BASIC', 'HEALTH_INSURANCE', '건강보험', { adjustedAmount: 0 }),
+      item(13, 'BASIC', 'EMPLOYMENT_INSURANCE', '고용보험', {
+        adjustedAmount: 0,
+      }),
+      item(14, 'BASIC', 'LONG_TERM_CARE_INSURANCE', '장기요양보험', {
+        adjustedAmount: 0,
+      }),
+      item(15, 'BASIC', 'INCOME_TAX', '소득세', { adjustedAmount: 0 }),
+      item(16, 'BASIC', 'LOCAL_INCOME_TAX', '지방소득세', {
+        adjustedAmount: 0,
+      }),
+    ];
+    const names = (health: boolean, employment: boolean) =>
+      payslipPdfModel(
+        detail({
+          isWithholdingApplied: false,
+          isHealthPensionInsured: health,
+          isEmploymentInjuryInsured: employment,
+          items: insuranceLines,
+        }),
+        '유하람',
+      ).deductions.map((r) => r.name);
+
+    it('둘 다 미가입이면 4대보험 줄이 없고 소득세 · 지방소득세만', () => {
+      expect(names(false, false)).toEqual(['소득세', '지방소득세']);
+    });
+
+    it('건강보험 · 국민연금만 — 국민연금 · 건강보험 · 장기요양보험, 고용보험 없음', () => {
+      expect(names(true, false)).toEqual([
+        '국민연금',
+        '건강보험',
+        '장기요양보험',
+        '소득세',
+        '지방소득세',
+      ]);
+    });
+
+    it('미가입이어도 0 아닌 금액이 든 줄은 보인다 — 0 원 · 미입력이면 숨는다(2026-11-24 사용자 결정)', () => {
+      const deductions = payslipPdfModel(
+        detail({
+          isWithholdingApplied: false,
+          isHealthPensionInsured: false,
+          isEmploymentInjuryInsured: false,
+          items: [
+            item(11, 'BASIC', 'NATIONAL_PENSION', '국민연금', {
+              adjustedAmount: 45_000,
+            }),
+            item(12, 'BASIC', 'HEALTH_INSURANCE', '건강보험', {
+              adjustedAmount: 0,
+            }),
+            item(13, 'BASIC', 'EMPLOYMENT_INSURANCE', '고용보험', {
+              isEntered: false,
+            }),
+            item(15, 'BASIC', 'INCOME_TAX', '소득세', { adjustedAmount: 0 }),
+          ],
+        }),
+        '유하람',
+      ).deductions;
+      expect(deductions).toEqual([
+        { name: '국민연금', note: null, amount: '45,000원' },
+        { name: '소득세', note: null, amount: '0원' },
+      ]);
+    });
+
+    it('고용보험 · 산재보험만 — 고용보험만', () => {
+      expect(names(false, true)).toEqual(['고용보험', '소득세', '지방소득세']);
+    });
   });
 
   it('두 번 이상 보냈으면 마지막 발송일만 — 「다시 발송」은 붙이지 않는다(PAY-20)', () => {

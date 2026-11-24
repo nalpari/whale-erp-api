@@ -524,6 +524,124 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     await save(d, { isWithholdingApplied: false, items: fill(d, []) });
   });
 
+  it('4대보험 줄은 근로계약의 가입 체크대로 — 미가입이면 비운 채 확정되고, 달 중간에 가입하면 가입한 보험만 공제 미입력 · 「기간 중 계약 변경」(WHALEERP-756)', async () => {
+    const INSURANCE = [
+      'NATIONAL_PENSION',
+      'HEALTH_INSURANCE',
+      'LONG_TERM_CARE_INSURANCE',
+      'EMPLOYMENT_INSURANCE',
+    ];
+    type Insured = Detail & {
+      isHealthPensionInsured: boolean;
+      isEmploymentInjuryInsured: boolean;
+      totalDeductionAmount: number;
+    };
+    const insuredDetail = async () => (await detail()) as Insured;
+    const fill = (d: Detail, empty: string[], zero = false) =>
+      d.items.map((i) => ({
+        payslipItemMasterId: i.payslipItemMasterId,
+        amount: empty.includes(i.itemCode)
+          ? zero
+            ? 0
+            : null
+          : i.isEntered
+            ? (i.adjustedAmount ?? i.calculatedAmount)
+            : 0,
+      }));
+    const confirmThenCancel = async () => {
+      await send('post', `/payslips/${payslipId}/confirm`, 200, {
+        updatedAt: (await detail()).updatedAt,
+      });
+      await send('post', `/payslips/${payslipId}/cancel-confirmation`, 200, {
+        updatedAt: (await detail()).updatedAt,
+      });
+    };
+
+    // 두 계약 모두 미체크 — 4대보험 넷을 비워도 공제 미입력이 아니고 확정된다
+    const before = await insuredDetail();
+    expect(before.isHealthPensionInsured).toBe(false);
+    expect(before.isEmploymentInjuryInsured).toBe(false);
+    await save(before, { items: fill(before, INSURANCE) });
+    const none = await listed();
+    expect(none.reasons).not.toContain('DEDUCTION_MISSING');
+    expect(none.count).toBe(none.pendingTotal);
+    await confirmThenCancel();
+
+    // 미가입이어도 0 아닌 금액이 든 4대보험 줄은 숨지 않고 공제 합계에 든다 — 예전엔 4대보험을 모두 채워야 확정돼, 채워 둔 금액이 줄 없이
+    // 합계에서 빠지지 않게(2026-11-24 사용자 결정, 리뷰 M5). 0 으로 되돌리면 다시 숨고 합계에서도 빠진다
+    const blank = await insuredDetail();
+    const withPension = (d: Detail, amount: number | null) =>
+      fill(d, INSURANCE).map((l, i) =>
+        d.items[i].itemCode === 'NATIONAL_PENSION' ? { ...l, amount } : l,
+      );
+    await save(blank, { items: withPension(blank, 45_000) });
+    const kept = await insuredDetail();
+    expect(kept.isHealthPensionInsured).toBe(false);
+    expect(kept.totalDeductionAmount).toBe(blank.totalDeductionAmount + 45_000);
+    expect((await listed()).reasons).not.toContain('DEDUCTION_MISSING');
+    await confirmThenCancel();
+    const back = await insuredDetail();
+    await save(back, { items: withPension(back, 0) });
+    expect((await insuredDetail()).totalDeductionAmount).toBe(
+      blank.totalDeductionAmount,
+    );
+    // 다음 단계는 4대보험이 비어 있는 데서 시작한다
+    const zero = await insuredDetail();
+    await save(zero, { items: withPension(zero, null) });
+
+    // 9/26 계약만 건강보험 · 국민연금 체크(달 중간 미가입 → 가입) — 그 셋만 보이고 고용보험은 숨는다
+    await prisma.contract.updateMany({
+      where: { staffMemberId, startDate: day('2026-09-26') },
+      data: { isHealthPensionInsured: true },
+    });
+    await send('post', `/payslips/${payslipId}/recalculate`, 200, {
+      updatedAt: (await detail()).updatedAt,
+    });
+    const joined = await insuredDetail();
+    expect(joined.isHealthPensionInsured).toBe(true);
+    expect(joined.isEmploymentInjuryInsured).toBe(false);
+    expect(joined.reviewReasons.map((r) => r.reviewReason)).toContain(
+      'CONTRACT_CHANGED',
+    );
+    const pending = await listed();
+    expect(pending.reasons).toContain('DEDUCTION_MISSING');
+    expect(pending.inPending).toBe(true);
+    expect(pending.count).toBe(pending.pendingTotal);
+    const blocked = await send('post', `/payslips/${payslipId}/confirm`, 422, {
+      updatedAt: joined.updatedAt,
+    });
+    expect(
+      (blocked.body as { items: { itemName: string }[] }).items
+        .map((i) => i.itemName)
+        .sort(),
+    ).toEqual(['건강보험', '국민연금', '장기요양보험'].sort());
+
+    // 셋을 0 으로 채우면 고용보험이 비어 있어도 확정 — 3.3% 를 켜도 확정은 막지 않는다(화면이 안내만)
+    await save(joined, {
+      isWithholdingApplied: true,
+      items: fill(
+        joined,
+        ['NATIONAL_PENSION', 'HEALTH_INSURANCE', 'LONG_TERM_CARE_INSURANCE'],
+        true,
+      ).map((l, i) =>
+        joined.items[i].itemCode === 'EMPLOYMENT_INSURANCE'
+          ? { ...l, amount: null }
+          : l,
+      ),
+    });
+    const filled = await listed();
+    expect(filled.reasons).not.toContain('DEDUCTION_MISSING');
+    await confirmThenCancel();
+
+    // 다음 시험을 위해 되돌려 둔다
+    await prisma.contract.updateMany({
+      where: { staffMemberId },
+      data: { isHealthPensionInsured: false },
+    });
+    const d = await detail();
+    await save(d, { isWithholdingApplied: false, items: fill(d, []) });
+  });
+
   it('고용형태가 다른 계약이 섞이면 기본급 · 주휴 · 연장을 계산하지 않고 「기간 중 계약 변경」이 직접 입력을 요구한다(PR #159 리뷰)', async () => {
     // 앞 테스트의 9/26 새 계약을 정직원으로 — 파트타이머 9/1~25 · 정직원 9/26~
     await prisma.contract.updateMany({

@@ -15,6 +15,7 @@ import { Prisma, type BulkExport } from '@prisma/client';
 import { AdminScopeService } from '../admin-scope/admin-scope.service';
 import { ACCOUNT_UNAVAILABLE_MESSAGE } from '../auth/access-messages';
 import { DETAIL_SELECT, toSummary } from '../payslips/my-payslips.service';
+import { payslipInsuranceMany } from '../payslips/payslip-insurance';
 import { payslipPdfModel, renderPayslipPdf } from '../payslips/payslip-pdf';
 import { dateOnly, storeNames } from '../payslips/payslip-shared';
 import { storeLabelOf } from '../stores/store-label';
@@ -390,7 +391,7 @@ export class BulkExportsService {
     });
     const payslips = await this.prisma.payslip.findMany({
       where: { ...byStaff, status: 'SENT' },
-      select: { ...DETAIL_SELECT, staffMemberId: true },
+      select: DETAIL_SELECT,
       orderBy: [{ staffMemberId: 'asc' }, { periodStartDate: 'asc' }],
     });
     const adminIds = [
@@ -471,11 +472,14 @@ export class BulkExportsService {
       this.prisma,
       payslips.map((p) => p.storeId),
     );
+    // 명세서 PDF 의 4대보험 줄 — 직원 앱 내보내기와 같다(WHALEERP-756). 급여 기간마다 한 번 읽는다
+    const insuranceOf = await payslipInsuranceMany(this.prisma, payslips);
     for (const p of plan.payslips) {
       const row = payslipById.get(p.payslipId)!;
       const detail = {
         ...toSummary(row, names(row.storeId)),
         isWithholdingApplied: row.isWithholdingApplied,
+        ...insuranceOf(row),
         items: row.payslipItems.map(({ payslipItemMaster, ...item }) => ({
           ...item,
           itemCode: payslipItemMaster.itemCode,

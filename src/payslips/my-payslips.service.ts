@@ -8,6 +8,7 @@ import {
   MyPayslipListResponseDto,
   MyPayslipSummaryDto,
 } from './dto/my-payslip.response.dto';
+import { payslipInsurance } from './payslip-insurance';
 import { dateOnly, ITEM_ORDER, storeNames } from './payslip-shared';
 
 /** PAY-4: 퇴직한 뒤에도 명세서를 만든 날부터 3년 동안 본다. */
@@ -34,6 +35,8 @@ const SUMMARY_SELECT = {
 
 export const DETAIL_SELECT = {
   ...SUMMARY_SELECT,
+  // 4대보험 가입 여부(payslipInsurance)를 셀 직원 레코드 — 응답에는 싣지 않는다
+  staffMemberId: true,
   isWithholdingApplied: true,
   // 상세 응답에는 싣지 않는다 — PDF 의 직원 이름 · 파일 이름에만 쓴다
   staffMember: { select: { name: true } },
@@ -156,12 +159,16 @@ export class MyPayslipsService {
       select: DETAIL_SELECT,
     });
     if (!row) return null;
-    const names = await storeNames(this.prisma, [row.storeId]);
+    const [names, insurance] = await Promise.all([
+      storeNames(this.prisma, [row.storeId]),
+      payslipInsurance(this.prisma, row),
+    ]);
     return {
       staffName: row.staffMember.name,
       detail: {
         ...toSummary(row, names(row.storeId)),
         isWithholdingApplied: row.isWithholdingApplied,
+        ...insurance,
         items:
           row.status === 'SENT'
             ? row.payslipItems.map(({ payslipItemMaster, ...item }) => ({

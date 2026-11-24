@@ -17,6 +17,7 @@ import {
 import { adminNames } from '../common/admin-names';
 import { containsText } from '../common/contains-text';
 import { PrismaService } from '../prisma/prisma.service';
+import { addDays } from '../staff-members/kst-date';
 import {
   PayslipListQueryDto,
   PayslipSummaryQueryDto,
@@ -30,6 +31,8 @@ import {
 } from './dto/payslip.response.dto';
 import {
   dateOnly,
+  EMPLOYMENT_INJURY_ITEM_CODES,
+  HEALTH_PENSION_ITEM_CODES,
   isShown,
   ITEM_ORDER,
   monthRange,
@@ -38,6 +41,11 @@ import {
   storeFieldsOf,
   storeInfoOf,
 } from './payslip-shared';
+import {
+  insuredWhere,
+  payslipInsurance,
+  payslipInsuranceMany,
+} from './payslip-insurance';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
 import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
@@ -66,46 +74,70 @@ const STORED_REVIEW_REASONS = REVIEW_PENDING_REASONS.filter(
 );
 
 /**
- * 공제 미입력 — 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수) 중 넣지 않은 줄이 있다.
- * 확정이 막는 조건(PayslipEditService.confirm)과 같다.
+ * 공제 미입력 — 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수, 4대보험은 근로계약에서
+ * 가입한 것만 — WHALEERP-756. 미가입이어도 0 아닌 금액 줄은 보이지만 미입력 줄은 금액이 없어 숨는다) 중 넣지 않은 줄이 있다.
+ * 확정이 막는 조건(PayslipEditService.confirm, `isShown`)과 같다. 가입 여부는
+ * 명세서 행의 급여 기간으로 셀 수 없어 그 달의 급여 기간(1일 ~ 말일 — 명세서는 늘 그렇다, payslip-draft payPeriod)으로 센다.
  */
-const DEDUCTION_MISSING: Prisma.PayslipWhereInput = {
-  OR: [
-    {
-      isWithholdingApplied: false,
-      payslipItems: {
-        some: {
-          isEntered: false,
-          itemCategory: { in: ['BASIC', 'ADDITIONAL'] },
-        },
+function deductionMissing(month: string): Prisma.PayslipWhereInput {
+  const { gte, lt } = monthRange(month);
+  const end = addDays(lt, -1);
+  const unentered = (
+    line: Prisma.PayslipItemWhereInput,
+  ): Prisma.PayslipWhereInput => ({
+    payslipItems: { some: { isEntered: false, ...line } },
+  });
+  const basic = (codes: Set<string>): Prisma.PayslipItemWhereInput => ({
+    itemCategory: 'BASIC',
+    payslipItemMaster: { itemCode: { in: [...codes] } },
+  });
+  return {
+    OR: [
+      unentered({ itemCategory: 'ADDITIONAL' }),
+      {
+        isWithholdingApplied: true,
+        ...unentered({ itemCategory: 'WITHHOLDING' }),
       },
-    },
-    {
-      isWithholdingApplied: true,
-      payslipItems: {
-        some: {
-          isEntered: false,
-          OR: [
-            { itemCategory: { in: ['ADDITIONAL', 'WITHHOLDING'] } },
-            {
-              itemCategory: 'BASIC',
-              payslipItemMaster: {
-                itemCode: { notIn: [...REPLACED_BY_WITHHOLDING] },
-              },
-            },
-          ],
-        },
+      {
+        isWithholdingApplied: false,
+        ...unentered(basic(REPLACED_BY_WITHHOLDING)),
       },
-    },
-  ],
-};
+      {
+        AND: [
+          insuredWhere('isHealthPensionInsured', gte, end),
+          unentered(basic(HEALTH_PENSION_ITEM_CODES)),
+        ],
+      },
+      {
+        AND: [
+          insuredWhere('isEmploymentInjuryInsured', gte, end),
+          unentered(basic(EMPLOYMENT_INJURY_ITEM_CODES)),
+        ],
+      },
+      // 그 밖의 기본 공제(지금은 없다 — 기본 공제는 여섯)는 늘 보인다(`isItemCodeShown`). 미가입 4대보험 줄은 0 아닌 금액이면 보이지만
+      // 여기서 보는 줄은 미입력뿐이라(미입력 + 미가입 = 숨김) 가입한 경우만 센다 — `isShown` 과 같은 판정
+      unentered({
+        itemCategory: 'BASIC',
+        payslipItemMaster: {
+          itemCode: {
+            notIn: [
+              ...REPLACED_BY_WITHHOLDING,
+              ...HEALTH_PENSION_ITEM_CODES,
+              ...EMPLOYMENT_INJURY_ITEM_CODES,
+            ],
+          },
+        },
+      }),
+    ],
+  };
+}
 
 /**
  * 검토 대기 — 확인하지 않은 검토 사유가 남았거나 공제가 비어 있는 작성 중 · 검토 중 명세서(검토 대기는 상태가 아니라 분류다,
  * 2026-10-26). 확정이 사유를 모두 확인하고 공제 미입력을 막으므로 확정 · 발송된 명세서는 검토 대기가 아니지만, 그 규칙에 기대지
  * 않고 상태로도 거른다
  */
-const REVIEW_PENDING: Prisma.PayslipWhereInput = {
+const reviewPending = (month: string): Prisma.PayslipWhereInput => ({
   status: { in: ['DRAFTING', 'REVIEWING'] },
   OR: [
     {
@@ -116,9 +148,9 @@ const REVIEW_PENDING: Prisma.PayslipWhereInput = {
         },
       },
     },
-    DEDUCTION_MISSING,
+    deductionMissing(month),
   ],
-};
+});
 
 /** 출퇴근 누락 사유가 없거나 모두 확인됐으면 출퇴근 확인. */
 const attendanceConfirmed = (
@@ -138,6 +170,7 @@ const pendingReasonsOf = (
 
 const LIST_SELECT = {
   payslipId: true,
+  staffMemberId: true,
   storeId: true,
   periodStartDate: true,
   periodEndDate: true,
@@ -149,12 +182,16 @@ const LIST_SELECT = {
     where: { acknowledgedAt: null },
     select: { reviewReason: true },
   },
-  // 넣지 않은 공제 줄 — 보이는 줄인지는 3.3% 적용 여부로 가린다(공제 미입력 검토 대기)
+  // 넣지 않은 공제 줄 — 보이는 줄인지는 3.3% 적용 여부 · 4대보험 가입 여부로 가린다(공제 미입력 검토 대기)
   isWithholdingApplied: true,
   payslipItems: {
     where: { isEntered: false, itemCategory: { not: 'EARNING' } },
     select: {
       itemCategory: true,
+      // 미입력 줄만 읽으니 금액은 늘 비었다 — 보이는 줄 판정(isShown)이 금액을 보는 모양이라 같이 읽는다
+      isEntered: true,
+      adjustedAmount: true,
+      calculatedAmount: true,
       payslipItemMaster: { select: { itemCode: true } },
     },
   },
@@ -320,7 +357,7 @@ export class PayslipListService {
         period,
         ...(name ? [name] : []),
         ...(filtersStatus ? [{ status: { in: status } }] : []),
-        ...(pendingOnly ? [REVIEW_PENDING] : []),
+        ...(pendingOnly ? [reviewPending(query.month)] : []),
       ],
     };
     const countWhere: Prisma.PayslipWhereInput = name
@@ -355,7 +392,7 @@ export class PayslipListService {
               consentedOnly,
               period,
               ...(name ? [name] : []),
-              REVIEW_PENDING,
+              reviewPending(query.month),
             ],
           },
         }),
@@ -375,6 +412,19 @@ export class PayslipListService {
       rows.map((r) => r.storeId),
     );
     const storeById = new Map(stores.map((s) => [s.storeId, s]));
+    const masked = (r: (typeof rows)[number]) =>
+      hidesPersonalData(
+        roleTypeCode,
+        storeById.get(r.storeId),
+        hqSharingConsentedOf(r.staffMember),
+      );
+    const editable = (r: (typeof rows)[number]) =>
+      r.status === 'DRAFTING' || r.status === 'REVIEWING';
+    // 공제 미입력을 가를 가입 여부 — 가린 줄 · 검토 대기가 될 수 없는 줄은 읽지 않는다. 쪽 전체를 한 번에(줄마다 읽지 않게)
+    const insuranceOf = await payslipInsuranceMany(
+      this.prisma,
+      rows.filter((r) => !masked(r) && editable(r)),
+    );
     const items = rows.map((r): PayslipListItemDto => {
       const shown = {
         storeId: r.storeId,
@@ -382,13 +432,7 @@ export class PayslipListService {
         periodStartDate: dateOnly(r.periodStartDate),
         periodEndDate: dateOnly(r.periodEndDate),
       };
-      if (
-        hidesPersonalData(
-          roleTypeCode,
-          storeById.get(r.storeId),
-          hqSharingConsentedOf(r.staffMember),
-        )
-      )
+      if (masked(r))
         return {
           ...shown,
           payslipId: null,
@@ -409,14 +453,15 @@ export class PayslipListService {
         isAttendanceConfirmed: attendanceConfirmed(r.payslipReviewReasons),
         status: r.status,
         lastSentAt: r.payslipDispatches[0]?.sentAt ?? null,
-        // 필터 · 건수(REVIEW_PENDING)와 같은 기준 — 작성 중 · 검토 중만 검토 대기다
-        pendingReviewReasons:
-          r.status === 'DRAFTING' || r.status === 'REVIEWING'
-            ? pendingReasonsOf(
-                r.payslipReviewReasons,
-                r.payslipItems.some((l) => isShown(l, r.isWithholdingApplied)),
-              )
-            : [],
+        // 필터 · 건수(reviewPending)와 같은 기준 — 작성 중 · 검토 중만 검토 대기다
+        pendingReviewReasons: editable(r)
+          ? pendingReasonsOf(
+              r.payslipReviewReasons,
+              r.payslipItems.some((l) =>
+                isShown(l, r.isWithholdingApplied, insuranceOf(r)),
+              ),
+            )
+          : [],
       };
     });
     return { items, total, statusCounts, reviewPendingCount };
@@ -521,7 +566,7 @@ export class PayslipListService {
       }),
       storeInfoOf(this.prisma, [found.storeId]),
     ]);
-    const [changedByName, confirmable] = await Promise.all([
+    const [changedByName, confirmable, insurance] = await Promise.all([
       adminNames(
         this.prisma,
         p.payslipLogs.map((l) => l.changedBy),
@@ -541,6 +586,8 @@ export class PayslipListService {
             }),
           )
         : null,
+      // 4대보험 가입 여부 — 화면이 공제 줄을 보이고 감춘다(WHALEERP-756). 가림을 정한 뒤라 가린 명세서에는 읽지 않는다
+      payslipInsurance(this.prisma, p),
     ]);
     return {
       payslipId: p.payslipId,
@@ -555,6 +602,7 @@ export class PayslipListService {
       status: p.status,
       isPremiumApplied: p.isPremiumApplied,
       isWithholdingApplied: p.isWithholdingApplied,
+      ...insurance,
       grossPayAmount: p.grossPayAmount,
       totalDeductionAmount: p.totalDeductionAmount,
       netPayAmount: p.netPayAmount,

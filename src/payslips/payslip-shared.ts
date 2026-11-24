@@ -48,23 +48,77 @@ export const REPLACED_BY_WITHHOLDING = new Set([
   'LOCAL_INCOME_TAX',
 ]);
 
+/** 건강보험 · 국민연금 가입이면 보이는 기본 공제 — 장기요양보험은 건강보험료에 붙어 같이 간다(WHALEERP-756, 2026-11-20 김지영) */
+export const HEALTH_PENSION_ITEM_CODES = new Set([
+  'NATIONAL_PENSION',
+  'HEALTH_INSURANCE',
+  'LONG_TERM_CARE_INSURANCE',
+]);
+
+/** 고용보험 · 산재보험 가입이면 보이는 기본 공제 — 산재보험은 사업주만 내 명세서 줄이 없다(WHALEERP-756) */
+export const EMPLOYMENT_INJURY_ITEM_CODES = new Set(['EMPLOYMENT_INSURANCE']);
+
 /**
- * 이 명세서에 보이는 줄 — 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수 둘. 화면의 isItemShown 과 같다. 명세서 수정(총액 ·
- * 확정의 공제 미입력)과 목록의 공제 미입력 검토 대기가 같은 판정을 쓴다.
+ * 명세서의 4대보험 가입 여부 — 급여 기간에 효력이 있던 근로계약(`validContractWhere`) 가운데 하나라도 그 칸을 체크했으면 true
+ * (payslip-insurance.ts, WHALEERP-756). 계약 칸이 null 이면 체크하지 않은 것으로 본다.
+ */
+export interface PayslipInsurance {
+  isHealthPensionInsured: boolean;
+  isEmploymentInjuryInsured: boolean;
+}
+
+/**
+ * 이 줄이 명세서에 보이는가 — 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수 둘. 4대보험 넷은 근로계약에서 가입했으면 보이고
+ * (건강보험 · 국민연금 → 국민연금 · 건강보험 · 장기요양보험, 고용보험 · 산재보험 → 고용보험, WHALEERP-756 — 미가입 직원에게 0 을
+ * 넣게 하지 않으려고), 미가입이면 **비었거나(`amount` null = 미입력) 0 원일 때만** 숨는다. 가입 체크 전에 넣어 둔 0 아닌 금액
+ * (예전엔 4대보험을 모두 채워야 확정됐다)이 줄 없이 합계에만 남거나, 다음 저장에서 합계에서 조용히 빠지지 않게(2026-11-24 사용자
+ * 결정). `amount` 는 줄 금액(`amountOf`). 화면(관리자 웹 · 직원 앱)의 isItemShown 과 같다.
+ */
+export function isItemCodeShown(
+  line: {
+    itemCategory: PayslipItemCategory;
+    itemCode: string;
+    amount: number | null;
+  },
+  withholding: boolean,
+  insurance: PayslipInsurance,
+): boolean {
+  const { itemCategory, itemCode, amount } = line;
+  if (itemCategory === 'WITHHOLDING') return withholding;
+  if (itemCategory !== 'BASIC') return true;
+  if (REPLACED_BY_WITHHOLDING.has(itemCode)) return !withholding;
+  const filled = amount !== null && amount !== 0;
+  if (HEALTH_PENSION_ITEM_CODES.has(itemCode))
+    return insurance.isHealthPensionInsured || filled;
+  if (EMPLOYMENT_INJURY_ITEM_CODES.has(itemCode))
+    return insurance.isEmploymentInjuryInsured || filled;
+  return true;
+}
+
+/**
+ * 이 명세서에 보이는 줄(`isItemCodeShown`, 금액은 `amountOf`). 명세서 수정(총액 · 확정의 공제 미입력)과 목록의 공제 미입력 검토
+ * 대기가 같은 판정을 쓴다 — 목록의 검토 대기 필터 · 건수는 같은 조건을 where 로 쓴다(payslip-list.service `deductionMissing`).
  */
 export function isShown(
   l: {
     itemCategory: PayslipItemCategory;
     payslipItemMaster: { itemCode: string };
+    isEntered: boolean;
+    adjustedAmount: number | null;
+    calculatedAmount: number | null;
   },
   withholding: boolean,
+  insurance: PayslipInsurance,
 ): boolean {
-  if (l.itemCategory === 'WITHHOLDING') return withholding;
-  if (l.itemCategory === 'BASIC')
-    return !(
-      withholding && REPLACED_BY_WITHHOLDING.has(l.payslipItemMaster.itemCode)
-    );
-  return true;
+  return isItemCodeShown(
+    {
+      itemCategory: l.itemCategory,
+      itemCode: l.payslipItemMaster.itemCode,
+      amount: amountOf(l),
+    },
+    withholding,
+    insurance,
+  );
 }
 
 /** 명세서 항목 순서 — 급여 항목 표의 순서, 같으면 줄 ID. */
