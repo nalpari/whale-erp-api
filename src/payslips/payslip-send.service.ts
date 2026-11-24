@@ -47,6 +47,7 @@ import { stale, statusConflict } from './payslip-edit.service';
 import { PayslipListService } from './payslip-list.service';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 import { DETAIL_SELECT, toSummary } from './my-payslips.service';
+import { payslipInsurance } from './payslip-insurance';
 import {
   payslipPdfFileName,
   payslipPdfModel,
@@ -537,6 +538,8 @@ export class PayslipSendService {
     const detail = {
       ...toSummary(sent, storeName),
       isWithholdingApplied: row.isWithholdingApplied,
+      // 직원 앱 상세 · 내보내기와 같은 4대보험 줄(WHALEERP-756)
+      ...(await payslipInsurance(this.prisma, row)),
       items: row.payslipItems.map(({ payslipItemMaster, ...item }) => ({
         ...item,
         itemCode: payslipItemMaster.itemCode,

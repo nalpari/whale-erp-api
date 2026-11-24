@@ -95,6 +95,13 @@ export class MyPayslipListResponseDto {
 export class MyPayslipDetailResponseDto extends MyPayslipSummaryDto {
   /** 3.3% 원천징수 적용 — 원천징수 · 소득세 줄을 어떻게 보일지 화면이 정한다 */
   isWithholdingApplied: boolean;
+  /**
+   * 건강보험 · 국민연금 가입 — 급여 기간에 효력이 있던 근로계약 중 하나라도 체크했으면 true. false 면 국민연금 · 건강보험 ·
+   * 장기요양보험 줄 가운데 금액이 비었거나 0 원인 줄을 보이지 않는다 — 0 아닌 금액이 든 줄은 미가입이어도 보인다(WHALEERP-756)
+   */
+  isHealthPensionInsured: boolean;
+  /** 고용보험 · 산재보험 가입 — 같은 계약 기준. false 면 고용보험 줄이 비었거나 0 원일 때 보이지 않는다(0 아닌 금액이면 보임, WHALEERP-756) */
+  isEmploymentInjuryInsured: boolean;
   /** 지급 · 공제 항목, 급여 항목 순서. 검토 중이면 빈 목록 */
   items: MyPayslipItemDto[];
 }

@@ -43,6 +43,7 @@ import {
   enteredBasis,
 } from './payslip-calculation';
 import { hoursText, PayBasis, PayResult, withHours } from './pay-calculation';
+import { payslipInsurance } from './payslip-insurance';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 import {
   amountOf,
@@ -50,6 +51,7 @@ import {
   isShown,
   ITEM_ORDER,
   notSendingSince,
+  type PayslipInsurance,
   SENDING_STALE_MS,
 } from './payslip-shared';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
@@ -131,12 +133,19 @@ interface Line {
   payslipItemMaster: { itemCode: string; isSystemCalculated: boolean };
 }
 
-/** 지급 총액 · 공제 총액 · 실지급액. 숨은 줄은 세지 않고 미입력은 0 으로 센다(확정은 미입력 공제를 따로 막는다). */
-function totalsOf(lines: Line[], withholding: boolean) {
+/**
+ * 지급 총액 · 공제 총액 · 실지급액. 숨은 줄(3.3% 로 빠진 세금 · 가입하지 않은 4대보험)은 세지 않고 미입력은 0 으로 센다(확정은
+ * 미입력 공제를 따로 막는다).
+ */
+function totalsOf(
+  lines: Line[],
+  withholding: boolean,
+  insurance: PayslipInsurance,
+) {
   let gross = 0;
   let deduction = 0;
   for (const l of lines) {
-    if (!isShown(l, withholding)) continue;
+    if (!isShown(l, withholding, insurance)) continue;
     const amount = amountOf(l) ?? 0;
     if (l.itemCategory === 'EARNING') gross += amount;
     else deduction += amount;
@@ -461,7 +470,11 @@ export class PayslipEditService {
 
       await tx.payslip.update({
         where: { payslipId },
-        data: totalsOf(kept, dto.isWithholdingApplied),
+        data: totalsOf(
+          kept,
+          dto.isWithholdingApplied,
+          await payslipInsurance(tx, current),
+        ),
       });
       if (changes.length > 0)
         await tx.payslipLog.create({
@@ -537,7 +550,11 @@ export class PayslipEditService {
       }
       await tx.payslip.update({
         where: { payslipId },
-        data: totalsOf(lines, current.isWithholdingApplied),
+        data: totalsOf(
+          lines,
+          current.isWithholdingApplied,
+          await payslipInsurance(tx, current),
+        ),
       });
       changes.push(
         ...(await this.refreshReviewReasons(
@@ -563,8 +580,8 @@ export class PayslipEditService {
 
   /**
    * 확정. 작성 중 · 검토 중만(아니면 409). 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를 켜면 소득세 · 지방소득세 대신
-   * 원천징수)가 하나라도 미입력이면 422 DEDUCTION_MISSING 과 그 항목. 금액이 있는 야간 · 휴일근무수당에 근무시간이 없으면 422
-   * WORK_HOURS_MISSING 과 그 항목(WHALEERP-755). 검토 사유가 있어도 확정하는 것이 「확인」이다 —
+   * 원천징수, 4대보험은 근로계약에서 가입한 것만 — WHALEERP-756)가 하나라도 미입력이면 422 DEDUCTION_MISSING 과 그 항목. 금액이
+   * 있는 야간 · 휴일근무수당에 근무시간이 없으면 422 WORK_HOURS_MISSING 과 그 항목(WHALEERP-755). 검토 사유가 있어도 확정하는 것이 「확인」이다 —
    * 확인하지 않은 사유에 확정 시각을 확인 일시로 남긴다. 확정할 수 있는 날(`confirmableFrom` — 퇴직일 · 마지막 계약 종료일 · 급여
    * 기간 마지막 날 가운데 가장 빠른 날의 다음 날, 한국. 그 계약의 보낸 갱신(임시저장 제외)이 기간 안에 시작하면 계약 종료일은 보지 않는다) 전이면 422 PERIOD_NOT_ENDED — 남은 날의 근무가 빠진 명세서가 발송되지
    * 않게 막는다. 초안은 그 전에도 미리 보기로 만든다(운영 정책 PAY-06 v247 · v251).
@@ -597,11 +614,12 @@ export class PayslipEditService {
           code: 'PERIOD_NOT_ENDED',
           message: `아직 확정할 수 없습니다. ${from} 부터 확정할 수 있습니다 — 급여 기간 마지막 날(그 전에 퇴직하거나 계약이 끝나면 그날. 진행 중인 갱신 계약이 있으면 급여 기간 마지막 날)이 지나야 합니다.`,
         });
+      const insurance = await payslipInsurance(tx, current);
       const lines = await this.lines(tx, payslipId);
       const missing = lines.filter(
         (l) =>
           l.itemCategory !== 'EARNING' &&
-          isShown(l, current.isWithholdingApplied) &&
+          isShown(l, current.isWithholdingApplied, insurance) &&
           !l.isEntered,
       );
       if (missing.length > 0)

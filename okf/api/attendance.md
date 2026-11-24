@@ -4,12 +4,12 @@ title: Attendance
 description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(출퇴근 탭 진입 · 버튼 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T01:14:12Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T05:07:10Z }
 sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
     title: 관리자 웹 일별 출퇴근 GET /attendance-records/daily(WHALEERP-217)
-    last_modified: 2026-11-19T06:58:12Z
+    last_modified: 2026-11-24T05:07:10Z
   - id: open-check-ins
     resource: ../../src/attendance/open-check-ins.ts
     title: 점포의 열린 출근 조건 openCheckInsOf · checkOutExpired(644 · 647 · 650 공용)
@@ -115,7 +115,11 @@ sources:
   기록이 있는 날만 준다. 보정 · 대신 등록한 날은 `edits`(관리자 웹 이력과 같은 모양, 새것부터 — 「이상 없음」만 받은 날은 빈 배열,
   ATT-19)가 붙는다. 보기만 하고 위치 동의는 보지 않는다(대신 등록을 받는 동의 없는 직원도 본다). 내 소속이 아니면 404.
   근무 시간 · 연장은 급여 계산과 같은 값(`payInputOf` · `weekStats` — 휴게 뺌, 주 40시간 초과 포함)으로 기간 합 `totals` 와 기간에
-  걸친 월 ~ 일 주마다 `weeks` 를 준다. 앱은 그대로 보인다(2026-10-26 재영).
+  걸친 월 ~ 일 주마다 `weeks` 를 준다. 앱은 그대로 보인다(2026-10-26 재영). `weeks` 도 조회 기간 안의 날만 센다 — 걸친 첫 주 · 마지막
+  주는 기간 몫이라 주별 근무 합이 `totals` 와 같다(WHALEERP-768, 2026-11-24. 전에는 주 전체를 세어 11/1~11/30 의 「10/26 – 11/1」에
+  10월 근무가 들어갔다). 연장도 `totals` 와 같은 기준(급여 계산의 달을 걸친 주 규칙)이라, 걸친 주는 주 전체 40시간으로 본 값과 다를 수
+  있다 — 기간 끝에 걸친 주는 기간 몫으로 주휴 조건을 채울 때만 주 40시간을 세고, 기간 앞에 걸친 주는 앞 몫이 주휴 조건을 못 채우면 주
+  전체 40시간 초과를 이 기간에 센다.
 
 [^service]: `src/attendance/my-attendance.service.ts`
 [^rules]: `src/attendance/attendance-rules.ts`

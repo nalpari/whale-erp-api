@@ -8,8 +8,8 @@ generated: { by: claude-code/opus-5.5, at: 2026-11-24T05:36:26Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
-    title: pickedStores — 목록 · 발송의 점포 조건(storeIds · storeTypes, 본사 HQ 포함)
-    last_modified: 2026-11-24T01:41:25Z
+    title: pickedStores — 목록 · 발송의 점포 조건(storeIds · storeTypes, 본사 HQ 포함) · 보이는 줄 isShown(3.3% · 4대보험 가입)
+    last_modified: 2026-11-24T04:14:26Z
   - id: payslip-list-query
     resource: ../../src/payslips/dto/payslip-list.query.dto.ts
     title: 목록 쿼리 — storeTypes 는 StoreScopeType(DIRECT · FRANCHISE · HQ)
@@ -45,7 +45,7 @@ sources:
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일 · 명세서 PDF 첨부)
-    last_modified: 2026-11-24T01:25:54Z
+    last_modified: 2026-11-24T02:51:52Z
   - id: pdf
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
@@ -58,6 +58,10 @@ sources:
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답 · 쿼리(my-payslip.response.dto.ts · my-payslip-list.query.dto.ts)
     last_modified: 2026-11-24T04:35:46Z
+  - id: payslip-insurance
+    resource: ../../src/payslips/payslip-insurance.ts
+    title: 4대보험 가입 여부 — 급여 기간 계약(validContractWhere)의 체크 하나라도(WHALEERP-756)
+    last_modified: 2026-11-24T04:14:26Z
 ---
 
 # 관리자 목록 (GET /payslips)
@@ -94,7 +98,7 @@ sources:
 「분류 · 검토 대기만」 필터. 따로 목록을 두지 않는다). 확인(`acknowledged_at`)하지 않은 검토 사유 넷 — 출퇴근 누락 ·
 계약 만료 후 기록 · 기간 중 계약 변경 · 확인 필요 기록 포함 — 중 하나라도 남았거나 **공제 미입력**(`DEDUCTION_MISSING`)인 명세서다.
 공제 미입력은 사유 행으로 남기지 않고 공제 칸으로 판정한다 — 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를 켜면 소득세 · 지방소득세
-대신 원천징수) 중 넣지 않은(`is_entered = false`) 줄이 있으면이고, 확정이 422 로 막는 조건과 같다(운영 정책 v221 PAY-06, 2026-10-27 재영).
+대신 원천징수, 4대보험은 계약에서 가입한 것만 — 아래 「4대보험 가입 여부」) 중 넣지 않은(`is_entered = false`) 줄이 있으면이고, 확정이 422 로 막는 조건과 같다(운영 정책 v221 PAY-06, 2026-10-27 재영).
 확정하면 사유를 모두 확인하고 공제 미입력을 막지만, 그 규칙에 기대지 않고 작성 중 · 검토 중만
 검토 대기로 본다(필터 · 건수 · 줄의 사유 모두 — 확정 · 발송된 명세서는 남은 사유가 있어도 `pendingReviewReasons` 가 빈 배열). 줄마다 `pendingReviewReasons`(사유 다섯 `REVIEW_PENDING_REASONS` — 출퇴근 누락 · 계약 만료 후 기록 · 기간 중 계약 변경 · 공제 미입력 · 확인 필요 기록 포함 — 의 순서로 한 번씩, 가린 줄은 null)를 싣고, `reviewPending=true`
 면 그런 명세서만 남긴다 — 개인 칸 필터라 상태 필터처럼 가려지는 점포에서는 동의한 직원 명세서만 남긴다. `reviewPendingCount` 는
@@ -125,7 +129,35 @@ sources:
 공제 항목(급여 항목 `sort_order` 순, `itemCode` 를 붙임), 검토 대기 사유, 처리 이력(최근 것이 위, `changedByName`),
 발송 이력(보낸 순), 참조 근로계약(`contractId · status · wageAmount`), 확정할 수 있는 첫날 `confirmableFrom`(YYYY-MM-DD —
 확정의 `PERIOD_NOT_ENDED` 와 같은 판정, 작성 중 · 검토 중이 아니면 null. 화면이 그 전에 [확정]을 막는다, WHALEERP-690),
-그 명세서 직원 레코드의 퇴직일 `retiredDate`(`staff_members.retired_date`, YYYY-MM-DD, 없으면 null — 화면이 「퇴직 · 퇴직 예정」을 보인다, WHALEERP-764).
+그 명세서 직원 레코드의 퇴직일 `retiredDate`(`staff_members.retired_date`, YYYY-MM-DD, 없으면 null — 화면이 「퇴직 · 퇴직 예정」을 보인다, WHALEERP-764),
+4대보험 가입 여부 `isHealthPensionInsured` · `isEmploymentInjuryInsured`(아래 「4대보험 가입 여부」 — 가림을 정한 뒤에 읽어 가린 명세서에는
+읽지도 않는다). 임시저장 · 다시 계산 · 확정 · 확정 취소 · 발송 · 재발송은 모두 이 상세(`PayslipListService.findOne`)를 다시 읽어 돌려준다.
+
+# 4대보험 가입 여부 (WHALEERP-756)
+
+공제 줄 가운데 4대보험 넷은 근로계약서의 가입 체크대로 보인다(2026-11-20 김지영 결정 — 미가입 직원에게 0 을 넣어야 확정되던 것):
+`contracts.is_health_pension_insured`(건강보험 · 국민연금) → 국민연금 · 건강보험 · 장기요양보험, `is_employment_injury_insured`(고용보험 ·
+산재보험) → 고용보험. 칸이 null 이면 체크하지 않은 것이다. 미가입 보험 줄은 **비었거나(미입력) 0 원일 때만** 숨는다 — 금액(`amountOf`)이 0 이
+아니면 미가입이어도 보이고 합계에 든다(2026-11-24 사용자 결정, 커밋 전 리뷰 Critical). 예전엔 4대보험을 모두 채워야 확정돼 확정 · 발송된
+명세서에 0 아닌 4대보험 금액이 있을 수 있는데, 숨기면 저장된 공제 합계 · 실지급액과 보이는 줄 합이 어긋나고, 작성 중 명세서는 다음
+임시저장 · 다시 계산이 그 금액을 조용히 빼며 화면에서 줄이 없어 지울 수도 없었다. 그래서 둘 다 미가입이고 4대보험이 비었으면 줄이 없고
+소득세 · 지방소득세만(3.3% 를 켜면 지금처럼 원천징수 둘). 금액은 지금처럼 관리자가 넣고 다시 계산하지 않는다 — 줄은 그대로 저장돼 있고
+보이는지만 가린다.
+
+어느 계약을 보는지는 「기간 중 계약 변경」 사유를 세는 계약과 같다 — 그 직원 레코드(점포마다 따로다)의, 급여 기간에 효력이 있던
+체결 완료 · 체결 뒤 종료 계약(`validContractWhere`, payslip-attendance-reasons.ts). 그중 **하나라도** 체크했으면 가입이다. 그래서 달 중간에
+미가입 → 가입 계약으로 바뀌면 가입한 보험 줄이 보이고, 계약이 둘이라 「기간 중 계약 변경」도 붙는다. **가입 여부는 저장하지 않고 읽을 때
+계약으로 센다**(마이그레이션을 피한 선택) — 바로잡기 · 서면 계약 등록으로 같은 기간 계약이 생기면 이미 만든 명세서의 판정이 바뀔 수 있다.
+그래도 0 아닌 금액 줄은 늘 보이므로 보이는 줄 합과 저장된 합계는 어긋나지 않고, 바뀌는 것은 비었거나 0 원인 4대보험 줄이 보이는지뿐이다.
+바로잡기로 닫힌 이전 계약(ENDED)도 급여 기간에 걸리면(`validContractWhere` 의 종료 조건) 그 체크가 가입으로 남는다.
+
+보이는 줄 규칙은 한 곳(`isItemCodeShown` · `isShown`, payslip-shared.ts)이고 합계(임시저장 · 다시 계산), 확정의 공제 미입력, 목록 줄의
+`pendingReviewReasons`, 직원 앱 · 메일 첨부 · 일괄 저장 PDF 가 같이 쓴다. 가입 여부는 `payslipInsurance` · `payslipInsuranceMany`
+(payslip-insurance.ts)가 계약을 읽어 센다 — 목록 · 일괄 저장은 급여 기간마다 한 번(명세서는 늘 1일 ~ 말일이라 한 쪽이면 한 번). 목록의
+「검토 대기만」 · 건수는 where 라 명세서 행의 기간을 쓸 수 없어 그 달의 1일 ~ 말일로 같은 계약 조건을 건다(`insuredWhere` —
+`staffMember.contracts` 관계). 관리자 상세 · 직원 앱 상세 응답에 두 값을 싣고, 화면(관리자 웹 `isItemShown`, 직원 앱 `payslip-rules.ts`)이
+같은 규칙으로 줄을 가린다(관리자 화면은 입력 중에 줄이 사라지지 않게 저장된 값으로 판정한다). 3.3% 를 켜고 가입한 직원이면 관리자 화면이 안내만 하고 확정은 막지 않는다. 목록 where(`deductionMissing`)는
+미입력 줄만 보므로 「미입력 + 미가입 = 숨김」이라 가입한 경우만 세면 `isShown` 과 같은 판정이다.
 
 # 점포 · 월 요약 (GET /payslips/summary, WHALEERP-621)
 
@@ -159,10 +191,11 @@ sources:
   따로 받은 날순으로 세운다.
 * `stores` — 받은 적이 있는 점포 모두(필터 전, 퇴직한 곳 포함), 이름순. 필터 칩이 쓴다.
 
-한 사람 몫은 3년치라 한 번에 읽어 메모리에서 거른다. 상세는 목록 줄에 `isWithholdingApplied` · `items` 를 더한다.
+한 사람 몫은 3년치라 한 번에 읽어 메모리에서 거른다. 상세는 목록 줄에 `isWithholdingApplied` · `isHealthPensionInsured` ·
+`isEmploymentInjuryInsured`(「4대보험 가입 여부」) · `items` 를 더한다.
 처리 이력은 발송 · 확정 취소만(PAY-1), 관리자 이름 없이, 최근 것이 위다. 앱은 가장 최근 발송 한 줄만 「발송」으로 보이고
 「재발송」을 따로 적지 않는다(PAY-20).
-항목은 저장된 줄을 모두 준다 — 원천징수를 켰을 때 소득세 줄을 숨기는 규칙은 화면 몫이라 `itemCode` 를 함께 준다.
+항목은 저장된 줄을 모두 준다 — 원천징수를 켰을 때 소득세 줄 · 가입하지 않은 4대보험 줄을 숨기는 규칙은 화면 몫이라 `itemCode` 를 함께 준다.
 
 # 초안 작성 (WHALEERP-226)
 
@@ -334,7 +367,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
   * 시스템 계산 항목(기본급 · 주휴 · 연장)에 계산값이 있으면 고친 값을 `adjustedAmount` 에 두고, 계산값과 같거나 null 이면 계산값으로
     돌린다. 그 밖의 줄은 `adjustedAmount = amount`, `isEntered = amount !== null`.
   * 3.3% 는 파트타이머 명세서만(정직원이 true 면 400). 같은 항목 두 번 · 한 줄 1억 초과 · 합계가 integer 를 넘으면 400.
-  * 합계를 다시 셈한다 — 보이는 줄만(3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수), 미입력은 0. 실지급액 CHECK(지급 − 공제)를 지킨다.
+  * 합계를 다시 셈한다 — 보이는 줄만(3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수, 미가입 4대보험은 비었거나 0 원인 줄만 빼고), 미입력은 0. 실지급액 CHECK(지급 − 공제)를 지킨다.
   * 바꾼 것이 있으면 처리 이력 `EDIT` 한 줄(「가산 적용 해제 · 상여 미입력 → 128,000원 · 항목 추가 연말(중도)정산」 모양). 없으면 남기지 않는다.
 * `POST /payslips/:id/confirm { updatedAt }` → 200 상세 — 작성 중 · 검토 중에서 확정. 확정할 수 있는 날(`confirmableFrom` — 퇴직일 · 마지막 계약 종료일 ·
   급여 기간 마지막 날 가운데 가장 빠른 날의 다음 날, 한국) 전이면 422 `PERIOD_NOT_ENDED`(「아직 확정할 수 없습니다. YYYY-MM-DD 부터
@@ -342,7 +375,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
   확정할 수 있어 퇴직 후 14일 청산 기한(근로기준법 제36조)을 막지 않는다. 계약 종료일은 급여 기간 계약의 효력 끝(`effectiveEnd`) 중 가장
   늦은 날이고, 무기한 계약이 하나라도 있거나 계약이 없거나, 그 계약들의 보낸 갱신(발송 대기 · 서명 대기 · 수정 요청 — 체결 전, `previousContractId`. 임시저장은 보내지 않아 치지 않는다 — 「가장 최근 계약」과 같은 기준, 2026-10-30 재영)이 급여 기간 마지막 날까지 시작하면(시작일 없는 것 포함) 보지 않는다(계약이 끝나도 이어서 일할 수 있어서, api #206 리뷰). 퇴직일은 그래도 본다. 초안 작성 · 임시저장 · 다시 계산은 그 전에도 된다(미리 보기, 운영 정책 PAY-06 v247 ·
   v251, 2026-10-29 재영, WHALEERP-634). 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를
-  켜면 소득세 · 지방소득세 대신 원천징수)가 하나라도 미입력이면 422 `DEDUCTION_MISSING`(본문 `items: [{ payslipItemId, itemName }]`).
+  켜면 소득세 · 지방소득세 대신 원천징수, 4대보험은 계약에서 가입한 것만 — WHALEERP-756)가 하나라도 미입력이면 422 `DEDUCTION_MISSING`(본문 `items: [{ payslipItemId, itemName }]`).
   검토 사유가 있어도 확정하는 것이 「확인」이다 — 확인하지 않은 사유의 `acknowledged_at` 에 확정 시각을 남긴다. `confirmed_at` ·
   `confirmed_by`, 처리 이력 `CONFIRM`(「확정 · 검토 사유 N건 확인」).
 * `POST /payslips/:id/cancel-confirmation { updatedAt }` → 200 상세 — 확정 · 발송 완료(보낸 뒤에도)에서 검토 중으로. 발송이 진행 중이면(발송 중 표시 `sending_started_at` 이 5분 `SENDING_STALE_MS` 안) 409 `PAYSLIP_SENDING` 「이 급여명세서를 보내는 중입니다. …」 — 취소된 금액이 메일 첨부 PDF 로 나가지 않게(WHALEERP-766). 확정 일시 ·
@@ -442,7 +475,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 
 내용은 직원 앱 상세와 같은 칸 · 같은 금액 규칙이다(다시 보낸 명세서도 발송일과 끝 안내를 넣는 점만 다르다 — 상세는 데모 resent 대로 뺀다, `payslipPdfModel` — 단위 테스트는 이 칸 모델을 본다): 제목 「급여명세서」, 급여 기간
 (「2026년 9월 1일 – 9월 30일」), 직원 · 근무지 · 계약 유형(`DB_ENUMS` 한글) · 발송일(마지막 SEND, 한국 날짜 — 두 번 이상이어도
-「다시 발송」은 적지 않는다, PAY-20), 지급 항목 표(비과세 표시) · 공제 항목 표(원천징수 둘은 3.3% 적용일 때만, 그때 소득세 · 지방소득세는 뺀다 —
+「다시 발송」은 적지 않는다, PAY-20), 지급 항목 표(비과세 표시) · 공제 항목 표(원천징수 둘은 3.3% 적용일 때만, 그때 소득세 · 지방소득세는 뺀다. 4대보험은 계약에서 가입한 것과 미가입이어도 0 아닌 금액이 든 것(`isItemCodeShown`, WHALEERP-756) —
 원천징수 줄에 「끝자리 세무 확인 대기(PAY-7)」, 그 밖에 안내가 없는 지급 줄은 이름 아래 작은 글자로 계산식 `calculationText` — WHALEERP-755), 지급 합계 · 공제 합계 · 실지급액(저장된 합계 값). 줄 금액은 `adjustedAmount ??
 calculatedAmount ?? 0`, 「1,000원」 형식. 「입금」이라는 말은 쓰지 않고 끝에 「급여 지급은 이 명세서로 처리하지 않습니다」를 둔다.
 

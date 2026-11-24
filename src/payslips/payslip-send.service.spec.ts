@@ -15,6 +15,25 @@ import { PayslipSendService } from './payslip-send.service';
 import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
 import { MyPayslipsService } from './my-payslips.service';
 import * as pdf from './payslip-pdf';
+import { payslipInsurance, payslipInsuranceMany } from './payslip-insurance';
+
+// 4대보험 가입 여부를 어느 계약에서 세는지는 payslip-insurance.spec 이 본다. 여기서는 기본으로 둘 다 가입(줄이 모두 보이는 예전
+// 동작)이고, 미가입은 그 시험에서 바꾼다(WHALEERP-756)
+jest.mock('./payslip-insurance', () => ({
+  ...jest.requireActual<object>('./payslip-insurance'),
+  payslipInsurance: jest.fn(),
+  payslipInsuranceMany: jest.fn(),
+}));
+const BOTH_INSURED = {
+  isHealthPensionInsured: true,
+  isEmploymentInjuryInsured: true,
+};
+const insuranceOne = payslipInsurance as jest.Mock;
+const insuranceMany = payslipInsuranceMany as jest.Mock;
+beforeEach(() => {
+  insuranceOne.mockReset().mockResolvedValue(BOTH_INSURED);
+  insuranceMany.mockReset().mockResolvedValue(() => BOTH_INSURED);
+});
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const UPDATED = '2026-10-19T01:00:00.000Z';
@@ -301,6 +320,24 @@ describe('PayslipSendService', () => {
           changedBy: 9,
         },
       });
+    });
+
+    it('첨부 PDF 의 4대보험 줄도 직원 앱과 같이 가입 여부대로 — 그 명세서의 직원 레코드 · 급여 기간으로 센다(WHALEERP-756)', async () => {
+      insuranceOne.mockResolvedValue({
+        isHealthPensionInsured: false,
+        isEmploymentInjuryInsured: true,
+      });
+      const model = jest.spyOn(pdf, 'payslipPdfModel');
+      await send();
+      expect(model.mock.calls[0][0]).toMatchObject({
+        isHealthPensionInsured: false,
+        isEmploymentInjuryInsured: true,
+      });
+      expect(insuranceOne).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ payslipId: 40 }),
+      );
+      model.mockRestore();
     });
 
     it('첨부 PDF 는 이 발송이 끝난 뒤 직원 앱 내보내기(GET /me/payslips/:id/pdf)가 주는 것과 같은 칸이다', async () => {

@@ -15,6 +15,29 @@ import {
 import { calculatePayslip } from './payslip-calculation';
 import { PayslipEditService } from './payslip-edit.service';
 import { PayslipListService } from './payslip-list.service';
+import { payslipInsurance, payslipInsuranceMany } from './payslip-insurance';
+
+// 4대보험 가입 여부를 어느 계약에서 세는지는 payslip-insurance.spec 이 본다. 여기서는 기본으로 둘 다 가입(줄이 모두 보이는 예전
+// 동작)이고, 미가입은 그 시험에서 바꾼다(WHALEERP-756)
+jest.mock('./payslip-insurance', () => ({
+  ...jest.requireActual<object>('./payslip-insurance'),
+  payslipInsurance: jest.fn(),
+  payslipInsuranceMany: jest.fn(),
+}));
+const BOTH_INSURED = {
+  isHealthPensionInsured: true,
+  isEmploymentInjuryInsured: true,
+};
+const NOT_INSURED = {
+  isHealthPensionInsured: false,
+  isEmploymentInjuryInsured: false,
+};
+const insuranceOne = payslipInsurance as jest.Mock;
+const insuranceMany = payslipInsuranceMany as jest.Mock;
+beforeEach(() => {
+  insuranceOne.mockReset().mockResolvedValue(BOTH_INSURED);
+  insuranceMany.mockReset().mockResolvedValue(() => BOTH_INSURED);
+});
 
 // 금액 계산(WHALEERP-227)은 pay-calculation.spec 이 본다. 여기서는 계산값이 줄 · 합계 · 이력으로 옮겨지는지만 본다.
 jest.mock('./payslip-calculation', () => ({
@@ -233,6 +256,8 @@ describe('PayslipEditService', () => {
       await expect(service.previousValues(9, 40)).rejects.toBeInstanceOf(
         NotFoundException,
       );
+      // 가린 명세서의 계약 가입 여부는 읽지도 않는다(WHALEERP-756, 리뷰 M4)
+      expect(insuranceOne).not.toHaveBeenCalled();
     });
 
     it('관리자 계정을 쓸 수 없으면 404', async () => {
@@ -350,6 +375,43 @@ describe('PayslipEditService', () => {
         netPayAmount: 962_000,
       });
     });
+
+    it.each([
+      // [미가입 국민연금 금액(null = 미입력), 공제 합계]
+      [45_000, 50_000],
+      [0, 5_000],
+      [null, 5_000],
+    ])(
+      '미가입 국민연금 줄은 0 아닌 금액이면 보여 합계에 들고, 0 · 미입력이면 숨어 세지 않는다 — %s → 공제 %s(WHALEERP-756, 2026-11-24 사용자 결정)',
+      async (pension, deduction) => {
+        insuranceOne.mockResolvedValue(NOT_INSURED);
+        prisma.payslipItem.findMany.mockResolvedValue(
+          lines().map((l) =>
+            l.payslipItemId === 112
+              ? { ...l, adjustedAmount: pension, isEntered: pension !== null }
+              : l,
+          ),
+        );
+        await save({
+          isWithholdingApplied: false,
+          items: [{ payslipItemMasterId: 27, amount: 5_000 }],
+        });
+        // 스톡옵션 5,000 + (보이면) 국민연금 — 예전에 채워 확정한 금액이 줄 없이 빠지지 않게
+        expect(call(prisma.payslip.update).data).toEqual({
+          grossPayAmount: 1_000_000,
+          totalDeductionAmount: deduction,
+          netPayAmount: 1_000_000 - deduction,
+        });
+        expect(insuranceOne).toHaveBeenCalledWith(
+          prisma,
+          expect.objectContaining({
+            staffMemberId: 30,
+            periodStartDate: d('2026-10-01'),
+            periodEndDate: d('2026-10-31'),
+          }),
+        );
+      },
+    );
 
     it('시스템 계산 항목은 고친 값이 계산값과 같거나 null 이면 계산값으로 돌린다', async () => {
       prisma.payslipItem.findMany.mockResolvedValue(
@@ -1070,6 +1132,90 @@ describe('PayslipEditService', () => {
         }),
       ]);
       await expect(confirm()).resolves.toEqual({ payslipId: 40 });
+    });
+
+    describe('4대보험 줄은 근로계약의 가입 체크대로 센다(WHALEERP-756)', () => {
+      const INSURANCE_LINES = [
+        line(112, 'BASIC', '국민연금', PENSION),
+        line(113, 'BASIC', '건강보험', master(13, 'HEALTH_INSURANCE')),
+        line(114, 'BASIC', '고용보험', master(14, 'EMPLOYMENT_INSURANCE')),
+        line(
+          115,
+          'BASIC',
+          '장기요양보험',
+          master(15, 'LONG_TERM_CARE_INSURANCE'),
+        ),
+      ];
+      // 소득세 · 지방소득세 · 붙인 추가 공제는 넣었고 4대보험 넷은 비웠다(3.3% 끔)
+      beforeEach(() => {
+        prisma.payslip.findFirst.mockResolvedValue(
+          located({ isWithholdingApplied: false }),
+        );
+        prisma.payslipItem.findMany.mockResolvedValue([
+          line(101, 'EARNING', '기본급', BASE, {
+            calculatedAmount: 1_000_000,
+            isEntered: true,
+          }),
+          ...INSURANCE_LINES,
+          line(116, 'BASIC', '소득세', INCOME_TAX, {
+            adjustedAmount: 0,
+            isEntered: true,
+          }),
+          line(117, 'BASIC', '지방소득세', master(17, 'LOCAL_INCOME_TAX'), {
+            adjustedAmount: 0,
+            isEntered: true,
+          }),
+        ]);
+      });
+      const missingIds = async () => {
+        const error = await confirm().catch((e: unknown) => e);
+        expect(error).toBeInstanceOf(UnprocessableEntityException);
+        return (
+          error as { getResponse(): { items: { payslipItemId: number }[] } }
+        )
+          .getResponse()
+          .items.map((i) => i.payslipItemId);
+      };
+
+      it('두 칸 모두 미체크면 4대보험을 비운 채 확정된다', async () => {
+        insuranceOne.mockResolvedValue(NOT_INSURED);
+        await expect(confirm()).resolves.toEqual({ payslipId: 40 });
+      });
+
+      it('건강보험 · 국민연금만 — 국민연금 · 건강보험 · 장기요양보험이 비면 막고 고용보험은 보지 않는다', async () => {
+        insuranceOne.mockResolvedValue({
+          isHealthPensionInsured: true,
+          isEmploymentInjuryInsured: false,
+        });
+        expect(await missingIds()).toEqual([112, 113, 115]);
+      });
+
+      it('고용보험 · 산재보험만 — 고용보험만 본다', async () => {
+        insuranceOne.mockResolvedValue({
+          isHealthPensionInsured: false,
+          isEmploymentInjuryInsured: true,
+        });
+        expect(await missingIds()).toEqual([114]);
+      });
+
+      it('3.3% 를 켜도 가입한 보험 줄은 그대로 본다 — 3.3% 와 가입이 함께여도 확정은 막지 않는다(화면이 안내만)', async () => {
+        prisma.payslip.findFirst.mockResolvedValue(
+          located({ isWithholdingApplied: true }),
+        );
+        insuranceOne.mockResolvedValue(BOTH_INSURED);
+        prisma.payslipItem.findMany.mockResolvedValue([
+          ...INSURANCE_LINES.map((l) => ({
+            ...l,
+            adjustedAmount: 0,
+            isEntered: true,
+          })),
+          line(128, 'WITHHOLDING', '사업소득세(3%)', BIZ_TAX, {
+            adjustedAmount: 0,
+            isEntered: true,
+          }),
+        ]);
+        await expect(confirm()).resolves.toEqual({ payslipId: 40 });
+      });
     });
 
     it('공제가 모두 있으면 확정 — 검토 사유를 확인한 것으로 남기고 처리 이력(확정)', async () => {

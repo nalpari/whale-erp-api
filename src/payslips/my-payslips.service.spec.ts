@@ -2,6 +2,25 @@ import { InternalServerErrorException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { MyPayslipsService } from './my-payslips.service';
+import { payslipInsurance, payslipInsuranceMany } from './payslip-insurance';
+
+// 4대보험 가입 여부를 어느 계약에서 세는지는 payslip-insurance.spec 이 본다. 여기서는 기본으로 둘 다 가입(줄이 모두 보이는 예전
+// 동작)이고, 미가입은 그 시험에서 바꾼다(WHALEERP-756)
+jest.mock('./payslip-insurance', () => ({
+  ...jest.requireActual<object>('./payslip-insurance'),
+  payslipInsurance: jest.fn(),
+  payslipInsuranceMany: jest.fn(),
+}));
+const BOTH_INSURED = {
+  isHealthPensionInsured: true,
+  isEmploymentInjuryInsured: true,
+};
+const insuranceOne = payslipInsurance as jest.Mock;
+const insuranceMany = payslipInsuranceMany as jest.Mock;
+beforeEach(() => {
+  insuranceOne.mockReset().mockResolvedValue(BOTH_INSURED);
+  insuranceMany.mockReset().mockResolvedValue(() => BOTH_INSURED);
+});
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const NOW = new Date('2026-10-19T03:00:00.000Z');
@@ -63,6 +82,7 @@ describe('MyPayslipsService', () => {
         findMany: jest.fn().mockResolvedValue([summary()]),
         findFirst: jest.fn().mockResolvedValue(
           summary({
+            staffMemberId: 30,
             isWithholdingApplied: true,
             payslipItems: [item],
             staffMember: { name: '유하람' },
@@ -371,6 +391,8 @@ describe('MyPayslipsService', () => {
       await expect(service.findOne(3, 40, NOW)).resolves.toEqual({
         ...shown,
         isWithholdingApplied: true,
+        isHealthPensionInsured: true,
+        isEmploymentInjuryInsured: true,
         items: [
           {
             payslipItemId: 1,
@@ -402,6 +424,24 @@ describe('MyPayslipsService', () => {
   });
 
   describe('findOne — 검토 중', () => {
+    it('4대보험 가입 여부를 그 명세서의 직원 레코드 · 급여 기간으로 세어 싣는다 — 앱이 공제 줄을 보이고 감춘다(WHALEERP-756)', async () => {
+      insuranceOne.mockResolvedValue({
+        isHealthPensionInsured: false,
+        isEmploymentInjuryInsured: false,
+      });
+      await expect(service.findOne(3, 40, NOW)).resolves.toMatchObject({
+        isHealthPensionInsured: false,
+        isEmploymentInjuryInsured: false,
+      });
+      expect(insuranceOne).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          staffMemberId: 30,
+          periodStartDate: d('2026-09-01'),
+        }),
+      );
+    });
+
     it('보낸 뒤 확정을 취소해 고치는 중이면 금액 · 항목 없이 준다 — 고치는 중인 값을 보이지 않게', async () => {
       prisma.payslip.findFirst.mockResolvedValue(
         summary({

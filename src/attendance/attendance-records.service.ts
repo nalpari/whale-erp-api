@@ -285,10 +285,19 @@ export class AttendanceRecordsService {
       };
     };
     const totals = stats(fromYmd, toYmd);
-    const weeks = mondays.map((monday) => ({
-      monday,
-      ...stats(monday, isoDate(addDays(toDate(monday), 6))),
-    }));
+    // 주별 줄도 조회 기간 안의 날만 센다 — 걸친 첫 주 · 마지막 주에 기간 밖 근무가 들어가 주별 합이 총 근무와 어긋났다
+    // (WHALEERP-768, 2026-11-24). 연장은 totals 와 같은 기준(급여 계산의 달을 걸친 주 규칙 `weeksOf`)이라 걸친 주는 주 전체
+    // 40시간으로 본 값과 다를 수 있다 — 기간 끝에 걸친 주는 기간 몫으로 주휴 조건을 채울 때만 주 40시간을 센다
+    const weeks = mondays.map((monday) => {
+      const sunday = isoDate(addDays(toDate(monday), 6));
+      return {
+        monday,
+        ...stats(
+          monday < fromYmd ? fromYmd : monday,
+          sunday > toYmd ? toYmd : sunday,
+        ),
+      };
+    });
     return {
       from: fromYmd,
       to: toYmd,
