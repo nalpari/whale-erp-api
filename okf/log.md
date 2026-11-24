@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-24
+* **Update**: [Payslips](/api/payslips.md) · [Attendance](/api/attendance.md) — 검토 사유 「확인 필요 기록 포함」 상세를 사유를 앞에 두는 문장으로 바꿨다: 「근무지 반경 밖 퇴근, 위치 조작 감지 등의 사유로 확인이 필요한 출퇴근 기록이 N건 있습니다.」 · 앞 달 날짜 「…지난달 날짜(9월 28일~9월 30일)에 확인이 필요한 출퇴근 기록이 N건 있습니다.」(WHALEERP-757, 2026-11-20 김지영 결정). 이미 저장된 행은 마이그레이션 `team3_payslip_flagged_detail_text` 로 같은 문장으로 고친다(11-10 · 10-29 전 옛 문장 세대도 포함, 남으면 마이그레이션이 멈춤) — 관리자 웹의 문장 바꾸기 코드를 뺀다. 배포 순서: api → `db:deploy` → front.
+
 ## 2026-11-20
 * **Update**: [Staff members](/api/staff-members.md) — 직원 상세 요약 근로계약(`GET /staff-members/:id/summary/contracts`): 신고 정보를 풀 수 없으면(키 없음 · 복호화 실패) 503 · 500 대신 `payrollAccount: null` + `payrollAccountUnavailable: true` 로 계좌만 빼고 계약 칸은 그대로 준다(WHALEERP-758). 근로계약 상세 신고 정보의 `UNAVAILABLE` 과 같다 — [Contracts API](/api/contracts-api.md) 의 대비 문장도 맞췄다. 마이그레이션 없음.
 
