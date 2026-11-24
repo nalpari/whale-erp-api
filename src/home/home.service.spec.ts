@@ -221,6 +221,7 @@ describe('HomeService', () => {
       await expect(service.pending(9, undefined, NOW)).resolves.toEqual({
         asOf: NOW,
         platform: true,
+        notOperatingCount: 0,
         items: [],
       });
       expect(scope.getManageableStores).not.toHaveBeenCalled();
@@ -582,6 +583,31 @@ describe('HomeService', () => {
       ]);
     });
 
+    it('본사 점포 줄은 확인 필요 건수와 상관없이 맨 위, 제목의 점포 수(total)에서는 빠진다(WHALEERP-751, 운영 정책 SCP-09)', async () => {
+      scope.getManageableStores.mockResolvedValue({
+        roleTypeCode: 'BM',
+        stores: [
+          { storeId: 1, storeTypeCode: 'DIRECT' },
+          { storeId: 2, storeTypeCode: 'FRANCHISE' },
+          { storeId: 3, storeTypeCode: 'DIRECT', isHq: true },
+        ],
+      });
+      storeRows.push({
+        storeId: 3,
+        name: '하늘커피',
+        storeTypeCode: 'DIRECT',
+        status: 'OPERATING',
+        isHq: true,
+      });
+      prisma.contract.groupBy.mockResolvedValue([
+        { storeId: 2, status: 'PENDING_SIGNATURE', _count: { _all: 2 } },
+      ]);
+      const res = await service.summary(9, undefined, NOW);
+      expect(res.storeTable.items.map((r) => r.storeId)).toEqual([3, 2, 1]);
+      expect(res.storeTable.total).toBe(2);
+      expect(res.cards!.stores.total).toBe(res.storeTable.total);
+    });
+
     it('오늘 TO-DO — 수행 날짜가 오늘인 것. 배정 그룹은 한 건이고 모두 완료여야 완료다(HOM-10)', async () => {
       // 첫 호출은 긴급 TO-DO(없음), 둘째가 오늘 TO-DO
       prisma.todo.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([
@@ -750,6 +776,59 @@ describe('HomeService', () => {
       });
     });
 
+    it('notOperatingCount — 줄로 센 건 가운데 미운영 점포의 건수. 문의 답변완료(점포 없음)는 넣지 않는다(WHALEERP-759, HOM-06 · 07)', async () => {
+      storeRows[1].status = 'NOT_OPERATING';
+      prisma.contract.findMany
+        .mockResolvedValueOnce([]) // 갱신 예정 없음
+        .mockResolvedValueOnce([
+          {
+            storeId: 1,
+            status: 'PENDING_SIGNATURE',
+            sentAt: date('2026-10-23'),
+            staffMember: { name: '박하늘', account: null },
+            contractStatusHistories: [],
+          },
+          {
+            storeId: 2,
+            status: 'CORRECTION_REQUESTED',
+            sentAt: date('2026-10-21'),
+            staffMember: { name: '남도현', account: null },
+            contractStatusHistories: [{ changedAt: date('2026-10-24') }],
+          },
+        ]);
+      prisma.todo.findMany.mockResolvedValue([
+        {
+          todoId: 1,
+          assignmentGroupId: null,
+          storeId: 2,
+          title: '냉장고 재료 폐기',
+          createdAt: date('2026-10-26'),
+        },
+      ]);
+      prisma.inquiryReply.groupBy.mockResolvedValue([
+        { inquiryId: 7, _max: { repliedAt: date('2026-10-27') } },
+      ]);
+      prisma.inquiry.findMany.mockResolvedValue([
+        { inquiryId: 7, title: '급여 문의' },
+      ]);
+      const res = await service.pending(9, undefined, NOW);
+      expect(res.items.reduce((n, i) => n + i.count, 0)).toBe(4);
+      expect(res.notOperatingCount).toBe(2);
+    });
+
+    it('notOperatingCount — 미운영 점포가 없으면 0, BP 를 고르지 않은 플랫폼 빈 결과도 0', async () => {
+      expect((await service.pending(9, undefined, NOW)).notOperatingCount).toBe(
+        0,
+      );
+      scope.platformAdminAccess.mockResolvedValue('allowed');
+      expect(await service.pending(9, undefined, NOW)).toEqual({
+        asOf: NOW,
+        platform: true,
+        notOperatingCount: 0,
+        items: [],
+      });
+    });
+
     it('본사 역할 — 가려지는 점포의 계약 · 갱신 예정 · 소속 확인 거절은 동의한 직원 것만 센다(근로계약 목록과 같은 조건)', async () => {
       scope.getManageableStores.mockResolvedValue({
         roleTypeCode: 'BM',
@@ -832,6 +911,7 @@ describe('HomeService', () => {
       expect(res).toEqual({
         asOf: NOW,
         platform: false,
+        notOperatingCount: 0,
         items: [],
       });
       expect(prisma.contract.findMany).not.toHaveBeenCalled();
