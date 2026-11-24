@@ -130,7 +130,7 @@ export const missingDetail = (days: readonly MissingDay[]) =>
   )}).`;
 
 /**
- * 「확인 필요로 표시된 출퇴근 기록이 2건 있습니다(근무지 반경 밖 퇴근, 위치 조작 감지 등).」 — 괄호 안 예시는 고정 글자다. 달을 걸친 첫 주의 앞 달 날에 센 기록이 있으면(`fromLeadDays` > 0) 그 날짜
+ * 「근무지 반경 밖 퇴근, 위치 조작 감지 등의 사유로 확인이 필요한 출퇴근 기록이 2건 있습니다.」 — 앞의 사유 예시는 고정 글자다(WHALEERP-757). 달을 걸친 첫 주의 앞 달 날에 센 기록이 있으면(`fromLeadDays` > 0) 그 날짜
  * 범위를 밝힌다 — 그 달 출퇴근 화면에서 찾지 못하지 않게. 앞 달 날이 하루면 그 날 하나만.
  */
 export const flaggedDetail = (
@@ -142,8 +142,8 @@ export const flaggedDetail = (
     ? [...new Set([leadDays[0], leadDays.at(-1)!])].map(monthDay).join('~')
     : '';
   return fromLeadDays > 0 && lead
-    ? `이번 급여 기간과 첫 주에 포함된 지난달 날짜(${lead})에 확인 필요로 표시된 출퇴근 기록이 ${count}건 있습니다.`
-    : `확인 필요로 표시된 출퇴근 기록이 ${count}건 있습니다(근무지 반경 밖 퇴근, 위치 조작 감지 등).`;
+    ? `이번 급여 기간과 첫 주에 포함된 지난달 날짜(${lead})에 확인이 필요한 출퇴근 기록이 ${count}건 있습니다.`
+    : `근무지 반경 밖 퇴근, 위치 조작 감지 등의 사유로 확인이 필요한 출퇴근 기록이 ${count}건 있습니다.`;
 };
 
 /**
