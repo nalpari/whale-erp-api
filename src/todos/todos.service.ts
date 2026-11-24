@@ -392,6 +392,8 @@ export class TodosService {
         createdBy: true,
         createdAt: true,
         updatedAt: true,
+        modifiedAt: true,
+        modifiedBy: true,
         todoAssignees: {
           select: {
             staffMemberId: true,
@@ -441,9 +443,10 @@ export class TodosService {
       : [];
     const admins = await adminNames(this.prisma, [
       todo.createdBy,
+      todo.modifiedBy,
       ...todo.todoStatusHistories.map((h) => h.changedBy),
     ]);
-    const { todoAssignees, todoStatusHistories, ...rest } = todo;
+    const { todoAssignees, todoStatusHistories, modifiedBy, ...rest } = todo;
     const hidden = (s: HqSharingSource | null) =>
       s !== null && hide(todo.storeId, hqSharingConsentedOf(s));
     return {
@@ -453,6 +456,8 @@ export class TodosService {
       createdByName: admins.get(todo.createdBy) ?? null,
       createdAt: todo.createdAt,
       updatedAt: todo.updatedAt,
+      modifiedAt: todo.modifiedAt,
+      modifiedByName: admins.get(modifiedBy) ?? null,
       assignees: todoAssignees.map((a) => ({
         ...staffOf({ ...a, name: a.staffMember.name }, hidden(a.staffMember))!,
         isCompleted: a.isCompleted,
@@ -498,7 +503,8 @@ export class TodosService {
   /**
    * 제목 · 내용 · 수행 예정 일시 · 긴급 수정. 그룹이면 그룹의 (지우지 않은) 행 전체에 같은 값을 쓴다. 긴급이 바뀌면
    * 바뀐 행마다 상태는 그대로인 이력을 남긴다(is_urgent_changed). 수행 예정 일시가 바뀌면 수행 임박 알림이 새 일시로
-   * 한 번 더 간다 — dedupe_key 에 일시가 들어 있다(T-3).
+   * 한 번 더 간다 — dedupe_key 에 일시가 들어 있다(T-3). 최종수정(modified_at · modified_by)은 여기서만 쓴다 — 상태 변경 ·
+   * 삭제 · 직원 앱은 바꾸지 않는다(WHALEERP-698). 그룹이면 모든 행이 같은 값이라 어느 직원 상세에서 봐도 같다.
    */
   async update(
     adminAccountId: number,
@@ -526,6 +532,8 @@ export class TodosService {
     if (dto.dueTime !== undefined)
       data.dueTime = dto.dueTime === null ? null : toTime(dto.dueTime);
     if (dto.isUrgent != null) data.isUrgent = dto.isUrgent;
+    data.modifiedAt = now;
+    data.modifiedBy = adminAccountId;
 
     const targets: Prisma.TodoWhereInput = {
       isDeleted: false,
