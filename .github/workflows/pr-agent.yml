@@ -39,7 +39,7 @@ jobs:
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
           github_action_config.auto_improve: "true"
-      # pr-agent 결과(리뷰 요약 · 코드 제안 제목)를 Buzz 「Whale ERP 3팀」 채널에 올린다.
+      # pr-agent 결과(리뷰 요약 · 코드 제안 제목)를 Buzz 「Whale ERP PR Review」 채널에 올린다.
       # GITHUB_TOKEN 으로 단 코멘트는 다른 워크플로를 깨우지 않아서 같은 job 에서 이어 한다.
       # Buzz 게시가 실패해도 리뷰 job 은 실패로 표시하지 않는다.
       - uses: actions/checkout@v5
@@ -52,7 +52,7 @@ jobs:
         env:
           BUZZ_PRIVATE_KEY: ${{ secrets.BUZZ_PRIVATE_KEY }}
           BUZZ_RELAY_URL: https://buzz-qaaf.srv1933583.hstgr.cloud
-          BUZZ_CHANNEL: 58f69767-4094-48f2-95a4-21618804728f
+          BUZZ_CHANNEL: b7996c01-2494-4abd-8ca2-eb18b5d265fb
           # Linux CLI 는 데스크톱 .deb 안에만 있다. 올릴 때 버전과 SHA256(릴리스 asset digest)을 함께 바꾼다.
           BUZZ_DEB_URL: https://github.com/block/buzz/releases/download/desktop-v0.5.28/Buzz_0.5.28_amd64.deb
           BUZZ_DEB_SHA256: 53609fa586a787871f080b0bfce679633e457f650982411c81ba104648c388cb

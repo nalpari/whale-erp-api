@@ -33,7 +33,11 @@ sources:
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
-    last_modified: 2026-11-19T06:58:12Z
+    last_modified: 2026-11-24T02:02:51Z
+  - id: draft-response-dto
+    resource: ../../src/payslips/dto/payslip-draft.response.dto.ts
+    title: 작성 대상 응답 DTO — 직원 · 점포 · 계약 · 출퇴근 · 명세서 · 퇴직일(retiredDate)
+    last_modified: 2026-11-24T02:25:49Z
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
@@ -125,6 +129,7 @@ sources:
 공제 항목(급여 항목 `sort_order` 순, `itemCode` 를 붙임), 검토 대기 사유, 처리 이력(최근 것이 위, `changedByName`),
 발송 이력(보낸 순), 참조 근로계약(`contractId · status · wageAmount`), 확정할 수 있는 첫날 `confirmableFrom`(YYYY-MM-DD —
 확정의 `PERIOD_NOT_ENDED` 와 같은 판정, 작성 중 · 검토 중이 아니면 null. 화면이 그 전에 [확정]을 막는다, WHALEERP-690),
+그 명세서 직원 레코드의 퇴직일 `retiredDate`(`staff_members.retired_date`, YYYY-MM-DD, 없으면 null — 화면이 「퇴직 · 퇴직 예정」을 보인다, WHALEERP-764),
 4대보험 가입 여부 `isHealthPensionInsured` · `isEmploymentInjuryInsured`(아래 「4대보험 가입 여부」 — 가림을 정한 뒤에 읽어 가린 명세서에는
 읽지도 않는다). 임시저장 · 다시 계산 · 확정 · 확정 취소 · 발송 · 재발송은 모두 이 상세(`PayslipListService.findOne`)를 다시 읽어 돌려준다.
 
@@ -200,7 +205,8 @@ sources:
 
 * `GET /payslips/candidates?month=YYYY-MM` → `{ periodStartDate, periodEndDate, items }`. 줄은 직원 하나 — `staffName` ·
   `storeName` · `employmentType`(유효 계약 값, 없으면 직원 레코드 값) · `contractId`(없으면 null — 만들 수 없음) ·
-  `payslipId`(이 달 명세서가 있으면) · `hasAttendance`. 대상은 재직 중이거나 그 달 유효 계약 · 명세서가 있는 직원이다
+  `payslipId`(이 달 명세서가 있으면) · `hasAttendance` · `retiredDate`(직원 레코드의 퇴직일 YYYY-MM-DD, 없으면 null — 퇴직한 달 마지막
+  급여인지 팝업이 가른다, WHALEERP-764). 대상은 재직 중이거나 그 달 유효 계약 · 명세서가 있는 직원이다
   (오래전 퇴직자는 빠진다). 이름순.
 * `POST /payslips { staffMemberId, month }` → 201 `{ payslipId }`. 404 범위 밖 · 가림 · 없음, 409 `PAYSLIP_EXISTS`(본문
   `payslipId` — 동시 생성으로 유일 제약에 걸린 경우는 ID 없이), 422 `NO_VALID_CONTRACT`.
@@ -239,7 +245,7 @@ sources:
     `reviewReasonsOf`) — 앞서 「확인」한 표시도 지운다(2026-10-26 재영). 처리 이력에 「출퇴근 누락 해소」 · 「계약 만료 후 기록 추가」
     모양으로 남긴다. 보정한 뒤 다시 계산하면 경고가 풀린다. 공제 미입력은 저장하지 않는 사유라 그대로 확정이 막는다.
 * **확인 필요 기록 포함**은 급여 기간(한국 시간)과 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날)에 확인 필요 사유가 남은(관리자가 아직 검토하지 않은) 그 직원 출퇴근 기록이 있을 때다(출근 없는 퇴근은 급여 기간 안의 것만) —
-  검토 사유 `ATTENDANCE_NEEDS_REVIEW`(상세 「확인 필요로 표시된 출퇴근 기록이 N건 있습니다(근무지 반경 밖 퇴근, 위치 조작 감지 등).」 — 괄호 안은 고정 예시. 앞 달 날에 그런 기록이 있으면 「이번 급여 기간과 첫 주에 포함된 지난달 날짜(9월 28일~9월 30일)에 확인 필요로 표시된 …」, 앞 달 날이 하루면 「(9월 30일)」, ATT-11 · 2026-10-20 재영). 확인 필요
+  검토 사유 `ATTENDANCE_NEEDS_REVIEW`(상세 「근무지 반경 밖 퇴근, 위치 조작 감지 등의 사유로 확인이 필요한 출퇴근 기록이 N건 있습니다.」 — 앞의 사유 예시는 고정 글자(WHALEERP-757, 2026-11-24 — 전에는 「확인 필요로 표시된 … (근무지 반경 밖 퇴근, 위치 조작 감지 등).」, 이미 저장된 행도 마이그레이션으로 고침). 앞 달 날에 그런 기록이 있으면 「이번 급여 기간과 첫 주에 포함된 지난달 날짜(9월 28일~9월 30일)에 확인이 필요한 …」, 앞 달 날이 하루면 「(9월 30일)」, ATT-11 · 2026-10-20 재영). 확인 필요
   기록도 급여 계산에는 넣는다. 짝 퇴근은 출근한 날(자정을 넘긴 퇴근도)로 센다 — 급여 계산과 같은 기준. 퇴근
   시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지 않는 다음 달에 붙었다(PR #159 리뷰). 앞 달 날 기록도
   세는 것은 그 날의 실근무가 이 달 주휴나 연장에 들어가서다(운영 정책 v247

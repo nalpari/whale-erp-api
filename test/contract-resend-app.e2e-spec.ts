@@ -11,6 +11,7 @@ import { SEND_VALID_MS } from '../src/contracts/contract-delivery.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import type { StaffMemberListResponseDto } from '../src/staff-members/dto/staff-member-list.response.dto';
 import { createBp, deleteBps } from './hq-bp';
+import { joinedOf } from './joined-account';
 
 // 가입한 직원의 근로계약 재발송 — 앱 알림(WHALEERP-611)과, 직원 목록 contract.canResend 가 재발송 api 의 판정과
 // 맞는지를 실제 DB 로(초대 행 없는 옛 소속 확인 계약 포함, api #164 리뷰). 알림 줄 · 날인 기한 · 상태 이력은 목으로는 증명되지 않는다.
@@ -97,7 +98,7 @@ describe('근로계약 재발송 — 앱 알림 · 목록 canResend (e2e, DB)', 
         },
       });
       accountIds.push(a.accountId);
-      return a;
+      return joinedOf(a);
     };
     // 직원 레코드 + 계약 하나(보낸 지 열흘, 기한 스무 날 남음) + (가입 전이면) 초대 하나
     const staff = async (

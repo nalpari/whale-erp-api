@@ -19,6 +19,7 @@ import type {
 } from '../src/my-profile/dto/my-membership.response.dto';
 import type { MyProfileResponseDto } from '../src/my-profile/dto/my-profile.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { kstToday } from '../src/staff-members/kst-date';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 import { createBp, deleteBps } from './hq-bp';
 
@@ -126,7 +127,7 @@ describe('내 정보 (e2e, DB)', () => {
     });
     directStaffId = await staff(meId, directStoreId, {
       hiredDate: new Date('2026-08-01'),
-      retiredDate: new Date('2026-12-31'),
+      retiredDate: new Date('2099-12-31'),
     });
     draftStaffId = await staff(meId, directStoreId, {
       contractStatus: 'DRAFT',
@@ -364,7 +365,7 @@ describe('내 정보 (e2e, DB)', () => {
       employmentType: 'PART_TIME',
       jobTitle: '홀',
       hiredDate: '2026-08-01',
-      retiredDate: '2026-12-31',
+      retiredDate: '2099-12-31',
     });
     expect(body.items[1]).toMatchObject({
       hiredDate: '2026-09-01',
@@ -419,8 +420,14 @@ describe('내 정보 (e2e, DB)', () => {
       retiredDate: '2026-09-30',
     });
     await get('/me/memberships?includeRetired=yes', token).expect(400);
-    // 신고 정보는 퇴직 포함과 상관없이 지금 소속만
-    await get(taxPath(laterRetiredId), token).expect(404);
+    // 신고 정보도 퇴직한 소속을 연다 — 조회만(WHALEERP-765)
+    expect(
+      (await get(taxPath(laterRetiredId), token).expect(200)).body,
+    ).toEqual({
+      staffMemberId: laterRetiredId,
+      editable: false,
+      taxProfile: null,
+    });
   });
 
   it('소속의 신고 정보 — 가린 값만, 원문은 응답에 없다. 내지 않은 소속은 null', async () => {
@@ -428,6 +435,7 @@ describe('내 정보 (e2e, DB)', () => {
     const res = await get(taxPath(franchiseStaffId), token).expect(200);
     expect(res.body).toEqual({
       staffMemberId: franchiseStaffId,
+      editable: true,
       taxProfile: {
         rrnMasked: '980304-1******',
         bankCode: '088',
@@ -443,12 +451,11 @@ describe('내 정보 (e2e, DB)', () => {
     expect((none.body as MyTaxProfileResponseDto).taxProfile).toBeNull();
   });
 
-  it('내 소속이 아닌 id 는 404 — 남의 레코드, 퇴직 · 임시저장만 있는 내 레코드, 범위 밖 id', async () => {
+  it('내 소속이 아닌 id 는 404 — 남의 레코드, 임시저장만 있는 내 레코드, 범위 밖 id', async () => {
     const token = await accountToken(meId);
     const bodies: unknown[] = [];
     for (const id of [
       otherStaffId,
-      retiredStaffId, // 신고 정보가 있어도 소속이 아니다
       draftStaffId,
       '2147483647',
       '2147483648',
@@ -652,6 +659,107 @@ describe('내 정보 (e2e, DB)', () => {
       { rrn: '9803041234567' },
       await accountToken(otherId),
     ).expect(404);
+  });
+
+  // 퇴직한 근무지 신고 정보는 조회만(WHALEERP-765). PUT 은 otherId 로 — meId 는 위 시험들이 요청 한도를 많이 썼다
+  it('퇴직한 내 소속 — 신고 정보는 가린 값으로 보이고(editable: false), 고치기 · 처음 넣기는 409 STAFF_RETIRED', async () => {
+    const res = await get(
+      taxPath(retiredStaffId),
+      await accountToken(meId),
+    ).expect(200);
+    expect(res.body).toMatchObject({
+      staffMemberId: retiredStaffId,
+      editable: false,
+      taxProfile: {
+        rrnMasked: '980304-1******',
+        payrollAccountNumberMasked: '********6789',
+      },
+    });
+    expect(res.text).not.toContain('9803041234567');
+
+    const otherRetiredId = await staff(otherId, franchiseStoreId, {
+      employmentStatus: 'RETIRED',
+      retiredDate: new Date('2026-09-30'),
+    });
+    const token = await accountToken(otherId);
+    const refused = await put(
+      taxPath(otherRetiredId),
+      {
+        rrn: '9803041234567',
+        bankCode: 'B004',
+        payrollAccountNumber: '1101234567',
+      },
+      token,
+    ).expect(409);
+    expect(refused.body).toMatchObject({
+      code: 'STAFF_RETIRED',
+      message: '퇴직한 근무지의 신고 정보는 조회만 할 수 있습니다.',
+    });
+    expect(
+      await prisma.staffTaxProfile.count({
+        where: { staffMemberId: otherRetiredId },
+      }),
+    ).toBe(0);
+    // 남의 퇴직 소속은 409 가 아니라 404 — 퇴직했는지도 알리지 않는다
+    await put(
+      taxPath(retiredStaffId),
+      { rrn: '9803041234567', currentPassword: PASSWORD },
+      token,
+    ).expect(404);
+  });
+
+  // 퇴직 판정은 재직 상태가 아니라 퇴직일(한국 날짜)이다 — 배치 전이어도 어제 퇴직이면 조회만, 오늘 퇴직이면 아직 고칠 수 있다.
+  // 소속 확인은 퇴직 포함 목록과 같아 임시저장 계약만 있는 퇴직 레코드는 404. 요청 한도를 따로 세게 이 시험만의 계정을 쓴다
+  it('퇴직일 경계 — 어제 퇴직(배치 전) 조회만 · 409, 오늘 퇴직 고칠 수 있음, 임시저장 계약만 있는 퇴직 레코드 404', async () => {
+    const edgeId = await account('경계', 'JOINED');
+    const token = await accountToken(edgeId);
+    const today = kstToday();
+    const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+    const firstSave = {
+      rrn: '9803041234567',
+      bankCode: 'B004',
+      payrollAccountNumber: '1101234567',
+    };
+
+    // (a) 재직 상태 그대로(배치 전) · 어제 퇴직
+    const pastId = await staff(edgeId, franchiseStoreId, {
+      retiredDate: yesterday,
+    });
+    expect((await get(taxPath(pastId), token).expect(200)).body).toEqual({
+      staffMemberId: pastId,
+      editable: false,
+      taxProfile: null,
+    });
+    const refused = await put(taxPath(pastId), firstSave, token).expect(409);
+    expect(refused.body).toMatchObject({ code: 'STAFF_RETIRED' });
+
+    // (b) 오늘 퇴직 — 퇴직일까지 일하므로 아직 재직
+    const todayId = await staff(edgeId, directStoreId, { retiredDate: today });
+    expect((await get(taxPath(todayId), token).expect(200)).body).toEqual({
+      staffMemberId: todayId,
+      editable: true,
+      taxProfile: null,
+    });
+    const saved = await put(taxPath(todayId), firstSave, token).expect(200);
+    expect(saved.body).toMatchObject({
+      staffMemberId: todayId,
+      editable: true,
+      taxProfile: { rrnMasked: '980304-1******' },
+    });
+
+    // (c) 퇴직 · 임시저장 계약만 — 내 소속이 아니다
+    const draftRetiredId = await staff(edgeId, franchiseStoreId, {
+      employmentStatus: 'RETIRED',
+      retiredDate: new Date('2026-09-30'),
+      contractStatus: 'DRAFT',
+    });
+    await get(taxPath(draftRetiredId), token).expect(404);
+    await put(taxPath(draftRetiredId), firstSave, token).expect(404);
+    expect(
+      await prisma.staffTaxProfile.count({
+        where: { staffMemberId: { in: [pastId, draftRetiredId] } },
+      }),
+    ).toBe(0);
   });
 
   // 고칠 때 지금 비밀번호(WHALEERP-333 · 334 후속, 2026-10-23). 요청 한도(계정마다 10분 10번)를 끝에서 보므로 이 계정의

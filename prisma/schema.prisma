@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 74, 1팀 외래키 39, 부분 고유 인덱스 6, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 75, 1팀 외래키 39, 부분 고유 인덱스 6, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -550,15 +550,15 @@ model Account {
   /// 계정 ID
   accountId                Int                      @id @default(autoincrement()) @map("account_id")
   /// 이메일 아이디 — 로그인 아이디, 고유
-  email                    String
+  email                    String?
   /// 비밀번호 해시
-  passwordHash             String                   @map("password_hash")
+  passwordHash             String?                  @map("password_hash")
   /// 실명 — 본인인증 값, 수정 불가
-  realName                 String                   @map("real_name")
+  realName                 String?                  @map("real_name")
   /// 생년월일 — 본인인증 값, 직원은 수정 불가 · 관리자 정정만 된다 (WHALEERP-602)
-  birthDate                DateTime                 @map("birth_date") @db.Date
+  birthDate                DateTime?                @map("birth_date") @db.Date
   /// 휴대전화번호 — 본인인증, 변경 시 재인증
-  phone                    String
+  phone                    String?
   /// 성별 — 남 · 여 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20)
   gender                   Gender?
   /// 외국인 여부 — 체크하지 않으면 내국인 — 가입 때 직원이 넣은 값, 계약서 값과 본인 대조 (WHALEERP-601, 2026-10-20)

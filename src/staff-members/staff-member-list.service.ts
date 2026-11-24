@@ -87,7 +87,10 @@ const STAFF_SELECT = {
   joinStatus: true,
   employmentStatus: true,
   retiredDate: true,
-  ...HQ_SHARING_SELECT,
+  // 상태는 직원 앱 회원 탈퇴 표시(isAccountWithdrawn)에 쓴다 — 본사 제공 동의 칸은 그 안에 펼친다
+  account: {
+    select: { status: true, ...HQ_SHARING_SELECT.account.select },
+  },
   invitations: {
     orderBy: [{ sentAt: 'asc' }, { invitationId: 'asc' }],
     select: {
@@ -486,6 +489,8 @@ export class StaffMemberListService {
         throw new InternalServerErrorException(
           `직원 ${r.staffMemberId} 의 점포 ${r.storeId} 를 찾을 수 없습니다.`,
         );
+      // 직원 앱 회원 탈퇴 — 계정은 남고 개인정보 칸만 비운다(WHALEERP-770). 가린 줄에도 같은 값이다(식별 정보가 아니다)
+      const isAccountWithdrawn = r.account?.status === 'WITHDRAWN';
       const storeDto = {
         storeId: r.storeId,
         name: store.name,
@@ -507,6 +512,7 @@ export class StaffMemberListService {
           contract: null,
           employmentStatus: null,
           retiredDate: null,
+          isAccountWithdrawn,
         };
       }
       const shown = displayInvitation(r.invitations);
@@ -545,7 +551,8 @@ export class StaffMemberListService {
           ? {
               linkHoldId: hold.linkHoldId,
               mismatchReason: hold.mismatchReason,
-              verifiedPhoneLast4: hold.account.phone.slice(-4),
+              // 탈퇴한 계정은 번호가 비어 있다 — 탈퇴할 때 열린 보류를 지우므로 보통 오지 않는다
+              verifiedPhoneLast4: hold.account.phone?.slice(-4) ?? null,
               heldAt: hold.createdAt,
             }
           : null,
@@ -567,6 +574,7 @@ export class StaffMemberListService {
           : null,
         employmentStatus: r.employmentStatus,
         retiredDate: dateOnly(r.retiredDate),
+        isAccountWithdrawn,
       };
     });
   }

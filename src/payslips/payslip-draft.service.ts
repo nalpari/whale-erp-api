@@ -63,6 +63,8 @@ interface Candidate {
   contractIds: number[];
   payslipId: number | null;
   hasAttendance: boolean;
+  /** 직원 레코드의 퇴직일(YYYY-MM-DD), 없으면 null */
+  retiredDate: string | null;
 }
 
 type Master = {
@@ -129,6 +131,7 @@ export class PayslipDraftService {
         employmentType: c.employmentType,
         payslipId: c.payslipId,
         hasAttendance: c.hasAttendance,
+        retiredDate: c.retiredDate,
         ...storeFieldsOf(infoOf(c.storeId)),
         contractId: c.contractIds[0] ?? null,
       })),
@@ -286,6 +289,7 @@ export class PayslipDraftService {
         storeId: true,
         name: true,
         employmentType: true,
+        retiredDate: true,
         contracts: {
           where: contracts,
           orderBy: [{ startDate: 'desc' }, { contractId: 'desc' }],
@@ -316,6 +320,7 @@ export class PayslipDraftService {
       contractIds: r.contracts.map((c) => c.contractId),
       payslipId: r.payslips[0]?.payslipId ?? null,
       hasAttendance: hasAttendance.has(r.staffMemberId),
+      retiredDate: r.retiredDate && dateOnly(r.retiredDate),
     }));
   }
 

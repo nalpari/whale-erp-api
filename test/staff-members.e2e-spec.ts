@@ -1230,7 +1230,7 @@ describe('직원 목록 (e2e, DB)', () => {
             storeId: directStoreId,
             accountId: account.accountId,
             name: '계정직원',
-            phone: account.phone,
+            phone: account.phone!,
             employmentType: 'PART_TIME',
             jobTitle: '홀',
             joinStatus: 'JOINED',
@@ -1281,7 +1281,7 @@ describe('직원 목록 (e2e, DB)', () => {
           storeId: franchiseStoreId,
           accountId: account.accountId,
           name: '가맹동의직원',
-          phone: account.phone,
+          phone: account.phone!,
           employmentType: 'PART_TIME',
           jobTitle: '홀',
           joinStatus: 'JOINED',
@@ -1317,7 +1317,7 @@ describe('직원 목록 (e2e, DB)', () => {
             storeId: directStoreId,
             accountId: account.accountId,
             name: '계정직원',
-            phone: account.phone,
+            phone: account.phone!,
             employmentType: 'PART_TIME',
             jobTitle: '홀',
             joinStatus: 'JOINED',
@@ -1548,14 +1548,14 @@ describe('직원 목록 (e2e, DB)', () => {
           storeId: franchiseStoreId,
           accountId: account.accountId,
           name: '가맹관리자직원',
-          phone: account.phone,
+          phone: account.phone!,
           employmentType: 'PART_TIME',
           jobTitle: '홀',
           joinStatus: 'JOINED',
         },
       });
       scopeStaffIds.push(staffMemberId);
-      faStaff = { staffMemberId, email: account.email };
+      faStaff = { staffMemberId, email: account.email! };
     });
 
     afterAll(async () => {

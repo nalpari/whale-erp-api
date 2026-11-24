@@ -1,5 +1,6 @@
 import { API_ENUMS } from '../enums/api-enums';
 import {
+  accountIdentityOf,
   type AccountIdentity,
   type ContractIdentity,
   IDENTITY_FIELDS,
@@ -111,4 +112,26 @@ describe('IdentityField — 화면 한글은 GET /enums 로', () => {
       ...IDENTITY_FIELDS,
     ]);
   });
+});
+
+describe('accountIdentityOf — 탈퇴한 계정(WHALEERP-770)', () => {
+  const full = {
+    realName: '홍길동',
+    phone: '01012345678',
+    birthDate: new Date('1990-01-01T00:00:00Z'),
+    gender: null,
+    isForeigner: false,
+    zipCode: '04001',
+  };
+
+  it('세 칸이 모두 있으면 다른 칸을 그대로 두고 값으로 좁힌다', () => {
+    expect(accountIdentityOf(full)).toEqual(full);
+  });
+
+  it.each(['realName', 'phone', 'birthDate'])(
+    '%s 가 비어 있으면(탈퇴 계정) null',
+    (field) => {
+      expect(accountIdentityOf({ ...full, [field]: null })).toBeNull();
+    },
+  );
 });

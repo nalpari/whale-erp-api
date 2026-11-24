@@ -312,9 +312,14 @@ export class MyEmailChangeService {
       where: { accountId },
       select: { email: true, passwordHash: true, status: true },
     });
-    if (account.status === 'WITHDRAWN')
+    // 칸이 비어 있는 것도 탈퇴한 계정이다(탈퇴가 아니면 있다 — CHECK)
+    if (
+      account.status === 'WITHDRAWN' ||
+      account.email === null ||
+      account.passwordHash === null
+    )
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
-    return account;
+    return { email: account.email, passwordHash: account.passwordHash };
   }
 
   private async assertNotInUse(

@@ -417,7 +417,7 @@ export class RetirementService {
       await this.schedule(tx, adminAccountId, staffMemberId, closed, now);
     }
 
-    for (const { status, storeId } of await this.endPendingContracts(
+    for (const { status, storeId } of await endPendingContracts(
       tx,
       { storeId: { in: ids } },
       'ADMIN',
@@ -455,33 +455,6 @@ export class RetirementService {
       for (const key of Object.keys(total) as (keyof typeof total)[])
         total[key] += mine[key];
     return result;
-  }
-
-  /** 대기 계약 4종을 종료로 닫고 상태 이력을 남긴다. 닫은 계약마다 (이전 상태, 점포)를 돌려준다. */
-  private async endPendingContracts(
-    tx: Tx,
-    where: Prisma.ContractWhereInput,
-    actor: StatusChangeActor,
-  ): Promise<{ status: ContractStatus; storeId: number | null }[]> {
-    const closed: { status: ContractStatus; storeId: number | null }[] = [];
-    for (const status of PENDING_CONTRACT_STATUSES) {
-      const ended = await tx.contract.updateManyAndReturn({
-        where: { ...where, status },
-        data: { status: 'ENDED' },
-        select: { contractId: true, storeId: true },
-      });
-      if (ended.length === 0) continue;
-      closed.push(...ended.map(({ storeId }) => ({ status, storeId })));
-      await tx.contractStatusHistory.createMany({
-        data: ended.map(({ contractId }) => ({
-          contractId,
-          fromStatus: status,
-          toStatus: 'ENDED' as const,
-          actor,
-        })),
-      });
-    }
-    return closed;
   }
 
   /** 지난 날짜면 배치를 기다리지 않고 지금 처리한 관리자로 확정한다. 오늘은 지난 날짜가 아니다. */
@@ -591,7 +564,7 @@ export class RetirementService {
       data: { status: 'EXPIRED' },
     });
 
-    await this.endPendingContracts(tx, { staffMemberId }, by.actor);
+    await endPendingContracts(tx, { staffMemberId }, by.actor);
     return true;
   }
 
@@ -769,6 +742,36 @@ export class RetirementService {
     if (!staff) throw new NotFoundException('직원을 찾을 수 없습니다.');
     return staff;
   }
+}
+
+/**
+ * 대기 계약 4종(`PENDING_CONTRACT_STATUSES`)을 종료로 닫고 상태 이력을 남긴다. 닫은 계약마다 (이전 상태, 점포)를 돌려준다.
+ * 퇴직 처리 · 점포 폐점 · 직원 앱 회원 탈퇴(WHALEERP-770, actor `STAFF`)가 함께 쓴다.
+ */
+export async function endPendingContracts(
+  tx: Tx,
+  where: Prisma.ContractWhereInput,
+  actor: StatusChangeActor,
+): Promise<{ status: ContractStatus; storeId: number | null }[]> {
+  const closed: { status: ContractStatus; storeId: number | null }[] = [];
+  for (const status of PENDING_CONTRACT_STATUSES) {
+    const ended = await tx.contract.updateManyAndReturn({
+      where: { ...where, status },
+      data: { status: 'ENDED' },
+      select: { contractId: true, storeId: true },
+    });
+    if (ended.length === 0) continue;
+    closed.push(...ended.map(({ storeId }) => ({ status, storeId })));
+    await tx.contractStatusHistory.createMany({
+      data: ended.map(({ contractId }) => ({
+        contractId,
+        fromStatus: status,
+        toStatus: 'ENDED' as const,
+        actor,
+      })),
+    });
+  }
+  return closed;
 }
 
 /** 열린 출근의 기준 — 보정할 수 있는 3개월 안, 짝 퇴근이 없는 출근. 단건 · 일괄 퇴직 처리가 같이 쓴다. */

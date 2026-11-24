@@ -222,7 +222,7 @@ const DETAIL_SELECT = {
   confirmedAt: true,
   createdAt: true,
   updatedAt: true,
-  staffMember: { select: { name: true } },
+  staffMember: { select: { name: true, retiredDate: true } },
   contract: { select: { contractId: true, status: true, wageAmount: true } },
   payslipItems: {
     orderBy: ITEM_ORDER,
@@ -593,6 +593,8 @@ export class PayslipListService {
       payslipId: p.payslipId,
       staffMemberId: p.staffMemberId,
       staffName: p.staffMember.name,
+      retiredDate:
+        p.staffMember.retiredDate && dateOnly(p.staffMember.retiredDate),
       storeId: p.storeId,
       ...storeFieldsOf(infoOf(p.storeId)),
       contractId: p.contractId,

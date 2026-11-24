@@ -103,6 +103,7 @@ await this.opsNotification.notify({
 | `NTF_CONTRACT_RENEWAL_DUE` | 계약 ID (계약당 한 번 — `contracts.renewal_notified_at`) | `storeManagers(계약 직원 레코드)` | #152 · #154 — 하루 배치 커밋 뒤 |
 | `NTF_LINK_HOLD` | 보류 ID | `activeAdmin(contracts.created_by)` | #137 — 연결 보류를 없애 사용 안 함(2026-10-19, `20261019153734_team3_link_hold_templates_off`) |
 | `NTF_AFFILIATION_REJECTED` | 초대 ID | `activeAdmin(contracts.created_by)` | 맡은 일감 없음 |
+| `NTF_STAFF_WITHDRAWN` | `{계정 ID}:{직원 레코드 ID}` (이 계정에 이어진 모든 직원 레코드마다 + 계약을 닫거나 초대를 만료시킨 후보 레코드, 같은 근무지는 한 번) | `storeManagers(직원 레코드)` — 본사 제공 동의를 지우기 **전에** 트랜잭션 안에서 정한다 | WHALEERP-770 — `MyWithdrawalService` 직원 앱 회원 탈퇴 커밋 뒤, 임시 문구 |
 
 `related.type` 은 `CONTRACT` · `INQUIRY` · `LEAD` · `STAFF_MEMBER` 다(`src/notifications/related-type.ts`). 가입 연결
 보류 · 소속 추가 확인 거절은 직원 레코드를 가리킨다. 화면의 「관련 업무 #41」 표시와 중복 방지에 쓰고, 갈 곳은 `link` 가 정한다.

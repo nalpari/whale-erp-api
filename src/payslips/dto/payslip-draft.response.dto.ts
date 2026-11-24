@@ -21,6 +21,11 @@ export class PayslipCandidateDto {
   payslipId: number | null;
   /** 급여 기간에 출퇴근 기록이 한 건이라도 있는가. 없으면 초안에 「출퇴근 누락」 검토 사유가 붙는다 */
   hasAttendance: boolean;
+  /**
+   * 직원 레코드의 퇴직일(staff_members.retired_date, YYYY-MM-DD). 없으면 null. 화면은 오늘(한국) 전이면 「퇴직」, 오늘 이후면
+   * 「퇴직 예정」으로 보인다 — 퇴직한 달 마지막 급여(근로기준법 제36조 14일 안 청산)를 가리려는 것이다
+   */
+  retiredDate: string | null;
 }
 
 export class PayslipCandidatesResponseDto {

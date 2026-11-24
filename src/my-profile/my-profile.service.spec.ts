@@ -191,5 +191,8 @@ describe('MyProfileService', () => {
     await expect(service.get(12)).rejects.toThrow(UnauthorizedException);
     findUnique.mockResolvedValue(null);
     await expect(service.get(12)).rejects.toThrow(UnauthorizedException);
+    // 칸이 비었는데 상태가 아직 JOINED 로 읽힌 경우도 500 이 아니라 401
+    findUnique.mockResolvedValue(accountRow({ email: null }));
+    await expect(service.get(12)).rejects.toThrow(UnauthorizedException);
   });
 });

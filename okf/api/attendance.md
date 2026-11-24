@@ -4,7 +4,7 @@ title: Attendance
 description: 직원 근무 앱 출퇴근(WHALEERP-207) — GET /me/attendance/records(내 기간 기록 · 보정 이력, 221 · 222) · GET /me/attendance(고른 근무지 좌표 · 반경 100m · 동의 · 출근을 막는 까닭 · 열린 출근 · 오늘 근무스케줄), POST /me/attendance/location-reads(출퇴근 탭 진입 · 버튼 때마다 위치 읽음 — 확인자료 수집 · 이용) · check-in · check-out(계정 행 잠금, 서버 수신 시각, 확인 필요 사유만, 위치 읽음을 기록에 연결), 확인 필요 사유 값, 3년 보존 뒤 파기 배치 attendance-purge.
 tags: [attendance, staff-app, batch]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T07:11:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T01:14:12Z }
 sources:
   - id: records
     resource: ../../src/attendance/attendance-records.service.ts
@@ -186,7 +186,7 @@ sources:
 | `ACCURACY_EXCEEDED` | 위치 오차 초과 | 더 쓰지 않는다. 운영 데이터가 없고 enum 값 삭제는 타입을 다시 만들어야 해서 값만 남겼다 |
 
 확인 필요 출근 · 퇴근도 급여 계산에 그대로 들어가고, 그런 기록이 든 급여명세서에는 검토 대기 사유
-`ATTENDANCE_NEEDS_REVIEW`(확인 필요 기록 포함)를 붙인다 — 초안을 만들 때 급여 기간의 사유가 남은(검토 전) 기록을 세어 「확인 필요로 표시된 출퇴근 기록이 N건 있습니다(근무지 반경 밖 퇴근, 위치 조작 감지 등).」로 붙인다([Payslips](/api/payslips.md)). 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날) 기록도 센다 — 그 날의 근무가 이 달 주휴나 연장에 들어가서다(운영 정책 v247 PAY-06, WHALEERP-634). 앞 달 날에 그런 기록이 있으면 문구는 「이번 급여 기간과 첫 주에 포함된 지난달 날짜(9월 28일~9월 30일)에 확인 필요로 표시된 …」다.
+`ATTENDANCE_NEEDS_REVIEW`(확인 필요 기록 포함)를 붙인다 — 초안을 만들 때 급여 기간의 사유가 남은(검토 전) 기록을 세어 「근무지 반경 밖 퇴근, 위치 조작 감지 등의 사유로 확인이 필요한 출퇴근 기록이 N건 있습니다.」로 붙인다(WHALEERP-757)([Payslips](/api/payslips.md)). 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날) 기록도 센다 — 그 날의 근무가 이 달 주휴나 연장에 들어가서다(운영 정책 v247 PAY-06, WHALEERP-634). 앞 달 날에 그런 기록이 있으면 문구는 「이번 급여 기간과 첫 주에 포함된 지난달 날짜(9월 28일~9월 30일)에 확인이 필요한 …」다.
 
 근무지(`store_id`)는 자동으로 고르지 않고 직원이 고른 곳이다(운영 정책 ATT-07, 2026-10-20 재영).
 
@@ -200,8 +200,9 @@ sources:
 - 대상을 `FOR UPDATE` 로 잠근 뒤, 대상을 가리키는 외래키(모두 RESTRICT)를 먼저 푼다.
   - 짝 출근(`check_in_attendance_record_id`)을 비운다 — 밤샘 근무의 퇴근은 출근보다 하루 늦게 기한이 차서 그날은 남는다.
     RESTRICT 는 행마다 바로 보므로, 같은 문장에서 함께 지우는 짝도 먼저 비운다.
-  - 위치정보 확인자료(`location_access_logs.attendance_record_id`)는 연결만 비운다 — 확인자료는 계정 · BP 탈퇴 가운데 늦은
-    쪽까지 남는다(RET-08 · ATT-22).
+  - 위치정보 확인자료(`location_access_logs.attendance_record_id`)는 연결만 비운다 — 확인자료는 직원 계정 탈퇴 시 파기
+    (위치정보법 제24조 제4항)한다(RET-08 · ATT-22, WHALEERP-770 — 탈퇴할 때 그 계정의 확인자료 · 동의 이력 · 동의를 지운다).
+    동의 철회 시 파기는 별도 일감이다(지금 철회는 확인자료를 지우지 않는다).
   - 보정 이력(`attendance_corrections`)은 기록과 함께 지운다.
 - 일회용 DB 에서 확인했다(2026-10-22): 기한 지난 출근 · 대상끼리 짝인 출근 · 퇴근 3건이 지워지고, 하루 늦은 밤샘 퇴근은 짝만 비운 채
   남고, 확인자료는 연결만 비운 채 남는다.

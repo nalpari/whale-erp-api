@@ -10,6 +10,7 @@ import { AuthSessionService } from '../src/auth-session/auth-session.service';
 import { applyNewPassword } from '../src/auth/apply-new-password';
 import { hashPassword } from '../src/auth/password';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { joinedOf } from './joined-account';
 
 const PASSWORD = 'correct-horse-battery';
 
@@ -57,7 +58,7 @@ describe('로그인 실패 잠금 (e2e, DB)', () => {
       },
     });
     createdAccountIds.push(account.accountId);
-    return account;
+    return joinedOf(account);
   }
 
   const login = (email: string, password: string) =>

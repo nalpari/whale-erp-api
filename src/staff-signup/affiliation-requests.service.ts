@@ -38,6 +38,7 @@ import {
   warnStaleHqSharingVersion,
 } from './hq-sharing-consent';
 import { sameName } from '../contracts/identity-match';
+import { assertPresent } from '../auth/assert-present';
 
 type Db = Prisma.TransactionClient | PrismaService;
 
@@ -440,6 +441,11 @@ export class AffiliationRequestsService {
     });
     if (!account || account.status === 'WITHDRAWN')
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
-    return account;
+    // 탈퇴가 아니면 두 칸이 있다(CHECK accounts_personal_required_unless_withdrawn)
+    return {
+      ...account,
+      phone: assertPresent(account.phone, 'phone'),
+      realName: assertPresent(account.realName, 'real_name'),
+    };
   }
 }

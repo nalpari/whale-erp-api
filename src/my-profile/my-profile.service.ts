@@ -54,7 +54,15 @@ export class MyProfileService {
         },
       },
     });
-    if (!account || account.status === 'WITHDRAWN')
+    // 칸이 비어 있는 것도 탈퇴한 계정이다(탈퇴가 아니면 다섯 칸이 있다 — CHECK)
+    if (
+      !account ||
+      account.status === 'WITHDRAWN' ||
+      account.email === null ||
+      account.realName === null ||
+      account.birthDate === null ||
+      account.phone === null
+    )
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
     const locationConsent = locationConsentOf(account.locationConsents);
     const termsVersion = await currentLocationTermsVersion(this.prisma);

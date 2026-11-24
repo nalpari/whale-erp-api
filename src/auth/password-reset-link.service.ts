@@ -23,6 +23,7 @@ import { hashPassword, hashToken } from './password';
 import { validateNewPassword } from './password-policy';
 import { PasswordResetLinkSender } from './password-reset-link-sender';
 import { readStaffAppUrl, resetLinkOf } from './staff-app-url';
+import { assertPresent } from './assert-present';
 
 /** 링크 수명. 24시간 동안 한 번만 쓴다(WHALEERP-172). */
 export const LINK_LIFETIME_MS = 24 * 60 * 60 * 1000;
@@ -197,8 +198,9 @@ export class PasswordResetLinkService {
         passwordResetLinkId,
         issuedAt: now,
         expiresAt,
-        email: locked.email,
-        realName: locked.realName,
+        // 탈퇴가 아니면 두 칸이 있다(CHECK) — 위에서 탈퇴를 걸렀다.
+        email: assertPresent(locked.email, 'email'),
+        realName: assertPresent(locked.realName, 'real_name'),
       };
     });
     if (issued.kind === 'withdrawn')
@@ -316,7 +318,10 @@ export class PasswordResetLinkService {
     });
     if (!isUsableLink(found, new Date()))
       throw new UnauthorizedException(INVALID_LINK_MESSAGE);
-    const reason = validateNewPassword(newPassword, found.account.email);
+    const reason = validateNewPassword(
+      newPassword,
+      assertPresent(found.account.email, 'email'),
+    );
     const candidate: PasswordCandidate =
       reason === null
         ? { kind: 'valid', passwordHash: await hashPassword(newPassword) }

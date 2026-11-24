@@ -47,8 +47,8 @@ export class StaffMemberLinkHoldDto {
     enumName: 'LinkHoldMismatchReason',
   })
   mismatchReason: LinkHoldMismatchReason;
-  /** 가입자가 본인인증한 번호의 끝 4자리 */
-  verifiedPhoneLast4: string;
+  /** 가입자가 본인인증한 번호의 끝 4자리. 탈퇴한 계정이면 null(탈퇴할 때 열린 보류를 지워 보통 오지 않는다) */
+  verifiedPhoneLast4: string | null;
   heldAt: Date;
 }
 
@@ -131,6 +131,12 @@ export class StaffMemberListItemDto {
   employmentStatus: EmploymentStatus | null;
   /** 퇴직일(YYYY-MM-DD). 재직이면서 값이 있으면 퇴직 예정 */
   retiredDate: string | null;
+  /**
+   * 직원이 직원 앱에서 회원 탈퇴한 계정인지(WHALEERP-770). 탈퇴해도 직원 레코드 · 계약 · 출퇴근 기록은 근무지 데이터로 남고
+   * 계정의 개인정보(이메일 · 휴대전화 등)만 지워진다 — 화면은 「탈퇴 계정」 표시를 한다. 가입 전(계정 없음)이면 false 다.
+   * 가린 줄(isMasked)에도 같은 값이 온다.
+   */
+  isAccountWithdrawn: boolean;
 }
 
 /** 재직 기간 하나 — 재입사로 이은 다른 직원 레코드(WHALEERP-615) */
