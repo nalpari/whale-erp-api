@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T02:13:03Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T02:25:49Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
@@ -17,7 +17,7 @@ sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
     title: PayslipListService (관리자 목록 · 상세, 가림 · 상태 건수)
-    last_modified: 2026-11-19T06:58:12Z
+    last_modified: 2026-11-24T02:02:51Z
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
     title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년). DETAIL_SELECT · toSummary 는 직원 자료 일괄 저장도 쓴다
@@ -33,7 +33,11 @@ sources:
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
-    last_modified: 2026-11-19T06:58:12Z
+    last_modified: 2026-11-24T02:02:51Z
+  - id: draft-response-dto
+    resource: ../../src/payslips/dto/payslip-draft.response.dto.ts
+    title: 작성 대상 응답 DTO — 직원 · 점포 · 계약 · 출퇴근 · 명세서 · 퇴직일(retiredDate)
+    last_modified: 2026-11-24T02:25:49Z
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
@@ -53,7 +57,7 @@ sources:
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답 · 쿼리(my-payslip.response.dto.ts · my-payslip-list.query.dto.ts)
-    last_modified: 2026-11-19T06:58:12Z
+    last_modified: 2026-11-24T02:02:51Z
 ---
 
 # 관리자 목록 (GET /payslips)
@@ -120,7 +124,8 @@ sources:
 읽은 뒤에 거르면 가려지는 명세서의 404 만 늦어 응답 시간으로 드러난다(직원 상세와 같다). 담는 것: 금액 셋, 지급 ·
 공제 항목(급여 항목 `sort_order` 순, `itemCode` 를 붙임), 검토 대기 사유, 처리 이력(최근 것이 위, `changedByName`),
 발송 이력(보낸 순), 참조 근로계약(`contractId · status · wageAmount`), 확정할 수 있는 첫날 `confirmableFrom`(YYYY-MM-DD —
-확정의 `PERIOD_NOT_ENDED` 와 같은 판정, 작성 중 · 검토 중이 아니면 null. 화면이 그 전에 [확정]을 막는다, WHALEERP-690).
+확정의 `PERIOD_NOT_ENDED` 와 같은 판정, 작성 중 · 검토 중이 아니면 null. 화면이 그 전에 [확정]을 막는다, WHALEERP-690),
+그 명세서 직원 레코드의 퇴직일 `retiredDate`(`staff_members.retired_date`, YYYY-MM-DD, 없으면 null — 화면이 「퇴직 · 퇴직 예정」을 보인다, WHALEERP-764).
 
 # 점포 · 월 요약 (GET /payslips/summary, WHALEERP-621)
 
@@ -167,7 +172,8 @@ sources:
 
 * `GET /payslips/candidates?month=YYYY-MM` → `{ periodStartDate, periodEndDate, items }`. 줄은 직원 하나 — `staffName` ·
   `storeName` · `employmentType`(유효 계약 값, 없으면 직원 레코드 값) · `contractId`(없으면 null — 만들 수 없음) ·
-  `payslipId`(이 달 명세서가 있으면) · `hasAttendance`. 대상은 재직 중이거나 그 달 유효 계약 · 명세서가 있는 직원이다
+  `payslipId`(이 달 명세서가 있으면) · `hasAttendance` · `retiredDate`(직원 레코드의 퇴직일 YYYY-MM-DD, 없으면 null — 퇴직한 달 마지막
+  급여인지 팝업이 가른다, WHALEERP-764). 대상은 재직 중이거나 그 달 유효 계약 · 명세서가 있는 직원이다
   (오래전 퇴직자는 빠진다). 이름순.
 * `POST /payslips { staffMemberId, month }` → 201 `{ payslipId }`. 404 범위 밖 · 가림 · 없음, 409 `PAYSLIP_EXISTS`(본문
   `payslipId` — 동시 생성으로 유일 제약에 걸린 경우는 ID 없이), 422 `NO_VALID_CONTRACT`.
