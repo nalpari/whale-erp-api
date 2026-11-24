@@ -426,6 +426,7 @@ describe('내 정보 (e2e, DB)', () => {
     ).toEqual({
       staffMemberId: laterRetiredId,
       editable: false,
+      expired: false,
       taxProfile: null,
     });
   });
@@ -436,6 +437,7 @@ describe('내 정보 (e2e, DB)', () => {
     expect(res.body).toEqual({
       staffMemberId: franchiseStaffId,
       editable: true,
+      expired: false,
       taxProfile: {
         rrnMasked: '980304-1******',
         bankCode: '088',
@@ -728,6 +730,7 @@ describe('내 정보 (e2e, DB)', () => {
     expect((await get(taxPath(pastId), token).expect(200)).body).toEqual({
       staffMemberId: pastId,
       editable: false,
+      expired: false,
       taxProfile: null,
     });
     const refused = await put(taxPath(pastId), firstSave, token).expect(409);
@@ -738,6 +741,7 @@ describe('내 정보 (e2e, DB)', () => {
     expect((await get(taxPath(todayId), token).expect(200)).body).toEqual({
       staffMemberId: todayId,
       editable: true,
+      expired: false,
       taxProfile: null,
     });
     const saved = await put(taxPath(todayId), firstSave, token).expect(200);

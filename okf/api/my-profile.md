@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 회원 탈퇴(GET withdrawal-eligibility · POST withdrawal, WHALEERP-770), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T02:14:54Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T07:06:28Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -57,7 +57,7 @@ sources:
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
-    last_modified: 2026-11-24T02:14:54Z
+    last_modified: 2026-11-24T07:06:28Z
   - id: my-memberships-controller
     resource: ../../src/my-profile/my-memberships.controller.ts
     title: 소속 · 신고 정보 경로, 신고 정보 저장의 요청 한도
@@ -334,7 +334,11 @@ grouping. The write (below) refuses both a change and a first save with 409 `STA
 Retention: from the day after `retiredDate` + 3 years (same `retiredBefore` cut as the purge
 batches, KST) the read does not decrypt the row and returns `taxProfile: null`, even before
 `tax-profile-purge` (05:10) deletes it — so a late or failed batch does not show expired values
-(PR #313). From 05:00 that day the contract purge removes the signed contracts, so the record leaves
+(PR #313). The response then also says `expired: true` — the same `retiredBefore` test, whether the row
+is still there or the purge already deleted it — so the app can tell "never submitted" (`taxProfile: null`,
+`expired: false`) from "deleted after retention" and stop calling the latter 「입력한 신고 정보가 없습니다」
+(WHALEERP-772; the app shows 「신고 정보 보관 기간이 지났습니다」 — B안, 2026-11-24 재영. Because `expired` is decided by the
+retirement date alone, it is also true for a record that never submitted one, which is why the copy says "not kept" rather than "deleted"). The save response is always `expired: false` (only an editable record gets there). From 05:00 that day the contract purge removes the signed contracts, so the record leaves
 `ANY_EMPLOYMENT_STAFF` and the read becomes 404 (the card leaves the list too). A record of a **deleted store** is 404 here too (read and save look the store up — no Prisma relation — and refuse `isDeleted`, same as
 the list — 2026-11-24 재영 결정).
 

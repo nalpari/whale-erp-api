@@ -55,6 +55,12 @@ export class MyTaxProfileResponseDto {
    * false 면 고치기 · 처음 넣기(`PUT`)가 409 STAFF_RETIRED 다.
    */
   editable: boolean;
-  /** 이 소속에 낸 신고 정보. 아직 내지 않았으면 null */
+  /**
+   * 보존 기간(퇴직 + 3년, 운영 정책 RET-01 · TAX-08)이 지났는지 — 퇴직일이 파기 배치와 같은 기준(`retiredBefore`)보다 앞이면 true 이고
+   * 그때 taxProfile 은 늘 null 이다(배치가 이미 지웠든 배치 전이든). 화면은 이것으로 「넣은 적 없음」과 「보존 기간이 지나 지움」을
+   * 가른다(WHALEERP-772). 퇴직하지 않았거나 기한 안이면 false
+   */
+  expired: boolean;
+  /** 이 소속에 낸 신고 정보. 아직 내지 않았거나 보존 기간이 지났으면(expired) null */
   taxProfile: MyTaxProfileDto | null;
 }
