@@ -94,6 +94,7 @@ describe('PayslipSendService', () => {
     payslipDispatch: { create: jest.Mock };
     payslipLog: { create: jest.Mock };
     store: { findMany: jest.Mock };
+    account: { findUnique: jest.Mock };
   };
 
   const build = async () => {
@@ -133,6 +134,14 @@ describe('PayslipSendService', () => {
       },
       payslipDispatch: { create: jest.fn().mockResolvedValue({}) },
       payslipLog: { create: jest.fn().mockResolvedValue({}) },
+      // 보내기 직전에 다시 읽는 계정 — 기본은 읽어 둔 것과 같다
+      account: {
+        findUnique: jest.fn().mockResolvedValue({
+          accountId: 1,
+          email: 'haram@example.com',
+          status: 'JOINED',
+        }),
+      },
       store: {
         findMany: jest.fn().mockResolvedValue([
           { storeId: 5, name: '모리커피 연남점' },
@@ -189,11 +198,36 @@ describe('PayslipSendService', () => {
         prisma.payslip.findFirst.mockResolvedValue(
           row({ staffMember: { ...row().staffMember, account } }),
         );
+        prisma.account.findUnique.mockResolvedValue(account);
         await expect(send()).rejects.toMatchObject({
           response: { code: 'NO_EMAIL' },
         });
       }
       expect(mail!.send).not.toHaveBeenCalled();
+    });
+
+    it('받는 주소는 보내기 직전에 다시 읽는다 — 그사이 이메일을 바꿨으면 새 주소로, 탈퇴했으면 보내지 않는다(PR #312)', async () => {
+      prisma.account.findUnique.mockResolvedValueOnce({
+        accountId: 1,
+        email: 'new@example.com',
+        status: 'JOINED',
+      });
+      await expect(send()).resolves.toEqual({ payslipId: 40 });
+      expect((mail!.send.mock.calls[0] as [{ to: string }])[0].to).toBe(
+        'new@example.com',
+      );
+      mail!.send.mockClear();
+      prisma.payslip.updateMany.mockClear();
+      prisma.account.findUnique.mockResolvedValueOnce({
+        accountId: 1,
+        email: 'haram@example.com',
+        status: 'WITHDRAWN',
+      });
+      await expect(send()).rejects.toMatchObject({
+        response: { code: 'NO_EMAIL' },
+      });
+      expect(mail!.send).not.toHaveBeenCalled();
+      expect(prisma.payslip.updateMany).not.toHaveBeenCalled();
     });
 
     it('읽은 상태 · updatedAt 으로 먼저 잡고 메일을 보낸 뒤, 발송 완료 · 발송 이력(성공) · 처리 이력(발송)', async () => {

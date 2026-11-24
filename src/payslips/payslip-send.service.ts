@@ -346,7 +346,14 @@ export class PayslipSendService {
   ): Promise<Delivery> {
     if (!this.mail) return { ok: false, reason: 'MAIL_NOT_CONFIGURED' };
     if (!this.appUrl) return { ok: false, reason: 'APP_URL_NOT_CONFIGURED' };
-    const account = t.staffMember.account;
+    // 받는 주소는 이 장을 보내기 직전에 다시 읽는다 — 일괄 발송은 대상을 처음에 한꺼번에 읽어, 그사이 직원이 이메일을 바꾸거나
+    // 탈퇴하면 예전 주소로 금액이 담긴 PDF 가 갈 수 있다(첨부는 로그인 없이 열린다, PR #312 pr-agent)
+    const account = t.staffMember.account
+      ? await this.prisma.account.findUnique({
+          where: { accountId: t.staffMember.account.accountId },
+          select: { accountId: true, email: true, status: true },
+        })
+      : null;
     if (!account || account.status === 'WITHDRAWN')
       return { ok: false, reason: 'NO_EMAIL' };
 
