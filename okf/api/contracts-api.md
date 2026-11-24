@@ -931,9 +931,9 @@ resent — a new contract instead.
   as 7101, 2026-11-02), so **for either a `STAFF_APP_URL` that is not
   https is 503 「직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 가입 초대(소속 추가 확인 요청) 알림톡 버튼 링크를 보낼 수 없습니다.」 before anything is
   written** — production already refuses it at startup. Both are registered with Kakao (가입 초대 2026-10-30, 소속 추가
-  확인 요청 again 2026-11-24 as `TALK_STAFF_AFFILIATION_V2`, the DB bodies match them), but neither has yet been seen arriving as an 알림톡 in a real send (for
-  both, the full `https://` button address opening); a rejected 알림톡 is only seen in the result report — so
-  **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written** until that is seen
+  확인 요청 again 2026-11-24 as `TALK_STAFF_AFFILIATION_V2`, the DB bodies match them). The 소속 추가 확인 요청 has been seen arriving as an 알림톡 with its full `https://` button
+  address opening (2026-11-24, dev contract 90); the 가입 초대 has not yet. A rejected 알림톡 is only seen in the result report — so
+  **a 가입 초대 or 소속 추가 확인 요청 without `BIZPPURIO_SMS_FROM` is 503 before anything is written** until the 가입 초대 is seen too
   (api #74 review; the fallback carries the body — for the 가입 초대 with the code and the link, for the 소속 추가 확인
   요청 the body with the `/affiliations` link). The https check looks at the link the send will build
   (same origin), not the raw `STAFF_APP_URL` text, so the two never disagree.

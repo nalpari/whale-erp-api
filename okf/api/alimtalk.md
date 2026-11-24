@@ -106,7 +106,8 @@ code, body and 「링크」 back, and `ALIMTALK_BUTTONS` lists the button again.
 from `STAFF_APP_URL` as before (`/invite#token=…`) and there is one Kakao
 template per message, not one per environment (재영 2026-10-30). The registered invite button link is
 `https://#{가입링크}` — everything after the scheme is a variable, so the dev server's `STAFF_APP_URL` does not
-make it differ. Every button sends the full `https://` address (김민식 2026-11-02).
+make it differ. Every button sends the full `https://` address (김민식 2026-11-02) — seen opening in a real send for the
+소속 추가 확인 요청 [요청 확인하기] (2026-11-24, dev contract 90).
 
 `send` resolves once Bizppurio has **accepted** the message (`code 1000`) and
 returns `{ referenceKey, messageKey }`. It throws otherwise — a `BizppurioError`
@@ -147,8 +148,8 @@ match) is thrown before any request too. `isMobilePhone` lets a caller run the n
 check before it writes, and `hasSmsFallback()` says whether `BIZPPURIO_SMS_FROM` is set —
 the only way a button link reaches anyone when Kakao rejects the 알림톡 — an unapproved body or button
 makes the 알림톡 itself fail (근로계약 가입 초대 ·
-소속 추가 확인 요청 require it until both are seen arriving as 알림톡 with the button (full address)
-opening in a real send — api #74 review).
+소속 추가 확인 요청 require it until the 가입 초대 is also seen arriving as 알림톡 with the button (full address)
+opening in a real send — api #74 review; the 소속 추가 확인 요청 was, 2026-11-24 dev contract 90).
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s
