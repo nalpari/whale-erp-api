@@ -35,3 +35,11 @@
 - `test/home.e2e-spec.ts` 를 맞춘다.
 - lint · tsc · 단위 · e2e.
 - okf 갱신.
+
+## 후속 — WHALEERP-759 · 751 (2026-11-24)
+
+집계 기준(운영 정책 HOM-06 · 07)은 바꾸지 않는다. 화면이 두 숫자의 차이를 설명하고 점포 수를 카드와 맞출 수 있게 응답만 고친다.
+
+- **759 `GET /home/pending`** — `notOperatingCount` 를 더한다. 확인 필요 줄로 센 건 가운데 미운영 점포(`storeStatusCode = NOT_OPERATING`)의 건수다(갱신 예정 · 직원 서명 대기 · 직원 수정 요청 · 소속 확인 거절 · 긴급 TO-DO). 문의 답변완료는 점포가 없어 넣지 않는다 — 화면이 그 줄 건수를 따로 읽는다. 플랫폼 빈 결과는 0. 점포 알약 툴팁(인테이크 ②)은 하지 않는다(재영 결정). 화면은 운영 점포별 현황 상자 맨 아래 안내로 쓴다(B안, 2026-11-24 재영).
+- **751 `GET /home/summary`** — `storeTable.total` 은 본사 점포를 뺀 줄 수(점포 카드 「운영 N개」와 같은 `!isHq`, 운영 정책 SCP-09). 본사 줄은 표에 그대로 두고 확인 필요 건수와 상관없이 맨 위에 둔다.
+- 검증: `home.service.spec.ts` 에 미운영 점포 긴급 TO-DO → `notOperatingCount` 1, 문의 답변완료는 세지 않음, 본사 맨 위 · `total` 본사 제외를 더한다. `openapi:export`, okf(home API) 갱신.
