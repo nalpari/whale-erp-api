@@ -136,7 +136,7 @@ sources:
   카카오 재등록과 함께 코드를 고친다. 제목(null)은 그대로이고, 메일 `EMAIL_STAFF_AFFILIATION_REQUEST` 의 링크 버튼도 그대로다.
   코드와 함께 배포한다 — 이 마이그레이션만 적용되면 옛 코드가 `LINK_MISMATCH`, 코드만 나가면 `NO_BUTTON_NAME` 으로 소속 추가 확인 요청을 막는다.
 - **소속 추가 확인 요청 = 카카오 재등록본**(WHALEERP-745 첫 줄 · WHALEERP-738 버튼). 등록본은 승인 뒤 고칠 수 없어 새 카카오 코드
-  `TALK_STAFF_AFFILIATION_V2`(카카오 쪽 이름 「소속 추가 요청」)로 다시 등록했다 — 2026-11-24 김민식 등록 · 검수 대기, **승인 전 머지 금지**.
+  `TALK_STAFF_AFFILIATION_V2`(카카오 쪽 이름 「소속 추가 요청」)로 다시 등록했다 — 2026-11-24 김민식 등록 · 같은 날 승인(등록 화면의 본문 · 버튼 「요청 확인하기」 `https://#{링크}` 를 대조했다).
   `20261124143223_team3_staff_affiliation_kakao_reregistered` 가 알림톡 `TALK_STAFF_AFFILIATION_REQUEST`(우리 코드는 그대로)의
   `kakao_template_code` 를 그 코드로, `body` · `default_body` 를 첫 줄 「#{근무지}에서 소속 추가를 요청했습니다.」인 네 줄로, `variables` ·
   `default_variables` 를 근무지 · 고용형태 · 링크(버튼 링크, `20261027154954` 원본 항목)로 맞춘다 — 운영자가 고친 문구도 덮어쓴다.

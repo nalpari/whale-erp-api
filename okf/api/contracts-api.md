@@ -752,7 +752,7 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
   expires after 30 days and the contract stays 발송 대기, so 재발송 continues it.
 - **After commit** `dispatch` sends alimtalk `TALK_STAFF_AFFILIATION_REQUEST` (근무지 · 고용형태 · 링크 — the first line is
   the store name only, WHALEERP-745; the 「요청 확인하기」 button opens 직원 앱 `/affiliations`, the same link as the mail,
-  WHALEERP-738). It is registered with Kakao under the code `TALK_STAFF_AFFILIATION_V2` (2026-11-24 김민식 등록 · 검수 대기;
+  WHALEERP-738). It is registered with Kakao under the code `TALK_STAFF_AFFILIATION_V2` (2026-11-24 김민식 등록 · 같은 날 승인;
   the first registration `TALK_STAFF_AFFILIATION_REQUEST` of 2026-11-03 had 사업자 in the first line and no button,
   [Notification templates](/api/notification-templates.md) · [Kakao Alimtalk](/api/alimtalk.md)). Before writing the
   same checks as the 가입 초대 apply (app URL present and https — the button link, SMS sender · mobile number · template

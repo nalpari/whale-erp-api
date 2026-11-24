@@ -101,8 +101,8 @@ and `kakao_template_code` match it, [Notification templates](/api/notification-t
 first registration (2026-11-03, code `TALK_STAFF_AFFILIATION_REQUEST`) had **no button** — a send carrying one arrived as
 the 대체 문자 (2026-11-03 08:22Z), so `20261103175100` dropped 「링크」 and the code stopped sending it. It was registered
 again with the button and a first line without 사업자 (WHALEERP-745) under the new Kakao code
-`TALK_STAFF_AFFILIATION_V2` (Kakao name 「소속 추가 요청」, 2026-11-24 김민식 등록 · 검수 대기); `20261124143223` puts that
-code, body and 「링크」 back, and `ALIMTALK_BUTTONS` lists the button again — **승인 전 머지 금지**. The invite link is built
+`TALK_STAFF_AFFILIATION_V2` (Kakao name 「소속 추가 요청」, 2026-11-24 김민식 등록 · 같은 날 승인); `20261124143223` puts that
+code, body and 「링크」 back, and `ALIMTALK_BUTTONS` lists the button again. The invite link is built
 from `STAFF_APP_URL` as before (`/invite#token=…`) and there is one Kakao
 template per message, not one per environment (재영 2026-10-30). The registered invite button link is
 `https://#{가입링크}` — everything after the scheme is a variable, so the dev server's `STAFF_APP_URL` does not
