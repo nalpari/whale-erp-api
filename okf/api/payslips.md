@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T01:41:25Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T02:13:03Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
@@ -206,7 +206,7 @@ sources:
     `reviewReasonsOf`) — 앞서 「확인」한 표시도 지운다(2026-10-26 재영). 처리 이력에 「출퇴근 누락 해소」 · 「계약 만료 후 기록 추가」
     모양으로 남긴다. 보정한 뒤 다시 계산하면 경고가 풀린다. 공제 미입력은 저장하지 않는 사유라 그대로 확정이 막는다.
 * **확인 필요 기록 포함**은 급여 기간(한국 시간)과 달을 걸친 첫 주의 앞 달 날(그 주 월요일 ~ 급여 기간 전날)에 확인 필요 사유가 남은(관리자가 아직 검토하지 않은) 그 직원 출퇴근 기록이 있을 때다(출근 없는 퇴근은 급여 기간 안의 것만) —
-  검토 사유 `ATTENDANCE_NEEDS_REVIEW`(상세 「확인 필요로 표시된 출퇴근 기록이 N건 있습니다(근무지 반경 밖 퇴근, 위치 조작 감지 등).」 — 괄호 안은 고정 예시. 앞 달 날에 그런 기록이 있으면 「이번 급여 기간과 첫 주에 포함된 지난달 날짜(9월 28일~9월 30일)에 확인 필요로 표시된 …」, 앞 달 날이 하루면 「(9월 30일)」, ATT-11 · 2026-10-20 재영). 확인 필요
+  검토 사유 `ATTENDANCE_NEEDS_REVIEW`(상세 「근무지 반경 밖 퇴근, 위치 조작 감지 등의 사유로 확인이 필요한 출퇴근 기록이 N건 있습니다.」 — 앞의 사유 예시는 고정 글자(WHALEERP-757, 2026-11-24 — 전에는 「확인 필요로 표시된 … (근무지 반경 밖 퇴근, 위치 조작 감지 등).」, 이미 저장된 행도 마이그레이션으로 고침). 앞 달 날에 그런 기록이 있으면 「이번 급여 기간과 첫 주에 포함된 지난달 날짜(9월 28일~9월 30일)에 확인이 필요한 …」, 앞 달 날이 하루면 「(9월 30일)」, ATT-11 · 2026-10-20 재영). 확인 필요
   기록도 급여 계산에는 넣는다. 짝 퇴근은 출근한 날(자정을 넘긴 퇴근도)로 센다 — 급여 계산과 같은 기준. 퇴근
   시각으로 세면 월말 밤샘 퇴근의 사유(근무 12시간 초과 등)가 그 근무를 지급하지 않는 다음 달에 붙었다(PR #159 리뷰). 앞 달 날 기록도
   세는 것은 그 날의 실근무가 이 달 주휴나 연장에 들어가서다(운영 정책 v247
