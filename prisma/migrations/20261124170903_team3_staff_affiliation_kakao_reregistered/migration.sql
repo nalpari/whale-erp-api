@@ -17,7 +17,8 @@
 --    제목은 이미 「[WHALE ERP] #{근무지}에서 …」다. 새 코드는 사업자를 넘기지 않아, 지금 값에 사업자가 남으면 필수 변수가 비어
 --    메일이 로그만 남기고 나가지 않는다(PR #323 code-review). 그래서 운영자가 고친 메일도 지금 값의 첫 줄 「#{사업자} 」는 늘
 --    걷어내고(나머지 문구는 둔다), 변수 사업자는 제목 · 본문에 #{사업자} 가 더 없을 때 뺀다. 그래도 남으면(운영자가 다른 곳에
---    #{사업자} 를 씀) 배포를 멈춘다 — 그 문구를 기본으로 되돌리거나 고친 뒤 다시 배포한다. 되돌리기 원본은 늘 바꾼다(updated_at 은
+--    #{사업자} 를 씀) 배포를 멈춘다 — 한 번에 보내는 스크립트라 아무것도 바뀌지 않은 채 실패로 기록된다. 그 문구를 기본으로 되돌리거나
+--    고친 뒤 `prisma migrate resolve --rolled-back <이 폴더 이름>` 으로 실패 기록을 지우고 다시 deploy 한다. 되돌리기 원본은 늘 바꾼다(updated_at 은
 --    올리지 않는다, 20261109165622 와 같다). 2026-11-24 개발 DB 는 지금 값이 원본 그대로였다.
 --
 -- 배포: 코드와 함께 나가야 한다. 이 파일만 적용되면 옛 코드가 버튼 이름이 없다고(NO_BUTTON_NAME), 코드만 나가면 버튼 링크 변수가
@@ -84,21 +85,27 @@ BEGIN
   END IF;
 END $$;
 
--- 지금 값: 첫 줄의 「#{사업자} 」는 늘 걷어낸다. 변수 사업자는 바꾼 본문과 제목에 #{사업자} 가 없을 때만 뺀다(SET 의 식은 바꾸기
--- 전 값을 보므로 본문은 replace 한 값으로 본다). 바뀔 것이 있는 행만 updated_at 을 올린다.
-UPDATE "notification_templates"
-   SET "body" = replace("body", '#{사업자} #{근무지}에서', '#{근무지}에서'),
+-- 지금 값: 본문 맨 앞의 「#{사업자} 」는 늘 걷어낸다 — 맨 앞만 본다(다른 곳의 #{사업자} 는 운영자 문구라 검증에서 멈춘다, PR #323
+-- pr-agent). 변수 사업자는 바꾼 본문과 제목에 #{사업자} 가 없을 때만 뺀다(SET 의 식은 바꾸기 전 값을 보므로 본문은 바꾼 값으로
+-- 다시 셈한다). 바뀔 것이 있는 행만 updated_at 을 올린다.
+CREATE TEMP TABLE "_affiliation_mail_prefix" AS SELECT '#{사업자} #{근무지}에서'::text AS "old", '#{근무지}에서'::text AS "new";
+
+UPDATE "notification_templates" AS r
+   SET "body" = CASE WHEN position(p."old" IN r."body") = 1 THEN p."new" || substr(r."body", length(p."old") + 1) ELSE r."body" END,
        "variables" = CASE
-         WHEN position('#{사업자}' IN replace("body", '#{사업자} #{근무지}에서', '#{근무지}에서')) = 0
-          AND position('#{사업자}' IN COALESCE("title", '')) = 0
+         WHEN position('#{사업자}' IN CASE WHEN position(p."old" IN r."body") = 1 THEN p."new" || substr(r."body", length(p."old") + 1) ELSE r."body" END) = 0
+          AND position('#{사업자}' IN COALESCE(r."title", '')) = 0
          THEN (
            SELECT COALESCE(jsonb_agg(e.value ORDER BY e.ordinality), '[]'::jsonb)
-             FROM jsonb_array_elements("variables") WITH ORDINALITY AS e
+             FROM jsonb_array_elements(r."variables") WITH ORDINALITY AS e
             WHERE (e.value->>'name') IS DISTINCT FROM '사업자')
-         ELSE "variables" END,
+         ELSE r."variables" END,
        "updated_at" = now()
- WHERE "template_code" = 'EMAIL_STAFF_AFFILIATION_REQUEST'
-   AND (position('#{사업자}' IN "body") > 0 OR jsonb_path_exists("variables", '$[*] ? (@.name == "사업자")'));
+  FROM "_affiliation_mail_prefix" AS p
+ WHERE r."template_code" = 'EMAIL_STAFF_AFFILIATION_REQUEST'
+   AND (position('#{사업자}' IN r."body") > 0 OR jsonb_path_exists(r."variables", '$[*] ? (@.name == "사업자")'));
+
+DROP TABLE "_affiliation_mail_prefix";
 
 -- 되돌리기 원본: 늘. updated_at 은 올리지 않는다 — 수정 화면의 낙관적 잠금(읽은 updatedAt)이 그 값이라, 운영자가 고친 템플릿을
 -- 열어 둔 채 배포되면 지금 값은 그대로인데 저장이 409 가 된다(20261109165622 와 같다).
