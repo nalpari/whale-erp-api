@@ -112,36 +112,43 @@ describe('직원 앱 회원 탈퇴 (e2e, DB)', () => {
     await prisma.passwordResetLink.deleteMany({ where: accountWhere });
     await prisma.authSession.deleteMany({ where: accountWhere });
     await prisma.account.deleteMany({ where: accountWhere });
-    // 알림은 응답 전에 만들어지지만(notify 를 기다린 뒤 204) 이 관리자를 가리키는 받는 사람 행이 있어 지우다 걸릴 수 있다 — 지우다 걸리면 다시 한다
-    await prisma.adminSession.deleteMany({
-      where: { adminAccountId: adminId },
-    });
-    for (let attempt = 1; ; attempt++) {
-      const rows = await prisma.notificationRecipient.findMany({
-        where: { adminAccountId: adminId },
-        select: { notificationId: true },
-      });
-      await prisma.notificationRecipient.deleteMany({
+    // beforeAll 이 관리자를 만들기 전에 죽었으면 adminId 가 undefined 다 — Prisma 는 undefined 필터를 빼 전체 행을 지우므로 건너뛴다
+    if (adminId !== undefined) {
+      // 알림은 응답 전에 만들어지지만(notify 를 기다린 뒤 204) 이 관리자를 가리키는 받는 사람 행이 있어 지우다 걸릴 수 있다 — 지우다 걸리면 다시 한다
+      await prisma.adminSession.deleteMany({
         where: { adminAccountId: adminId },
       });
-      await prisma.notification.deleteMany({
-        where: { notificationId: { in: rows.map((r) => r.notificationId) } },
-      });
-      try {
-        await prisma.adminAccount.deleteMany({
+      for (let attempt = 1; ; attempt++) {
+        const rows = await prisma.notificationRecipient.findMany({
+          where: { adminAccountId: adminId },
+          select: { notificationId: true },
+        });
+        await prisma.notificationRecipient.deleteMany({
           where: { adminAccountId: adminId },
         });
-        break;
-      } catch (e) {
-        if (attempt >= 20) throw e;
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await prisma.notification.deleteMany({
+          where: { notificationId: { in: rows.map((r) => r.notificationId) } },
+        });
+        try {
+          await prisma.adminAccount.deleteMany({
+            where: { adminAccountId: adminId },
+          });
+          break;
+        } catch (e) {
+          if (attempt >= 20) throw e;
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
       }
     }
-    await prisma.store.deleteMany({
-      where: { storeId: { in: [storeId, otherStoreId] } },
-    });
-    await deleteBps(prisma, { where: { bpCodeId } });
-    await app.close();
+    // 점포 · BP 도 만들어진 것만 — undefined id 로 지우면 전체 행에 걸린다
+    const storeIds = [storeId, otherStoreId].filter(
+      (id): id is number => id !== undefined,
+    );
+    if (storeIds.length)
+      await prisma.store.deleteMany({ where: { storeId: { in: storeIds } } });
+    if (bpCodeId !== undefined)
+      await deleteBps(prisma, { where: { bpCodeId } });
+    await app?.close();
   });
 
   async function account() {
