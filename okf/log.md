@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-24
+* **Update**: [Attendance](/api/attendance.md) — 직원 앱 기간별 주별 줄(`GET /me/attendance/records` 의 `weeks`)도 조회 기간 안의 날만 센다(WHALEERP-768): 걸친 첫 주 · 마지막 주는 `max(월요일, from)` ~ `min(일요일, to)` 로 잘라 `totals` 와 같은 기준으로 세어 주별 근무 합이 총 근무와 같다(11/1~11/30 의 「10/26 – 11/1」에 10월 근무가 들어가던 것). 걸친 주의 연장은 주 전체 40시간으로 본 값과 다를 수 있다. 응답 모양 · 직원 앱 그대로, 마이그레이션 없음.
 * **Update**: [My profile](/api/my-profile.md) · [Attendance](/api/attendance.md) · [Staff members](/api/staff-members.md) · [Notification templates](/api/notification-templates.md) · [Naming](/conventions/naming.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 앱 회원 탈퇴(WHALEERP-770, 노영주 확정): `GET /me/profile/withdrawal-eligibility` · `POST /me/profile/withdrawal`(재직 · 퇴직 예정이면 409 `EMPLOYED_AFFILIATION` + `employedStores`, 비밀번호 400, 즉시 처리). 한 트랜잭션에서 대기 계약 종료(actor `STAFF`) · 초대 만료 · 위치정보 · 계정 이력 파기 · 세션 폐기 · `accounts` 개인정보 NULL 하고 커밋 뒤 근무지 관리자 알림 `NTF_STAFF_WITHDRAWN` · 완료 메일 `EMAIL_STAFF_WITHDRAW_DONE`(임시 문구). 마이그레이션 `20261124122247_team3_staff_withdrawal`(`accounts` 다섯 칸 NULL 허용 + 탈퇴 아니면 있어야 하는 CHECK, 템플릿 2건 → 기본 템플릿 50건). 직원 목록 · 상세에 `isAccountWithdrawn`. RET-08(위치정보 확인자료)은 「직원 계정 탈퇴 시 파기」로 바뀌었고 동의 철회 시 파기는 별도 일감이다.
 * **Update**: [My profile](/api/my-profile.md) — 내 신고 정보 조회 · 저장: 지운 점포의 소속은 목록과 같이 404(점포를 따로 읽어 `isDeleted` 면 거절, WHALEERP-765 재영 결정).
 * **Update**: [My profile](/api/my-profile.md) — 내 신고 정보 조회: 보존 기간(퇴직 + 3년)이 지난 퇴직 레코드는 파기 배치 전이어도 풀지 않고 `taxProfile: null`(PR #313 pr-agent). 그날 05:00 근로계약 파기 뒤로는 404 다.
