@@ -826,7 +826,13 @@ describe('TodosService', () => {
       });
       expect(db.todo.updateMany).toHaveBeenCalledWith({
         where: targets,
-        data: { isUrgent: true, dueTime: null },
+        // 최종수정은 묶음 전체 행에 같은 값 — 어느 직원 상세에서 봐도 같다(WHALEERP-698)
+        data: {
+          isUrgent: true,
+          dueTime: null,
+          modifiedAt: NOW,
+          modifiedBy: ADMIN,
+        },
       });
     });
 
@@ -1090,6 +1096,43 @@ describe('TodosService', () => {
       ...patch,
     });
 
+    it('상세 — 최종수정: 고친 적이 없으면 둘 다 null, 고쳤으면 그 시각과 고친 관리자 이름(WHALEERP-698)', async () => {
+      const row = (modifiedAt: Date | null, modifiedBy: number | null) => ({
+        ...itemRow(),
+        assignmentGroupId: null,
+        createdBy: ADMIN,
+        createdAt: NOW,
+        updatedAt: NOW,
+        modifiedAt,
+        modifiedBy,
+        todoAssignees: [],
+        todoStatusHistories: [],
+      });
+      db.adminAccount.findMany.mockResolvedValue([
+        { adminAccountId: ADMIN, name: '김관리' },
+        { adminAccountId: 2, name: '이수정' },
+      ]);
+
+      db.todo.findFirst.mockResolvedValueOnce(row(null, null));
+      await expect(service.findOne(ADMIN, 7)).resolves.toMatchObject({
+        createdByName: '김관리',
+        modifiedAt: null,
+        modifiedByName: null,
+      });
+
+      db.todo.findFirst.mockResolvedValueOnce(row(NOW, 2));
+      const detail = await service.findOne(ADMIN, 7);
+      expect(detail).toMatchObject({
+        modifiedAt: NOW,
+        modifiedByName: '이수정',
+      });
+      expect(detail).not.toHaveProperty('modifiedBy');
+      expect(db.adminAccount.findMany).toHaveBeenLastCalledWith({
+        where: { adminAccountId: { in: [ADMIN, 2] } },
+        select: { adminAccountId: true, name: true },
+      });
+    });
+
     it('상세 — 그룹의 지우지 않은 행 · 직원 이름, 이력의 이름, 등록한 관리자 이름', async () => {
       db.todo.findFirst.mockResolvedValue({
         ...itemRow({ status: 'IN_PROGRESS', completedAt: null }),
@@ -1328,7 +1371,12 @@ describe('TodosService', () => {
       ).resolves.toMatchObject({ todoId: 7, groupTodos: [] });
       expect(db.todo.updateMany).toHaveBeenCalledWith({
         where: { isDeleted: false, todoId: 7 },
-        data: { title: '새 제목', isUrgent: true },
+        data: {
+          title: '새 제목',
+          isUrgent: true,
+          modifiedAt: NOW,
+          modifiedBy: ADMIN,
+        },
       });
       expect(db.todoStatusHistory.createMany).not.toHaveBeenCalled();
     });
