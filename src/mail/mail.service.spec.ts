@@ -128,6 +128,31 @@ describe('MailService', () => {
     );
   });
 
+  it('받은 첨부는 로고 인라인 첨부 뒤에 내려받는 첨부로 붙이고, 이력에는 남기지 않는다', async () => {
+    const pdf = Buffer.from('%PDF-1.3 test');
+    await service.send({
+      ...input,
+      attachments: [
+        {
+          filename: '급여명세서_2026-07_유하람.pdf',
+          content: pdf,
+          contentType: 'application/pdf',
+        },
+      ],
+    });
+    const { attachments } = sent();
+    expect(attachments).toEqual([
+      expect.objectContaining({ cid: 'whale-erp-logo' }),
+      {
+        filename: '급여명세서_2026-07_유하람.pdf',
+        content: pdf,
+        contentType: 'application/pdf',
+        contentDisposition: 'attachment',
+      },
+    ]);
+    expect(logged()).not.toHaveProperty('attachments');
+  });
+
   it('일반 글 본문을 공통 틀에 넣어 줄바꿈을 살리고 버튼 링크를 버튼으로 붙인다', async () => {
     await service.send(input);
 

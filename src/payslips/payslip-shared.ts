@@ -6,6 +6,20 @@ import { matchesStoreScope } from '../stores/store-scope-type';
 /** 날짜만 있는 값(@db.Date — Prisma 는 UTC 자정 Date)을 YYYY-MM-DD 로. */
 export const dateOnly = (date: Date) => date.toISOString().slice(0, 10);
 
+/**
+ * 발송 중 표시(sendingStartedAt)가 이보다 오래되면 끊긴 것(처리 중 서버 종료 등)으로 본다 — 발송은 다시 잡게 두고, 확정 취소는
+ * 막지 않는다. SMTP 연결 · 응답 제한이 각 30초라 정상 발송은 이 안에 끝난다.
+ */
+export const SENDING_STALE_MS = 5 * 60_000;
+
+/** 발송 중이 아닌 명세서(표시가 없거나 끊긴 것) — 발송을 잡을 때와 확정 취소가 같이 쓴다 */
+export const notSendingSince = (now: Date) => ({
+  OR: [
+    { sendingStartedAt: null },
+    { sendingStartedAt: { lt: new Date(now.getTime() - SENDING_STALE_MS) } },
+  ],
+});
+
 /** YYYY-MM 의 첫날부터 다음 달 첫날 전까지(날짜 칸 비교용). */
 export function monthRange(month: string): { gte: Date; lt: Date } {
   const [year, m] = month.split('-').map(Number);
