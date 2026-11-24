@@ -25,6 +25,8 @@ describe('직원 앱 회원 탈퇴 (e2e, DB)', () => {
   let passwordHash: string;
   const accountIds: number[] = [];
   const staffIds: number[] = [];
+  // 계정 없이 만든 본인인증 — accountId 필터에 안 잡히므로 id 로 따로 지운다
+  const orphanVerificationIds: number[] = [];
 
   beforeAll(async () => {
     if (process.env.APP_ENV !== 'test' || !process.env.DATABASE_URL)
@@ -106,6 +108,10 @@ describe('직원 앱 회원 탈퇴 (e2e, DB)', () => {
     await prisma.loginHistory.deleteMany({ where: accountWhere });
     await prisma.accountChangeHistory.deleteMany({ where: accountWhere });
     await prisma.identityVerification.deleteMany({ where: accountWhere });
+    if (orphanVerificationIds.length)
+      await prisma.identityVerification.deleteMany({
+        where: { identityVerificationId: { in: orphanVerificationIds } },
+      });
     await prisma.notificationPreference.deleteMany({ where: accountWhere });
     await prisma.emailChangePin.deleteMany({ where: accountWhere });
     await prisma.passwordResetPin.deleteMany({ where: accountWhere });
@@ -407,6 +413,7 @@ describe('직원 앱 회원 탈퇴 (e2e, DB)', () => {
     const orphan = await prisma.identityVerification.create({
       data: { purpose: 'SIGNUP', phone: a.phone, result: 'SUCCEEDED' },
     });
+    orphanVerificationIds.push(orphan.identityVerificationId);
     await prisma.notificationPreference.create({
       data: { accountId: a.accountId, preferenceCategory: 'CONTRACT' },
     });
@@ -494,9 +501,6 @@ describe('직원 앱 회원 탈퇴 (e2e, DB)', () => {
         where: { identityVerificationId: orphan.identityVerificationId },
       }),
     ).toBe(1);
-    await prisma.identityVerification.delete({
-      where: { identityVerificationId: orphan.identityVerificationId },
-    });
     // 대기 계약은 종료 — 이력 actor 는 직원
     expect(
       (await prisma.contract.findUniqueOrThrow({ where: { contractId } }))
