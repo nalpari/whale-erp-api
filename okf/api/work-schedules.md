@@ -4,7 +4,7 @@ title: Work schedules
 description: 관리자 웹 근무스케줄 관리(/work-schedules, MN000010)의 주간 · 월간 조회, 등록 · 일괄 등록 · 지난 주 복사 · 수정 · 삭제 · 변경 이력, 3년 보존 뒤 파기 배치와 등록에 필요한 직원 선택지 · 계약 기본값 — 근무일 + 30분 단위 시각, 자정 넘김, 같은 직원 레코드 겹침 409(EXCLUDE), 근무일 기준 계약 기간 · 가입 · 퇴직일 판정, 변경 이력, 직원 근무 앱 월 달력 조회(/me/work-schedules).
 tags: [work-schedule, admin, staff-app]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T08:16:31Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T05:04:59Z }
 sources:
   - id: service
     resource: ../../src/work-schedules/work-schedules.service.ts
@@ -25,7 +25,7 @@ sources:
   - id: notice
     resource: ../../src/work-schedules/work-schedule-notice.ts
     title: 저장 알림 — 직원 알림 · 앱 푸시 발송 대기(#201)
-    last_modified: 2026-11-17T01:27:06Z
+    last_modified: 2026-11-24T05:04:59Z
   - id: purge
     resource: ../../src/work-schedules/work-schedule-purge.ts
     title: 3년 보존 뒤 파기 배치 work-schedule-purge(#609)
@@ -144,7 +144,7 @@ every route — they all go through `scopeOf` — before the scope is read. 직�
 
 # Notice
 
-등록 · 수정 · 삭제가 저장 트랜잭션 안에서 `noticeScheduleChange` 를 부른다 — 템플릿 `PUSH_SCHEDULE_CHANGED`(근무스케줄 변경, 수신 설정 묶음 `SCHEDULE`)로 직원 알림(`notification_target = STAFF`, `related_type = WORK_SCHEDULE`, `related_id` = 근무스케줄) · 받는 사람 하나 · 앱 푸시 발송 대기(`notification_deliveries`, `sent_at` 빈 행) 하나.[^notice]
+등록 · 수정 · 삭제가 저장 트랜잭션 안에서 `noticeScheduleChange` 를 부른다 — 템플릿 `PUSH_SCHEDULE_CHANGED`(근무스케줄 변경, 수신 설정 묶음 `SCHEDULE`)로 직원 알림(`notification_target = STAFF`, `related_type = WORK_SCHEDULE`, `related_id` = 근무스케줄) · 받는 사람 하나 · 앱 푸시 발송 대기(`notification_deliveries`, `sent_at` 빈 행) 하나.[^notice] 등록 · 수정 · 삭제가 같은 템플릿이라 기본 문구는 제목 「근무스케줄 안내」, 본문 「#{근무지} 근무스케줄이 등록 · 변경되었습니다. / - 내용: #{변경내용} / 직원 근무 앱에서 근무스케줄을 확인해 주세요.」다(WHALEERP-769, `20261124140348_team3_schedule_notice_wording` — 전에는 처음 등록에도 「근무스케줄 변경 / … 변경되었습니다」였다).
 
 - `#{변경내용}`: 등록 「10월 21일(수) 09:00~18:00 추가」, 삭제 「… 삭제」, 수정 「전 → 후」(근무일이 같으면 뒤 날짜를 뺀다), 시각이 같고 휴게만 바뀌면 「… 09:00~13:00 휴게 30분 → 60분」, 시각과 휴게가 함께 바뀌면 시각 변화만(Q7, 2026-10-21 재영). 자정을 넘으면 「22:00~익일 02:00」, 24:00 에 끝나면 「18:00~24:00」. 기간 등록은 직원마다 「11월 17일(화)~11월 21일(토) 근무 3건 추가」로 묶는다(`rangeText`, WHALEERP-730) — 그 직원에게 한 건만 생겼으면 한 건 등록 문구(시각까지)다.
 - 템플릿의 수신 설정 묶음(`preference_category`, 기본 근무스케줄 — 운영자가 바꿀 수 있다)을 끈 계정은 알림함 줄만 남고 발송 대기가 없다(NTF-14). 시간과 관계없이 곧바로다 — 근무시간 외 보류 규칙은 없다.
@@ -157,7 +157,7 @@ every route — they all go through `scopeOf` — before the scope is read. 직�
 
 가입한 직원에게는 같은 내용을 메일로도 보낸다(운영 정책 NTF-14 · NTF-18 v262 — 가입한 직원의 알림톡은 근로계약서 발송 하나뿐이다).
 
-- 템플릿 `EMAIL_SCHEDULE_CHANGED`(근무스케줄 변경 메일, `20261030142820`). 본문은 `PUSH_SCHEDULE_CHANGED` 와 같은 문장이고 제목은 「[WHALE ERP] 근무스케줄 변경」, 변수는 근무지 · 변경내용 · 링크(버튼 — `STAFF_APP_URL` origin + `/work`, 직원 근무 앱 근무 탭).
+- 템플릿 `EMAIL_SCHEDULE_CHANGED`(근무스케줄 변경 메일, `20261030142820`). 본문은 `PUSH_SCHEDULE_CHANGED` 와 같은 문장이고 제목은 「[WHALE ERP] 근무스케줄 안내」(WHALEERP-769 전에는 「… 변경」), 변수는 근무지 · 변경내용 · 링크(버튼 — `STAFF_APP_URL` origin + `/work`, 직원 근무 앱 근무 탭).
 - `noticeScheduleChange` 는 앱 푸시 발송 대기를 만들었을 때만 보낼 메일(받는 사람 행 · 계정 이메일 · 변수)을 돌려준다. 그래서 알림이 없는 경우(퇴직 · 계정 없음 · 탈퇴 · 템플릿 문제 · 바뀐 것 없음)와 수신 설정 묶음을 끈 계정에는 메일도 없다. 메일 템플릿에는 묶음을 둘 수 없어(CHECK `notification_templates_preference_category_push_only`) 앱 푸시의 판정을 따른다.
 - 메일은 커밋 뒤에 보낸다(`sendScheduleMail`) — 등록 · 수정 · 삭제 · 일괄 등록 · 기간 등록 · 지난 주 복사(뒤 셋은 직원마다 한 통). 롤백된 저장의 메일은 나가지 않는다. 한 건 등록 · 수정 · 삭제는 보낸 뒤 응답하고, 일괄 · 기간 등록 · 지난 주 복사는 기다리지 않고 응답한다(차례로 보내는 동안 화면이 시간 초과로 실패를 보이지 않게).
 - 메일 실패는 저장을 막지 않는다. 메일 설정(`MAIL_*`) · `STAFF_APP_URL` 이 없으면 보내지 않고 `work schedule mail SKIPPED` 로그만(알림함 줄은 남는다).
