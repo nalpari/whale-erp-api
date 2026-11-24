@@ -2,6 +2,7 @@
 
 ## 2026-11-24
 * **Update**: [Payslips](/api/payslips.md) · [Mail (Gmail SMTP)](/api/mail.md) — 급여명세서 발송 · 재발송 메일(`EMAIL_PAYSLIP_SENT` · `RESENT`)에 그 명세서 PDF 를 첨부한다(운영 정책 PAY-08, WHALEERP-766): 직원 앱 내보내기와 같은 생성기 · 파일 이름(`급여명세서_YYYY-MM_이름.pdf`), 잡은 뒤 읽은 지금 값 · 이번 발송일. PDF 를 못 만들면 첨부 없이 보내고 처리 이력 `SEND` 문구에 「명세서 PDF 첨부 실패」를 남긴다(`payslip_dispatches` 에 사유 칸이 없어서. 오류 원문은 서버 로그에만). `MailService.send` 에 `attachments` 인자를 더했다(로고 인라인 첨부 뒤에 내려받는 첨부로). 메일 본문 · 직원 앱 문구 그대로, 마이그레이션 없음.
+* **Update**: [TO-DO](/api/todos.md) — TO-DO 상세에 최종수정(`modifiedAt` · `modifiedByName`, WHALEERP-698): 관리자 [수정]만 `todos.modified_at` · `modified_by` 에 남긴다(마이그레이션 `20261124101923_team3_todo_modified`). 상태 변경 · 삭제 · 직원 앱 완료는 바꾸지 않고, 묶음은 전체 행이 같은 값이다. 기존 행 · 등록만 한 TO-DO 는 null(화면에 줄 없음). 근로계약 최종수정(WHALEERP-699)과 같은 방식.
 
 ## 2026-11-20
 * **Update**: [Staff members](/api/staff-members.md) — 직원 상세 요약 근로계약(`GET /staff-members/:id/summary/contracts`): 신고 정보를 풀 수 없으면(키 없음 · 복호화 실패) 503 · 500 대신 `payrollAccount: null` + `payrollAccountUnavailable: true` 로 계좌만 빼고 계약 칸은 그대로 준다(WHALEERP-758). 근로계약 상세 신고 정보의 `UNAVAILABLE` 과 같다 — [Contracts API](/api/contracts-api.md) 의 대비 문장도 맞췄다. 마이그레이션 없음.

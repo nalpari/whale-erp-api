@@ -583,6 +583,111 @@ describe('TO-DO (e2e, DB)', () => {
     expect(histories).toBe(1);
   });
 
+  it('최종수정 — 관리자 [수정]만 남기고 묶음 전체가 같은 값, 상태 변경 · 직원 앱 완료는 바꾸지 않는다(WHALEERP-698)', async () => {
+    await prisma.adminAccount.update({
+      where: { adminAccountId: bmId },
+      data: { name: '김등록' },
+    });
+    await prisma.adminAccount.update({
+      where: { adminAccountId: pmId },
+      data: { name: '이수정' },
+    });
+    const call = async (
+      sub: number,
+      method: 'get' | 'patch',
+      path: string,
+      body?: object,
+    ) => {
+      const req = request(app.getHttpServer())
+        [method](path)
+        .set('Authorization', `Bearer ${await adminToken(sub)}`);
+      // 플랫폼 마스터는 탭 BP 로 이 BP 를 고른다 — 「다른 관리자」로 쓴다
+      if (sub === pmId) req.set('X-Bp-Code-Id', String(bpCodeId));
+      return body === undefined ? req : req.send(body);
+    };
+    // 상세에서 최종수정 두 칸만 본다
+    const detail = async (todoId: number) => {
+      const res = await call(bmId, 'get', `/todos/${todoId}`);
+      expect(res.status).toBe(200);
+      const { modifiedAt, modifiedByName } = res.body as {
+        modifiedAt: string | null;
+        modifiedByName: string | null;
+      };
+      return { modifiedAt, modifiedByName };
+    };
+
+    const created = await asAdmin(
+      'post',
+      '/todos',
+      todoBody({
+        storeId: directStoreId,
+        assigneeType: 'ALL',
+        executionMode: 'EACH',
+        title: '최종수정',
+      }),
+    );
+    expect(created.status).toBe(201);
+    const ids = (created.body as { todoIds: number[] }).todoIds;
+    expect(ids.length).toBeGreaterThanOrEqual(2);
+    const [mine, other] = await Promise.all(
+      [direct1, direct2].map((s) =>
+        prisma.todoAssignee.findFirstOrThrow({
+          where: { todoId: { in: ids }, staffMemberId: s.staffMemberId },
+        }),
+      ),
+    );
+
+    // 등록만 했으면 줄이 없다
+    expect(await detail(mine.todoId)).toEqual({
+      modifiedAt: null,
+      modifiedByName: null,
+    });
+
+    // 다른 관리자가 고치면 그 관리자 · 시각, 묶음의 다른 직원 줄에도 같은 값
+    expect(
+      (
+        await call(pmId, 'patch', `/todos/${mine.todoId}`, {
+          title: '최종수정 1',
+        })
+      ).status,
+    ).toBe(200);
+    const first = await detail(mine.todoId);
+    expect(first.modifiedByName).toBe('이수정');
+    expect(first.modifiedAt).not.toBeNull();
+    expect(await detail(other.todoId)).toEqual(first);
+
+    // 다시 고치면 바뀐다
+    await new Promise((r) => setTimeout(r, 5));
+    expect(
+      (
+        await call(bmId, 'patch', `/todos/${other.todoId}`, {
+          isUrgent: true,
+        })
+      ).status,
+    ).toBe(200);
+    const second = await detail(mine.todoId);
+    expect(second.modifiedByName).toBe('김등록');
+    expect(Date.parse(second.modifiedAt!)).toBeGreaterThan(
+      Date.parse(first.modifiedAt!),
+    );
+
+    // 관리자 상태 변경 · 직원 앱 완료는 그대로
+    expect(
+      (
+        await call(pmId, 'patch', `/todos/${mine.todoId}/status`, {
+          status: 'IN_PROGRESS',
+        })
+      ).status,
+    ).toBe(200);
+    const staff = await request(app.getHttpServer())
+      .patch(`/me/todos/${other.todoId}/status`)
+      .set('Authorization', `Bearer ${await accountToken(direct2.accountId)}`)
+      .send({ status: 'DONE' });
+    expect(staff.status).toBe(200);
+    expect(await detail(mine.todoId)).toEqual(second);
+    expect(await detail(other.todoId)).toEqual(second);
+  });
+
   it('수행 임박 알림 — 두 번 돌아도 계정마다 하나(dedupe_key 부분 고유 인덱스)', async () => {
     const now = new Date();
     // 30분 뒤가 수행 예정 일시인 TO-DO — 한국 날짜 · 시각으로 넣는다

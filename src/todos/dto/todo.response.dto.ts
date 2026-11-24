@@ -150,6 +150,12 @@ export class TodoDetailDto {
   createdByName: string | null;
   createdAt: Date;
   updatedAt: Date;
+  /** 최종수정 일시 — 관리자 [수정] 때만. 고친 적이 없으면 null(상세에 줄이 없다). 상태 변경은 바꾸지 않는다 (WHALEERP-698) */
+  @ApiProperty({ nullable: true, type: Date })
+  modifiedAt: Date | null;
+  /** 최종수정 관리자 이름 — createdByName 과 같은 규칙 */
+  @ApiProperty({ nullable: true, type: String })
+  modifiedByName: string | null;
   /** 이 행의 배정 대상 */
   assignees: TodoAssigneeDto[];
   /** 그룹의 행들(이 행 포함). 그룹이 아니면 빈 배열 */

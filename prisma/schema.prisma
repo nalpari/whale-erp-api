@@ -14,7 +14,7 @@ datasource db {
 // admin_account_id, *_by)는 정수 컬럼만 있고, 제약은 SQL 쪽에만 있다.
 // DDL 마이그레이션은 prisma/migrations/20261007000000_team3_initial (같은 생성기가 쓴다).
 //
-// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 74, 1팀 외래키 38, 부분 고유 인덱스 6, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
+// Prisma 가 표현하지 못해 SQL 에만 있는 것: CHECK 74, 1팀 외래키 39, 부분 고유 인덱스 6, EXCLUDE 1, NULLS NOT DISTINCT 고유 1.
 // 기본키는 SQL 에서 GENERATED ALWAYS AS IDENTITY 다(여기서는 autoincrement 로 보인다).
 // 그 제약들의 원문은 docs/raw/2026-10-06-3팀-schema.sql 이다.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1367,6 +1367,10 @@ model Todo {
   isDeleted              Boolean             @default(false) @map("is_deleted")
   /// 최근 수정 일시
   updatedAt              DateTime            @updatedAt @default(now()) @map("updated_at") @db.Timestamptz(6)
+  /// 최종수정 일시 — 관리자 [수정] 때만, 상태 변경은 바꾸지 않는다 (WHALEERP-698, 2026-11-24)
+  modifiedAt             DateTime?           @map("modified_at") @db.Timestamptz(6)
+  /// 최종수정 관리자 — 관리자 [수정] 때만, 상태 변경은 바꾸지 않는다 (WHALEERP-698, 2026-11-24)
+  modifiedBy             Int?                @map("modified_by")
   performerStaffMember   StaffMember?        @relation(fields: [performerStaffMemberId], references: [staffMemberId], onDelete: Restrict, onUpdate: NoAction, map: "todos_performer_staff_member_id_fkey")
   todoAssignees          TodoAssignee[]
   todoStatusHistories    TodoStatusHistory[]

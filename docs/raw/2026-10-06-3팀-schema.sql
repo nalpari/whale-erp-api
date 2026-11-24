@@ -578,6 +578,8 @@ CREATE TABLE "todos" (
     "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "is_deleted" BOOLEAN NOT NULL DEFAULT false,
     "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "modified_at" TIMESTAMPTZ(6),
+    "modified_by" INTEGER,
 
     CONSTRAINT "todos_pkey" PRIMARY KEY ("todo_id")
 );
@@ -1117,6 +1119,7 @@ ALTER TABLE "attendance_corrections" ADD CONSTRAINT "attendance_corrections_corr
 ALTER TABLE "todos" ADD CONSTRAINT "todos_store_id_fkey" FOREIGN KEY ("store_id") REFERENCES "stores" ("store_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "todos" ADD CONSTRAINT "todos_performer_staff_member_id_fkey" FOREIGN KEY ("performer_staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "todos" ADD CONSTRAINT "todos_created_by_fkey" FOREIGN KEY ("created_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
+ALTER TABLE "todos" ADD CONSTRAINT "todos_modified_by_fkey" FOREIGN KEY ("modified_by") REFERENCES "admin_accounts" ("admin_account_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "todo_assignees" ADD CONSTRAINT "todo_assignees_todo_id_fkey" FOREIGN KEY ("todo_id") REFERENCES "todos" ("todo_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "todo_assignees" ADD CONSTRAINT "todo_assignees_staff_member_id_fkey" FOREIGN KEY ("staff_member_id") REFERENCES "staff_members" ("staff_member_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 ALTER TABLE "todo_status_histories" ADD CONSTRAINT "todo_status_histories_todo_id_fkey" FOREIGN KEY ("todo_id") REFERENCES "todos" ("todo_id") ON DELETE RESTRICT ON UPDATE NO ACTION;
@@ -1541,6 +1544,8 @@ COMMENT ON COLUMN "todos"."created_by" IS '등록 관리자';
 COMMENT ON COLUMN "todos"."created_at" IS '등록일';
 COMMENT ON COLUMN "todos"."is_deleted" IS '삭제 표시 — 대기일 때만 삭제';
 COMMENT ON COLUMN "todos"."updated_at" IS '최근 수정 일시 (물리에서 추가)';
+COMMENT ON COLUMN "todos"."modified_at" IS '최종수정 일시 — 관리자 [수정] 때만, 상태 변경은 바꾸지 않는다 (WHALEERP-698, 2026-11-24) (물리에서 추가)';
+COMMENT ON COLUMN "todos"."modified_by" IS '최종수정 관리자 — 관리자 [수정] 때만, 상태 변경은 바꾸지 않는다 (WHALEERP-698, 2026-11-24) (물리에서 추가)';
 COMMENT ON TABLE "todo_assignees" IS 'TO-DO 배정 대상';
 COMMENT ON COLUMN "todo_assignees"."todo_id" IS 'TO-DO';
 COMMENT ON COLUMN "todo_assignees"."staff_member_id" IS '직원 레코드 — 퇴직자 배정 불가';
