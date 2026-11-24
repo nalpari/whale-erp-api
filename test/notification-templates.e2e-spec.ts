@@ -32,7 +32,7 @@ const FIRST_NOTIFICATION_CODES = [
 const DEFAULT_NOTIFICATION_CODES = [
   ...FIRST_NOTIFICATION_CODES,
   'NTF_SIGNUP_UNDER_AGE',
-  // 직원 앱 회원 탈퇴 근무지 관리자 알림(20261124110811, WHALEERP-770)
+  // 직원 앱 회원 탈퇴 근무지 관리자 알림(20261124122247, WHALEERP-770)
   'NTF_STAFF_WITHDRAWN',
 ];
 /** 이 스위트가 만드는 템플릿(…_E2E_…) — 앞선 실행이 정리 전에 죽어 남아도 기본 템플릿 비교에서 뺀다 */
@@ -60,7 +60,7 @@ const DEFAULT_TEMPLATE_CODES = [
   'EMAIL_PASSWORD_RESET',
   'EMAIL_TEMP_PASSWORD',
   'EMAIL_WITHDRAW_DONE',
-  // 직원 앱 회원 탈퇴 완료 메일(20261124110811, WHALEERP-770)
+  // 직원 앱 회원 탈퇴 완료 메일(20261124122247, WHALEERP-770)
   'EMAIL_STAFF_WITHDRAW_DONE',
   // 소속 추가 확인 요청(20261027154954, WHALEERP-130)
   'EMAIL_STAFF_AFFILIATION_REQUEST',
@@ -196,7 +196,7 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
   // (20261021103042, 가입 불가 — 만 19세 미만) · 43 · 44번째 EMAIL_ · TALK_STAFF_AFFILIATION_REQUEST(20261027154954, 소속
   // 추가 확인 요청) · 45 · 46번째 EMAIL_EXCEL_READY · EMAIL_EXCEL_FAILED(20261028140448, 공통 엑셀) · 47번째
   // EMAIL_SCHEDULE_CHANGED(20261030142820, 근무스케줄 변경 메일) · 48번째 TALK_STAFF_CONTRACT_SENT(20261102114500, 근로계약서 발송
-  // 알림톡) · 49 · 50번째 NTF_STAFF_WITHDRAWN · EMAIL_STAFF_WITHDRAW_DONE(20261124110811, 직원 앱 회원 탈퇴)는 자기 INSERT 에서
+  // 알림톡) · 49 · 50번째 NTF_STAFF_WITHDRAWN · EMAIL_STAFF_WITHDRAW_DONE(20261124122247, 직원 앱 회원 탈퇴)는 자기 INSERT 에서
   // 채운다. 건수가 아니라 코드로 본다 — 기본 템플릿을 더하면 okf naming 「기본 템플릿 코드」 표와 함께 이 목록에 더한다
   // (WHALEERP-617).
   it('마이그레이션으로 넣은 기본 템플릿 50건에 기본 문구가 있다 (NOTIFY-17)', async () => {

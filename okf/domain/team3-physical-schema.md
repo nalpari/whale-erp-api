@@ -193,7 +193,7 @@ It is additive on purpose — `ALTER TYPE … ADD VALUE` cannot use the new valu
 the same transaction, and existing rows are all `JOINED` or `LINK_HOLD`.[^account-status-migration]
 
 **Then a withdrawn account's personal columns go NULL** (WHALEERP-770, 2026-11-24 노영주).
-`20261124110811_team3_staff_withdrawal` drops NOT NULL from `accounts.email` · `password_hash` · `real_name` ·
+`20261124122247_team3_staff_withdrawal` drops NOT NULL from `accounts.email` · `password_hash` · `real_name` ·
 `birth_date` · `phone` (the row stays — staff records, contracts and attendance point at it by `account_id`) and adds
 `accounts_personal_required_unless_withdrawn`: `status = 'WITHDRAWN'` or all five are present, so a NULL cannot leak into
 a live account. Every existing row satisfies it (the migration's check block counts the ones that do not and aborts).

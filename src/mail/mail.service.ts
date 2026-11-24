@@ -23,6 +23,14 @@ export type SendMailInput = {
   staffMemberId?: number;
   /** 관리자가 대신 보냈을 때. 본인 요청이면 비운다 */
   sentBy?: number;
+  /** 내려받는 첨부(급여명세서 PDF 등). 띠의 로고 인라인 첨부 뒤에 붙는다. 이력(mail_send_logs)에는 남기지 않는다 */
+  attachments?: readonly MailAttachment[];
+};
+
+export type MailAttachment = {
+  filename: string;
+  content: Buffer;
+  contentType: string;
 };
 
 export type MailSendResult = {
@@ -128,6 +136,12 @@ export class MailService {
             cid: MAIL_LOGO_CID,
             contentDisposition: 'inline',
           },
+          ...(input.attachments ?? []).map((a) => ({
+            filename: a.filename,
+            content: a.content,
+            contentType: a.contentType,
+            contentDisposition: 'attachment' as const,
+          })),
         ],
       })) as { messageId: string };
       messageId = info.messageId;

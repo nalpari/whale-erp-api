@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   HttpStatus,
   Inject,
   Injectable,
@@ -16,6 +17,9 @@ import {
 import { PERSONAL_DATA_KEY } from '../common/personal-data-key.provider';
 import { maskAccountNumber, maskRrn } from '../common/personal-data-mask';
 import { verifyPassword } from '../auth/password';
+import { employedOn } from '../contracts/contract-status';
+import { kstToday } from '../staff-members/kst-date';
+import { retiredBefore } from '../staff-members/retiree-purge';
 import { PrismaService } from '../prisma/prisma.service';
 import { ACTIVE_STAFF } from '../todos/todo-rules';
 import { dateOnly } from '../common/date-only';
@@ -61,6 +65,24 @@ const badRequest = (code: string, message: string) =>
 const currentPasswordMismatch = () =>
   badRequest('CURRENT_PASSWORD_MISMATCH', CURRENT_PASSWORD_MISMATCH_MESSAGE);
 
+/**
+ * 퇴직한 소속의 신고 정보는 조회만 — 고치기 · 처음 넣기는 409(WHALEERP-765). 코드는 근로계약 날인의 퇴직 409 와 같다.
+ * 판정도 같다(employedOn) — 퇴직일이 지났으면 퇴직 배치 전이라도 퇴직이다.
+ */
+const staffRetired = () =>
+  new ConflictException({
+    statusCode: HttpStatus.CONFLICT,
+    error: 'Conflict',
+    code: 'STAFF_RETIRED',
+    message: '퇴직한 근무지의 신고 정보는 조회만 할 수 있습니다.',
+  });
+
+/** 지금 재직 — employedOn 의 where 꼴. 퇴직일이 없거나 오늘(한국 날짜) · 뒤 */
+const employedNow = (now: Date) => ({
+  employmentStatus: 'EMPLOYED' as const,
+  OR: [{ retiredDate: null }, { retiredDate: { gte: kstToday(now) } }],
+});
+
 type TaxProfileRow = {
   rrnEncrypted: Uint8Array;
   bankCode: string;
@@ -69,7 +91,7 @@ type TaxProfileRow = {
   collectedAt: Date;
 };
 
-/** 재직 조건(employmentStatus)만 뺀 소속 조건 — 퇴직 포함 목록(includeRetired)이 쓴다 */
+/** 재직 조건(employmentStatus)만 뺀 소속 조건 — 퇴직 포함 목록(includeRetired)과 신고 정보(조회 · 저장의 내 소속 확인)가 쓴다 */
 const ANY_EMPLOYMENT_STAFF = {
   joinStatus: ACTIVE_STAFF.joinStatus,
   contracts: ACTIVE_STAFF.contracts,
@@ -80,7 +102,8 @@ const ANY_EMPLOYMENT_STAFF = {
  * 소속은 TO-DO 와 같은 「재직 직원」 기준(ACTIVE_STAFF)이다 — 급여도 이 정책(PAY-16 · CTR-29)을 따라야 한다. 임시저장 계약만
  * 있는 레코드 · 가입 전 · 퇴직한 레코드는 빠지고 퇴직 예정은 들어간다. 목록만은 퇴직 포함(includeRetired, 2026-10-28)으로
  * 퇴직한 레코드도 받을 수 있다 — 나머지 조건은 같고, 지금 소속 뒤에 퇴직일 최근 순으로 붙는다. 탈퇴 계정은 가드가 접속을
- * 끊어 여기까지 오지 않는다.
+ * 끊어 여기까지 오지 않는다. 신고 정보도 퇴직한 소속까지 연다 — 조회는 가린 값으로, 고치기 · 처음 넣기는 409(WHALEERP-765,
+ * 퇴직 후에도 3년 조회 — 3년이 지나면 파기 배치가 신고 정보를 지워 null 이다).
  * 지운 점포(삭제 표시)의 소속은 뺀다 — 점포는 미운영이고 진행 중인 근로계약이 없어야 지울 수 있어 지금 소속은 남지 않지만,
  * 퇴직 포함이면 모두 퇴직한 뒤 지운 점포의 레코드가 걸린다(api #180 리뷰).
  */
@@ -167,15 +190,41 @@ export class MyMembershipsService {
     return { items, total: items.length };
   }
 
-  /** 내 소속(목록과 같은 조건)이 아니면 404 — 남의 레코드도, 퇴직했거나 임시저장 계약만 있는 내 레코드도 없는 것과 같다 */
+  /**
+   * 내 소속(퇴직 포함 목록과 같은 조건)이 아니면 404 — 남의 레코드도, 임시저장 계약만 있는 내 레코드도 없는 것과 같다. 퇴직한
+   * 소속도 같은 가린 값으로 주고 `editable: false` 다(WHALEERP-765 — 그곳 급여 계좌를 다시 보려는 것). 고칠 수 있는지는
+   * 저장(409)과 같은 판정이다.
+   */
+  /**
+   * 지운 점포(삭제 표시)의 소속이면 404 — 퇴직 포함 목록이 지운 점포를 빼므로 신고 정보도 id 로 열리지 않게 맞춘다(WHALEERP-765,
+   * 2026-11-24 재영 결정). 직원 레코드의 store_id 는 1팀 점포를 가리키지만 Prisma 관계가 없어 따로 읽는다(목록과 같다). 지울 수
+   * 있는 점포는 진행 중인 계약이 없어야 해서 저장 도중 지워지는 경합은 따로 막지 않는다.
+   */
+  private async assertStoreNotDeleted(staffMemberId: number): Promise<void> {
+    const staff = await this.prisma.staffMember.findUnique({
+      where: { staffMemberId },
+      select: { storeId: true },
+    });
+    const store = staff
+      ? await this.prisma.store.findUnique({
+          where: { storeId: staff.storeId },
+          select: { isDeleted: true },
+        })
+      : null;
+    if (!store || store.isDeleted)
+      throw new NotFoundException('소속을 찾을 수 없습니다.');
+  }
+
   async taxProfile(
     accountId: number,
     staffMemberId: number,
   ): Promise<MyTaxProfileResponseDto> {
     const staff = await this.prisma.staffMember.findFirst({
-      where: { staffMemberId, accountId, ...ACTIVE_STAFF },
+      where: { staffMemberId, accountId, ...ANY_EMPLOYMENT_STAFF },
       select: {
         staffMemberId: true,
+        employmentStatus: true,
+        retiredDate: true,
         staffTaxProfile: {
           select: {
             rrnEncrypted: true,
@@ -188,16 +237,26 @@ export class MyMembershipsService {
       },
     });
     if (!staff) throw new NotFoundException('소속을 찾을 수 없습니다.');
+    await this.assertStoreNotDeleted(staffMemberId);
+    const now = new Date();
+    // 보존 기간(퇴직 + 3년, RET-01)이 지난 퇴직 레코드는 파기 배치(05:10)가 돌기 전이어도 신고 정보를 풀지 않는다 — 배치가
+    // 늦거나 실패해도 기한이 지난 값이 보이지 않게(PR #313 pr-agent). 기준은 파기 배치와 같은 retiredBefore 다. 퇴직 상태
+    // 배치가 반영됐는지와 상관없이 퇴직일로만 판정한다
+    const expired =
+      staff.retiredDate !== null && staff.retiredDate < retiredBefore(now);
     return {
       staffMemberId: staff.staffMemberId,
-      taxProfile: staff.staffTaxProfile
-        ? this.open(staff.staffMemberId, staff.staffTaxProfile)
-        : null,
+      editable: employedOn(staff, now),
+      taxProfile:
+        staff.staffTaxProfile && !expired
+          ? this.open(staff.staffMemberId, staff.staffTaxProfile)
+          : null,
     };
   }
 
   /**
-   * 신고 정보 작성 · 수정(WHALEERP-334). 내 소속(목록 · 조회와 같은 조건)만 — 아니면 404. 관리자 토큰은 컨트롤러가 막는다.
+   * 신고 정보 작성 · 수정(WHALEERP-334). 내 소속(퇴직 포함 목록 · 조회와 같은 조건)만 — 아니면 404. 퇴직한 소속이면(조회의
+   * `editable: false`) 고치기 · 처음 넣기 모두 409 STAFF_RETIRED 다(WHALEERP-765). 관리자 토큰은 컨트롤러가 막는다.
    * - 처음 작성할 때는 주민등록번호 · 은행 · 계좌번호를 모두 받는다. 고칠 때는 주민등록번호만, 또는 급여 계좌(은행 · 계좌번호를
    *   함께)만 받아도 되고 보내지 않은 항목은 그대로 둔다.
    * - 주민등록번호 앞 7자리가 가입한 생년월일과 다르면 받지 않는다 — 관리자에게 정정을 요청하게 안내한다(진입 · 가입 화면 가이드).
@@ -212,7 +271,7 @@ export class MyMembershipsService {
    *   값)도 트랜잭션 안에서 만들어, 응답을 만들 수 없으면 쓰기도 되돌린다 — 저장은 되고 응답만 500 이 되지 않게.
    * - 이미 낸 신고 정보를 고칠 때는 지금 비밀번호가 맞아야 한다 — 토큰만 손에 넣은 사람이 급여 계좌를 자기 계좌로 바꾸지
    *   못하게(WHALEERP-333 · 334 후속, 2026-10-23). 없거나 틀리면 400 CURRENT_PASSWORD_MISMATCH. 처음 작성(날인 뒤 흐름)은 받지
-   *   않고, 보내도 비교하지 않는다(형식은 DTO 가 본다 — 빈 문자열 등은 처음 작성에도 400). 순서는 내 소속(404) → 비밀번호 →
+   *   않고, 보내도 비교하지 않는다(형식은 DTO 가 본다 — 빈 문자열 등은 처음 작성에도 400). 순서는 내 소속(404) → 퇴직(409) → 비밀번호 →
    *   나머지 검사다(본문 형식 · 모양 400 과 키 없음 503 은 그보다 앞) — 비밀번호보다 먼저 생년월일 · 은행 · 같은 값
    *   여부를 답하면 토큰만으로 주민등록번호 · 계좌를 맞혀 볼 수 있다. 틀려도 로그인 잠금 횟수는 세지 않고 요청 한도만 건다
    *   (이메일 변경 · 비밀번호 변경과 같다). scrypt 는 잠금 밖에서 하고, 잠근 뒤 해시를 다시 봐 그사이 바뀐 비밀번호로 고치지
@@ -238,10 +297,18 @@ export class MyMembershipsService {
       );
     const key = this.requireKey(staffMemberId);
 
-    const mine = { staffMemberId, accountId, ...ACTIVE_STAFF };
-    // 내 소속인지 먼저 본다 — 남의 레코드면 비밀번호를 보지 않고 404, 남의 직원 행도 잠그지 않는다.
+    const mine = { staffMemberId, accountId, ...ANY_EMPLOYMENT_STAFF };
+    // 내 소속인지 먼저 본다 — 남의 레코드면 비밀번호를 보지 않고 404, 남의 직원 행도 잠그지 않는다. 퇴직한 내 소속이면 409 —
+    // 이것도 비밀번호보다 먼저다(퇴직은 감출 일이 아니고, 맞혀도 고칠 수 없다).
     if (!(await this.prisma.staffMember.count({ where: mine })))
       throw new NotFoundException('소속을 찾을 수 없습니다.');
+    await this.assertStoreNotDeleted(staffMemberId);
+    if (
+      !(await this.prisma.staffMember.count({
+        where: { ...mine, ...employedNow(new Date()) },
+      }))
+    )
+      throw staffRetired();
     // 고치는 경우에만 지금 비밀번호를 본다. 확인한 해시는 잠근 뒤 다시 본다
     const verifiedHash = (await this.prisma.staffTaxProfile.count({
       where: { staffMemberId },
@@ -259,9 +326,14 @@ export class MyMembershipsService {
         SELECT 1 FROM staff_members WHERE staff_member_id = ${staffMemberId} FOR NO KEY UPDATE`;
       const staff = await tx.staffMember.findFirst({
         where: mine,
-        select: { account: { select: { birthDate: true } } },
+        select: {
+          employmentStatus: true,
+          retiredDate: true,
+          account: { select: { birthDate: true } },
+        },
       });
       if (!staff) throw new NotFoundException('소속을 찾을 수 없습니다.');
+      if (!employedOn(staff, new Date())) throw staffRetired();
       const select = {
         rrnEncrypted: true,
         bankCode: true,
@@ -382,7 +454,8 @@ export class MyMembershipsService {
           }));
       return this.open(staffMemberId, saved);
     });
-    return { staffMemberId, taxProfile };
+    // 저장했으면 재직 중이다 — 퇴직이면 위에서 409
+    return { staffMemberId, editable: true, taxProfile };
   }
 
   /** 지금 비밀번호가 맞으면 확인한 해시를 준다. 없거나 틀리면 400 — 원문은 어디에도 남기지 않는다 */
