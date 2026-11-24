@@ -58,7 +58,7 @@ TO-DO (#109). Three controllers over one service:[^todos-controllers]
 `modified_by`(FK → `admin_accounts`)에 남고[^modified-migration], `update` 만 쓴다 — 상태 변경(관리자 · 직원 앱) · 삭제 · 공유
 완료는 바꾸지 않는다(상태 변경은 「상태 변경이력」에 사람 · 시각이 남는다). `updated_at`(`@updatedAt`)은 그 모두에 바뀌어 최종수정으로
 쓸 수 없다. 묶음이면 [수정]이 묶음 전체 행에 같은 값을 써서 어느 직원 상세에서 봐도 같다. 기존 행은 채우지 않아 null 이고, 등록만
-한 TO-DO 도 null 이다 — 화면은 그때 「최종수정」 줄을 두지 않는다. 근로계약 최종수정(WHALEERP-699, [Contracts API](/api/contracts-api.md))과
+한 TO-DO 도 null 이다 — 화면은 그때도 「최종수정」 줄을 두고 「-」로 보인다(WHALEERP-698 후속, 2026-11-24 재영 — 근로계약 상세와 같다). 근로계약 최종수정(WHALEERP-699, [Contracts API](/api/contracts-api.md))과
 같은 방식이지만 근사로 채운 기존 행은 없다: 관리자 [수정]은 긴급을 바꿀 때만 이력에 남아 근사할 기록이 없다.
 
 목록 · 상세 · 등록 응답의 줄마다 `storeIsHq`(stores.is_hq, 본사 아니면 false)가 실린다 — 관리자 화면은 본사를 「[본사] 상호」로 보인다(2026-11-19). 이름 칸 `storeName` 은 상호 그대로. 같은 DTO 를 쓰는 직원 앱(`GET /me/todos` · `PATCH /me/todos/:todoId/status`)에도 실리지만 직원 앱은 쓰지 않는다.
