@@ -247,6 +247,8 @@ export class MyMembershipsService {
     return {
       staffMemberId: staff.staffMemberId,
       editable: employedOn(staff, now),
+      // 화면이 「넣은 적 없음」과 「보존 기간이 지나 지움」을 가른다(WHALEERP-772) — 배치가 이미 지웠어도 같은 판정이다
+      expired,
       taxProfile:
         staff.staffTaxProfile && !expired
           ? this.open(staff.staffMemberId, staff.staffTaxProfile)
@@ -455,7 +457,8 @@ export class MyMembershipsService {
       return this.open(staffMemberId, saved);
     });
     // 저장했으면 재직 중이다 — 퇴직이면 위에서 409
-    return { staffMemberId, editable: true, taxProfile };
+    // 고칠 수 있는(퇴직하지 않은) 소속만 여기까지 오므로 보존 기간이 지났을 수 없다
+    return { staffMemberId, editable: true, expired: false, taxProfile };
   }
 
   /** 지금 비밀번호가 맞으면 확인한 해시를 준다. 없거나 틀리면 400 — 원문은 어디에도 남기지 않는다 */

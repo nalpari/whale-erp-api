@@ -197,6 +197,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     ).resolves.toEqual({
       staffMemberId: 31,
       editable: true,
+      expired: false,
       taxProfile: {
         rrnMasked: '980304-1******',
         bankCode: 'B004',
