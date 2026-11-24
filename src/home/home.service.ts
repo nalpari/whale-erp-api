@@ -433,8 +433,10 @@ export class HomeService {
         : null,
       pendingActionCount: pending.get(s.storeId) ?? 0,
     }));
+    // 본사 점포 줄은 확인 필요 건수와 상관없이 맨 위(WHALEERP-751)
     rows.sort(
       (a, b) =>
+        Number(b.isHq) - Number(a.isHq) ||
         b.pendingActionCount - a.pendingActionCount ||
         a.storeName.localeCompare(b.storeName, 'ko') ||
         a.storeId - b.storeId,
@@ -458,7 +460,8 @@ export class HomeService {
         myInquiries,
         todayTodo,
       },
-      storeTable: { total: rows.length, items: rows },
+      // 제목의 점포 수는 점포 카드처럼 본사를 세지 않는다(운영 정책 SCP-09) — 본사 줄은 표에 있다
+      storeTable: { total: rows.filter((r) => !r.isHq).length, items: rows },
     };
   }
 
@@ -474,15 +477,29 @@ export class HomeService {
       'inquiries',
       'todos',
     ]);
-    if (!ctx) return { asOf: now, platform: true, items: [] };
+    if (!ctx)
+      return { asOf: now, platform: true, notOperatingCount: 0, items: [] };
     const { ids, can, shown, nameOf } = ctx;
     const today = kstToday(now);
     const items: (HomePendingItemDto | null)[] = [];
+    // 점포별 현황(운영 점포만, HOM-06)에 없는 미운영 점포의 건 — 화면이 두 숫자의 차이를 알린다(WHALEERP-759). 줄로 센 것만 센다
+    const notOperatingIds = new Set(
+      ctx.stores
+        .filter((s) => s.storeStatusCode === 'NOT_OPERATING')
+        .map((s) => s.storeId),
+    );
+    let notOperatingCount = 0;
+    const itemOf = (...args: Parameters<typeof pendingItemOf>) => {
+      notOperatingCount += args[1].filter(
+        (e) => e.storeId !== null && notOperatingIds.has(e.storeId),
+      ).length;
+      return pendingItemOf(...args);
+    };
 
     if (can('contracts')) {
       // 종료가 가장 이른 계약이 대표다 — 그 계약의 종료까지 남은 날을 D-N 으로 보인다(HOM-04)
       const renewals = await this.renewals(shown.contract, today);
-      const renewal = pendingItemOf(
+      const renewal = itemOf(
         'CONTRACT_RENEWAL',
         renewals.map((c) => ({
           name: nameOf(c.storeId, c.staffMember),
@@ -537,7 +554,7 @@ export class HomeService {
                 : (c.contractStatusHistories[0]?.changedAt ?? null),
           }));
         items.push(
-          pendingItemOf(
+          itemOf(
             status === 'PENDING_SIGNATURE'
               ? 'CONTRACT_PENDING_SIGNATURE'
               : 'CONTRACT_CORRECTION_REQUESTED',
@@ -556,12 +573,7 @@ export class HomeService {
         since: r.rejectedAt,
       }));
       items.push(
-        pendingItemOf(
-          'AFFILIATION_REJECTED',
-          oldestFirst(entries),
-          ['REJECTED'],
-          now,
-        ),
+        itemOf('AFFILIATION_REJECTED', oldestFirst(entries), ['REJECTED'], now),
       );
     }
 
@@ -586,7 +598,7 @@ export class HomeService {
           )
         : new Map<number, string>();
       items.push(
-        pendingItemOf(
+        itemOf(
           'INQUIRY_ANSWERED',
           oldestFirst(
             replied.map((r) => ({
@@ -603,7 +615,7 @@ export class HomeService {
 
     if (can('todos'))
       items.push(
-        pendingItemOf(
+        itemOf(
           'URGENT_TODO',
           (await this.urgentTodoLines(ids)).map((t) => ({
             name: t.title,
@@ -618,6 +630,7 @@ export class HomeService {
     return {
       asOf: now,
       platform: false,
+      notOperatingCount,
       items: items.filter((i): i is HomePendingItemDto => i !== null),
     };
   }

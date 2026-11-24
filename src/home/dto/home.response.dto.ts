@@ -88,9 +88,9 @@ export class HomeStoreRowDto {
 }
 
 export class HomeStoreTableDto {
-  /** 운영 점포 전체 수 */
+  /** 운영 점포 수 — 본사 점포는 세지 않는다(점포 카드와 같다, 운영 정책 SCP-09 · WHALEERP-751) */
   total: number;
-  /** 운영 점포 모두 — 확인 필요 많은 순, 같으면 점포명(HOM-06) */
+  /** 운영 점포 모두 — 본사 점포 줄이 맨 위, 나머지는 확인 필요 많은 순, 같으면 점포명(HOM-06) */
   items: HomeStoreRowDto[];
 }
 
@@ -145,6 +145,11 @@ export class HomePendingResponseDto {
   asOf: Date;
   /** 플랫폼 계정이면 true — items 는 빈 배열 */
   platform: boolean;
+  /**
+   * items 로 센 건 가운데 미운영 점포의 건수 — 점포별 현황(운영 점포만, HOM-06)에는 없고 확인 필요에만 센다(HOM-07).
+   * 문의 답변완료는 점포가 없어 넣지 않는다(그 줄의 count 를 읽는다). 플랫폼 빈 결과는 0(WHALEERP-759)
+   */
+  notOperatingCount: number;
   /** 건수가 0인 유형과 권한이 없는 유형은 뺀다. 순서는 갱신 예정 → 계약 → 직원 → 문의 → TO-DO */
   items: HomePendingItemDto[];
 }
