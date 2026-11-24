@@ -40,7 +40,14 @@ import {
   CalculatedItemCode,
 } from './payslip-calculation';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
-import { amountOf, dateOnly, isShown, ITEM_ORDER } from './payslip-shared';
+import {
+  amountOf,
+  dateOnly,
+  isShown,
+  ITEM_ORDER,
+  notSendingSince,
+  SENDING_STALE_MS,
+} from './payslip-shared';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
 import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
@@ -69,6 +76,16 @@ export const statusConflict = (now: PayslipStatus) =>
   });
 
 /** 409 PAYSLIP_STALE — 읽은 뒤 그사이 누가 고쳤다(updatedAt 이 다르다). */
+/** 발송이 진행 중이라(메일을 보내는 중) 확정 취소를 받지 않는다 — 취소된 금액이 메일 첨부 PDF 로 나가지 않게(WHALEERP-766) */
+export const sendingConflict = () =>
+  new ConflictException({
+    statusCode: HttpStatus.CONFLICT,
+    error: 'Conflict',
+    code: 'PAYSLIP_SENDING',
+    message:
+      '이 급여명세서를 보내는 중입니다. 잠시 뒤 화면을 새로 고쳐 다시 해 주세요.',
+  });
+
 export const stale = () =>
   new ConflictException({
     statusCode: HttpStatus.CONFLICT,
@@ -549,11 +566,15 @@ export class PayslipEditService {
     if (!CONFIRMED.includes(current.status))
       throw statusConflict(current.status);
     await this.prisma.$transaction(async (tx) => {
-      await this.claim(tx, payslipId, current.status, dto.updatedAt, {
-        status: 'REVIEWING',
-        confirmedAt: null,
-        confirmedBy: null,
-      });
+      // 발송 중(메일 · 첨부 PDF 를 보내는 중)이면 받지 않는다 — 취소된 명세서의 금액이 첨부로 나가지 않게(WHALEERP-766)
+      await this.claim(
+        tx,
+        payslipId,
+        current.status,
+        dto.updatedAt,
+        { status: 'REVIEWING', confirmedAt: null, confirmedBy: null },
+        { notSending: true },
+      );
       // 확정이 찍은 확인 표시를 푼다(사유를 확인하는 것은 확정뿐이다) — 다시 검토 중이 된 명세서가 남은 사유로 검토 대기에
       // 들게(운영 정책 v221 PAY-06)
       const { count } = await tx.payslipReviewReason.updateMany({
@@ -700,17 +721,30 @@ export class PayslipEditService {
     status: PayslipStatus,
     updatedAt: string,
     data: Prisma.PayslipUpdateManyMutationInput,
+    { notSending = false }: { notSending?: boolean } = {},
   ): Promise<void> {
+    const at = new Date();
     const { count } = await tx.payslip.updateMany({
-      where: { payslipId, status, updatedAt: sameMillisecond(updatedAt) },
+      where: {
+        payslipId,
+        status,
+        updatedAt: sameMillisecond(updatedAt),
+        ...(notSending ? notSendingSince(at) : {}),
+      },
       data,
     });
     if (count > 0) return;
     const now = await tx.payslip.findUnique({
       where: { payslipId },
-      select: { status: true },
+      select: { status: true, updatedAt: true, sendingStartedAt: true },
     });
     if (now && now.status !== status) throw statusConflict(now.status);
+    if (
+      notSending &&
+      now?.sendingStartedAt &&
+      now.sendingStartedAt.getTime() >= at.getTime() - SENDING_STALE_MS
+    )
+      throw sendingConflict();
     throw stale();
   }
 

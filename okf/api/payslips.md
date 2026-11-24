@@ -4,12 +4,12 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T01:14:12Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T02:13:03Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
     title: pickedStores — 목록 · 발송의 점포 조건(storeIds · storeTypes, 본사 HQ 포함)
-    last_modified: 2026-11-19T06:58:12Z
+    last_modified: 2026-11-24T01:41:25Z
   - id: payslip-list-query
     resource: ../../src/payslips/dto/payslip-list.query.dto.ts
     title: 목록 쿼리 — storeTypes 는 StoreScopeType(DIRECT · FRANCHISE · HQ)
@@ -37,11 +37,11 @@ sources:
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-10-30T02:31:31Z
+    last_modified: 2026-11-24T01:41:25Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
-    title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일)
-    last_modified: 2026-10-30T02:31:31Z
+    title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일 · 명세서 PDF 첨부)
+    last_modified: 2026-11-24T01:25:54Z
   - id: pdf
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
@@ -291,7 +291,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
   켜면 소득세 · 지방소득세 대신 원천징수)가 하나라도 미입력이면 422 `DEDUCTION_MISSING`(본문 `items: [{ payslipItemId, itemName }]`).
   검토 사유가 있어도 확정하는 것이 「확인」이다 — 확인하지 않은 사유의 `acknowledged_at` 에 확정 시각을 남긴다. `confirmed_at` ·
   `confirmed_by`, 처리 이력 `CONFIRM`(「확정 · 검토 사유 N건 확인」).
-* `POST /payslips/:id/cancel-confirmation { updatedAt }` → 200 상세 — 확정 · 발송 완료(보낸 뒤에도)에서 검토 중으로. 확정 일시 ·
+* `POST /payslips/:id/cancel-confirmation { updatedAt }` → 200 상세 — 확정 · 발송 완료(보낸 뒤에도)에서 검토 중으로. 발송이 진행 중이면(발송 중 표시 `sending_started_at` 이 5분 `SENDING_STALE_MS` 안) 409 `PAYSLIP_SENDING` 「이 급여명세서를 보내는 중입니다. …」 — 취소된 금액이 메일 첨부 PDF 로 나가지 않게(WHALEERP-766). 확정 일시 ·
   관리자를 비우고, 확정이 확인한 검토 사유의 `acknowledged_at` 을 다시 비운다 — 사유가 남은 명세서가 검토 중이면서 검토 대기에서
   빠지지 않게(운영 정책 v221 PAY-06, 2026-10-27 재영. 사유를 확인하는 것은 확정뿐이다). 이 정책 전에 확정 취소한 명세서는
   마이그레이션 `20261027150500_team3_payslip_reopened_review_reasons` 가 작성 중 · 검토 중 명세서의 확인 표시를 모두 풀어 맞춘다(머지 후 `pnpm db:deploy`). 처리 이력 `CANCEL_CONFIRMATION`(「확정 취소 ·
@@ -330,7 +330,12 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 3. 트랜잭션 밖에서 메일(되돌릴 수 없어 커밋 뒤, mail.md). 템플릿은 전에 이메일로 보낸 적이 있으면(재발송 또는 확정 취소 뒤 다시 확정)
    `EMAIL_PAYSLIP_RESENT`, 아니면 `EMAIL_PAYSLIP_SENT`. 변수는 템플릿 행 그대로 `직원이름`(직원 레코드 이름) · `근무지`(점포 이름) ·
    `급여월`(급여 기간 시작 달, 「7월」 — NTF-20) · `링크`(버튼, `STAFF_APP_URL` 의 origin + `/pay/{payslipId}` — 직원 근무 앱 명세서
-   상세). `sentBy` 는 보낸 관리자.
+   상세). `sentBy` 는 보낸 관리자. **그 명세서 PDF 를 첨부한다**(운영 정책 PAY-08, WHALEERP-766) — 잡은 뒤에 `DETAIL_SELECT` 로
+   다시 읽어 직원 앱 내보내기와 같은 생성기(`payslipPdfModel` · `renderPayslipPdf`) · 같은 파일 이름(`급여명세서_YYYY-MM_이름.pdf`)으로
+   그린다. 보낸 뒤 직원 앱에서 내려받는 것과 같게 발송 완료 · 발송일(잡은 시각, 한국 날짜)로 그리므로 다시 보내면 지금 값 · 이번
+   발송일이다. PDF 를 만들지 못하면(읽기 실패 · 금액 없음 · 글꼴 등) 첨부 없이 보내고, 처리 이력 `SEND` 문구 끝에
+   「· 명세서 PDF 첨부 실패」를 붙이고(오류 원문은 관리자 화면에 보이지 않게 넣지 않는다) `payslip PDF NOT ATTACHED` error 로그에 원문을 남긴다 — 발송 이력
+   `payslip_dispatches` 에는 사유 칸이 없어서다. 메일 자체가 실패하면 처리 이력이 없으므로 이 문구도 없다.
 4. 성공이면 한 트랜잭션에서 발송 완료(확정 · 발송 완료이고 잡은 `updatedAt` 그대로일 때만 — 그사이 확정이 취소됐거나 취소 뒤 다시 확정됐으면 상태는 두고 이력만. 보낸 메일과 다른 값이 직원 앱에 보이지 않게), 발송 이력(EMAIL ·
    SUCCEEDED · 보낸 관리자), 처리 이력 `SEND`(상태 칸은 확정 → 발송 완료로 바뀐 경우에만 남고, 문구는 전에 이메일로 보낸 적이 있으면 「재발송 · 이메일」 — 확정 취소 뒤 다시 확정해 보내면 둘 다 남는다). 실패면 발송
    이력(EMAIL · FAILED)만 — 상태는 그대로라 다시 보낼 수 있다. 실패하면 잡을 때 바꾼 `updatedAt` 을 원래 값으로 되돌리고 발송 중 표시를 비운다(그사이 다른
@@ -340,7 +345,8 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 
 알려진 한계(후속 과제):
 
-* 일괄 발송은 한 요청 안에서 한 장씩 차례로 보낸다(SMTP 왕복이 건수만큼). 건수가 많으면 프록시 · 화면의 시간 제한을 넘겨 화면이
+* 일괄 발송은 한 요청 안에서 한 장씩 차례로 보낸다(SMTP 왕복이 건수만큼). 장마다 PDF 그리기(약 40ms, 요청 스레드에서 CPU 로 — 그동안
+  다른 요청도 기다린다)와 행 읽기 한 번이 더해진다. 첨부는 한 장 약 60KB(base64 로 약 80KB)라 Gmail 25MB 제한과는 멀다. 건수가 많으면 프록시 · 화면의 시간 제한을 넘겨 화면이
   `sent` · `failed` 를 받지 못할 수 있다 — 서버는 끝까지 보내고, 다시 눌러도 확정만 대상이라 두 번 보내지 않는다(아래 메일은 나갔는데 기록이 실패한 경우는 빼고). 상한 · 동시성은 아직 없다.
 * 메일이 나간 뒤 발송 완료 · 이력 쓰기가 실패하면 로그만 남기고 성공으로 답한다(되돌리면 다시 누를 때 두 번 간다). 그 명세서는
   확정 그대로라 화면에 「발송」이 남고, 직원 앱에는 보이지 않는다 — 이 경우를 화면에 알리는 길은 아직 없다.
@@ -361,7 +367,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 
 - 한 번에 5000건(`PAYSLIP_PURGE_BATCH_SIZE`), 생성일 · id 순으로 `FOR UPDATE` 로 잠근 뒤 지운다. 밀린 분량은 다음 날.
 - 외래키가 모두 RESTRICT 라 딸린 행부터 지운다 — 항목 · 검토 사유 · 발송 기록 · 처리 이력. 그 명세서의 알림(`related_type
-  'PAYSLIP'`, 직원 앱 발송 알림)은 외래키가 없지만 받는 사람 · 발송까지 함께 지운다. 명세서 파일은 저장하지 않는다(PDF 는 내려받을 때 만든다).
+  'PAYSLIP'`, 직원 앱 발송 알림)은 외래키가 없지만 받는 사람 · 발송까지 함께 지운다. 명세서 파일은 저장하지 않는다(PDF 는 내려받을 때 · 메일로 보낼 때 만든다).
 - 지운 건수는 `payslip-purge RAN processed=N` 로그다.
 - 퇴직자 근로계약 파기(`contract-purge`, 05:00, WHALEERP-645)는 명세서가 가리키는 계약이 있는 레코드를 건너뛴다. 이 배치가 먼저
   돌아 명세서를 지우면, 퇴직일 + 3년이 지난 레코드는 그날 계약 파기부터 지울 대상이 된다(한도 · 파일 조건에 따라 밀릴 수 있다,

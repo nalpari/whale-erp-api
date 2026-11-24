@@ -13,6 +13,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PayslipListService } from './payslip-list.service';
 import { PayslipSendService } from './payslip-send.service';
 import { HQ_SHARING_CONSENTED } from '../admin-scope/hq-sharing';
+import { MyPayslipsService } from './my-payslips.service';
+import * as pdf from './payslip-pdf';
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const UPDATED = '2026-10-19T01:00:00.000Z';
@@ -35,6 +37,46 @@ const row = (over: object = {}) => ({
   ...over,
 });
 
+/** 첨부 PDF 를 그릴 때 읽는 행(my-payslips DETAIL_SELECT 모양) */
+const pdfRow = (over: object = {}) => ({
+  payslipId: 40,
+  storeId: 5,
+  periodStartDate: d('2026-07-01'),
+  periodEndDate: d('2026-07-31'),
+  employmentType: 'PART_TIME',
+  status: 'CONFIRMED',
+  grossPayAmount: 1_000_000,
+  totalDeductionAmount: 33_000,
+  netPayAmount: 967_000,
+  createdAt: d('2026-08-01'),
+  payslipLogs: [],
+  isWithholdingApplied: true,
+  staffMember: { name: '유하람' },
+  payslipItems: [
+    {
+      payslipItemId: 1,
+      itemCategory: 'EARNING',
+      itemName: '기본급',
+      isTaxFree: false,
+      calculatedAmount: 1_000_000,
+      adjustedAmount: null,
+      isEntered: true,
+      payslipItemMaster: { itemCode: 'BASE_PAY' },
+    },
+    {
+      payslipItemId: 2,
+      itemCategory: 'WITHHOLDING',
+      itemName: '사업소득세(3%)',
+      isTaxFree: false,
+      calculatedAmount: 30_000,
+      adjustedAmount: null,
+      isEntered: true,
+      payslipItemMaster: { itemCode: 'BUSINESS_INCOME_TAX' },
+    },
+  ],
+  ...over,
+});
+
 describe('PayslipSendService', () => {
   let service: PayslipSendService;
   let scope: { getManageableStores: jest.Mock };
@@ -46,11 +88,13 @@ describe('PayslipSendService', () => {
     payslip: {
       findFirst: jest.Mock;
       findMany: jest.Mock;
+      findFirstOrThrow: jest.Mock;
       updateMany: jest.Mock;
     };
     payslipDispatch: { create: jest.Mock };
     payslipLog: { create: jest.Mock };
     store: { findMany: jest.Mock };
+    account: { findUnique: jest.Mock };
   };
 
   const build = async () => {
@@ -85,10 +129,19 @@ describe('PayslipSendService', () => {
       payslip: {
         findFirst: jest.fn().mockResolvedValue(row()),
         findMany: jest.fn().mockResolvedValue([row()]),
+        findFirstOrThrow: jest.fn().mockResolvedValue(pdfRow()),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       payslipDispatch: { create: jest.fn().mockResolvedValue({}) },
       payslipLog: { create: jest.fn().mockResolvedValue({}) },
+      // 보내기 직전에 다시 읽는 계정 — 기본은 읽어 둔 것과 같다
+      account: {
+        findUnique: jest.fn().mockResolvedValue({
+          accountId: 1,
+          email: 'haram@example.com',
+          status: 'JOINED',
+        }),
+      },
       store: {
         findMany: jest.fn().mockResolvedValue([
           { storeId: 5, name: '모리커피 연남점' },
@@ -145,11 +198,36 @@ describe('PayslipSendService', () => {
         prisma.payslip.findFirst.mockResolvedValue(
           row({ staffMember: { ...row().staffMember, account } }),
         );
+        prisma.account.findUnique.mockResolvedValue(account);
         await expect(send()).rejects.toMatchObject({
           response: { code: 'NO_EMAIL' },
         });
       }
       expect(mail!.send).not.toHaveBeenCalled();
+    });
+
+    it('받는 주소는 보내기 직전에 다시 읽는다 — 그사이 이메일을 바꿨으면 새 주소로, 탈퇴했으면 보내지 않는다(PR #312)', async () => {
+      prisma.account.findUnique.mockResolvedValueOnce({
+        accountId: 1,
+        email: 'new@example.com',
+        status: 'JOINED',
+      });
+      await expect(send()).resolves.toEqual({ payslipId: 40 });
+      expect((mail!.send.mock.calls[0] as [{ to: string }])[0].to).toBe(
+        'new@example.com',
+      );
+      mail!.send.mockClear();
+      prisma.payslip.updateMany.mockClear();
+      prisma.account.findUnique.mockResolvedValueOnce({
+        accountId: 1,
+        email: 'haram@example.com',
+        status: 'WITHDRAWN',
+      });
+      await expect(send()).rejects.toMatchObject({
+        response: { code: 'NO_EMAIL' },
+      });
+      expect(mail!.send).not.toHaveBeenCalled();
+      expect(prisma.payslip.updateMany).not.toHaveBeenCalled();
     });
 
     it('읽은 상태 · updatedAt 으로 먼저 잡고 메일을 보낸 뒤, 발송 완료 · 발송 이력(성공) · 처리 이력(발송)', async () => {
@@ -186,6 +264,13 @@ describe('PayslipSendService', () => {
           링크: 'https://staff.example.com/pay/40',
         },
         sentBy: 9,
+        attachments: [
+          {
+            filename: '급여명세서_2026-07_유하람.pdf',
+            content: expect.any(Buffer) as Buffer,
+            contentType: 'application/pdf',
+          },
+        ],
       });
       // 잡을 때 쓴 updatedAt 그대로일 때만 옮긴다 — 그사이 다시 확정된 명세서를 발송 완료로 만들지 않게
       expect(call(prisma.payslip.updateMany, 1)).toEqual({
@@ -211,9 +296,94 @@ describe('PayslipSendService', () => {
           fromStatus: 'CONFIRMED',
           toStatus: 'SENT',
           summary: '발송 · 이메일',
+          // 발송 시각은 잡은 시각(첨부 PDF 의 발송일과 같다)
+          changedAt: call(prisma.payslip.updateMany, 0).data.updatedAt,
           changedBy: 9,
         },
       });
+    });
+
+    it('첨부 PDF 는 이 발송이 끝난 뒤 직원 앱 내보내기(GET /me/payslips/:id/pdf)가 주는 것과 같은 칸이다', async () => {
+      const model = jest.spyOn(pdf, 'payslipPdfModel');
+      await send();
+      const attached = (
+        mail!.send.mock.calls[0] as [{ attachments: { content: Buffer }[] }]
+      )[0].attachments[0];
+      expect(attached.content.subarray(0, 5).toString()).toBe('%PDF-');
+      // 보낸 뒤의 행(발송 완료 · 잡은 시각의 SEND 이력)을 직원 앱 쪽 document 로 읽어 같은 칸이 나오는지 본다
+      const claimedAt = call(prisma.payslip.updateMany, 0).data
+        .updatedAt as Date;
+      // 잡은 그대로의 행만 읽는다 — 그사이 확정 취소 · 수정된 값을 붙이지 않게
+      expect(call(prisma.payslip.findFirstOrThrow)).toMatchObject({
+        where: {
+          payslipId: 40,
+          updatedAt: claimedAt,
+          sendingStartedAt: claimedAt,
+        },
+      });
+      // 처리 이력의 발송 시각도 잡은 시각이라 첨부 PDF 와 앱 PDF 의 발송일이 같다
+      expect(call(prisma.payslipLog.create).data).toMatchObject({
+        changedAt: claimedAt,
+      });
+      const app = new MyPayslipsService({
+        payslip: {
+          findFirst: jest.fn().mockResolvedValue(
+            pdfRow({
+              status: 'SENT',
+              payslipLogs: [
+                { payslipLogId: 7, logType: 'SEND', changedAt: claimedAt },
+              ],
+            }),
+          ),
+        },
+        store: prisma.store,
+      } as unknown as PrismaService);
+      const found = await app.document(1, 40, new Date('2026-08-10'));
+      expect(model.mock.results[0].value).toEqual(
+        pdf.payslipPdfModel(found!.detail, found!.staffName),
+      );
+      expect(model.mock.results[0].value).toMatchObject({
+        net: '967,000원',
+        info: expect.arrayContaining([['직원', '유하람']]) as unknown,
+      });
+      model.mockRestore();
+    });
+
+    it('PDF 를 만들지 못하면 첨부 없이 보내고 처리 이력 문구에 실패 사유를 남긴다 — 발송은 그대로 성공', async () => {
+      const error = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      // 금액이 없는 행은 생성기가 거절한다(검토 중 명세서를 0원으로 그리지 않게)
+      prisma.payslip.findFirstOrThrow.mockResolvedValue(
+        pdfRow({ netPayAmount: null }),
+      );
+      await expect(send()).resolves.toEqual({ payslipId: 40 });
+      expect(mail!.send).toHaveBeenCalledTimes(1);
+      expect((mail!.send.mock.calls as unknown[][])[0][0]).not.toHaveProperty(
+        'attachments',
+      );
+      expect(call(prisma.payslipDispatch.create).data).toMatchObject({
+        status: 'SUCCEEDED',
+      });
+      expect(call(prisma.payslipLog.create).data).toMatchObject({
+        toStatus: 'SENT',
+        summary: '발송 · 이메일 · 명세서 PDF 첨부 실패',
+      });
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('payslip PDF NOT ATTACHED payslip=40'),
+      );
+
+      // 읽기 자체가 실패해도 같다
+      mail!.send.mockClear();
+      prisma.payslip.findFirstOrThrow.mockRejectedValue(new Error('db down'));
+      await expect(send()).resolves.toEqual({ payslipId: 40 });
+      expect((mail!.send.mock.calls as unknown[][])[0][0]).not.toHaveProperty(
+        'attachments',
+      );
+      expect(call(prisma.payslipLog.create, 1).data.summary).toBe(
+        '발송 · 이메일 · 명세서 PDF 첨부 실패',
+      );
+      error.mockRestore();
     });
 
     it('전에 보낸 적이 있으면(확정 취소 뒤 다시 확정) 재발송 템플릿 · 「재발송」', async () => {
@@ -322,6 +492,48 @@ describe('PayslipSendService', () => {
         toStatus: null,
         summary: '재발송 · 이메일',
       });
+    });
+
+    it('다시 보내면 잡은 뒤 읽은 지금 값으로 PDF 를 그려 붙인다(이전 발송 값이 아니라)', async () => {
+      const model = jest.spyOn(pdf, 'payslipPdfModel');
+      prisma.payslip.findFirst.mockResolvedValue(row({ status: 'SENT' }));
+      prisma.payslip.findFirstOrThrow.mockResolvedValue(
+        pdfRow({
+          status: 'SENT',
+          netPayAmount: 1_067_000,
+          payslipLogs: [
+            {
+              payslipLogId: 3,
+              logType: 'SEND',
+              changedAt: new Date('2026-08-01T00:00:00.000Z'),
+            },
+          ],
+        }),
+      );
+      await resend();
+      const attached = (
+        mail!.send.mock.calls[0] as [
+          { templateCode: string; attachments: { filename: string }[] },
+        ]
+      )[0];
+      expect(attached.templateCode).toBe('EMAIL_PAYSLIP_RESENT');
+      expect(attached.attachments[0].filename).toBe(
+        '급여명세서_2026-07_유하람.pdf',
+      );
+      // 잡은 뒤에 읽는다 — 그 사이 고친 값이 아니라 잡은(보내는) 값
+      expect(
+        prisma.payslip.findFirstOrThrow.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(prisma.payslip.updateMany.mock.invocationCallOrder[0]);
+      const claimedAt = call(prisma.payslip.updateMany, 0).data
+        .updatedAt as Date;
+      const drawn = model.mock.results[0].value as pdf.PayslipPdfModel;
+      expect(drawn.net).toBe('1,067,000원');
+      // 발송일은 이번 발송(잡은 시각) — 지난 발송일이 아니다
+      expect(drawn.info).toContainEqual([
+        '발송일',
+        `${claimedAt.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul', year: 'numeric', month: 'long', day: 'numeric' })}`,
+      ]);
+      model.mockRestore();
     });
 
     it('확정 · 검토 중이면 409', async () => {

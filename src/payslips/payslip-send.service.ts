@@ -31,7 +31,10 @@ import {
   OPTIONAL_MAIL_SERVICE,
   type OptionalMailService,
 } from '../mail/mail.module';
-import { isMailTransportError } from '../mail/mail.service';
+import {
+  isMailTransportError,
+  type MailAttachment,
+} from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PayslipStatusChangeDto } from './dto/payslip-edit.dto';
 import { SendPayslipsDto } from './dto/payslip-send.dto';
@@ -43,7 +46,18 @@ import { PayslipDetailResponseDto } from './dto/payslip.response.dto';
 import { stale, statusConflict } from './payslip-edit.service';
 import { PayslipListService } from './payslip-list.service';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
-import { monthRange, pickedStores, storeNames } from './payslip-shared';
+import { DETAIL_SELECT, toSummary } from './my-payslips.service';
+import {
+  payslipPdfFileName,
+  payslipPdfModel,
+  renderPayslipPdf,
+} from './payslip-pdf';
+import {
+  monthRange,
+  pickedStores,
+  SENDING_STALE_MS,
+  storeNames,
+} from './payslip-shared';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
 import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
@@ -95,14 +109,9 @@ const FAILURE_MESSAGE: Record<PayslipSendFailure, string> = {
 type Delivery = { ok: true } | { ok: false; reason: PayslipSendFailure };
 
 /**
- * 발송 중 표시가 이보다 오래되면 끊긴 것(처리 중 서버 종료 등)으로 보고 다시 잡게 둔다. SMTP 연결 · 응답 제한이 각 30초라
- * 정상 발송은 이 안에 끝난다.
- */
-const SENDING_STALE_MS = 5 * 60_000;
-
-/**
  * 급여명세서 발송 · 재발송 (WHALEERP-231). 확정한 명세서를 직원 앱 계정의 이메일로 보낸다(EMAIL_PAYSLIP_SENT, 전에 보낸 적이
- * 있으면 EMAIL_PAYSLIP_RESENT) — 메일의 버튼은 직원 앱 명세서 상세(`/pay/{id}`)로 간다. 발송 완료로 옮기면서 직원 알림(알림함 줄과
+ * 있으면 EMAIL_PAYSLIP_RESENT) — 메일의 버튼은 직원 앱 명세서 상세(`/pay/{id}`)로 가고, 그 명세서 PDF(직원 앱 내보내기와 같은 것)를
+ * 첨부한다(PAY-08, WHALEERP-766 — PDF 를 만들지 못하면 첨부 없이 보내고 처리 이력 문구에 사유를 남긴다). 발송 완료로 옮기면서 직원 알림(알림함 줄과
  * 앱 푸시 발송 대기, PUSH_PAYSLIP_SENT · RESENT, #259)도 만든다 — 실제 앱 푸시는 아직 없다(기기 토큰 · FCM, #261 · #321).
  * 급여 지급은 하지 않는다.
  *
@@ -337,7 +346,14 @@ export class PayslipSendService {
   ): Promise<Delivery> {
     if (!this.mail) return { ok: false, reason: 'MAIL_NOT_CONFIGURED' };
     if (!this.appUrl) return { ok: false, reason: 'APP_URL_NOT_CONFIGURED' };
-    const account = t.staffMember.account;
+    // 받는 주소는 이 장을 보내기 직전에 다시 읽는다 — 일괄 발송은 대상을 처음에 한꺼번에 읽어, 그사이 직원이 이메일을 바꾸거나
+    // 탈퇴하면 예전 주소로 금액이 담긴 PDF 가 갈 수 있다(첨부는 로그인 없이 열린다, PR #312 pr-agent)
+    const account = t.staffMember.account
+      ? await this.prisma.account.findUnique({
+          where: { accountId: t.staffMember.account.accountId },
+          select: { accountId: true, email: true, status: true },
+        })
+      : null;
     if (!account || account.status === 'WITHDRAWN')
       return { ok: false, reason: 'NO_EMAIL' };
 
@@ -364,6 +380,18 @@ export class PayslipSendService {
 
     const again = t.status === 'SENT' || t.payslipDispatches.length > 0;
     const at = `payslip=${t.payslipId}`;
+    // 명세서 PDF 첨부(PAY-08). 만들지 못하면 첨부 없이 보내고 처리 이력 문구에 「명세서 PDF 첨부 실패」를 남긴다 — 발송을 막지
+    // 않는다. 오류 원문(서버 경로 등이 들어갈 수 있다)은 관리자 화면에 보이는 처리 이력이 아니라 서버 로그에만 둔다
+    let attachment: MailAttachment | null = null;
+    let pdfFailed = false;
+    try {
+      attachment = await this.pdfAttachment(t.payslipId, storeName, claimedAt);
+    } catch (e) {
+      this.logger.error(
+        `payslip PDF NOT ATTACHED ${at} ${errorKind(e)}: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      pdfFailed = true;
+    }
     try {
       await this.mail.send({
         templateCode: again ? 'EMAIL_PAYSLIP_RESENT' : 'EMAIL_PAYSLIP_SENT',
@@ -379,6 +407,7 @@ export class PayslipSendService {
           ).toString(),
         },
         sentBy: adminAccountId,
+        ...(attachment ? { attachments: [attachment] } : {}),
       });
     } catch (e) {
       // SMTP 단계 실패와 보내기 전에 막힌 실패(템플릿 꺼짐 · 주소 형식 등 — 다시 눌러도 풀리지 않는다)를 로그에서 가른다
@@ -449,7 +478,12 @@ export class PayslipSendService {
             logType: 'SEND',
             fromStatus: changed ? 'CONFIRMED' : null,
             toStatus: changed ? 'SENT' : null,
-            summary: `${again ? '재발송' : '발송'} · 이메일`,
+            summary:
+              `${again ? '재발송' : '발송'} · 이메일` +
+              (pdfFailed ? ' · 명세서 PDF 첨부 실패' : ''),
+            // 발송 시각은 잡은 시각 — 첨부 PDF 의 발송일과 직원 앱에서 내려받는 PDF 의 발송일(이 이력)이 같아야 한다.
+            // 기록 시각으로 두면 메일이 한국 자정을 넘겨 끝날 때 하루가 어긋난다(PR #312 pr-agent)
+            changedAt: claimedAt,
             changedBy: adminAccountId,
           },
         });
@@ -474,6 +508,45 @@ export class PayslipSendService {
       );
     }
     return { ok: true };
+  }
+
+  /**
+   * 메일에 붙일 명세서 PDF — 직원 앱 내보내기(GET /me/payslips/:id/pdf)와 같은 생성기 · 같은 파일 이름. 잡은 뒤에 읽어 보내는 값과 같고,
+   * 이 발송이 끝나면 직원 앱에서 내려받는 PDF 와 같게 발송 완료 · 발송일(잡은 시각)을 넣어 그린다.
+   */
+  private async pdfAttachment(
+    payslipId: number,
+    storeName: string,
+    sentAt: Date,
+  ): Promise<MailAttachment> {
+    // 이 발송이 잡은 그대로의 행만 읽는다 — 잡은 뒤 확정 취소 · 수정이 있었으면 그 값을 「발송 완료」 PDF 로 메일에 붙이지
+    // 않게(메일은 되돌릴 수 없다). 없으면 던져 첨부 없이 보내고 처리 이력에 「명세서 PDF 첨부 실패」가 남는다(PR #312 pr-agent)
+    const row = await this.prisma.payslip.findFirstOrThrow({
+      where: { payslipId, updatedAt: sentAt, sendingStartedAt: sentAt },
+      select: DETAIL_SELECT,
+    });
+    const sent = {
+      ...row,
+      status: 'SENT' as const,
+      payslipLogs: [
+        { payslipLogId: 0, logType: 'SEND' as const, changedAt: sentAt },
+        ...row.payslipLogs,
+      ],
+    };
+    const detail = {
+      ...toSummary(sent, storeName),
+      isWithholdingApplied: row.isWithholdingApplied,
+      items: row.payslipItems.map(({ payslipItemMaster, ...item }) => ({
+        ...item,
+        itemCode: payslipItemMaster.itemCode,
+      })),
+    };
+    const staffName = row.staffMember.name;
+    return {
+      filename: payslipPdfFileName(detail, staffName).name,
+      content: await renderPayslipPdf(payslipPdfModel(detail, staffName)),
+      contentType: 'application/pdf',
+    };
   }
 
   /** 메일이 나가지 않았을 때 잡기를 푼다 — 잡은 그대로면 updatedAt 도 되돌리고, 그사이 바뀌었으면 발송 중 표시만 비운다. */
