@@ -1,7 +1,10 @@
+import { Weekday } from '@prisma/client';
 import {
   addDay,
   calculatePay,
   ContractTerms,
+  hoursText,
+  roundDiv,
   PayInput,
   weekStats,
 } from './pay-calculation';
@@ -111,6 +114,14 @@ describe('calculatePay', () => {
         workedMinutes: 3_900,
         overtimeMinutes: 0,
         weeklyHolidayWeeks: 5,
+        basis: {
+          basePay: { minutes: 3_900, text: '65.0시간 × 10,000원' },
+          weeklyHolidayPay: {
+            minutes: 900,
+            text: '5주 · 실근무(주 40시간까지) 75.0시간 ÷ 5 × 10,000원',
+          },
+          overtimePay: { minutes: 0, text: '0.0시간 × 10,000원 × 1.5배' },
+        },
       });
     });
 
@@ -555,6 +566,359 @@ describe('calculatePay', () => {
       basePay: null,
       weeklyHolidayPay: null,
       overtimePay: null,
+    });
+  });
+
+  describe('계산 근거 — 시간 · 한 줄 계산식(WHALEERP-755)', () => {
+    const PART: ContractTerms = {
+      start: '2026-01-01',
+      end: '2026-10-15',
+      hourlyWage: 10_030,
+      baseHours: null,
+      contractDays: { MON: 300, WED: 300, FRI: 300 },
+      includedOvertimeMinutes: 0,
+    };
+    const PART_B: ContractTerms = {
+      ...PART,
+      start: '2026-10-16',
+      end: null,
+      hourlyWage: 10_320,
+    };
+
+    it('파트타이머 연장은 「시간 × 시급 × 1.5배」, 기본급은 연장을 뺀 시간 — 가산을 끄면 1배', () => {
+      const input = partTimer({ hourlyWage: 10_320 });
+      input.worked['2026-10-16'] = 780; // 5시간 넘긴 8시간
+      const r = calculatePay(input);
+      expect(r.basis.overtimePay).toEqual({
+        minutes: 480,
+        text: '8.0시간 × 10,320원 × 1.5배',
+      });
+      expect(r.basis.basePay).toEqual({
+        minutes: 3_900,
+        text: '65.0시간 × 10,320원',
+      });
+      expect(
+        calculatePay({ ...input, isPremiumApplied: false }).basis.overtimePay,
+      ).toEqual({ minutes: 480, text: '8.0시간 × 10,320원 × 1배' });
+    });
+
+    it('기간 중 시급이 바뀌면 시급별 구간을 「 + 」로 잇는다 — 날짜 순', () => {
+      const input = partTimer({ contracts: [PART_B, PART] });
+      input.worked['2026-10-14'] = 540; // 10,030원 — 4시간 연장
+      input.worked['2026-10-21'] = 540; // 10,320원 — 4시간 연장
+      const r = calculatePay(input);
+      expect(r.basis.overtimePay).toEqual({
+        minutes: 480,
+        text: '4.0시간 × 10,030원 × 1.5배 + 4.0시간 × 10,320원 × 1.5배',
+      });
+      // 10/2 ~ 14 의 6일 × 5시간, 10/16 ~ 30 의 7일 × 5시간
+      expect(r.basis.basePay.text).toBe(
+        '30.0시간 × 10,030원 + 35.0시간 × 10,320원',
+      );
+      // 9/28 · 10/5 주는 앞 계약, 10/12 주(일요일이 10/18) · 10/19 · 10/26 주는 뒤 계약 — 주마다 15시간 ÷ 5
+      expect(r.basis.weeklyHolidayPay).toEqual({
+        minutes: 900,
+        text: '2주 · 실근무(주 40시간까지) 30.0시간 ÷ 5 × 10,030원 + 3주 · 실근무(주 40시간까지) 45.0시간 ÷ 5 × 10,320원',
+      });
+    });
+
+    it('정직원 기본급은 「시급 × 월 기본시간」(시간 없음), 기간 중 입사 · 퇴사면 「× 재직일 / 기간 일」, 주휴는 「기본급에 포함」', () => {
+      const r = calculatePay(fullTimer({ hourlyWage: 10_320 }));
+      expect(r.basis.basePay).toEqual({
+        minutes: null,
+        text: '10,320원 × 월 209시간',
+      });
+      expect(r.basis.weeklyHolidayPay).toEqual({
+        minutes: null,
+        text: '기본급에 포함',
+      });
+      expect(
+        calculatePay(fullTimer({ hourlyWage: 10_320, hiredDate: '2026-10-12' }))
+          .basis.basePay.text,
+      ).toBe('10,320원 × 월 209시간 × 20일 / 31일');
+      // 계약이 바뀌면 계약마다
+      const A = {
+        ...PART,
+        baseHours: 209,
+        contractDays: { MON: 480, TUE: 480, WED: 480, THU: 480, FRI: 480 },
+      };
+      expect(
+        calculatePay(
+          fullTimer({
+            contracts: [
+              { ...A, start: '2026-10-16', end: null, hourlyWage: 10_320 },
+              A,
+            ],
+          }),
+        ).basis.basePay.text,
+      ).toBe(
+        '10,030원 × 월 209시간 × 15일 / 31일 + 10,320원 × 월 209시간 × 16일 / 31일',
+      );
+    });
+
+    it('정직원 연장은 포괄 연장을 뺀 분으로 적는다', () => {
+      const input = fullTimer({ includedOvertimeMinutes: 120 });
+      input.worked['2026-10-14'] = 600; // 하루 +2시간
+      input.worked['2026-10-17'] = 480; // 토요일 — 주 48시간
+      const r = calculatePay(input);
+      expect(r.overtimeMinutes).toBe(600);
+      expect(r.basis.overtimePay).toEqual({
+        minutes: 480,
+        text: '8.0시간 × 10,030원 × 1.5배',
+      });
+      expect(r.overtimePay).toBe(Math.round(8 * 10_030 * 1.5));
+    });
+
+    it('식을 다시 셈한 값이 금액과 다르면 식 대신 시간만 — 기간 앞 날(앞 계약 시급)의 연장을 뺀 음수 구간(리뷰)', () => {
+      // 11/1 이 일요일. 앞 계약(10,030원)이 10/30 에 끝나 10/26 주는 앞 달 몫으로 주휴 조건을 못 채우고 11월이 주 전체로 맡는다 —
+      // 그 주 48시간의 주 40시간 초과 8시간은 10/31(앞 계약 시급)에 매겨지고, 기본급은 11월 날만 세므로 10,030원 구간이 음수가 된다
+      const worked: Record<string, number> = {
+        ...days('2026-10-26', '2026-10-31', [1, 2, 3, 4, 5, 6], 480),
+        ...days('2026-11-02', '2026-11-30', [1, 3, 5], 300),
+      };
+      const A: ContractTerms = {
+        ...PART,
+        end: '2026-10-30',
+        contractDays: {
+          MON: 480,
+          TUE: 480,
+          WED: 480,
+          THU: 480,
+          FRI: 480,
+          SAT: 480,
+        },
+      };
+      const r = calculatePay({
+        ...partTimer(),
+        contracts: [{ ...PART_B, start: '2026-11-01' }],
+        leadingContracts: [A],
+        periodStart: '2026-11-01',
+        periodEnd: '2026-11-30',
+        worked,
+      });
+      // 금액(그대로): 11월 65시간 × 10,320원 − 연장 8시간 × 10,030원
+      expect(r.basePay).toBe(Math.round(65 * 10_320 - 8 * 10_030));
+      // 시간 수는 법정 기재사항이라 남긴다(PR #317 리뷰)
+      expect(r.basis.basePay).toEqual({ minutes: 3_420, text: '57.0시간' });
+      // 연장 · 주휴는 식과 금액이 맞아 그대로 낸다
+      expect(r.basis.overtimePay.text).toBe('8.0시간 × 10,030원 × 1.5배');
+      expect(r.overtimePay).toBe(8 * 10_030 * 1.5);
+    });
+
+    it('식이 칸 길이(200자)를 넘으면 식 대신 시간만, 시간이 없는 정직원 기본급은 NULL — 시급이 여러 번 바뀐 연장 · 정직원 일할', () => {
+      // 10월에 사흘마다 시급이 바뀐 계약 열 개(늦게 시작한 것부터) — 여덟 구간 연장식이 197자라 200자를 넘기려면 그만큼 바뀌어야 한다
+      const wages = (base: ContractTerms) =>
+        Array.from({ length: 10 }, (_, i) => ({
+          ...base,
+          start: addDay('2026-10-01', i * 3),
+          end: i === 9 ? null : addDay('2026-10-01', i * 3 + 2),
+          hourlyWage: 10_030 + i * 10,
+        })).reverse();
+      const part = partTimer({
+        contracts: wages({
+          ...PART,
+          contractDays: { MON: 60, TUE: 60, WED: 60, THU: 60, FRI: 60 },
+        }),
+        worked: days('2026-10-01', '2026-10-31', [1, 2, 3, 4, 5], 120),
+      });
+      const r = calculatePay(part);
+      expect(r.overtimePay).toBeGreaterThan(0);
+      expect(r.basis.overtimePay.text).toBe(hoursText(r.overtimeMinutes));
+      expect(r.basis.overtimePay.minutes).toBe(r.overtimeMinutes);
+
+      const full = calculatePay(
+        fullTimer({
+          contracts: wages({
+            ...PART,
+            baseHours: 209,
+            contractDays: { MON: 480, TUE: 480, WED: 480, THU: 480, FRI: 480 },
+          }),
+        }),
+      );
+      expect(full.basePay).toBeGreaterThan(0);
+      expect(full.basis.basePay).toEqual({ minutes: null, text: null });
+    });
+
+    it('시간 글자는 소수 첫째 자리로 정확할 때(6의 배수 분)만 「7.8시간」, 아니면 「7시간 50분」(재영 리뷰)', () => {
+      expect(hoursText(470)).toBe('7시간 50분');
+      expect(hoursText(468)).toBe('7.8시간');
+      expect(hoursText(480)).toBe('8.0시간');
+      expect(hoursText(61)).toBe('1시간 1분');
+      expect(hoursText(31)).toBe('31분');
+      expect(hoursText(30)).toBe('0.5시간');
+      expect(hoursText(0)).toBe('0.0시간');
+      // 소수 분(주휴 ÷ 5 등)은 분으로 반올림해 적는다
+      expect(hoursText(93.4)).toBe('1시간 33분');
+    });
+
+    it.each([
+      [470, '7시간 50분'],
+      [468, '7.8시간'],
+      [480, '8.0시간'],
+      [61, '1시간 1분'],
+      [31, '31분'],
+    ])(
+      '식에 보이는 값을 다시 곱하면 금액과 같다 — 연장 %p 분은 「%s」 × 시급 × 1.5배, 기본급도',
+      (minutes, hours) => {
+        // 월요일 하루만 일했다 — 계약 5시간을 넘긴 분이 연장
+        const r = calculatePay(
+          partTimer({
+            hourlyWage: 10_320,
+            worked: { '2026-10-05': 300 + minutes },
+          }),
+        );
+        expect(r.basis.overtimePay).toEqual({
+          minutes,
+          text: `${hours} × 10,320원 × 1.5배`,
+        });
+        expect(r.overtimePay).toBe(Math.round((minutes / 60) * 10_320 * 1.5));
+        expect(r.basis.basePay.text).toBe('5.0시간 × 10,320원');
+        expect(r.basePay).toBe(5 * 10_320);
+
+        // 같은 분을 기본급으로(계약 8시간 안) — 「7시간 50분 × 10,320원」 = 80,840원
+        const base = calculatePay(
+          partTimer({
+            hourlyWage: 10_320,
+            contractDays: { MON: 480 },
+            worked: { '2026-10-05': minutes },
+          }),
+        );
+        expect(base.basis.basePay).toEqual({
+          minutes,
+          text: `${hours} × 10,320원`,
+        });
+        expect(base.basePay).toBe(Math.round((minutes * 10_320) / 60));
+      },
+    );
+
+    describe('주휴 금액 · 식은 정수로 셈한다(최종 게이트)', () => {
+      /** 2026-10-05(월) ~ 11(일) 한 주 — 계약 요일 분(월 ~ 금)과 그 주 실근무 */
+      const oneWeek = (
+        contractDays: Partial<Record<Weekday, number>>,
+        worked: Record<string, number>,
+        hourlyWage = 10_330,
+      ) =>
+        calculatePay(
+          partTimer({
+            hourlyWage,
+            contractDays,
+            periodStart: '2026-10-05',
+            periodEnd: '2026-10-11',
+            worked,
+          }),
+        );
+      const weekdays = (minutes: number[], monday = '2026-10-05') =>
+        Object.fromEntries(minutes.map((m, i) => [addDay(monday, i), m]));
+      const FIVE = (m: number) => ({ MON: m, TUE: m, WED: m, THU: m, FRI: m });
+
+      it('주 915분 · 시급 10,330원 → 915 × 10,330 ÷ 300 = 31,506.5 → 31,507원, 식 「1주 · 실근무(주 40시간까지) 15시간 15분 ÷ 5 × 10,330원」', () => {
+        // 전에는 915 ÷ 5 ÷ 60 × 10,330 을 부동소수로 셈해 31,506.4999… → 31,506원이었다(1원 차)
+        const r = oneWeek(FIVE(183), weekdays([183, 183, 183, 183, 183]));
+        expect(r.weeklyHolidayPay).toBe(31_507);
+        expect(r.basis.weeklyHolidayPay).toEqual({
+          minutes: 183,
+          text: '1주 · 실근무(주 40시간까지) 15시간 15분 ÷ 5 × 10,330원',
+        });
+      });
+
+      it('두 주 915 + 1,230분 → 2,145 × 10,330 ÷ 300 = 73,859.5 → 73,860원(이것도 정확히 .5 원)', () => {
+        const r = calculatePay(
+          partTimer({
+            hourlyWage: 10_330,
+            contractDays: FIVE(246),
+            periodStart: '2026-10-05',
+            periodEnd: '2026-10-18',
+            worked: {
+              ...weekdays([183, 183, 183, 183, 183]),
+              ...weekdays([246, 246, 246, 246, 246], '2026-10-12'),
+            },
+          }),
+        );
+        expect(r.weeklyHolidayPay).toBe(73_860);
+        expect(r.basis.weeklyHolidayPay).toEqual({
+          minutes: 429,
+          text: '2주 · 실근무(주 40시간까지) 35시간 45분 ÷ 5 × 10,330원',
+        });
+      });
+
+      it('901분 → 31,025원 「1주 · 실근무(주 40시간까지) 15시간 1분 ÷ 5 × 10,330원」, 정시간 900분 → 「15.0시간」', () => {
+        const odd = oneWeek(
+          { ...FIVE(180), MON: 181 },
+          weekdays([181, 180, 180, 180, 180]),
+        );
+        expect(odd.weeklyHolidayPay).toBe(Math.round((901 * 10_330) / 300));
+        expect(odd.basis.weeklyHolidayPay.text).toBe(
+          '1주 · 실근무(주 40시간까지) 15시간 1분 ÷ 5 × 10,330원',
+        );
+        const even = oneWeek(FIVE(180), weekdays([180, 180, 180, 180, 180]));
+        expect(even.weeklyHolidayPay).toBe(30_990);
+        expect(even.basis.weeklyHolidayPay.text).toBe(
+          '1주 · 실근무(주 40시간까지) 15.0시간 ÷ 5 × 10,330원',
+        );
+      });
+
+      it('시급 10,320 ~ 15,000원(10원 단위) × 주 900 ~ 2,400분 전부 — 식으로 셈한 원이 정확한 반올림(분자 ÷ 300)과 같다', () => {
+        // 식 「실근무 W ÷ 5 × 시급」을 셈한 원 = W × 시급 ÷ 300 의 반올림. 정수로 검산한다: 300q − 150 ≤ W × 시급 < 300q + 150
+        let floatDiffers = 0;
+        for (let wage = 10_320; wage <= 15_000; wage += 10)
+          for (let w = 900; w <= 2_400; w++) {
+            const n = w * wage;
+            const q = roundDiv(n, 300);
+            expect(300 * q - 150 <= n && n < 300 * q + 150).toBe(true);
+            if (Math.round((w / 5 / 60) * wage) !== q) floatDiffers++;
+          }
+        // 옛 부동소수 셈과 1원 다른 경우가 있다(정확히 .5 원인 경계) — 몇 건인지 남긴다
+        expect(floatDiffers).toBeGreaterThan(0);
+      });
+
+      it('시급 · 주 실근무를 성기게 훑어 calculatePay 의 식이 늘 나오고 식으로 셈한 원이 금액과 같다', () => {
+        for (let wage = 10_320; wage <= 15_000; wage += 470)
+          for (let w = 900; w <= 2_400; w += 37) {
+            const day = Math.floor(w / 5);
+            const days = [w - day * 4, day, day, day, day];
+            const r = oneWeek(
+              { MON: days[0], TUE: day, WED: day, THU: day, FRI: day },
+              weekdays(days),
+              wage,
+            );
+            const text = r.basis.weeklyHolidayPay.text!;
+            expect(text).toBe(
+              `1주 · 실근무(주 40시간까지) ${hoursText(w)} ÷ 5 × ${wage.toLocaleString('ko-KR')}원`,
+            );
+            expect(r.weeklyHolidayPay).toBe(roundDiv(w * wage, 300));
+          }
+      });
+    });
+
+    it('정직원 연장 지급 대상 분이 0.5분 미만인데 금액이 있으면 시간 · 식을 비운다(최종 게이트)', () => {
+      // 10/7 입사(재직 25일), 포괄 74분 → 74 × 25 ÷ 31 = 59.68분을 빼면 10/14 의 연장 60분 가운데 0.32분이 남는다
+      const input = fullTimer({
+        includedOvertimeMinutes: 74,
+        hiredDate: '2026-10-07',
+      });
+      input.worked['2026-10-14'] = 540;
+      const r = calculatePay(input);
+      // 0.3226분 × 10,030원 × 1.5 ÷ 60 = 80.9 → 81원
+      expect(r.overtimePay).toBe(roundDiv(10 * 10_030 * 3, 31 * 60 * 2));
+      expect(r.overtimePay).toBe(81);
+      expect(r.basis.overtimePay).toEqual({ minutes: null, text: null });
+    });
+
+    it('계산하지 않으면(시급 없음 · 고용형태 섞임) 시간 · 식도 없다', () => {
+      const none = { minutes: null, text: null };
+      for (const r of [
+        calculatePay(partTimer({ hourlyWage: null })),
+        calculatePay(partTimer({ isEmploymentMixed: true })),
+      ])
+        expect(r.basis).toEqual({
+          basePay: none,
+          weeklyHolidayPay: none,
+          overtimePay: none,
+        });
+      // 월 기본시간이 없는 정직원은 기본급만
+      expect(
+        calculatePay(fullTimer({ baseHours: null })).basis.basePay,
+      ).toEqual(none);
     });
   });
 

@@ -21,6 +21,8 @@ const item = (
   calculatedAmount: null,
   adjustedAmount: null,
   isEntered: true,
+  workMinutes: null,
+  calculationText: null,
   ...over,
 });
 
@@ -102,6 +104,35 @@ describe('payslip PDF', () => {
       { name: '상여', note: null, amount: '0원' },
       { name: '식대', note: '비과세', amount: '200,000원' },
     ]);
+  });
+
+  it('안내가 없는 지급 줄은 계산식을 작은 글자로 — 비과세 줄은 그대로 「비과세」, 공제 줄은 쓰지 않는다(WHALEERP-755)', () => {
+    const model = payslipPdfModel(
+      detail({
+        items: [
+          item(1, 'EARNING', 'OVERTIME_PAY', '연장수당', {
+            calculatedAmount: 123_840,
+            workMinutes: 480,
+            calculationText: '8.0시간 × 10,320원 × 1.5배',
+          }),
+          item(2, 'EARNING', 'MEAL_ALLOWANCE', '식대', {
+            isTaxFree: true,
+            adjustedAmount: 200_000,
+            calculationText: '쓰이지 않음',
+          }),
+          item(3, 'BASIC', 'NATIONAL_PENSION', '국민연금', {
+            adjustedAmount: 0,
+            calculationText: '쓰이지 않음',
+          }),
+        ],
+      }),
+      '유하람',
+    );
+    expect(model.earnings.map((r) => r.note)).toEqual([
+      '8.0시간 × 10,320원 × 1.5배',
+      '비과세',
+    ]);
+    expect(model.deductions[0].note).toBeNull();
   });
 
   it('공제 줄 — 3.3% 를 켜면 소득세 · 지방소득세 대신 원천징수 둘(끝자리 안내 PAY-7)', () => {

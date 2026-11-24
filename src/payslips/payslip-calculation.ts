@@ -10,7 +10,9 @@ import {
   calculatePay,
   contractOn,
   ContractTerms,
+  hoursText,
   mondayOf,
+  PayBasis,
   PayInput,
   PayResult,
 } from './pay-calculation';
@@ -229,3 +231,33 @@ export const amountsOf = (
   WEEKLY_HOLIDAY_PAY: r.weeklyHolidayPay,
   OVERTIME_PAY: r.overtimePay,
 });
+
+/** 항목 코드별 시간 · 계산식(WHALEERP-755) — 금액(amountsOf)과 함께 줄의 work_minutes · calculation_text 에 쓴다 */
+export const basisOf = (
+  r: PayResult,
+): Record<CalculatedItemCode, PayBasis> => ({
+  BASE_PAY: r.basis.basePay,
+  WEEKLY_HOLIDAY_PAY: r.basis.weeklyHolidayPay,
+  OVERTIME_PAY: r.basis.overtimePay,
+});
+
+/**
+ * 관리자가 계산값과 다른 금액으로 고친 계산 항목 줄 — 시간은 계산 때 값 그대로, 식은 「직접 입력」(연장수당은 「8.0시간 · 직접 입력」).
+ * 고친 금액과 맞지 않는 식을 직원에게 보이지 않는다(WHALEERP-755, 2026-11-20 김지영)
+ */
+export const enteredBasis = (
+  code: CalculatedItemCode,
+  minutes: number | null,
+): PayBasis => ({
+  minutes,
+  text:
+    code === 'OVERTIME_PAY' && minutes !== null
+      ? `${hoursText(minutes)} · 직접 입력`
+      : '직접 입력',
+});
+
+/** 관리자가 시간을 넣는 지급 항목(WHALEERP-755) — 금액이 있으면 시간을 함께 받는다. 식은 시간만(시급 · 배율은 금액에 들어 있다) */
+export const ENTERED_HOURS_ITEM_CODES = [
+  'NIGHT_WORK_PAY',
+  'HOLIDAY_WORK_PAY',
+] as const;

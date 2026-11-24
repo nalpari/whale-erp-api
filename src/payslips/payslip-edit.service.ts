@@ -35,10 +35,14 @@ import {
 } from './payslip-attendance-reasons';
 import {
   amountsOf,
+  basisOf,
   CALCULATED_ITEM_CODES,
   calculatePayslip,
   CalculatedItemCode,
+  ENTERED_HOURS_ITEM_CODES,
+  enteredBasis,
 } from './payslip-calculation';
+import { hoursText, PayBasis, PayResult, withHours } from './pay-calculation';
 import { payslipInsurance } from './payslip-insurance';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 import {
@@ -105,6 +109,8 @@ const LINE_SELECT = {
   calculatedAmount: true,
   adjustedAmount: true,
   isEntered: true,
+  workMinutes: true,
+  calculationText: true,
   payslipItemMaster: {
     select: {
       payslipItemMasterId: true,
@@ -122,6 +128,8 @@ interface Line {
   calculatedAmount: number | null;
   adjustedAmount: number | null;
   isEntered: boolean;
+  workMinutes: number | null;
+  calculationText: string | null;
   payslipItemMaster: { itemCode: string; isSystemCalculated: boolean };
 }
 
@@ -257,6 +265,10 @@ export class PayslipEditService {
    * 계산한다(2026-10-26 재영). 화면이 보낸 값이 바꾸기 전 계산값과 같으면(고친 값이 없던 줄) 관리자가 고치지 않은 것으로 보고
    * 새 계산값을 따르고, 다르면 고친 값으로 남긴다. 앞서 고쳐 둔 값(adjustedAmount)은 그대로 돌려보내도 지키고 계산값 칸만 새로 둔다
    * (PR #159 리뷰).
+   *
+   * 시간 · 계산식(WHALEERP-755, 2026-11-20 김지영) — 계산 항목을 계산값과 다른 금액으로 고치면 시간은 계산 때 값 그대로 두고 식을
+   * 「직접 입력」(연장수당은 「8.0시간 · 직접 입력」)으로 바꾼다. 계산값으로 되돌리면 식을 다시 만든다. 야간 · 휴일근무수당은 받은
+   * 시간(분)과 식 「2.0시간」을 남기고, 금액이 0보다 큰데 시간이 없으면 400 이다. 작성 중 · 검토 중만 고치므로 발송한 식은 바뀌지 않는다.
    */
   async save(
     adminAccountId: number,
@@ -272,10 +284,13 @@ export class PayslipEditService {
         '3.3% 원천징수는 파트타이머 명세서에만 적용할 수 있습니다.',
       );
     const wanted = new Map<number, number | null>();
-    for (const { payslipItemMasterId, amount } of dto.items) {
+    // undefined 는 키가 없는 요청(근무시간 칸이 없는 옛 관리자 화면) — JSON 에 undefined 가 없어 null(비움)과 갈린다
+    const wantedMinutes = new Map<number, number | null | undefined>();
+    for (const { payslipItemMasterId, amount, workMinutes } of dto.items) {
       if (wanted.has(payslipItemMasterId))
         throw new BadRequestException('같은 항목을 두 번 보냈습니다.');
       wanted.set(payslipItemMasterId, amount);
+      wantedMinutes.set(payslipItemMasterId, workMinutes);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -285,16 +300,17 @@ export class PayslipEditService {
       });
       const lines = await this.lines(tx, payslipId);
       const changes: string[] = [];
-      const fresh =
+      const calculate = async () =>
+        calculatePayslip(tx, {
+          ...current,
+          contractIds: await this.contractIdsOf(tx, current),
+          isPremiumApplied: dto.isPremiumApplied,
+        });
+      let pay: PayResult | null =
         dto.isPremiumApplied !== current.isPremiumApplied
-          ? amountsOf(
-              await calculatePayslip(tx, {
-                ...current,
-                contractIds: await this.contractIdsOf(tx, current),
-                isPremiumApplied: dto.isPremiumApplied,
-              }),
-            )
+          ? await calculate()
           : null;
+      const fresh = pay && amountsOf(pay);
       if (dto.isPremiumApplied !== current.isPremiumApplied)
         changes.push(`가산 적용 ${dto.isPremiumApplied ? '켬' : '해제'}`);
       if (dto.isWithholdingApplied !== current.isWithholdingApplied)
@@ -325,14 +341,69 @@ export class PayslipEditService {
             amount = null;
           base = { ...l, calculatedAmount: fresh[code] };
         }
+        const value = this.nextValue(base, amount);
+        // 시간 · 계산식(WHALEERP-755). undefined 면 그대로 둔다
+        let basis: PayBasis | undefined;
+        if (code !== null && base.calculatedAmount !== null) {
+          // 고친 금액이 그대로면(앞서 고쳐 둔 값을 돌려보냄) 식도 그대로 둔다
+          if (value.adjustedAmount !== null) {
+            if (recalculated || value.adjustedAmount !== l.adjustedAmount)
+              basis = enteredBasis(
+                code,
+                recalculated ? basisOf(pay!)[code].minutes : l.workMinutes,
+              );
+          } else if (recalculated) basis = basisOf(pay!)[code];
+          else if (l.adjustedAmount !== null) {
+            // 고친 값을 계산값으로 되돌렸다 — 고칠 때 식을 「직접 입력」으로 덮어 남은 식이 없어 지금 데이터로 다시 만든다. 그사이 출퇴근이
+            // 바뀌어 다시 셈한 금액이 계산값과 다르면 맞는 식이 없어 비우고 시간만 「8.0시간」으로 남긴다 — 식을 비울 때의 계산과 같은
+            // 규칙(withHours), 시간 수는 법정 기재사항이라(PR #317 재검사)
+            pay ??= await calculate();
+            basis =
+              amountsOf(pay)[code] === base.calculatedAmount
+                ? basisOf(pay)[code]
+                : withHours(l.workMinutes, null);
+          }
+        } else if (recalculated) basis = basisOf(pay!).OVERTIME_PAY;
+        else if (
+          (ENTERED_HOURS_ITEM_CODES as readonly string[]).includes(
+            l.payslipItemMaster.itemCode,
+          ) &&
+          // 키가 없으면(옛 관리자 화면 — api 를 먼저 배포한다) 저장된 시간을 그대로 두고 아래 검사도 건너뛴다. 아니면 공제만 고쳐도
+          // 야간 · 휴일 금액이 있는 명세서가 400 이 된다(최종 게이트). 시간이 빈 채로 남으면 확정이 막는다
+          wantedMinutes.get(masterId) !== undefined
+        ) {
+          // 야간 · 휴일근무수당 — 관리자가 넣은 시간, 식은 시간만(시급 · 배율은 관리자가 금액에 넣는다)
+          const minutes = wantedMinutes.get(masterId)!;
+          // 0 시간도 없는 것으로 본다 — 금액이 있는데 「0.0시간」은 시간 수를 적지 않은 것과 같다(재영 리뷰)
+          if (amount !== null && amount > 0 && !minutes)
+            throw new BadRequestException(
+              '야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
+            );
+          // 30분 단위는 이 두 줄만 — DTO 에 두면 다른 줄에 실린 시간까지 막는다(PR #317 리뷰)
+          if (minutes !== null && minutes % 30 !== 0)
+            throw new BadRequestException(
+              '야간 · 휴일근무수당 근무시간은 30분 단위로 입력해 주세요.',
+            );
+          basis = {
+            minutes,
+            text: minutes === null ? null : hoursText(minutes),
+          };
+        }
         const next = {
           ...(recalculated && { calculatedAmount: base.calculatedAmount }),
-          ...this.nextValue(base, amount),
+          ...value,
+          ...(basis && {
+            workMinutes: basis.minutes,
+            calculationText: basis.text,
+          }),
         };
         if (
           base.calculatedAmount !== l.calculatedAmount ||
           next.adjustedAmount !== l.adjustedAmount ||
-          next.isEntered !== l.isEntered
+          next.isEntered !== l.isEntered ||
+          (basis &&
+            (basis.minutes !== l.workMinutes ||
+              basis.text !== l.calculationText))
         ) {
           await tx.payslipItem.update({
             where: { payslipItemId: l.payslipItemId },
@@ -382,7 +453,13 @@ export class PayslipEditService {
           };
           await tx.payslipItem.create({ data });
           changes.push(`항목 추가 ${m.name}`);
-          kept.push({ ...data, payslipItemId: 0, payslipItemMaster: m });
+          kept.push({
+            ...data,
+            workMinutes: null,
+            calculationText: null,
+            payslipItemId: 0,
+            payslipItemMaster: m,
+          });
         }
       }
       if (removed.length > 0) {
@@ -417,7 +494,7 @@ export class PayslipEditService {
 
   /**
    * 출퇴근으로 다시 계산(WHALEERP-227, 데모 「출퇴근으로 다시 계산」). 작성 중 · 검토 중만(아니면 409). 기본급 · 주휴수당 ·
-   * 연장수당을 지금 출퇴근 기록과 명세서의 가산 값으로 다시 계산하고, 관리자가 고친 값은 버린다(계산값으로 돌린다). 합계를 다시
+   * 연장수당을 지금 출퇴근 기록과 명세서의 가산 값으로 다시 계산하고(시간 · 계산식도, WHALEERP-755), 관리자가 고친 값은 버린다(계산값으로 돌린다). 합계를 다시
    * 셈하고 바뀐 것을 처리 이력(수정)에 남긴다 — 바뀐 것이 없어도 「출퇴근으로 다시 계산」 한 줄은 남는다.
    * 검토 대기 사유(출퇴근 누락 · 기간 중 계약 변경 · 계약 만료 후 기록 · 확인 필요 기록 포함, WHALEERP-229)도 지금 데이터로 모두
    * 새로 판정한다 — 앞서 「확인」한 표시는 지우고 다시 붙인다(2026-10-26 재영). 보정한 뒤 다시
@@ -437,9 +514,8 @@ export class PayslipEditService {
         updatedAt: new Date(),
       });
       const contractIds = await this.contractIdsOf(tx, current);
-      const fresh = amountsOf(
-        await calculatePayslip(tx, { ...current, contractIds }),
-      );
+      const pay = await calculatePayslip(tx, { ...current, contractIds });
+      const fresh = amountsOf(pay);
       const changes: string[] = [];
       const lines: Line[] = [];
       for (const l of await this.lines(tx, payslipId)) {
@@ -452,12 +528,16 @@ export class PayslipEditService {
           calculatedAmount: fresh[code],
           adjustedAmount: null,
           isEntered: fresh[code] !== null,
+          workMinutes: basisOf(pay)[code].minutes,
+          calculationText: basisOf(pay)[code].text,
         };
         const after = { ...l, ...next };
         if (
           next.calculatedAmount !== l.calculatedAmount ||
           l.adjustedAmount !== null ||
-          next.isEntered !== l.isEntered
+          next.isEntered !== l.isEntered ||
+          next.workMinutes !== l.workMinutes ||
+          next.calculationText !== l.calculationText
         )
           await tx.payslipItem.update({
             where: { payslipItemId: l.payslipItemId },
@@ -501,7 +581,8 @@ export class PayslipEditService {
 
   /**
    * 확정. 작성 중 · 검토 중만(아니면 409). 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를 켜면 소득세 · 지방소득세 대신
-   * 원천징수, 4대보험은 근로계약에서 가입한 것만 — WHALEERP-756)가 하나라도 미입력이면 422 DEDUCTION_MISSING 과 그 항목. 검토 사유가 있어도 확정하는 것이 「확인」이다 —
+   * 원천징수, 4대보험은 근로계약에서 가입한 것만 — WHALEERP-756)가 하나라도 미입력이면 422 DEDUCTION_MISSING 과 그 항목. 금액이
+   * 있는 야간 · 휴일근무수당에 근무시간이 없으면 422 WORK_HOURS_MISSING 과 그 항목(WHALEERP-755). 검토 사유가 있어도 확정하는 것이 「확인」이다 —
    * 확인하지 않은 사유에 확정 시각을 확인 일시로 남긴다. 확정할 수 있는 날(`confirmableFrom` — 퇴직일 · 마지막 계약 종료일 · 급여
    * 기간 마지막 날 가운데 가장 빠른 날의 다음 날, 한국. 그 계약의 보낸 갱신(임시저장 제외)이 기간 안에 시작하면 계약 종료일은 보지 않는다) 전이면 422 PERIOD_NOT_ENDED — 남은 날의 근무가 빠진 명세서가 발송되지
    * 않게 막는다. 초안은 그 전에도 미리 보기로 만든다(운영 정책 PAY-06 v247 · v251).
@@ -535,7 +616,8 @@ export class PayslipEditService {
           message: `아직 확정할 수 없습니다. ${from} 부터 확정할 수 있습니다 — 급여 기간 마지막 날(그 전에 퇴직하거나 계약이 끝나면 그날. 진행 중인 갱신 계약이 있으면 급여 기간 마지막 날)이 지나야 합니다.`,
         });
       const insurance = await payslipInsurance(tx, current);
-      const missing = (await this.lines(tx, payslipId)).filter(
+      const lines = await this.lines(tx, payslipId);
+      const missing = lines.filter(
         (l) =>
           l.itemCategory !== 'EARNING' &&
           isShown(l, current.isWithholdingApplied, insurance) &&
@@ -548,6 +630,27 @@ export class PayslipEditService {
           code: 'DEDUCTION_MISSING',
           message: `비어 있는 공제가 있어 확정할 수 없습니다: ${missing.map((l) => l.itemName).join(', ')}. 공제 대상이 아니면 0 을 넣어 주세요.`,
           items: missing.map((l) => ({
+            payslipItemId: l.payslipItemId,
+            itemName: l.itemName,
+          })),
+        });
+      // 야간 · 휴일근무수당은 금액이 있으면 근무시간이 있어야 확정한다 — 시간 수는 임금명세서 기재사항이다(근로기준법 시행령 제27조의2,
+      // WHALEERP-755). 임시저장도 막지만, 옛 관리자 화면 · 2026-11-24 전 명세서는 시간 없이 남아 있을 수 있다(최종 게이트)
+      const noHours = lines.filter(
+        (l) =>
+          (ENTERED_HOURS_ITEM_CODES as readonly string[]).includes(
+            l.payslipItemMaster.itemCode,
+          ) &&
+          (amountOf(l) ?? 0) > 0 &&
+          !l.workMinutes, // NULL · 0 시간 모두(재영 리뷰)
+      );
+      if (noHours.length > 0)
+        throw new UnprocessableEntityException({
+          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          error: 'Unprocessable Entity',
+          code: 'WORK_HOURS_MISSING',
+          message: `근무시간이 없어 확정할 수 없습니다: ${noHours.map((l) => l.itemName).join(', ')}. 야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.`,
+          items: noHours.map((l) => ({
             payslipItemId: l.payslipItemId,
             itemName: l.itemName,
           })),

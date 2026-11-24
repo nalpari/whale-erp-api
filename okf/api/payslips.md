@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T04:14:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T07:50:11Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
@@ -17,15 +17,15 @@ sources:
   - id: payslip-list-service
     resource: ../../src/payslips/payslip-list.service.ts
     title: PayslipListService (관리자 목록 · 상세, 가림 · 상태 건수)
-    last_modified: 2026-11-24T04:14:26Z
+    last_modified: 2026-11-24T04:35:46Z
   - id: my-payslips-service
     resource: ../../src/payslips/my-payslips.service.ts
     title: MyPayslipsService (직원 앱 — 발송 완료 · 본인 · 3년). DETAIL_SELECT · toSummary 는 직원 자료 일괄 저장도 쓴다
-    last_modified: 2026-11-24T02:51:52Z
+    last_modified: 2026-11-24T04:35:46Z
   - id: controllers
     resource: ../../src/payslips/payslips.controller.ts
     title: GET /payslips · /payslips/summary · /payslips/:id (급여명세서 관리 MN000009 조회)
-    last_modified: 2026-10-30T02:31:31Z
+    last_modified: 2026-11-24T06:18:46Z
   - id: my-controller
     resource: ../../src/payslips/my-payslips.controller.ts
     title: GET /me/payslips · /me/payslips/:id (직원 근무 앱 토큰)
@@ -33,7 +33,7 @@ sources:
   - id: draft-service
     resource: ../../src/payslips/payslip-draft.service.ts
     title: PayslipDraftService (작성 대상 · 초안 · 일괄 작성)
-    last_modified: 2026-11-24T02:02:51Z
+    last_modified: 2026-11-24T04:35:46Z
   - id: draft-response-dto
     resource: ../../src/payslips/dto/payslip-draft.response.dto.ts
     title: 작성 대상 응답 DTO — 직원 · 점포 · 계약 · 출퇴근 · 명세서 · 퇴직일(retiredDate)
@@ -41,7 +41,7 @@ sources:
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-11-24T02:51:52Z
+    last_modified: 2026-11-24T07:28:42Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일 · 명세서 PDF 첨부)
@@ -49,7 +49,7 @@ sources:
   - id: pdf
     resource: ../../src/payslips/payslip-pdf.ts
     title: 직원 앱 명세서 PDF(칸 모델 · pdfkit 렌더 · 파일 이름)
-    last_modified: 2026-11-24T04:14:26Z
+    last_modified: 2026-11-24T04:35:46Z
   - id: purge
     resource: ../../src/payslips/payslip-purge.ts
     title: 급여명세서 보존 기간 파기 payslip-purge (WHALEERP-649)
@@ -57,7 +57,7 @@ sources:
   - id: dto
     resource: ../../src/payslips/dto/payslip.response.dto.ts
     title: 관리자 응답 · 쿼리(payslip-list.query.dto.ts) · 직원 앱 응답 · 쿼리(my-payslip.response.dto.ts · my-payslip-list.query.dto.ts)
-    last_modified: 2026-11-24T02:51:52Z
+    last_modified: 2026-11-24T04:35:46Z
   - id: payslip-insurance
     resource: ../../src/payslips/payslip-insurance.ts
     title: 4대보험 가입 여부 — 급여 기간 계약(validContractWhere)의 체크 하나라도(WHALEERP-756)
@@ -293,14 +293,77 @@ sources:
   (PAY-04 v237, 2026-10-29 재영 — 예: 월 ~ 금 8시간이면 9월 명세서 9/28 주 24시간 ÷ 5, 10/1 · 2 는 어느 주휴에도 들지 않는다).
   주 40시간 연장도 그 주를 맡은 달이 센다. 앞 달이 맡은 주는 다음 달이 주 전체 초과에서 앞 달 몫 초과를 뺀 만큼을
   센다(같은 시간을 두 번 세지도, 빠뜨리지도 않는다). 원 단위 반올림은 항목마다 한 번.
-* 야간 · 휴일근무수당은 관리자가 넣는다.
+* **금액은 정수로 셈한다**(최종 게이트, 2026-11-24) — 항목마다 정수 분자(분 × 시급 × 배율 분자, 정직원 기본급은 시급 × 월 기본시간 × 10 × 재직일,
+  정직원 연장은 지급 대상 분 × 기간 일수 × 시급 × 배율 분자)를 분모(60 × 배율 분모, 주휴는 300, 정직원은 × 기간 일수 · × 10)로 나눠
+  `roundDiv`(정확히 .5 원은 올림 — 전의 `Math.round` 와 같은 규칙)로 반올림한다. 전에는 부동소수로 셈해 정확히 X.5 원인 금액이 X.4999… 가
+  되어 **1원 내려가는 경우가 있었다** — 주휴(시급 10,320 ~ 15,000원 × 주 900 ~ 2,400분 가운데 2,749건, 예: 시급 10,330원 · 주 915분 31,506 →
+  31,507원)와 정직원 포괄 연장. 파트타이머 기본급 · 연장과 정직원 기본급은 같은 범위를 셈해 보니 바뀌는 경우가 없었다. 이미 만든 명세서의
+  금액은 다시 계산하기 전까지 그대로다.
+* 야간 · 휴일근무수당은 관리자가 넣는다 — 금액과 근무시간(아래 「시간 · 계산식」).
 * **다시 계산** — `PUT /payslips/:id` 에서 가산 값을 바꾸면 연장수당만 그 값으로 다시 계산한다(목업 payrolls-detail — 기본급 · 주휴수당은
   고친 값도 그대로 둔다, 출퇴근이 바뀐 것은 「출퇴근으로 다시 계산」의 일). 화면이 보낸 시스템 계산 줄 값이 바꾸기 전 값과
   같으면 고치지 않은 것으로 보고 새 계산값을 따르고, 다르면 고친 값으로 남긴다. `POST /payslips/:id/recalculate { updatedAt }` →
   200 상세 — 작성 중 · 검토 중만(아니면 409), 지금 출퇴근 기록으로 셋을 다시 계산하고 고친 값은 버린다. 합계를 다시 셈하고 처리 이력
   `EDIT` 「출퇴근으로 다시 계산 · 기본급 600,000원 → 670,000원」(바뀐 것이 없어도 앞 말은 남긴다). 동시 저장은 아래와 같다(409
   `PAYSLIP_STALE`).
-* e2e `test/payslip-calculation.e2e-spec.ts` — 초안 계산 · 가산 해제 · 다시 계산을 실제 DB 로 본다.
+* e2e `test/payslip-calculation.e2e-spec.ts` — 초안 계산 · 가산 해제 · 다시 계산 · 시간 · 계산식(고침 · 되돌림 · 야간 시간 · 직원 앱 상세)을 실제 DB 로 본다.
+
+# 시간 · 계산식 (WHALEERP-755)
+
+임금명세서 기재사항(근로기준법 시행령 제27조의2 5호 — 출근일수 · 시간에 따라 달라지는 항목의 계산방법, 연장 · 야간 · 휴일근로 시간 수.
+어기면 과태료이고 5인 미만 사업장도 해당한다)을 위해 금액 줄마다 `payslip_items.work_minutes`(분) · `calculation_text`(varchar(200), 한 줄
+식)를 둔다(마이그레이션 `20261124152130_team3_payslip_item_calculation`, 2026-11-20 김지영 결정). 기간 중 시급이 바뀌면 금액만으로 식을 다시
+만들 수 없고 발송한 문서의 식은 바뀌지 않아야 해서 api 가 만들어 저장한다. 관리자 상세 · 직원 앱 상세 · PDF 가 같은 글자를 보인다.
+
+* **만드는 곳** — `calculatePay` 가 금액과 같은 분 · 같은 시급으로 `PayResult.basis`(항목마다 `{ minutes, text }`)를 내고, 줄에는
+  `basisOf`(payslip-calculation.ts, `amountsOf` 와 짝)로 옮긴다. 시간은 소수 첫째 자리로 정확할 때(분이 6의 배수)만
+  「7.8시간」 · 「8.0시간」 · 「0.0시간」, 아니면 「7시간 50분」 · 「31분」(`hoursText`, 소수 분은 분으로 반올림 — 재영 리뷰 2026-11-24. 470분을
+  「7.8시간」으로 적으면 식이 80,496원인데 금액은 80,840원이었다). 시간만 남긴 칸 · 야간 · 휴일 「2.0시간」 · 「직접 입력」도 같은 글자다. 시급은 천 단위 쉼표, 배율은 「1.5배」 · 「1배」.
+  같은 항목에 시급이 둘 이상이면 시급별 구간을 날짜 순으로 「 + 」로 잇는다(「4.0시간 × 10,030원 × 1.5배 + 4.0시간 × 10,320원 × 1.5배」).
+  * 파트타이머 기본급 — 연장을 뺀 근무 분, 「87.6시간 × 10,320원」(날마다 그날 시급).
+  * 파트타이머 주휴 — 시간(`work_minutes`)은 주휴 시간 Σ min(주 실근무, 40시간) ÷ 5 분(반올림)이고, 식은 나누기 전 실근무 합으로
+    「4주 · 실근무(주 40시간까지) 80.0시간 ÷ 5 × 10,320원」 · 「1주 · 실근무(주 40시간까지) 15시간 15분 ÷ 5 × 10,330원」(그 주 마지막 날 계약 시급별 주 수, 최종 게이트 —
+    ÷ 5 한 소수 분을 적으면 식이 금액과 어긋났다). 시간 칸은 관리자 상세 · 직원 앱 · PDF 에서 「주휴 시간」으로 읽혀야 해 ÷ 5 한 분 그대로 둔다.
+  * 정직원 기본급 — 시간 NULL, 「10,320원 × 월 209시간」, 기간 중 입사 · 퇴사 · 계약 변경이면 계약(시급 · 월 기본시간)마다
+    「× 20일 / 30일」(재직 역일 / 기간 역일). 정직원 주휴 — 0원, 시간 NULL, 「기본급에 포함」.
+  * 연장 — 지급 대상 분(정직원은 포괄 연장을 뺀 분), 「8.0시간 × 10,320원 × 1.5배」 · 가산을 끄면 「× 1배」.
+  * 0 분인 줄(연장 없음 · 주휴 대상 주 없음)도 기간 끝 계약 시급으로 「0.0시간 × 10,320원 × 1.5배」 · 「0주 · 0.0시간 × 10,320원」을 적는다.
+  * 계산하지 않으면(시급 · 월 기본시간 없음, 고용형태 섞임) 둘 다 NULL.
+  * **식이 금액과 맞지 않으면 식을 내지 않는다** — 시간이 있으면 식 대신 시간만 「57.0시간」(야간 · 휴일과 같은 모양, `withHours`)을 남기고,
+    시간이 없는 정직원 기본급은 NULL(리뷰 2026-11-24 · PR #317). 시간 수(연장 · 야간 · 휴일근로)는 법정 기재사항이라 세 곳에서 빠지지 않게 한다. 구간마다 그 구간이 나타내는 금액(분 × 시급 ×
+    배율, 정직원 기본급은 시급 × 월 기본시간 × 재직일 ÷ 기간 일)을 **식에 보이는 값**(보이는 분 · 시급 · 배율 · 일수)으로 다시 곱해 더하고,
+    정수 분자 ÷ 분모를 원 단위로 반올림한 값(`roundDiv`, 금액과 같은 셈)이 금액과 같을 때만 식을 낸다(`formula`) — 기본급 · 주휴 · 연장 모두.
+    정직원 포괄 일할로 소수 분이 나와 분으로 반올림해 적어 어긋나면 식 대신 시간만 남고, 금액이 있는데 그 분이 0.5분 미만이면(「0.0시간」)
+    시간 · 식을 모두 비운다(NULL — 「0 시간」은 시간이 없다는 뜻으로 읽힌다).
+    예: 11/1 이 일요일이고 앞 계약이 10/30 에 끝나면 10/26 주를 11월이 맡아 그 주 40시간 초과가 10/31(앞 계약 시급)에 매겨지는데, 기본급은
+    11월 날만 세어 앞 시급 구간이 음수가 된다 — 그 구간을 빼고 적으면 식(「52.0시간 × 10,320원」)이 금액과 달라져서 식을 비운다.
+  * **200자(칸 길이)를 넘는 식도 같다**(시간만, 시간이 없으면 NULL) — 넘기면 저장이 Prisma P2000 → 500 이었다(초안 · 일괄 작성 · 다시 계산 · 가산 바꾸기). 한 달에
+    계약 조건(시급 · 월 기본시간)이 6~7번 바뀌어야 넘친다(연장 여덟 구간이 197자).
+* **쓰는 때** — 초안 작성(`createMany`), 출퇴근으로 다시 계산(새 식), 가산 바꾸기(연장수당 새 식), 임시저장. 임시저장에서 계산 항목을
+  계산값과 다른 금액으로 고치면 시간은 계산 때 값 그대로 두고 식은 「직접 입력」(연장수당은 「8.0시간 · 직접 입력」) — 고친 금액과 맞지
+  않는 식을 직원에게 보이지 않는다. 고친 값을 그대로 돌려보내면 식도 그대로다(2026-11-24 전 줄의 NULL 도). 계산값으로 되돌리면 지금
+  데이터로 다시 셈해 식을 되살린다 — 고칠 때 덮어써 남은 식이 없어서다. 그사이 출퇴근이 바뀌어 다시 셈한 금액이 계산값과 다르면 맞는
+  식이 없어 식 대신 시간만 「8.0시간」을 남긴다(계산의 `withHours` 와 같은 규칙, 시간이 없으면 NULL — PR #317 재검사). 작성 중 · 검토 중만 고치므로 발송한 명세서의 식은 바뀌지 않는다(확정 취소 뒤 다시 고치면 다시 보낼 때 새 식이 나간다).
+* **야간 · 휴일근무수당** — 임시저장 `items[].workMinutes`(분, 0 이상 · 한 달 44,640분 이하, 빼거나 null 이면 시간 없음 — DTO)를
+  받아 그대로 두고 식은 「2.0시간」(시급 · 배율은 관리자가 금액에 넣는다). 금액이 0보다 큰데 시간이 없거나 0 이면 400 「야간 · 휴일근무수당은
+  근무시간을 함께 입력해 주세요.」, 30분 단위가 아니면 400 「야간 · 휴일근무수당 근무시간은 30분 단위로 입력해 주세요.」 — 30분 단위는 이 두 줄만
+  서비스가 본다(DTO 에 두면 다른 줄에 실린 시간까지 막는다, PR #317 리뷰). 다른 줄의 `workMinutes` 는 무시한다. 지난 명세서 불러오기(`previous-values`)는 시간을 싣지 않는다 — 그 달
+  시간을 넣게 둔다. 시간만 바꾼 저장은 처리 이력에 남기지 않는다(이력은 금액 바뀜만 적는다).
+* **응답** — `PayslipItemDto` · `MyPayslipItemDto` 에 `workMinutes: number | null` · `calculationText: string | null`. 관리자 상세(임시저장 ·
+  확정 · 확정 취소 · 다시 계산 · 발송이 같은 `findOne` 으로 돌려준다) · 직원 앱 상세 · 발송 메일 PDF · 일괄 저장 PDF 가 같은 select 다.
+* 2026-11-24 전에 만든 줄은 채우지 않는다(NULL) — 화면 · PDF 는 전처럼 식 없이 보인다. 지금까지 발송한 명세서는 개발 서버 시험분뿐이다.
+* **옛 관리자 화면 호환 · 확정** — 근무시간 칸이 없는 옛 관리자 웹(main)은 `workMinutes` 키를 보내지 않는다. 키가 없으면(undefined —
+  JSON 에 undefined 가 없어 전역 ValidationPipe(whitelist · transform)를 지나도 null 과 갈린다, dto spec 이 확인) 그 줄의 저장된 시간을
+  그대로 두고 「금액 > 0 이면 시간 필수」 · 30분 단위 검사를 건너뛴다 — 아니면 api 를 먼저 배포했을 때 야간 · 휴일 금액이 있는 명세서는
+  공제만 고쳐도 400 이 된다. 키가 있고 null 이면 필수 검사를 한다(새 관리자 웹은 두 줄에 늘 키를 싣고 빈 칸은 null). 그렇게 시간 없이
+  남은 줄(옛 화면 · 2026-11-24 전 명세서)은 **확정**이 막는다 — 금액이 있는 야간 · 휴일근무수당에 `work_minutes` 가 NULL 이거나 0 이면 422
+  `WORK_HOURS_MISSING`(「근무시간이 없어 확정할 수 없습니다: 야간수당. 야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.」, 본문
+  `items: [{ payslipItemId, itemName }]` — 공제 미입력 `DEDUCTION_MISSING` 과 같은 모양, 그 검사 뒤에 본다).
+* **배포 순서** — api(+ `db:deploy`, 마이그레이션 `20261124152130_team3_payslip_item_calculation`) → 관리자 웹 · 직원 앱. 새 api 는 옛
+  화면을 위처럼 받아 주고, 새 화면은 새 칸(`workMinutes` · `calculationText`)이 있는 api 를 기대한다(관리자 웹은 칸이 없어도 빈 칸 ·
+  식 없음으로 그린다). 마이그레이션 전에 새 api 가 돌면 `payslip_items` 를 쓰는 요청이 500 이다(마이그레이션 머리말).
+  **api 를 되돌릴 때는 화면을 먼저 되돌린다** — 새 화면은 `workMinutes` 를 보내고, 옛 api 는 모르는 칸을 400 으로 막는다(전역
+  ValidationPipe `forbidNonWhitelisted`). 화면을 그대로 두고 api 만 되돌리면 임시저장이 모두 400 이 된다.
 
 # 임시저장 · 확정 · 확정 취소 (WHALEERP-228 · 230)
 
@@ -310,7 +373,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 누가 고친 것이라 409 `PAYSLIP_STALE`. 그 UPDATE 가 명세서 행을 잠가 같은 트랜잭션의 나머지 쓰기는 줄을 선다. 세 경로 모두 고친 뒤의
 상세(`GET /payslips/:id` 와 같은 모양)를 돌려준다.
 
-* `PUT /payslips/:id { updatedAt, isPremiumApplied, isWithholdingApplied, items: [{ payslipItemMasterId, amount: number|null }] }` —
+* `PUT /payslips/:id { updatedAt, isPremiumApplied, isWithholdingApplied, items: [{ payslipItemMasterId, amount: number|null, workMinutes?: number|null }] }` —
   작성 중 · 검토 중만. **상태는 바꾸지 않는다**(작성 중은 작성 중, 검토 중은 검토 중 — 검토 중은 확정 취소로만 들어간다).
   * 공제는 요율이 해마다 바뀌어 시스템이 계산하지 않고 관리자가 넣는다. 3.3% 원천징수 두 줄도 관리자가 넣는다(비과세 포함 지급 총액
     기준은 화면이 알린다). `null` 은 미입력이고 0 과 다르다(`isEntered`).
@@ -428,7 +491,7 @@ UPDATE 를 먼저 한다(게시물 · 문의와 같은 방식). 0건이면 지�
 내용은 직원 앱 상세와 같은 칸 · 같은 금액 규칙이다(다시 보낸 명세서도 발송일과 끝 안내를 넣는 점만 다르다 — 상세는 데모 resent 대로 뺀다, `payslipPdfModel` — 단위 테스트는 이 칸 모델을 본다): 제목 「급여명세서」, 급여 기간
 (「2026년 9월 1일 – 9월 30일」), 직원 · 근무지 · 계약 유형(`DB_ENUMS` 한글) · 발송일(마지막 SEND, 한국 날짜 — 두 번 이상이어도
 「다시 발송」은 적지 않는다, PAY-20), 지급 항목 표(비과세 표시) · 공제 항목 표(원천징수 둘은 3.3% 적용일 때만, 그때 소득세 · 지방소득세는 뺀다. 4대보험은 계약에서 가입한 것과 미가입이어도 0 아닌 금액이 든 것(`isItemCodeShown`, WHALEERP-756) —
-원천징수 줄에 「끝자리 세무 확인 대기(PAY-7)」), 지급 합계 · 공제 합계 · 실지급액(저장된 합계 값). 줄 금액은 `adjustedAmount ??
+원천징수 줄에 「끝자리 세무 확인 대기(PAY-7)」, 그 밖에 안내가 없는 지급 줄은 이름 아래 작은 글자로 계산식 `calculationText` — WHALEERP-755), 지급 합계 · 공제 합계 · 실지급액(저장된 합계 값). 줄 금액은 `adjustedAmount ??
 calculatedAmount ?? 0`, 「1,000원」 형식. 「입금」이라는 말은 쓰지 않고 끝에 「급여 지급은 이 명세서로 처리하지 않습니다」를 둔다.
 
 직원 자료 일괄 저장([Bulk exports](/api/bulk-exports.md))도 이 PDF 를 쓴다. 그 점포 범위의 발송 완료(`SENT`) 명세서를 같은 `DETAIL_SELECT` 로 읽고 `toSummary` 와 같은 상세로 바꿔 그린다. 그래서 상세의 모양을 바꾸면 zip 안의 PDF 도 바뀐다. 확정을 취소해 검토 중인 명세서는 담지 않는다.

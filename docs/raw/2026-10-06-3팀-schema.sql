@@ -646,6 +646,8 @@ CREATE TABLE "payslip_items" (
     "calculated_amount" INTEGER,
     "adjusted_amount" INTEGER,
     "is_entered" BOOLEAN NOT NULL DEFAULT false,
+    "work_minutes" INTEGER,
+    "calculation_text" VARCHAR(200),
 
     CONSTRAINT "payslip_items_pkey" PRIMARY KEY ("payslip_item_id")
 );
@@ -1593,6 +1595,8 @@ COMMENT ON COLUMN "payslip_items"."is_tax_free" IS '비과세 여부 — 발송 
 COMMENT ON COLUMN "payslip_items"."calculated_amount" IS '시스템 계산값 — 지급 항목만';
 COMMENT ON COLUMN "payslip_items"."adjusted_amount" IS '관리자 수정값';
 COMMENT ON COLUMN "payslip_items"."is_entered" IS '입력 여부 — 공제 미입력과 0 구분 (논리 entered)';
+COMMENT ON COLUMN "payslip_items"."work_minutes" IS '근무시간 — 계산 · 입력에 쓴 시간(분) — 기본급(파트타이머) · 주휴 · 연장은 계산 때, 야간 · 휴일근무수당은 관리자가 넣는다 (WHALEERP-755, 2026-11-24) (물리에서 추가)';
+COMMENT ON COLUMN "payslip_items"."calculation_text" IS '계산식 — 한 줄 계산식 — 관리자가 계산값과 다른 금액으로 고치면 「직접 입력」. 계산하지 않으면 NULL (WHALEERP-755, 2026-11-24) (물리에서 추가)';
 COMMENT ON TABLE "payslip_item_masters" IS '급여 항목';
 COMMENT ON COLUMN "payslip_item_masters"."payslip_item_master_id" IS '급여 항목 ID';
 COMMENT ON COLUMN "payslip_item_masters"."item_code" IS '항목 코드 — 고유, 영문 대문자(예: BASE_PAY)';

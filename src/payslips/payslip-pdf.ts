@@ -20,7 +20,7 @@ const TIME_ZONE = 'Asia/Seoul';
 
 export interface PayslipPdfRow {
   name: string;
-  /** 이름 아래 작은 글자 — 비과세 · 원천징수 끝자리 안내(PAY-7) */
+  /** 이름 아래 작은 글자 — 비과세 · 원천징수 끝자리 안내(PAY-7), 그 밖의 지급 줄은 계산식(WHALEERP-755) */
   note: string | null;
   amount: string;
 }
@@ -42,7 +42,10 @@ const rowOf = (item: MyPayslipItemDto): PayslipPdfRow => ({
     ? '비과세'
     : item.itemCategory === 'WITHHOLDING'
       ? '끝자리 세무 확인 대기(PAY-7)'
-      : null,
+      : // 안내가 없는 지급 줄은 관리자 상세 · 직원 앱과 같은 계산식(WHALEERP-755). 없으면(계산하지 않음 · 2026-11-24 전 명세서) 비운다
+        item.itemCategory === 'EARNING'
+        ? item.calculationText
+        : null,
   // 직원 앱과 같다: 고친 값 > 계산값 > 0. 합계는 저장된 값을 쓴다.
   amount: won(item.adjustedAmount ?? item.calculatedAmount ?? 0),
 });

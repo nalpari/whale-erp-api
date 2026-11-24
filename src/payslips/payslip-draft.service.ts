@@ -22,6 +22,7 @@ import {
 } from './dto/payslip-draft.response.dto';
 import {
   amountsOf,
+  basisOf,
   CALCULATED_ITEM_CODES,
   calculatePayslip,
   CalculatedItemCode,
@@ -379,19 +380,23 @@ export class PayslipDraftService {
         },
       });
       const isPremiumApplied = previous?.isPremiumApplied ?? true;
-      const calculated = amountsOf(
-        await calculatePayslip(tx, {
-          staffMemberId: c.staffMemberId,
-          contractIds: c.contractIds,
-          employmentType: c.employmentType,
-          periodStartDate: period.start,
-          periodEndDate: period.end,
-          isPremiumApplied,
-        }),
-      );
+      const pay = await calculatePayslip(tx, {
+        staffMemberId: c.staffMemberId,
+        contractIds: c.contractIds,
+        employmentType: c.employmentType,
+        periodStartDate: period.start,
+        periodEndDate: period.end,
+        isPremiumApplied,
+      });
+      const calculated = amountsOf(pay);
       const calculatedOf = (m: Master) =>
         (CALCULATED_ITEM_CODES as readonly string[]).includes(m.itemCode)
           ? calculated[m.itemCode as CalculatedItemCode]
+          : null;
+      // 계산 항목의 시간 · 계산식(WHALEERP-755) — 나머지 줄은 비운다(야간 · 휴일근무수당 시간은 관리자가 넣는다)
+      const basisOfMaster = (m: Master) =>
+        (CALCULATED_ITEM_CODES as readonly string[]).includes(m.itemCode)
+          ? basisOf(pay)[m.itemCode as CalculatedItemCode]
           : null;
       const gross = masters.reduce((sum, m) => sum + (calculatedOf(m) ?? 0), 0);
       const { payslipId } = await tx.payslip.create({
@@ -426,6 +431,8 @@ export class PayslipDraftService {
                   calculatedAmount: calculatedOf(m),
                   adjustedAmount: null,
                   isEntered: calculatedOf(m) !== null,
+                  workMinutes: basisOfMaster(m)?.minutes ?? null,
+                  calculationText: basisOfMaster(m)?.text ?? null,
                 })),
             },
           },

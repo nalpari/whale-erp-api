@@ -5,6 +5,7 @@ import {
   IsArray,
   IsBoolean,
   IsInt,
+  IsOptional,
   Max,
   Min,
   ValidateIf,
@@ -15,6 +16,8 @@ import { IsUpdatedAt } from '../../common/updated-at';
 const MAX_INT = 2_147_483_647;
 /** 한 줄 금액 상한(원). 줄을 더한 합계가 integer 칸을 넘지 않게 낮게 둔다 — 합계도 따로 본다 */
 export const PAYSLIP_AMOUNT_MAX = 100_000_000;
+/** 한 줄 근무시간 상한(분) — 한 달 31일 × 24시간 */
+export const PAYSLIP_WORK_MINUTES_MAX = 31 * 24 * 60;
 
 /** 명세서 한 줄의 금액. null 은 미입력이고 0 과 다르다(공제 대상이 아니면 0 을 넣는다). */
 export class PayslipItemAmountDto {
@@ -35,6 +38,25 @@ export class PayslipItemAmountDto {
   @Min(0)
   @Max(PAYSLIP_AMOUNT_MAX)
   amount: number | null;
+
+  /**
+   * 근무시간(분), 0 이상 — 야간수당 · 휴일근무수당만 쓰고 다른 줄은 무시한다(WHALEERP-755). 그 두 줄은 30분 단위이고 금액이 0보다
+   * 크면 함께 넣어야 한다(아니면 400 — 서비스가 본다. 다른 줄에 실린 값까지 30분 단위로 막지 않게, PR #317 리뷰). null 이면 시간
+   * 없음. 키를 빼면(근무시간 칸이 없는 옛 관리자 화면) 그 줄의 저장된 시간을 그대로 두고 위 검사도 하지 않는다 — 시간 없이 금액이
+   * 남으면 확정이 422 WORK_HOURS_MISSING 으로 막는다
+   */
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    required: false,
+    minimum: 0,
+    maximum: PAYSLIP_WORK_MINUTES_MAX,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(PAYSLIP_WORK_MINUTES_MAX)
+  workMinutes?: number | null;
 }
 
 /**

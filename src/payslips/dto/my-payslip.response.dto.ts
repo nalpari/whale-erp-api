@@ -27,6 +27,10 @@ export class MyPayslipItemDto {
   calculatedAmount: number | null;
   adjustedAmount: number | null;
   isEntered: boolean;
+  /** 계산 · 입력에 쓴 시간(분). 없으면 null(WHALEERP-755) */
+  workMinutes: number | null;
+  /** 한 줄 계산식 — 관리자 상세와 같은 글자(「8.0시간 × 10,320원 × 1.5배」 · 「직접 입력」). 없으면 null(WHALEERP-755) */
+  calculationText: string | null;
 }
 
 /** 직원 앱 명세서 목록 한 줄 */

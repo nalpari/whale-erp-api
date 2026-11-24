@@ -64,6 +64,11 @@ const pay = (over: object = {}) => ({
   workedMinutes: 0,
   overtimeMinutes: 0,
   weeklyHolidayWeeks: 0,
+  basis: {
+    basePay: { minutes: null, text: null },
+    weeklyHolidayPay: { minutes: null, text: null },
+    overtimePay: { minutes: null, text: null },
+  },
   ...over,
 });
 
@@ -102,6 +107,8 @@ const line = (
   calculatedAmount: null,
   adjustedAmount: null,
   isEntered: false,
+  workMinutes: null,
+  calculationText: null,
   payslipItemMaster: m,
   ...over,
 });
@@ -418,9 +425,15 @@ describe('PayslipEditService', () => {
           { payslipItemMasterId: 27, amount: 5_000 },
         ],
       });
+      // 계산식은 다시 셈해 되살린다 — 고칠 때 「직접 입력」으로 덮어 남은 식이 없다(WHALEERP-755)
       expect(call(prisma.payslipItem.update)).toEqual({
         where: { payslipItemId: 101 },
-        data: { adjustedAmount: null, isEntered: true },
+        data: {
+          adjustedAmount: null,
+          isEntered: true,
+          workMinutes: null,
+          calculationText: null,
+        },
       });
     });
 
@@ -526,6 +539,232 @@ describe('PayslipEditService', () => {
       expect(calculate).not.toHaveBeenCalled();
     });
 
+    describe('시간 · 계산식(WHALEERP-755)', () => {
+      const OVERTIME = master(3, 'OVERTIME_PAY', true);
+      const NIGHT = master(4, 'NIGHT_WORK_PAY');
+      const HOLIDAY = master(5, 'HOLIDAY_WORK_PAY');
+      const overtime = (over: object = {}) =>
+        line(103, 'EARNING', '연장수당', OVERTIME, {
+          calculatedAmount: 123_840,
+          isEntered: true,
+          workMinutes: 480,
+          calculationText: '8.0시간 × 10,320원 × 1.5배',
+          ...over,
+        });
+      const basis = (text: string, minutes: number | null = 480) => ({
+        basePay: { minutes: null, text: null },
+        weeklyHolidayPay: { minutes: null, text: null },
+        overtimePay: { minutes, text },
+      });
+      const dataOf = (id: number) =>
+        (prisma.payslipItem.update.mock.calls as [Args][])
+          .map((c) => c[0])
+          .find(
+            (c) => (c.where as { payslipItemId: number }).payslipItemId === id,
+          )?.data;
+
+      it('계산값과 다른 금액으로 고치면 시간은 그대로, 식은 「직접 입력」 — 연장수당은 시간을 앞에, 기본급은 「직접 입력」만', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue([
+          line(101, 'EARNING', '기본급', BASE, {
+            calculatedAmount: 1_000_000,
+            isEntered: true,
+            workMinutes: 3_900,
+            calculationText: '65.0시간 × 10,320원',
+          }),
+          overtime(),
+        ]);
+        await save({
+          items: [
+            { payslipItemMasterId: 1, amount: 990_000 },
+            { payslipItemMasterId: 3, amount: 130_000 },
+          ],
+        });
+        expect(dataOf(101)).toEqual({
+          adjustedAmount: 990_000,
+          isEntered: true,
+          workMinutes: 3_900,
+          calculationText: '직접 입력',
+        });
+        expect(dataOf(103)).toEqual({
+          adjustedAmount: 130_000,
+          isEntered: true,
+          workMinutes: 480,
+          calculationText: '8.0시간 · 직접 입력',
+        });
+        expect(calculate).not.toHaveBeenCalled();
+      });
+
+      it('계산값으로 되돌리면 지금 데이터로 식을 다시 만든다 — 다시 셈한 금액이 계산값과 다르면 식 대신 시간만(PR #317 재검사)', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue([
+          overtime({
+            adjustedAmount: 130_000,
+            calculationText: '8.0시간 · 직접 입력',
+          }),
+        ]);
+        calculate.mockResolvedValue(
+          pay({
+            overtimePay: 123_840,
+            basis: basis('8.0시간 × 10,320원 × 1.5배'),
+          }),
+        );
+        await save({ items: [{ payslipItemMasterId: 3, amount: 123_840 }] });
+        expect(dataOf(103)).toEqual({
+          adjustedAmount: null,
+          isEntered: true,
+          workMinutes: 480,
+          calculationText: '8.0시간 × 10,320원 × 1.5배',
+        });
+
+        prisma.payslipItem.update.mockClear();
+        calculate.mockResolvedValue(
+          pay({ overtimePay: 150_000, basis: basis('9.7시간', 581) }),
+        );
+        await save({ items: [{ payslipItemMasterId: 3, amount: 123_840 }] });
+        expect(dataOf(103)).toMatchObject({
+          adjustedAmount: null,
+          workMinutes: 480,
+          calculationText: '8.0시간',
+        });
+      });
+
+      it('가산을 끄면 연장수당 식도 새 계산의 「× 1배」로 — 고친 연장수당은 새 시간으로 「직접 입력」', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue([overtime()]);
+        calculate.mockResolvedValue(
+          pay({
+            overtimePay: 82_560,
+            basis: basis('8.0시간 × 10,320원 × 1배'),
+          }),
+        );
+        await save({
+          isPremiumApplied: false,
+          items: [{ payslipItemMasterId: 3, amount: 123_840 }],
+        });
+        expect(dataOf(103)).toMatchObject({
+          calculatedAmount: 82_560,
+          adjustedAmount: null,
+          workMinutes: 480,
+          calculationText: '8.0시간 × 10,320원 × 1배',
+        });
+
+        prisma.payslipItem.update.mockClear();
+        await save({
+          isPremiumApplied: false,
+          items: [{ payslipItemMasterId: 3, amount: 100_000 }],
+        });
+        expect(dataOf(103)).toMatchObject({
+          calculatedAmount: 82_560,
+          adjustedAmount: 100_000,
+          calculationText: '8.0시간 · 직접 입력',
+        });
+      });
+
+      it('야간 · 휴일근무수당은 넣은 시간을 남기고 식은 「2.0시간」 — 금액이 있는데 시간이 없으면 400', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue([
+          line(104, 'EARNING', '야간수당', NIGHT),
+          line(105, 'EARNING', '휴일근무수당', HOLIDAY),
+        ]);
+        await expect(
+          save({
+            items: [
+              { payslipItemMasterId: 4, amount: 30_000, workMinutes: null },
+            ],
+          }),
+        ).rejects.toThrow(
+          '야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
+        );
+        await expect(
+          save({
+            items: [
+              { payslipItemMasterId: 5, amount: 30_000, workMinutes: null },
+            ],
+          }),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        // 0 시간도 시간이 없는 것이다(재영 리뷰)
+        await expect(
+          save({
+            items: [{ payslipItemMasterId: 4, amount: 30_000, workMinutes: 0 }],
+          }),
+        ).rejects.toThrow(
+          '야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
+        );
+
+        await save({
+          items: [
+            { payslipItemMasterId: 4, amount: 30_000, workMinutes: 120 },
+            { payslipItemMasterId: 5, amount: 0, workMinutes: 0 },
+          ],
+        });
+        expect(dataOf(104)).toEqual({
+          adjustedAmount: 30_000,
+          isEntered: true,
+          workMinutes: 120,
+          calculationText: '2.0시간',
+        });
+        // 0원은 시간 없이(0 시간도) 둘 수 있다
+        expect(dataOf(105)).toEqual({
+          adjustedAmount: 0,
+          isEntered: true,
+          workMinutes: 0,
+          calculationText: '0.0시간',
+        });
+      });
+
+      it('근무시간 키가 없으면(옛 관리자 화면) 저장된 시간을 그대로 두고 검사하지 않는다 — 금액만 고쳐도 저장된다(최종 게이트)', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue([
+          line(104, 'EARNING', '야간수당', NIGHT, {
+            adjustedAmount: 30_000,
+            isEntered: true,
+            workMinutes: 120,
+            calculationText: '2.0시간',
+          }),
+          line(105, 'EARNING', '휴일근무수당', HOLIDAY, {
+            adjustedAmount: 20_000,
+            isEntered: true,
+          }),
+        ]);
+        await save({
+          items: [
+            { payslipItemMasterId: 4, amount: 40_000 },
+            { payslipItemMasterId: 5, amount: 20_000 },
+          ],
+        });
+        // 금액만 바뀌고 시간 · 식은 쓰지 않는다. 시간 없는 휴일근무수당도 막지 않는다(확정이 막는다)
+        expect(dataOf(104)).toEqual({
+          adjustedAmount: 40_000,
+          isEntered: true,
+        });
+        expect(dataOf(105)).toBeUndefined();
+      });
+
+      it('30분 단위는 야간 · 휴일근무수당만 본다 — 다른 줄에 실린 시간(연장수당 61분)은 무시하고 저장된다(PR #317 리뷰)', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue([
+          overtime(),
+          line(104, 'EARNING', '야간수당', NIGHT),
+        ]);
+        await expect(
+          save({
+            items: [
+              { payslipItemMasterId: 4, amount: 30_000, workMinutes: 45 },
+            ],
+          }),
+        ).rejects.toThrow(
+          '야간 · 휴일근무수당 근무시간은 30분 단위로 입력해 주세요.',
+        );
+
+        prisma.payslipItem.update.mockClear();
+        await save({
+          items: [{ payslipItemMasterId: 3, amount: 130_000, workMinutes: 61 }],
+        });
+        // 연장수당의 시간은 계산 때 값(480분) 그대로 — 보낸 61분은 쓰지 않는다
+        expect(dataOf(103)).toEqual({
+          adjustedAmount: 130_000,
+          isEntered: true,
+          workMinutes: 480,
+          calculationText: '8.0시간 · 직접 입력',
+        });
+      });
+    });
+
     describe('가산 적용을 바꾸면', () => {
       const OVERTIME = master(3, 'OVERTIME_PAY', true);
       const withOvertime = (over: object = {}) => [
@@ -573,6 +812,8 @@ describe('PayslipEditService', () => {
             calculatedAmount: 20_000,
             adjustedAmount: null,
             isEntered: true,
+            workMinutes: null,
+            calculationText: null,
           },
         });
         expect(updateOf(101)).toBeUndefined();
@@ -670,6 +911,8 @@ describe('PayslipEditService', () => {
           calculatedAmount: 1_050_000,
           adjustedAmount: null,
           isEntered: true,
+          workMinutes: null,
+          calculationText: null,
         },
       });
       expect(call(prisma.payslip.update).data).toEqual({
@@ -680,6 +923,34 @@ describe('PayslipEditService', () => {
       expect(logSummary()).toBe(
         '출퇴근으로 다시 계산 · 기본급 900,000원 → 1,050,000원',
       );
+    });
+
+    it('시간 · 계산식도 새 계산으로 바꾼다 — 「직접 입력」도 계산식으로 돌아간다(WHALEERP-755)', async () => {
+      prisma.payslipItem.findMany.mockResolvedValue([
+        line(101, 'EARNING', '기본급', BASE, {
+          calculatedAmount: 1_000_000,
+          isEntered: true,
+          workMinutes: 3_900,
+          calculationText: '직접 입력',
+        }),
+      ]);
+      calculate.mockResolvedValue(
+        pay({
+          basis: {
+            basePay: { minutes: 3_900, text: '65.0시간 × 10,320원' },
+            weeklyHolidayPay: { minutes: null, text: null },
+            overtimePay: { minutes: null, text: null },
+          },
+        }),
+      );
+      await recalculate();
+      expect(call(prisma.payslipItem.update).data).toEqual({
+        calculatedAmount: 1_000_000,
+        adjustedAmount: null,
+        isEntered: true,
+        workMinutes: 3_900,
+        calculationText: '65.0시간 × 10,320원',
+      });
     });
 
     it('바뀐 것이 없어도 다시 계산한 줄은 이력에 남긴다', async () => {
@@ -827,6 +1098,69 @@ describe('PayslipEditService', () => {
           ],
         },
       });
+    });
+
+    it('금액이 있는 야간 · 휴일근무수당에 근무시간이 없으면 422 WORK_HOURS_MISSING 과 그 항목 — 0원 · 시간 있는 줄은 막지 않는다(WHALEERP-755)', async () => {
+      const NIGHT = master(4, 'NIGHT_WORK_PAY');
+      const HOLIDAY = master(5, 'HOLIDAY_WORK_PAY');
+      const filled = lines().map((l) =>
+        l.itemCategory === 'EARNING'
+          ? l
+          : { ...l, adjustedAmount: 0, isEntered: true },
+      );
+      prisma.payslipItem.findMany.mockResolvedValue([
+        ...filled,
+        line(104, 'EARNING', '야간수당', NIGHT, {
+          adjustedAmount: 30_000,
+          isEntered: true,
+        }),
+        line(105, 'EARNING', '휴일근무수당', HOLIDAY, {
+          adjustedAmount: 0,
+          isEntered: true,
+        }),
+      ]);
+      const error = await confirm().catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(UnprocessableEntityException);
+      expect(error).toMatchObject({
+        response: {
+          code: 'WORK_HOURS_MISSING',
+          message:
+            '근무시간이 없어 확정할 수 없습니다: 야간수당. 야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
+          items: [{ payslipItemId: 104, itemName: '야간수당' }],
+        },
+      });
+      expect(prisma.payslipLog.create).not.toHaveBeenCalled();
+
+      // 0 시간도 막는다(재영 리뷰) — 0원 · 0 시간 줄은 막지 않는다
+      prisma.payslipItem.findMany.mockResolvedValue([
+        ...filled,
+        line(104, 'EARNING', '야간수당', NIGHT, {
+          adjustedAmount: 30_000,
+          isEntered: true,
+          workMinutes: 0,
+        }),
+        line(105, 'EARNING', '휴일근무수당', HOLIDAY, {
+          adjustedAmount: 0,
+          isEntered: true,
+          workMinutes: 0,
+        }),
+      ]);
+      await expect(confirm()).rejects.toMatchObject({
+        response: {
+          code: 'WORK_HOURS_MISSING',
+          items: [{ payslipItemId: 104, itemName: '야간수당' }],
+        },
+      });
+
+      prisma.payslipItem.findMany.mockResolvedValue([
+        ...filled,
+        line(104, 'EARNING', '야간수당', NIGHT, {
+          adjustedAmount: 30_000,
+          isEntered: true,
+          workMinutes: 120,
+        }),
+      ]);
+      await expect(confirm()).resolves.toEqual({ payslipId: 40 });
     });
 
     describe('4대보험 줄은 근로계약의 가입 체크대로 센다(WHALEERP-756)', () => {

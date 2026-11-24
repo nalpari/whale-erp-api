@@ -1,6 +1,15 @@
 # Directory Update Log
 
 ## 2026-11-24
+* **Update**: [Payslips](/api/payslips.md) — 주휴 식의 실근무에 주 40시간 상한을 적용한 값임을 「실근무(주 40시간까지)」로 적는다(PR #317 pr-agent, WHALEERP-755).
+* **Update**: [Payslips](/api/payslips.md) — 최종 게이트: 금액을 정수 분자 ÷ 분모(`roundDiv`)로 셈해 부동소수 .5 경계의 1원 차를 없앴다(주휴 · 정직원 포괄 연장에서 1원 오르는 경우가 있다), 주휴 식은 「N주 · 실근무 15시간 15분 ÷ 5 × 시급」, 식 판정은 보이는 값으로 셈한 원 = 금액 하나로, 0.5분 미만 정직원 연장은 시간 · 식을 비운다.
+* **Update**: [Payslips](/api/payslips.md) — 재영 리뷰: 야간 · 휴일근무수당 금액이 있는데 근무시간이 0 이어도 시간이 없는 것으로 본다(임시저장 400 · 확정 422 `WORK_HOURS_MISSING`). 금액 0 · 시간 0 은 통과.
+* **Update**: [Payslips](/api/payslips.md) — 재영 리뷰: 시간 글자는 6의 배수 분만 「7.8시간」, 아니면 「7시간 50분」(`hoursText`), 식은 보이는 값으로 다시 곱한 금액이 실제 금액과 맞을 때만 낸다(470분이 「7.8시간」으로 적혀 식과 금액이 어긋났다).
+* **Update**: [Payslips](/api/payslips.md) — 되돌리기 순서(api 를 되돌릴 때는 화면 먼저 — 새 화면의 `workMinutes` 를 옛 api 가 400 으로 막는다), 확정 422 문서(`ApiUnprocessableEntityResponse`)에 `WORK_HOURS_MISSING` 을 더했다(WHALEERP-755, 동작 변경 없음).
+* **Update**: [Payslips](/api/payslips.md) — 최종 게이트: 임시저장에 `workMinutes` 키가 없으면(옛 관리자 화면) 저장된 시간을 두고 시간 검사를 건너뛴다(null 이면 그대로 필수), 확정은 금액이 있는 야간 · 휴일근무수당에 시간이 없으면 422 `WORK_HOURS_MISSING`. 배포 순서 api(+ db:deploy) → 관리자 웹 · 직원 앱.
+* **Update**: [Payslips](/api/payslips.md) — PR #317 재검사: 계산값으로 되돌릴 때 다시 셈한 금액이 달라 식을 비우면 시간이 있을 때 「N.N시간」을 남긴다(`withHours`, 계산과 같은 규칙).
+* **Update**: [Payslips](/api/payslips.md) — PR #317 리뷰: 식을 비울 때(금액 불일치 · 200자 초과) 시간이 있으면 「N.N시간」을 남긴다(법정 기재 시간 수). 근무시간 30분 단위 검사를 DTO 에서 서비스로 옮겨 야간 · 휴일근무수당 줄에만 건다(다른 줄에 실린 값은 무시).
+* **Update**: [Payslips](/api/payslips.md) — 금액 줄의 시간 · 한 줄 계산식(WHALEERP-755, 2026-11-20 김지영 결정): `payslip_items.work_minutes` · `calculation_text`(마이그레이션 `20261124152130_team3_payslip_item_calculation`, 기존 행 NULL). `calculatePay` 가 `basis` 를 내고 초안 · 다시 계산 · 가산 바꾸기 · 임시저장이 쓴다(고친 금액은 「직접 입력」, 되돌리면 다시 셈해 되살림). 야간 · 휴일근무수당은 `items[].workMinutes`(30분 단위)를 받고 금액이 있는데 시간이 없으면 400. 관리자 · 직원 앱 응답에 두 칸, PDF 지급 줄 note 에 식. 식을 다시 셈한 값이 금액과 다르면(앞 계약 시급의 음수 구간 등) · 200자를 넘으면 식은 NULL(리뷰).
 * **Update**: [My profile](/api/my-profile.md) — 내 신고 정보 조회(`GET /me/memberships/:staffMemberId/tax-profile`)에 `expired` 를 더했다(WHALEERP-772): 퇴직일이 파기 배치와 같은 `retiredBefore` 보다 앞이면 true(신고 정보가 남아 있든 배치가 이미 지웠든), 그때 `taxProfile` 은 늘 null. 직원 앱이 「넣은 적 없음」과 「보존 기간이 지나 지움」을 가른다. 저장 응답은 늘 false. 마이그레이션 없음.
 * **Update**: [TO-DO](/api/todos.md) — `TodoDetailDto.modifiedAt` 설명을 「고친 적이 없으면 null(상세는 줄을 두고 「-」로 보인다)」로 맞췄다(WHALEERP-698 후속, 2026-11-24 재영 — 관리자 웹 TO-DO 상세가 근로계약 상세처럼 줄을 늘 두게 바뀜, front #338). api 동작 · 응답 모양은 그대로, openapi 설명만 바뀐다.
 * **Update**: 로그인 후 홈(`src/home`) — `GET /home/pending` 에 `notOperatingCount`(확인 필요 줄로 센 건 가운데 미운영 점포의 건수, 문의 답변완료는 점포가 없어 넣지 않음 · 플랫폼 빈 결과 0)를 더했다 — 관리자 웹이 운영 점포별 현황 아래에 표에 없는 건을 알린다(WHALEERP-759, B안 2026-11-24 재영, 집계 기준 HOM-06 · 07 그대로). `GET /home/summary` 의 `storeTable.total` 은 본사 점포를 빼고 세고(점포 카드와 같다, 운영 정책 SCP-09), 본사 줄은 확인 필요 건수와 상관없이 맨 위다(WHALEERP-751). 마이그레이션 없음.

@@ -33,6 +33,11 @@ const NOTHING = {
   workedMinutes: 0,
   overtimeMinutes: 0,
   weeklyHolidayWeeks: 0,
+  basis: {
+    basePay: { minutes: null, text: null },
+    weeklyHolidayPay: { minutes: null, text: null },
+    overtimePay: { minutes: null, text: null },
+  },
 };
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -462,6 +467,29 @@ describe('PayslipDraftService', () => {
       });
     });
 
+    it('계산 항목은 시간 · 계산식도 함께 넣고, 나머지 줄은 비운다(WHALEERP-755)', async () => {
+      calculate.mockResolvedValue({
+        ...NOTHING,
+        basePay: 650_000,
+        basis: {
+          ...NOTHING.basis,
+          basePay: { minutes: 3_900, text: '65.0시간 × 10,000원' },
+        },
+      });
+      await service.create(9, 30, '2026-10');
+      const items = created().data.payslipItems.createMany.data;
+      expect(items[0]).toMatchObject({
+        payslipItemMasterId: 1,
+        workMinutes: 3_900,
+        calculationText: '65.0시간 × 10,000원',
+      });
+      expect(items[1]).toMatchObject({
+        payslipItemMasterId: 9,
+        workMinutes: null,
+        calculationText: null,
+      });
+    });
+
     it('항목은 사용 중인 급여 항목의 지급 · 기본 공제(파트타이머는 원천징수도), 금액 없이 미입력으로 만든다', async () => {
       await service.create(9, 30, '2026-10');
       expect(prisma.payslipItemMaster.findMany).toHaveBeenCalledWith({
@@ -487,6 +515,8 @@ describe('PayslipDraftService', () => {
           calculatedAmount: null,
           adjustedAmount: null,
           isEntered: false,
+          workMinutes: null,
+          calculationText: null,
         },
         expect.objectContaining({ payslipItemMasterId: 9, isTaxFree: true }),
         expect.objectContaining({
