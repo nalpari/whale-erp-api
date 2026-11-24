@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-24
+* **Update**: [My profile](/api/my-profile.md) — 내 신고 정보 조회(`GET /me/memberships/:staffMemberId/tax-profile`)에 `expired` 를 더했다(WHALEERP-772): 퇴직일이 파기 배치와 같은 `retiredBefore` 보다 앞이면 true(신고 정보가 남아 있든 배치가 이미 지웠든), 그때 `taxProfile` 은 늘 null. 직원 앱이 「넣은 적 없음」과 「보존 기간이 지나 지움」을 가른다. 저장 응답은 늘 false. 마이그레이션 없음.
 * **Update**: [TO-DO](/api/todos.md) — `TodoDetailDto.modifiedAt` 설명을 「고친 적이 없으면 null(상세는 줄을 두고 「-」로 보인다)」로 맞췄다(WHALEERP-698 후속, 2026-11-24 재영 — 관리자 웹 TO-DO 상세가 근로계약 상세처럼 줄을 늘 두게 바뀜, front #338). api 동작 · 응답 모양은 그대로, openapi 설명만 바뀐다.
 * **Update**: 로그인 후 홈(`src/home`) — `GET /home/pending` 에 `notOperatingCount`(확인 필요 줄로 센 건 가운데 미운영 점포의 건수, 문의 답변완료는 점포가 없어 넣지 않음 · 플랫폼 빈 결과 0)를 더했다 — 관리자 웹이 운영 점포별 현황 아래에 표에 없는 건을 알린다(WHALEERP-759, B안 2026-11-24 재영, 집계 기준 HOM-06 · 07 그대로). `GET /home/summary` 의 `storeTable.total` 은 본사 점포를 빼고 세고(점포 카드와 같다, 운영 정책 SCP-09), 본사 줄은 확인 필요 건수와 상관없이 맨 위다(WHALEERP-751). 마이그레이션 없음.
 * **Update**: [Attendance](/api/attendance.md) — 직원 앱 기간별 주별 줄(`GET /me/attendance/records` 의 `weeks`)도 조회 기간 안의 날만 센다(WHALEERP-768): 걸친 첫 주 · 마지막 주는 `max(월요일, from)` ~ `min(일요일, to)` 로 잘라 `totals` 와 같은 기준으로 세어 주별 근무 합이 총 근무와 같다(11/1~11/30 의 「10/26 – 11/1」에 10월 근무가 들어가던 것). 걸친 주의 연장은 주 전체 40시간으로 본 값과 다를 수 있다. 응답 모양 · 직원 앱 그대로, 마이그레이션 없음.
