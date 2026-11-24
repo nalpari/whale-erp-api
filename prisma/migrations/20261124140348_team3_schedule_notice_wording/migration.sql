@@ -35,20 +35,19 @@ BEGIN
   END IF;
 END $$;
 
--- 지금 값: 제목 · 본문이 둘 다 되돌리기 원본 그대로일 때만. default_* 를 바꾸기 전에 비교한다.
+-- 한 UPDATE 로 바꾼다 — 지금 값(title · body)은 갱신 전 값이 둘 다 되돌리기 원본 그대로일 때만, 되돌리기 원본(default_*)은 늘.
+-- 둘로 나누면 그 사이에 운영자가 [기본값으로 되돌리기]를 눌러 옛 문구가 남을 수 있다(PR #318 pr-agent). updated_at 은 지금 값을
+-- 바꿀 때만 올린다 — 되돌리기 원본만 바뀌는 행은 그대로(머리 주석).
 UPDATE "notification_templates" AS r
-   SET "title" = w."title_to", "body" = $t$#{근무지} 근무스케줄이 등록 · 변경되었습니다.
+   SET "title" = CASE WHEN r."title" = r."default_title" AND r."body" = r."default_body" THEN w."title_to" ELSE r."title" END,
+       "body" = CASE WHEN r."title" = r."default_title" AND r."body" = r."default_body" THEN $t$#{근무지} 근무스케줄이 등록 · 변경되었습니다.
 
 - 내용: #{변경내용}
 
-직원 근무 앱에서 근무스케줄을 확인해 주세요.$t$, "updated_at" = now()
-  FROM "_schedule_notice_wording" AS w
- WHERE r."template_code" = w."template_code"
-   AND r."title" = r."default_title" AND r."body" = r."default_body";
-
--- 되돌리기 원본: 2건 모두. updated_at 은 올리지 않는다(머리 주석).
-UPDATE "notification_templates" AS r
-   SET "default_title" = w."title_to", "default_body" = $t$#{근무지} 근무스케줄이 등록 · 변경되었습니다.
+직원 근무 앱에서 근무스케줄을 확인해 주세요.$t$ ELSE r."body" END,
+       "updated_at" = CASE WHEN r."title" = r."default_title" AND r."body" = r."default_body" THEN now() ELSE r."updated_at" END,
+       "default_title" = w."title_to",
+       "default_body" = $t$#{근무지} 근무스케줄이 등록 · 변경되었습니다.
 
 - 내용: #{변경내용}
 
