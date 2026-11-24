@@ -4,8 +4,12 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T05:04:59Z }
 sources:
+  - id: schedule-notice-wording
+    resource: ../../prisma/migrations/20261124140348_team3_schedule_notice_wording/migration.sql
+    title: 근무스케줄 앱 푸시 · 메일 제목 · 본문을 등록에도 맞게 (WHALEERP-769)
+    last_modified: 2026-11-24T05:04:59Z
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
     title: 근로계약 서명 완료 · 서명 거절 알림 제목 · 본문, 발송 템플릿 변수 표시 이름 「서명 기한」, 템플릿 이름 (WHALEERP-659)
@@ -109,6 +113,12 @@ sources:
   「근로계약서 서명 기한 만료」는 그대로다. `PUSH_CONTRACT_SENT` · `TALK_STAFF_CONTRACT_SENT` 는 변수 `날인기한` 의 표시 이름(label)만
   「서명 기한」으로 — 변수 이름은 발송 코드가 넘기는 키라 그대로, 본문 · 카카오 등록 문구도 그대로다. 템플릿 이름은 되돌리기 원본이 없어
   처음 넣은 이름일 때만 바꾼다: 근로계약 날인 → 근로계약 서명 완료, 근로계약 거부 → 근로계약 서명 거절, 근로계약 만료 → 근로계약 서명 기한 만료.
+- **근무스케줄 알림 · 메일 문구**(WHALEERP-769, 2026-11-24 — 처음 등록해도 「변경」으로 가던 것). `20261124140348_team3_schedule_notice_wording`
+  이 `PUSH_SCHEDULE_CHANGED` · `EMAIL_SCHEDULE_CHANGED` 의 제목 「근무스케줄 변경」 → 「근무스케줄 안내」(메일은 「[WHALE ERP] 」 머리 그대로),
+  본문 「… 근무스케줄이 변경되었습니다. / - 변경 내용: … / … 바뀐 스케줄을 확인해 주세요.」 → 「#{근무지} 근무스케줄이 등록 · 변경되었습니다. /
+  - 내용: #{변경내용} / 직원 근무 앱에서 근무스케줄을 확인해 주세요.」로 바꾼다(두 채널 같은 본문 — 메일 HTML 틀 · 버튼은 발송 코드가 붙인다).
+  지금 값은 제목 · 본문이 둘 다 되돌리기 원본 그대로일 때만(변수 목록은 바꾸지 않아 보지 않는다), 되돌리기 원본은 늘 — 되돌리기 원본만 바꿀 때는
+  `updated_at` 을 올리지 않는다(위 서명 완료 문구와 같다). 템플릿 코드 · 이름(「근무스케줄 변경」 · 「근무스케줄 변경 메일」) · 변수 · 발송 로직은 그대로다.
 - **가입 초대 알림톡 = 카카오 등록본**(WHALEERP-636, 2026-10-30 등록). 알림톡은 등록한 본문과 글자 · 줄바꿈까지 같아야 나간다.
   `20261030174743_team3_staff_invitation_kakao_registered` 가 `TALK_STAFF_INVITATION` 의 `body` · `default_body` 를 등록본(빈 줄 없는 다섯 줄 —
   「#{근무지}에서 근로계약서를 보내려고 합니다.」 … 「초대 코드와 링크는 30일 동안 쓸 수 있습니다.」)으로, `kakao_template_code` 를
