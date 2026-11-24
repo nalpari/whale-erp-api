@@ -306,7 +306,7 @@ sources:
 
 임금명세서 기재사항(근로기준법 시행령 제27조의2 5호 — 출근일수 · 시간에 따라 달라지는 항목의 계산방법, 연장 · 야간 · 휴일근로 시간 수.
 어기면 과태료이고 5인 미만 사업장도 해당한다)을 위해 금액 줄마다 `payslip_items.work_minutes`(분) · `calculation_text`(varchar(200), 한 줄
-식)를 둔다(마이그레이션 `20261124131846_team3_payslip_item_calculation`, 2026-11-20 김지영 결정). 기간 중 시급이 바뀌면 금액만으로 식을 다시
+식)를 둔다(마이그레이션 `20261124152130_team3_payslip_item_calculation`, 2026-11-20 김지영 결정). 기간 중 시급이 바뀌면 금액만으로 식을 다시
 만들 수 없고 발송한 문서의 식은 바뀌지 않아야 해서 api 가 만들어 저장한다. 관리자 상세 · 직원 앱 상세 · PDF 가 같은 글자를 보인다.
 
 * **만드는 곳** — `calculatePay` 가 금액과 같은 분 · 같은 시급으로 `PayResult.basis`(항목마다 `{ minutes, text }`)를 내고, 줄에는
@@ -346,7 +346,7 @@ sources:
   남은 줄(옛 화면 · 2026-11-24 전 명세서)은 **확정**이 막는다 — 금액이 있는 야간 · 휴일근무수당에 `work_minutes` 가 NULL 이면 422
   `WORK_HOURS_MISSING`(「근무시간이 없어 확정할 수 없습니다: 야간수당. 야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.」, 본문
   `items: [{ payslipItemId, itemName }]` — 공제 미입력 `DEDUCTION_MISSING` 과 같은 모양, 그 검사 뒤에 본다).
-* **배포 순서** — api(+ `db:deploy`, 마이그레이션 `20261124131846_team3_payslip_item_calculation`) → 관리자 웹 · 직원 앱. 새 api 는 옛
+* **배포 순서** — api(+ `db:deploy`, 마이그레이션 `20261124152130_team3_payslip_item_calculation`) → 관리자 웹 · 직원 앱. 새 api 는 옛
   화면을 위처럼 받아 주고, 새 화면은 새 칸(`workMinutes` · `calculationText`)이 있는 api 를 기대한다(관리자 웹은 칸이 없어도 빈 칸 ·
   식 없음으로 그린다). 마이그레이션 전에 새 api 가 돌면 `payslip_items` 를 쓰는 요청이 500 이다(마이그레이션 머리말).
   **api 를 되돌릴 때는 화면을 먼저 되돌린다** — 새 화면은 `workMinutes` 를 보내고, 옛 api 는 모르는 칸을 400 으로 막는다(전역
