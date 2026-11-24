@@ -65,6 +65,8 @@ describe('MyMembershipsService', () => {
   let findMany: jest.Mock;
   let findFirst: jest.Mock;
   let findStores: jest.Mock;
+  let findStaffUnique: jest.Mock;
+  let findStoreUnique: jest.Mock;
   let logError: jest.SpyInstance;
 
   beforeEach(() => {
@@ -75,6 +77,9 @@ describe('MyMembershipsService', () => {
   const build = async (key: Buffer | null = KEY) => {
     findMany = jest.fn().mockResolvedValue([staffRow()]);
     findFirst = jest.fn().mockResolvedValue(taxRow({ staffTaxProfile: null }));
+    // 신고 정보의 지운 점포 확인(WHALEERP-765) — 기본은 살아 있는 점포
+    findStaffUnique = jest.fn().mockResolvedValue({ storeId: 5 });
+    findStoreUnique = jest.fn().mockResolvedValue({ isDeleted: false });
     findStores = jest.fn().mockResolvedValue([
       { storeId: 5, name: '강남점', storeTypeCode: 'FRANCHISE' },
       { storeId: 6, name: '본점', storeTypeCode: 'DIRECT' },
@@ -85,8 +90,8 @@ describe('MyMembershipsService', () => {
         {
           provide: PrismaService,
           useValue: {
-            staffMember: { findMany, findFirst },
-            store: { findMany: findStores },
+            staffMember: { findMany, findFirst, findUnique: findStaffUnique },
+            store: { findMany: findStores, findUnique: findStoreUnique },
           },
         },
         { provide: PERSONAL_DATA_KEY, useValue: key },
@@ -253,6 +258,14 @@ describe('MyMembershipsService', () => {
         joinStatus: ACTIVE_STAFF.joinStatus,
         contracts: ACTIVE_STAFF.contracts,
       });
+    });
+
+    it('지운 점포의 소속이면 404 — 목록과 같이 id 로도 열리지 않는다(WHALEERP-765, 재영 결정)', async () => {
+      const service = await build();
+      findStoreUnique.mockResolvedValue({ isDeleted: true });
+      await expect(service.taxProfile(12, 31)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
     });
 
     it('재직 중이면 editable: true', async () => {

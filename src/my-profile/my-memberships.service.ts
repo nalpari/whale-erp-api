@@ -195,6 +195,26 @@ export class MyMembershipsService {
    * 소속도 같은 가린 값으로 주고 `editable: false` 다(WHALEERP-765 — 그곳 급여 계좌를 다시 보려는 것). 고칠 수 있는지는
    * 저장(409)과 같은 판정이다.
    */
+  /**
+   * 지운 점포(삭제 표시)의 소속이면 404 — 퇴직 포함 목록이 지운 점포를 빼므로 신고 정보도 id 로 열리지 않게 맞춘다(WHALEERP-765,
+   * 2026-11-24 재영 결정). 직원 레코드의 store_id 는 1팀 점포를 가리키지만 Prisma 관계가 없어 따로 읽는다(목록과 같다). 지울 수
+   * 있는 점포는 진행 중인 계약이 없어야 해서 저장 도중 지워지는 경합은 따로 막지 않는다.
+   */
+  private async assertStoreNotDeleted(staffMemberId: number): Promise<void> {
+    const staff = await this.prisma.staffMember.findUnique({
+      where: { staffMemberId },
+      select: { storeId: true },
+    });
+    const store = staff
+      ? await this.prisma.store.findUnique({
+          where: { storeId: staff.storeId },
+          select: { isDeleted: true },
+        })
+      : null;
+    if (!store || store.isDeleted)
+      throw new NotFoundException('소속을 찾을 수 없습니다.');
+  }
+
   async taxProfile(
     accountId: number,
     staffMemberId: number,
@@ -217,6 +237,7 @@ export class MyMembershipsService {
       },
     });
     if (!staff) throw new NotFoundException('소속을 찾을 수 없습니다.');
+    await this.assertStoreNotDeleted(staffMemberId);
     const now = new Date();
     // 보존 기간(퇴직 + 3년, RET-01)이 지난 퇴직 레코드는 파기 배치(05:10)가 돌기 전이어도 신고 정보를 풀지 않는다 — 배치가
     // 늦거나 실패해도 기한이 지난 값이 보이지 않게(PR #313 pr-agent). 기준은 파기 배치와 같은 retiredBefore 다. 퇴직 상태
@@ -281,6 +302,7 @@ export class MyMembershipsService {
     // 이것도 비밀번호보다 먼저다(퇴직은 감출 일이 아니고, 맞혀도 고칠 수 없다).
     if (!(await this.prisma.staffMember.count({ where: mine })))
       throw new NotFoundException('소속을 찾을 수 없습니다.');
+    await this.assertStoreNotDeleted(staffMemberId);
     if (
       !(await this.prisma.staffMember.count({
         where: { ...mine, ...employedNow(new Date()) },

@@ -46,7 +46,12 @@ const withPw = <T extends object>(dto: T) => ({
 describe('MyMembershipsService.saveTaxProfile', () => {
   let tx: {
     $queryRaw: jest.Mock;
-    staffMember: { findFirst: jest.Mock; count: jest.Mock };
+    staffMember: {
+      findFirst: jest.Mock;
+      count: jest.Mock;
+      findUnique: jest.Mock;
+    };
+    store: { findUnique: jest.Mock };
     account: { findUniqueOrThrow: jest.Mock };
     codeItem: { count: jest.Mock };
     staffTaxProfile: {
@@ -147,7 +152,10 @@ describe('MyMembershipsService.saveTaxProfile', () => {
       staffMember: {
         findFirst: jest.fn(),
         count: jest.fn().mockResolvedValue(1),
+        findUnique: jest.fn().mockResolvedValue({ storeId: 5 }),
       },
+      // 지운 점포 확인(WHALEERP-765) — 기본은 살아 있는 점포
+      store: { findUnique: jest.fn().mockResolvedValue({ isDeleted: false }) },
       account: {
         findUniqueOrThrow: jest.fn(() => Promise.resolve({ passwordHash })),
       },
@@ -411,6 +419,18 @@ describe('MyMembershipsService.saveTaxProfile', () => {
       await rolledBack();
     },
   );
+
+  it('지운 점포의 소속이면 404 — 비밀번호 · 잠금 전, 쓰지 않는다(WHALEERP-765, 재영 결정)', async () => {
+    staff(true);
+    tx.store.findUnique.mockResolvedValue({ isDeleted: true });
+    const e = await thrown(
+      service().saveTaxProfile(77, 31, withPw({ rrn: RRN })),
+    );
+    expect(e.getStatus()).toBe(404);
+    expect(tx.account.findUniqueOrThrow).not.toHaveBeenCalled();
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
+    expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
+  });
 
   it('잠근 뒤 다시 읽으니 내 소속이 아니면 404 — 쓰지 않는다(api #86 재리뷰)', async () => {
     staff(true);

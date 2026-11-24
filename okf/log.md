@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-24
+* **Update**: [My profile](/api/my-profile.md) — 내 신고 정보 조회 · 저장: 지운 점포의 소속은 목록과 같이 404(점포를 따로 읽어 `isDeleted` 면 거절, WHALEERP-765 재영 결정).
 * **Update**: [My profile](/api/my-profile.md) — 내 신고 정보 조회: 보존 기간(퇴직 + 3년)이 지난 퇴직 레코드는 파기 배치 전이어도 풀지 않고 `taxProfile: null`(PR #313 pr-agent). 그날 05:00 근로계약 파기 뒤로는 404 다.
 * **Update**: [My profile (staff app)](/api/my-profile.md) — 퇴직한 소속의 신고 정보는 조회만(WHALEERP-765): `GET /me/memberships/:staffMemberId/tax-profile` 가 퇴직 포함 목록과 같은 내 소속 조건(`ANY_EMPLOYMENT_STAFF`)으로 퇴직 레코드도 같은 가린 값으로 주고 응답에 `editable`(퇴직이면 false — 근로계약 날인과 같은 `employedOn` 판정, 퇴직일이 지났으면 배치 전이어도 퇴직)을 더했다. `PUT` 은 퇴직한 내 소속이면 고치기 · 처음 넣기 모두 409 `STAFF_RETIRED`(「퇴직한 근무지의 신고 정보는 조회만 할 수 있습니다.」, 내 소속 404 뒤 · 비밀번호 전), 잠근 뒤 그사이 퇴직 확정도 404 대신 409. 남의 레코드는 그대로 404. 보존 기간은 파기 배치(05:10)를 따른다. 마이그레이션 없음.
 * **Update**: [TO-DO](/api/todos.md) — TO-DO 상세에 최종수정(`modifiedAt` · `modifiedByName`, WHALEERP-698): 관리자 [수정]만 `todos.modified_at` · `modified_by` 에 남긴다(마이그레이션 `20261124101923_team3_todo_modified`). 상태 변경 · 삭제 · 직원 앱 완료는 바꾸지 않고, 묶음은 전체 행이 같은 값이다. 기존 행 · 등록만 한 TO-DO 는 null(화면에 줄 없음). 근로계약 최종수정(WHALEERP-699)과 같은 방식.
