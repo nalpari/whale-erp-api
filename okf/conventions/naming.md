@@ -380,7 +380,7 @@ DB 테이블은 복수형, 모델·타입은 PascalCase 단수형으로 바꿔 �
 | 메일 · 3팀 10 | `EMAIL_STAFF_PASSWORD_PIN` · `EMAIL_STAFF_RESET_LINK` · `EMAIL_CHANGE_PIN` · `EMAIL_LEAD_CONFIRMATION` · `EMAIL_LEAD_REPLY` · `EMAIL_PAYSLIP_SENT` · `EMAIL_PAYSLIP_RESENT` · `EMAIL_STAFF_AFFILIATION_REQUEST` · `EMAIL_SCHEDULE_CHANGED` · `EMAIL_STAFF_WITHDRAW_DONE` | 비밀번호 찾기 핀 · 관리자 초기화 재설정 링크 · 로그인 이메일 변경 핀 · 도입문의 접수 확인 · 도입문의 답변 메일 · 급여명세서 발송 메일 · 급여명세서 다시 발송 메일 · 소속 추가 확인 요청(직원에게, WHALEERP-130) · 근무스케줄 변경 메일(가입한 직원에게, WHALEERP-639) · 직원 앱 회원 탈퇴 완료(탈퇴한 직원에게, WHALEERP-770 · 임시 문구) |
 | 메일 · 1팀 8 | `EMAIL_SIGNUP_DONE` · `EMAIL_SIGNUP_ALERT` · `EMAIL_BP_REGISTER` · `EMAIL_PLAT_ADMIN_CREATE` · `EMAIL_BP_ADMIN_CREATE` · `EMAIL_PASSWORD_RESET` · `EMAIL_TEMP_PASSWORD` · `EMAIL_WITHDRAW_DONE` | 회원가입 완료 · 신규 BP 가입 알림 · BP 신규 등록 · 플랫폼 관리자 계정 생성 · BP 관리자 계정 생성 · 비밀번호 초기화 · 임시 비밀번호 발급 · 회원 탈퇴 완료. 뒤 코드는 1팀 옛 MAIL_TYPE 값 그대로 |
 | 메일 · 공통 엑셀 2 | `EMAIL_EXCEL_READY` · `EMAIL_EXCEL_FAILED` | 엑셀 파일 준비 완료 · 엑셀 파일 생성 실패(1만 건 이상 예약 생성, 2026-10-28) |
-| 알림톡 3 | `TALK_STAFF_INVITATION` · `TALK_STAFF_AFFILIATION_REQUEST` · `TALK_STAFF_CONTRACT_SENT` | 가입 초대 · 소속 추가 확인 요청(WHALEERP-130 — 카카오에 같은 코드 `TALK_STAFF_AFFILIATION_REQUEST` 로 버튼 없이 등록, 2026-11-03) · 근로계약서 발송 알림톡(가입한 직원에게, WHALEERP-619 — 카카오 템플릿 코드가 `PUSH_CONTRACT_SENT` 라 앱 푸시 템플릿 코드와 글자만 같다. 우리 코드는 `TALK_` 그대로, `kakao_template_code` 에만 그 값) |
+| 알림톡 3 | `TALK_STAFF_INVITATION` · `TALK_STAFF_AFFILIATION_REQUEST` · `TALK_STAFF_CONTRACT_SENT` | 가입 초대 · 소속 추가 확인 요청(WHALEERP-130 — 카카오 템플릿 코드 `TALK_STAFF_AFFILIATION_V2` 로 [요청 확인하기] 버튼과 함께 다시 등록, 2026-11-24 승인 · WHALEERP-738 · 745. 변수 근무지 · 고용형태 · 링크) · 근로계약서 발송 알림톡(가입한 직원에게, WHALEERP-619 — 카카오 템플릿 코드가 `PUSH_CONTRACT_SENT` 라 앱 푸시 템플릿 코드와 글자만 같다. 우리 코드는 `TALK_` 그대로, `kakao_template_code` 에만 그 값) |
 
 ## 인증 · 계정
 

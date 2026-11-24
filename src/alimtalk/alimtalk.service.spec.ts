@@ -434,26 +434,28 @@ ${link}`,
       );
     });
 
-    // 카카오 등록본에 버튼이 없다(2026-11-03) — 버튼 링크 변수가 남아 있으면 보내기 전에 던진다(마이그레이션이 뺀다)
-    it('소속 추가 확인 요청은 버튼이 없는 템플릿이라 버튼 링크 변수가 있으면 던진다', async () => {
+    // 카카오 재등록본에 [요청 확인하기] 버튼이 있다(WHALEERP-738) — 링크는 직원 앱 요청 화면
+    it('소속 추가 확인 요청은 [요청 확인하기] 웹링크 버튼을 싣는다', async () => {
       findUnique.mockResolvedValue({
         ...withLink(),
         templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
       });
+      const affiliations = 'https://staff.whale.test/affiliations';
 
-      await expect(
-        service.send({
-          ...input,
-          templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
-          variables: {
-            name: '홍길동',
-            링크: 'https://staff.whale.test/affiliations',
-          },
-        }),
-      ).rejects.toThrow(
-        '알림톡 템플릿 TALK_STAFF_AFFILIATION_REQUEST 의 버튼 이름이 없습니다',
-      );
-      expect(client.sendMessage).not.toHaveBeenCalled();
+      await service.send({
+        ...input,
+        templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+        variables: { name: '홍길동', 링크: affiliations },
+      });
+
+      expect(sent().content.at.button).toEqual([
+        {
+          name: '요청 확인하기',
+          type: 'WL',
+          url_mobile: affiliations,
+          url_pc: affiliations,
+        },
+      ]);
     });
 
     it('버튼 링크 변수가 없는 템플릿 · 선택 링크를 비우면 버튼이 없다', async () => {

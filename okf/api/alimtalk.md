@@ -94,14 +94,15 @@ that is not https — `http://` included, it cannot fit the registered `https://
 template code, never the link), the 근로계약 발송
 pre-check (503 before anything is written, below) and the template save check
 ([Notification templates](/api/notification-templates.md)).
-An optional link left empty sends no button. Only `TALK_STAFF_INVITATION` has a button: its name 「가입하기」
-and the same link for PC were fixed by 재영 (2026-10-30), and it is registered with Kakao under its own code
-(2026-10-30 — the DB body and `kakao_template_code` match it, [Notification templates](/api/notification-templates.md)).
-`TALK_STAFF_AFFILIATION_REQUEST` is registered under its own code too (2026-11-03), **without a button** (김민식
-confirmed). A send carrying the 「요청 확인하기」 button the code used to add was accepted (`1000`) under the new code
-but arrived as the 대체 문자 (2026-11-03 08:22Z), so the button and the 「링크」 variable are gone: `ALIMTALK_BUTTONS`
-no longer lists it, `20261103175100` drops 「링크」 from its variables, and the 직원 reaches the request by logging in
-to the app. Adding a button back means registering it with Kakao again together with both. The invite link is built
+An optional link left empty sends no button. Two templates have a button. `TALK_STAFF_INVITATION` 「가입하기」: name
+and the same link for PC fixed by 재영 (2026-10-30), registered with Kakao under its own code (2026-10-30 — the DB body
+and `kakao_template_code` match it, [Notification templates](/api/notification-templates.md)).
+`TALK_STAFF_AFFILIATION_REQUEST` 「요청 확인하기」 (link variable 「링크」 = 직원 앱 `/affiliations`, WHALEERP-738): the
+first registration (2026-11-03, code `TALK_STAFF_AFFILIATION_REQUEST`) had **no button** — a send carrying one arrived as
+the 대체 문자 (2026-11-03 08:22Z), so `20261103175100` dropped 「링크」 and the code stopped sending it. It was registered
+again with the button and a first line without 사업자 (WHALEERP-745) under the new Kakao code
+`TALK_STAFF_AFFILIATION_V2` (Kakao name 「소속 추가 요청」, 2026-11-24 김민식 등록 · 같은 날 승인); `20261124170903` puts that
+code, body and 「링크」 back, and `ALIMTALK_BUTTONS` lists the button again. The invite link is built
 from `STAFF_APP_URL` as before (`/invite#token=…`) and there is one Kakao
 template per message, not one per environment (재영 2026-10-30). The registered invite button link is
 `https://#{가입링크}` — everything after the scheme is a variable, so the dev server's `STAFF_APP_URL` does not
@@ -146,8 +147,8 @@ match) is thrown before any request too. `isMobilePhone` lets a caller run the n
 check before it writes, and `hasSmsFallback()` says whether `BIZPPURIO_SMS_FROM` is set —
 the only way a button link reaches anyone when Kakao rejects the 알림톡 — an unapproved body or button
 makes the 알림톡 itself fail (근로계약 가입 초대 ·
-소속 추가 확인 요청 require it until 소속 추가 is registered and the invite's button (full address) is
-seen opening in a real send — api #74 review).
+소속 추가 확인 요청 require it until both are seen arriving as 알림톡 with the button (full address)
+opening in a real send — api #74 review).
 
 Polling needs a place to record results and a
 multi-instance guard ([Employment Contract Batch](/api/employment-contract-batch.md)'s

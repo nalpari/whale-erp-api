@@ -6,8 +6,11 @@ describe('alimtalk-buttons', () => {
       name: '가입하기',
       link: '링크',
     });
-    // 소속 추가 확인 요청은 카카오 등록본에 버튼이 없다(2026-11-03)
-    expect(alimtalkButtonOf('TALK_STAFF_AFFILIATION_REQUEST')).toBeUndefined();
+    // 소속 추가 확인 요청은 카카오 재등록본에 [요청 확인하기] 버튼이 있다(WHALEERP-738)
+    expect(alimtalkButtonOf('TALK_STAFF_AFFILIATION_REQUEST')).toEqual({
+      name: '요청 확인하기',
+      link: '링크',
+    });
     expect(alimtalkButtonOf('TALK_X')).toBeUndefined();
     expect(alimtalkButtonOf('toString')).toBeUndefined();
   });

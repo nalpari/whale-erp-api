@@ -159,11 +159,14 @@ describe('ContractDeliveryService', () => {
             channel: 'ALIMTALK',
             title: null,
             body: '…',
-            // 가입 초대는 링크 변수에 버튼 링크 표시가 있어야 보낸다(WHALEERP-636). 소속 추가 확인 요청은 카카오 등록본에
-            // 버튼이 없어 버튼 링크 변수도 없다(2026-11-03)
+            // 링크 변수에 버튼 링크 표시가 있어야 보낸다 — 가입 초대(WHALEERP-636) · 소속 추가 확인 요청(재등록, WHALEERP-738)
             variables:
               where.templateCode === 'TALK_STAFF_AFFILIATION_REQUEST'
-                ? [{ name: '사업자' }, { name: '근무지' }, { name: '고용형태' }]
+                ? [
+                    { name: '근무지' },
+                    { name: '고용형태' },
+                    { name: '링크', isButtonLink: true },
+                  ]
                 : [{ name: '링크', isButtonLink: true }],
             kakaoTemplateCode: where.templateCode,
           }),
@@ -411,12 +414,7 @@ describe('ContractDeliveryService', () => {
           employmentType: 'PART_TIME',
           candidateAccountId: 5,
         });
-        tx.store.findUnique.mockResolvedValue({
-          name: '모리커피 연남점',
-          bpCode: {
-            stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
-          },
-        });
+        tx.store.findUnique.mockResolvedValue({ name: '모리커피 연남점' });
         Object.assign(tx, {
           account: {
             findUnique: jest
@@ -460,7 +458,6 @@ describe('ContractDeliveryService', () => {
           expired: [40],
           storeName: '모리커피 연남점',
           affiliation: {
-            bpName: '모리커피',
             employmentType: '파트타이머',
             email: 'a@b.c',
             nameMismatch: false,
@@ -477,12 +474,12 @@ describe('ContractDeliveryService', () => {
           } as unknown as ConfigService,
           mail as never,
         ).dispatch(pending, 1);
+        // 첫 줄은 근무지만(WHALEERP-745). 알림톡 버튼(WHALEERP-738)과 메일은 같은 직원 앱 요청 화면 링크를 싣는다
         const variables = {
-          사업자: '모리커피',
           근무지: '모리커피 연남점',
           고용형태: '파트타이머',
+          링크: 'https://staff.whale.test/affiliations',
         };
-        // 알림톡은 버튼이 없는 등록본이라 링크를 넘기지 않고(2026-11-03), 메일만 직원 앱 요청 화면 링크를 싣는다
         expect(alimtalk.send).toHaveBeenCalledWith({
           templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
           to: PHONE,
@@ -493,10 +490,7 @@ describe('ContractDeliveryService', () => {
         expect(mail.send).toHaveBeenCalledWith({
           templateCode: 'EMAIL_STAFF_AFFILIATION_REQUEST',
           to: 'a@b.c',
-          variables: {
-            ...variables,
-            링크: 'https://staff.whale.test/affiliations',
-          },
+          variables,
         });
       },
     );
@@ -508,10 +502,7 @@ describe('ContractDeliveryService', () => {
         jobTitle: '홀',
         candidateAccountId: 5,
       });
-      tx.store.findUnique.mockResolvedValue({
-        name: '모리커피 연남점',
-        bpCode: { stores: [{ businessProfile: { bizTradeName: '모리커피' } }] },
-      });
+      tx.store.findUnique.mockResolvedValue({ name: '모리커피 연남점' });
       Object.assign(tx, {
         account: {
           findUnique: jest
@@ -566,10 +557,7 @@ describe('ContractDeliveryService', () => {
         employmentType: 'FULL_TIME',
         jobTitle: '매니저',
       });
-      tx.store.findUnique.mockResolvedValue({
-        name: '모리커피 연남점',
-        bpCode: { stores: [{ businessProfile: { bizTradeName: '모리커피' } }] },
-      });
+      tx.store.findUnique.mockResolvedValue({ name: '모리커피 연남점' });
       Object.assign(tx, {
         account: {
           findUnique: jest
@@ -621,7 +609,6 @@ describe('ContractDeliveryService', () => {
             invitationId: 50,
             unlockAttemptId: null,
             affiliation: {
-              bpName: 'B',
               employmentType: '정직원',
               email: 'a@b.c',
               nameMismatch: false,
@@ -827,8 +814,8 @@ describe('ContractDeliveryService', () => {
       }
     });
 
-    // 코드만 먼저 배포돼 DB 템플릿에 버튼 링크 변수(링크)가 남았으면 — 버튼이 없는 등록본(2026-11-03)이라 쓰기 전에 503
-    it('소속 추가 확인 요청 템플릿에 버튼 링크 변수가 남아 있으면 쓰기 전에 503 — NO_BUTTON_NAME, 아무것도 쓰지 않는다', async () => {
+    // 코드만 먼저 배포돼 DB 템플릿에 버튼 링크 변수(링크)가 아직 없으면 — 재등록본(WHALEERP-738)에는 버튼이 있어 쓰기 전에 503
+    it('소속 추가 확인 요청 템플릿에 버튼 링크 변수가 없으면 쓰기 전에 503 — LINK_MISMATCH, 아무것도 쓰지 않는다', async () => {
       const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
       try {
         tx.notificationTemplate.findUnique.mockResolvedValue({
@@ -836,7 +823,11 @@ describe('ContractDeliveryService', () => {
           channel: 'ALIMTALK',
           title: null,
           body: '…',
-          variables: [{ name: '사업자' }, { name: '링크', isButtonLink: true }],
+          variables: [
+            { name: '사업자' },
+            { name: '근무지' },
+            { name: '고용형태' },
+          ],
           kakaoTemplateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
         });
         await expect(
@@ -851,7 +842,7 @@ describe('ContractDeliveryService', () => {
         expect(tx.invitation.updateMany).not.toHaveBeenCalled();
         expect(tx.contract.update).not.toHaveBeenCalled();
         expect(error).toHaveBeenCalledWith(
-          '소속 추가 확인 요청 템플릿 버튼 설정이 맞지 않음: NO_BUTTON_NAME 버튼 링크 표시=[링크]',
+          '소속 추가 확인 요청 템플릿 버튼 설정이 맞지 않음: LINK_MISMATCH 버튼 링크 표시=[] 기대=링크',
         );
       } finally {
         error.mockRestore();
@@ -870,81 +861,32 @@ describe('ContractDeliveryService', () => {
       expect(tx.contract.update).not.toHaveBeenCalled();
     });
 
-    // 소속 추가 확인 요청 알림톡은 버튼 · 링크가 없다(카카오 등록본, 2026-11-03) — 직원 앱 주소는 메일 링크에만 쓴다
+    // 소속 추가 확인 요청 알림톡도 [요청 확인하기] 버튼 링크를 싣는다(카카오 재등록, WHALEERP-738) — 버튼 없이 보내면 등록본과
+    // 달라 대체 문자로 가므로, 직원 앱 주소가 없거나 https 가 아니면 가입 초대처럼 쓰기 전에 막는다
     it.each([
-      ['http', 'http://localhost:3001'],
-      ['없음', undefined],
+      [
+        'http',
+        'http://localhost:3001',
+        '직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 소속 추가 확인 요청 알림톡 버튼 링크를 보낼 수 없습니다.',
+      ],
+      [
+        '없음',
+        undefined,
+        '직원 앱 주소(STAFF_APP_URL)가 없어 소속 추가 확인 요청 링크를 보낼 수 없습니다.',
+      ],
     ])(
-      '직원 앱 주소가 %s 이어도 소속 추가 확인 요청은 보낸다 — 알림톡은 링크 없이, 주소가 없으면 메일만 건너뛴다',
-      async (_, url) => {
+      '직원 앱 주소가 %s 이면 소속 추가 확인 요청도 503 — 아무것도 쓰지 않는다',
+      async (_, url, message) => {
         appUrl = url;
-        tx.staffMember.update.mockResolvedValue({
-          name: '남도현',
-          employmentType: 'PART_TIME',
-          jobTitle: '홀',
-          candidateAccountId: 5,
-        });
-        tx.store.findUnique.mockResolvedValue({
-          name: '모리커피 연남점',
-          bpCode: {
-            stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
-          },
-        });
-        Object.assign(tx, {
-          account: {
-            findUnique: jest
-              .fn()
-              .mockResolvedValue({ email: 'a@b.c', realName: '남도현' }),
-          },
-        });
-        const pending = (await service().prepare(
-          t(),
-          input({ draftAction: 'AFFILIATION_CONFIRM' }),
-          NOW,
-        )) as PendingInvite;
-        expect(pending.kind).toBe('AFFILIATION');
-        prisma.invitation.findUnique.mockResolvedValue({ status: 'SENT' });
-        const mail = { send: jest.fn().mockResolvedValue({}) };
-        const warn = jest
-          .spyOn(Logger.prototype, 'warn')
-          .mockImplementation(() => undefined);
-        try {
-          await new ContractDeliveryService(
-            prisma as unknown as PrismaService,
-            alimtalk as unknown as AlimtalkService,
-            {
-              get: (key: string) => (key === 'JWT_SECRET' ? SECRET : appUrl),
-            } as unknown as ConfigService,
-            mail as never,
-          ).dispatch(pending, 1);
-          expect(alimtalk.send).toHaveBeenCalledWith(
-            expect.objectContaining({
-              templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
-              variables: {
-                사업자: '모리커피',
-                근무지: '모리커피 연남점',
-                고용형태: '파트타이머',
-              },
-            }),
-          );
-          if (url) {
-            // 메일 링크는 버튼 링크가 아니라 https 가 아니어도 싣는다
-            expect(mail.send).toHaveBeenCalledWith(
-              expect.objectContaining({
-                variables: expect.objectContaining({
-                  링크: 'http://localhost:3001/affiliations',
-                }) as object,
-              }),
-            );
-          } else {
-            expect(mail.send).not.toHaveBeenCalled();
-            expect(warn).toHaveBeenCalledWith(
-              expect.stringContaining('no STAFF_APP_URL'),
-            );
-          }
-        } finally {
-          warn.mockRestore();
-        }
+        await expect(
+          service().prepare(
+            t(),
+            input({ draftAction: 'AFFILIATION_CONFIRM' }),
+            NOW,
+          ),
+        ).rejects.toThrow(message);
+        expect(tx.invitation.updateMany).not.toHaveBeenCalled();
+        expect(tx.contract.update).not.toHaveBeenCalled();
       },
     );
 
@@ -1206,7 +1148,6 @@ describe('ContractDeliveryService', () => {
         token: null,
         unlockAttemptId: null,
         affiliation: {
-          bpName: 'B',
           employmentType: '정직원',
           email: null,
           nameMismatch: false,
@@ -1784,7 +1725,6 @@ describe('ContractDeliveryService', () => {
             token: null,
             unlockAttemptId: null,
             affiliation: {
-              bpName: 'B',
               employmentType: '정직원',
               email: null,
               nameMismatch: false,
@@ -1873,7 +1813,6 @@ describe('ContractDeliveryService', () => {
               token: null,
               unlockAttemptId: null,
               affiliation: {
-                bpName: 'B',
                 employmentType: '정직원',
                 email: null,
                 nameMismatch: false,

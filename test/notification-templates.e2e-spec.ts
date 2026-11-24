@@ -243,10 +243,10 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
     expect(row.variables).toEqual(row.defaultVariables);
   });
 
-  // 소속 추가 확인 요청 알림톡도 카카오에 등록했다(WHALEERP-130 후속, 2026-11-03 등록)
-  it('소속 추가 확인 요청 알림톡의 문구 · 카카오 템플릿 코드가 카카오 등록본과 같다', async () => {
+  // 소속 추가 확인 요청 알림톡은 첫 줄 · 버튼을 바꿔 카카오에 새 코드로 다시 등록했다(WHALEERP-745 · 738)
+  it('소속 추가 확인 요청 알림톡의 문구 · 카카오 템플릿 코드가 카카오 재등록본과 같다 — 버튼 링크 변수 링크', async () => {
     const registered = [
-      '#{사업자} #{근무지}에서 소속 추가를 요청했습니다.',
+      '#{근무지}에서 소속 추가를 요청했습니다.',
       '고용 형태: #{고용형태}',
       'WHALE ERP 직원 근무 앱에 로그인해 요청을 확인하고 수락하면 근로계약서를 받을 수 있습니다.',
       '요청은 30일 동안 유효합니다.',
@@ -259,29 +259,40 @@ describe('알림 템플릿 관리 (e2e, DB)', () => {
       title: null,
       body: registered,
       defaultBody: registered,
-      kakaoTemplateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+      kakaoTemplateCode: 'TALK_STAFF_AFFILIATION_V2',
     });
-    // 등록본에 버튼이 없어 버튼 링크 변수(링크)를 뺐다 — 발송 코드가 넘기는 사업자 · 근무지 · 고용형태만
+    // 사업자를 뺐고(WHALEERP-745), [요청 확인하기] 버튼 링크 변수 링크를 되돌렸다(WHALEERP-738)
     const variables = row.variables as {
       name: string;
       isButtonLink?: boolean;
     }[];
     expect(variables.map((v) => v.name)).toEqual([
-      '사업자',
       '근무지',
       '고용형태',
+      '링크',
     ]);
-    expect(variables.some((v) => v.isButtonLink)).toBe(false);
+    expect(variables.filter((v) => v.isButtonLink).map((v) => v.name)).toEqual([
+      '링크',
+    ]);
     expect(row.variables).toEqual(row.defaultVariables);
-    // 메일은 그대로 링크 버튼을 싣는다(알림톡만 바뀜)
+    // 메일도 첫 줄에서 사업자를 뺐고, 링크 버튼은 그대로다
     const mail = await prisma.notificationTemplate.findUniqueOrThrow({
       where: { templateCode: 'EMAIL_STAFF_AFFILIATION_REQUEST' },
     });
-    expect(
-      (mail.variables as { name: string; isButtonLink?: boolean }[]).find(
-        (v) => v.isButtonLink,
-      )?.name,
-    ).toBe('링크');
+    expect(mail.defaultBody).toMatch(
+      /^#\{근무지\}에서 소속 추가를 요청했습니다/,
+    );
+    expect(mail.body).toBe(mail.defaultBody);
+    const mailVariables = mail.variables as {
+      name: string;
+      isButtonLink?: boolean;
+    }[];
+    expect(mailVariables.map((v) => v.name)).toEqual([
+      '근무지',
+      '고용형태',
+      '링크',
+    ]);
+    expect(mailVariables.find((v) => v.isButtonLink)?.name).toBe('링크');
   });
 
   it('근로계약서 발송 알림톡이 카카오 등록본과 같다 — 카카오 코드 PUSH_CONTRACT_SENT, 버튼 · 링크 변수 없음(WHALEERP-619)', async () => {

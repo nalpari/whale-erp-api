@@ -34,7 +34,6 @@ import {
 } from '../alimtalk/alimtalk-buttons';
 import { findSendableTemplate } from '../notification-templates/find-template';
 import { noticeStaff } from '../notifications/staff-notice';
-import { HQ_TRADE_NAME_SELECT, tradeNameOf } from '../bp-codes/hq-profile';
 import {
   storeNotOperatingConflict,
   storeOperating,
@@ -201,7 +200,6 @@ export type PendingInvite = DeliveryInput & {
    * 달라 메일을 보내지 않는다
    */
   affiliation: {
-    bpName: string;
     employmentType: string;
     email: string | null;
     nameMismatch: boolean;
@@ -235,9 +233,9 @@ const failureOf = (e: unknown): { kind: SendFailureKind; code?: number } =>
  *   가입한 직원의 근로계약서 발송 알림톡(WHALEERP-619)도 커밋 뒤에 보내지만, 되돌리지 않고 실패해도 저장은 그대로다.
  *
  * 초대 코드는 알림톡 본문에 싣는다. 초대 링크(STAFF_APP_URL 의 `/invite#token=…`)는 버튼 변수라 알림톡 버튼과 대체 문자
- * 끝에 함께 실린다(WHALEERP-636). 등록한 버튼 링크가 `https://#{변수}` 라 직원 앱 주소가
- * https 가 아니면 쓰기 전에 막는다. 소속 추가 확인 요청 알림톡은 카카오 등록본에 버튼이 없어(2026-11-03) 링크를 싣지 않는다 —
- * 직원은 앱에 로그인해 요청을 본다. 그래서 직원 앱 주소가 없어도 알림톡은 보내고, 링크가 들어가는 메일만 건너뛴다.
+ * 끝에 함께 실린다(WHALEERP-636). 소속 추가 확인 요청 알림톡도 카카오 재등록본에 [요청 확인하기] 버튼이 있어(WHALEERP-738) 직원 앱
+ * 요청 화면 링크(`/affiliations`, 메일과 같다)를 싣는다. 등록한 버튼 링크가 `https://#{변수}` 라 직원 앱 주소가 없거나 https 가
+ * 아니면 두 초대 모두 쓰기 전에 막는다 — 버튼 없이 보내면 등록본과 달라 대체 문자로 간다.
  * 두 알림톡 모두 실제 발송에서 알림톡으로 닿는지 확인 전이라 대체 문자 발신번호가 없으면 쓰기 전에 막는다(api #74 리뷰) —
  * 그러지 않으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가 된다.
  */
@@ -268,7 +266,7 @@ export class ContractDeliveryService {
   }
 
   /**
-   * 가입 초대를 보낼 수 있는가 — 직원 앱 주소(초대 링크, 가입 초대만) · 대체 문자 발신번호(503), 휴대폰 번호(409
+   * 가입 초대를 보낼 수 있는가 — 직원 앱 주소(알림톡 버튼 링크) · 대체 문자 발신번호(503), 휴대폰 번호(409
    * SEND_PHONE_NOT_MOBILE), 켜진 템플릿(503). 저장 트랜잭션 안에서 부른다 — 던지면 저장째 되돌아가 「보내지 않았는데 보낸 상태」가
    * 남지 않는다.
    */
@@ -278,22 +276,20 @@ export class ContractDeliveryService {
     kind: 'INVITE' | 'AFFILIATION',
   ): Promise<void> {
     const what = kind === 'INVITE' ? '가입 초대' : '소속 추가 확인 요청';
-    // 소속 추가 확인 요청 알림톡은 버튼 · 링크가 없다(카카오 등록본, 2026-11-03) — 직원 앱 주소는 가입 초대 링크에만 필요하다
-    if (kind === 'INVITE') {
-      if (!this.appUrl)
-        throw new ServiceUnavailableException(
-          `직원 앱 주소(STAFF_APP_URL)가 없어 ${what} 링크를 보낼 수 없습니다.`,
-        );
-      // 링크는 알림톡 버튼 변수이고, 카카오에 등록한 버튼 링크가 `https://#{변수}` 라 https 주소만 실을 수 있다(2026-11-02) — http 면
-      // 커밋 뒤 발송이 늘 던지므로 쓰기 전에 막는다. 발송과 같은 판단이 되게 원문이 아니라 실제로 만들 링크와 같은 origin 을 본다.
-      // 운영은 기동 검사(readStaffAppUrl)가 이미 https 만 받는다.
-      if (!isButtonLinkUrl(affiliationLinkOf(this.appUrl)))
-        throw new ServiceUnavailableException(
-          `직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 ${what} 알림톡 버튼 링크를 보낼 수 없습니다.`,
-        );
-    }
-    // 두 알림톡 모두 카카오에 등록했지만(가입 초대 2026-10-30 · 소속 추가 확인 요청 2026-11-03) 실제 발송에서 알림톡으로 닿는지
-    // (가입 초대는 버튼 전체 주소가 열리는지) 아직 확인 전이다 — 대체 문자가 없으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가
+    // 두 알림톡 모두 직원 앱 링크를 버튼에 싣는다 — 가입 초대 [가입하기] · 소속 추가 확인 요청 [요청 확인하기](WHALEERP-738)
+    if (!this.appUrl)
+      throw new ServiceUnavailableException(
+        `직원 앱 주소(STAFF_APP_URL)가 없어 ${what} 링크를 보낼 수 없습니다.`,
+      );
+    // 링크는 알림톡 버튼 변수이고, 카카오에 등록한 버튼 링크가 `https://#{변수}` 라 https 주소만 실을 수 있다(2026-11-02) — http 면
+    // 커밋 뒤 발송이 늘 던지므로 쓰기 전에 막는다. 발송과 같은 판단이 되게 원문이 아니라 실제로 만들 링크와 같은 origin 을 본다.
+    // 운영은 기동 검사(readStaffAppUrl)가 이미 https 만 받는다.
+    if (!isButtonLinkUrl(affiliationLinkOf(this.appUrl)))
+      throw new ServiceUnavailableException(
+        `직원 앱 주소(STAFF_APP_URL)가 https 가 아니라 ${what} 알림톡 버튼 링크를 보낼 수 없습니다.`,
+      );
+    // 두 알림톡 모두 카카오에 등록했지만(가입 초대 2026-10-30 · 소속 추가 확인 요청 재등록 WHALEERP-738) 실제 발송에서 알림톡으로
+    // 닿는지(버튼 전체 주소가 열리는지) 아직 확인 전이다 — 대체 문자가 없으면 직원에게 닿을 길이 없는데 화면은 보낸 상태가
     // 된다(api #59 · #74 리뷰). 확인되면 다시 본다.
     if (!this.alimtalk.hasSmsFallback())
       throw new ServiceUnavailableException(
@@ -512,7 +508,7 @@ export class ContractDeliveryService {
       : null;
     const store = await tx.store.findUnique({
       where: { storeId: input.storeId },
-      select: { name: true, bpCode: { select: HQ_TRADE_NAME_SELECT } },
+      select: { name: true },
     });
     return {
       ...input,
@@ -522,7 +518,6 @@ export class ContractDeliveryService {
       invitationId: invitation.invitationId,
       unlockAttemptId: null,
       affiliation: {
-        bpName: store ? tradeNameOf(store.bpCode) : '',
         // 알림톡 · 메일 변수는 빈 문자열이어도 렌더된다
         employmentType: employmentTypeLabel(employmentType) ?? '',
         email: account?.email ?? null,
@@ -715,8 +710,11 @@ export class ContractDeliveryService {
         await this.alimtalk.send({
           templateCode: AFFILIATION_TEMPLATE,
           to: pending.phone,
-          // 버튼이 없는 등록본이라 링크는 넘기지 않는다 — 템플릿에 없는 변수는 렌더가 던진다
-          variables: this.affiliationVariables(pending),
+          // [요청 확인하기] 버튼 링크(WHALEERP-738) — 직원 앱 주소는 쓰기 전에 확인했다(assertCanInvite)
+          variables: {
+            ...this.affiliationVariables(pending),
+            링크: affiliationLinkOf(this.appUrl as string),
+          },
           related: { type: CONTRACT_RELATED_TYPE, id: contractId },
           sentBy,
         });
@@ -784,10 +782,12 @@ export class ContractDeliveryService {
     return true;
   }
 
-  /** 소속 추가 확인 요청 알림톡 · 메일 변수. 알림톡은 이것만, 메일은 링크(직원 앱 요청 화면)를 더한다 */
+  /**
+   * 소속 추가 확인 요청 알림톡 · 메일 변수. 둘 다 링크(직원 앱 요청 화면)를 더한다. 첫 줄은 근무지(점포 이름)만이다 — 상호를 앞에
+   * 붙이면 「도레미커피 도레미커피 신촌점」처럼 겹쳤다(WHALEERP-745)
+   */
   private affiliationVariables(p: PendingInvite): Record<string, string> {
     return {
-      사업자: p.affiliation?.bpName ?? '',
       근무지: p.storeName,
       고용형태: p.affiliation?.employmentType ?? '',
     };
@@ -797,7 +797,7 @@ export class ContractDeliveryService {
     const email = p.affiliation?.email;
     // 이름이 다른 계정에는 메일을 보내지 않는다 — 그 사유는 메일 설정이 없는 환경에서도 남긴다(유선 확인 때 근거)
     const nameMismatch = p.affiliation?.nameMismatch === true;
-    // 메일의 링크(직원 앱 요청 화면)는 직원 앱 주소로 만든다 — 없으면 메일만 건너뛴다(알림톡은 링크 없이 나갔다)
+    // 메일의 링크(직원 앱 요청 화면)는 직원 앱 주소로 만든다. 주소가 없으면 쓰기 전에 막혀(assertCanInvite) 여기 오지 않는다
     const appUrl = this.appUrl;
     if (nameMismatch || !this.mail || !email || !appUrl) {
       const why = nameMismatch

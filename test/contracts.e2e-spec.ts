@@ -205,7 +205,7 @@ describe('근로계약 목록 (e2e)', () => {
       .mockResolvedValue({ staffMemberId: 3, contracts: [{ contractId: 7 }] });
     // 저장하면 곧바로 보낸다(2026-10-19 재영) — 가입 초대 템플릿 · 초대 · 알림톡(실제로 보내지 않음)
     alimtalk.send.mockReset().mockResolvedValue({ referenceKey: 'r' });
-    // 가입 초대는 버튼 링크 변수가 있고, 소속 추가 확인 요청은 카카오 등록본에 버튼이 없어 버튼 링크 변수도 없다(2026-11-03)
+    // 두 초대 모두 링크 변수에 버튼 링크 표시가 있다 — 가입 초대(WHALEERP-636) · 소속 추가 확인 요청(재등록, WHALEERP-738)
     prisma.notificationTemplate.findUnique
       .mockReset()
       .mockImplementation(({ where }: { where: { templateCode: string } }) =>
@@ -216,7 +216,11 @@ describe('근로계약 목록 (e2e)', () => {
           body: '…',
           variables:
             where.templateCode === 'TALK_STAFF_AFFILIATION_REQUEST'
-              ? [{ name: '사업자' }, { name: '근무지' }, { name: '고용형태' }]
+              ? [
+                  { name: '근무지' },
+                  { name: '고용형태' },
+                  { name: '링크', isButtonLink: true },
+                ]
               : [{ name: '링크', isButtonLink: true }],
           kakaoTemplateCode: where.templateCode,
         }),
@@ -1746,13 +1750,7 @@ describe('근로계약 목록 (e2e)', () => {
         email: 'a@b.c',
         realName: '남도현',
       });
-      prisma.store.findUnique.mockResolvedValue({
-        name: '모리커피 연남점',
-        // 상호명은 BP 본사 점포의 사업자정보에서 읽는다(HQ_TRADE_NAME_SELECT).
-        bpCode: {
-          stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
-        },
-      });
+      prisma.store.findUnique.mockResolvedValue({ name: '모리커피 연남점' });
     };
 
     it('계정이 있는 번호면 발송 대기로 만들고 소속 추가 확인 요청 알림톡을 보낸다(WHALEERP-130)', async () => {
@@ -1772,10 +1770,11 @@ describe('근로계약 목록 (e2e)', () => {
       expect(alimtalk.send).toHaveBeenCalledWith(
         expect.objectContaining({
           templateCode: 'TALK_STAFF_AFFILIATION_REQUEST',
+          // 첫 줄은 근무지만(WHALEERP-745), [요청 확인하기] 버튼 링크는 직원 앱 요청 화면(WHALEERP-738)
           variables: {
-            사업자: '모리커피',
             근무지: '모리커피 연남점',
             고용형태: '파트타이머',
+            링크: 'https://staff.e2e.test/affiliations',
           },
         }),
       );
@@ -1879,13 +1878,7 @@ describe('근로계약 목록 (e2e)', () => {
         email: 'a@b.c',
         realName: '남도현',
       });
-      prisma.store.findUnique.mockResolvedValue({
-        name: '모리커피 연남점',
-        // 상호명은 BP 본사 점포의 사업자정보에서 읽는다(HQ_TRADE_NAME_SELECT).
-        bpCode: {
-          stores: [{ businessProfile: { bizTradeName: '모리커피' } }],
-        },
-      });
+      prisma.store.findUnique.mockResolvedValue({ name: '모리커피 연남점' });
       const res = await send().expect(200);
       expect(res.body).toMatchObject({
         status: 'PENDING_SEND',
