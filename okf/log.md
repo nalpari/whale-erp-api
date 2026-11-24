@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-24
+* **Update**: [Payslips](/api/payslips.md) — 작성 대상(`GET /payslips/candidates`) 줄과 상세(`GET /payslips/:id`)에 `retiredDate`(그 명세서 직원 레코드의 `staff_members.retired_date`, YYYY-MM-DD · 없으면 null)를 더했다(WHALEERP-764) — 관리자 웹이 작성 팝업 · 상세에 「퇴직 · 퇴직 예정」을 보인다. 상세를 돌려주는 임시저장 · 확정 · 발송 응답도 같다. 마이그레이션 없음.
 * **Update**: [TO-DO](/api/todos.md) — TO-DO 상세에 최종수정(`modifiedAt` · `modifiedByName`, WHALEERP-698): 관리자 [수정]만 `todos.modified_at` · `modified_by` 에 남긴다(마이그레이션 `20261124101923_team3_todo_modified`). 상태 변경 · 삭제 · 직원 앱 완료는 바꾸지 않고, 묶음은 전체 행이 같은 값이다. 기존 행 · 등록만 한 TO-DO 는 null(화면에 줄 없음). 근로계약 최종수정(WHALEERP-699)과 같은 방식.
 
 ## 2026-11-20

@@ -42,6 +42,7 @@ const staff = (over: object = {}) => ({
   storeId: 5,
   name: '서지안',
   employmentType: 'FULL_TIME',
+  retiredDate: null,
   contracts: [{ contractId: 7, employmentType: 'PART_TIME' }],
   payslips: [],
   ...over,
@@ -183,6 +184,7 @@ describe('PayslipDraftService', () => {
           staffMemberId: 31,
           storeId: 6,
           name: '이도윤',
+          retiredDate: d('2026-02-14'),
           contracts: [],
           payslips: [{ payslipId: 55 }],
         }),
@@ -202,6 +204,7 @@ describe('PayslipDraftService', () => {
             contractId: 7,
             payslipId: null,
             hasAttendance: true,
+            retiredDate: null,
           },
           {
             staffMemberId: 31,
@@ -213,6 +216,8 @@ describe('PayslipDraftService', () => {
             contractId: null,
             payslipId: 55,
             hasAttendance: false,
+            // 퇴직일(YYYY-MM-DD) — 화면이 「퇴직 · 퇴직 예정」을 보인다(WHALEERP-764)
+            retiredDate: '2026-02-14',
           },
         ],
       });
@@ -247,6 +252,13 @@ describe('PayslipDraftService', () => {
         { startDate: 'desc' },
         { contractId: 'desc' },
       ]);
+    });
+
+    it('직원 레코드의 퇴직일을 읽는다(WHALEERP-764)', async () => {
+      await service.candidates(9, '2026-10');
+      expect(
+        (staffWhere().select as unknown as Record<string, unknown>).retiredDate,
+      ).toBe(true);
     });
 
     it('이미 있는 명세서는 목록과 같이 급여 기간 시작일이 그 달인 것이다', async () => {

@@ -44,7 +44,11 @@ const detailRow = (over: object = {}) => ({
   confirmedAt: null,
   createdAt: new Date('2026-10-01T00:00:00.000Z'),
   updatedAt: new Date('2026-10-02T00:00:00.000Z'),
-  staffMember: { name: '서지안', account: { isHqSharingConsented: false } },
+  staffMember: {
+    name: '서지안',
+    retiredDate: null,
+    account: { isHqSharingConsented: false },
+  },
   contract: { contractId: 7, status: 'SIGNED', wageAmount: 10_320 },
   payslipItems: [
     {
@@ -857,6 +861,7 @@ describe('PayslipListService', () => {
         payslipId: 40,
         staffMemberId: 30,
         staffName: '서지안',
+        retiredDate: null,
         storeId: 5,
         storeName: '모리커피 서초점',
         storeIsHq: false,
@@ -922,6 +927,23 @@ describe('PayslipListService', () => {
           },
         ],
         dispatches: [],
+      });
+    });
+
+    it('그 명세서 직원 레코드의 퇴직일을 YYYY-MM-DD 로 준다 — 화면이 「퇴직 · 퇴직 예정」을 보인다(WHALEERP-764)', async () => {
+      prisma.payslip.findUniqueOrThrow.mockResolvedValue(
+        detailRow({
+          staffMember: { name: '서지안', retiredDate: d('2026-09-14') },
+        }),
+      );
+      await expect(service.findOne(9, 40)).resolves.toMatchObject({
+        retiredDate: '2026-09-14',
+      });
+      const args = firstArg(prisma.payslip.findUniqueOrThrow) as {
+        select: { staffMember: unknown };
+      };
+      expect(args.select.staffMember).toEqual({
+        select: { name: true, retiredDate: true },
       });
     });
 
