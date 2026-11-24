@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T05:36:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T06:18:46Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
@@ -25,7 +25,7 @@ sources:
   - id: controllers
     resource: ../../src/payslips/payslips.controller.ts
     title: GET /payslips · /payslips/summary · /payslips/:id (급여명세서 관리 MN000009 조회)
-    last_modified: 2026-10-30T02:31:31Z
+    last_modified: 2026-11-24T06:18:46Z
   - id: my-controller
     resource: ../../src/payslips/my-payslips.controller.ts
     title: GET /me/payslips · /me/payslips/:id (직원 근무 앱 토큰)
@@ -349,6 +349,8 @@ sources:
 * **배포 순서** — api(+ `db:deploy`, 마이그레이션 `20261124131846_team3_payslip_item_calculation`) → 관리자 웹 · 직원 앱. 새 api 는 옛
   화면을 위처럼 받아 주고, 새 화면은 새 칸(`workMinutes` · `calculationText`)이 있는 api 를 기대한다(관리자 웹은 칸이 없어도 빈 칸 ·
   식 없음으로 그린다). 마이그레이션 전에 새 api 가 돌면 `payslip_items` 를 쓰는 요청이 500 이다(마이그레이션 머리말).
+  **api 를 되돌릴 때는 화면을 먼저 되돌린다** — 새 화면은 `workMinutes` 를 보내고, 옛 api 는 모르는 칸을 400 으로 막는다(전역
+  ValidationPipe `forbidNonWhitelisted`). 화면을 그대로 두고 api 만 되돌리면 임시저장이 모두 400 이 된다.
 
 # 임시저장 · 확정 · 확정 취소 (WHALEERP-228 · 230)
 
