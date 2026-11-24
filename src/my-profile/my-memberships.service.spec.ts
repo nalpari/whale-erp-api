@@ -335,6 +335,38 @@ describe('MyMembershipsService', () => {
       }
     });
 
+    it('expired — 퇴직일이 파기 기준(retiredBefore)보다 앞이면 신고 정보가 남아 있든 배치가 이미 지웠든 true, 당일까지 · 재직은 false(WHALEERP-772)', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date('2026-10-20T03:00:00Z')); // 한국 2026-10-20 12:00
+      try {
+        const service = await build();
+        const retired = (retiredDate: string, withProfile: boolean) =>
+          taxRow({
+            employmentStatus: 'RETIRED',
+            retiredDate: d(retiredDate),
+            staffTaxProfile: withProfile ? taxProfile(31) : null,
+          });
+        // 배치 전(행이 남음) · 배치 뒤(행이 지워짐) 모두 지운 것으로 알린다
+        for (const withProfile of [true, false]) {
+          findFirst.mockResolvedValue(retired('2023-10-19', withProfile));
+          const res = await service.taxProfile(12, 31);
+          expect(res.expired).toBe(true);
+          expect(res.taxProfile).toBeNull();
+        }
+        // 퇴직 + 3년 당일까지는 기한 안
+        findFirst.mockResolvedValue(retired('2023-10-20', true));
+        expect((await service.taxProfile(12, 31)).expired).toBe(false);
+        // 기한 안 퇴직인데 넣은 적 없음 — 「입력한 적 없음」 그대로
+        findFirst.mockResolvedValue(retired('2025-01-31', false));
+        expect((await service.taxProfile(12, 31)).expired).toBe(false);
+        // 재직
+        findFirst.mockResolvedValue(taxRow({}));
+        expect((await service.taxProfile(12, 31)).expired).toBe(false);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('퇴직일이 지났는데 배치 전(재직 상태)이어도 조회만 — 근로계약 날인과 같은 판정', async () => {
       const service = await build();
       findFirst.mockResolvedValue(taxRow({ retiredDate: d('2020-01-31') }));
@@ -374,6 +406,7 @@ describe('MyMembershipsService', () => {
       expect(await service.taxProfile(12, 31)).toEqual({
         staffMemberId: 31,
         editable: true,
+        expired: false,
         taxProfile: null,
       });
     });
@@ -385,6 +418,7 @@ describe('MyMembershipsService', () => {
       expect(res).toEqual({
         staffMemberId: 31,
         editable: true,
+        expired: false,
         taxProfile: {
           rrnMasked: '980304-1******',
           bankCode: '088',
