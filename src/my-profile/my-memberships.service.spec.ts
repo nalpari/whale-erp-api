@@ -302,6 +302,14 @@ describe('MyMembershipsService', () => {
         const res = await service.taxProfile(12, 31);
         expect(res.taxProfile).toBeNull();
         expect(res.editable).toBe(false);
+        // 퇴직 상태 배치가 반영되지 않은(재직 상태로 남은) 레코드도 퇴직일로 판정한다
+        findFirst.mockResolvedValue(
+          taxRow({
+            retiredDate: d('2023-10-19'),
+            staffTaxProfile: taxProfile(31),
+          }),
+        );
+        expect((await service.taxProfile(12, 31)).taxProfile).toBeNull();
       } finally {
         jest.useRealTimers();
       }

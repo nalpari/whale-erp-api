@@ -219,11 +219,10 @@ export class MyMembershipsService {
     if (!staff) throw new NotFoundException('소속을 찾을 수 없습니다.');
     const now = new Date();
     // 보존 기간(퇴직 + 3년, RET-01)이 지난 퇴직 레코드는 파기 배치(05:10)가 돌기 전이어도 신고 정보를 풀지 않는다 — 배치가
-    // 늦거나 실패해도 기한이 지난 값이 보이지 않게(PR #313 pr-agent). 기준은 파기 배치와 같은 retiredBefore 다
+    // 늦거나 실패해도 기한이 지난 값이 보이지 않게(PR #313 pr-agent). 기준은 파기 배치와 같은 retiredBefore 다. 퇴직 상태
+    // 배치가 반영됐는지와 상관없이 퇴직일로만 판정한다
     const expired =
-      staff.employmentStatus === 'RETIRED' &&
-      staff.retiredDate !== null &&
-      staff.retiredDate < retiredBefore(now);
+      staff.retiredDate !== null && staff.retiredDate < retiredBefore(now);
     return {
       staffMemberId: staff.staffMemberId,
       editable: employedOn(staff, now),
