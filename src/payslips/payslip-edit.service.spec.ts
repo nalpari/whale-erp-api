@@ -634,6 +634,34 @@ describe('PayslipEditService', () => {
           calculationText: null,
         });
       });
+
+      it('30분 단위는 야간 · 휴일근무수당만 본다 — 다른 줄에 실린 시간(연장수당 61분)은 무시하고 저장된다(PR #317 리뷰)', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue([
+          overtime(),
+          line(104, 'EARNING', '야간수당', NIGHT),
+        ]);
+        await expect(
+          save({
+            items: [
+              { payslipItemMasterId: 4, amount: 30_000, workMinutes: 45 },
+            ],
+          }),
+        ).rejects.toThrow(
+          '야간 · 휴일근무수당 근무시간은 30분 단위로 입력해 주세요.',
+        );
+
+        prisma.payslipItem.update.mockClear();
+        await save({
+          items: [{ payslipItemMasterId: 3, amount: 130_000, workMinutes: 61 }],
+        });
+        // 연장수당의 시간은 계산 때 값(480분) 그대로 — 보낸 61분은 쓰지 않는다
+        expect(dataOf(103)).toEqual({
+          adjustedAmount: 130_000,
+          isEntered: true,
+          workMinutes: 480,
+          calculationText: '8.0시간 · 직접 입력',
+        });
+      });
     });
 
     describe('가산 적용을 바꾸면', () => {

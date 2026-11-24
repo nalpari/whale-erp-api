@@ -364,6 +364,11 @@ export class PayslipEditService {
             throw new BadRequestException(
               '야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
             );
+          // 30분 단위는 이 두 줄만 — DTO 에 두면 다른 줄에 실린 시간까지 막는다(PR #317 리뷰)
+          if (minutes !== null && minutes % 30 !== 0)
+            throw new BadRequestException(
+              '야간 · 휴일근무수당 근무시간은 30분 단위로 입력해 주세요.',
+            );
           basis = {
             minutes,
             text: minutes === null ? null : hoursText(minutes),

@@ -84,14 +84,14 @@ describe('SavePayslipDto (금액 저장)', () => {
     (amount) => expect(save({ amount }).failed).toEqual(['items']),
   );
 
-  it.each([undefined, null, 0, 30, 120, 44_640])(
-    '근무시간 %p 분은 받는다 — 30분 단위(WHALEERP-755)',
+  it.each([undefined, null, 0, 30, 61, 44_640])(
+    '근무시간 %p 분은 받는다 — 30분 단위는 야간 · 휴일근무수당 줄만 서비스가 본다(WHALEERP-755, PR #317 리뷰)',
     (workMinutes) =>
       expect(save({ amount: 0, workMinutes }).failed).toEqual([]),
   );
 
-  it.each([-30, 45, 1.5, 44_670, '120'])(
-    '근무시간 %p 분은 400 — 음수 · 30분 단위가 아님 · 한 달 넘음',
+  it.each([-30, 1.5, 44_670, '120'])(
+    '근무시간 %p 분은 400 — 음수 · 정수가 아님 · 한 달 넘음',
     (workMinutes) =>
       expect(save({ amount: 0, workMinutes }).failed).toEqual(['items']),
   );

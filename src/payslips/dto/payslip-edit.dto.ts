@@ -4,7 +4,6 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
-  IsDivisibleBy,
   IsInt,
   IsOptional,
   Max,
@@ -41,8 +40,8 @@ export class PayslipItemAmountDto {
   amount: number | null;
 
   /**
-   * 근무시간(분) — 야간수당 · 휴일근무수당만 쓰고 다른 줄은 무시한다(WHALEERP-755). 30분 단위, 0 이상. 금액이 0보다 크면 함께
-   * 넣어야 한다(아니면 400). 빼거나 null 이면 시간 없음
+   * 근무시간(분), 0 이상 — 야간수당 · 휴일근무수당만 쓰고 다른 줄은 무시한다(WHALEERP-755). 그 두 줄은 30분 단위이고 금액이 0보다
+   * 크면 함께 넣어야 한다(아니면 400 — 서비스가 본다. 다른 줄에 실린 값까지 30분 단위로 막지 않게, PR #317 리뷰). 빼거나 null 이면 시간 없음
    */
   @ApiProperty({
     type: Number,
@@ -50,13 +49,11 @@ export class PayslipItemAmountDto {
     required: false,
     minimum: 0,
     maximum: PAYSLIP_WORK_MINUTES_MAX,
-    multipleOf: 30,
   })
   @IsOptional()
   @IsInt()
   @Min(0)
   @Max(PAYSLIP_WORK_MINUTES_MAX)
-  @IsDivisibleBy(30)
   workMinutes?: number | null;
 }
 
