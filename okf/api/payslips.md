@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T05:00:56Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T05:05:47Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
@@ -41,7 +41,7 @@ sources:
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-11-24T05:00:56Z
+    last_modified: 2026-11-24T05:05:47Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일 · 명세서 PDF 첨부)
@@ -297,7 +297,7 @@ sources:
   계산값과 다른 금액으로 고치면 시간은 계산 때 값 그대로 두고 식은 「직접 입력」(연장수당은 「8.0시간 · 직접 입력」) — 고친 금액과 맞지
   않는 식을 직원에게 보이지 않는다. 고친 값을 그대로 돌려보내면 식도 그대로다(2026-11-24 전 줄의 NULL 도). 계산값으로 되돌리면 지금
   데이터로 다시 셈해 식을 되살린다 — 고칠 때 덮어써 남은 식이 없어서다. 그사이 출퇴근이 바뀌어 다시 셈한 금액이 계산값과 다르면 맞는
-  식이 없어 NULL 로 둔다(관리자 화면은 「계산값」만). 작성 중 · 검토 중만 고치므로 발송한 명세서의 식은 바뀌지 않는다(확정 취소 뒤 다시 고치면 다시 보낼 때 새 식이 나간다).
+  식이 없어 식 대신 시간만 「8.0시간」을 남긴다(계산의 `withHours` 와 같은 규칙, 시간이 없으면 NULL — PR #317 재검사). 작성 중 · 검토 중만 고치므로 발송한 명세서의 식은 바뀌지 않는다(확정 취소 뒤 다시 고치면 다시 보낼 때 새 식이 나간다).
 * **야간 · 휴일근무수당** — 임시저장 `items[].workMinutes`(분, 0 이상 · 한 달 44,640분 이하, 빼거나 null 이면 시간 없음 — DTO)를
   받아 그대로 두고 식은 「2.0시간」(시급 · 배율은 관리자가 금액에 넣는다). 금액이 0보다 큰데 시간이 없으면 400 「야간 · 휴일근무수당은
   근무시간을 함께 입력해 주세요.」, 30분 단위가 아니면 400 「야간 · 휴일근무수당 근무시간은 30분 단위로 입력해 주세요.」 — 30분 단위는 이 두 줄만

@@ -140,7 +140,10 @@ function formula(segments: readonly Segment[], raw: number): string | null {
  * 같은 모양). 연장 · 야간 · 휴일근로의 시간 수는 법정 기재사항이라 관리자 상세 · 직원 앱 · PDF 세 곳에서 빠지지 않게(PR #317 리뷰).
  * 시간이 없으면(정직원 기본급) NULL 그대로다.
  */
-const withHours = (minutes: number | null, text: string | null): PayBasis => ({
+export const withHours = (
+  minutes: number | null,
+  text: string | null,
+): PayBasis => ({
   minutes,
   text: text ?? (minutes === null ? null : hoursText(minutes)),
 });

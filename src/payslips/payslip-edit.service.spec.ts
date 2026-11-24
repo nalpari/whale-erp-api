@@ -532,7 +532,7 @@ describe('PayslipEditService', () => {
         expect(calculate).not.toHaveBeenCalled();
       });
 
-      it('계산값으로 되돌리면 지금 데이터로 식을 다시 만든다 — 다시 셈한 금액이 계산값과 다르면 식을 비운다', async () => {
+      it('계산값으로 되돌리면 지금 데이터로 식을 다시 만든다 — 다시 셈한 금액이 계산값과 다르면 식 대신 시간만(PR #317 재검사)', async () => {
         prisma.payslipItem.findMany.mockResolvedValue([
           overtime({
             adjustedAmount: 130_000,
@@ -561,7 +561,7 @@ describe('PayslipEditService', () => {
         expect(dataOf(103)).toMatchObject({
           adjustedAmount: null,
           workMinutes: 480,
-          calculationText: null,
+          calculationText: '8.0시간',
         });
       });
 

@@ -42,7 +42,7 @@ import {
   ENTERED_HOURS_ITEM_CODES,
   enteredBasis,
 } from './payslip-calculation';
-import { hoursText, PayBasis, PayResult } from './pay-calculation';
+import { hoursText, PayBasis, PayResult, withHours } from './pay-calculation';
 import { PAYSLIP_NOT_FOUND_MESSAGE } from './payslip-menu';
 import {
   amountOf,
@@ -345,12 +345,13 @@ export class PayslipEditService {
           } else if (recalculated) basis = basisOf(pay!)[code];
           else if (l.adjustedAmount !== null) {
             // 고친 값을 계산값으로 되돌렸다 — 고칠 때 식을 「직접 입력」으로 덮어 남은 식이 없어 지금 데이터로 다시 만든다. 그사이 출퇴근이
-            // 바뀌어 다시 셈한 금액이 계산값과 다르면 맞는 식이 없어 비운다(관리자 화면은 「계산값」만 보인다)
+            // 바뀌어 다시 셈한 금액이 계산값과 다르면 맞는 식이 없어 비우고 시간만 「8.0시간」으로 남긴다 — 식을 비울 때의 계산과 같은
+            // 규칙(withHours), 시간 수는 법정 기재사항이라(PR #317 재검사)
             pay ??= await calculate();
             basis =
               amountsOf(pay)[code] === base.calculatedAmount
                 ? basisOf(pay)[code]
-                : { minutes: l.workMinutes, text: null };
+                : withHours(l.workMinutes, null);
           }
         } else if (recalculated) basis = basisOf(pay!).OVERTIME_PAY;
         else if (
