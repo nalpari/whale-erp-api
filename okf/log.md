@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-24
+* **Update**: [TO-DO](/api/todos.md) — `TodoDetailDto.modifiedAt` 설명을 「고친 적이 없으면 null(상세는 줄을 두고 「-」로 보인다)」로 맞췄다(WHALEERP-698 후속, 2026-11-24 재영 — 관리자 웹 TO-DO 상세가 근로계약 상세처럼 줄을 늘 두게 바뀜, front #338). api 동작 · 응답 모양은 그대로, openapi 설명만 바뀐다.
 * **Update**: 로그인 후 홈(`src/home`) — `GET /home/pending` 에 `notOperatingCount`(확인 필요 줄로 센 건 가운데 미운영 점포의 건수, 문의 답변완료는 점포가 없어 넣지 않음 · 플랫폼 빈 결과 0)를 더했다 — 관리자 웹이 운영 점포별 현황 아래에 표에 없는 건을 알린다(WHALEERP-759, B안 2026-11-24 재영, 집계 기준 HOM-06 · 07 그대로). `GET /home/summary` 의 `storeTable.total` 은 본사 점포를 빼고 세고(점포 카드와 같다, 운영 정책 SCP-09), 본사 줄은 확인 필요 건수와 상관없이 맨 위다(WHALEERP-751). 마이그레이션 없음.
 * **Update**: [Attendance](/api/attendance.md) — 직원 앱 기간별 주별 줄(`GET /me/attendance/records` 의 `weeks`)도 조회 기간 안의 날만 센다(WHALEERP-768): 걸친 첫 주 · 마지막 주는 `max(월요일, from)` ~ `min(일요일, to)` 로 잘라 `totals` 와 같은 기준으로 세어 주별 근무 합이 총 근무와 같다(11/1~11/30 의 「10/26 – 11/1」에 10월 근무가 들어가던 것). 걸친 주의 연장은 주 전체 40시간으로 본 값과 다를 수 있다. 응답 모양 · 직원 앱 그대로, 마이그레이션 없음.
 * **Update**: [Work schedules](/api/work-schedules.md) · [Notification templates](/api/notification-templates.md) — 근무스케줄 알림 · 메일 문구를 등록에도 맞게(WHALEERP-769): `PUSH_SCHEDULE_CHANGED` · `EMAIL_SCHEDULE_CHANGED` 제목 「근무스케줄 안내」(메일은 「[WHALE ERP] 」 머리 그대로), 본문 「#{근무지} 근무스케줄이 등록 · 변경되었습니다. / - 내용: #{변경내용} / 직원 근무 앱에서 근무스케줄을 확인해 주세요.」. 마이그레이션 `20261124140348_team3_schedule_notice_wording` — 지금 값은 제목 · 본문이 옛 기본값 그대로일 때만, 되돌리기 원본은 늘. 템플릿 이름 · 변수 · 발송 로직은 그대로.
