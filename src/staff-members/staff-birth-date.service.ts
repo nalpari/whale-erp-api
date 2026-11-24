@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { ageOn } from '../contracts/contracts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { isBirthDateCorrectable } from './birth-date-correctable';
+import { assertPresent } from '../auth/assert-present';
 import { kstToday, parseDateOnly } from './kst-date';
 import { STAFF_NOT_FOUND_MESSAGE } from './staff-menu';
 
@@ -105,7 +106,9 @@ export class StaffBirthDateService {
       if (!isBirthDateCorrectable({ ...staff, account: current }, at))
         throw conflict('BIRTH_DATE_RETIRED', BIRTH_DATE_RETIRED_MESSAGE);
 
-      if (current.birthDate.getTime() === birthDate.getTime())
+      // 위에서 가입 완료(JOINED)만 통과시켰다 — 탈퇴가 아니면 생년월일이 있다(CHECK).
+      const before = assertPresent(current.birthDate, 'birth_date');
+      if (before.getTime() === birthDate.getTime())
         throw conflict('BIRTH_DATE_UNCHANGED', BIRTH_DATE_UNCHANGED_MESSAGE);
 
       await tx.account.update({
@@ -116,7 +119,7 @@ export class StaffBirthDateService {
         data: {
           accountId,
           field: 'BIRTH_DATE',
-          beforeValue: isoDate(current.birthDate),
+          beforeValue: isoDate(before),
           afterValue: isoDate(birthDate),
           channel: 'ADMIN_CORRECTION',
           requestedBy: adminAccountId,

@@ -41,7 +41,13 @@ export class MyPasswordService {
       where: { accountId },
       select: { email: true, passwordHash: true, status: true },
     });
-    if (!account || account.status === 'WITHDRAWN')
+    // 칸이 비어 있는 것도 탈퇴한 계정이다(탈퇴가 아니면 있다 — CHECK)
+    if (
+      !account ||
+      account.status === 'WITHDRAWN' ||
+      account.email === null ||
+      account.passwordHash === null
+    )
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
 
     // 지금 비밀번호를 먼저 본다. 규칙 위반 사유를 먼저 주면 토큰만 가진 사람이 비밀번호 없이 규칙을 확인할 수 있다 —

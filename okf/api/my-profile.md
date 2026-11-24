@@ -1,7 +1,7 @@
 ---
 type: API
 title: My profile (staff app)
-description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
+description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 회원 탈퇴(GET withdrawal-eligibility · POST withdrawal, WHALEERP-770), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
 generated: { by: claude-code/opus-5.5, at: 2026-11-24T02:14:54Z }
@@ -26,6 +26,18 @@ sources:
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)
     last_modified: 2026-10-21T01:22:19Z
+  - id: my-withdrawal-service
+    resource: ../../src/my-profile/my-withdrawal.service.ts
+    title: MyWithdrawalService — 직원 앱 회원 탈퇴(WHALEERP-770)
+    last_modified: 2026-11-24T02:30:00Z
+  - id: my-withdrawal-controller
+    resource: ../../src/my-profile/my-withdrawal.controller.ts
+    title: 회원 탈퇴 경로 · 상태 코드 · 요청 한도
+    last_modified: 2026-11-24T02:30:00Z
+  - id: staff-withdrawal-migration
+    resource: ../../prisma/migrations/20261124122247_team3_staff_withdrawal/migration.sql
+    title: accounts 개인정보 칸 NULL 허용 · 탈퇴 아니면 있어야 한다는 CHECK · 탈퇴 알림 · 메일 템플릿(임시 문구)
+    last_modified: 2026-11-24T02:30:00Z
   - id: my-consent-controller
     resource: ../../src/my-profile/my-consent.controller.ts
     title: 위치정보 · 본사 제공 동의 경로
@@ -514,6 +526,54 @@ masked values only.
   RRN check is read in that same post-lock read. Checking existence first keeps the save from locking
   someone else's row.
 
+# 회원 탈퇴 (WHALEERP-770)
+
+`GET /me/profile/withdrawal-eligibility` · `POST /me/profile/withdrawal` — 직원 앱 계정 토큰만(관리자 토큰 403, 토큰 없음 · 접속 종료 ·
+탈퇴 계정 401). 정책은 2026-11-24 노영주 확정 — 유예기간 없이 즉시, 재가입은 새 계정(해시 보관 없음). `MyWithdrawalController` ·
+`MyWithdrawalService`.[^my-withdrawal-service]
+
+| 호출 | 응답 |
+|---|---|
+| `GET /me/profile/withdrawal-eligibility` | `{ canWithdraw: boolean, employedStores: { storeName: string, retiredDate: string \| null }[], pendingContractCount: number }` — 아무것도 쓰지 않는다 |
+| `POST /me/profile/withdrawal` `{ currentPassword }` | 204 · 400 비밀번호 틀림 · 409 재직 중 · 401 · 429 |
+
+- **막는 것은 하나** — 이 계정에 이어진(`account_id`) 직원 레코드 가운데 가입 완료(`JOINED`) · 재직(`EMPLOYED`)이 하나라도 있으면 막는다.
+  **퇴직 예정**(퇴직일이 있어도 재직)도 막고 `retiredDate` 에 그 날짜를 싣는다. `ACTIVE_STAFF`(체결 계약이 있는 재직)는 쓰지 않는다 —
+  계약 없이 재직인 레코드도 막는다. 대기 계약 · 안 본 급여명세서는 막지 않는다.
+- **409 본문** — 다른 409 와 같은 모양에 막는 근무지를 더한다: `{ statusCode: 409, error: 'Conflict', code: 'EMPLOYED_AFFILIATION',
+  message: '근무지 관리자에게 퇴직 처리를 요청해 주세요.', employedStores: [{ storeName, retiredDate }] }`. 다른 처리와 교착이 두 번 겹쳤을
+  때의 409(문구만 있고 `code` 없음 — 「다른 처리와 겹쳐 탈퇴하지 못했습니다. 바뀐 것은 없으니 …」)와 앱이 `code` 로 가른다.
+- **재확인** — 지금 비밀번호가 틀리면 400 `지금 비밀번호가 맞지 않습니다.`(`CURRENT_PASSWORD_MISMATCH_MESSAGE`, 비밀번호 변경과 같은 문구).
+  틀려도 로그인 실패 횟수는 세지 않고, 계정마다 10분에 10번 요청 한도(429)만 건다. 확인한 사이 비밀번호가 바뀌었으면 400.
+- **한 트랜잭션** (재직이 아닐 때): ① 잠금 — 이 계정의 직원 레코드(`account_id` 또는 `candidate_account_id`) id 순 `FOR NO KEY UPDATE`
+  → 계정 행 `FOR UPDATE` → 재직 다시 판정. 점포 → 직원 → 계정인 퇴직 · 폐점의 순서와 같아 관리자 퇴직 처리 · 점포 폐점과 교착하지
+  않는다. 계정부터 잡는 직원 앱 경로(소속 추가 수락)와 같은 계정이 동시에 부딪쳐 교착하면 처음부터 한 번 다시 하고, 또 교착이면 409 로
+  「바뀐 것 없음」을 알린다(`store-closings` 의 `retryOnDeadlock` 은 폐점 문구라 쓰지 않았다). ② 대기 계약 4종을 종료로 닫고 상태 이력
+  actor `STAFF`(`endPendingContracts` — 퇴직 · 폐점과 같은 함수, 대상은 `account_id` 또는 `candidate_account_id` 가 이 계정인 레코드).
+  ③ 발송(`SENT`) 초대 만료, `candidate_account_id` 비움, 열린 연결 보류(`link_holds`, 처리 결과 없음) 삭제(처리 결과가 승인 · 재초대
+  둘뿐이라 「닫음」 값이 없다). ④ 위치정보 파기(위치정보법 제24조 제4항) — `location_access_logs`, 동의 이력, 동의. ⑤ 계정에 달린
+  개인정보 — `login_histories`(계정, 또는 계정 없이 남은 이 이메일), `account_change_histories`, `identity_verifications`(이 계정에 귀속된 것만 — 계정 없이 남은 기록은 같은 번호로 가입하려는 다른 사람의 것일 수 있어 지우지 않는다),
+  `notification_preferences`, `email_change_pins`, `password_reset_pins` · `password_reset_links`. ⑥ 접속 전부 종료(`revokeAll`)하고
+  `device_identifier` 를 비운다. ⑦ `accounts` 행은 지우지 않고 `status = WITHDRAWN`, 이메일 · 비밀번호 해시 · 실명 · 생년월일 · 휴대전화 ·
+  성별 · 동일인 식별값 · 주소 세 칸을 NULL, 외국인 여부 false, 본사 제공 동의는 「동의한 적 없음」(false + 버전 · 일시 NULL)으로.
+- **남기는 것** — 직원 레코드 · 근로계약 · 급여명세서 · 출퇴근 · 근무스케줄 · 신고 정보(근무지 데이터, 보존 기간 배치가 지운다),
+  `staff_tax_profile_histories`(값 없음), 알림함(`notification_recipients` · `notification_deliveries`), 메일 · 알림톡 발송 이력
+  (`mail_send_logs` · `alimtalk_send_logs` 에 수신 주소 · 본문이 남는다 — 1년 보존, 별도 정리 일감 필요), `invitation_code_attempts` ·
+  `email_find_attempts`(번호 HMAC 키뿐).
+- **커밋 뒤** — 근무지 관리자 운영 알림 `NTF_STAFF_WITHDRAWN`(이 계정에 이어진(`account_id`) **모든** 직원 레코드의 근무지와, 대기 계약을 닫거나 초대를 만료시킨 후보 레코드의 근무지(같은 근무지는 한 번), 받는 사람은 `storeManagers`
+  — 가맹 점포를 보는 본사 역할 관리자(`hidesPersonalData`, HQ_ROLES)는 본사 제공 동의가 없으면 가려져 받지 못하므로 동의를 지우기 **전에** 트랜잭션 안에서 정한다, related `STAFF_MEMBER`, 링크
+  `/staff-members/:id`)와 직원 완료 메일 `EMAIL_STAFF_WITHDRAW_DONE`(지우기 전에 읽어 둔 이메일로). 알림 · 메일 실패는 탈퇴를 되돌리지
+  않는다(메일 설정 `MAIL_*` 없으면 메일만 건너뛴다 — `optionalMailServiceProvider`). 두 템플릿의 **문구는 임시**다 — 기획 확인 뒤
+  템플릿 관리 화면에서 고친다(메일 제목 「[WHALE ERP] 회원 탈퇴 완료」).
+- **DB** — `20261124122247_team3_staff_withdrawal`: `accounts` 의 `email` · `password_hash` · `real_name` · `birth_date` · `phone` NOT NULL 을
+  풀고 `accounts_personal_required_unless_withdrawn`(`status = 'WITHDRAWN'` 이거나 다섯 칸이 모두 있다) CHECK 를 건다. 기존 행은 모두
+  이 CHECK 를 만족한다(`ADD CONSTRAINT` 가 기존 행을 검증한다). 롤백 주의: 탈퇴한 행이 생기면 `SET NOT NULL` 로 되돌릴 수 없다. `accounts_email_lower` · `accounts_phone_format` 은 NULL 이면 통과라
+  고치지 않았다. 이메일 고유 인덱스는 NULL 끼리 겹치지 않아 탈퇴한 이메일로 다시 가입된다.
+- **탈퇴 계정을 만나는 기존 경로** — 로그인(이메일 NULL 이라 없는 계정과 같다) · 이메일 찾기(번호 NULL 이라 안 걸린다) · 비밀번호 재설정 ·
+  가입 번호 중복(`status <> WITHDRAWN` 으로 이미 제외) · 급여명세서 발송(`NO_EMAIL`) · 계약 발송(이메일 · 알림톡 번호 없음 → 안 보냄) ·
+  근무스케줄 변경 알림(탈퇴 계정은 건너뜀)은 NULL 을 빈 값으로 숨기지 않고 의미대로 건너뛰거나 401/404 로 답한다. 직원 목록 · 상세는
+  `isAccountWithdrawn`(탈퇴 계정만 true, 가린 줄 포함)과 이메일 · 생년월일 NULL(생년월일은 계약서 값으로 대체) — [Staff members](/api/staff-members.md).
+
 # Retention: 신고 정보 and 계정 변경 이력 (WHALEERP-645)
 
 Two daily jobs in `RetireePurgeScheduler`, each inside `runExclusive`, use the same date as
@@ -524,7 +584,7 @@ Two daily jobs in `RetireePurgeScheduler`, each inside `runExclusive`, use the s
   records keep it; a withdrawn account follows the same rule (RET-07). Records are picked oldest 퇴직일 first and
   the staff rows are taken `FOR NO KEY UPDATE` (like the 신고 정보 save and 퇴직 취소) in `staff_member_id`
   order, the same order as a contract save (api #238 리뷰). The log counts staff records; at most 5000 per run.
-- **`account-change-purge` (05:20, RET-04)**: deletes an account's `PHONE` · `ADDRESS` rows of
+- **`account-change-purge` (05:20, RET-04)**: 직원 앱 회원 탈퇴(아래 「회원 탈퇴」)는 계정 변경 이력을 보존 기간을 기다리지 않고 **탈퇴 때 모두 파기**한다(2026-11-24 노영주) — 탈퇴하지 않은 계정에 이 배치가 도는 규칙은 그대로다. Deletes an account's `PHONE` · `ADDRESS` rows of
   `account_change_histories` when the account has at least one staff record (`staff_members.account_id`)
   and every one of them is `RETIRED` with `retired_date` before the date — that is, the latest 퇴직일 + 3년
   has passed (2026-11-03 김민식). An account with a 재직 or 퇴직 예정 record, or with no record at all, keeps
@@ -542,6 +602,7 @@ Two daily jobs in `RetireePurgeScheduler`, each inside `runExclusive`, use the s
 [^my-consent-controller]: 위치정보 · 본사 제공 동의 경로
 [^close-unverified-email-change-pins]: 비밀번호 확인 없이 낸 이메일 변경 핀을 배포 때 닫기(WHALEERP-607)
 [^email-change-pin-sender]: 이메일 변경 핀 메일(EMAIL_CHANGE_PIN), MAIL_* 없으면 503
+[^my-withdrawal-service]: MyWithdrawalService — 직원 앱 회원 탈퇴(WHALEERP-770)
 [^my-memberships-service]: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
 [^location-consent-state]: 위치정보 동의 상태 판정(API 전용 enum LocationConsentState)
 [^personal-data-cipher]: 개인정보 칸 암호화 · 복호화, 신고 정보 AAD

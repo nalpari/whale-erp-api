@@ -108,10 +108,15 @@ export class EmailFindService {
           select: { email: true, realName: true, birthDate: true },
         });
         const name = comparableName(input.name);
-        const matched = accounts.filter(
-          (a) =>
-            comparableName(a.realName) === name &&
-            a.birthDate.toISOString().slice(0, 10) === input.birthDate,
+        // 탈퇴하지 않은 계정은 세 칸이 모두 있다(CHECK) — null 검사는 타입을 좁히기 위한 것이다.
+        const matched = accounts.flatMap((a) =>
+          a.email !== null &&
+          a.realName !== null &&
+          a.birthDate !== null &&
+          comparableName(a.realName) === name &&
+          a.birthDate.toISOString().slice(0, 10) === input.birthDate
+            ? [a.email]
+            : [],
         );
         if (matched.length > 0) {
           // 그 번호의 계정이 모두 맞았을 때만 실패 횟수를 지운다(2026-10-13 노영주, api #20 리뷰). 일부만 맞은 성공으로
@@ -121,7 +126,7 @@ export class EmailFindService {
           await record(true, clears ? CLEARED_ATTEMPT_STATE : state);
           return {
             kind: 'found',
-            emails: matched.map((a) => maskEmail(a.email)),
+            emails: matched.map((email) => maskEmail(email)),
           };
         }
 

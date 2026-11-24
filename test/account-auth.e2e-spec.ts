@@ -128,7 +128,7 @@ describe('POST /auth/account/login (e2e, DB)', () => {
     const account = await createAccount();
 
     const res = await login({
-      email: `  ${account.email.toUpperCase()} `,
+      email: `  ${account.email!.toUpperCase()} `,
       password: PASSWORD,
     });
 

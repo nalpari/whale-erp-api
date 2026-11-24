@@ -456,7 +456,8 @@ KEYS_ONLY_NOT_NULL = {"contracts"}
 REQUIRED = {
     "identity_verifications": ["purpose", "phone", "result", "verified_at"],
     "auth_sessions": ["account_id", "refresh_token_hash", "issued_at", "last_used_at", "expires_at"],
-    "accounts": ["email", "password_hash", "real_name", "birth_date", "phone", "status", "failed_login_count"],
+    # 이메일 · 비밀번호 해시 · 실명 · 생년월일 · 휴대전화는 탈퇴하면 비운다(WHALEERP-770) — 탈퇴가 아니면 있어야 한다는 것은 아래 CHECK 가 건다
+    "accounts": ["status", "failed_login_count"],
     "account_change_histories": ["account_id", "field", "channel", "changed_at"],
     "login_histories": ["email", "attempted_at"],
     "password_reset_pins": ["account_id", "pin_hash", "issued_at", "expires_at", "attempt_count"],
@@ -557,6 +558,8 @@ CHECKS = [
     ("accounts", "email_lower", "\"email\" = lower(\"email\")"),
     ("accounts", "phone_format", "\"phone\" ~ '^[0-9]{10,11}$'"),
     ("accounts", "failed_login_count_nonnegative", "\"failed_login_count\" >= 0"),
+    # 직원 앱 회원 탈퇴(WHALEERP-770) — 탈퇴한 계정만 개인정보 칸을 비운다. 계정 행은 직원 레코드 연결 때문에 남는다
+    ("accounts", "personal_required_unless_withdrawn", "\"status\" = 'WITHDRAWN' OR (\"email\" IS NOT NULL AND \"password_hash\" IS NOT NULL AND \"real_name\" IS NOT NULL AND \"birth_date\" IS NOT NULL AND \"phone\" IS NOT NULL)"),
     # 본사 제공 동의(계정) — 동의 중이면 버전 · 동의 시각이 있고 철회 시각은 없다. 동의 안 함이면 셋 다 없거나(동의한 적 없음)
     # 셋 다 있다(철회함). 철회 시각은 동의 시각 뒤다 (#137, 2026-10-20 계정으로 옮김)
     ("accounts", "hq_sharing_consent_fields", "NOT \"is_hq_sharing_consented\" OR (\"hq_sharing_consent_version\" IS NOT NULL AND \"hq_sharing_agreed_at\" IS NOT NULL AND \"hq_sharing_withdrawn_at\" IS NULL)"),

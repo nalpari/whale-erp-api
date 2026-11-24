@@ -265,7 +265,7 @@ describe('내 정보 편집 (e2e, DB)', () => {
       const row = await prisma.account.findUniqueOrThrow({
         where: { accountId: id },
       });
-      expect(await verifyPassword(PASSWORD, row.passwordHash)).toBe(true);
+      expect(await verifyPassword(PASSWORD, row.passwordHash!)).toBe(true);
     });
 
     it('바꾸면 해시로만 저장되고, 이 기기는 이어지고 다른 기기는 끊기며, 값 없는 이력과 passwordChangedAt 이 남는다', async () => {
@@ -283,7 +283,7 @@ describe('내 정보 편집 (e2e, DB)', () => {
         where: { accountId: id },
       });
       expect(row.passwordHash).not.toContain('NewPass456!');
-      expect(await verifyPassword('NewPass456!', row.passwordHash)).toBe(true);
+      expect(await verifyPassword('NewPass456!', row.passwordHash!)).toBe(true);
       await send('get', '/me/profile', there.token).expect(401);
       const after = await profile(here.token);
       expect(new Date(after.passwordChangedAt).getTime()).toBeGreaterThan(
@@ -324,7 +324,9 @@ describe('내 정보 편집 (e2e, DB)', () => {
       const row = await prisma.account.findUniqueOrThrow({
         where: { accountId: id },
       });
-      expect(await verifyPassword(winnerPassword, row.passwordHash)).toBe(true);
+      expect(await verifyPassword(winnerPassword, row.passwordHash!)).toBe(
+        true,
+      );
       await send('get', '/me/profile', winner.token).expect(200);
       await send('get', '/me/profile', loser.token).expect(401);
       expect(

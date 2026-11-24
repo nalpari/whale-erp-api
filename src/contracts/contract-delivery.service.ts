@@ -497,8 +497,10 @@ export class ContractDeliveryService {
     // 메일은 입력한 번호가 아니라 그 번호로 찾은 계정의 이메일로 간다 — 입력한 이름이 그 계정 실명과 다르면(번호를 넘겨받은
     // 다른 사람일 수 있다) 채용 정보(근무지 · 고용 형태)가 남에게 가지 않게 보내지 않는다. 알림톡은 입력한 번호로 그대로 간다 —
     // 받지 못한 직원은 관리자가 유선으로 확인한다(WHALEERP-140, 2026-10-29 김민식). 본인 대조와 같은 이름 규칙(nameKey)
+    // 탈퇴한 계정이면(후보 계정은 탈퇴 때 비우지만 그 사이 탈퇴한 경우) 실명도 이메일도 비어 있다 — 이름이 다른 것과 같다
     const nameMismatch =
-      account !== null && !sameName(staff.name, account.realName);
+      account !== null &&
+      (account.realName === null || !sameName(staff.name, account.realName));
     const historyId = input.statusChanged
       ? ((
           await tx.contractStatusHistory.findFirst({
@@ -585,7 +587,8 @@ export class ContractDeliveryService {
       relatedId: input.contractId,
       variables,
     });
-    if (notice !== 'QUEUED' || !staff.account) return null;
+    // 탈퇴한 계정은 번호가 비어 있어 알림톡을 보내지 않는다
+    if (notice !== 'QUEUED' || !staff.account?.phone) return null;
     return {
       kind: 'CONTRACT_SENT',
       contractId: input.contractId,

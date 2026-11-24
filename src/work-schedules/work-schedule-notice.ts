@@ -155,7 +155,8 @@ export async function noticeScheduleChange(
     return null;
   }
   const account = staff?.account;
-  if (!account || account.status === 'WITHDRAWN') {
+  // 탈퇴한 계정은 이메일도 비어 있다(WHALEERP-770) — 상태와 이메일을 함께 본다
+  if (!account || account.status === 'WITHDRAWN' || account.email === null) {
     logger.warn(
       `work schedule notice SKIPPED staffMember ${input.staffMemberId}: ${account ? 'withdrawn account' : 'no account'}`,
     );

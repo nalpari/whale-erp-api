@@ -342,6 +342,18 @@ describe('MyEmailChangeService', () => {
       ).rejects.toBeInstanceOf(UnauthorizedException);
     });
 
+    it('칸이 비어 있으면(탈퇴가 막 커밋됨) 500 이 아니라 401', async () => {
+      const service = await build();
+      tx.account.findUniqueOrThrow.mockResolvedValue({
+        email: null,
+        status: 'JOINED',
+        passwordHash: null,
+      });
+      await expect(
+        service.requestPin(12, 'new@example.com', PASSWORD),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
     it('지금 비밀번호가 틀리면 400 이고 핀을 내지도 보내지도 않는다 — 훔친 토큰만으로 아이디를 바꾸지 못하게 (WHALEERP-607)', async () => {
       const service = await build();
       await expect(

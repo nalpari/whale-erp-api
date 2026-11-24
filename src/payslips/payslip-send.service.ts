@@ -354,7 +354,8 @@ export class PayslipSendService {
           select: { accountId: true, email: true, status: true },
         })
       : null;
-    if (!account || account.status === 'WITHDRAWN')
+    // 탈퇴한 계정은 이메일이 비어 있다(WHALEERP-770) — 보낼 곳이 없다
+    if (!account?.email || account.status === 'WITHDRAWN')
       return { ok: false, reason: 'NO_EMAIL' };
 
     // 잡을 때 발송 중 표시(sendingStartedAt)를 채운다. updatedAt 만 바꾸면 잡은 뒤에 새로 읽은 요청(다시 누름 · 다른 관리자)이

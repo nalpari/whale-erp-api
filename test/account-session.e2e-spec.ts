@@ -11,6 +11,7 @@ import { LoginResponseDto } from '../src/auth/dto/login.response.dto';
 import { RefreshResponseDto } from '../src/auth/dto/refresh.response.dto';
 import { hashPassword } from '../src/auth/password';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { joinedOf } from './joined-account';
 
 const PASSWORD = 'correct-horse-battery';
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -62,7 +63,7 @@ describe('로그아웃·갱신·접속 만료 (e2e, DB)', () => {
       },
     });
     createdAccountIds.push(account.accountId);
-    return account;
+    return joinedOf(account);
   }
 
   async function loginOn(email: string, deviceIdentifier?: string) {

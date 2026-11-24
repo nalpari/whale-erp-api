@@ -192,6 +192,17 @@ withdrawn account could not be told apart. The migration
 It is additive on purpose — `ALTER TYPE … ADD VALUE` cannot use the new value in
 the same transaction, and existing rows are all `JOINED` or `LINK_HOLD`.[^account-status-migration]
 
+**Then a withdrawn account's personal columns go NULL** (WHALEERP-770, 2026-11-24 노영주).
+`20261124122247_team3_staff_withdrawal` drops NOT NULL from `accounts.email` · `password_hash` · `real_name` ·
+`birth_date` · `phone` (the row stays — staff records, contracts and attendance point at it by `account_id`) and adds
+`accounts_personal_required_unless_withdrawn`: `status = 'WITHDRAWN'` or all five are present, so a NULL cannot leak into
+a live account. Every existing row satisfies it (the migration's check block counts the ones that do not and aborts).
+`accounts_email_lower` · `accounts_phone_format` pass on NULL already and were not touched; the unique e-mail index
+lets NULLs repeat, so a withdrawn e-mail can sign up again as a new account. Two default templates, `NTF_STAFF_WITHDRAWN`
+(운영 알림, now 12) and `EMAIL_STAFF_WITHDRAW_DONE`, came in the same migration with 임시 wording — see
+[My profile](/api/my-profile.md) 「회원 탈퇴」. `_model.py` · `docs/raw` follow by hand (the physical generator needs the
+front repo beside this one).
+
 **After the freeze, 생년월일 정정 adds two enum values.** `20261026110852_team3_account_birth_date_correction` (WHALEERP-602) adds `BIRTH_DATE` to `account_change_field` and `ADMIN_CORRECTION` to `account_change_channel` (values appended, so the 화면 order is the order added) and rewrites their `COMMENT ON TYPE` plus four column comments. `schema.sql`, `_model.py` and `schema.prisma` were edited by hand to match; the generator was not run (it needs `whale-erp-front` beside this repository).
 
 Two things to know before the next change of this kind. The model source is

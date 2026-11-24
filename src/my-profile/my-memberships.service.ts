@@ -367,7 +367,7 @@ export class MyMembershipsService {
         hasRrn &&
         staff.account &&
         birthDateOfRrn(dto.rrn as string) !==
-          staff.account.birthDate.toISOString().slice(0, 10)
+          staff.account.birthDate?.toISOString().slice(0, 10)
       )
         throw badRequest(
           'RRN_BIRTH_MISMATCH',
@@ -468,7 +468,11 @@ export class MyMembershipsService {
       where: { accountId },
       select: { passwordHash: true },
     });
-    if (!(await verifyPassword(currentPassword, passwordHash)))
+    // 비밀번호가 비어 있는 것은 탈퇴한 계정이다 — 맞는 비밀번호가 있을 수 없다
+    if (
+      passwordHash === null ||
+      !(await verifyPassword(currentPassword, passwordHash))
+    )
       throw currentPasswordMismatch();
     return passwordHash;
   }
