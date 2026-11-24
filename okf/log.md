@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-24
+* **Update**: [Kakao Alimtalk](/api/alimtalk.md) · [Contracts API](/api/contracts-api.md) · [Notification templates](/api/notification-templates.md) · [Naming](/conventions/naming.md) — 소속 추가 확인 요청 알림톡 · 메일 첫 줄을 「#{근무지}에서」로(사업자 뺌, WHALEERP-745), 알림톡에 [요청 확인하기] 버튼(링크 = 직원 앱 `/affiliations`, WHALEERP-738). 카카오 새 코드 `TALK_STAFF_AFFILIATION_V2`(2026-11-24 김민식 등록 · 검수 대기 — 승인 전 머지 금지), 마이그레이션 `20261124143223_team3_staff_affiliation_kakao_reregistered`. 소속 추가 확인 요청도 직원 앱 주소(https)가 없으면 쓰기 전에 503. 코드 · 마이그레이션을 함께 배포한다.
 * **Update**: [Payslips](/api/payslips.md) — 주휴 식의 실근무에 주 40시간 상한을 적용한 값임을 「실근무(주 40시간까지)」로 적는다(PR #317 pr-agent, WHALEERP-755).
 * **Update**: [Payslips](/api/payslips.md) — 최종 게이트: 금액을 정수 분자 ÷ 분모(`roundDiv`)로 셈해 부동소수 .5 경계의 1원 차를 없앴다(주휴 · 정직원 포괄 연장에서 1원 오르는 경우가 있다), 주휴 식은 「N주 · 실근무 15시간 15분 ÷ 5 × 시급」, 식 판정은 보이는 값으로 셈한 원 = 금액 하나로, 0.5분 미만 정직원 연장은 시간 · 식을 비운다.
 * **Update**: [Payslips](/api/payslips.md) — 재영 리뷰: 야간 · 휴일근무수당 금액이 있는데 근무시간이 0 이어도 시간이 없는 것으로 본다(임시저장 400 · 확정 422 `WORK_HOURS_MISSING`). 금액 0 · 시간 0 은 통과.

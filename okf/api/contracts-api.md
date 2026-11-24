@@ -750,13 +750,14 @@ the app shows no contract to a 후보 계정. Now the missing 「점포 연결�
   leaves alone) and sets the record's `join_status` to `INVITED` (the list's 가입 상태 shows 소속 승인 대기 · 복귀 확인). `sent_at` is set; **`sign_deadline_at` stays null** — the 30-day 날인 기한
   starts at acceptance (재영). 발송 대기 is never expired by the daily batch (it only expires 서명 대기); the invitation
   expires after 30 days and the contract stays 발송 대기, so 재발송 continues it.
-- **After commit** `dispatch` sends alimtalk `TALK_STAFF_AFFILIATION_REQUEST` (사업자 · 근무지 · 고용형태; no button and
-  no link — the 직원 logs in to the app to find the request). It is registered with Kakao under its own code
-  `TALK_STAFF_AFFILIATION_REQUEST` without a button (2026-11-03 김민식; until then it went out as the 대체 문자 under the
-  placeholder `WHALE_AFFILIATION_01`, [Notification templates](/api/notification-templates.md) ·
-  [Kakao Alimtalk](/api/alimtalk.md)). Before writing the same checks as the 가입 초대 apply except the app URL (SMS
-  sender · mobile number · template on and its button setup — 503 · 409); `STAFF_APP_URL` is only needed for the mail
-  link below, and without it the mail alone is skipped (logged). Failure handling is the
+- **After commit** `dispatch` sends alimtalk `TALK_STAFF_AFFILIATION_REQUEST` (근무지 · 고용형태 · 링크 — the first line is
+  the store name only, WHALEERP-745; the 「요청 확인하기」 button opens 직원 앱 `/affiliations`, the same link as the mail,
+  WHALEERP-738). It is registered with Kakao under the code `TALK_STAFF_AFFILIATION_V2` (2026-11-24 김민식 등록 · 검수 대기;
+  the first registration `TALK_STAFF_AFFILIATION_REQUEST` of 2026-11-03 had 사업자 in the first line and no button,
+  [Notification templates](/api/notification-templates.md) · [Kakao Alimtalk](/api/alimtalk.md)). Before writing the
+  same checks as the 가입 초대 apply (app URL present and https — the button link, SMS sender · mobile number · template
+  on and its button setup — 503 · 409): sent without the button it would differ from the registration and go as the
+  대체 문자. Failure handling is the
   가입 초대's: surely not sent → undo (invitation deleted, previous one revived, status back, 502 `SEND_FAILED`); unknown
   → 502 `SEND_UNCONFIRMED`. Undo leaves `candidate_account_id` as the save wrote it. The request shows in the 직원 app
   right after commit, so the 직원 may answer before the alimtalk: if the invitation is already `ACCEPTED` /

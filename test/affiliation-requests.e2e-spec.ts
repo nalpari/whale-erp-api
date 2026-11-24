@@ -197,8 +197,8 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
       candidateAccountId: r.accountId,
       accountId: null,
     });
-    // 알림톡은 DB 템플릿으로 렌더해 카카오 등록 코드(2026-11-03 등록)로 나간다. 등록본에 버튼이 없어 버튼 · 링크 없이 가고,
-    // 대체 문자도 본문만 간다
+    // 알림톡은 DB 템플릿으로 렌더해 카카오 재등록 코드로 나간다(WHALEERP-745 · 738). 첫 줄은 근무지만이고 [요청 확인하기] 버튼이
+    // 직원 앱 요청 화면을 연다 — 대체 문자에는 본문 끝에 같은 링크가 붙는다
     expect(bizppurio.sendMessage).toHaveBeenCalledTimes(1);
     const [message] = bizppurio.sendMessage.mock.calls[0] as [
       {
@@ -206,15 +206,21 @@ describe('소속 추가 확인 요청 (e2e, DB)', () => {
         recontent?: { sms?: { message: string }; lms?: { message: string } };
       },
     ];
-    expect(message.content.at).not.toHaveProperty('button');
-    expect(
-      message.recontent?.lms?.message ?? message.recontent?.sms?.message,
-    ).toBe(message.content.at.message);
-    expect(message.content.at.templatecode).toBe(
-      'TALK_STAFF_AFFILIATION_REQUEST',
-    );
-    expect(message.content.at.message).toContain(
-      '소속 추가 테스트 BP 소속 추가 점포에서 소속 추가를 요청했습니다.',
+    const affiliations = 'https://staff.e2e.test/affiliations';
+    expect(message.content.at).toHaveProperty('button', [
+      {
+        name: '요청 확인하기',
+        type: 'WL',
+        url_mobile: affiliations,
+        url_pc: affiliations,
+      },
+    ]);
+    expect(message.recontent?.lms?.message ?? message.recontent?.sms?.message)
+      .toBe(`${message.content.at.message}
+${affiliations}`);
+    expect(message.content.at.templatecode).toBe('TALK_STAFF_AFFILIATION_V2');
+    expect(message.content.at.message).toMatch(
+      /^소속 추가 점포에서 소속 추가를 요청했습니다\./,
     );
     expect(message.content.at.message).toContain('고용 형태: 파트타이머');
     expect(mail.send).toHaveBeenCalledWith({
