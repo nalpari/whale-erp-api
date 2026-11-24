@@ -9,7 +9,6 @@ import {
   needsLocationReconsent,
 } from './location-consent-state';
 import { currentLocationTermsVersion } from './location-terms';
-import { assertPresent } from '../auth/assert-present';
 
 @Injectable()
 export class MyProfileService {
@@ -55,18 +54,25 @@ export class MyProfileService {
         },
       },
     });
-    if (!account || account.status === 'WITHDRAWN')
+    // 칸이 비어 있는 것도 탈퇴한 계정이다(탈퇴가 아니면 다섯 칸이 있다 — CHECK)
+    if (
+      !account ||
+      account.status === 'WITHDRAWN' ||
+      account.email === null ||
+      account.realName === null ||
+      account.birthDate === null ||
+      account.phone === null
+    )
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
     const locationConsent = locationConsentOf(account.locationConsents);
     const termsVersion = await currentLocationTermsVersion(this.prisma);
 
     return {
       accountId: account.accountId,
-      // 위에서 탈퇴 계정을 걸렀다 — 탈퇴가 아니면 다섯 칸이 있다(CHECK).
-      email: assertPresent(account.email, 'email'),
-      realName: assertPresent(account.realName, 'real_name'),
-      birthDate: dateOnly(assertPresent(account.birthDate, 'birth_date')),
-      phone: assertPresent(account.phone, 'phone'),
+      email: account.email,
+      realName: account.realName,
+      birthDate: dateOnly(account.birthDate),
+      phone: account.phone,
       zipCode: account.zipCode,
       address: account.address,
       addressDetail: account.addressDetail,

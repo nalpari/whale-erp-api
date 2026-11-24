@@ -352,12 +352,7 @@ describe('MyWithdrawalService', () => {
         },
       });
       expect(tx.identityVerification.deleteMany).toHaveBeenCalledWith({
-        where: {
-          OR: [
-            { accountId: ACCOUNT_ID },
-            { accountId: null, phone: '01012345678' },
-          ],
-        },
+        where: { accountId: ACCOUNT_ID },
       });
       for (const table of [
         tx.accountChangeHistory,
@@ -442,6 +437,26 @@ describe('MyWithdrawalService', () => {
           ([n]: [{ related: { id: number } }]) => n.related.id,
         ),
       ).toEqual([1, 2]);
+    });
+
+    it('같은 근무지에 이어진 레코드가 둘이면(재입사) 한 번만 알린다 — 이어진 레코드가 후보보다 먼저', async () => {
+      await build();
+      members.splice(
+        0,
+        members.length,
+        { staffMemberId: 1, storeId: 7, name: '홍길동', accountId: null },
+        { staffMemberId: 2, storeId: 7, name: '홍길동', accountId: ACCOUNT_ID },
+        { staffMemberId: 3, storeId: 7, name: '홍길동', accountId: ACCOUNT_ID },
+      );
+      tx.contract.findMany.mockResolvedValue([{ staffMemberId: 1 }]);
+
+      await service.withdraw(ACCOUNT_ID, PASSWORD);
+
+      expect(
+        ops.notify.mock.calls.map(
+          ([n]: [{ related: { id: number } }]) => n.related.id,
+        ),
+      ).toEqual([2]);
     });
 
     it('받는 사람은 동의를 지우기 전에 정한다', async () => {

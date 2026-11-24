@@ -10,7 +10,6 @@ import {
 import { Prisma } from '@prisma/client';
 import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
 import { AuthSessionService } from '../auth-session/auth-session.service';
-import { assertPresent } from '../auth/assert-present';
 import { verifyPassword } from '../auth/password';
 import { dateOnly } from '../common/date-only';
 import { OPTIONAL_MAIL_SERVICE } from '../mail/mail.module';
@@ -105,12 +104,7 @@ export class MyWithdrawalService {
 
   async withdraw(accountId: number, currentPassword: string): Promise<void> {
     const account = await this.liveAccount(this.prisma, accountId);
-    if (
-      !(await verifyPassword(
-        currentPassword,
-        assertPresent(account.passwordHash, 'password_hash'),
-      ))
-    )
+    if (!(await verifyPassword(currentPassword, account.passwordHash)))
       throw new BadRequestException(CURRENT_PASSWORD_MISMATCH_MESSAGE);
 
     const now = new Date();
@@ -198,7 +192,7 @@ export class MyWithdrawalService {
     const staffMemberIds = members.map((m) => m.staffMemberId);
 
     // 알릴 받는 사람은 본사 제공 동의를 지우기 전에 정한다 — 지운 뒤에는 가맹 점포를 보는 본사 역할 관리자(hidesPersonalData, HQ_ROLES)가 가림 기준에 걸려 받지 못한다.
-    // 대상: 이어진 레코드 전부 + 후보 레코드 중 이번에 계약을 닫거나 초대를 만료시키는 레코드(정책 2 — 대기 계약 종료를 근무지에 알린다).
+    // 대상: 이어진 레코드(근무지마다 하나) + 후보 레코드 중 이번에 계약을 닫거나 초대를 만료시키는 레코드(정책 2 — 대기 계약 종료를 근무지에 알린다).
     // 같은 근무지는 한 번만 알린다.
     const candidates = members.filter((m) => m.accountId !== accountId);
     const affected = new Set(
@@ -225,13 +219,13 @@ export class MyWithdrawalService {
             ).map((i) => i.staffMemberId),
           ],
     );
-    const seenStores = new Set(
-      members.filter((m) => m.accountId === accountId).map((m) => m.storeId),
-    );
-    const targets = members.filter((m) => {
-      if (m.accountId !== accountId && !affected.has(m.staffMemberId))
-        return false;
-      if (m.accountId !== accountId && seenStores.has(m.storeId)) return false;
+    // 근무지마다 한 번 — 이어진 레코드(재입사 등으로 한 근무지에 둘 이상일 수 있다)가 먼저, 후보 레코드는 그다음이다.
+    const seenStores = new Set<number>();
+    const targets = [
+      ...members.filter((m) => m.accountId === accountId),
+      ...candidates.filter((m) => affected.has(m.staffMemberId)),
+    ].filter((m) => {
+      if (seenStores.has(m.storeId)) return false;
       seenStores.add(m.storeId);
       return true;
     });
@@ -259,16 +253,15 @@ export class MyWithdrawalService {
     });
     await tx.locationConsent.deleteMany({ where: { accountId } });
 
-    // 이력에는 계정이 지워지기 전 이메일 · 휴대전화번호가 남아 있다 — 계정을 가리키지 못한 시도(없는 계정으로 남긴 로그인 이력,
-    // 계정 없이 남긴 본인인증)도 같은 값이면 함께 지운다.
-    const email = assertPresent(account.email, 'email');
-    const phone = assertPresent(account.phone, 'phone');
+    // 이력에는 계정이 지워지기 전 이메일이 남아 있다 — 계정을 가리키지 못한 로그인 시도(없는 계정으로 남긴 이력)도 같은 이메일이면
+    // 함께 지운다. 본인인증은 이 계정에 귀속된 것만 지운다 — 계정 없이 남은 기록은 같은 번호로 가입하려는 다른 사람의 것일 수 있다.
+    const { email } = account;
     await tx.loginHistory.deleteMany({
       where: { OR: [{ accountId }, { accountId: null, email }] },
     });
     await tx.accountChangeHistory.deleteMany({ where: { accountId } });
     await tx.identityVerification.deleteMany({
-      where: { OR: [{ accountId }, { accountId: null, phone }] },
+      where: { accountId },
     });
     await tx.notificationPreference.deleteMany({ where: { accountId } });
     await tx.emailChangePin.deleteMany({ where: { accountId } });
@@ -367,9 +360,22 @@ export class MyWithdrawalService {
         status: true,
       },
     });
-    if (!account || account.status === 'WITHDRAWN')
+    // 칸이 비어 있는 것도 탈퇴한 계정이다(탈퇴가 아니면 다섯 칸이 있다 — CHECK)
+    if (
+      !account ||
+      account.status === 'WITHDRAWN' ||
+      account.email === null ||
+      account.passwordHash === null ||
+      account.realName === null ||
+      account.phone === null
+    )
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
-    return account;
+    return {
+      email: account.email,
+      passwordHash: account.passwordHash,
+      realName: account.realName,
+      phone: account.phone,
+    };
   }
 }
 

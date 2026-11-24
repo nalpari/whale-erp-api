@@ -108,6 +108,13 @@ describe('MyPasswordService', () => {
     );
   });
 
+  it('탈퇴가 막 커밋돼 칸이 비어 있어도 500 이 아니라 401 이다', async () => {
+    const service = await build({ status: 'JOINED', passwordHash: null });
+    await expect(service.change(user, CURRENT, NEXT)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
   it('검증한 뒤 잠금을 잡기 전에 비밀번호가 바뀌었으면(재설정이 먼저 끝남) 400 이고 덮어쓰지 않는다', async () => {
     const service = await build();
     tx.account.findUniqueOrThrow.mockResolvedValue({

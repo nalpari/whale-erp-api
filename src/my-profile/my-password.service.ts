@@ -12,7 +12,6 @@ import type { AccountUser } from '../auth/auth.types';
 import { hashPassword, verifyPassword } from '../auth/password';
 import { validateNewPassword } from '../auth/password-policy';
 import { PrismaService } from '../prisma/prisma.service';
-import { assertPresent } from '../auth/assert-present';
 
 export const CURRENT_PASSWORD_MISMATCH_MESSAGE =
   '지금 비밀번호가 맞지 않습니다.';
@@ -42,22 +41,20 @@ export class MyPasswordService {
       where: { accountId },
       select: { email: true, passwordHash: true, status: true },
     });
-    if (!account || account.status === 'WITHDRAWN')
+    // 칸이 비어 있는 것도 탈퇴한 계정이다(탈퇴가 아니면 있다 — CHECK)
+    if (
+      !account ||
+      account.status === 'WITHDRAWN' ||
+      account.email === null ||
+      account.passwordHash === null
+    )
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
 
     // 지금 비밀번호를 먼저 본다. 규칙 위반 사유를 먼저 주면 토큰만 가진 사람이 비밀번호 없이 규칙을 확인할 수 있다 —
     // 큰 일은 아니지만 재설정(핀이 맞은 뒤에 규칙)과 순서를 맞춘다.
-    if (
-      !(await verifyPassword(
-        currentPassword,
-        assertPresent(account.passwordHash, 'password_hash'),
-      ))
-    )
+    if (!(await verifyPassword(currentPassword, account.passwordHash)))
       throw new BadRequestException(CURRENT_PASSWORD_MISMATCH_MESSAGE);
-    const reason = validateNewPassword(
-      newPassword,
-      assertPresent(account.email, 'email'),
-    );
+    const reason = validateNewPassword(newPassword, account.email);
     if (reason !== null) throw new BadRequestException(reason);
     // scrypt 는 잠금 밖에서 — 잠근 채 해시하면 같은 계정의 로그인 · 재설정이 그동안 줄을 선다.
     const passwordHash = await hashPassword(newPassword);

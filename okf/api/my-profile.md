@@ -552,7 +552,7 @@ masked values only.
   actor `STAFF`(`endPendingContracts` — 퇴직 · 폐점과 같은 함수, 대상은 `account_id` 또는 `candidate_account_id` 가 이 계정인 레코드).
   ③ 발송(`SENT`) 초대 만료, `candidate_account_id` 비움, 열린 연결 보류(`link_holds`, 처리 결과 없음) 삭제(처리 결과가 승인 · 재초대
   둘뿐이라 「닫음」 값이 없다). ④ 위치정보 파기(위치정보법 제24조 제4항) — `location_access_logs`, 동의 이력, 동의. ⑤ 계정에 달린
-  개인정보 — `login_histories`(계정, 또는 계정 없이 남은 이 이메일), `account_change_histories`, `identity_verifications`(계정 또는 계정 없이 이 번호),
+  개인정보 — `login_histories`(계정, 또는 계정 없이 남은 이 이메일), `account_change_histories`, `identity_verifications`(이 계정에 귀속된 것만 — 계정 없이 남은 기록은 같은 번호로 가입하려는 다른 사람의 것일 수 있어 지우지 않는다),
   `notification_preferences`, `email_change_pins`, `password_reset_pins` · `password_reset_links`. ⑥ 접속 전부 종료(`revokeAll`)하고
   `device_identifier` 를 비운다. ⑦ `accounts` 행은 지우지 않고 `status = WITHDRAWN`, 이메일 · 비밀번호 해시 · 실명 · 생년월일 · 휴대전화 ·
   성별 · 동일인 식별값 · 주소 세 칸을 NULL, 외국인 여부 false, 본사 제공 동의는 「동의한 적 없음」(false + 버전 · 일시 NULL)으로.

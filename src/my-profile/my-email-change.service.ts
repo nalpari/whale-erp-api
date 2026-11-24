@@ -19,7 +19,6 @@ import { isMailTransportError } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailChangePinSender } from './email-change-pin-sender';
 import { CURRENT_PASSWORD_MISMATCH_MESSAGE } from './my-password.service';
-import { assertPresent } from '../auth/assert-present';
 
 /** 템플릿 `EMAIL_CHANGE_PIN` 문구가 15분이다 */
 const PIN_LIFETIME_MS = 15 * 60 * 1000;
@@ -313,12 +312,14 @@ export class MyEmailChangeService {
       where: { accountId },
       select: { email: true, passwordHash: true, status: true },
     });
-    if (account.status === 'WITHDRAWN')
+    // 칸이 비어 있는 것도 탈퇴한 계정이다(탈퇴가 아니면 있다 — CHECK)
+    if (
+      account.status === 'WITHDRAWN' ||
+      account.email === null ||
+      account.passwordHash === null
+    )
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
-    return {
-      email: assertPresent(account.email, 'email'),
-      passwordHash: assertPresent(account.passwordHash, 'password_hash'),
-    };
+    return { email: account.email, passwordHash: account.passwordHash };
   }
 
   private async assertNotInUse(

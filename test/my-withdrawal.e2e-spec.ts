@@ -396,6 +396,10 @@ describe('직원 앱 회원 탈퇴 (e2e, DB)', () => {
         result: 'SUCCEEDED',
       },
     });
+    // 계정 없이 남은 같은 번호의 인증 기록 — 다른 사람의 것일 수 있어 남는다
+    const orphan = await prisma.identityVerification.create({
+      data: { purpose: 'SIGNUP', phone: a.phone, result: 'SUCCEEDED' },
+    });
     await prisma.notificationPreference.create({
       data: { accountId: a.accountId, preferenceCategory: 'CONTRACT' },
     });
@@ -478,6 +482,14 @@ describe('직원 앱 회원 탈퇴 (e2e, DB)', () => {
       prisma.linkHold.count({ where }),
     ])
       expect(await count).toBe(0);
+    expect(
+      await prisma.identityVerification.count({
+        where: { identityVerificationId: orphan.identityVerificationId },
+      }),
+    ).toBe(1);
+    await prisma.identityVerification.delete({
+      where: { identityVerificationId: orphan.identityVerificationId },
+    });
     // 대기 계약은 종료 — 이력 actor 는 직원
     expect(
       (await prisma.contract.findUniqueOrThrow({ where: { contractId } }))
