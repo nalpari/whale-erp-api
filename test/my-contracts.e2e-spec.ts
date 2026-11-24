@@ -15,6 +15,7 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { STORAGE } from '../src/storage/storage.module';
 import { addDays, kstToday } from '../src/staff-members/kst-date';
 import { createBp, deleteBps } from './hq-bp';
+import { joinedOf } from './joined-account';
 
 // 직원 앱 날인 · 거부 · 수정 요청(WHALEERP-145)을 실제 DB 로 확인한다 — 내 계약만(남의 계약 · 후보 계정만 있는 계약 404),
 // 본인 대조, 체결 완료 · 이력 · 서명 행 · 주소 고정, 두 번 누르면 409, 거부 사유는 선택. 저장소는 가짜다.
@@ -207,7 +208,9 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
       },
     });
     accountIds.push(accountId);
-    return prisma.account.findUniqueOrThrow({ where: { accountId } });
+    return joinedOf(
+      await prisma.account.findUniqueOrThrow({ where: { accountId } }),
+    );
   }
 
   /** 서명 대기 계약 — 계약서 값은 계정과 같게(이름 공백만 다르다). link 가 candidate 면 후보 계정만 둔다 */

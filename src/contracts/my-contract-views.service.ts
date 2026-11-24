@@ -17,7 +17,11 @@ import type {
   MyContractListItemDto,
   MyContractListResponseDto,
 } from './dto/my-contract-view.dto';
-import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
+import {
+  accountIdentityOf,
+  EMPTY_CONTRACT_IDENTITY,
+  identityMismatches,
+} from './identity-match';
 import {
   MY_CONTRACT_NOT_FOUND,
   myContractWhere,
@@ -183,7 +187,10 @@ export class MyContractViewsService {
       return { c, account: c.staffMember.account!, store, documents };
     });
     if (!read) throw new NotFoundException(MY_CONTRACT_NOT_FOUND);
-    const { c, account, store, documents } = read;
+    const { c, store, documents } = read;
+    // 토큰을 확인한 뒤 탈퇴했으면 계정 칸이 비어 있다 — 없는 계약과 같게 답한다
+    const account = accountIdentityOf(read.account);
+    if (!account) throw new NotFoundException(MY_CONTRACT_NOT_FOUND);
     // 계약 행이 점포를 외래키로 가리켜 없으면 데이터가 깨진 것이다(목록의 storeNames 와 같다)
     if (!store)
       throw new InternalServerErrorException(

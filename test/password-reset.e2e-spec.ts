@@ -13,6 +13,7 @@ import {
   PasswordResetPinTarget,
 } from '../src/auth/password-reset-pin-sender';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { joinedOf } from './joined-account';
 
 const OLD_PASSWORD = 'old-Password-1';
 const NEW_PASSWORD = 'Brand-new-pw1';
@@ -82,7 +83,7 @@ describe('비밀번호 재설정 (e2e, DB)', () => {
       },
     });
     createdAccountIds.push(account.accountId);
-    return account;
+    return joinedOf(account);
   }
 
   const api = () => request(app.getHttpServer());

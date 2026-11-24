@@ -257,7 +257,9 @@ describe('근무스케줄 (e2e, DB)', () => {
       select: { email: true },
     });
     await prisma.mailSendLog.deleteMany({
-      where: { toEmail: { in: emails.map((a) => a.email) } },
+      where: {
+        toEmail: { in: emails.flatMap((a) => (a.email ? [a.email] : [])) },
+      },
     });
     const schedules = await prisma.workSchedule.findMany({
       where: { staffMemberId: { in: staffIds } },
@@ -1498,7 +1500,7 @@ describe('근무스케줄 (e2e, DB)', () => {
           where: { staffMemberId },
           select: { account: { select: { email: true } } },
         })
-      ).account!.email;
+      ).account!.email!;
     beforeEach(() => sendMail.mockClear());
 
     it('등록 · 수정 · 삭제마다 계정 이메일로 한 통 — 근무 탭 버튼, EMAIL 발송 이력 · 메일 발송 이력', async () => {

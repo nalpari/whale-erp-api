@@ -9,6 +9,7 @@ import {
   needsLocationReconsent,
 } from './location-consent-state';
 import { currentLocationTermsVersion } from './location-terms';
+import { assertPresent } from '../auth/assert-present';
 
 @Injectable()
 export class MyProfileService {
@@ -61,10 +62,11 @@ export class MyProfileService {
 
     return {
       accountId: account.accountId,
-      email: account.email,
-      realName: account.realName,
-      birthDate: dateOnly(account.birthDate),
-      phone: account.phone,
+      // 위에서 탈퇴 계정을 걸렀다 — 탈퇴가 아니면 다섯 칸이 있다(CHECK).
+      email: assertPresent(account.email, 'email'),
+      realName: assertPresent(account.realName, 'real_name'),
+      birthDate: dateOnly(assertPresent(account.birthDate, 'birth_date')),
+      phone: assertPresent(account.phone, 'phone'),
       zipCode: account.zipCode,
       address: account.address,
       addressDetail: account.addressDetail,

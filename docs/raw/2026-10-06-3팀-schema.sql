@@ -144,11 +144,11 @@ CREATE TABLE "auth_sessions" (
 -- 계정
 CREATE TABLE "accounts" (
     "account_id" INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL,
-    "email" TEXT NOT NULL,
-    "password_hash" TEXT NOT NULL,
-    "real_name" TEXT NOT NULL,
-    "birth_date" DATE NOT NULL,
-    "phone" TEXT NOT NULL,
+    "email" TEXT,
+    "password_hash" TEXT,
+    "real_name" TEXT,
+    "birth_date" DATE,
+    "phone" TEXT,
     "gender" "gender",
     "is_foreigner" BOOLEAN NOT NULL DEFAULT false,
     "connecting_information" TEXT,
@@ -971,6 +971,7 @@ CREATE TABLE "bulk_export_download_logs" (
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_email_lower" CHECK ("email" = lower("email"));
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_phone_format" CHECK ("phone" ~ '^[0-9]{10,11}$');
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_failed_login_count_nonnegative" CHECK ("failed_login_count" >= 0);
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_personal_required_unless_withdrawn" CHECK ("status" = 'WITHDRAWN' OR ("email" IS NOT NULL AND "password_hash" IS NOT NULL AND "real_name" IS NOT NULL AND "birth_date" IS NOT NULL AND "phone" IS NOT NULL));
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_consent_fields" CHECK (NOT "is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NULL));
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_not_consented_fields" CHECK ("is_hq_sharing_consented" OR ("hq_sharing_consent_version" IS NULL AND "hq_sharing_agreed_at" IS NULL AND "hq_sharing_withdrawn_at" IS NULL) OR ("hq_sharing_consent_version" IS NOT NULL AND "hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" IS NOT NULL));
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_hq_sharing_withdrawn_after_agreed" CHECK ("hq_sharing_withdrawn_at" IS NULL OR ("hq_sharing_agreed_at" IS NOT NULL AND "hq_sharing_withdrawn_at" >= "hq_sharing_agreed_at"));

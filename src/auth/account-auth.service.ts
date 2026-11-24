@@ -19,6 +19,7 @@ import {
   isLocked,
   registerFailure,
 } from './attempt-lock';
+import { assertPresent } from './assert-present';
 import { JwtPayload } from './auth.types';
 import { LoginDto } from './dto/login.dto';
 import {
@@ -141,7 +142,16 @@ export class AccountAuthService {
       );
       throw new UnauthorizedException(INVALID_LOGIN_MESSAGE);
     }
-    return this.loginResponseOf(account, outcome.session);
+    // 이메일로 찾은 계정이고 탈퇴가 아니라 이메일 · 실명이 있다(CHECK).
+    return this.loginResponseOf(
+      {
+        accountId: account.accountId,
+        email,
+        realName: assertPresent(account.realName, 'real_name'),
+        status: account.status,
+      },
+      outcome.session,
+    );
   }
 
   /**
@@ -186,7 +196,9 @@ export class AccountAuthService {
       where: { accountId: session.accountId },
       select: { email: true },
     });
-    if (!account) throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
+    // 접속 상태 서비스가 탈퇴 계정의 접속을 이미 걸렀지만, 그 뒤 탈퇴했으면 이메일이 비어 있다 — 없는 계정과 같다.
+    if (!account?.email)
+      throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
 
     return {
       accessToken: await this.signAccessToken(
@@ -210,9 +222,14 @@ export class AccountAuthService {
       where: { accountId },
       select: { accountId: true, email: true, realName: true, status: true },
     });
-    if (!account || account.status === 'WITHDRAWN')
+    if (
+      !account ||
+      account.status === 'WITHDRAWN' ||
+      account.email === null ||
+      account.realName === null
+    )
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
-    return account;
+    return { ...account, email: account.email, realName: account.realName };
   }
 
   /** 로그아웃. 그 기기(접속 상태 하나)만 종료하고 다른 기기는 그대로 둔다. */
@@ -252,7 +269,7 @@ export class AccountAuthService {
    * 뒤의 값이다.
    */
   private completeSuccess(
-    verified: { accountId: number; passwordHash: string },
+    verified: { accountId: number; passwordHash: string | null },
     email: string,
     deviceIdentifier: string | undefined,
     isRemembered: boolean,

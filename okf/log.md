@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-24
+* **Update**: [My profile](/api/my-profile.md) · [Attendance](/api/attendance.md) · [Staff members](/api/staff-members.md) · [Notification templates](/api/notification-templates.md) · [Naming](/conventions/naming.md) · [Team 3 physical schema](/domain/team3-physical-schema.md) — 직원 앱 회원 탈퇴(WHALEERP-770, 노영주 확정): `GET /me/profile/withdrawal-eligibility` · `POST /me/profile/withdrawal`(재직 · 퇴직 예정이면 409 `EMPLOYED_AFFILIATION` + `employedStores`, 비밀번호 400, 즉시 처리). 한 트랜잭션에서 대기 계약 종료(actor `STAFF`) · 초대 만료 · 위치정보 · 계정 이력 파기 · 세션 폐기 · `accounts` 개인정보 NULL 하고 커밋 뒤 근무지 관리자 알림 `NTF_STAFF_WITHDRAWN` · 완료 메일 `EMAIL_STAFF_WITHDRAW_DONE`(임시 문구). 마이그레이션 `20261124110811_team3_staff_withdrawal`(`accounts` 다섯 칸 NULL 허용 + 탈퇴 아니면 있어야 하는 CHECK, 템플릿 2건 → 기본 템플릿 50건). 직원 목록 · 상세에 `isAccountWithdrawn`. RET-08(위치정보 확인자료)은 「직원 계정 탈퇴 시 파기」로 바뀌었고 동의 철회 시 파기는 별도 일감이다.
 * **Update**: [TO-DO](/api/todos.md) — TO-DO 상세에 최종수정(`modifiedAt` · `modifiedByName`, WHALEERP-698): 관리자 [수정]만 `todos.modified_at` · `modified_by` 에 남긴다(마이그레이션 `20261124101923_team3_todo_modified`). 상태 변경 · 삭제 · 직원 앱 완료는 바꾸지 않고, 묶음은 전체 행이 같은 값이다. 기존 행 · 등록만 한 TO-DO 는 null(화면에 줄 없음). 근로계약 최종수정(WHALEERP-699)과 같은 방식.
 
 ## 2026-11-20

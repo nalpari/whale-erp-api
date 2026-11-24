@@ -9,6 +9,7 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import sharp from 'sharp';
@@ -43,7 +44,12 @@ import type {
   MyContractActionResponseDto,
   SignedMyContractResponseDto,
 } from './dto/my-contract-action.dto';
-import { EMPTY_CONTRACT_IDENTITY, identityMismatches } from './identity-match';
+import {
+  accountIdentityOf,
+  EMPTY_CONTRACT_IDENTITY,
+  identityMismatches,
+} from './identity-match';
+import { INVALID_SESSION_MESSAGE } from '../auth-session/auth-session.service';
 import { MY_CONTRACT_NOT_FOUND, myContractWhere } from './my-contract-scope';
 
 /** 날인을 막을 때 직원에게 보이는 문장 — 근무지 점포가 운영 중이 아니다 */
@@ -417,9 +423,12 @@ export class MyContractsService {
           '근로계약서가 다시 발송됐습니다. 새로 고쳐 바뀐 계약서를 확인해 주세요.',
       });
     // 당사자 행이 없으면 모든 칸이 빈 계약서로 대조한다 — 빈 칸은 다른 것이다
+    // 토큰을 확인한 뒤 탈퇴했으면 계정 칸이 비어 있다 — 접속이 끝난 것과 같다
+    const account = accountIdentityOf(c.staffMember.account!);
+    if (!account) throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
     const mismatches = identityMismatches(
       c.contractParty ?? EMPTY_CONTRACT_IDENTITY,
-      c.staffMember.account!,
+      account,
     );
     if (mismatches.length)
       throw new ConflictException({

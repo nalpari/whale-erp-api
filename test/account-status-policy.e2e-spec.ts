@@ -16,6 +16,7 @@ import {
   MyPayslipListResponseDto,
 } from '../src/payslips/dto/my-payslip.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { joinedOf } from './joined-account';
 
 const PASSWORD = 'correct-horse-battery';
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
@@ -102,7 +103,7 @@ describe('계정 상태 정책 (e2e, DB)', () => {
       },
     });
     createdAccountIds.push(account.accountId);
-    return account;
+    return joinedOf(account);
   }
 
   const addStaffMember = (

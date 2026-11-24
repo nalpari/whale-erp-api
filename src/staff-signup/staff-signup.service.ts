@@ -56,6 +56,7 @@ import {
   warnStaleHqSharingVersion,
 } from './hq-sharing-consent';
 import { sameName } from '../contracts/identity-match';
+import { assertPresent } from '../auth/assert-present';
 
 /** 번호 · 코드가 맞는 초대가 없다 — 어느 쪽이 틀렸는지, 그 번호로 초대가 있는지 알리지 않는다(JOIN-7) */
 export const CODE_MISMATCH = '휴대전화번호나 초대 코드를 다시 확인해 주세요.';
@@ -297,7 +298,7 @@ export class StaffSignupService {
                 }
               : {}),
           },
-          select: { accountId: true, email: true, realName: true },
+          select: { accountId: true },
         });
         const linked = await tx.staffMember.updateMany({
           where: { staffMemberId: staffMember.staffMemberId, accountId: null },
@@ -316,7 +317,14 @@ export class StaffSignupService {
           'PENDING_SIGNATURE',
           'STAFF',
         );
-        return { kind: 'joined', ...account, hqSharingConsentRecorded };
+        // 방금 이 값으로 만든 계정이다 — 읽은 칸은 탈퇴 계정을 위해 null 을 허용하는 타입이라 입력한 값을 그대로 쓴다
+        return {
+          kind: 'joined',
+          accountId: account.accountId,
+          email: dto.email,
+          realName: dto.name,
+          hqSharingConsentRecorded,
+        };
       });
     } catch (e) {
       if (
@@ -536,7 +544,12 @@ export class StaffSignupService {
     });
     if (!account || account.status === 'WITHDRAWN')
       throw new UnauthorizedException(INVALID_SESSION_MESSAGE);
-    return account;
+    // 탈퇴가 아니면 두 칸이 있다(CHECK accounts_personal_required_unless_withdrawn)
+    return {
+      ...account,
+      phone: assertPresent(account.phone, 'phone'),
+      realName: assertPresent(account.realName, 'real_name'),
+    };
   }
 
   /**

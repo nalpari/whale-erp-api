@@ -13,6 +13,7 @@ import { applyNewPassword } from './apply-new-password';
 import { validateNewPassword } from './password-policy';
 import { PasswordResetPinSender } from './password-reset-pin-sender';
 import { generatePin, normalizePin } from './pin';
+import { assertPresent } from './assert-present';
 
 /**
  * 핀 유효시간이자 새 비밀번호를 정하는 시간. 한 시계다 — 핀을 낸 시각부터 10분이 지나면 핀 확인도
@@ -147,10 +148,11 @@ export class PasswordResetService {
     // 응답이 늦어져 계정이 있다는 것이 드러나고, 실패를 던져도 마찬가지다. 사용자는 1분 뒤에 새 핀을
     // 받을 수 있다. Promise.resolve 로 감싸는 것은 send 가 동기로 던져도 아래 catch 로 가게 하려는
     // 것이다 — 걷어내면 그 예외가 요청을 500 으로 만든다.
+    // 위에서 탈퇴 계정을 걸렀다 — 탈퇴가 아니면 두 칸이 있다(CHECK).
     const target = {
       accountId: account.accountId,
-      email: account.email,
-      realName: account.realName,
+      email: assertPresent(account.email, 'email'),
+      realName: assertPresent(account.realName, 'real_name'),
     };
     void Promise.resolve()
       .then(() => this.sender.send(target, pin, expiresAt))
@@ -277,7 +279,7 @@ export class PasswordResetService {
     }
     const account: PinAccount = {
       accountId: found.accountId,
-      email: found.email,
+      email: assertPresent(found.email, 'email'),
     };
 
     // 가장 최근의 닫히지 않은 핀만 본다. 새 핀을 내면 이전 핀은 이미 닫혀 있다.

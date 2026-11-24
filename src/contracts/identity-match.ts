@@ -46,6 +46,22 @@ export type AccountIdentity = {
   isForeigner: boolean;
 };
 
+/**
+ * 탈퇴한 계정은 실명 · 휴대전화 · 생년월일이 비어 있다(WHALEERP-770) — 그 계정은 본인 대조 대상이 아니라 null 이다. 직원 앱
+ * 계약 경로는 로그인한 계정만 오므로 null 은 토큰을 확인한 뒤 탈퇴한 경우다.
+ */
+export function accountIdentityOf<
+  T extends {
+    realName: string | null;
+    phone: string | null;
+    birthDate: Date | null;
+  },
+>(account: T): (T & AccountIdentity) | null {
+  const { realName, phone, birthDate } = account;
+  if (realName === null || phone === null || birthDate === null) return null;
+  return { ...account, realName, phone, birthDate } as T & AccountIdentity;
+}
+
 /** 이름은 공백을 모두 지우고 영문은 대문자로 비교한다 — 저장 값은 그대로다(2026-10-16) */
 export const nameKey = (name: string) =>
   name.normalize('NFC').replace(/\s/g, '').toUpperCase();

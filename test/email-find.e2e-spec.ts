@@ -111,7 +111,7 @@ describe('이메일 찾기 (e2e, DB)', () => {
       return `${local.slice(0, 2)}${'*'.repeat(local.length - 3)}${local.slice(-1)}@${domain}`;
     };
     expect(res.body).toEqual({
-      emails: [masked(first.email), masked(second.email)],
+      emails: [masked(first.email!), masked(second.email!)],
     });
     // 이메일 원문은 응답 어디에도 없다.
     expect(JSON.stringify(res.body)).not.toContain(first.email);

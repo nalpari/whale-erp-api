@@ -84,7 +84,7 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
       await prisma.account.findUniqueOrThrow({
         where: { accountId: await account('other', 'JOINED', hash) },
       })
-    ).email;
+    ).email!;
     withdrawnId = await account('gone', 'WITHDRAWN', hash);
   });
 
@@ -172,7 +172,7 @@ describe('이메일 아이디 변경 (e2e, DB)', () => {
   const ageLatestPin = (accountId: number) =>
     prisma.$executeRaw`UPDATE email_change_pins SET issued_at = issued_at - interval '2 minutes' WHERE account_id = ${accountId}`;
   const emailOf = async (accountId: number) =>
-    (await prisma.account.findUniqueOrThrow({ where: { accountId } })).email;
+    (await prisma.account.findUniqueOrThrow({ where: { accountId } })).email!;
   /** 테스트마다 새 계정 — 1분 간격 · 계정 요청 한도 · 핀 개수가 앞 테스트에 기대지 않게 */
   const fresh = async (tag: string) => {
     const accountId = await account(

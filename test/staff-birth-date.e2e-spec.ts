@@ -254,8 +254,8 @@ describe('직원 생년월일 정정 (e2e, DB)', () => {
     ).birthDateCorrectable;
 
   const birthOf = async (accountId: number) =>
-    (await prisma.account.findUniqueOrThrow({ where: { accountId } })).birthDate
-      .toISOString()
+    (await prisma.account.findUniqueOrThrow({ where: { accountId } }))
+      .birthDate!.toISOString()
       .slice(0, 10);
 
   it('성공 204 — 계정 값이 바뀌고, 다른 BP 소속에도 같이 바뀌고, 이력이 남고, 계약서 값은 그대로다', async () => {
@@ -296,7 +296,7 @@ describe('직원 생년월일 정정 (e2e, DB)', () => {
       where: { staffMemberId: otherBpStaffId },
       select: { account: { select: { birthDate: true } } },
     });
-    expect(sibling.account?.birthDate.toISOString().slice(0, 10)).toBe(
+    expect(sibling.account?.birthDate?.toISOString().slice(0, 10)).toBe(
       '1991-06-18',
     );
     const histories = await prisma.accountChangeHistory.findMany({

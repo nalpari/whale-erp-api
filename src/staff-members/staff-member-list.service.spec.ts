@@ -489,7 +489,37 @@ describe('StaffMemberListService', () => {
       contract: null,
       employmentStatus: null,
       retiredDate: null,
+      isAccountWithdrawn: false,
     });
+  });
+
+  it('목록 줄에도 isAccountWithdrawn — 탈퇴 계정만 true, 가린 줄에도 같은 값 (WHALEERP-770)', async () => {
+    prisma.staffMember.findMany.mockResolvedValue([
+      row({
+        staffMemberId: 31,
+        account: {
+          status: 'WITHDRAWN',
+          isHqSharingConsented: false,
+          hqSharingConsentVersion: null,
+        },
+      }),
+      row({
+        staffMemberId: 32,
+        storeId: 6,
+        account: {
+          status: 'WITHDRAWN',
+          isHqSharingConsented: false,
+          hqSharingConsentVersion: null,
+        },
+      }),
+      row({ staffMemberId: 33 }),
+    ]);
+    const items = (await service.list(9, {}))!.items;
+    expect(items.map((i) => [i.staffMemberId, i.isAccountWithdrawn])).toEqual([
+      [31, true],
+      [null, true],
+      [33, false],
+    ]);
   });
 
   it('가맹관리자(FA)와 직영 점포는 가리지 않는다', async () => {
@@ -1232,12 +1262,44 @@ describe('StaffMemberListService', () => {
       });
     });
 
-    it('탈퇴한 계정이면 이메일은 null', async () => {
+    it('탈퇴한 계정이면 이메일은 null 이고 isAccountWithdrawn 이 true (WHALEERP-770)', async () => {
+      // 탈퇴하면 DB 칸은 모두 비고 동의도 지워진다 — 직영 점포 줄은 가려지지 않는다
       prisma.staffMember.findFirst.mockResolvedValue(
-        row({ account: { email: 'gone@test.invalid', status: 'WITHDRAWN' } }),
+        row({
+          account: {
+            email: null,
+            birthDate: null,
+            status: 'WITHDRAWN',
+            isHqSharingConsented: false,
+            hqSharingConsentVersion: null,
+          },
+        }),
       );
       await expect(service.findOne(9, 30)).resolves.toMatchObject({
         email: null,
+        birthDate: null,
+        isAccountWithdrawn: true,
+      });
+    });
+
+    it('가입한 계정이면 isAccountWithdrawn 이 false, 가입 전이어도 false', async () => {
+      prisma.staffMember.findFirst.mockResolvedValue(
+        row({
+          account: {
+            email: 'a@test.invalid',
+            birthDate: new Date('1990-01-01T00:00:00Z'),
+            status: 'JOINED',
+            isHqSharingConsented: false,
+            hqSharingConsentVersion: null,
+          },
+        }),
+      );
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        isAccountWithdrawn: false,
+      });
+      prisma.staffMember.findFirst.mockResolvedValue(row({ account: null }));
+      await expect(service.findOne(9, 30)).resolves.toMatchObject({
+        isAccountWithdrawn: false,
       });
     });
 
