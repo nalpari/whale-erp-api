@@ -679,11 +679,19 @@ describe('PayslipEditService', () => {
             ],
           }),
         ).rejects.toBeInstanceOf(BadRequestException);
+        // 0 시간도 시간이 없는 것이다(재영 리뷰)
+        await expect(
+          save({
+            items: [{ payslipItemMasterId: 4, amount: 30_000, workMinutes: 0 }],
+          }),
+        ).rejects.toThrow(
+          '야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
+        );
 
         await save({
           items: [
             { payslipItemMasterId: 4, amount: 30_000, workMinutes: 120 },
-            { payslipItemMasterId: 5, amount: 0, workMinutes: null },
+            { payslipItemMasterId: 5, amount: 0, workMinutes: 0 },
           ],
         });
         expect(dataOf(104)).toEqual({
@@ -692,12 +700,12 @@ describe('PayslipEditService', () => {
           workMinutes: 120,
           calculationText: '2.0시간',
         });
-        // 0원은 시간 없이 둘 수 있다
+        // 0원은 시간 없이(0 시간도) 둘 수 있다
         expect(dataOf(105)).toEqual({
           adjustedAmount: 0,
           isEntered: true,
-          workMinutes: null,
-          calculationText: null,
+          workMinutes: 0,
+          calculationText: '0.0시간',
         });
       });
 
@@ -1122,6 +1130,27 @@ describe('PayslipEditService', () => {
         },
       });
       expect(prisma.payslipLog.create).not.toHaveBeenCalled();
+
+      // 0 시간도 막는다(재영 리뷰) — 0원 · 0 시간 줄은 막지 않는다
+      prisma.payslipItem.findMany.mockResolvedValue([
+        ...filled,
+        line(104, 'EARNING', '야간수당', NIGHT, {
+          adjustedAmount: 30_000,
+          isEntered: true,
+          workMinutes: 0,
+        }),
+        line(105, 'EARNING', '휴일근무수당', HOLIDAY, {
+          adjustedAmount: 0,
+          isEntered: true,
+          workMinutes: 0,
+        }),
+      ]);
+      await expect(confirm()).rejects.toMatchObject({
+        response: {
+          code: 'WORK_HOURS_MISSING',
+          items: [{ payslipItemId: 104, itemName: '야간수당' }],
+        },
+      });
 
       prisma.payslipItem.findMany.mockResolvedValue([
         ...filled,

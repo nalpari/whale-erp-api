@@ -374,7 +374,8 @@ export class PayslipEditService {
         ) {
           // 야간 · 휴일근무수당 — 관리자가 넣은 시간, 식은 시간만(시급 · 배율은 관리자가 금액에 넣는다)
           const minutes = wantedMinutes.get(masterId)!;
-          if (amount !== null && amount > 0 && minutes === null)
+          // 0 시간도 없는 것으로 본다 — 금액이 있는데 「0.0시간」은 시간 수를 적지 않은 것과 같다(재영 리뷰)
+          if (amount !== null && amount > 0 && !minutes)
             throw new BadRequestException(
               '야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
             );
@@ -641,7 +642,7 @@ export class PayslipEditService {
             l.payslipItemMaster.itemCode,
           ) &&
           (amountOf(l) ?? 0) > 0 &&
-          l.workMinutes === null,
+          !l.workMinutes, // NULL · 0 시간 모두(재영 리뷰)
       );
       if (noHours.length > 0)
         throw new UnprocessableEntityException({
