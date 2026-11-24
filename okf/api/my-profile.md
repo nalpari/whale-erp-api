@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-09T07:55:00Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T01:33:00Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -45,12 +45,11 @@ sources:
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
-    last_modified: 2026-10-29T05:17:36Z
-    last_modified: 2026-10-28T05:30:00Z
+    last_modified: 2026-11-24T01:25:00Z
   - id: my-memberships-controller
     resource: ../../src/my-profile/my-memberships.controller.ts
     title: 소속 · 신고 정보 경로, 신고 정보 저장의 요청 한도
-    last_modified: 2026-11-09T07:55:00Z
+    last_modified: 2026-11-24T01:33:00Z
   - id: my-membership-list-query-dto
     resource: ../../src/my-profile/dto/my-membership-list.query.dto.ts
     title: 소속 근무지 목록 조건(includeRetired)
@@ -301,19 +300,29 @@ means 퇴직 예정 (RETIRED is set by the midnight batch the day after the date
 `employmentStatus`, so on a day the batch is late a record past its `retiredDate` can still sit in
 the current group while the app reads the date as 퇴직. `false` or absent is exactly
 the old list — attendance, home and the 근무지 selector keep calling it that way; anything but
-`true` · `false` is 400. The tax-profile route does **not** follow the flag: a retired record is
-still 404 there. An account with none — 연결
+`true` · `false` is 400. The tax-profile route opens retired records too (read-only, below). An account with none — 연결
 보류, or everything retired — gets `{ items: [], total: 0 }`. Deleted stores are
 not filtered, and need not be: a store can be deleted only while 미운영 and with no
 contract in progress, so no 소속 of this rule can point at one.
 
-**The tax-profile route uses the same rule as its ownership check.** It looks up
-`{ staffMemberId, accountId, ...ACTIVE_STAFF }`, so someone else's id, and also
-one of your own retired or draft-only records, is 404 — even when that record has
-a 신고 정보 row. Anything outside the list does not exist from this route, and
-every one of those 404s (including an id that does not exist or is out of range)
-has the same body, so the response cannot tell whether someone else's record
-exists.
+**The tax-profile route uses the `includeRetired` rule as its ownership check.** It looks up
+`{ staffMemberId, accountId, joinStatus, contracts }` (`ANY_EMPLOYMENT_STAFF` — `ACTIVE_STAFF`
+without `employmentStatus`), so someone else's id, and also one of your own draft-only or
+not-yet-joined records, is 404 — even when that record has a 신고 정보 row. Every one of those 404s
+(including an id that does not exist or is out of range) has the same body, so the response cannot
+tell whether someone else's record exists.
+
+**Retired records are read-only** (WHALEERP-765, 2026-11-24 — 명세 S-YWYTJY · RET-01 · S-DOVWAR: a
+퇴직한 근무지's 근로계약서 · 급여명세서 · 신고 정보 stay viewable for 3 years, and the 급여 계좌 differs per
+근무지, so the 직원 needs to see which one that store paid into). The read returns the same masked
+values plus `editable: false`; `editable` is `employedOn` from `contract-status.ts` — the same test as
+the contract signing's 409 `STAFF_RETIRED` — so a record whose `retiredDate` has passed counts as
+retired even before the midnight batch sets `RETIRED`. That matches the app's `retiredDate < today`
+grouping. The write (below) refuses both a change and a first save with 409 `STAFF_RETIRED`.
+Retention needs nothing here: `tax-profile-purge` (05:10, below) deletes the row 3 years after
+`retiredDate`, after which the read is `taxProfile: null` — between midnight and 05:10 on that day the
+old row can still be read. A retired record of a **deleted store** is not on the list but is still
+readable here by id (the list drops deleted stores; this route does not look at `stores`).
 
 `store` is read with a second query: `staff_members.store_id` points at 1팀's
 `stores`, but 3팀's Prisma models hold it as a plain `Int` with no relation, so
@@ -445,7 +454,9 @@ page.
 `PUT /me/memberships/:staffMemberId/tax-profile` with `{ rrn?, bankCode?, payrollAccountNumber?, currentPassword? }`
 (hyphens and spaces are dropped; a field is skipped only when absent — `null` is 400, it used to reach
 the cipher and 500, api #86 review). The same "is this my membership" check as the read — anything else
-is 404 — and the account token only: an admin token is 403 at the guard. The answer is the read's shape,
+is 404, a retired one of yours is 409 `{ code: 'STAFF_RETIRED', message: '퇴직한 근무지의 신고 정보는 조회만 할 수 있습니다.' }`
+(change and first save alike, WHALEERP-765) — and the account token only: an admin token is 403 at the guard.
+The answer carries `editable: true`. The answer is the read's shape,
 masked values only.
 
 - **Changing an existing profile needs the current password** (`currentPassword`, string, 1–128 —
@@ -456,7 +467,7 @@ masked values only.
   rejects it; here it is optional, so the service answers both. The **first save does not take it** (the
   post-signing flow, 150) — sent anyway, the service does not compare it, but the DTO still checks its
   shape (string, non-empty, ≤ 128), so an empty or too-long value is 400 even on a first save. **Order**:
-  my-membership 404 → password → everything else, with these exceptions in front: DTO validation, the
+  my-membership 404 → retired 409 → password → everything else, with these exceptions in front: DTO validation, the
   request-shape 400s (empty body · one-sided account), and 503 when the server has no encryption key
   (`requireKey`, checked before the 404 and the password). Before the password nothing about the stored values is answered — otherwise the
   birth-date check, the bank check or "same value, nothing written" would let a token holder guess the
@@ -496,8 +507,8 @@ masked values only.
 - **Two first saves at once**: the staff row is taken `FOR UPDATE` before the profile is read, so the
   second one sees the first one's profile instead of failing on the primary key (500 before, api #86
   review). Since 2026-10-23 that second one is an update whose password was never checked, so it is 400
-  `CURRENT_PASSWORD_MISMATCH` and writes nothing — the app should treat it as "already saved" and reload. The "my active membership" check runs again under that lock — a 퇴직 확정
-  committed in between makes it 404 and nothing is written (api #86 re-review). The birth date for the
+  `CURRENT_PASSWORD_MISMATCH` and writes nothing — the app should treat it as "already saved" and reload. The membership check runs again under that lock — a 퇴직 확정
+  committed in between makes it 409 `STAFF_RETIRED` (404 before WHALEERP-765) and nothing is written (api #86 re-review). The birth date for the
   RRN check is read in that same post-lock read. Checking existence first keeps the save from locking
   someone else's row.
 
