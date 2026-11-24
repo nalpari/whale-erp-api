@@ -246,7 +246,7 @@ export class MyAttendanceStatsDto {
   overtimeMinutes: number;
 }
 
-/** 월 ~ 일 한 주의 근무 · 연장 — 기간 밖 날도 그 주면 센다 */
+/** 월 ~ 일 한 주의 근무 · 연장 — 기간 안의 날만 센다(걸친 첫 주 · 마지막 주는 기간 몫, totals 와 같은 기준, WHALEERP-768) */
 export class MyAttendanceWeekDto extends MyAttendanceStatsDto {
   /** 그 주 월요일(YYYY-MM-DD) */
   monday: string;
