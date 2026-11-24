@@ -1406,7 +1406,7 @@ describe('근무스케줄 (e2e, DB)', () => {
         expect.stringMatching(/ 09:00~13:00 → 10:00~14:00\n/),
         expect.stringMatching(/ 10:00~14:00 삭제\n/),
       ]);
-      expect(notices[0].title).toBe('근무스케줄 변경');
+      expect(notices[0].title).toBe('근무스케줄 안내');
       for (const n of notices) {
         expect(n.notificationTarget).toBe('STAFF');
         expect(n.notificationRecipients).toHaveLength(1);
@@ -1523,14 +1523,14 @@ describe('근무스케줄 (e2e, DB)', () => {
       );
       for (const m of sent) {
         expect(m.to).toBe(to);
-        expect(m.subject).toBe('[WHALE ERP] 근무스케줄 변경');
+        expect(m.subject).toBe('[WHALE ERP] 근무스케줄 안내');
         expect(m.text).toContain(
-          '근무스케줄 DIRECT 근무스케줄이 변경되었습니다.',
+          '근무스케줄 DIRECT 근무스케줄이 등록 · 변경되었습니다.',
         );
         expect(m.text).toContain('https://staff.e2e.test/work');
       }
       expect(sent.map((m) => m.text)).toEqual([
-        expect.stringMatching(/- 변경 내용: .* 09:00~13:00 추가\n/),
+        expect.stringMatching(/- 내용: .* 09:00~13:00 추가\n/),
         expect.stringMatching(/ 09:00~13:00 → 10:00~14:00\n/),
         expect.stringMatching(/ 10:00~14:00 삭제\n/),
       ]);
