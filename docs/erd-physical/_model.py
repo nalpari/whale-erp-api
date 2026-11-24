@@ -221,7 +221,10 @@ ADD = {
                        (None, "", "등록 일시", "datetime", "created_at", ""),
                        (None, "", "최근 수정 일시", "datetime", "updated_at", "")],
     "location_consents": [("agreed_at", "", "일시 중지 시각", "datetime", "paused_at", "위치 수집 일시 중지 (ATT-26, 2026-09-29). 다시 켜면 NULL")],
-    "todos": [(None, "", "최근 수정 일시", "datetime", "updated_at", "")],
+    "todos": [(None, "", "최근 수정 일시", "datetime", "updated_at", ""),
+              # 상세의 최종수정 — updated_at 은 상태 변경 · 직원 앱 완료도 바꿔서 관리자 [수정]만 따로 남긴다 (WHALEERP-698, 2026-11-24)
+              (None, "", "최종수정 일시", "datetime", "modified_at", "관리자 [수정] 때만, 상태 변경은 바꾸지 않는다 (WHALEERP-698, 2026-11-24)"),
+              (None, "FK", "최종수정 관리자", "id", "modified_by", "관리자 [수정] 때만, 상태 변경은 바꾸지 않는다 (WHALEERP-698, 2026-11-24)")],
     "todo_status_histories": [("changed_by", "FK", "변경 직원", "id", "staff_member_id", "직원이 바꿨을 때. changed_by 와 함께 쓰지 않는다")],
     "payslips": [("is_premium_applied", "", "3.3% 원천징수 적용", "bool", "is_withholding_applied", "파트타이머는 적용으로 시작, 명세서마다 끈다 (운영 정책 PAY-03)"),
                  # 같은 명세서를 두 요청이 함께 보내지 않게 — updatedAt 만으로는 잡은 뒤 새로 읽은 요청을 막지 못한다 (api #96 리뷰, 2026-10-21)
