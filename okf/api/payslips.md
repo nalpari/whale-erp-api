@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T06:18:46Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T07:27:16Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
@@ -310,7 +310,9 @@ sources:
 만들 수 없고 발송한 문서의 식은 바뀌지 않아야 해서 api 가 만들어 저장한다. 관리자 상세 · 직원 앱 상세 · PDF 가 같은 글자를 보인다.
 
 * **만드는 곳** — `calculatePay` 가 금액과 같은 분 · 같은 시급으로 `PayResult.basis`(항목마다 `{ minutes, text }`)를 내고, 줄에는
-  `basisOf`(payslip-calculation.ts, `amountsOf` 와 짝)로 옮긴다. 시간은 소수 첫째 자리(「8.0시간」), 시급은 천 단위 쉼표, 배율은 「1.5배」 · 「1배」.
+  `basisOf`(payslip-calculation.ts, `amountsOf` 와 짝)로 옮긴다. 시간은 소수 첫째 자리로 정확할 때(분이 6의 배수)만
+  「7.8시간」 · 「8.0시간」 · 「0.0시간」, 아니면 「7시간 50분」 · 「31분」(`hoursText`, 소수 분은 분으로 반올림 — 재영 리뷰 2026-11-24. 470분을
+  「7.8시간」으로 적으면 식이 80,496원인데 금액은 80,840원이었다). 시간만 남긴 칸 · 야간 · 휴일 「2.0시간」 · 「직접 입력」도 같은 글자다. 시급은 천 단위 쉼표, 배율은 「1.5배」 · 「1배」.
   같은 항목에 시급이 둘 이상이면 시급별 구간을 날짜 순으로 「 + 」로 잇는다(「4.0시간 × 10,030원 × 1.5배 + 4.0시간 × 10,320원 × 1.5배」).
   * 파트타이머 기본급 — 연장을 뺀 근무 분, 「87.6시간 × 10,320원」(날마다 그날 시급).
   * 파트타이머 주휴 — Σ min(주 실근무, 40시간) ÷ 5 분(반올림), 「4주 · 16.0시간 × 10,320원」(그 주 마지막 날 계약 시급별 주 수).
@@ -321,7 +323,10 @@ sources:
   * 계산하지 않으면(시급 · 월 기본시간 없음, 고용형태 섞임) 둘 다 NULL.
   * **식이 금액과 맞지 않으면 식을 내지 않는다** — 시간이 있으면 식 대신 시간만 「57.0시간」(야간 · 휴일과 같은 모양, `withHours`)을 남기고,
     시간이 없는 정직원 기본급은 NULL(리뷰 2026-11-24 · PR #317). 시간 수(연장 · 야간 · 휴일근로)는 법정 기재사항이라 세 곳에서 빠지지 않게 한다. 구간마다 그 구간이 나타내는 금액(분 × 시급 ×
-    배율, 정직원 기본급은 시급 × 월 기본시간 × 재직일 ÷ 기간 일)을 더해 반올림 전 금액과 견준다(`formula`) — 기본급 · 주휴 · 연장 모두.
+    배율, 정직원 기본급은 시급 × 월 기본시간 × 재직일 ÷ 기간 일)을 **식에 보이는 값**(보이는 분 · 시급 · 배율 · 일수)으로 다시 곱해 더하고,
+    원 단위로 반올림한 값(calculatePay 와 같은 `Math.round` — 식을 읽은 사람이 셈해 확인하는 값)이 금액과 같거나 반올림 전 값이 소수 오차
+    안에서 같을 때만 식을 낸다(`formula`) — 기본급 · 주휴 · 연장 모두. 소수 분(주휴 ÷ 5 · 정직원 포괄 일할)을 분으로 반올림해 적어 어긋나면
+    식 대신 시간만 남는다.
     예: 11/1 이 일요일이고 앞 계약이 10/30 에 끝나면 10/26 주를 11월이 맡아 그 주 40시간 초과가 10/31(앞 계약 시급)에 매겨지는데, 기본급은
     11월 날만 세어 앞 시급 구간이 음수가 된다 — 그 구간을 빼고 적으면 식(「52.0시간 × 10,320원」)이 금액과 달라져서 식을 비운다.
   * **200자(칸 길이)를 넘는 식도 같다**(시간만, 시간이 없으면 NULL) — 넘기면 저장이 Prisma P2000 → 500 이었다(초안 · 일괄 작성 · 다시 계산 · 가산 바꾸기). 한 달에

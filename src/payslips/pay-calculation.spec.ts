@@ -734,6 +734,58 @@ describe('calculatePay', () => {
       expect(full.basis.basePay).toEqual({ minutes: null, text: null });
     });
 
+    it('시간 글자는 소수 첫째 자리로 정확할 때(6의 배수 분)만 「7.8시간」, 아니면 「7시간 50분」(재영 리뷰)', () => {
+      expect(hoursText(470)).toBe('7시간 50분');
+      expect(hoursText(468)).toBe('7.8시간');
+      expect(hoursText(480)).toBe('8.0시간');
+      expect(hoursText(61)).toBe('1시간 1분');
+      expect(hoursText(31)).toBe('31분');
+      expect(hoursText(30)).toBe('0.5시간');
+      expect(hoursText(0)).toBe('0.0시간');
+      // 소수 분(주휴 ÷ 5 등)은 분으로 반올림해 적는다
+      expect(hoursText(93.4)).toBe('1시간 33분');
+    });
+
+    it.each([
+      [470, '7시간 50분'],
+      [468, '7.8시간'],
+      [480, '8.0시간'],
+      [61, '1시간 1분'],
+      [31, '31분'],
+    ])(
+      '식에 보이는 값을 다시 곱하면 금액과 같다 — 연장 %p 분은 「%s」 × 시급 × 1.5배, 기본급도',
+      (minutes, hours) => {
+        // 월요일 하루만 일했다 — 계약 5시간을 넘긴 분이 연장
+        const r = calculatePay(
+          partTimer({
+            hourlyWage: 10_320,
+            worked: { '2026-10-05': 300 + minutes },
+          }),
+        );
+        expect(r.basis.overtimePay).toEqual({
+          minutes,
+          text: `${hours} × 10,320원 × 1.5배`,
+        });
+        expect(r.overtimePay).toBe(Math.round((minutes / 60) * 10_320 * 1.5));
+        expect(r.basis.basePay.text).toBe('5.0시간 × 10,320원');
+        expect(r.basePay).toBe(5 * 10_320);
+
+        // 같은 분을 기본급으로(계약 8시간 안) — 「7시간 50분 × 10,320원」 = 80,840원
+        const base = calculatePay(
+          partTimer({
+            hourlyWage: 10_320,
+            contractDays: { MON: 480 },
+            worked: { '2026-10-05': minutes },
+          }),
+        );
+        expect(base.basis.basePay).toEqual({
+          minutes,
+          text: `${hours} × 10,320원`,
+        });
+        expect(base.basePay).toBe(Math.round((minutes * 10_320) / 60));
+      },
+    );
+
     it('계산하지 않으면(시급 없음 · 고용형태 섞임) 시간 · 식도 없다', () => {
       const none = { minutes: null, text: null };
       for (const r of [

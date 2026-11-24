@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-24
+* **Update**: [Payslips](/api/payslips.md) — 재영 리뷰: 시간 글자는 6의 배수 분만 「7.8시간」, 아니면 「7시간 50분」(`hoursText`), 식은 보이는 값으로 다시 곱한 금액이 실제 금액과 맞을 때만 낸다(470분이 「7.8시간」으로 적혀 식과 금액이 어긋났다).
 * **Update**: [Payslips](/api/payslips.md) — 되돌리기 순서(api 를 되돌릴 때는 화면 먼저 — 새 화면의 `workMinutes` 를 옛 api 가 400 으로 막는다), 확정 422 문서(`ApiUnprocessableEntityResponse`)에 `WORK_HOURS_MISSING` 을 더했다(WHALEERP-755, 동작 변경 없음).
 * **Update**: [Payslips](/api/payslips.md) — 최종 게이트: 임시저장에 `workMinutes` 키가 없으면(옛 관리자 화면) 저장된 시간을 두고 시간 검사를 건너뛴다(null 이면 그대로 필수), 확정은 금액이 있는 야간 · 휴일근무수당에 시간이 없으면 422 `WORK_HOURS_MISSING`. 배포 순서 api(+ db:deploy) → 관리자 웹 · 직원 앱.
 * **Update**: [Payslips](/api/payslips.md) — PR #317 재검사: 계산값으로 되돌릴 때 다시 셈한 금액이 달라 식을 비우면 시간이 있을 때 「N.N시간」을 남긴다(`withHours`, 계산과 같은 규칙).

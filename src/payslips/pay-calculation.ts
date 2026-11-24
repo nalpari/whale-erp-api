@@ -108,9 +108,22 @@ export interface PayResult {
 }
 
 const NO_BASIS: PayBasis = { minutes: null, text: null };
-/** 「8.0시간」 — 소수 첫째 자리 */
-export const hoursText = (minutes: number) =>
-  `${(minutes / 60).toFixed(1)}시간`;
+/**
+ * 식에 적는 분 — 분 단위로 반올림한다(주휴 ÷ 5 · 정직원 포괄 일할은 소수 분이 나온다). 식 검증은 이 분으로 다시 곱한다(formula).
+ */
+export const shownMinutes = (minutes: number) => Math.round(minutes);
+
+/**
+ * 시간 글자 — 소수 첫째 자리로 정확하면(분이 6의 배수) 「7.8시간」 · 「8.0시간」 · 「0.0시간」, 아니면 「7시간 50분」 · 「31분」. 소수
+ * 첫째 자리로 반올림하면 470분이 「7.8시간」(468분)이 되어 식을 다시 곱한 값이 금액과 달랐다(재영 리뷰, WHALEERP-755). 계산식 · 시간만
+ * 남긴 칸 · 야간 · 휴일 · 「직접 입력」 모두 이 글자를 쓰고, 관리자 상세 · 직원 앱 · PDF 는 api 가 만든 글자를 그대로 보인다.
+ */
+export const hoursText = (minutes: number) => {
+  const m = shownMinutes(minutes);
+  if (m % 6 === 0) return `${(m / 60).toFixed(1)}시간`;
+  const h = Math.floor(m / 60);
+  return h > 0 ? `${h}시간 ${m % 60}분` : `${m % 60}분`;
+};
 const wageText = (wage: number) => `${wage.toLocaleString('ko-KR')}원`;
 const addTo = <K>(map: Map<K, number>, key: K, n: number) =>
   map.set(key, (map.get(key) ?? 0) + n);
@@ -118,19 +131,20 @@ const addTo = <K>(map: Map<K, number>, key: K, n: number) =>
 /** calculation_text 칸 길이(varchar(200)) */
 export const CALCULATION_TEXT_MAX = 200;
 
-/** 식의 한 구간 — 그 구간이 나타내는 금액(반올림 전, 원)과 글자 */
+/** 식의 한 구간 — 글자에 보이는 값(보이는 분 · 시급 · 배율 · 일수)을 다시 곱한 금액(반올림 전, 원)과 글자 */
 type Segment = [value: number, text: string];
 
 /**
- * 구간을 「 + 」로 이은 한 줄 계산식. 식이 나타내는 금액(구간 값의 합)이 실제 금액(반올림 전 값)과 다르면 식을 내지 않는다(null — 시간만
- * 남긴다, withHours) —
- * 0 분 이하 구간을 뺐을 때처럼 식을 다시 셈한 값이 금액과 맞지 않으면 직원에게 보이지 않는다(WHALEERP-755 리뷰). 반올림 뒤가 아니라 전
- * 값으로 견준다 — 구간별로 나눈 소수 오차가 .5 경계에서 반올림을 뒤집을 수 있어서다(그만큼만 봐준다).
+ * 구간을 「 + 」로 이은 한 줄 계산식. 식에 보이는 값을 다시 곱한 합이 실제 금액과 맞을 때만 낸다(아니면 null — 시간만 남긴다,
+ * withHours). 0 분 이하 구간을 뺐을 때 · 소수 분을 분 단위로 반올림해 적을 때처럼 식을 읽은 사람이 셈한 값이 금액과 다르면 직원에게
+ * 보이지 않는다(WHALEERP-755 리뷰 · 재영 리뷰).
+ * 맞는다는 것: 원 단위로 반올림한 값이 같거나(calculatePay 와 같은 Math.round — 식을 읽은 사람이 셈해 확인하는 값이 이것이다), 반올림
+ * 전 값이 소수 오차 안에서 같다(구간별로 나눠 더한 소수 오차가 .5 경계에서 반올림을 뒤집어 맞는 식을 지우지 않게).
  * 200자(칸 길이)를 넘어도 null 이다 — 넘기면 저장이 500 이 된다. 한 달에 계약 조건(시급 · 월 기본시간)이 6~7번 바뀌어야 넘친다.
  */
 function formula(segments: readonly Segment[], raw: number): string | null {
   const implied = segments.reduce((s, [value]) => s + value, 0);
-  if (Math.abs(implied - raw) > 1e-6) return null;
+  if (Math.abs(implied - raw) > 1e-6 && won(implied) !== won(raw)) return null;
   const text = segments.map(([, t]) => t).join(' + ');
   return text.length > CALCULATION_TEXT_MAX ? null : text;
 }
@@ -417,7 +431,7 @@ export function calculatePay(input: PayInput): PayResult {
   ) =>
     formula(
       wageSegments(minutesByWage, fallbackWage, (wage, m) => [
-        (m / 60) * wage * rate,
+        (shownMinutes(m) / 60) * wage * rate,
         `${hoursText(m)} × ${wageText(wage)} × ${rate}배`,
       ]),
       raw,
@@ -559,7 +573,7 @@ export function calculatePay(input: PayInput): PayResult {
         Math.max(0, sum(baseByWage)),
         formula(
           wageSegments(baseByWage, fallbackWage, (wage, m) => [
-            (m * wage) / 60,
+            (shownMinutes(m) * wage) / 60,
             `${hoursText(m)} × ${wageText(wage)}`,
           ]),
           Math.max(0, basePay - overtimePay) / 60,
@@ -572,7 +586,7 @@ export function calculatePay(input: PayInput): PayResult {
             ? [...holidayByWage]
             : [[fallbackWage, { weeks: 0, minutes: 0 }] as [number, Holiday]]
           ).map(([wage, { weeks, minutes }]): Segment => [
-            (minutes / 60) * wage,
+            (shownMinutes(minutes) / 60) * wage,
             `${weeks}주 · ${hoursText(minutes)} × ${wageText(wage)}`,
           ]),
           holidayRaw,
