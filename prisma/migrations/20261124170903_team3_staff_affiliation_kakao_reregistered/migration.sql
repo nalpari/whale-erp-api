@@ -14,10 +14,11 @@
 --      20261027154954 원본 그대로다(20261103175100 이 뺐던 것). 운영자가 고친 문구도 덮어쓴다(20261103175100 과 같다) — 등록본과 다른
 --      문구는 카카오가 거절해 대체 문자로만 간다. 제목(null) · 이름 · 사용 여부는 그대로다.
 -- 2) 메일 EMAIL_STAFF_AFFILIATION_REQUEST — 본문 첫 줄 「#{사업자} #{근무지}에서」 → 「#{근무지}에서」, 변수에서 사업자를 뺀다.
---    제목은 이미 「[WHALE ERP] #{근무지}에서 …」다. 20261109165622 와 같은 방식 — 지금 값(title · body · variables)이 셋 다 되돌리기
---    원본과 같을 때만 지금 값을 바꾸고(운영자가 고친 문구는 둔다), 되돌리기 원본은 늘 바꾼다(updated_at 은 올리지 않는다).
---    운영자가 고친 메일은 필수 변수 사업자가 남아 새 코드에서 렌더링이 실패한다(로그만) — 기본 문구로 되돌리거나 사업자를 지운다
---    (2026-11-24 개발 DB 는 원본 그대로).
+--    제목은 이미 「[WHALE ERP] #{근무지}에서 …」다. 새 코드는 사업자를 넘기지 않아, 지금 값에 사업자가 남으면 필수 변수가 비어
+--    메일이 로그만 남기고 나가지 않는다(PR #323 code-review). 그래서 운영자가 고친 메일도 지금 값의 첫 줄 「#{사업자} 」는 늘
+--    걷어내고(나머지 문구는 둔다), 변수 사업자는 제목 · 본문에 #{사업자} 가 더 없을 때 뺀다. 그래도 남으면(운영자가 다른 곳에
+--    #{사업자} 를 씀) 배포를 멈춘다 — 그 문구를 기본으로 되돌리거나 고친 뒤 다시 배포한다. 되돌리기 원본은 늘 바꾼다(updated_at 은
+--    올리지 않는다, 20261109165622 와 같다). 2026-11-24 개발 DB 는 지금 값이 원본 그대로였다.
 --
 -- 배포: 코드와 함께 나가야 한다. 이 파일만 적용되면 옛 코드가 버튼 이름이 없다고(NO_BUTTON_NAME), 코드만 나가면 버튼 링크 변수가
 -- 없다고(LINK_MISMATCH) 소속 추가 확인 요청을 막는다 — 머지 직후 deploy 와 api 배포를 함께 한다.
@@ -83,17 +84,21 @@ BEGIN
   END IF;
 END $$;
 
--- 지금 값: 셋 다 되돌리기 원본 그대로일 때만. default_* 를 바꾸기 전에 비교한다.
+-- 지금 값: 첫 줄의 「#{사업자} 」는 늘 걷어낸다. 변수 사업자는 바꾼 본문과 제목에 #{사업자} 가 없을 때만 뺀다(SET 의 식은 바꾸기
+-- 전 값을 보므로 본문은 replace 한 값으로 본다). 바뀔 것이 있는 행만 updated_at 을 올린다.
 UPDATE "notification_templates"
    SET "body" = replace("body", '#{사업자} #{근무지}에서', '#{근무지}에서'),
-       "variables" = (
-         SELECT COALESCE(jsonb_agg(e.value ORDER BY e.ordinality), '[]'::jsonb)
-           FROM jsonb_array_elements("variables") WITH ORDINALITY AS e
-          WHERE (e.value->>'name') IS DISTINCT FROM '사업자'),
+       "variables" = CASE
+         WHEN position('#{사업자}' IN replace("body", '#{사업자} #{근무지}에서', '#{근무지}에서')) = 0
+          AND position('#{사업자}' IN COALESCE("title", '')) = 0
+         THEN (
+           SELECT COALESCE(jsonb_agg(e.value ORDER BY e.ordinality), '[]'::jsonb)
+             FROM jsonb_array_elements("variables") WITH ORDINALITY AS e
+            WHERE (e.value->>'name') IS DISTINCT FROM '사업자')
+         ELSE "variables" END,
        "updated_at" = now()
  WHERE "template_code" = 'EMAIL_STAFF_AFFILIATION_REQUEST'
-   AND "title" IS NOT DISTINCT FROM "default_title" AND "body" = "default_body"
-   AND "variables" = "default_variables";
+   AND (position('#{사업자}' IN "body") > 0 OR jsonb_path_exists("variables", '$[*] ? (@.name == "사업자")'));
 
 -- 되돌리기 원본: 늘. updated_at 은 올리지 않는다 — 수정 화면의 낙관적 잠금(읽은 updatedAt)이 그 값이라, 운영자가 고친 템플릿을
 -- 열어 둔 채 배포되면 지금 값은 그대로인데 저장이 409 가 된다(20261109165622 와 같다).
@@ -105,7 +110,7 @@ UPDATE "notification_templates"
           WHERE (e.value->>'name') IS DISTINCT FROM '사업자')
  WHERE "template_code" = 'EMAIL_STAFF_AFFILIATION_REQUEST';
 
--- 검증은 되돌리기 원본만 본다 — 지금 값은 운영자가 고쳤을 수 있다.
+-- 검증: 되돌리기 원본은 새 첫 줄 그대로, 지금 값은 사업자가 남지 않았는지만 본다(나머지는 운영자가 고쳤을 수 있다).
 DO $$
 DECLARE n integer;
 BEGIN
@@ -117,5 +122,12 @@ BEGIN
      AND NOT jsonb_path_exists("default_variables", '$[*] ? (@.name == "사업자")');
   IF n <> 1 THEN
     RAISE EXCEPTION '소속 추가 확인 요청 메일의 기본 문구가 새 첫 줄로 바뀌지 않았다: %', n;
+  END IF;
+  SELECT count(*) INTO n FROM "notification_templates"
+   WHERE "template_code" = 'EMAIL_STAFF_AFFILIATION_REQUEST'
+     AND (position('#{사업자}' IN COALESCE("title", '') || "body") > 0
+          OR jsonb_path_exists("variables", '$[*] ? (@.name == "사업자")'));
+  IF n <> 0 THEN
+    RAISE EXCEPTION '소속 추가 확인 요청 메일(운영자가 고친 문구)에 사업자가 남았다 — 새 코드는 사업자를 넘기지 않아 메일이 나가지 않는다. 그 문구에서 #{사업자} 를 지우거나 기본으로 되돌린 뒤 다시 배포한다';
   END IF;
 END $$;
