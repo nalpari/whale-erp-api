@@ -602,7 +602,11 @@ describe('PayslipEditService', () => {
           line(105, 'EARNING', '휴일근무수당', HOLIDAY),
         ]);
         await expect(
-          save({ items: [{ payslipItemMasterId: 4, amount: 30_000 }] }),
+          save({
+            items: [
+              { payslipItemMasterId: 4, amount: 30_000, workMinutes: null },
+            ],
+          }),
         ).rejects.toThrow(
           '야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
         );
@@ -617,7 +621,7 @@ describe('PayslipEditService', () => {
         await save({
           items: [
             { payslipItemMasterId: 4, amount: 30_000, workMinutes: 120 },
-            { payslipItemMasterId: 5, amount: 0 },
+            { payslipItemMasterId: 5, amount: 0, workMinutes: null },
           ],
         });
         expect(dataOf(104)).toEqual({
@@ -633,6 +637,33 @@ describe('PayslipEditService', () => {
           workMinutes: null,
           calculationText: null,
         });
+      });
+
+      it('근무시간 키가 없으면(옛 관리자 화면) 저장된 시간을 그대로 두고 검사하지 않는다 — 금액만 고쳐도 저장된다(최종 게이트)', async () => {
+        prisma.payslipItem.findMany.mockResolvedValue([
+          line(104, 'EARNING', '야간수당', NIGHT, {
+            adjustedAmount: 30_000,
+            isEntered: true,
+            workMinutes: 120,
+            calculationText: '2.0시간',
+          }),
+          line(105, 'EARNING', '휴일근무수당', HOLIDAY, {
+            adjustedAmount: 20_000,
+            isEntered: true,
+          }),
+        ]);
+        await save({
+          items: [
+            { payslipItemMasterId: 4, amount: 40_000 },
+            { payslipItemMasterId: 5, amount: 20_000 },
+          ],
+        });
+        // 금액만 바뀌고 시간 · 식은 쓰지 않는다. 시간 없는 휴일근무수당도 막지 않는다(확정이 막는다)
+        expect(dataOf(104)).toEqual({
+          adjustedAmount: 40_000,
+          isEntered: true,
+        });
+        expect(dataOf(105)).toBeUndefined();
       });
 
       it('30분 단위는 야간 · 휴일근무수당만 본다 — 다른 줄에 실린 시간(연장수당 61분)은 무시하고 저장된다(PR #317 리뷰)', async () => {
@@ -997,6 +1028,48 @@ describe('PayslipEditService', () => {
           ],
         },
       });
+    });
+
+    it('금액이 있는 야간 · 휴일근무수당에 근무시간이 없으면 422 WORK_HOURS_MISSING 과 그 항목 — 0원 · 시간 있는 줄은 막지 않는다(WHALEERP-755)', async () => {
+      const NIGHT = master(4, 'NIGHT_WORK_PAY');
+      const HOLIDAY = master(5, 'HOLIDAY_WORK_PAY');
+      const filled = lines().map((l) =>
+        l.itemCategory === 'EARNING'
+          ? l
+          : { ...l, adjustedAmount: 0, isEntered: true },
+      );
+      prisma.payslipItem.findMany.mockResolvedValue([
+        ...filled,
+        line(104, 'EARNING', '야간수당', NIGHT, {
+          adjustedAmount: 30_000,
+          isEntered: true,
+        }),
+        line(105, 'EARNING', '휴일근무수당', HOLIDAY, {
+          adjustedAmount: 0,
+          isEntered: true,
+        }),
+      ]);
+      const error = await confirm().catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(UnprocessableEntityException);
+      expect(error).toMatchObject({
+        response: {
+          code: 'WORK_HOURS_MISSING',
+          message:
+            '근무시간이 없어 확정할 수 없습니다: 야간수당. 야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
+          items: [{ payslipItemId: 104, itemName: '야간수당' }],
+        },
+      });
+      expect(prisma.payslipLog.create).not.toHaveBeenCalled();
+
+      prisma.payslipItem.findMany.mockResolvedValue([
+        ...filled,
+        line(104, 'EARNING', '야간수당', NIGHT, {
+          adjustedAmount: 30_000,
+          isEntered: true,
+          workMinutes: 120,
+        }),
+      ]);
+      await expect(confirm()).resolves.toEqual({ payslipId: 40 });
     });
 
     it('공제가 모두 있으면 확정 — 검토 사유를 확인한 것으로 남기고 처리 이력(확정)', async () => {

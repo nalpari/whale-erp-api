@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import { ValidationPipe } from '@nestjs/common';
 import { plainToInstance, type ClassConstructor } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { CreatePayslipDto, PayslipMonthDto } from './payslip-draft.dto';
@@ -95,6 +96,31 @@ describe('SavePayslipDto (금액 저장)', () => {
     (workMinutes) =>
       expect(save({ amount: 0, workMinutes }).failed).toEqual(['items']),
   );
+
+  it('근무시간 키가 없으면 undefined, null 은 null 그대로 — 전역 파이프(whitelist · transform)를 지나도 갈린다(옛 관리자 화면 호환, 최종 게이트)', async () => {
+    // AppModule 의 전역 ValidationPipe 옵션을 옮겨 적었다 — 그쪽을 바꾸면 여기도 맞춘다
+    const pipe = new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    });
+    const body = (item: object) => ({
+      updatedAt: '2026-10-21T01:00:00.000Z',
+      isPremiumApplied: true,
+      isWithholdingApplied: false,
+      items: [{ payslipItemMasterId: 4, amount: 30_000, ...item }],
+    });
+    const out = async (item: object) =>
+      (
+        (await pipe.transform(body(item), {
+          type: 'body',
+          metatype: SavePayslipDto,
+        })) as SavePayslipDto
+      ).items[0].workMinutes;
+    expect(await out({})).toBeUndefined();
+    expect(await out({ workMinutes: null })).toBeNull();
+    expect(await out({ workMinutes: 120 })).toBe(120);
+  });
 
   it('금액 칸이 아예 없으면 400', () => {
     const dto = plainToInstance(SavePayslipDto, {

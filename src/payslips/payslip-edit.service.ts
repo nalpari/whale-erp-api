@@ -275,12 +275,13 @@ export class PayslipEditService {
         '3.3% 원천징수는 파트타이머 명세서에만 적용할 수 있습니다.',
       );
     const wanted = new Map<number, number | null>();
-    const wantedMinutes = new Map<number, number | null>();
+    // undefined 는 키가 없는 요청(근무시간 칸이 없는 옛 관리자 화면) — JSON 에 undefined 가 없어 null(비움)과 갈린다
+    const wantedMinutes = new Map<number, number | null | undefined>();
     for (const { payslipItemMasterId, amount, workMinutes } of dto.items) {
       if (wanted.has(payslipItemMasterId))
         throw new BadRequestException('같은 항목을 두 번 보냈습니다.');
       wanted.set(payslipItemMasterId, amount);
-      wantedMinutes.set(payslipItemMasterId, workMinutes ?? null);
+      wantedMinutes.set(payslipItemMasterId, workMinutes);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -357,10 +358,13 @@ export class PayslipEditService {
         else if (
           (ENTERED_HOURS_ITEM_CODES as readonly string[]).includes(
             l.payslipItemMaster.itemCode,
-          )
+          ) &&
+          // 키가 없으면(옛 관리자 화면 — api 를 먼저 배포한다) 저장된 시간을 그대로 두고 아래 검사도 건너뛴다. 아니면 공제만 고쳐도
+          // 야간 · 휴일 금액이 있는 명세서가 400 이 된다(최종 게이트). 시간이 빈 채로 남으면 확정이 막는다
+          wantedMinutes.get(masterId) !== undefined
         ) {
           // 야간 · 휴일근무수당 — 관리자가 넣은 시간, 식은 시간만(시급 · 배율은 관리자가 금액에 넣는다)
-          const minutes = wantedMinutes.get(masterId) ?? null;
+          const minutes = wantedMinutes.get(masterId)!;
           if (amount !== null && amount > 0 && minutes === null)
             throw new BadRequestException(
               '야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.',
@@ -559,7 +563,8 @@ export class PayslipEditService {
 
   /**
    * 확정. 작성 중 · 검토 중만(아니면 409). 보이는 공제(기본 공제 · 붙인 추가 공제, 3.3% 를 켜면 소득세 · 지방소득세 대신
-   * 원천징수)가 하나라도 미입력이면 422 DEDUCTION_MISSING 과 그 항목. 검토 사유가 있어도 확정하는 것이 「확인」이다 —
+   * 원천징수)가 하나라도 미입력이면 422 DEDUCTION_MISSING 과 그 항목. 금액이 있는 야간 · 휴일근무수당에 근무시간이 없으면 422
+   * WORK_HOURS_MISSING 과 그 항목(WHALEERP-755). 검토 사유가 있어도 확정하는 것이 「확인」이다 —
    * 확인하지 않은 사유에 확정 시각을 확인 일시로 남긴다. 확정할 수 있는 날(`confirmableFrom` — 퇴직일 · 마지막 계약 종료일 · 급여
    * 기간 마지막 날 가운데 가장 빠른 날의 다음 날, 한국. 그 계약의 보낸 갱신(임시저장 제외)이 기간 안에 시작하면 계약 종료일은 보지 않는다) 전이면 422 PERIOD_NOT_ENDED — 남은 날의 근무가 빠진 명세서가 발송되지
    * 않게 막는다. 초안은 그 전에도 미리 보기로 만든다(운영 정책 PAY-06 v247 · v251).
@@ -592,7 +597,8 @@ export class PayslipEditService {
           code: 'PERIOD_NOT_ENDED',
           message: `아직 확정할 수 없습니다. ${from} 부터 확정할 수 있습니다 — 급여 기간 마지막 날(그 전에 퇴직하거나 계약이 끝나면 그날. 진행 중인 갱신 계약이 있으면 급여 기간 마지막 날)이 지나야 합니다.`,
         });
-      const missing = (await this.lines(tx, payslipId)).filter(
+      const lines = await this.lines(tx, payslipId);
+      const missing = lines.filter(
         (l) =>
           l.itemCategory !== 'EARNING' &&
           isShown(l, current.isWithholdingApplied) &&
@@ -605,6 +611,27 @@ export class PayslipEditService {
           code: 'DEDUCTION_MISSING',
           message: `비어 있는 공제가 있어 확정할 수 없습니다: ${missing.map((l) => l.itemName).join(', ')}. 공제 대상이 아니면 0 을 넣어 주세요.`,
           items: missing.map((l) => ({
+            payslipItemId: l.payslipItemId,
+            itemName: l.itemName,
+          })),
+        });
+      // 야간 · 휴일근무수당은 금액이 있으면 근무시간이 있어야 확정한다 — 시간 수는 임금명세서 기재사항이다(근로기준법 시행령 제27조의2,
+      // WHALEERP-755). 임시저장도 막지만, 옛 관리자 화면 · 2026-11-24 전 명세서는 시간 없이 남아 있을 수 있다(최종 게이트)
+      const noHours = lines.filter(
+        (l) =>
+          (ENTERED_HOURS_ITEM_CODES as readonly string[]).includes(
+            l.payslipItemMaster.itemCode,
+          ) &&
+          (amountOf(l) ?? 0) > 0 &&
+          l.workMinutes === null,
+      );
+      if (noHours.length > 0)
+        throw new UnprocessableEntityException({
+          statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          error: 'Unprocessable Entity',
+          code: 'WORK_HOURS_MISSING',
+          message: `근무시간이 없어 확정할 수 없습니다: ${noHours.map((l) => l.itemName).join(', ')}. 야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.`,
+          items: noHours.map((l) => ({
             payslipItemId: l.payslipItemId,
             itemName: l.itemName,
           })),

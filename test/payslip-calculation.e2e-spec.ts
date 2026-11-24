@@ -209,8 +209,10 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     isWithholdingApplied: boolean;
     grossPayAmount: number;
     items: {
+      payslipItemId: number;
       payslipItemMasterId: number;
       itemCode: string;
+      itemName: string;
       calculatedAmount: number | null;
       adjustedAmount: number | null;
       isEntered: boolean;
@@ -315,7 +317,7 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     const before = await detail();
     const masterOf = (code: string) =>
       before.items.find((i) => i.itemCode === code)!.payslipItemMasterId;
-    // 시간 없이 야간수당 금액만 넣으면 400
+    // 시간 칸을 비운(null) 채 야간수당 금액만 넣으면 400 — 키가 아예 없으면(옛 화면) 막지 않는다(아래 확정 시험)
     const res = await request(app.getHttpServer())
       .put(`/payslips/${payslipId}`)
       .set('Authorization', `Bearer ${await token()}`)
@@ -324,7 +326,11 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
         isPremiumApplied: before.isPremiumApplied,
         isWithholdingApplied: before.isWithholdingApplied,
         items: [
-          { payslipItemMasterId: masterOf('NIGHT_WORK_PAY'), amount: 30_000 },
+          {
+            payslipItemMasterId: masterOf('NIGHT_WORK_PAY'),
+            amount: 30_000,
+            workMinutes: null,
+          },
         ],
       })
       .expect(400);
@@ -388,13 +394,59 @@ describe('급여명세서 지급 항목 계산 (e2e, DB)', () => {
     await save(await detail(), {
       items: [
         { payslipItemMasterId: masterOf('OVERTIME_PAY'), amount: 20_000 },
-        { payslipItemMasterId: masterOf('NIGHT_WORK_PAY'), amount: 0 },
+        {
+          payslipItemMasterId: masterOf('NIGHT_WORK_PAY'),
+          amount: 0,
+          workMinutes: null,
+        },
       ],
     });
     expect(basis(await detail())).toEqual({
       BASE_PAY: [3_900, '65.0시간 × 10,000원'],
       WEEKLY_HOLIDAY_PAY: [720, '4주 · 12.0시간 × 10,000원'],
       OVERTIME_PAY: [120, '2.0시간 × 10,000원 × 1배'],
+    });
+  });
+
+  it('금액이 있는 야간수당에 근무시간이 없으면(옛 화면이 남긴 줄) 확정이 422 WORK_HOURS_MISSING 이다(WHALEERP-755 최종 게이트)', async () => {
+    const before = await detail();
+    const night = before.items.find((i) => i.itemCode === 'NIGHT_WORK_PAY')!;
+    // 옛 관리자 화면은 workMinutes 를 보내지 않는다 — 키가 없으면 저장은 되고 시간은 비어 남는다
+    await save(before, {
+      items: [
+        { payslipItemMasterId: night.payslipItemMasterId, amount: 30_000 },
+      ],
+    });
+    const saved = await detail();
+    expect(
+      saved.items.find((i) => i.itemCode === 'NIGHT_WORK_PAY')!.workMinutes,
+    ).toBeNull();
+    // 공제 미입력이 먼저 막지 않게 공제를 0 으로 채운다
+    const deductions = { payslipId, itemCategory: { not: 'EARNING' as const } };
+    await prisma.payslipItem.updateMany({
+      where: deductions,
+      data: { adjustedAmount: 0, isEntered: true },
+    });
+    const res = await send('post', `/payslips/${payslipId}/confirm`, 422, {
+      updatedAt: saved.updatedAt,
+    });
+    expect(res.body).toMatchObject({
+      code: 'WORK_HOURS_MISSING',
+      items: [{ payslipItemId: night.payslipItemId, itemName: night.itemName }],
+    });
+    // 다음 시험을 위해 되돌린다 — 공제는 미입력, 야간수당은 0원
+    await prisma.payslipItem.updateMany({
+      where: deductions,
+      data: { adjustedAmount: null, isEntered: false },
+    });
+    await save(await detail(), {
+      items: [
+        {
+          payslipItemMasterId: night.payslipItemMasterId,
+          amount: 0,
+          workMinutes: null,
+        },
+      ],
     });
   });
 

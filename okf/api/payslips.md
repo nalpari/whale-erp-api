@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T05:05:47Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T05:36:26Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
@@ -41,7 +41,7 @@ sources:
   - id: edit-service
     resource: ../../src/payslips/payslip-edit.service.ts
     title: PayslipEditService (임시저장 · 확정 · 확정 취소 · 지난 명세서 · 추가 공제 항목)
-    last_modified: 2026-11-24T05:05:47Z
+    last_modified: 2026-11-24T05:36:26Z
   - id: send-service
     resource: ../../src/payslips/payslip-send.service.ts
     title: PayslipSendService (발송 · 재발송 · 일괄 발송, 이메일 · 명세서 PDF 첨부)
@@ -306,6 +306,16 @@ sources:
 * **응답** — `PayslipItemDto` · `MyPayslipItemDto` 에 `workMinutes: number | null` · `calculationText: string | null`. 관리자 상세(임시저장 ·
   확정 · 확정 취소 · 다시 계산 · 발송이 같은 `findOne` 으로 돌려준다) · 직원 앱 상세 · 발송 메일 PDF · 일괄 저장 PDF 가 같은 select 다.
 * 2026-11-24 전에 만든 줄은 채우지 않는다(NULL) — 화면 · PDF 는 전처럼 식 없이 보인다. 지금까지 발송한 명세서는 개발 서버 시험분뿐이다.
+* **옛 관리자 화면 호환 · 확정** — 근무시간 칸이 없는 옛 관리자 웹(main)은 `workMinutes` 키를 보내지 않는다. 키가 없으면(undefined —
+  JSON 에 undefined 가 없어 전역 ValidationPipe(whitelist · transform)를 지나도 null 과 갈린다, dto spec 이 확인) 그 줄의 저장된 시간을
+  그대로 두고 「금액 > 0 이면 시간 필수」 · 30분 단위 검사를 건너뛴다 — 아니면 api 를 먼저 배포했을 때 야간 · 휴일 금액이 있는 명세서는
+  공제만 고쳐도 400 이 된다. 키가 있고 null 이면 필수 검사를 한다(새 관리자 웹은 두 줄에 늘 키를 싣고 빈 칸은 null). 그렇게 시간 없이
+  남은 줄(옛 화면 · 2026-11-24 전 명세서)은 **확정**이 막는다 — 금액이 있는 야간 · 휴일근무수당에 `work_minutes` 가 NULL 이면 422
+  `WORK_HOURS_MISSING`(「근무시간이 없어 확정할 수 없습니다: 야간수당. 야간 · 휴일근무수당은 근무시간을 함께 입력해 주세요.」, 본문
+  `items: [{ payslipItemId, itemName }]` — 공제 미입력 `DEDUCTION_MISSING` 과 같은 모양, 그 검사 뒤에 본다).
+* **배포 순서** — api(+ `db:deploy`, 마이그레이션 `20261124131846_team3_payslip_item_calculation`) → 관리자 웹 · 직원 앱. 새 api 는 옛
+  화면을 위처럼 받아 주고, 새 화면은 새 칸(`workMinutes` · `calculationText`)이 있는 api 를 기대한다(관리자 웹은 칸이 없어도 빈 칸 ·
+  식 없음으로 그린다). 마이그레이션 전에 새 api 가 돌면 `payslip_items` 를 쓰는 요청이 500 이다(마이그레이션 머리말).
 
 # 임시저장 · 확정 · 확정 취소 (WHALEERP-228 · 230)
 
