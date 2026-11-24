@@ -475,6 +475,9 @@ export class PayslipSendService {
             summary:
               `${again ? '재발송' : '발송'} · 이메일` +
               (pdfFailed ? ' · 명세서 PDF 첨부 실패' : ''),
+            // 발송 시각은 잡은 시각 — 첨부 PDF 의 발송일과 직원 앱에서 내려받는 PDF 의 발송일(이 이력)이 같아야 한다.
+            // 기록 시각으로 두면 메일이 한국 자정을 넘겨 끝날 때 하루가 어긋난다(PR #312 pr-agent)
+            changedAt: claimedAt,
             changedBy: adminAccountId,
           },
         });
@@ -510,8 +513,10 @@ export class PayslipSendService {
     storeName: string,
     sentAt: Date,
   ): Promise<MailAttachment> {
-    const row = await this.prisma.payslip.findUniqueOrThrow({
-      where: { payslipId },
+    // 이 발송이 잡은 그대로의 행만 읽는다 — 잡은 뒤 확정 취소 · 수정이 있었으면 그 값을 「발송 완료」 PDF 로 메일에 붙이지
+    // 않게(메일은 되돌릴 수 없다). 없으면 던져 첨부 없이 보내고 처리 이력에 「명세서 PDF 첨부 실패」가 남는다(PR #312 pr-agent)
+    const row = await this.prisma.payslip.findFirstOrThrow({
+      where: { payslipId, updatedAt: sentAt, sendingStartedAt: sentAt },
       select: DETAIL_SELECT,
     });
     const sent = {

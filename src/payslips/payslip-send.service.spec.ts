@@ -88,7 +88,7 @@ describe('PayslipSendService', () => {
     payslip: {
       findFirst: jest.Mock;
       findMany: jest.Mock;
-      findUniqueOrThrow: jest.Mock;
+      findFirstOrThrow: jest.Mock;
       updateMany: jest.Mock;
     };
     payslipDispatch: { create: jest.Mock };
@@ -128,7 +128,7 @@ describe('PayslipSendService', () => {
       payslip: {
         findFirst: jest.fn().mockResolvedValue(row()),
         findMany: jest.fn().mockResolvedValue([row()]),
-        findUniqueOrThrow: jest.fn().mockResolvedValue(pdfRow()),
+        findFirstOrThrow: jest.fn().mockResolvedValue(pdfRow()),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       payslipDispatch: { create: jest.fn().mockResolvedValue({}) },
@@ -262,6 +262,8 @@ describe('PayslipSendService', () => {
           fromStatus: 'CONFIRMED',
           toStatus: 'SENT',
           summary: '발송 · 이메일',
+          // 발송 시각은 잡은 시각(첨부 PDF 의 발송일과 같다)
+          changedAt: call(prisma.payslip.updateMany, 0).data.updatedAt,
           changedBy: 9,
         },
       });
@@ -274,12 +276,21 @@ describe('PayslipSendService', () => {
         mail!.send.mock.calls[0] as [{ attachments: { content: Buffer }[] }]
       )[0].attachments[0];
       expect(attached.content.subarray(0, 5).toString()).toBe('%PDF-');
-      expect(call(prisma.payslip.findUniqueOrThrow)).toMatchObject({
-        where: { payslipId: 40 },
-      });
       // 보낸 뒤의 행(발송 완료 · 잡은 시각의 SEND 이력)을 직원 앱 쪽 document 로 읽어 같은 칸이 나오는지 본다
       const claimedAt = call(prisma.payslip.updateMany, 0).data
         .updatedAt as Date;
+      // 잡은 그대로의 행만 읽는다 — 그사이 확정 취소 · 수정된 값을 붙이지 않게
+      expect(call(prisma.payslip.findFirstOrThrow)).toMatchObject({
+        where: {
+          payslipId: 40,
+          updatedAt: claimedAt,
+          sendingStartedAt: claimedAt,
+        },
+      });
+      // 처리 이력의 발송 시각도 잡은 시각이라 첨부 PDF 와 앱 PDF 의 발송일이 같다
+      expect(call(prisma.payslipLog.create).data).toMatchObject({
+        changedAt: claimedAt,
+      });
       const app = new MyPayslipsService({
         payslip: {
           findFirst: jest.fn().mockResolvedValue(
@@ -309,7 +320,7 @@ describe('PayslipSendService', () => {
         .spyOn(Logger.prototype, 'error')
         .mockImplementation(() => undefined);
       // 금액이 없는 행은 생성기가 거절한다(검토 중 명세서를 0원으로 그리지 않게)
-      prisma.payslip.findUniqueOrThrow.mockResolvedValue(
+      prisma.payslip.findFirstOrThrow.mockResolvedValue(
         pdfRow({ netPayAmount: null }),
       );
       await expect(send()).resolves.toEqual({ payslipId: 40 });
@@ -330,7 +341,7 @@ describe('PayslipSendService', () => {
 
       // 읽기 자체가 실패해도 같다
       mail!.send.mockClear();
-      prisma.payslip.findUniqueOrThrow.mockRejectedValue(new Error('db down'));
+      prisma.payslip.findFirstOrThrow.mockRejectedValue(new Error('db down'));
       await expect(send()).resolves.toEqual({ payslipId: 40 });
       expect((mail!.send.mock.calls as unknown[][])[0][0]).not.toHaveProperty(
         'attachments',
@@ -452,7 +463,7 @@ describe('PayslipSendService', () => {
     it('다시 보내면 잡은 뒤 읽은 지금 값으로 PDF 를 그려 붙인다(이전 발송 값이 아니라)', async () => {
       const model = jest.spyOn(pdf, 'payslipPdfModel');
       prisma.payslip.findFirst.mockResolvedValue(row({ status: 'SENT' }));
-      prisma.payslip.findUniqueOrThrow.mockResolvedValue(
+      prisma.payslip.findFirstOrThrow.mockResolvedValue(
         pdfRow({
           status: 'SENT',
           netPayAmount: 1_067_000,
@@ -477,7 +488,7 @@ describe('PayslipSendService', () => {
       );
       // 잡은 뒤에 읽는다 — 그 사이 고친 값이 아니라 잡은(보내는) 값
       expect(
-        prisma.payslip.findUniqueOrThrow.mock.invocationCallOrder[0],
+        prisma.payslip.findFirstOrThrow.mock.invocationCallOrder[0],
       ).toBeGreaterThan(prisma.payslip.updateMany.mock.invocationCallOrder[0]);
       const claimedAt = call(prisma.payslip.updateMany, 0).data
         .updatedAt as Date;
