@@ -118,7 +118,7 @@ describe('calculatePay', () => {
           basePay: { minutes: 3_900, text: '65.0시간 × 10,000원' },
           weeklyHolidayPay: {
             minutes: 900,
-            text: '5주 · 실근무 75.0시간 ÷ 5 × 10,000원',
+            text: '5주 · 실근무(주 40시간까지) 75.0시간 ÷ 5 × 10,000원',
           },
           overtimePay: { minutes: 0, text: '0.0시간 × 10,000원 × 1.5배' },
         },
@@ -618,7 +618,7 @@ describe('calculatePay', () => {
       // 9/28 · 10/5 주는 앞 계약, 10/12 주(일요일이 10/18) · 10/19 · 10/26 주는 뒤 계약 — 주마다 15시간 ÷ 5
       expect(r.basis.weeklyHolidayPay).toEqual({
         minutes: 900,
-        text: '2주 · 실근무 30.0시간 ÷ 5 × 10,030원 + 3주 · 실근무 45.0시간 ÷ 5 × 10,320원',
+        text: '2주 · 실근무(주 40시간까지) 30.0시간 ÷ 5 × 10,030원 + 3주 · 실근무(주 40시간까지) 45.0시간 ÷ 5 × 10,320원',
       });
     });
 
@@ -811,13 +811,13 @@ describe('calculatePay', () => {
         Object.fromEntries(minutes.map((m, i) => [addDay(monday, i), m]));
       const FIVE = (m: number) => ({ MON: m, TUE: m, WED: m, THU: m, FRI: m });
 
-      it('주 915분 · 시급 10,330원 → 915 × 10,330 ÷ 300 = 31,506.5 → 31,507원, 식 「1주 · 실근무 15시간 15분 ÷ 5 × 10,330원」', () => {
+      it('주 915분 · 시급 10,330원 → 915 × 10,330 ÷ 300 = 31,506.5 → 31,507원, 식 「1주 · 실근무(주 40시간까지) 15시간 15분 ÷ 5 × 10,330원」', () => {
         // 전에는 915 ÷ 5 ÷ 60 × 10,330 을 부동소수로 셈해 31,506.4999… → 31,506원이었다(1원 차)
         const r = oneWeek(FIVE(183), weekdays([183, 183, 183, 183, 183]));
         expect(r.weeklyHolidayPay).toBe(31_507);
         expect(r.basis.weeklyHolidayPay).toEqual({
           minutes: 183,
-          text: '1주 · 실근무 15시간 15분 ÷ 5 × 10,330원',
+          text: '1주 · 실근무(주 40시간까지) 15시간 15분 ÷ 5 × 10,330원',
         });
       });
 
@@ -837,23 +837,23 @@ describe('calculatePay', () => {
         expect(r.weeklyHolidayPay).toBe(73_860);
         expect(r.basis.weeklyHolidayPay).toEqual({
           minutes: 429,
-          text: '2주 · 실근무 35시간 45분 ÷ 5 × 10,330원',
+          text: '2주 · 실근무(주 40시간까지) 35시간 45분 ÷ 5 × 10,330원',
         });
       });
 
-      it('901분 → 31,025원 「1주 · 실근무 15시간 1분 ÷ 5 × 10,330원」, 정시간 900분 → 「15.0시간」', () => {
+      it('901분 → 31,025원 「1주 · 실근무(주 40시간까지) 15시간 1분 ÷ 5 × 10,330원」, 정시간 900분 → 「15.0시간」', () => {
         const odd = oneWeek(
           { ...FIVE(180), MON: 181 },
           weekdays([181, 180, 180, 180, 180]),
         );
         expect(odd.weeklyHolidayPay).toBe(Math.round((901 * 10_330) / 300));
         expect(odd.basis.weeklyHolidayPay.text).toBe(
-          '1주 · 실근무 15시간 1분 ÷ 5 × 10,330원',
+          '1주 · 실근무(주 40시간까지) 15시간 1분 ÷ 5 × 10,330원',
         );
         const even = oneWeek(FIVE(180), weekdays([180, 180, 180, 180, 180]));
         expect(even.weeklyHolidayPay).toBe(30_990);
         expect(even.basis.weeklyHolidayPay.text).toBe(
-          '1주 · 실근무 15.0시간 ÷ 5 × 10,330원',
+          '1주 · 실근무(주 40시간까지) 15.0시간 ÷ 5 × 10,330원',
         );
       });
 
@@ -883,7 +883,7 @@ describe('calculatePay', () => {
             );
             const text = r.basis.weeklyHolidayPay.text!;
             expect(text).toBe(
-              `1주 · 실근무 ${hoursText(w)} ÷ 5 × ${wage.toLocaleString('ko-KR')}원`,
+              `1주 · 실근무(주 40시간까지) ${hoursText(w)} ÷ 5 × ${wage.toLocaleString('ko-KR')}원`,
             );
             expect(r.weeklyHolidayPay).toBe(roundDiv(w * wage, 300));
           }

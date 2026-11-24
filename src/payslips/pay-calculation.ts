@@ -644,7 +644,7 @@ export function calculatePay(input: PayInput): PayResult {
             : [[fallbackWage, { weeks: 0, worked: 0 }] as [number, Holiday]]
           ).map(([wage, { weeks, worked }]): Segment => [
             worked * wage,
-            `${weeks}주 · 실근무 ${hoursText(worked)} ÷ 5 × ${wageText(wage)}`,
+            `${weeks}주 · 실근무(주 40시간까지) ${hoursText(worked)} ÷ 5 × ${wageText(wage)}`,
           ]),
           300,
           weeklyHolidayPay,

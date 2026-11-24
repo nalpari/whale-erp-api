@@ -4,7 +4,7 @@ title: Payslip list, detail and draft creation
 description: GET /payslips/summary 점포 하나 · 급여 월 요약(고용형태별 건수 · 지급 합계, WHALEERP-621); POST /payslips/send · /payslips/:id/send · /resend 발송 · 재발송(WHALEERP-231, 이메일 · 푸시 없음); PUT /payslips/:id 임시저장 · POST …/confirm · …/cancel-confirmation · GET …/previous-values · GET /payslips/additional-items (WHALEERP-228 · 230); GET /payslips 는 점포(storeIds) · 직원명(staffName) 필터도 받는다; POST /payslips · /payslips/bulk · GET /payslips/candidates — 초안 작성(직원별 · 그 달 일괄, 유효 계약 없으면 안 만들고 이미 있으면 건너뜀, 출퇴근 없으면 누락 사유); GET /payslips · /payslips/:id — 관리자 웹 급여명세서 관리 목록(급여 월 · 상태 필터, 상태 건수, 20·50·100 쪽) · 상세(항목 · 검토 대기 사유 · 이력 · 발송), 관리 범위와 본사 제공 동의 가림; GET /me/payslips · /me/payslips/:id — 직원 근무 앱의 발송된 내 명세서, 퇴직 뒤에도 3년, 목록은 점포(storeId) · 연도(year, 급여 기간) 필터와 이번 달에 받은 실지급액 합계(thisMonth); 매일 04:50 생성일 + 3년 지난 명세서 파기 payslip-purge(WHALEERP-649)
 tags: [payslip, list, admin, staff-app, masking, retention]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T07:42:39Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T07:50:11Z }
 sources:
   - id: payslip-shared
     resource: ../../src/payslips/payslip-shared.ts
@@ -322,7 +322,7 @@ sources:
   같은 항목에 시급이 둘 이상이면 시급별 구간을 날짜 순으로 「 + 」로 잇는다(「4.0시간 × 10,030원 × 1.5배 + 4.0시간 × 10,320원 × 1.5배」).
   * 파트타이머 기본급 — 연장을 뺀 근무 분, 「87.6시간 × 10,320원」(날마다 그날 시급).
   * 파트타이머 주휴 — 시간(`work_minutes`)은 주휴 시간 Σ min(주 실근무, 40시간) ÷ 5 분(반올림)이고, 식은 나누기 전 실근무 합으로
-    「4주 · 실근무 80.0시간 ÷ 5 × 10,320원」 · 「1주 · 실근무 15시간 15분 ÷ 5 × 10,330원」(그 주 마지막 날 계약 시급별 주 수, 최종 게이트 —
+    「4주 · 실근무(주 40시간까지) 80.0시간 ÷ 5 × 10,320원」 · 「1주 · 실근무(주 40시간까지) 15시간 15분 ÷ 5 × 10,330원」(그 주 마지막 날 계약 시급별 주 수, 최종 게이트 —
     ÷ 5 한 소수 분을 적으면 식이 금액과 어긋났다). 시간 칸은 관리자 상세 · 직원 앱 · PDF 에서 「주휴 시간」으로 읽혀야 해 ÷ 5 한 분 그대로 둔다.
   * 정직원 기본급 — 시간 NULL, 「10,320원 × 월 209시간」, 기간 중 입사 · 퇴사 · 계약 변경이면 계약(시급 · 월 기본시간)마다
     「× 20일 / 30일」(재직 역일 / 기간 역일). 정직원 주휴 — 0원, 시간 NULL, 「기본급에 포함」.
