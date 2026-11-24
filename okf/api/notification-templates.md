@@ -4,8 +4,12 @@ title: Notification templates
 description: 알림 템플릿 관리 — 플랫폼 운영자가 운영 알림 · 앱 푸시 · 메일 · 알림톡 문구를 보고 · 고치고 · 등록하고 · 끄고 · 기본 문구로 되돌리는 /notification-templates.
 tags: [notifications, templates, admin, platform]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T05:04:59Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T06:00:00Z }
 sources:
+  - id: staff-affiliation-kakao-reregistered
+    resource: ../../prisma/migrations/20261124143223_team3_staff_affiliation_kakao_reregistered/migration.sql
+    title: 소속 추가 확인 요청 알림톡 · 메일 첫 줄 근무지만, 알림톡 [요청 확인하기] 버튼 · 카카오 코드 TALK_STAFF_AFFILIATION_V2 (WHALEERP-745 · 738)
+    last_modified: 2026-11-24T06:00:00Z
   - id: schedule-notice-wording
     resource: ../../prisma/migrations/20261124140348_team3_schedule_notice_wording/migration.sql
     title: 근무스케줄 앱 푸시 · 메일 제목 · 본문을 등록에도 맞게 (WHALEERP-769)
@@ -132,8 +136,8 @@ sources:
   대체 문자로 갔다. 등록본 본문은 처음 넣은 기본 문구(`20261027154954`)와 같은 네 줄이고, `body` · `default_body` 를 그 값으로 맞춘다 —
   운영자가 고친 문구도 덮어쓴다. 등록본에 버튼이 없어 `variables` · `default_variables` 에서 버튼 링크 변수 「링크」를 빼고
   사업자 · 근무지 · 고용형태만 남긴다 — 버튼을 실으면 알림톡이 거절돼 대체 문자로 간다. 코드도 이 템플릿의 버튼(「요청 확인하기」)을
-  뺐다([Kakao Alimtalk](/api/alimtalk.md)). 그래서 저장 검사가 이 템플릿의 버튼 링크 표시를 `NO_BUTTON_NAME` 으로 막는다 — 버튼을 넣으려면
-  카카오 재등록과 함께 코드를 고친다. 제목(null)은 그대로이고, 메일 `EMAIL_STAFF_AFFILIATION_REQUEST` 의 링크 버튼도 그대로다.
+  뺐다([Kakao Alimtalk](/api/alimtalk.md)). 그래서 그때는 저장 검사가 이 템플릿의 버튼 링크 표시를 `NO_BUTTON_NAME` 으로 막았다(`20261124143223` 이 버튼을 되돌려 지금은
+  「링크」에 표시가 있어야 한다). 제목(null)은 그대로이고, 메일 `EMAIL_STAFF_AFFILIATION_REQUEST` 의 링크 버튼도 그대로다.
   코드와 함께 배포한다 — 이 마이그레이션만 적용되면 옛 코드가 `LINK_MISMATCH`, 코드만 나가면 `NO_BUTTON_NAME` 으로 소속 추가 확인 요청을 막는다.
 - **소속 추가 확인 요청 = 카카오 재등록본**(WHALEERP-745 첫 줄 · WHALEERP-738 버튼). 등록본은 승인 뒤 고칠 수 없어 새 카카오 코드
   `TALK_STAFF_AFFILIATION_V2`(카카오 쪽 이름 「소속 추가 요청」)로 다시 등록했다 — 2026-11-24 김민식 등록 · 같은 날 승인(등록 화면의 본문 · 버튼 「요청 확인하기」 `https://#{링크}` 를 대조했다).
@@ -142,7 +146,9 @@ sources:
   `default_variables` 를 근무지 · 고용형태 · 링크(버튼 링크, `20261027154954` 원본 항목)로 맞춘다 — 운영자가 고친 문구도 덮어쓴다.
   점포 이름이 상호로 시작하면 「도레미커피 도레미커피 신촌점에서」처럼 겹쳐 사업자를 뺐다(본사 근무지도 점포 이름 그대로, 「[본사]」 없음).
   메일 `EMAIL_STAFF_AFFILIATION_REQUEST` 도 본문 첫 줄 「#{사업자} #{근무지}에서」 → 「#{근무지}에서」, 변수에서 사업자를 뺀다 —
-  되돌리기 원본은 늘, 지금 값은 셋이 되돌리기 원본과 같을 때만(`20261109165622` 와 같다). 코드도 [요청 확인하기] 버튼과 링크를 싣는다.
+  되돌리기 원본은 늘, 지금 값은 셋이 되돌리기 원본과 같을 때만(`20261109165622` 와 같다). 운영자가 고친 메일은 필수 변수
+  사업자가 남아 코드가 넘기지 않으므로 렌더링에서 실패한다(로그만, 메일이 안 나간다) — 그런 환경은 기본 문구로 되돌리거나 사업자를
+  지운다. 2026-11-24 개발 DB 는 제목 · 본문 · 변수가 되돌리기 원본 그대로였다. 코드도 [요청 확인하기] 버튼과 링크를 싣는다.
   코드와 함께 배포한다 — 이 마이그레이션만 적용되면 옛 코드가 `NO_BUTTON_NAME`, 코드만 나가면 `LINK_MISMATCH` 로 소속 추가 확인 요청을 막는다.
 - **템플릿 코드**는 고칠 수 있다. 형식(`^[A-Z][A-Z0-9_]*$`)과 고유만 보고 겹치면 409. 채널을 바꿔도 코드가 저절로 바뀌지
   않는다. 발송 코드가 이 값으로 부르므로 화면이 「발송 코드도 함께 바꿔야 합니다」 확인을 받는다.
