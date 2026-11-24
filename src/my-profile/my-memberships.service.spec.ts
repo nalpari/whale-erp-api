@@ -277,6 +277,36 @@ describe('MyMembershipsService', () => {
       });
     });
 
+    it('보존 기간(퇴직 + 3년)이 지난 퇴직 레코드는 파기 배치 전이어도 신고 정보를 풀지 않는다 — 당일까지는 보인다', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date('2026-10-20T03:00:00Z')); // 한국 2026-10-20 12:00
+      try {
+        const service = await build();
+        // 퇴직 + 3년 당일(2026-10-20)까지 남는다
+        findFirst.mockResolvedValue(
+          taxRow({
+            employmentStatus: 'RETIRED',
+            retiredDate: d('2023-10-20'),
+            staffTaxProfile: taxProfile(31),
+          }),
+        );
+        expect((await service.taxProfile(12, 31)).taxProfile).not.toBeNull();
+        // 그 전날 퇴직이면 기한이 지났다 — 배치가 아직 지우지 않았어도 null
+        findFirst.mockResolvedValue(
+          taxRow({
+            employmentStatus: 'RETIRED',
+            retiredDate: d('2023-10-19'),
+            staffTaxProfile: taxProfile(31),
+          }),
+        );
+        const res = await service.taxProfile(12, 31);
+        expect(res.taxProfile).toBeNull();
+        expect(res.editable).toBe(false);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('퇴직일이 지났는데 배치 전(재직 상태)이어도 조회만 — 근로계약 날인과 같은 판정', async () => {
       const service = await build();
       findFirst.mockResolvedValue(taxRow({ retiredDate: d('2020-01-31') }));
