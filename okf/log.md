@@ -1,5 +1,8 @@
 # Directory Update Log
 
+## 2026-11-24
+* **Update**: [TO-DO](/api/todos.md) — TO-DO 상세에 최종수정(`modifiedAt` · `modifiedByName`, WHALEERP-698): 관리자 [수정]만 `todos.modified_at` · `modified_by` 에 남긴다(마이그레이션 `20261124101923_team3_todo_modified`). 상태 변경 · 삭제 · 직원 앱 완료는 바꾸지 않고, 묶음은 전체 행이 같은 값이다. 기존 행 · 등록만 한 TO-DO 는 null(화면에 줄 없음). 근로계약 최종수정(WHALEERP-699)과 같은 방식.
+
 ## 2026-11-20
 * **Update**: [Staff members](/api/staff-members.md) — 직원 상세 요약 근로계약(`GET /staff-members/:id/summary/contracts`): 신고 정보를 풀 수 없으면(키 없음 · 복호화 실패) 503 · 500 대신 `payrollAccount: null` + `payrollAccountUnavailable: true` 로 계좌만 빼고 계약 칸은 그대로 준다(WHALEERP-758). 근로계약 상세 신고 정보의 `UNAVAILABLE` 과 같다 — [Contracts API](/api/contracts-api.md) 의 대비 문장도 맞췄다. 마이그레이션 없음.
 

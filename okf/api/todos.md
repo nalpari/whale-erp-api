@@ -4,12 +4,12 @@ title: TO-DO
 description: 관리자 웹 TO-DO 리스트 관리(MN000026)와 직원 상세 · 직원 근무 앱의 TO-DO API — 배정 그룹 펼치기, 한 명 수행의 완료 선점(409 TODO_ALREADY_DONE), 대기만 지우는 삭제, 5분마다 도는 수행 임박 알림 배치.
 tags: [todo, admin, staff-app, batch, notification]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-19T07:11:43Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-24T01:23:32Z }
 sources:
   - id: todos-service
     resource: ../../src/todos/todos.service.ts
     title: TodosService — 등록 · 목록 · 상세 · 수정 · 상태 변경 · 삭제 · 내 TO-DO
-    last_modified: 2026-11-19T06:58:12Z
+    last_modified: 2026-11-24T01:23:32Z
   - id: todo-rules
     resource: ../../src/todos/todo-rules.ts
     title: 재직 직원 기준 · 정렬 · 묶음 상태 · 수행 예정 일시 계산
@@ -29,7 +29,11 @@ sources:
   - id: plan
     resource: ../../docs/plans/2026-10-19-todos.md
     title: TO-DO API 계획 (T-1 ~ T-4, 2026-10-19 재영)
-    last_modified: 2026-11-05T08:00:00Z
+    last_modified: 2026-11-24T01:23:32Z
+  - id: modified-migration
+    resource: ../../prisma/migrations/20261124101923_team3_todo_modified/migration.sql
+    title: todos.modified_at · modified_by (최종수정, WHALEERP-698)
+    last_modified: 2026-11-24T01:23:32Z
 ---
 
 # What it is
@@ -48,6 +52,14 @@ TO-DO (#109). Three controllers over one service:[^todos-controllers]
 | `GET /staff-members/:id/todos` | menu `/staff-members` (MN000005) read **and** `/todos` read (service, `requireAreaRead` — otherwise 403 「조회 권한이 없습니다.」, before the scope 404) | 직원 상세의 TO-DO 영역 (#118; area rule since 2026-10-22, same as [직원 상세 요약](/api/staff-members.md)) |
 | `GET /me/todos` | `account` token | 내 TO-DO (근무 탭 · 홈 카드) |
 | `PATCH /me/todos/:todoId/status` | `account` token | 대기 ↔ 진행 중 ↔ 완료 |
+
+상세에는 `modifiedAt` · `modifiedByName` 이 있다 — 최종수정 (WHALEERP-698, 2026-11-24): 관리자가 [수정]
+(`PATCH /todos/:todoId`)으로 마지막으로 고친 때와 그 관리자 이름(`createdByName` 과 같은 `adminNames`). `todos.modified_at` ·
+`modified_by`(FK → `admin_accounts`)에 남고[^modified-migration], `update` 만 쓴다 — 상태 변경(관리자 · 직원 앱) · 삭제 · 공유
+완료는 바꾸지 않는다(상태 변경은 「상태 변경이력」에 사람 · 시각이 남는다). `updated_at`(`@updatedAt`)은 그 모두에 바뀌어 최종수정으로
+쓸 수 없다. 묶음이면 [수정]이 묶음 전체 행에 같은 값을 써서 어느 직원 상세에서 봐도 같다. 기존 행은 채우지 않아 null 이고, 등록만
+한 TO-DO 도 null 이다 — 화면은 그때 「최종수정」 줄을 두지 않는다. 근로계약 최종수정(WHALEERP-699, [Contracts API](/api/contracts-api.md))과
+같은 방식이지만 근사로 채운 기존 행은 없다: 관리자 [수정]은 긴급을 바꿀 때만 이력에 남아 근사할 기록이 없다.
 
 목록 · 상세 · 등록 응답의 줄마다 `storeIsHq`(stores.is_hq, 본사 아니면 false)가 실린다 — 관리자 화면은 본사를 「[본사] 상호」로 보인다(2026-11-19). 이름 칸 `storeName` 은 상호 그대로. 같은 DTO 를 쓰는 직원 앱(`GET /me/todos` · `PATCH /me/todos/:todoId/status`)에도 실리지만 직원 앱은 쓰지 않는다.
 
@@ -259,3 +271,4 @@ PostgreSQL.
 [^due-soon]: `src/todos/todo-due-soon.service.ts`, `todo-due-soon.scheduler.ts`
 [^template-migration]: `prisma/migrations/20261019114505_team3_todo_due_soon_template/migration.sql`
 [^plan]: `docs/plans/2026-10-19-todos.md`
+[^modified-migration]: `prisma/migrations/20261124101923_team3_todo_modified/migration.sql`
