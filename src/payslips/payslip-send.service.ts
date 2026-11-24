@@ -52,7 +52,12 @@ import {
   payslipPdfModel,
   renderPayslipPdf,
 } from './payslip-pdf';
-import { monthRange, pickedStores, storeNames } from './payslip-shared';
+import {
+  monthRange,
+  pickedStores,
+  SENDING_STALE_MS,
+  storeNames,
+} from './payslip-shared';
 import type { TargetBpContext } from '../auth/menu-permission.guard';
 import { targetStores } from '../admin-scope/target-stores';
 import { PAYSLIP_BP_NOT_CHOSEN } from './payslip-target-bp';
@@ -102,12 +107,6 @@ const FAILURE_MESSAGE: Record<PayslipSendFailure, string> = {
 };
 
 type Delivery = { ok: true } | { ok: false; reason: PayslipSendFailure };
-
-/**
- * 발송 중 표시가 이보다 오래되면 끊긴 것(처리 중 서버 종료 등)으로 보고 다시 잡게 둔다. SMTP 연결 · 응답 제한이 각 30초라
- * 정상 발송은 이 안에 끝난다.
- */
-const SENDING_STALE_MS = 5 * 60_000;
 
 /**
  * 급여명세서 발송 · 재발송 (WHALEERP-231). 확정한 명세서를 직원 앱 계정의 이메일로 보낸다(EMAIL_PAYSLIP_SENT, 전에 보낸 적이

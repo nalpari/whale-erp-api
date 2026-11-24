@@ -856,6 +856,33 @@ describe('PayslipEditService', () => {
         response: { code: 'PAYSLIP_STATUS_CONFLICT' },
       });
     });
+    it('발송 중(발송 중 표시가 5분 안)이면 409 PAYSLIP_SENDING — 취소된 금액이 메일 첨부로 나가지 않게(WHALEERP-766)', async () => {
+      prisma.payslip.findFirst.mockResolvedValue(located({ status: 'SENT' }));
+      prisma.payslip.updateMany.mockResolvedValueOnce({ count: 0 });
+      prisma.payslip.findUnique.mockResolvedValueOnce({
+        status: 'SENT',
+        updatedAt: new Date(),
+        sendingStartedAt: new Date(Date.now() - 10_000),
+      });
+      await expect(cancel()).rejects.toMatchObject({
+        response: { code: 'PAYSLIP_SENDING' },
+      });
+      // 잡는 조건에 발송 중이 아닌 것(표시 없음 · 5분 넘게 끊김)이 들어간다
+      expect(call(prisma.payslip.updateMany).where).toHaveProperty('OR');
+    });
+
+    it('발송 중 표시가 5분을 넘겨 끊긴 것이면 막지 않는다 — 다른 이유(낡은 화면)면 PAYSLIP_STALE', async () => {
+      prisma.payslip.findFirst.mockResolvedValue(located({ status: 'SENT' }));
+      prisma.payslip.updateMany.mockResolvedValueOnce({ count: 0 });
+      prisma.payslip.findUnique.mockResolvedValueOnce({
+        status: 'SENT',
+        updatedAt: new Date(),
+        sendingStartedAt: new Date(Date.now() - 6 * 60_000),
+      });
+      await expect(cancel()).rejects.toMatchObject({
+        response: { code: 'PAYSLIP_STALE' },
+      });
+    });
   });
 
   describe('previousValues (지난 명세서 불러오기, WHALEERP-228)', () => {
