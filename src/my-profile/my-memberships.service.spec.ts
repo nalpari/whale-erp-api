@@ -52,6 +52,15 @@ const staffRow = (patch: Record<string, unknown> = {}) => ({
   ...patch,
 });
 
+/** 신고 정보 조회가 읽는 직원 레코드 — 기본은 재직 중 */
+const taxRow = (patch: Record<string, unknown> = {}) => ({
+  staffMemberId: 31,
+  employmentStatus: 'EMPLOYED',
+  retiredDate: null,
+  staffTaxProfile: null,
+  ...patch,
+});
+
 describe('MyMembershipsService', () => {
   let findMany: jest.Mock;
   let findFirst: jest.Mock;
@@ -65,9 +74,7 @@ describe('MyMembershipsService', () => {
 
   const build = async (key: Buffer | null = KEY) => {
     findMany = jest.fn().mockResolvedValue([staffRow()]);
-    findFirst = jest
-      .fn()
-      .mockResolvedValue({ staffMemberId: 31, staffTaxProfile: null });
+    findFirst = jest.fn().mockResolvedValue(taxRow({ staffTaxProfile: null }));
     findStores = jest.fn().mockResolvedValue([
       { storeId: 5, name: '강남점', storeTypeCode: 'FRANCHISE' },
       { storeId: 6, name: '본점', storeTypeCode: 'DIRECT' },
@@ -237,14 +244,63 @@ describe('MyMembershipsService', () => {
   });
 
   describe('taxProfile', () => {
-    it('내 재직 직원 레코드인지 같은 조건으로 확인한다 — 경로의 id 만으로 남의 레코드를 열 수 없다', async () => {
+    it('내 소속인지 퇴직 포함 목록과 같은 조건으로 확인한다 — 경로의 id 만으로 남의 레코드를 열 수 없다', async () => {
       const service = await build();
       await service.taxProfile(12, 31);
       expect(firstArg(findFirst).where).toEqual({
         staffMemberId: 31,
         accountId: 12,
-        ...ACTIVE_STAFF,
+        joinStatus: ACTIVE_STAFF.joinStatus,
+        contracts: ACTIVE_STAFF.contracts,
       });
+    });
+
+    it('재직 중이면 editable: true', async () => {
+      const service = await build();
+      expect((await service.taxProfile(12, 31)).editable).toBe(true);
+    });
+
+    it('퇴직한 내 소속도 가린 값으로 보인다 — 조회만(editable: false)', async () => {
+      const service = await build();
+      findFirst.mockResolvedValue(
+        taxRow({
+          employmentStatus: 'RETIRED',
+          retiredDate: d('2026-09-30'),
+          staffTaxProfile: taxProfile(31),
+        }),
+      );
+      const res = await service.taxProfile(12, 31);
+      expect(res.editable).toBe(false);
+      expect(res.taxProfile).toMatchObject({
+        rrnMasked: '980304-1******',
+        payrollAccountNumberMasked: '********6789',
+      });
+    });
+
+    it('퇴직일이 지났는데 배치 전(재직 상태)이어도 조회만 — 근로계약 날인과 같은 판정', async () => {
+      const service = await build();
+      findFirst.mockResolvedValue(taxRow({ retiredDate: d('2020-01-31') }));
+      expect((await service.taxProfile(12, 31)).editable).toBe(false);
+    });
+
+    it('오늘은 한국 날짜로 센다 — UTC 로는 10-20 이어도 한국이 10-21 이면 10-20 퇴직은 퇴직, 10-21 은 퇴직 예정', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date('2026-10-20T15:30:00Z')); // 한국 2026-10-21 00:30
+      try {
+        const service = await build();
+        findFirst.mockResolvedValue(taxRow({ retiredDate: d('2026-10-20') }));
+        expect((await service.taxProfile(12, 31)).editable).toBe(false);
+        findFirst.mockResolvedValue(taxRow({ retiredDate: d('2026-10-21') }));
+        expect((await service.taxProfile(12, 31)).editable).toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('퇴직 예정(퇴직일이 오늘 · 뒤)은 고칠 수 있다', async () => {
+      const service = await build();
+      findFirst.mockResolvedValue(taxRow({ retiredDate: d('2999-12-31') }));
+      expect((await service.taxProfile(12, 31)).editable).toBe(true);
     });
 
     it('내 소속이 아니면 404', async () => {
@@ -259,19 +315,18 @@ describe('MyMembershipsService', () => {
       const service = await build();
       expect(await service.taxProfile(12, 31)).toEqual({
         staffMemberId: 31,
+        editable: true,
         taxProfile: null,
       });
     });
 
     it('가린 주민등록번호 · 계좌번호와 은행 · 수집 목적 · 일시만 — 원문은 응답에 없다', async () => {
       const service = await build();
-      findFirst.mockResolvedValue({
-        staffMemberId: 31,
-        staffTaxProfile: taxProfile(31),
-      });
+      findFirst.mockResolvedValue(taxRow({ staffTaxProfile: taxProfile(31) }));
       const res = await service.taxProfile(12, 31);
       expect(res).toEqual({
         staffMemberId: 31,
+        editable: true,
         taxProfile: {
           rrnMasked: '980304-1******',
           bankCode: '088',

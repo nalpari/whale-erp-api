@@ -8,6 +8,22 @@ import {
 } from '../common/personal-data-cipher';
 import { PrismaService } from '../prisma/prisma.service';
 import { ACTIVE_STAFF } from '../todos/todo-rules';
+
+/** 재직 조건(employmentStatus)만 뺀 내 소속 조건 — 퇴직 레코드도 찾아 404 대신 409 로 답한다 */
+const MINE = {
+  staffMemberId: 31,
+  accountId: 77,
+  joinStatus: ACTIVE_STAFF.joinStatus,
+  contracts: ACTIVE_STAFF.contracts,
+};
+/** 지금 재직 — 퇴직일이 없거나 오늘(한국 날짜, NOW 기준 2026-10-20) · 뒤 */
+const EMPLOYED_NOW = {
+  employmentStatus: 'EMPLOYED',
+  OR: [
+    { retiredDate: null },
+    { retiredDate: { gte: new Date('2026-10-20T00:00:00.000Z') } },
+  ],
+};
 import {
   birthDateOfRrn,
   MyMembershipsService,
@@ -68,6 +84,8 @@ describe('MyMembershipsService.saveTaxProfile', () => {
   /** 내 소속 하나 — 이미 낸 신고 정보가 있으면 `existing()` 을 읽는다 */
   const staff = (hasProfile: boolean, birth = '1998-03-04') => {
     tx.staffMember.findFirst.mockResolvedValue({
+      employmentStatus: 'EMPLOYED',
+      retiredDate: null,
       account: { birthDate: new Date(`${birth}T00:00:00.000Z`) },
     });
     tx.staffTaxProfile.count.mockResolvedValue(hasProfile ? 1 : 0);
@@ -170,6 +188,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
       }),
     ).resolves.toEqual({
       staffMemberId: 31,
+      editable: true,
       taxProfile: {
         rrnMasked: '980304-1******',
         bankCode: 'B004',
@@ -180,7 +199,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     });
     expect(
       (tx.staffMember.findFirst.mock.calls[0] as [{ where: unknown }])[0].where,
-    ).toEqual({ staffMemberId: 31, accountId: 77, ...ACTIVE_STAFF });
+    ).toEqual(MINE);
     const data = dataOf(tx.staffTaxProfile.create);
     expect(data).toMatchObject({
       staffMemberId: 31,
@@ -393,7 +412,7 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     },
   );
 
-  it('잠근 뒤 다시 읽으니 내 재직 소속이 아니면(그사이 퇴직 확정) 404 — 쓰지 않는다(api #86 재리뷰)', async () => {
+  it('잠근 뒤 다시 읽으니 내 소속이 아니면 404 — 쓰지 않는다(api #86 재리뷰)', async () => {
     staff(true);
     tx.staffMember.findFirst.mockResolvedValue(null);
     const e = await thrown(
@@ -404,12 +423,56 @@ describe('MyMembershipsService.saveTaxProfile', () => {
     // 소속 확인 → 잠금 → 소속 · 생년월일 다시 읽기
     expect(order(tx.staffMember.count)).toBeLessThan(order(tx.$queryRaw));
     expect(order(tx.$queryRaw)).toBeLessThan(order(tx.staffMember.findFirst));
-    expect(
-      (tx.staffMember.count.mock.calls[0] as [{ where: unknown }])[0].where,
-    ).toEqual({ staffMemberId: 31, accountId: 77, ...ACTIVE_STAFF });
+    const wheres = (
+      tx.staffMember.count.mock.calls as [{ where: unknown }][]
+    ).map(([a]) => a.where);
+    expect(wheres).toEqual([MINE, { ...MINE, ...EMPLOYED_NOW }]);
     expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
     expect(tx.staffTaxProfileHistory.createMany).not.toHaveBeenCalled();
   });
+
+  it('잠근 뒤 다시 읽으니 그사이 퇴직 확정이면 409 STAFF_RETIRED — 쓰지 않는다', async () => {
+    staff(true);
+    tx.staffMember.findFirst.mockResolvedValue({
+      employmentStatus: 'RETIRED',
+      retiredDate: new Date('2026-10-19T00:00:00.000Z'),
+      account: { birthDate: new Date('1998-03-04T00:00:00.000Z') },
+    });
+    const e = await thrown(
+      service().saveTaxProfile(77, 31, withPw({ rrn: RRN })),
+    );
+    expect(e.getStatus()).toBe(409);
+    expect(codeOf(e)).toBe('STAFF_RETIRED');
+    expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
+    expect(tx.staffTaxProfileHistory.createMany).not.toHaveBeenCalled();
+  });
+
+  // 퇴직한 근무지 신고 정보는 조회만(WHALEERP-765) — 고치기 · 처음 넣기 모두 409
+  it.each([
+    ['고치기', true, withPw({ rrn: RRN })],
+    [
+      '처음 넣기',
+      false,
+      { rrn: RRN, bankCode: 'B004', payrollAccountNumber: ACCOUNT_NO },
+    ],
+  ])(
+    '퇴직한 내 소속이면 %s 도 409 STAFF_RETIRED — 비밀번호를 보기 전, 잠그지 않는다',
+    async (_, hasProfile, dto) => {
+      staff(hasProfile);
+      // 첫 count(내 소속) 는 있고, 둘째(지금 재직) 는 없다
+      tx.staffMember.count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+      const e = await thrown(service().saveTaxProfile(77, 31, dto));
+      expect(e.getStatus()).toBe(409);
+      expect(e.getResponse()).toMatchObject({
+        code: 'STAFF_RETIRED',
+        message: '퇴직한 근무지의 신고 정보는 조회만 할 수 있습니다.',
+      });
+      expect(tx.account.findUniqueOrThrow).not.toHaveBeenCalled();
+      expect(tx.$queryRaw).not.toHaveBeenCalled();
+      expect(tx.staffTaxProfile.create).not.toHaveBeenCalled();
+      expect(tx.staffTaxProfile.update).not.toHaveBeenCalled();
+    },
+  );
 
   it('주민등록번호 앞자리가 가입 생년월일과 다르면 400 RRN_BIRTH_MISMATCH — 관리자에게 정정 요청', async () => {
     staff(true, '1998-03-05');

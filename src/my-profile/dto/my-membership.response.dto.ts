@@ -50,6 +50,11 @@ export class MyTaxProfileDto {
 
 export class MyTaxProfileResponseDto {
   staffMemberId: number;
+  /**
+   * 고칠 수 있는지 — 퇴직한 소속(퇴직일이 지남, 퇴직 배치 전 포함)이면 false 이고 조회만 된다(WHALEERP-765).
+   * false 면 고치기 · 처음 넣기(`PUT`)가 409 STAFF_RETIRED 다.
+   */
+  editable: boolean;
   /** 이 소속에 낸 신고 정보. 아직 내지 않았으면 null */
   taxProfile: MyTaxProfileDto | null;
 }
