@@ -2,6 +2,7 @@ import {
   addDay,
   calculatePay,
   ContractTerms,
+  hoursText,
   PayInput,
   weekStats,
 } from './pay-calculation';
@@ -663,7 +664,7 @@ describe('calculatePay', () => {
       expect(r.overtimePay).toBe(Math.round(8 * 10_030 * 1.5));
     });
 
-    it('식을 다시 셈한 값이 금액과 다르면 식을 내지 않는다 — 기간 앞 날(앞 계약 시급)의 연장을 뺀 음수 구간(리뷰)', () => {
+    it('식을 다시 셈한 값이 금액과 다르면 식 대신 시간만 — 기간 앞 날(앞 계약 시급)의 연장을 뺀 음수 구간(리뷰)', () => {
       // 11/1 이 일요일. 앞 계약(10,030원)이 10/30 에 끝나 10/26 주는 앞 달 몫으로 주휴 조건을 못 채우고 11월이 주 전체로 맡는다 —
       // 그 주 48시간의 주 40시간 초과 8시간은 10/31(앞 계약 시급)에 매겨지고, 기본급은 11월 날만 세므로 10,030원 구간이 음수가 된다
       const worked: Record<string, number> = {
@@ -692,13 +693,14 @@ describe('calculatePay', () => {
       });
       // 금액(그대로): 11월 65시간 × 10,320원 − 연장 8시간 × 10,030원
       expect(r.basePay).toBe(Math.round(65 * 10_320 - 8 * 10_030));
-      expect(r.basis.basePay).toEqual({ minutes: 3_420, text: null });
+      // 시간 수는 법정 기재사항이라 남긴다(PR #317 리뷰)
+      expect(r.basis.basePay).toEqual({ minutes: 3_420, text: '57.0시간' });
       // 연장 · 주휴는 식과 금액이 맞아 그대로 낸다
       expect(r.basis.overtimePay.text).toBe('8.0시간 × 10,030원 × 1.5배');
       expect(r.overtimePay).toBe(8 * 10_030 * 1.5);
     });
 
-    it('식이 칸 길이(200자)를 넘으면 내지 않는다 — 시급이 여러 번 바뀐 연장 · 정직원 일할', () => {
+    it('식이 칸 길이(200자)를 넘으면 식 대신 시간만, 시간이 없는 정직원 기본급은 NULL — 시급이 여러 번 바뀐 연장 · 정직원 일할', () => {
       // 10월에 사흘마다 시급이 바뀐 계약 열 개(늦게 시작한 것부터) — 여덟 구간 연장식이 197자라 200자를 넘기려면 그만큼 바뀌어야 한다
       const wages = (base: ContractTerms) =>
         Array.from({ length: 10 }, (_, i) => ({
@@ -716,7 +718,7 @@ describe('calculatePay', () => {
       });
       const r = calculatePay(part);
       expect(r.overtimePay).toBeGreaterThan(0);
-      expect(r.basis.overtimePay.text).toBeNull();
+      expect(r.basis.overtimePay.text).toBe(hoursText(r.overtimeMinutes));
       expect(r.basis.overtimePay.minutes).toBe(r.overtimeMinutes);
 
       const full = calculatePay(

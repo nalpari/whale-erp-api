@@ -122,7 +122,8 @@ export const CALCULATION_TEXT_MAX = 200;
 type Segment = [value: number, text: string];
 
 /**
- * 구간을 「 + 」로 이은 한 줄 계산식. 식이 나타내는 금액(구간 값의 합)이 실제 금액(반올림 전 값)과 다르면 식을 내지 않는다(null) —
+ * 구간을 「 + 」로 이은 한 줄 계산식. 식이 나타내는 금액(구간 값의 합)이 실제 금액(반올림 전 값)과 다르면 식을 내지 않는다(null — 시간만
+ * 남긴다, withHours) —
  * 0 분 이하 구간을 뺐을 때처럼 식을 다시 셈한 값이 금액과 맞지 않으면 직원에게 보이지 않는다(WHALEERP-755 리뷰). 반올림 뒤가 아니라 전
  * 값으로 견준다 — 구간별로 나눈 소수 오차가 .5 경계에서 반올림을 뒤집을 수 있어서다(그만큼만 봐준다).
  * 200자(칸 길이)를 넘어도 null 이다 — 넘기면 저장이 500 이 된다. 한 달에 계약 조건(시급 · 월 기본시간)이 6~7번 바뀌어야 넘친다.
@@ -133,6 +134,16 @@ function formula(segments: readonly Segment[], raw: number): string | null {
   const text = segments.map(([, t]) => t).join(' + ');
   return text.length > CALCULATION_TEXT_MAX ? null : text;
 }
+
+/**
+ * 시간과 식을 한 칸으로 — 식을 비웠으면(금액과 맞지 않음 · 200자 초과) 시간이 있을 때 시간만 「8.0시간」으로 남긴다(야간 · 휴일근무수당과
+ * 같은 모양). 연장 · 야간 · 휴일근로의 시간 수는 법정 기재사항이라 관리자 상세 · 직원 앱 · PDF 세 곳에서 빠지지 않게(PR #317 리뷰).
+ * 시간이 없으면(정직원 기본급) NULL 그대로다.
+ */
+const withHours = (minutes: number | null, text: string | null): PayBasis => ({
+  minutes,
+  text: text ?? (minutes === null ? null : hoursText(minutes)),
+});
 
 /**
  * 시급별 분을 구간으로 — 먼저 넣은 시급부터. 0 분 이하 구간은 빼고(그래서 금액과 어긋나면 formula 가 식을 내지 않는다), 다 빠지면(연장
@@ -470,9 +481,9 @@ export function calculatePay(input: PayInput): PayResult {
       basis: {
         basePay: noBaseHours
           ? NO_BASIS
-          : {
-              minutes: null,
-              text: formula(
+          : withHours(
+              null,
+              formula(
                 (monthly.size
                   ? [...monthly.values()]
                   : [
@@ -490,12 +501,12 @@ export function calculatePay(input: PayInput): PayResult {
                 ]),
                 baseRaw,
               ),
-            },
+            ),
         weeklyHolidayPay: { minutes: null, text: '기본급에 포함' },
-        overtimePay: {
-          minutes: Math.round(payableMinutes),
-          text: overtimeText(payable, overtimePay),
-        },
+        overtimePay: withHours(
+          Math.round(payableMinutes),
+          overtimeText(payable, overtimePay),
+        ),
       },
     };
   }
@@ -541,19 +552,19 @@ export function calculatePay(input: PayInput): PayResult {
     overtimeMinutes,
     weeklyHolidayWeeks,
     basis: {
-      basePay: {
-        minutes: Math.max(0, sum(baseByWage)),
-        text: formula(
+      basePay: withHours(
+        Math.max(0, sum(baseByWage)),
+        formula(
           wageSegments(baseByWage, fallbackWage, (wage, m) => [
             (m * wage) / 60,
             `${hoursText(m)} × ${wageText(wage)}`,
           ]),
           Math.max(0, basePay - overtimePay) / 60,
         ),
-      },
-      weeklyHolidayPay: {
-        minutes: Math.round(holidayMinutes),
-        text: formula(
+      ),
+      weeklyHolidayPay: withHours(
+        Math.round(holidayMinutes),
+        formula(
           (holidayByWage.size
             ? [...holidayByWage]
             : [[fallbackWage, { weeks: 0, minutes: 0 }] as [number, Holiday]]
@@ -563,11 +574,11 @@ export function calculatePay(input: PayInput): PayResult {
           ]),
           holidayRaw,
         ),
-      },
-      overtimePay: {
-        minutes: sum(overtimeByWage),
-        text: overtimeText(overtimeByWage, (overtimePay / 60) * rate),
-      },
+      ),
+      overtimePay: withHours(
+        sum(overtimeByWage),
+        overtimeText(overtimeByWage, (overtimePay / 60) * rate),
+      ),
     },
   };
 }
