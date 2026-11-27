@@ -4,7 +4,7 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 회원 탈퇴(GET withdrawal-eligibility · POST withdrawal, WHALEERP-770), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T07:06:28Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-27T04:22:43Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
@@ -57,7 +57,7 @@ sources:
   - id: my-memberships-service
     resource: ../../src/my-profile/my-memberships.service.ts
     title: MyMembershipsService — 소속 근무지 · 소속별 신고 정보
-    last_modified: 2026-11-24T07:06:28Z
+    last_modified: 2026-11-27T04:22:43Z
   - id: my-memberships-controller
     resource: ../../src/my-profile/my-memberships.controller.ts
     title: 소속 · 신고 정보 경로, 신고 정보 저장의 요청 한도
@@ -300,6 +300,12 @@ Consequences:
 - retired records and records not yet joined are absent.
 
 Ordered by 입사일 (missing last) then `staffMemberId`.
+
+Each item also carries **`taxProfileSubmitted`** (2026-11-27, WHALEERP-775) — whether that 소속 has a
+신고 정보, the same answer as the tax-profile route's `taxProfile !== null` (false once the retention
+period has passed, same `retiredBefore` cut). The list reads only the row's key, never the ciphertext,
+so it decrypts nothing; the 직원 앱 uses it to decide the 신고 정보 입력 prompt without opening each
+소속's tax profile.
 
 **`includeRetired=true` adds the retired ones** (2026-10-28, WHALEERP-603 follow-up — the
 app's 근무지 list shows past 근무지 too). Only the `employmentStatus` part of `ACTIVE_STAFF`

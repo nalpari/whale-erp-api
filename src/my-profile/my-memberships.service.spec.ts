@@ -49,6 +49,7 @@ const staffRow = (patch: Record<string, unknown> = {}) => ({
   retiredDate: null,
   employmentStatus: 'EMPLOYED',
   storeId: 5,
+  staffTaxProfile: null,
   ...patch,
 });
 
@@ -112,12 +113,45 @@ describe('MyMembershipsService', () => {
       ]);
     });
 
-    it('신고 정보 · 동의 칸은 읽지 않는다 — 목록에서 복호화하지 않는다', async () => {
+    it('신고 정보는 낸 적이 있는지만 읽는다 — 암호문 · 동의 칸은 읽지 않아 목록에서 복호화하지 않는다', async () => {
       const service = await build();
       await service.list(12);
       const { select } = firstArg(findMany);
-      expect(select).not.toHaveProperty('staffTaxProfile');
+      expect(select.staffTaxProfile).toEqual({
+        select: { staffMemberId: true },
+      });
       expect(select).not.toHaveProperty('isHqSharingConsented');
+    });
+
+    it('신고 정보를 냈는지 — 보존 기간(퇴직 + 3년)이 지났으면 내지 않은 것으로 본다(조회와 같다)', async () => {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+      jest.setSystemTime(new Date('2026-10-20T03:00:00Z')); // 한국 2026-10-20 — 보존 기준일 2023-10-20
+      try {
+        const service = await build();
+        const submitted = { staffTaxProfile: { staffMemberId: 1 } };
+        const retired = (staffMemberId: number, retiredDate: string) =>
+          staffRow({
+            staffMemberId,
+            employmentStatus: 'RETIRED',
+            retiredDate: d(retiredDate),
+            ...submitted,
+          });
+        findMany.mockResolvedValue([
+          staffRow({ staffMemberId: 31, ...submitted }),
+          staffRow({ staffMemberId: 32 }),
+          retired(33, '2023-10-19'), // 기준일 전날 — 지났다
+          retired(34, '2023-10-20'), // 기준일 당일 — 아직 보존
+          retired(35, '2026-09-30'),
+        ]);
+        const { items } = await service.list(12, true);
+        expect(
+          Object.fromEntries(
+            items.map((m) => [m.staffMemberId, m.taxProfileSubmitted]),
+          ),
+        ).toEqual({ 31: true, 32: false, 33: false, 34: true, 35: true });
+      } finally {
+        jest.useRealTimers();
+      }
     });
 
     it('점포는 3팀 · 1팀 경계라 관계가 없어 storeId 로 한 번에 따로 읽는다', async () => {
@@ -178,6 +212,7 @@ describe('MyMembershipsService', () => {
             jobTitle: '홀',
             hiredDate: '2026-09-01',
             retiredDate: null,
+            taxProfileSubmitted: false,
           },
           {
             staffMemberId: 32,
@@ -186,6 +221,7 @@ describe('MyMembershipsService', () => {
             jobTitle: '홀',
             hiredDate: null,
             retiredDate: '2026-10-31',
+            taxProfileSubmitted: false,
           },
         ],
         total: 2,

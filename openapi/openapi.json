@@ -36200,6 +36200,10 @@
             "type": "string",
             "nullable": true,
             "description": "퇴직일(YYYY-MM-DD) — 이날까지 일한다. 오늘(한국 시각) · 뒤면 퇴직 예정, 앞이면 퇴직(`includeRetired=true` 로 받은\n퇴직한 소속)이다. 없으면 null. 목록의 묶음(지금 소속 · 퇴직)은 재직 상태로 가르므로, 퇴직 배치가 늦은 날에는 퇴직일이 지난\n레코드가 지금 소속 쪽에 섞일 수 있다"
+          },
+          "taxProfileSubmitted": {
+            "type": "boolean",
+            "description": "이 소속에 신고 정보를 냈는지 — 신고 정보 조회(`GET /me/memberships/:staffMemberId/tax-profile`)의 `taxProfile` 이 null 이\n아닌 것과 같다(보존 기간이 지났으면 false). 직원 앱이 소속마다 신고 정보를 풀어 보지 않고 입력 안내를 가른다(WHALEERP-775).\nfalse 라도 퇴직한 소속(retiredDate 가 오늘 앞)은 넣을 수 없다(PUT 409 STAFF_RETIRED) — 입력 안내는 지금 소속에만 둔다.\n「낸 적 없음」과 「보존 기간이 지나 지움」은 신고 정보 조회의 expired 로 가른다"
           }
         },
         "required": [
@@ -36208,7 +36212,8 @@
           "store",
           "jobTitle",
           "hiredDate",
-          "retiredDate"
+          "retiredDate",
+          "taxProfileSubmitted"
         ]
       },
       "MyMembershipListResponseDto": {
