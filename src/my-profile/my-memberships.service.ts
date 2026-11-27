@@ -98,6 +98,13 @@ const ANY_EMPLOYMENT_STAFF = {
 };
 
 /**
+ * 신고 정보 보존 기간(퇴직 + 3년, RET-01)이 지났는지 — 파기 배치와 같은 retiredBefore 기준이고, 퇴직 상태 배치가 반영됐는지와
+ * 상관없이 퇴직일로만 본다. 소속 목록의 taxProfileSubmitted 와 신고 정보 조회의 expired 가 같은 판정이어야 해서 둘이 함께 쓴다.
+ */
+const taxProfileExpired = (retiredDate: Date | null, now: Date) =>
+  retiredDate !== null && retiredDate < retiredBefore(now);
+
+/**
  * 직원 앱 마이페이지의 소속 근무지 (WHALEERP-188). 소속을 누르면 근로계약서 · 급여명세서 · 신고 정보로 간다(2026-10-20).
  * 소속은 TO-DO 와 같은 「재직 직원」 기준(ACTIVE_STAFF)이다 — 급여도 이 정책(PAY-16 · CTR-29)을 따라야 한다. 임시저장 계약만
  * 있는 레코드 · 가입 전 · 퇴직한 레코드는 빠지고 퇴직 예정은 들어간다. 목록만은 퇴직 포함(includeRetired, 2026-10-28)으로
@@ -107,13 +114,6 @@ const ANY_EMPLOYMENT_STAFF = {
  * 지운 점포(삭제 표시)의 소속은 뺀다 — 점포는 미운영이고 진행 중인 근로계약이 없어야 지울 수 있어 지금 소속은 남지 않지만,
  * 퇴직 포함이면 모두 퇴직한 뒤 지운 점포의 레코드가 걸린다(api #180 리뷰).
  */
-/**
- * 신고 정보 보존 기간(퇴직 + 3년, RET-01)이 지났는지 — 파기 배치와 같은 retiredBefore 기준이고, 퇴직 상태 배치가 반영됐는지와
- * 상관없이 퇴직일로만 본다. 소속 목록의 taxProfileSubmitted 와 신고 정보 조회의 expired 가 같은 판정이어야 해서 둘이 함께 쓴다.
- */
-const taxProfileExpired = (retiredDate: Date | null, now: Date) =>
-  retiredDate !== null && retiredDate < retiredBefore(now);
-
 @Injectable()
 export class MyMembershipsService {
   private readonly logger = new Logger(MyMembershipsService.name);
