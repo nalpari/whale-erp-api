@@ -32,6 +32,7 @@ import {
 const ITEM_SELECT = {
   contractId: true,
   status: true,
+  staffMemberId: true,
   storeId: true,
   employmentType: true,
   contractMethod: true,
@@ -287,6 +288,7 @@ function itemOf(
   return {
     contractId: r.contractId,
     status,
+    staffMemberId: r.staffMemberId,
     storeId: r.storeId,
     storeName,
     // 계약 사본(그 계약의 고용 형태). 비어 있는 옛 계약은 직원 레코드 값 — 관리자 상세의 원본
