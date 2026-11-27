@@ -4,7 +4,7 @@ title: Contracts API
 description: GET /contracts (list), POST /contracts (근로계약서 초안 저장), GET /contracts/minimum-wage (지금 최저임금), GET · PUT /contracts/:contractId (상세 · 임시저장 이어 쓰기), DELETE /contracts/:contractId (임시저장 삭제), plus GET /contracts/store-options for the 근무지 choice; admin tokens only, filtered by the admin scope. Status changes go through one transition table (contract-status).
 tags: [api, contracts, nestjs, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-20T02:01:07Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-27T03:16:05Z }
 sources:
   - id: contract-status-labels
     resource: ../../prisma/migrations/20261109165622_team3_contract_status_labels/migration.sql
@@ -73,7 +73,7 @@ sources:
   - id: my-contract-views
     resource: ../../src/contracts/my-contract-views.service.ts
     title: 직원 앱 근로계약 목록 · 상세 (WHALEERP-610)
-    last_modified: 2026-11-18T06:49:02Z
+    last_modified: 2026-11-27T03:16:05Z
   - id: contracts-menu
     resource: ../../src/contracts/contracts-menu.ts
     title: 근로계약 관리 메뉴 상수(CONTRACTS_MENU) — 서비스의 권한 재확인과 직원 목록 · 상세의 workDays 판정이 같이 쓴다
@@ -1191,7 +1191,8 @@ apply to reading.
   contract and one waiting for 소속 추가 확인 (only `candidate_account_id`) are absent too — the detail
   is the same 404 「근로계약을 찾을 수 없습니다.」 for all of them. A 퇴직 직원 still sees their contracts.
 - **`GET /me/contracts`** — all of them, not paged (a 직원 has a handful): `{ items, total }`. A row is
-  `contractId` · `status` · `storeId` · `storeName` (근무지 — the app groups by it) · `employmentType`
+  `contractId` · `status` · `staffMemberId` (the 직원 레코드 — the same id as `GET /me/memberships`, where a 퇴직 record appears only with
+  `includeRetired=true`; a 퇴직 뒤 재입사 makes a new record, so two rows of one 근무지 can differ, WHALEERP-775) · `storeId` · `storeName` (근무지 — the app groups by it) · `employmentType`
   (the contract's copy; the 직원 레코드's when empty, as in the 관리자 detail) · `contractMethod` · `startDate` · `endDate` · `sentAt` · `signDeadlineAt` ·
   `processedAt` · `awaitingSignature`. `processedAt` is the last status-history row's `changed_at` when it
   is the current status (날인 일자, a 종이 계약's 등록일, 거부 · 만료 · 종료 일자), else null; for 서명 대기

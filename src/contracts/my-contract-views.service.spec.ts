@@ -24,6 +24,7 @@ describe('MyContractViewsService', () => {
   const row = (o: Record<string, unknown> = {}) => ({
     contractId: 41,
     status: 'PENDING_SIGNATURE',
+    staffMemberId: 5,
     storeId: 11,
     employmentType: 'PART_TIME',
     contractMethod: 'ELECTRONIC',
@@ -94,6 +95,7 @@ describe('MyContractViewsService', () => {
         {
           contractId: 41,
           status: 'PENDING_SIGNATURE',
+          staffMemberId: 5,
           storeId: 11,
           storeName: '웨일 카페 홍대점',
           employmentType: 'PART_TIME',
@@ -315,6 +317,7 @@ describe('MyContractViewsService', () => {
       expect(d).toMatchObject({
         contractId: 41,
         status: 'PENDING_SIGNATURE',
+        staffMemberId: 5,
         storeName: '웨일 카페 홍대점',
         sentAt: '2026-10-20T01:00:00.000Z',
         awaitingSignature: true,
