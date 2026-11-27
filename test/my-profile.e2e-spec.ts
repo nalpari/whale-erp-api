@@ -20,6 +20,7 @@ import type {
 import type { MyProfileResponseDto } from '../src/my-profile/dto/my-profile.response.dto';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { kstToday } from '../src/staff-members/kst-date';
+import { retiredBefore } from '../src/staff-members/retiree-purge';
 import { HQ_SHARING_CONSENT_VERSION } from '../src/admin-scope/hq-sharing';
 import { createBp, deleteBps } from './hq-bp';
 
@@ -366,11 +367,14 @@ describe('내 정보 (e2e, DB)', () => {
       jobTitle: '홀',
       hiredDate: '2026-08-01',
       retiredDate: '2099-12-31',
+      taxProfileSubmitted: false,
     });
+    // 신고 정보를 낸 소속(WHALEERP-775) — 목록은 낸 적이 있는지만 싣는다
     expect(body.items[1]).toMatchObject({
       hiredDate: '2026-09-01',
       retiredDate: null,
       store: { storeId: franchiseStoreId, storeTypeCode: 'FRANCHISE' },
+      taxProfileSubmitted: true,
     });
   });
 
@@ -418,6 +422,8 @@ describe('내 정보 (e2e, DB)', () => {
       jobTitle: '홀',
       hiredDate: null,
       retiredDate: '2026-09-30',
+      // 퇴직했어도 보존 기간(퇴직 + 3년) 안이면 낸 신고 정보가 있다(WHALEERP-775) — 퇴직일이 박혀 있어 기간은 실행 시각으로 센다
+      taxProfileSubmitted: new Date('2026-09-30') >= retiredBefore(),
     });
     await get('/me/memberships?includeRetired=yes', token).expect(400);
     // 신고 정보도 퇴직한 소속을 연다 — 조회만(WHALEERP-765)

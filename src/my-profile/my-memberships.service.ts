@@ -98,6 +98,13 @@ const ANY_EMPLOYMENT_STAFF = {
 };
 
 /**
+ * 신고 정보 보존 기간(퇴직 + 3년, RET-01)이 지났는지 — 파기 배치와 같은 retiredBefore 기준이고, 퇴직 상태 배치가 반영됐는지와
+ * 상관없이 퇴직일로만 본다. 소속 목록의 taxProfileSubmitted 와 신고 정보 조회의 expired 가 같은 판정이어야 해서 둘이 함께 쓴다.
+ */
+const taxProfileExpired = (retiredDate: Date | null, now: Date) =>
+  retiredDate !== null && retiredDate < retiredBefore(now);
+
+/**
  * 직원 앱 마이페이지의 소속 근무지 (WHALEERP-188). 소속을 누르면 근로계약서 · 급여명세서 · 신고 정보로 간다(2026-10-20).
  * 소속은 TO-DO 와 같은 「재직 직원」 기준(ACTIVE_STAFF)이다 — 급여도 이 정책(PAY-16 · CTR-29)을 따라야 한다. 임시저장 계약만
  * 있는 레코드 · 가입 전 · 퇴직한 레코드는 빠지고 퇴직 예정은 들어간다. 목록만은 퇴직 포함(includeRetired, 2026-10-28)으로
@@ -138,6 +145,8 @@ export class MyMembershipsService {
         retiredDate: true,
         employmentStatus: true,
         storeId: true,
+        // 낸 적이 있는지만 — 암호문은 읽지 않는다(목록에서 풀지 않는다)
+        staffTaxProfile: { select: { staffMemberId: true } },
       },
     });
     // 지금 소속(읽은 입사일 · id 순 그대로) 뒤에 퇴직한 소속을 퇴직일 최근 순으로 — sort 는 안정 정렬이라 같은 묶음 · 같은
@@ -165,6 +174,7 @@ export class MyMembershipsService {
         })
       : [];
     const storeById = new Map(stores.map((st) => [st.storeId, st]));
+    const now = new Date();
 
     const items = rows.flatMap((s) => {
       const store = storeById.get(s.storeId);
@@ -185,6 +195,9 @@ export class MyMembershipsService {
         jobTitle: s.jobTitle,
         hiredDate: dateOnly(s.hiredDate),
         retiredDate: dateOnly(s.retiredDate),
+        // 신고 정보 조회와 같은 판정 — 보존 기간이 지났으면 파기 배치 전이어도 내지 않은 것으로 본다
+        taxProfileSubmitted:
+          s.staffTaxProfile !== null && !taxProfileExpired(s.retiredDate, now),
       };
     });
     return { items, total: items.length };
@@ -241,9 +254,8 @@ export class MyMembershipsService {
     const now = new Date();
     // 보존 기간(퇴직 + 3년, RET-01)이 지난 퇴직 레코드는 파기 배치(05:10)가 돌기 전이어도 신고 정보를 풀지 않는다 — 배치가
     // 늦거나 실패해도 기한이 지난 값이 보이지 않게(PR #313 pr-agent). 기준은 파기 배치와 같은 retiredBefore 다. 퇴직 상태
-    // 배치가 반영됐는지와 상관없이 퇴직일로만 판정한다
-    const expired =
-      staff.retiredDate !== null && staff.retiredDate < retiredBefore(now);
+    // 배치가 반영됐는지와 상관없이 퇴직일로만 판정한다(taxProfileExpired — 소속 목록과 같은 판정)
+    const expired = taxProfileExpired(staff.retiredDate, now);
     return {
       staffMemberId: staff.staffMemberId,
       editable: employedOn(staff, now),
