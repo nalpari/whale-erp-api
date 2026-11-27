@@ -542,7 +542,29 @@ describe('StaffSignupService', () => {
       ]);
     });
 
-    it('시행 중인 약관이 하나라도 없으면 500 — 계정을 만들지 않는다(운영자가 끄거나 지움)', async () => {
+    it('시행 중인 마케팅 약관이 없으면 필수 두 줄만 남기고 가입한다 — 선택 약관 하나로 가입을 막지 않는다', async () => {
+      tx.termsVersion.findMany.mockResolvedValue([
+        {
+          termsTypeCode: 'STAFF_TERMS_SERVICE',
+          termsVersionId: 3,
+          version: 'v1.0',
+        },
+        { termsTypeCode: 'STAFF_PRIVACY', termsVersionId: 4, version: 'v1.0' },
+      ]);
+      await service().signup(input({ marketingAgreed: true }));
+      expect(
+        (
+          argOf(tx.accountTermsAgreementLog.createMany).data as {
+            termsVersionId: number;
+          }[]
+        ).map((r) => r.termsVersionId),
+      ).toEqual([3, 4]);
+      expect(argOf(tx.account.create).data).toMatchObject({
+        termsAgreedAt: NOW,
+      });
+    });
+
+    it('필수 약관 가운데 시행 중인 것이 없으면 500 — 계정을 만들지 않는다(운영자가 끄거나 지움)', async () => {
       tx.termsVersion.findMany.mockResolvedValue([]);
       const e = await thrown(service().signup(input()));
       expect(e.getStatus()).toBe(500);

@@ -178,10 +178,10 @@ In one transaction:
    not block joining) and a warn log names the account and both versions (the sent value JSON-quoted, since it
    comes from a public route). **약관 동의 (ACC-23)**: the 약관 in force now (`currentStaffTerms` in
    `src/my-profile/staff-terms.ts` — the same rule as the public 약관 API and 관리자 가입: active, not deleted, 시행일 ≤ KST
-   today, latest first) — one missing → 500 「지금은 가입할 수 없습니다 …」 before the account is made (an error log names it;
+   today, latest first) — one of the two **required** missing → 500 「지금은 가입할 수 없습니다 …」 before the account is made (an error log names it;
    only read when the 약관 fields were sent).
-   The account gets `terms_agreed_at` = the signup time and `account_terms_agreement_logs` three rows (required two agreed,
-   marketing as chosen; `channel: SIGNUP`, `client_address` = `@Ip()` — the 직원 앱 sends the user's IP in
+   The account gets `terms_agreed_at` = the signup time and `account_terms_agreement_logs` rows (required two agreed,
+   marketing as chosen — two rows when no `MARKETING` 약관 is in force; `channel: SIGNUP`, `client_address` = `@Ip()` — the 직원 앱 sends the user's IP in
    `X-Forwarded-For`). Unlike 본사 제공 동의 the shown versions are not compared at signup — the versions in force are
    recorded, as 관리자 가입 does. The optional `MARKETING` 약관 may be off: then only the two required rows are written —
    switching one 1팀 common 약관 off must not stop 직원 signup.

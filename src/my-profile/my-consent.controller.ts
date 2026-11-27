@@ -132,7 +132,7 @@ export class MyConsentController {
   })
   @ApiInternalServerErrorResponse({
     description:
-      '시행 중인 직원 앱 약관이 없음(운영자가 끄거나 지움) — 「지금은 약관 동의를 받을 수 없습니다 …」',
+      '필수 약관(STAFF_TERMS_SERVICE · STAFF_PRIVACY) 가운데 시행 중인 것이 없음(운영자가 끄거나 지움) — 「지금은 약관 동의를 받을 수 없습니다 …」',
   })
   agreeTerms(
     @CurrentUser() user: AccountUser,

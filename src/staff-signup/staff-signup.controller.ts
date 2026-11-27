@@ -70,7 +70,7 @@ export class StaffSignupController {
   })
   @ApiInternalServerErrorResponse({
     description:
-      '시행 중인 직원 앱 약관(STAFF_TERMS_SERVICE · STAFF_PRIVACY · MARKETING)이 없음 — 「지금은 가입할 수 없습니다 …」',
+      '필수 약관(STAFF_TERMS_SERVICE · STAFF_PRIVACY) 가운데 시행 중인 것이 없음 — 「지금은 가입할 수 없습니다 …」(선택 약관 MARKETING 이 없으면 막지 않고 그 줄만 남기지 않는다)',
   })
   @ApiNotFoundResponse({
     description: 'INVITATION_NOT_FOUND · INVITATION_ENDED — 초대 확인과 같다',

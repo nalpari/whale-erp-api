@@ -483,7 +483,7 @@ describe('MyConsentService', () => {
       expect(tx.accountTermsAgreementLog.createMany).not.toHaveBeenCalled();
     });
 
-    it('시행 중인 약관이 하나라도 없으면 500', async () => {
+    it('필수 약관 가운데 시행 중인 것이 없으면 500', async () => {
       const service = await build();
       tx.termsVersion.findMany.mockResolvedValue([]);
       await expect(

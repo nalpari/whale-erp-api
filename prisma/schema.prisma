@@ -1271,6 +1271,9 @@ model LocationConsentHistory {
   @@map("location_consent_histories")
 }
 
+// 직원 계정 약관 동의 이력(WHALEERP-774, 20261127105251_team3_account_terms_agreements)과 accounts.terms_agreed_at 은 3팀 논리 카탈로그 ·
+// _model.py 에 아직 없어 생성기 밖에서 손으로 썼다 — 카탈로그에 들어오기 전에 _build_prisma.py 를 다시 돌리면 이 블록과 그 칸이 빠진다
+// (okf domain/team3-physical-schema.md).
 /// 직원 계정 약관 동의 이력 (WHALEERP-774). 1팀 terms_agreement_logs 와 따로 둔다 — 약관 버전 · 동의 경로는 1팀 것을 참조한다
 model AccountTermsAgreementLog {
   /// 동의 이력 ID

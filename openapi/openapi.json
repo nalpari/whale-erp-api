@@ -17399,7 +17399,7 @@
             "description": "보인 약관 버전이 시행 중인 것과 다름(TERMS_CHANGED — 「그사이 약관이 바뀌었습니다. …」, 화면은 다시 받는다) · 이미 동의함"
           },
           "500": {
-            "description": "시행 중인 직원 앱 약관이 없음(운영자가 끄거나 지움) — 「지금은 약관 동의를 받을 수 없습니다 …」"
+            "description": "필수 약관(STAFF_TERMS_SERVICE · STAFF_PRIVACY) 가운데 시행 중인 것이 없음(운영자가 끄거나 지움) — 「지금은 약관 동의를 받을 수 없습니다 …」"
           }
         },
         "security": [
@@ -17609,7 +17609,7 @@
             "description": "같은 번호로 번호 + 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 공개 경로 기본 요청 제한"
           },
           "500": {
-            "description": "시행 중인 직원 앱 약관(STAFF_TERMS_SERVICE · STAFF_PRIVACY · MARKETING)이 없음 — 「지금은 가입할 수 없습니다 …」"
+            "description": "필수 약관(STAFF_TERMS_SERVICE · STAFF_PRIVACY) 가운데 시행 중인 것이 없음 — 「지금은 가입할 수 없습니다 …」(선택 약관 MARKETING 이 없으면 막지 않고 그 줄만 남기지 않는다)"
           }
         },
         "summary": "직원 앱 가입(WHALEERP-601 · 142, 가이드 ③·④). 초대를 다시 확인하고 계정을 만들어 직원 레코드에 잇고(가입 완료) 초대를\n수락으로 둔다. 가입을 기다리던 근로계약서는 서명 대기가 된다. 계정 번호는 초대의 번호다. 마치면 로그인 응답과 같은\n모양으로 접속 상태를 준다. 가입하는 날 만 19세 미만이면 계정을 만들지 않고 초대를 「가입 불가」로 둔 뒤 400 이다.\n본사 제공 동의에 실은 문구 버전(hqSharingConsentVersion)이 지금과 달라도 가입은 마치고 동의만 남기지 않는다 — 응답의\nhqSharingConsentRecorded 가 false 다(ATT-30 v253). 약관 동의(ACC-23)는 필수 둘이 true 여야 하고, 시행 중인 버전 셋에 동의\n이력(account_terms_agreement_logs, 경로 SIGNUP · 접속 IP)을 남기고 계정의 약관 동의 일시를 채운다.",
