@@ -30,8 +30,9 @@ describe('MyConsentService', () => {
       create: jest.Mock;
       update: jest.Mock;
     };
-    termsVersion: { findFirst: jest.Mock };
+    termsVersion: { findFirst: jest.Mock; findMany: jest.Mock };
     locationConsentHistory: { create: jest.Mock };
+    accountTermsAgreementLog: { createMany: jest.Mock };
   };
   /** 동의 이력 줄(ATT-26) — [동의 ID, 처리 구분, 시각] 차례로 */
   const histories = () =>
@@ -58,6 +59,7 @@ describe('MyConsentService', () => {
         findUniqueOrThrow: jest.fn().mockResolvedValue({
           status: 'JOINED',
           isHqSharingConsented: false,
+          termsAgreedAt: null,
           ...account,
         }),
         update: jest.fn().mockResolvedValue({}),
@@ -69,8 +71,23 @@ describe('MyConsentService', () => {
       },
       termsVersion: {
         findFirst: jest.fn().mockResolvedValue({ version: 'v1.0' }),
+        // 시행 중인 직원 앱 약관 셋(ACC-23)
+        findMany: jest.fn().mockResolvedValue([
+          {
+            termsTypeCode: 'STAFF_TERMS_SERVICE',
+            termsVersionId: 3,
+            version: 'v1.0',
+          },
+          {
+            termsTypeCode: 'STAFF_PRIVACY',
+            termsVersionId: 4,
+            version: 'v1.1',
+          },
+          { termsTypeCode: 'MARKETING', termsVersionId: 5, version: 'v1.0' },
+        ]),
       },
       locationConsentHistory: { create: jest.fn().mockResolvedValue({}) },
+      accountTermsAgreementLog: { createMany: jest.fn() },
     };
     const prisma = {
       $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
@@ -370,6 +387,87 @@ describe('MyConsentService', () => {
     });
   });
 
+  describe('약관 동의 (ACC-23, 약관 동의를 받기 전에 가입한 직원)', () => {
+    const shown = {
+      termsServiceVersion: 'v1.0',
+      privacyVersion: 'v1.1',
+      marketingVersion: 'v1.0',
+    };
+
+    it('보인 버전 셋이 시행 중인 것과 같으면 이력 세 줄(경로 FIRST_LOGIN · 접속 IP)과 계정의 동의 일시를 남긴다', async () => {
+      const service = await build();
+      await service.agreeTerms(12, shown, false, '203.0.113.7');
+      expect(tx.$queryRaw).toHaveBeenCalled();
+      const [{ data }] = tx.accountTermsAgreementLog.createMany.mock
+        .calls[0] as [{ data: { agreedAt: Date }[] }];
+      const agreedAt = data[0].agreedAt;
+      expect(data).toEqual(
+        [3, 4, 5].map((termsVersionId) => ({
+          accountId: 12,
+          termsVersionId,
+          isAgreed: termsVersionId !== 5,
+          agreedAt,
+          channel: 'FIRST_LOGIN',
+          clientAddress: '203.0.113.7',
+        })),
+      );
+      expect(tx.account.update).toHaveBeenCalledWith({
+        where: { accountId: 12 },
+        data: { termsAgreedAt: agreedAt },
+      });
+    });
+
+    it('마케팅 정보 수신에 동의하면 그 줄도 동의', async () => {
+      const service = await build();
+      await service.agreeTerms(12, shown, true, undefined);
+      const [{ data }] = tx.accountTermsAgreementLog.createMany.mock
+        .calls[0] as [
+        { data: { isAgreed: boolean; clientAddress: string | null }[] },
+      ];
+      expect(data.map((r) => [r.isAgreed, r.clientAddress])).toEqual([
+        [true, null],
+        [true, null],
+        [true, null],
+      ]);
+    });
+
+    it.each([
+      ['서비스 이용약관', { termsServiceVersion: 'v0.9' }],
+      ['개인정보 수집·이용', { privacyVersion: 'v1.0' }],
+      ['마케팅 정보 수신', { marketingVersion: 'v2.0' }],
+    ])(
+      '보인 %s 버전이 시행 중인 것과 다르면 409 TERMS_CHANGED — 남기지 않는다',
+      async (_label, patch) => {
+        const service = await build();
+        const e = (await service
+          .agreeTerms(12, { ...shown, ...patch }, false, undefined)
+          .catch((error: unknown) => error)) as ConflictException;
+        expect(e).toBeInstanceOf(ConflictException);
+        expect((e.getResponse() as { code?: string }).code).toBe(
+          'TERMS_CHANGED',
+        );
+        expect(tx.accountTermsAgreementLog.createMany).not.toHaveBeenCalled();
+        expect(tx.account.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('이미 동의했으면 409 — 이력을 더 남기지 않는다', async () => {
+      const service = await build({ termsAgreedAt: AGREED_AT });
+      await expect(
+        service.agreeTerms(12, shown, false, undefined),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(tx.accountTermsAgreementLog.createMany).not.toHaveBeenCalled();
+    });
+
+    it('시행 중인 약관이 하나라도 없으면 500', async () => {
+      const service = await build();
+      tx.termsVersion.findMany.mockResolvedValue([]);
+      await expect(
+        service.agreeTerms(12, shown, false, undefined),
+      ).rejects.toBeInstanceOf(InternalServerErrorException);
+    });
+  });
+
   it.each([
     'agreeLocation',
     'pauseLocation',
@@ -377,6 +475,7 @@ describe('MyConsentService', () => {
     'withdrawLocation',
     'agreeHqSharing',
     'withdrawHqSharing',
+    'agreeTerms',
   ] as const)('탈퇴 계정은 %s 가 401', async (method) => {
     const service = await build({ status: 'WITHDRAWN' });
     // agreeLocation · agreeHqSharing 만 보인 약관 · 문구 버전을 받는다
@@ -385,7 +484,18 @@ describe('MyConsentService', () => {
         ? service.agreeLocation(12, 'v1.0')
         : method === 'agreeHqSharing'
           ? service.agreeHqSharing(12, HQ_SHARING_CONSENT_VERSION)
-          : service[method](12);
+          : method === 'agreeTerms'
+            ? service.agreeTerms(
+                12,
+                {
+                  termsServiceVersion: 'v1.0',
+                  privacyVersion: 'v1.1',
+                  marketingVersion: 'v1.0',
+                },
+                false,
+                undefined,
+              )
+            : service[method](12);
     await expect(run()).rejects.toBeInstanceOf(UnauthorizedException);
   });
 });

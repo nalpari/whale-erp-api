@@ -579,6 +579,8 @@ model Account {
   hqSharingAgreedAt        DateTime?                @map("hq_sharing_agreed_at") @db.Timestamptz(6)
   /// 본사 제공 동의 철회 일시 — 철회하지 않았으면 NULL
   hqSharingWithdrawnAt     DateTime?                @map("hq_sharing_withdrawn_at") @db.Timestamptz(6)
+  /// 약관 동의 일시 — 서비스 이용약관 · 개인정보 수집·이용(필수 둘)에 동의한 시각. 비어 있으면 앱이 동의를 받는다 (ACC-23, WHALEERP-774)
+  termsAgreedAt            DateTime?                @map("terms_agreed_at") @db.Timestamptz(6)
   /// 계정 상태 — 가입 완료·연결 보류·탈퇴, 휴면 없음
   status                   AccountStatus
   /// 로그인 실패 횟수 — 5회 잠금
@@ -602,6 +604,7 @@ model Account {
   linkHolds                LinkHold[]
   staffTaxProfileHistories StaffTaxProfileHistory[]
   locationConsents         LocationConsent[]
+  termsAgreementLogs       AccountTermsAgreementLog[]
   notificationRecipients   NotificationRecipient[]
   notificationPreferences  NotificationPreference[]
 
@@ -1266,6 +1269,29 @@ model LocationConsentHistory {
 
   @@index([locationConsentId, occurredAt], map: "location_consent_histories_location_consent_id_occurred_at_idx")
   @@map("location_consent_histories")
+}
+
+/// 직원 계정 약관 동의 이력 (WHALEERP-774). 1팀 terms_agreement_logs 와 따로 둔다 — 약관 버전 · 동의 경로는 1팀 것을 참조한다
+model AccountTermsAgreementLog {
+  /// 동의 이력 ID
+  accountTermsAgreementLogId Int                   @id @default(autoincrement()) @map("account_terms_agreement_log_id")
+  /// 직원 계정 — accounts FK
+  accountId                  Int                   @map("account_id")
+  /// 약관 버전 — terms_versions FK
+  termsVersionId             Int                   @map("terms_version_id")
+  /// 동의 여부 — 선택 약관(마케팅 정보 수신)은 동의하지 않아도 한 줄 남는다
+  isAgreed                   Boolean               @map("is_agreed")
+  /// 동의 일시
+  agreedAt                   DateTime              @default(now()) @map("agreed_at") @db.Timestamptz(6)
+  /// 동의 경로 — 회원가입 · 최초 로그인(이미 가입한 직원이 홈에서 동의)
+  channel                    TermsAgreementChannel
+  /// 접속 IP
+  clientAddress              String?               @map("client_address")
+  account                    Account               @relation(fields: [accountId], references: [accountId], onDelete: Restrict, onUpdate: NoAction, map: "account_terms_agreement_logs_account_id_fkey")
+  termsVersion               TermsVersion          @relation(fields: [termsVersionId], references: [termsVersionId], onDelete: Restrict, onUpdate: NoAction, map: "account_terms_agreement_logs_terms_version_id_fkey")
+
+  @@index([accountId], map: "account_terms_agreement_logs_account_id_idx")
+  @@map("account_terms_agreement_logs")
 }
 
 /// 출퇴근 기록
@@ -2230,6 +2256,7 @@ model TermsVersion {
   termsOfUseAgreedAdminAccounts AdminAccount[]      @relation("AdminAccountsTermsOfUseVersion")
   privacyAgreedAdminAccounts    AdminAccount[]      @relation("AdminAccountsPrivacyVersion")
   agreementLogs                 TermsAgreementLog[] @relation("TermsAgreementLogsTermsVersion")
+  accountAgreementLogs          AccountTermsAgreementLog[]
 
   @@unique([termsTypeCode, version], map: "terms_versions_terms_type_code_version_key")
   @@map("terms_versions")

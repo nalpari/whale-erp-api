@@ -136,11 +136,16 @@ part like `"a"@example.com` is a 400, since password-reset mail could never reac
 (the wording version the screen showed — read only when `hqSharingConsented` is true; if sent it must be a
 non-empty string ≤ 64 chars (400), and **missing is not an error**: an app that predates this field (deploy
 skew) has its consent treated like a version mismatch — joining completes, the consent is not written,
-ATT-30 v252 · v253) · `deviceIdentifier`
+ATT-30 v252 · v253) · `termsServiceAgreed` · `privacyAgreed` (the two required 약관 — once either is sent **both must be `true`**,
+anything else (false · null · a string) is 400 「필수 약관에 동의해 주세요.」, ACC-23, WHALEERP-774; **both missing is not an
+error** — an app that predates the fields joins without 약관 동의 written, the account's `terms_agreed_at` stays empty and
+the app asks on 홈 (`needsTermsAgreement`, [My profile](/api/my-profile.md)); a warn log names the account. So deploying the
+api before the app never blocks a signup, as with `hqSharingConsentVersion`) · `marketingAgreed` (optional, 선택 — missing is
+not agreed) · `deviceIdentifier`
 (optional, as in login). **There is no phone field**: the account takes the invitation's
 (근로계약서) phone — if a 직원 could type it, they could sign up on someone else's number and block
-that person's next invitation (JOIN-7). 약관 동의 waits for 1팀's common 약관 registration
-(2026-10-20 김민식).
+that person's next invitation (JOIN-7). The 약관 are 1팀's `terms_versions` rows `STAFF_TERMS_SERVICE` ·
+`STAFF_PRIVACY` · `MARKETING`; the screen reads them from `GET /public-terms-versions/:termsTypeCode` for 「보기」.
 
 Before the transaction: the password rule (`validateNewPassword`) is 400, a birth date after today
 (KST) is 400 `BIRTH_DATE_IN_FUTURE` (a mistyped year would otherwise end the invitation as 만 19세
@@ -171,7 +176,14 @@ In one transaction:
    person since api #78. **Only if `hqSharingConsentVersion` equals that constant**: otherwise (different or missing) the signup
    still completes without the consent (ATT-30 v253 — the consent is optional, so a changed wording must
    not block joining) and a warn log names the account and both versions (the sent value JSON-quoted, since it
-   comes from a public route).
+   comes from a public route). **약관 동의 (ACC-23)**: the 약관 in force now (`currentStaffTerms` in
+   `src/my-profile/staff-terms.ts` — the same rule as the public 약관 API and 관리자 가입: active, not deleted, 시행일 ≤ KST
+   today, latest first) — one missing → 500 「지금은 가입할 수 없습니다 …」 before the account is made (an error log names it;
+   only read when the 약관 fields were sent).
+   The account gets `terms_agreed_at` = the signup time and `account_terms_agreement_logs` three rows (required two agreed,
+   marketing as chosen; `channel: SIGNUP`, `client_address` = `@Ip()` — the 직원 앱 sends the user's IP in
+   `X-Forwarded-For`). Unlike 본사 제공 동의 the shown versions are not compared at signup — the versions in force are
+   recorded, as 관리자 가입 does.
 5. Link the record (`account_id`, `join_status = JOINED`, conditioned on no account yet).
 6. The record's 발송 대기 contracts → 서명 대기, history actor `STAFF`. The deadline from the send stays.
 
@@ -315,6 +327,5 @@ The entered 이름 · 생년월일 · 성별 · 외국인 여부 are kept on the
 
 # Left for later
 
-- 약관 동의 (1팀 common 약관 registration).
 - `NTF_SIGNUP_UNDER_AGE` wording is a draft for the 기획 to confirm.
 - The 직원 앱 screen for adding a 근무지 (WHALEERP-604) — where the invitation list sits is for the 기획.

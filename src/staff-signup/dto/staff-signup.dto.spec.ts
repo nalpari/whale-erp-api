@@ -15,12 +15,64 @@ const signup = (overrides: Record<string, unknown> = {}) => ({
   gender: 'FEMALE',
   zipCode: '04001',
   address: '서울 마포구 동교로 1',
+  termsServiceAgreed: true,
+  privacyAgreed: true,
   ...overrides,
 });
 const errorsOf = <T extends object>(cls: new () => T, plain: object) =>
   validateSync(plainToInstance(cls, plain)).map((e) => e.property);
 
 describe('직원 가입 DTO', () => {
+  it.each([
+    ['termsServiceAgreed', false],
+    ['termsServiceAgreed', undefined],
+    ['termsServiceAgreed', 'true'],
+    ['privacyAgreed', false],
+    ['privacyAgreed', undefined],
+  ])(
+    '필수 약관 %s 가 %p 이면 받지 않는다 — true 만(ACC-23)',
+    (property, value) => {
+      const errors = validateSync(
+        plainToInstance(StaffSignupDto, signup({ [property]: value })),
+      );
+      expect(errors.map((e) => e.property)).toEqual([property]);
+      expect(Object.values(errors[0].constraints ?? {})).toContain(
+        '필수 약관에 동의해 주세요.',
+      );
+    },
+  );
+
+  it('필수 약관 두 칸이 모두 빠지면 받는다 — 약관 칸이 없던 예전 앱(동의는 홈에서 받는다)', () => {
+    expect(
+      errorsOf(
+        StaffSignupDto,
+        signup({ termsServiceAgreed: undefined, privacyAgreed: undefined }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('필수 약관이 null 이면 받지 않는다 — 빠진 것과 다르다', () => {
+    expect(
+      errorsOf(
+        StaffSignupDto,
+        signup({ termsServiceAgreed: null, privacyAgreed: null }),
+      ),
+    ).toEqual(['termsServiceAgreed', 'privacyAgreed']);
+  });
+
+  it.each([true, false, undefined])(
+    '마케팅 정보 수신은 선택 — %p 를 받는다',
+    (marketingAgreed) => {
+      expect(errorsOf(StaffSignupDto, signup({ marketingAgreed }))).toEqual([]);
+    },
+  );
+
+  it('마케팅 정보 수신이 참 · 거짓이 아니면 받지 않는다', () => {
+    expect(
+      errorsOf(StaffSignupDto, signup({ marketingAgreed: 'yes' })),
+    ).toEqual(['marketingAgreed']);
+  });
+
   it('초대 코드는 앞뒤 공백을 지우고 대문자로, 번호는 하이픈을 지운다', () => {
     const dto = plainToInstance(InvitationLookupDto, {
       code: ' k7q2m9px ',

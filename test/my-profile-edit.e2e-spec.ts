@@ -98,6 +98,7 @@ describe('내 정보 편집 (e2e, DB)', () => {
       where: { locationConsent: where },
     });
     await prisma.locationConsent.deleteMany({ where });
+    await prisma.accountTermsAgreementLog.deleteMany({ where });
     await prisma.authSession.deleteMany({ where });
     await prisma.account.deleteMany({ where });
     if (bmId !== undefined) {
@@ -156,6 +157,12 @@ describe('내 정보 편집 (e2e, DB)', () => {
     address: '서울 중구 세종대로 110',
     addressDetail: '2층 201호',
   };
+  // 시행 중인 직원 앱 약관 셋 — 모두 v1.0(20261006000100_team1_initial_data)
+  const SHOWN_TERMS = {
+    termsServiceVersion: 'v1.0',
+    privacyVersion: 'v1.0',
+    marketingVersion: 'v1.0',
+  };
   const WRITES: [method: 'post' | 'put', path: string, body?: object][] = [
     ['put', '/me/profile/address', ADDRESS],
     [
@@ -169,6 +176,7 @@ describe('내 정보 편집 (e2e, DB)', () => {
     ['post', '/me/location-consent/withdraw'],
     ['post', '/me/hq-sharing-consent'],
     ['post', '/me/hq-sharing-consent/withdraw'],
+    ['post', '/me/terms-agreement', { ...SHOWN_TERMS }],
   ];
 
   it('토큰이 없으면 401, 관리자 토큰은 403 — 쓰는 경로 모두', async () => {
@@ -450,6 +458,67 @@ describe('내 정보 편집 (e2e, DB)', () => {
           where: { accountId: otherId, withdrawnAt: null },
         }),
       ).toBe(1);
+    });
+  });
+
+  describe('약관 동의 (ACC-23, 약관 동의를 받기 전에 가입한 직원)', () => {
+    it('동의 기록이 없으면 내 정보가 약관 동의 필요 — 보인 버전이 다르면 409, 맞으면 204 · 이력 세 줄 · 다시는 409', async () => {
+      const id = await account('약관', 'JOINED', await hashPassword(PASSWORD));
+      const { token } = await login(id);
+      expect((await profile(token)).needsTermsAgreement).toBe(true);
+
+      await send('post', '/me/terms-agreement', token).expect(400);
+      await send('post', '/me/terms-agreement', token, {
+        ...SHOWN_TERMS,
+        marketingAgreed: 'yes',
+      }).expect(400);
+      const changed = await send('post', '/me/terms-agreement', token, {
+        ...SHOWN_TERMS,
+        privacyVersion: 'v0.9',
+      }).expect(409);
+      expect(changed.body).toMatchObject({ code: 'TERMS_CHANGED' });
+      expect(
+        await prisma.accountTermsAgreementLog.count({
+          where: { accountId: id },
+        }),
+      ).toBe(0);
+
+      await send('post', '/me/terms-agreement', token, {
+        ...SHOWN_TERMS,
+        marketingAgreed: true,
+      }).expect(204);
+      expect((await profile(token)).needsTermsAgreement).toBe(false);
+      const { termsAgreedAt } = await prisma.account.findUniqueOrThrow({
+        where: { accountId: id },
+      });
+      expect(
+        await prisma.accountTermsAgreementLog.findMany({
+          where: { accountId: id },
+          orderBy: { accountTermsAgreementLogId: 'asc' },
+          select: {
+            isAgreed: true,
+            channel: true,
+            agreedAt: true,
+            termsVersion: { select: { termsTypeCode: true } },
+          },
+        }),
+      ).toEqual(
+        ['STAFF_TERMS_SERVICE', 'STAFF_PRIVACY', 'MARKETING'].map(
+          (termsTypeCode) => ({
+            isAgreed: true,
+            channel: 'FIRST_LOGIN',
+            agreedAt: termsAgreedAt,
+            termsVersion: { termsTypeCode },
+          }),
+        ),
+      );
+
+      await send('post', '/me/terms-agreement', token, SHOWN_TERMS).expect(409);
+      expect(
+        await prisma.accountTermsAgreementLog.count({
+          where: { accountId: id },
+        }),
+      ).toBe(3);
     });
   });
 

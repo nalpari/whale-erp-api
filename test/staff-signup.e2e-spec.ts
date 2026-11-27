@@ -114,6 +114,8 @@ describe('직원 가입 (e2e, DB)', () => {
       zipCode: '04001',
       address: '서울 마포구 동교로 1',
       addressDetail: '2층',
+      termsServiceAgreed: true,
+      privacyAgreed: true,
       deviceIdentifier: `e2e-${n}`,
       ...overrides,
     };
@@ -228,6 +230,9 @@ describe('직원 가입 (e2e, DB)', () => {
     await prisma.loginHistory.deleteMany({
       where: { accountId: { in: accountIds } },
     });
+    await prisma.accountTermsAgreementLog.deleteMany({
+      where: { accountId: { in: accountIds } },
+    });
     await prisma.account.deleteMany({
       where: { accountId: { in: accountIds } },
     });
@@ -286,6 +291,31 @@ describe('직원 가입 (e2e, DB)', () => {
       isHqSharingConsented: false,
       status: 'JOINED',
     });
+    // 약관 동의(ACC-23) — 시행 중인 버전 셋, 마케팅은 빼서 동의 안 함
+    expect(account.termsAgreedAt).toEqual(expect.any(Date));
+    expect(
+      await prisma.accountTermsAgreementLog.findMany({
+        where: { accountId: account.accountId },
+        orderBy: { accountTermsAgreementLogId: 'asc' },
+        select: {
+          isAgreed: true,
+          channel: true,
+          agreedAt: true,
+          termsVersion: { select: { termsTypeCode: true, version: true } },
+        },
+      }),
+    ).toEqual(
+      [
+        ['STAFF_TERMS_SERVICE', true],
+        ['STAFF_PRIVACY', true],
+        ['MARKETING', false],
+      ].map(([termsTypeCode, isAgreed]) => ({
+        isAgreed,
+        channel: 'SIGNUP',
+        agreedAt: account.termsAgreedAt,
+        termsVersion: { termsTypeCode, version: 'v1.0' },
+      })),
+    );
     expect(
       await prisma.staffMember.findUniqueOrThrow({
         where: { staffMemberId: s.staffMemberId },
@@ -319,6 +349,50 @@ describe('직원 가입 (e2e, DB)', () => {
       token: s.token,
     }).expect(409);
     expect(again.body).toMatchObject({ code: 'INVITATION_ALREADY_JOINED' });
+  });
+
+  it.each(['termsServiceAgreed', 'privacyAgreed'])(
+    '필수 약관 %s 가 true 가 아니면 400 — 계정을 만들지 않고 초대도 그대로다(ACC-23)',
+    async (field) => {
+      const s = await invited(directStoreId);
+      const payload = body({ token: s.token }, { [field]: false });
+      const res = await post('/auth/account/signup', payload).expect(400);
+      expect(JSON.stringify(res.body)).toContain('필수 약관에 동의해 주세요.');
+      expect(
+        await prisma.account.count({ where: { email: payload.email } }),
+      ).toBe(0);
+      expect(
+        await prisma.invitation.findUniqueOrThrow({
+          where: { invitationId: s.invitationId },
+        }),
+      ).toMatchObject({ status: 'SENT' });
+    },
+  );
+
+  it('필수 약관 두 칸을 모두 빼면(약관 칸이 없던 예전 앱) 가입은 마치고 동의를 남기지 않는다 — 내 정보가 약관 동의 필요', async () => {
+    const s = await invited(directStoreId);
+    const payload = body(
+      { token: s.token },
+      { termsServiceAgreed: undefined, privacyAgreed: undefined },
+    );
+    const joined = await post('/auth/account/signup', payload).expect(201);
+    const account = await prisma.account.findUniqueOrThrow({
+      where: { email: payload.email },
+    });
+    expect(account.termsAgreedAt).toBeNull();
+    expect(
+      await prisma.accountTermsAgreementLog.count({
+        where: { accountId: account.accountId },
+      }),
+    ).toBe(0);
+    const me = await request(app.getHttpServer())
+      .get('/me/profile')
+      .set(
+        'Authorization',
+        `Bearer ${(joined.body as { accessToken: string }).accessToken}`,
+      )
+      .expect(200);
+    expect(me.body).toMatchObject({ needsTermsAgreement: true });
   });
 
   it('링크 토큰으로 확인 · 가입하고, 가맹점에서 동의하면 계정에 남는다', async () => {

@@ -99,6 +99,7 @@ describe('MyWithdrawalService', () => {
       locationConsent: deleteMany(),
       loginHistory: deleteMany(),
       accountChangeHistory: deleteMany(),
+      accountTermsAgreementLog: deleteMany(),
       identityVerification: deleteMany(),
       notificationPreference: deleteMany(),
       emailChangePin: deleteMany(),
@@ -356,6 +357,7 @@ describe('MyWithdrawalService', () => {
       });
       for (const table of [
         tx.accountChangeHistory,
+        tx.accountTermsAgreementLog,
         tx.notificationPreference,
         tx.emailChangePin,
         tx.passwordResetPin,
@@ -398,6 +400,7 @@ describe('MyWithdrawalService', () => {
           hqSharingConsentVersion: null,
           hqSharingAgreedAt: null,
           hqSharingWithdrawnAt: null,
+          termsAgreedAt: null,
           failedLoginCount: 0,
           lockExpiresAt: null,
         },

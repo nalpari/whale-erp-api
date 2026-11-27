@@ -62,10 +62,10 @@ type Notice = {
  * 3. 발송(SENT) 초대는 만료로 바꾸고, 후보 계정(`candidate_account_id`)을 비우고, 열린 연결 보류(link_holds, 처리 결과 없음)는
  *    지운다(처리 결과가 승인 · 재초대 둘뿐이라 「닫음」 값이 없다).
  * 4. 위치정보 파기(위치정보법 제24조 제4항) — 확인자료(location_access_logs), 동의 이력, 동의.
- * 5. 계정에 달린 개인정보 — 로그인 · 변경 이력, 본인인증 이력, 알림 수신 설정, 이메일 변경 핀, 비밀번호 재설정 핀 · 링크.
+ * 5. 계정에 달린 개인정보 — 로그인 · 변경 이력, 약관 동의 이력(접속 IP), 본인인증 이력, 알림 수신 설정, 이메일 변경 핀, 비밀번호 재설정 핀 · 링크.
  *    알림함(notification_recipients · deliveries)은 지우지 않는다(근무지가 보낸 알림 이력).
  * 6. 접속 전부 종료(revokeAll)하고 기기 식별 정보를 비운다.
- * 7. accounts 행 — 개인정보 칸을 NULL, 본사 제공 동의는 「동의한 적 없음」으로.
+ * 7. accounts 행 — 개인정보 칸을 NULL, 본사 제공 동의는 「동의한 적 없음」으로, 약관 동의 일시도 비운다.
  *
  * 커밋 뒤: 근무지 관리자 운영 알림(NTF_STAFF_WITHDRAWN, 이 계정에 이어진(`account_id`) 모든 직원 레코드와, 계약을 닫거나 초대를 만료시킨 후보 레코드(같은 근무지는 한 번)의 근무지 — 받는 사람은 동의를
  * 지우기 전에 정한다), 직원 완료 메일(지우기 전에 읽어 둔 이메일로). 알림 · 메일 실패는 탈퇴를 되돌리지 않는다.
@@ -260,6 +260,7 @@ export class MyWithdrawalService {
       where: { OR: [{ accountId }, { accountId: null, email }] },
     });
     await tx.accountChangeHistory.deleteMany({ where: { accountId } });
+    await tx.accountTermsAgreementLog.deleteMany({ where: { accountId } });
     await tx.identityVerification.deleteMany({
       where: { accountId },
     });
@@ -294,6 +295,7 @@ export class MyWithdrawalService {
         hqSharingConsentVersion: null,
         hqSharingAgreedAt: null,
         hqSharingWithdrawnAt: null,
+        termsAgreedAt: null,
         failedLoginCount: 0,
         lockExpiresAt: null,
       },

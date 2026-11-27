@@ -104,7 +104,7 @@ ever taken from the path.
 
 | 호출 | 내용 |
 |---|---|
-| `GET /me/profile` | 계정 칸, 본사 제공 동의, 위치정보 동의[^my-profile-service] |
+| `GET /me/profile` | 계정 칸, 본사 제공 동의, 위치정보 동의, 약관 동의 필요(`needsTermsAgreement`)[^my-profile-service] |
 | `GET /me/memberships` | 소속 근무지 `{ items, total }`, `?includeRetired=true` 면 퇴직한 소속도[^my-memberships-service] |
 | `GET /me/memberships/:staffMemberId/tax-profile` | 그 소속의 신고 정보 |
 | `PUT /me/memberships/:staffMemberId/tax-profile` | 신고 정보 작성 · 수정 (WHALEERP-334) |
@@ -138,6 +138,7 @@ after each one.
 | `POST /me/profile/email-change-pins` | `{ newEmail, currentPassword }` — 191, 지금 비밀번호가 맞으면 새 이메일로 핀[^my-email-change-service] |
 | `POST /me/profile/email-change` | `{ pin }` — 191, 맞으면 이메일을 바꿈 |
 | `POST /me/location-consent` · `/pause` · `/resume` · `/withdraw` | 위치정보 동의 · 잠시 멈춤 · 다시 켜기 · 철회. 동의는 본문에 화면이 보여 준 약관 버전 `{ termsVersion }`(필수, 보인 약관이 없었으면 null)을 싣고, 시행 중인 버전과 다르면 409 — 시트를 연 사이 약관이 바뀌어도 보인 고지와 남는 버전이 어긋나지 않게(WHALEERP-628). 빼면 400[^my-consent-service] |
+| `POST /me/terms-agreement` | 약관 동의(ACC-23, WHALEERP-774) — 약관 동의를 받기 전에 가입한 직원(`accounts.terms_agreed_at` 이 빔 → 내 정보 `needsTermsAgreement: true`)이 홈 팝업에서 한다. 본문 `{ termsServiceVersion, privacyVersion, marketingVersion, marketingAgreed? }` — 동의 시트가 보인 약관 버전 셋(필수, 비지 않은 64자 이하)과 마케팅 정보 수신(빼면 동의 안 함). 요청 자체가 필수 둘에 동의하는 것이다. 계정 행을 잠그고 시행 중인 버전(`currentStaffTerms`, `staff-terms.ts`)과 다르면 409 `code: TERMS_CHANGED` 「그사이 약관이 바뀌었습니다 …」(「이미 동의함」 409 보다 먼저, 위치정보 동의와 같은 순서), 시행 중인 약관이 없으면 500. 맞으면 `account_terms_agreement_logs` 세 줄(`channel: FIRST_LOGIN`, 접속 IP)과 `terms_agreed_at` 을 같은 시각으로 남기고 204[^my-consent-service] |
 | `POST /me/hq-sharing-consent` · `/withdraw` | 본사 제공 동의(다시 동의) · 철회. 동의는 본문에 화면이 보여 준 문구 버전 `{ consentVersion }`(필수, null 아님 — 문구는 앱에 묶여 늘 있다)을 싣고, 지금 버전과 다르면 「이미 동의함」보다 먼저 409 「사업자 제공 동의 내용이 바뀌었습니다. 화면을 새로 고쳐 …」 — 앱 문구가 번들이라 새로 고쳐야 새 문구가 보인다(ATT-30 v252). 빼면 400[^my-consent-controller] |
 
 **The address lives on the account, so "every 소속" is free.** `accounts`
@@ -557,9 +558,9 @@ masked values only.
   ③ 발송(`SENT`) 초대 만료, `candidate_account_id` 비움, 열린 연결 보류(`link_holds`, 처리 결과 없음) 삭제(처리 결과가 승인 · 재초대
   둘뿐이라 「닫음」 값이 없다). ④ 위치정보 파기(위치정보법 제24조 제4항) — `location_access_logs`, 동의 이력, 동의. ⑤ 계정에 달린
   개인정보 — `login_histories`(계정, 또는 계정 없이 남은 이 이메일), `account_change_histories`, `identity_verifications`(이 계정에 귀속된 것만 — 계정 없이 남은 기록은 같은 번호로 가입하려는 다른 사람의 것일 수 있어 지우지 않는다),
-  `notification_preferences`, `email_change_pins`, `password_reset_pins` · `password_reset_links`. ⑥ 접속 전부 종료(`revokeAll`)하고
+  `notification_preferences`, `email_change_pins`, `password_reset_pins` · `password_reset_links`, 약관 동의 이력(`account_terms_agreement_logs` — 접속 IP 가 있다, WHALEERP-774). ⑥ 접속 전부 종료(`revokeAll`)하고
   `device_identifier` 를 비운다. ⑦ `accounts` 행은 지우지 않고 `status = WITHDRAWN`, 이메일 · 비밀번호 해시 · 실명 · 생년월일 · 휴대전화 ·
-  성별 · 동일인 식별값 · 주소 세 칸을 NULL, 외국인 여부 false, 본사 제공 동의는 「동의한 적 없음」(false + 버전 · 일시 NULL)으로.
+  성별 · 동일인 식별값 · 주소 세 칸을 NULL, 외국인 여부 false, 본사 제공 동의는 「동의한 적 없음」(false + 버전 · 일시 NULL)으로, 약관 동의 일시(`terms_agreed_at`)도 NULL.
 - **남기는 것** — 직원 레코드 · 근로계약 · 급여명세서 · 출퇴근 · 근무스케줄 · 신고 정보(근무지 데이터, 보존 기간 배치가 지운다),
   `staff_tax_profile_histories`(값 없음), 알림함(`notification_recipients` · `notification_deliveries`), 메일 · 알림톡 발송 이력
   (`mail_send_logs` · `alimtalk_send_logs` 에 수신 주소 · 본문이 남는다 — 1년 보존, 별도 정리 일감 필요), `invitation_code_attempts` ·

@@ -50,6 +50,8 @@ describe('StaffSignupService', () => {
     staffMember: { updateMany: jest.Mock };
     contract: { updateManyAndReturn: jest.Mock };
     contractStatusHistory: { createManyAndReturn: jest.Mock };
+    termsVersion: { findMany: jest.Mock };
+    accountTermsAgreementLog: { createMany: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
   let sessions: { issue: jest.Mock };
@@ -90,6 +92,8 @@ describe('StaffSignupService', () => {
     zipCode: '04001',
     address: '서울 마포구 동교로 1',
     addressDetail: '2층',
+    termsServiceAgreed: true,
+    privacyAgreed: true,
     deviceIdentifier: 'device-1',
     ...overrides,
   });
@@ -147,6 +151,23 @@ describe('StaffSignupService', () => {
       contractStatusHistory: {
         createManyAndReturn: jest.fn().mockResolvedValue([]),
       },
+      // 시행 중인 직원 앱 약관 셋(ACC-23)
+      termsVersion: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            termsTypeCode: 'STAFF_TERMS_SERVICE',
+            termsVersionId: 3,
+            version: 'v1.0',
+          },
+          {
+            termsTypeCode: 'STAFF_PRIVACY',
+            termsVersionId: 4,
+            version: 'v1.0',
+          },
+          { termsTypeCode: 'MARKETING', termsVersionId: 5, version: 'v1.0' },
+        ]),
+      },
+      accountTermsAgreementLog: { createMany: jest.fn() },
     };
     prisma = {
       ...tx,
@@ -439,6 +460,7 @@ describe('StaffSignupService', () => {
         address: '서울 마포구 동교로 1',
         addressDetail: '2층',
         status: 'JOINED',
+        termsAgreedAt: NOW,
       });
       expect(tx.staffMember.updateMany).toHaveBeenCalledWith({
         where: { staffMemberId: 9, accountId: null },
@@ -472,6 +494,60 @@ describe('StaffSignupService', () => {
         expect.objectContaining({ authSessionId: 12 }),
       );
       expect(ops.notify).not.toHaveBeenCalled();
+    });
+
+    it('약관 동의 이력 세 줄을 시행 중 버전 · 가입 시각 · 접속 IP · 경로 SIGNUP 으로 남긴다 — 마케팅을 빼면 동의 안 함(ACC-23)', async () => {
+      await service().signup(input(), '203.0.113.7');
+      expect(argOf(tx.accountTermsAgreementLog.createMany).data).toEqual(
+        [3, 4, 5].map((termsVersionId) => ({
+          accountId: 77,
+          termsVersionId,
+          isAgreed: termsVersionId !== 5,
+          agreedAt: NOW,
+          channel: 'SIGNUP',
+          clientAddress: '203.0.113.7',
+        })),
+      );
+    });
+
+    it('필수 약관 두 칸이 빠지면(약관 칸이 없던 예전 앱) 가입은 마치고 동의를 남기지 않는다 — 약관 동의 일시가 비어 홈에서 받는다 · 경고 로그', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      await expect(
+        service().signup(
+          input({ termsServiceAgreed: undefined, privacyAgreed: undefined }),
+        ),
+      ).resolves.toMatchObject({ accessToken: 'access' });
+      expect(argOf(tx.account.create).data).not.toHaveProperty('termsAgreedAt');
+      expect(tx.termsVersion.findMany).not.toHaveBeenCalled();
+      expect(tx.accountTermsAgreementLog.createMany).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('약관 동의 칸이 없는 요청'),
+      );
+      warn.mockRestore();
+    });
+
+    it('마케팅 정보 수신에 동의하면 그 줄도 동의', async () => {
+      await service().signup(input({ marketingAgreed: true }));
+      expect(
+        (
+          argOf(tx.accountTermsAgreementLog.createMany).data as {
+            isAgreed: boolean;
+            clientAddress: string | null;
+          }[]
+        ).map((r) => [r.isAgreed, r.clientAddress]),
+      ).toEqual([
+        [true, null],
+        [true, null],
+        [true, null],
+      ]);
+    });
+
+    it('시행 중인 약관이 하나라도 없으면 500 — 계정을 만들지 않는다(운영자가 끄거나 지움)', async () => {
+      tx.termsVersion.findMany.mockResolvedValue([]);
+      const e = await thrown(service().signup(input()));
+      expect(e.getStatus()).toBe(500);
+      expect(tx.account.create).not.toHaveBeenCalled();
+      expect(tx.accountTermsAgreementLog.createMany).not.toHaveBeenCalled();
     });
 
     it('번호 → 직원 행 → 계정 확인 · 초대 · 계정 만들기 순서로 잠근다 — 재발송 · 퇴직 확정과 같은 순서(api #81 재리뷰)', async () => {
@@ -597,6 +673,7 @@ describe('StaffSignupService', () => {
       });
       expect(tx.account.create).not.toHaveBeenCalled();
       expect(tx.staffMember.updateMany).not.toHaveBeenCalled();
+      expect(tx.accountTermsAgreementLog.createMany).not.toHaveBeenCalled();
       expect(sessions.issue).not.toHaveBeenCalled();
       expect(storeManagers).toHaveBeenCalledWith(prisma, 9);
       // 생년월일은 알림에 싣지 않는다

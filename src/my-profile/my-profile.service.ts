@@ -35,6 +35,7 @@ export class MyProfileService {
         hqSharingConsentVersion: true,
         hqSharingAgreedAt: true,
         hqSharingWithdrawnAt: true,
+        termsAgreedAt: true,
         locationConsents: {
           select: {
             locationConsentId: true,
@@ -88,6 +89,7 @@ export class MyProfileService {
         ...locationConsent,
         needsReconsent: needsLocationReconsent(locationConsent, termsVersion),
       },
+      needsTermsAgreement: account.termsAgreedAt === null,
       // 바꾼 적이 없으면 가입 때 정한 비밀번호다.
       passwordChangedAt:
         account.accountChangeHistories[0]?.changedAt ?? account.createdAt,

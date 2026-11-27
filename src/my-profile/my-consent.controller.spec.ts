@@ -82,6 +82,35 @@ describe('MyConsentController', () => {
     expect(fn).toHaveBeenCalledWith(12, 'v1.0');
   });
 
+  it('agreeTerms 는 POST /me/terms-agreement 이고 토큰의 계정 · 보인 약관 버전 셋 · 마케팅 동의(빼면 false) · 접속 IP 로 부른다(ACC-23)', async () => {
+    const fn = jest.fn().mockResolvedValue(undefined);
+    const controller = new MyConsentController({
+      agreeTerms: fn,
+    } as unknown as MyConsentService);
+    expect(
+      Reflect.getMetadata(
+        PATH_METADATA,
+        Object.getOwnPropertyDescriptor(
+          MyConsentController.prototype,
+          'agreeTerms',
+        )?.value as object,
+      ),
+    ).toBe('terms-agreement');
+    const shown = {
+      termsServiceVersion: 'v1.0',
+      privacyVersion: 'v1.1',
+      marketingVersion: 'v1.0',
+    };
+    await controller.agreeTerms(me, shown, '203.0.113.7');
+    expect(fn).toHaveBeenCalledWith(12, shown, false, '203.0.113.7');
+    await controller.agreeTerms(
+      me,
+      { ...shown, marketingAgreed: true },
+      undefined,
+    );
+    expect(fn).toHaveBeenLastCalledWith(12, shown, true, undefined);
+  });
+
   it('위치정보 동의는 시행 중인 약관이 없을 때의 500 을 문서에 적는다', () => {
     expect(
       responsesOf(MyConsentController.prototype, 'agreeLocation')['500']
