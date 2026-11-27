@@ -1,6 +1,7 @@
 # Directory Update Log
 
 ## 2026-11-27
+* **Update**: [My profile (staff app)](/api/my-profile.md) — `GET /me/memberships` 소속마다 `taxProfileSubmitted`(신고 정보를 냈는지, 보존 기간이 지나면 false)를 싣는다. 암호문은 읽지 않는다. 직원 앱이 소속마다 신고 정보를 풀어 보지 않고 입력 안내를 가른다(WHALEERP-775).
 * **Update**: [Contracts API](/api/contracts-api.md) — `GET /me/contracts` 한 줄에 `staffMemberId`(그 계약의 직원 레코드)를 싣는다. 직원 앱이 같은 근무지의 옛 레코드(퇴직 뒤 재입사) 계약과 지금 소속 계약을 가른다(WHALEERP-775 종이 계약 신고 정보 안내).
 
 ## 2026-11-24

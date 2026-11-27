@@ -23,6 +23,11 @@ export class MyMembershipDto {
    * 레코드가 지금 소속 쪽에 섞일 수 있다
    */
   retiredDate: string | null;
+  /**
+   * 이 소속에 신고 정보를 냈는지 — 신고 정보 조회(`GET /me/memberships/:staffMemberId/tax-profile`)의 `taxProfile` 이 null 이
+   * 아닌 것과 같다(보존 기간이 지났으면 false). 직원 앱이 소속마다 신고 정보를 풀어 보지 않고 입력 안내를 가른다(WHALEERP-775)
+   */
+  taxProfileSubmitted: boolean;
 }
 
 export class MyMembershipListResponseDto {

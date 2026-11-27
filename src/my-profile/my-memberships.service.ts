@@ -138,6 +138,8 @@ export class MyMembershipsService {
         retiredDate: true,
         employmentStatus: true,
         storeId: true,
+        // 낸 적이 있는지만 — 암호문은 읽지 않는다(목록에서 풀지 않는다)
+        staffTaxProfile: { select: { staffMemberId: true } },
       },
     });
     // 지금 소속(읽은 입사일 · id 순 그대로) 뒤에 퇴직한 소속을 퇴직일 최근 순으로 — sort 는 안정 정렬이라 같은 묶음 · 같은
@@ -165,6 +167,8 @@ export class MyMembershipsService {
         })
       : [];
     const storeById = new Map(stores.map((st) => [st.storeId, st]));
+    // 신고 정보 조회와 같은 판정 — 보존 기간(퇴직 + 3년)이 지났으면 파기 배치 전이어도 내지 않은 것으로 본다
+    const keepFrom = retiredBefore(new Date());
 
     const items = rows.flatMap((s) => {
       const store = storeById.get(s.storeId);
@@ -185,6 +189,9 @@ export class MyMembershipsService {
         jobTitle: s.jobTitle,
         hiredDate: dateOnly(s.hiredDate),
         retiredDate: dateOnly(s.retiredDate),
+        taxProfileSubmitted:
+          s.staffTaxProfile !== null &&
+          !(s.retiredDate !== null && s.retiredDate < keepFrom),
       };
     });
     return { items, total: items.length };

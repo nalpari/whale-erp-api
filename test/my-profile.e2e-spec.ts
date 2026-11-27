@@ -366,11 +366,14 @@ describe('내 정보 (e2e, DB)', () => {
       jobTitle: '홀',
       hiredDate: '2026-08-01',
       retiredDate: '2099-12-31',
+      taxProfileSubmitted: false,
     });
+    // 신고 정보를 낸 소속(WHALEERP-775) — 목록은 낸 적이 있는지만 싣는다
     expect(body.items[1]).toMatchObject({
       hiredDate: '2026-09-01',
       retiredDate: null,
       store: { storeId: franchiseStoreId, storeTypeCode: 'FRANCHISE' },
+      taxProfileSubmitted: true,
     });
   });
 
