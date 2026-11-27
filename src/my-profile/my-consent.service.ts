@@ -30,7 +30,8 @@ const TERMS_CHANGED =
 export type ShownStaffTermsVersions = {
   termsServiceVersion: string;
   privacyVersion: string;
-  marketingVersion: string;
+  /** 보인 마케팅 약관이 없었으면(시행 중인 것이 없음) null */
+  marketingVersion: string | null;
 };
 
 type LockedAccount = HqSharingAccount & { termsAgreedAt: Date | null };
@@ -209,7 +210,7 @@ export class MyConsentService {
       if (
         shown.termsServiceVersion !== terms.termsService.version ||
         shown.privacyVersion !== terms.privacy.version ||
-        shown.marketingVersion !== terms.marketing.version
+        shown.marketingVersion !== (terms.marketing?.version ?? null)
       )
         throw new ConflictException({
           statusCode: HttpStatus.CONFLICT,

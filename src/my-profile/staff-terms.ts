@@ -11,15 +11,18 @@ const STAFF_TERMS_TYPES = {
   marketing: 'MARKETING',
 } as const;
 
-type StaffTermsKey = keyof typeof STAFF_TERMS_TYPES;
-export type StaffTerms = Record<
-  StaffTermsKey,
-  { termsVersionId: number; version: string }
->;
+type TermsVersion = { termsVersionId: number; version: string };
+/** 시행 중인 약관 셋. 마케팅은 선택 약관이라 없을 수 있다(운영자가 끄거나 지움) — 그때는 그 줄만 남기지 않는다 */
+export type StaffTerms = {
+  termsService: TermsVersion;
+  privacy: TermsVersion;
+  marketing: TermsVersion | null;
+};
 
 /**
  * 지금 시행 중인 직원 앱 약관 셋. 공개 약관 API · 관리자 가입 동의와 같은 규칙 — 시행일이 KST 오늘까지인 사용 중 버전 가운데
- * 늦게 시행한 것. 그래야 화면의 「보기」와 같은 버전에 동의가 남는다. 하나라도 없으면(운영자가 끄거나 지움) null 이다.
+ * 늦게 시행한 것. 그래야 화면의 「보기」와 같은 버전에 동의가 남는다. 필수 둘 가운데 하나라도 없으면(운영자가 끄거나 지움) null 이다.
+ * 선택 약관(마케팅)이 없는 것은 막지 않는다 — 1팀 공통 약관 하나를 꺼서 직원 가입이 멈추지 않게(api 리뷰).
  */
 export async function currentStaffTerms(db: {
   termsVersion: Pick<Prisma.TransactionClient['termsVersion'], 'findMany'>;
@@ -41,11 +44,11 @@ export async function currentStaffTerms(db: {
   const termsService = pick(STAFF_TERMS_TYPES.termsService);
   const privacy = pick(STAFF_TERMS_TYPES.privacy);
   const marketing = pick(STAFF_TERMS_TYPES.marketing);
-  if (!termsService || !privacy || !marketing) return null;
-  return { termsService, privacy, marketing };
+  if (!termsService || !privacy) return null;
+  return { termsService, privacy, marketing: marketing ?? null };
 }
 
-/** 약관 동의 이력 세 줄(account_terms_agreement_logs) — 필수 둘은 동의, 마케팅은 고른 대로 */
+/** 약관 동의 이력(account_terms_agreement_logs) — 필수 둘은 동의, 마케팅은 고른 대로(시행 중인 마케팅 약관이 없으면 두 줄) */
 export function staffTermsAgreementRows(input: {
   accountId: number;
   terms: StaffTerms;
@@ -65,6 +68,8 @@ export function staffTermsAgreementRows(input: {
   return [
     row(input.terms.termsService.termsVersionId, true),
     row(input.terms.privacy.termsVersionId, true),
-    row(input.terms.marketing.termsVersionId, input.marketingAgreed),
+    ...(input.terms.marketing
+      ? [row(input.terms.marketing.termsVersionId, input.marketingAgreed)]
+      : []),
   ];
 }

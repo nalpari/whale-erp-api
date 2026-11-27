@@ -54,12 +54,24 @@ describe('currentStaffTerms', () => {
     });
   });
 
-  it('하나라도 시행 중인 버전이 없으면 null — 운영자가 끄거나 지웠다', async () => {
+  it('필수 약관 하나라도 시행 중인 버전이 없으면 null — 운영자가 끄거나 지웠다', async () => {
+    await expect(
+      currentStaffTerms(
+        db([row('STAFF_TERMS_SERVICE', 3), row('MARKETING', 5)]),
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('선택 약관(마케팅)만 없으면 마케팅 null — 막지 않는다', async () => {
     await expect(
       currentStaffTerms(
         db([row('STAFF_TERMS_SERVICE', 3), row('STAFF_PRIVACY', 4)]),
       ),
-    ).resolves.toBeNull();
+    ).resolves.toEqual({
+      termsService: { termsVersionId: 3, version: 'v1.0' },
+      privacy: { termsVersionId: 4, version: 'v1.0' },
+      marketing: null,
+    });
   });
 });
 
@@ -90,6 +102,18 @@ describe('staffTermsAgreementRows', () => {
         clientAddress: '203.0.113.7',
       })),
     );
+  });
+
+  it('시행 중인 마케팅 약관이 없으면 필수 두 줄만', () => {
+    expect(
+      staffTermsAgreementRows({
+        accountId: 77,
+        terms: { ...terms, marketing: null },
+        marketingAgreed: true,
+        channel: 'SIGNUP',
+        agreedAt: NOW,
+      }).map((r) => r.termsVersionId),
+    ).toEqual([3, 4]);
   });
 
   it('IP 를 모르면 null', () => {

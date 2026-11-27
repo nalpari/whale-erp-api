@@ -451,6 +451,30 @@ describe('MyConsentService', () => {
       },
     );
 
+    it('시행 중인 마케팅 약관이 없으면 보인 마케팅 버전은 null 이어야 하고, 필수 두 줄만 남긴다', async () => {
+      const service = await build();
+      tx.termsVersion.findMany.mockResolvedValue([
+        {
+          termsTypeCode: 'STAFF_TERMS_SERVICE',
+          termsVersionId: 3,
+          version: 'v1.0',
+        },
+        { termsTypeCode: 'STAFF_PRIVACY', termsVersionId: 4, version: 'v1.1' },
+      ]);
+      await expect(
+        service.agreeTerms(12, shown, false, undefined),
+      ).rejects.toBeInstanceOf(ConflictException);
+      await service.agreeTerms(
+        12,
+        { ...shown, marketingVersion: null },
+        false,
+        undefined,
+      );
+      const [{ data }] = tx.accountTermsAgreementLog.createMany.mock
+        .calls[0] as [{ data: { termsVersionId: number }[] }];
+      expect(data.map((r) => r.termsVersionId)).toEqual([3, 4]);
+    });
+
     it('이미 동의했으면 409 — 이력을 더 남기지 않는다', async () => {
       const service = await build({ termsAgreedAt: AGREED_AT });
       await expect(

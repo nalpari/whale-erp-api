@@ -51,6 +51,19 @@ describe('직원 가입 DTO', () => {
     ).toEqual([]);
   });
 
+  it('마케팅만 싣고 필수 둘을 빼면 받지 않는다 — 예전 앱으로 보지 않는다', () => {
+    expect(
+      errorsOf(
+        StaffSignupDto,
+        signup({
+          termsServiceAgreed: undefined,
+          privacyAgreed: undefined,
+          marketingAgreed: true,
+        }),
+      ),
+    ).toEqual(['termsServiceAgreed', 'privacyAgreed']);
+  });
+
   it('필수 약관이 null 이면 받지 않는다 — 빠진 것과 다르다', () => {
     expect(
       errorsOf(

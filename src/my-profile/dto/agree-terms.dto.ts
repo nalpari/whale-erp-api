@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsBoolean,
+  ValidateIf,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -31,12 +32,21 @@ export class AgreeTermsDto {
   @MaxLength(VERSION_MAX)
   privacyVersion: string;
 
-  /** 보인 마케팅 정보 수신 동의(MARKETING) 버전 — 동의하지 않아도 싣는다(동의 안 함도 이력에 남는다) */
-  @ApiProperty({ minLength: 1, maxLength: VERSION_MAX })
+  /**
+   * 보인 마케팅 정보 수신 동의(MARKETING) 버전 — 동의하지 않아도 싣는다(동의 안 함도 이력에 남는다). 선택 약관이라 시행 중인 것이
+   * 없을 수 있다 — 그래서 보인 마케팅 약관이 없었으면 null 이다(위치정보 동의의 termsVersion 과 같다). 빼면 400
+   */
+  @ApiProperty({
+    minLength: 1,
+    maxLength: VERSION_MAX,
+    nullable: true,
+    type: String,
+  })
+  @ValidateIf((_, value) => value !== null)
   @IsString({ message: shownVersion('marketingVersion') })
   @IsNotEmpty({ message: shownVersion('marketingVersion') })
   @MaxLength(VERSION_MAX)
-  marketingVersion: string;
+  marketingVersion: string | null;
 
   /** [선택] 마케팅 정보 수신 동의 — 빼면 동의하지 않음 */
   @IsOptional()

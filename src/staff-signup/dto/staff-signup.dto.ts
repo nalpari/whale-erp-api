@@ -25,12 +25,16 @@ const REQUIRED_TERMS = '필수 약관에 동의해 주세요.';
 /**
  * 필수 약관 두 칸을 볼지 — 둘 다 빠졌으면 보지 않는다. 약관 동의 칸이 생기기 전의 앱(열어 둔 탭 · PWA, api 를 먼저 배포한 사이)이
  * 가입하지 못하게 막지 않으려는 것이다 — 그 계정은 약관 동의 일시가 비어 홈에서 동의를 받는다(본사 제공 동의 버전과 같은 생각, ATT-30 v253).
- * 하나라도 실으면 둘 다 true 여야 한다.
+ * 약관 칸(마케팅 포함)을 하나라도 실으면 필수 둘이 true 여야 한다.
  */
 const sendsTerms = (o: {
   termsServiceAgreed?: unknown;
   privacyAgreed?: unknown;
-}) => o.termsServiceAgreed !== undefined || o.privacyAgreed !== undefined;
+  marketingAgreed?: unknown;
+}) =>
+  o.termsServiceAgreed !== undefined ||
+  o.privacyAgreed !== undefined ||
+  o.marketingAgreed !== undefined;
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.normalize('NFC').trim() : value;
 const trimLower = ({ value }: { value: unknown }) =>

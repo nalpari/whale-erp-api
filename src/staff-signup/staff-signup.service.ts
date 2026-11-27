@@ -379,7 +379,7 @@ export class StaffSignupService {
       });
     }
 
-    if (dto.termsServiceAgreed === undefined)
+    if (dto.termsServiceAgreed !== true)
       this.logger.warn(
         `가입: 약관 동의 칸이 없는 요청이라 동의를 남기지 않았다(홈에서 받는다) accountId=${outcome.accountId}`,
       );

@@ -183,7 +183,8 @@ In one transaction:
    The account gets `terms_agreed_at` = the signup time and `account_terms_agreement_logs` three rows (required two agreed,
    marketing as chosen; `channel: SIGNUP`, `client_address` = `@Ip()` — the 직원 앱 sends the user's IP in
    `X-Forwarded-For`). Unlike 본사 제공 동의 the shown versions are not compared at signup — the versions in force are
-   recorded, as 관리자 가입 does.
+   recorded, as 관리자 가입 does. The optional `MARKETING` 약관 may be off: then only the two required rows are written —
+   switching one 1팀 common 약관 off must not stop 직원 signup.
 5. Link the record (`account_id`, `join_status = JOINED`, conditioned on no account yet).
 6. The record's 발송 대기 contracts → 서명 대기, history actor `STAFF`. The deadline from the send stays.
 
@@ -328,4 +329,6 @@ The entered 이름 · 생년월일 · 성별 · 외국인 여부 are kept on the
 # Left for later
 
 - `NTF_SIGNUP_UNDER_AGE` wording is a draft for the 기획 to confirm.
+- Drop the 「both 약관 fields missing」 allowance once the 직원 앱 with the 약관 칸 is deployed (WHALEERP-774 follow-up) — until
+  then a direct call to the public route can create an account without 약관 동의, caught only by the 홈 popup.
 - The 직원 앱 screen for adding a 근무지 (WHALEERP-604) — where the invitation list sits is for the 기획.
