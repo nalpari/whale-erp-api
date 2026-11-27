@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Gender } from '@prisma/client';
 import { Transform } from 'class-transformer';
 import {
+  Equals,
   IsBoolean,
   IsEmail,
   IsEnum,
@@ -11,6 +12,7 @@ import {
   Matches,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { IsDateOnly } from '../../common/is-date-only';
 import { IsSendableEmail } from '../../mail/is-sendable-email';
@@ -19,6 +21,25 @@ import { LoginResponseDto } from '../../auth/dto/login.response.dto';
 import { IsHqSharingConsentVersion } from '../hq-sharing-consent';
 import { InvitationLookupDto } from './invitation-lookup.dto';
 
+const REQUIRED_TERMS = '필수 약관에 동의해 주세요.';
+/**
+ * 필수 약관 두 칸을 볼지 — 둘 다 빠졌으면 보지 않는다. 약관 동의 칸이 생기기 전의 앱(열어 둔 탭 · PWA, api 를 먼저 배포한 사이)이
+ * 가입하지 못하게 막지 않으려는 것이다 — 그 계정은 약관 동의 일시가 비어 홈에서 동의를 받는다(본사 제공 동의 버전과 같은 생각, ATT-30 v253).
+ * 약관 칸(마케팅 · 보인 버전 포함)을 하나라도 실으면 필수 둘이 true 이고 보인 버전 셋이 있어야 한다.
+ */
+const TERMS_FIELDS = [
+  'termsServiceAgreed',
+  'privacyAgreed',
+  'marketingAgreed',
+  'termsServiceVersion',
+  'privacyVersion',
+  'marketingVersion',
+] as const;
+const sendsTerms = (
+  o: Partial<Record<(typeof TERMS_FIELDS)[number], unknown>>,
+) => TERMS_FIELDS.some((field) => o[field] !== undefined);
+const SHOWN_VERSION = (field: string) =>
+  `가입 화면에 보인 약관 버전(${field})을 보내 주세요.`;
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.normalize('NFC').trim() : value;
 const trimLower = ({ value }: { value: unknown }) =>
@@ -29,7 +50,7 @@ const trimLower = ({ value }: { value: unknown }) =>
  * 인적사항을 함께 받는다. 본인인증은 없다(2026-10-16) — 이름 · 생년월일 · 성별 · 외국인 여부는 서명 때 근로계약서 값과
  * 대조한다(WHALEERP-125 「본인 대조」). **계정의 휴대전화번호는 받지 않고 초대(근로계약서)의 번호를 쓴다**(JOIN-7 — 고칠 수
  * 있으면 남의 번호로 가입해 그 사람의 다음 초대를 막을 수 있다). 이름 규칙은 근로계약서 직원 정보와 같다. 약관 동의는
- * 1팀 공통 약관 등록이 생기면 더한다(2026-10-20 김민식).
+ * 필수 둘(서비스 이용약관 · 개인정보 수집·이용)과 선택 하나(마케팅 정보 수신)다(운영 정책 ACC-23, WHALEERP-774).
  */
 export class StaffSignupDto extends InvitationLookupDto {
   /** 로그인 아이디. 소문자로 맞춰 저장한다(accounts_email_lower). 핀으로 확인하지 않는다 */
@@ -104,6 +125,63 @@ export class StaffSignupDto extends InvitationLookupDto {
    */
   @IsHqSharingConsentVersion()
   hqSharingConsentVersion?: string;
+
+  /**
+   * [필수] 직원 앱 서비스 이용약관 동의 — 실으면 true 만 받는다(ACC-23). 시행 중인 버전(STAFF_TERMS_SERVICE)에 동의한 것으로 남는다.
+   * 약관 칸을 모두 빼면(약관 칸이 없던 예전 앱) 가입은 마치고 동의를 남기지 않는다 — 앱이 홈에서 받는다.
+   * 약관 칸 여섯(termsServiceAgreed · privacyAgreed · marketingAgreed · termsServiceVersion · privacyVersion · marketingVersion)은 모두 싣거나 모두 뺀다 — 하나라도 실으면 필수 둘이 true 이고 보인 버전 셋이 있어야 한다(아니면 400). 모두 빼는 것은 약관 칸이 없던 예전 앱뿐이다
+   */
+  @ValidateIf(sendsTerms)
+  @Equals(true, { message: REQUIRED_TERMS })
+  termsServiceAgreed?: boolean;
+
+  /**
+   * [필수] 개인정보 수집·이용 동의 — 실으면 true 만 받는다(ACC-23). 시행 중인 버전(STAFF_PRIVACY)에 동의한 것으로 남는다.
+   * 약관 칸 여섯(termsServiceAgreed · privacyAgreed · marketingAgreed · termsServiceVersion · privacyVersion · marketingVersion)은 모두 싣거나 모두 뺀다 — 하나라도 실으면 필수 둘이 true 이고 보인 버전 셋이 있어야 한다(아니면 400). 모두 빼는 것은 약관 칸이 없던 예전 앱뿐이다
+   */
+  @ValidateIf(sendsTerms)
+  @Equals(true, { message: REQUIRED_TERMS })
+  privacyAgreed?: boolean;
+
+  /**
+   * [선택] 마케팅 정보 수신 동의(MARKETING) — 빼면 동의하지 않음. 동의하지 않아도 이력에 한 줄 남는다.
+   * 약관 칸 여섯(termsServiceAgreed · privacyAgreed · marketingAgreed · termsServiceVersion · privacyVersion · marketingVersion)은 모두 싣거나 모두 뺀다 — 하나라도 실으면 필수 둘이 true 이고 보인 버전 셋이 있어야 한다(아니면 400). 모두 빼는 것은 약관 칸이 없던 예전 앱뿐이다
+   */
+  @IsOptional()
+  @IsBoolean()
+  marketingAgreed?: boolean;
+
+  /**
+   * 가입 화면이 보인 약관 버전 — 서비스 이용약관(STAFF_TERMS_SERVICE) · 개인정보 수집·이용(STAFF_PRIVACY) · 마케팅(MARKETING).
+   * 약관 칸을 실으면 셋 다 싣는다(마케팅은 보인 것이 없었으면 null). 시행 중인 버전과 다르면 409 TERMS_CHANGED — 화면을 연 사이
+   * 약관이 바뀌었으면 보지 않은 버전에 동의한 것으로 남기지 않는다(홈 약관 동의와 같다, api #326 code-review)
+   */
+  @ApiProperty({ required: false, minLength: 1, maxLength: 64 })
+  @ValidateIf(sendsTerms)
+  @IsString({ message: SHOWN_VERSION('termsServiceVersion') })
+  @IsNotEmpty({ message: SHOWN_VERSION('termsServiceVersion') })
+  @MaxLength(64)
+  termsServiceVersion?: string;
+
+  @ApiProperty({ required: false, minLength: 1, maxLength: 64 })
+  @ValidateIf(sendsTerms)
+  @IsString({ message: SHOWN_VERSION('privacyVersion') })
+  @IsNotEmpty({ message: SHOWN_VERSION('privacyVersion') })
+  @MaxLength(64)
+  privacyVersion?: string;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: String,
+    minLength: 1,
+    maxLength: 64,
+  })
+  @ValidateIf((o: StaffSignupDto, value) => sendsTerms(o) && value !== null)
+  @IsString({ message: SHOWN_VERSION('marketingVersion') })
+  @IsNotEmpty({ message: SHOWN_VERSION('marketingVersion') })
+  @MaxLength(64)
+  marketingVersion?: string | null;
 
   /** 이 기기 — 로그인과 같다. 같은 기기의 앞 접속을 끝낸다 */
   @IsOptional()

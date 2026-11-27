@@ -4,6 +4,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
   UnauthorizedException,
@@ -37,6 +38,11 @@ import {
 import { ageOn, lockPeople } from '../contracts/contracts.service';
 import { OpsNotificationService } from '../notifications/ops-notification.service';
 import { storeManagers } from '../notifications/recipients';
+import {
+  assertShownStaffTerms,
+  currentStaffTerms,
+  staffTermsAgreementRows,
+} from '../my-profile/staff-terms';
 import { PrismaService } from '../prisma/prisma.service';
 import { kstToday } from '../staff-members/kst-date';
 import type { InvitationCheckResponseDto } from './dto/invitation-check.response.dto';
@@ -219,7 +225,10 @@ export class StaffSignupService {
   }
 
   /** 가입(가이드 ③) — 마치면 로그인된 상태다(가이드 ④) */
-  async signup(dto: StaffSignupDto): Promise<StaffSignupResponseDto> {
+  async signup(
+    dto: StaffSignupDto,
+    clientAddress?: string,
+  ): Promise<StaffSignupResponseDto> {
     const weak = validateNewPassword(dto.password, dto.email);
     if (weak) throw new BadRequestException(weak);
     const today = kstToday().toISOString().slice(0, 10);
@@ -272,6 +281,24 @@ export class StaffSignupService {
             store: store.name,
           };
 
+        // 약관 동의(ACC-23) — 필수 둘은 DTO 가 true 만 받는다. 시행 중인 버전에 동의한 것으로 남긴다(관리자 가입과 같다).
+        // 둘 다 빠졌으면(약관 칸이 없던 예전 앱) 가입은 마치고 남기지 않는다 — 약관 동의 일시가 비어 앱이 홈에서 받는다
+        const agreesTerms = dto.termsServiceAgreed === true;
+        const terms = agreesTerms ? await currentStaffTerms(tx) : null;
+        if (agreesTerms && !terms) {
+          // 운영자가 직원 앱 약관을 모두 끄거나 지우면 여기서 500 이다 — 원인을 로그에서 바로 찾게 남긴다
+          this.logger.error('시행 중인 직원 앱 약관이 없어 가입을 받지 못했다');
+          throw new InternalServerErrorException(
+            '지금은 가입할 수 없습니다. 관리자에게 문의해 주세요.',
+          );
+        }
+        // 화면이 보인 약관 버전이 시행 중인 것과 다르면 409 — 보지 않은 버전에 동의한 것으로 남기지 않는다(트랜잭션이라 초대도 그대로)
+        if (terms)
+          assertShownStaffTerms(terms, {
+            termsServiceVersion: dto.termsServiceVersion ?? '',
+            privacyVersion: dto.privacyVersion ?? '',
+            marketingVersion: dto.marketingVersion ?? null,
+          });
         // 보인 문구 버전이 지금과 다르면 가입은 마치고 동의만 남기지 않는다(ATT-30 v253)
         const hqSharingConsentRecorded = hqSharingConsentRecordOf(
           asksHqSharingConsentAt(store.storeTypeCode),
@@ -290,6 +317,7 @@ export class StaffSignupService {
             address: dto.address,
             addressDetail: dto.addressDetail || null,
             status: 'JOINED',
+            ...(terms ? { termsAgreedAt: now } : {}),
             ...(hqSharingConsentRecorded
               ? {
                   isHqSharingConsented: true,
@@ -300,6 +328,17 @@ export class StaffSignupService {
           },
           select: { accountId: true },
         });
+        if (terms)
+          await tx.accountTermsAgreementLog.createMany({
+            data: staffTermsAgreementRows({
+              accountId: account.accountId,
+              terms,
+              marketingAgreed: dto.marketingAgreed ?? false,
+              channel: 'SIGNUP',
+              agreedAt: now,
+              clientAddress,
+            }),
+          });
         const linked = await tx.staffMember.updateMany({
           where: { staffMemberId: staffMember.staffMemberId, accountId: null },
           data: {
@@ -348,6 +387,10 @@ export class StaffSignupService {
       });
     }
 
+    if (dto.termsServiceAgreed !== true)
+      this.logger.warn(
+        `가입: 약관 동의 칸이 없는 요청이라 동의를 남기지 않았다(홈에서 받는다) accountId=${outcome.accountId}`,
+      );
     warnStaleHqSharingVersion(
       this.logger,
       '가입',

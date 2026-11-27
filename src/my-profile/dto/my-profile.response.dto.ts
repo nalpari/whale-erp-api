@@ -61,6 +61,12 @@ export class MyProfileResponseDto {
   hqSharingConsent: MyHqSharingConsentDto;
   locationConsent: MyLocationConsentDto;
   /**
+   * 약관 동의가 필요한지(운영 정책 ACC-23, WHALEERP-774) — 필수 약관 둘(서비스 이용약관 · 개인정보 수집·이용)에 동의한 기록이
+   * 없으면 true 다. 약관 동의를 받기 전에 가입한 직원이 그렇다. 앱은 홈에서 다른 팝업보다 먼저 약관 동의 팝업을 띄우고
+   * `POST /me/terms-agreement` 로 받는다.
+   */
+  needsTermsAgreement: boolean;
+  /**
    * 비밀번호를 마지막으로 정한 시각 — 바꾼 적이 없으면 가입 시각. 오래되면 화면이 변경을 권한다(WHALEERP-194). 몇 달을
    * 「오래」로 볼지는 화면이 정한다
    */

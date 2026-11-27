@@ -19,8 +19,10 @@ const SUMMARY = {
  * 로그인 전 약관 화면이 부르는 지금 시행 중인 약관. 고르는 규칙은 동의를 남기는 두 곳(회원가입 AdminSignupService,
  * 첫 로그인 AdminPasswordChangeService)과 같다 — 사용 중 · 미삭제 · 시행일이 KST 오늘 이하인 행 가운데 시행일이
  * 늦은 것. 그래야 화면에 보인 버전에 동의가 남는다.
- * 탭 이름 · 순서는 플랫폼 BP 의 공통코드 `TERMS_TYPE` 이고, 그 코드를 쓰지 않게 하면 여기서는 약관이 빠진다. 동의를
- * 남기는 두 곳은 공통코드를 보지 않아 그 약관에 계속 동의를 받는다 — 필수 약관의 코드는 끄지 않는다.
+ * 탭 이름 · 순서는 플랫폼 BP 의 공통코드 `TERMS_TYPE` 이고, 그 코드를 쓰지 않게 하면 여기서는 약관이 빠진다. 관리자 동의를
+ * 남기는 두 곳은 공통코드를 보지 않아 그 약관에 계속 동의를 받는다 — 필수 약관의 코드는 끄지 않는다. 직원 앱 약관 동의(가입 ·
+ * 홈, staff-terms.ts currentStaffTerms)는 이 기준을 따라 코드를 끈 약관을 없는 것으로 본다 — 필수 약관(STAFF_TERMS_SERVICE ·
+ * STAFF_PRIVACY)의 코드를 끄면 직원 가입 · 약관 동의가 500 이 된다.
  */
 @Injectable()
 export class TermsVersionsService {

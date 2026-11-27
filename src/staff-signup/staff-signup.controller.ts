@@ -3,12 +3,14 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
+  Ip,
   Post,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
   ApiConflictResponse,
+  ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
@@ -58,25 +60,33 @@ export class StaffSignupController {
    * 수락으로 둔다. 가입을 기다리던 근로계약서는 서명 대기가 된다. 계정 번호는 초대의 번호다. 마치면 로그인 응답과 같은
    * 모양으로 접속 상태를 준다. 가입하는 날 만 19세 미만이면 계정을 만들지 않고 초대를 「가입 불가」로 둔 뒤 400 이다.
    * 본사 제공 동의에 실은 문구 버전(hqSharingConsentVersion)이 지금과 달라도 가입은 마치고 동의만 남기지 않는다 — 응답의
-   * hqSharingConsentRecorded 가 false 다(ATT-30 v253).
+   * hqSharingConsentRecorded 가 false 다(ATT-30 v253). 약관 동의(ACC-23)는 필수 둘이 true 여야 하고, 시행 중인 버전 셋에 동의
+   * 이력(account_terms_agreement_logs, 경로 SIGNUP · 접속 IP)을 남기고 계정의 약관 동의 일시를 채운다.
    */
   @Post('signup')
   @ApiBadRequestResponse({
     description:
-      '형식 오류 · 비밀번호 규칙 · 만 19세 미만(SIGNUP_UNDER_AGE, 초대는 가입 불가가 됨)',
+      '형식 오류 · 비밀번호 규칙 · 필수 약관(termsServiceAgreed · privacyAgreed)이 true 가 아님 · 약관 칸을 실었는데 보인 약관 버전(termsServiceVersion · privacyVersion · marketingVersion)이 없음 · 만 19세 미만(SIGNUP_UNDER_AGE, 초대는 가입 불가가 됨)',
+  })
+  @ApiInternalServerErrorResponse({
+    description:
+      '필수 약관(STAFF_TERMS_SERVICE · STAFF_PRIVACY) 가운데 시행 중인 것이 없음 — 「지금은 가입할 수 없습니다 …」(선택 약관 MARKETING 이 없으면 막지 않고 그 줄만 남기지 않는다)',
   })
   @ApiNotFoundResponse({
     description: 'INVITATION_NOT_FOUND · INVITATION_ENDED — 초대 확인과 같다',
   })
   @ApiConflictResponse({
     description:
-      'INVITATION_ALREADY_JOINED · ACCOUNT_EXISTS · 이미 쓰는 이메일(ACCOUNT_EMAIL_TAKEN)',
+      'INVITATION_ALREADY_JOINED · ACCOUNT_EXISTS · 이미 쓰는 이메일(ACCOUNT_EMAIL_TAKEN) · 화면이 보인 약관 버전이 시행 중인 것과 다름(TERMS_CHANGED — 「그사이 약관이 바뀌었습니다. …」, 화면은 약관을 다시 받는다)',
   })
   @ApiTooManyRequestsResponse({
     description:
       '같은 번호로 번호 + 코드를 5번 틀려 30분 잠김(INVITATION_CODE_LOCKED, 본문 lockExpiresAt — 재발송하면 풀림) · 공개 경로 기본 요청 제한',
   })
-  signup(@Body() dto: StaffSignupDto): Promise<StaffSignupResponseDto> {
-    return this.signups.signup(dto);
+  signup(
+    @Body() dto: StaffSignupDto,
+    @Ip() ip: string | undefined,
+  ): Promise<StaffSignupResponseDto> {
+    return this.signups.signup(dto, ip);
   }
 }

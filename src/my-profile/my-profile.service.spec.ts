@@ -24,6 +24,7 @@ const accountRow = (patch: Record<string, unknown> = {}) => ({
   hqSharingConsentVersion: HQ_SHARING_CONSENT_VERSION,
   hqSharingAgreedAt: AGREED_AT,
   hqSharingWithdrawnAt: null,
+  termsAgreedAt: AGREED_AT,
   locationConsents: [],
   createdAt: new Date('2026-09-01T00:00:00Z'),
   accountChangeHistories: [],
@@ -87,8 +88,16 @@ describe('MyProfileService', () => {
         withdrawnAt: null,
         needsReconsent: false,
       },
+      needsTermsAgreement: false,
       passwordChangedAt: new Date('2026-09-01T00:00:00Z'),
     });
+  });
+
+  it('약관 동의 일시가 비었으면 약관 동의가 필요하다 — 약관 동의를 받기 전에 가입한 직원(ACC-23, WHALEERP-774)', async () => {
+    const service = await build();
+    findUnique.mockResolvedValue(accountRow({ termsAgreedAt: null }));
+    expect((await service.get(12)).needsTermsAgreement).toBe(true);
+    expect(firstArg(findUnique).select.termsAgreedAt).toBe(true);
   });
 
   it('비밀번호를 바꾼 적이 있으면 마지막 변경 시각, 없으면 가입 시각 (WHALEERP-194 권유 문구)', async () => {

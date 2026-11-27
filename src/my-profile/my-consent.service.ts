@@ -15,14 +15,22 @@ import {
 } from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
 import { currentLocationTermsVersion } from './location-terms';
+import {
+  type ShownStaffTermsVersions,
+  assertShownStaffTerms,
+  currentStaffTerms,
+  staffTermsAgreementRows,
+} from './staff-terms';
 
 const NOT_AGREED_MESSAGE = '위치정보 수집에 동의한 상태가 아닙니다.';
 /** 화면이 보인 본사 제공 동의 문구 버전이 지금 것과 다름(ATT-30 v252) — 직원 앱이 이 사유를 그대로 보인다 */
 export const HQ_SHARING_TERMS_CHANGED =
   '사업자 제공 동의 내용이 바뀌었습니다. 화면을 새로 고쳐 바뀐 내용을 확인한 뒤 다시 동의해 주세요.';
 
+type LockedAccount = HqSharingAccount & { termsAgreedAt: Date | null };
+
 /**
- * 직원 앱 내 정보의 동의 두 가지 (WHALEERP-193). 위치정보 동의(ATT-23 · ATT-26)는 `location_consents` 의 행이고, 철회하지
+ * 직원 앱 내 정보의 동의 두 가지 (WHALEERP-193)와 약관 동의(ACC-23, WHALEERP-774). 위치정보 동의(ATT-23 · ATT-26)는 `location_consents` 의 행이고, 철회하지
  * 않은 행이 계정에 하나다. 본사 제공 동의(ATT-30)는 계정 칸 넷이다.
  *
  * 모두 계정 행을 잠근 채 상태를 읽고 쓴다 — 두 기기에서 동시에 누르면 둘 다 「동의 없음」을 읽고 위치정보 동의를 두 행
@@ -169,6 +177,58 @@ export class MyConsentService {
     });
   }
 
+  /**
+   * 약관 동의 — 약관 동의를 받기 전에 가입한 직원(계정의 약관 동의 일시가 빔)이 홈에서 한다(ACC-23, WHALEERP-774). 필수 둘에
+   * 동의하고 마케팅 정보 수신은 고른 대로다. 이력(경로 FIRST_LOGIN · 접속 IP — 세 줄, 시행 중인 마케팅 약관이 없으면 두 줄)을 남기고 계정의
+   * 동의 일시를 채운다.
+   * `shown`(동의 시트가 보인 약관 버전 셋)은 시행 중인 것과 같아야 한다 — 다르면 409(code TERMS_CHANGED)로 거절해 보인 약관과
+   * 남는 버전이 어긋나지 않게 한다(「이미 동의함」 409 `TERMS_ALREADY_AGREED` 가 먼저, 버전이 뒤 — 다시 보낸 요청을 실패로 보이지 않게).
+   */
+  agreeTerms(
+    accountId: number,
+    shown: ShownStaffTermsVersions,
+    marketingAgreed: boolean,
+    clientAddress: string | undefined,
+  ): Promise<void> {
+    return this.locked(accountId, async (tx, account) => {
+      // 두 번 누름 · 응답을 잃고 다시 보냄 — 앱이 code 로 가려 팝업을 내린다. 약관 조회 · 버전 비교보다 먼저 본다 — 다시 보낸 사이 약관이
+      // 바뀌었어도 이미 동의한 계정에 「약관이 바뀌었다」 · 500 을 보이지 않게(api #326 code-review)
+      if (account.termsAgreedAt)
+        throw new ConflictException({
+          statusCode: HttpStatus.CONFLICT,
+          error: 'Conflict',
+          code: 'TERMS_ALREADY_AGREED',
+          message: '이미 약관에 동의했습니다.',
+        });
+      const terms = await currentStaffTerms(tx);
+      if (!terms) {
+        // 운영자가 직원 앱 약관을 모두 끄거나 지우면 여기서 500 이다 — 원인을 로그에서 바로 찾게 남긴다.
+        this.logger.error(
+          `시행 중인 직원 앱 약관이 없어 약관 동의를 남기지 못했다 accountId=${accountId}`,
+        );
+        throw new InternalServerErrorException(
+          '지금은 약관 동의를 받을 수 없습니다. 관리자에게 문의해 주세요.',
+        );
+      }
+      assertShownStaffTerms(terms, shown);
+      const now = new Date();
+      await tx.accountTermsAgreementLog.createMany({
+        data: staffTermsAgreementRows({
+          accountId,
+          terms,
+          marketingAgreed,
+          channel: 'FIRST_LOGIN',
+          agreedAt: now,
+          clientAddress,
+        }),
+      });
+      await tx.account.update({
+        where: { accountId },
+        data: { termsAgreedAt: now },
+      });
+    });
+  }
+
   /** 본사 제공 동의 철회. 동의한 버전 · 시각은 남긴다 — CHECK `accounts_hq_sharing_not_consented_fields` 가 요구한다 */
   withdrawHqSharing(accountId: number): Promise<void> {
     return this.locked(accountId, async (tx, account) => {
@@ -185,7 +245,7 @@ export class MyConsentService {
     accountId: number,
     work: (
       tx: Prisma.TransactionClient,
-      account: HqSharingAccount,
+      account: LockedAccount,
     ) => Promise<void>,
   ): Promise<void> {
     return this.prisma.$transaction(async (tx) => {
@@ -196,6 +256,7 @@ export class MyConsentService {
           status: true,
           isHqSharingConsented: true,
           hqSharingConsentVersion: true,
+          termsAgreedAt: true,
         },
       });
       if (account.status === 'WITHDRAWN')

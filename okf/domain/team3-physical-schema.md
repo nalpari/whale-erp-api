@@ -4,8 +4,12 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-27T04:14:50Z }
 sources:
+  - id: account-terms-agreements
+    resource: ../../prisma/migrations/20261127105251_team3_account_terms_agreements/migration.sql
+    title: 직원 계정 약관 동의 이력 account_terms_agreement_logs · accounts.terms_agreed_at (WHALEERP-774)
+    last_modified: 2026-11-27T01:52:51Z
   - id: contract-work-location-comment
     resource: ../../prisma/migrations/20261111091227_team3_contract_work_location_comment/migration.sql
     title: 근무 장소 work_location 설명 — 소속 근무지를 고르면 근무지명으로 채움 (front #250)
@@ -202,6 +206,16 @@ lets NULLs repeat, so a withdrawn e-mail can sign up again as a new account. Two
 (운영 알림, now 12) and `EMAIL_STAFF_WITHDRAW_DONE`, came in the same migration with 임시 wording — see
 [My profile](/api/my-profile.md) 「회원 탈퇴」. `_model.py` · `docs/raw` follow by hand (the physical generator needs the
 front repo beside this one).
+
+**직원 계정 약관 동의 has its own log table** (WHALEERP-774, ACC-23, 2026-11-27 김민식).
+`20261127105251_team3_account_terms_agreements` adds `accounts.terms_agreed_at` (the time the two required 약관 were agreed;
+NULL means the app still asks — every account that existed before is NULL) and `account_terms_agreement_logs`
+(`account_id` → `accounts`, `terms_version_id` → 1팀 `terms_versions`, `is_agreed`, `agreed_at`, `channel` — 1팀's enum
+`terms_agreement_channel`, `client_address`; index on `account_id`, FKs RESTRICT).[^account-terms-agreements] 1팀's
+`terms_agreement_logs` was **not** widened: its `admin_account_id` is NOT NULL and nothing reads it (two writers only, 관리자
+가입 · 강제 비밀번호 변경), so a separate table keeps the 1팀 table untouched and matches how 직원 consents already sit by
+`account_id` (`location_consents`). Written by hand into the migration and the 3팀 section of `schema.prisma`, like
+`bulk_exports` at first; `_model.py` · `docs/raw` · the front logical catalog have not caught up yet.
 
 **After the freeze, 생년월일 정정 adds two enum values.** `20261026110852_team3_account_birth_date_correction` (WHALEERP-602) adds `BIRTH_DATE` to `account_change_field` and `ADMIN_CORRECTION` to `account_change_channel` (values appended, so the 화면 order is the order added) and rewrites their `COMMENT ON TYPE` plus four column comments. `schema.sql`, `_model.py` and `schema.prisma` were edited by hand to match; the generator was not run (it needs `whale-erp-front` beside this repository).
 
@@ -790,3 +804,4 @@ table where it has them; the rest (`invitation_channel`,
 [^auth-session-remember-me]: 접속 상태의 자동 로그인 칸 (끄면 7일)
 [^account-status-migration]: 계정 상태에 탈퇴를 더하는 마이그레이션 (2026-10-07)
 [^bulk-exports]: 직원 자료 일괄 저장 테이블 (WHALEERP-336)
+[^account-terms-agreements]: 직원 계정 약관 동의 이력 (WHALEERP-774)
