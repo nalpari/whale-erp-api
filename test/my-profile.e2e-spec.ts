@@ -421,6 +421,8 @@ describe('내 정보 (e2e, DB)', () => {
       jobTitle: '홀',
       hiredDate: null,
       retiredDate: '2026-09-30',
+      // 퇴직했어도 보존 기간(퇴직 + 3년) 안이라 낸 신고 정보가 있다(WHALEERP-775)
+      taxProfileSubmitted: true,
     });
     await get('/me/memberships?includeRetired=yes', token).expect(400);
     // 신고 정보도 퇴직한 소속을 연다 — 조회만(WHALEERP-765)

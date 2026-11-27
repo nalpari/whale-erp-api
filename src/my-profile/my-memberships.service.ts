@@ -107,6 +107,13 @@ const ANY_EMPLOYMENT_STAFF = {
  * 지운 점포(삭제 표시)의 소속은 뺀다 — 점포는 미운영이고 진행 중인 근로계약이 없어야 지울 수 있어 지금 소속은 남지 않지만,
  * 퇴직 포함이면 모두 퇴직한 뒤 지운 점포의 레코드가 걸린다(api #180 리뷰).
  */
+/**
+ * 신고 정보 보존 기간(퇴직 + 3년, RET-01)이 지났는지 — 파기 배치와 같은 retiredBefore 기준이고, 퇴직 상태 배치가 반영됐는지와
+ * 상관없이 퇴직일로만 본다. 소속 목록의 taxProfileSubmitted 와 신고 정보 조회의 expired 가 같은 판정이어야 해서 둘이 함께 쓴다.
+ */
+const taxProfileExpired = (retiredDate: Date | null, now: Date) =>
+  retiredDate !== null && retiredDate < retiredBefore(now);
+
 @Injectable()
 export class MyMembershipsService {
   private readonly logger = new Logger(MyMembershipsService.name);
@@ -167,8 +174,7 @@ export class MyMembershipsService {
         })
       : [];
     const storeById = new Map(stores.map((st) => [st.storeId, st]));
-    // 신고 정보 조회와 같은 판정 — 보존 기간(퇴직 + 3년)이 지났으면 파기 배치 전이어도 내지 않은 것으로 본다
-    const keepFrom = retiredBefore(new Date());
+    const now = new Date();
 
     const items = rows.flatMap((s) => {
       const store = storeById.get(s.storeId);
@@ -189,9 +195,9 @@ export class MyMembershipsService {
         jobTitle: s.jobTitle,
         hiredDate: dateOnly(s.hiredDate),
         retiredDate: dateOnly(s.retiredDate),
+        // 신고 정보 조회와 같은 판정 — 보존 기간이 지났으면 파기 배치 전이어도 내지 않은 것으로 본다
         taxProfileSubmitted:
-          s.staffTaxProfile !== null &&
-          !(s.retiredDate !== null && s.retiredDate < keepFrom),
+          s.staffTaxProfile !== null && !taxProfileExpired(s.retiredDate, now),
       };
     });
     return { items, total: items.length };
@@ -248,9 +254,8 @@ export class MyMembershipsService {
     const now = new Date();
     // 보존 기간(퇴직 + 3년, RET-01)이 지난 퇴직 레코드는 파기 배치(05:10)가 돌기 전이어도 신고 정보를 풀지 않는다 — 배치가
     // 늦거나 실패해도 기한이 지난 값이 보이지 않게(PR #313 pr-agent). 기준은 파기 배치와 같은 retiredBefore 다. 퇴직 상태
-    // 배치가 반영됐는지와 상관없이 퇴직일로만 판정한다
-    const expired =
-      staff.retiredDate !== null && staff.retiredDate < retiredBefore(now);
+    // 배치가 반영됐는지와 상관없이 퇴직일로만 판정한다(taxProfileExpired — 소속 목록과 같은 판정)
+    const expired = taxProfileExpired(staff.retiredDate, now);
     return {
       staffMemberId: staff.staffMemberId,
       editable: employedOn(staff, now),
