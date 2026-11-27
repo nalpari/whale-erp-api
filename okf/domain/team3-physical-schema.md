@@ -4,7 +4,7 @@ title: Team 3 physical schema
 description: The PostgreSQL schema for 3팀's 48 tables, generated from the logical ERD; what it depends on, what it adds, and what Prisma cannot carry.
 tags: [database, schema, erd, postgresql, prisma]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-17T07:26:26Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-27T04:14:50Z }
 sources:
   - id: account-terms-agreements
     resource: ../../prisma/migrations/20261127105251_team3_account_terms_agreements/migration.sql

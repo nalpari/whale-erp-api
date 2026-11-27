@@ -496,6 +496,18 @@ describe('MyConsentService', () => {
       );
     });
 
+    it('이미 동의했으면 시행 중인 필수 약관이 없어도 409 TERMS_ALREADY_AGREED — 500 이 아니다(api #326 code-review)', async () => {
+      const service = await build({ termsAgreedAt: AGREED_AT });
+      tx.codeItem.findMany.mockResolvedValue([]);
+      const e = (await service
+        .agreeTerms(12, shown, false, undefined)
+        .catch((error: unknown) => error)) as ConflictException;
+      expect(e).toBeInstanceOf(ConflictException);
+      expect((e.getResponse() as { code?: string }).code).toBe(
+        'TERMS_ALREADY_AGREED',
+      );
+    });
+
     it('이미 동의했으면 409 TERMS_ALREADY_AGREED — 이력을 더 남기지 않는다(앱이 code 로 가려 팝업을 내린다)', async () => {
       const service = await build({ termsAgreedAt: AGREED_AT });
       const e = (await service

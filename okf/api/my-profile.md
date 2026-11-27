@@ -4,12 +4,12 @@ title: My profile (staff app)
 description: 직원 근무 앱 마이페이지 (WHALEERP-188) — GET /me/profile(계정 칸 · 계정의 본사 제공 동의 · 위치정보 동의 · 비밀번호 변경 시각), GET /me/memberships(재직 직원 기준 소속 근무지, includeRetired 로 퇴직한 소속도), GET · PUT /me/memberships/:staffMemberId/tax-profile(소속별 신고 정보 조회 · 작성 · 수정, WHALEERP-334), 주소 수정(189) · 이메일 아이디 변경(191) · 비밀번호 변경(192) · 위치정보 · 본사 제공 동의 쓰기(193), 회원 탈퇴(GET withdrawal-eligibility · POST withdrawal, WHALEERP-770), 그리고 개인정보 칸의 AES-256-GCM 암호화 형식.
 tags: [staff-app, account, personal-data, encryption]
 status: draft
-generated: { by: claude-code/opus-5.5, at: 2026-11-24T07:06:28Z }
+generated: { by: claude-code/opus-5.5, at: 2026-11-27T04:14:50Z }
 sources:
   - id: my-profile-service
     resource: ../../src/my-profile/my-profile.service.ts
     title: MyProfileService — 내 정보(계정 칸 · 동의 · 비밀번호 변경 시각)
-    last_modified: 2026-10-28T04:52:10Z
+    last_modified: 2026-11-27T04:14:50Z
   - id: my-address-service
     resource: ../../src/my-profile/my-address.service.ts
     title: MyAddressService — 주소 수정과 이력(WHALEERP-189)
@@ -21,7 +21,7 @@ sources:
   - id: my-consent-service
     resource: ../../src/my-profile/my-consent.service.ts
     title: MyConsentService — 위치정보 동의 · 본사 제공 동의 쓰기
-    last_modified: 2026-10-29T09:00:43Z
+    last_modified: 2026-11-27T04:14:50Z
   - id: my-profile-controller
     resource: ../../src/my-profile/my-profile.controller.ts
     title: 내 정보 경로 · 상태 코드 · 요청 한도(주소 · 이메일 · 비밀번호)

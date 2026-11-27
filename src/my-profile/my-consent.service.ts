@@ -191,6 +191,15 @@ export class MyConsentService {
     clientAddress: string | undefined,
   ): Promise<void> {
     return this.locked(accountId, async (tx, account) => {
+      // 두 번 누름 · 응답을 잃고 다시 보냄 — 앱이 code 로 가려 팝업을 내린다. 약관 조회 · 버전 비교보다 먼저 본다 — 다시 보낸 사이 약관이
+      // 바뀌었어도 이미 동의한 계정에 「약관이 바뀌었다」 · 500 을 보이지 않게(api #326 code-review)
+      if (account.termsAgreedAt)
+        throw new ConflictException({
+          statusCode: HttpStatus.CONFLICT,
+          error: 'Conflict',
+          code: 'TERMS_ALREADY_AGREED',
+          message: '이미 약관에 동의했습니다.',
+        });
       const terms = await currentStaffTerms(tx);
       if (!terms) {
         // 운영자가 직원 앱 약관을 모두 끄거나 지우면 여기서 500 이다 — 원인을 로그에서 바로 찾게 남긴다.
@@ -201,15 +210,6 @@ export class MyConsentService {
           '지금은 약관 동의를 받을 수 없습니다. 관리자에게 문의해 주세요.',
         );
       }
-      // 두 번 누름 · 응답을 잃고 다시 보냄 — 앱이 code 로 가려 팝업을 내린다. 버전 비교보다 먼저 본다 — 다시 보낸 사이 약관이
-      // 바뀌었어도 이미 동의한 계정에 「약관이 바뀌었다」를 보이지 않게(api #326 code-review)
-      if (account.termsAgreedAt)
-        throw new ConflictException({
-          statusCode: HttpStatus.CONFLICT,
-          error: 'Conflict',
-          code: 'TERMS_ALREADY_AGREED',
-          message: '이미 약관에 동의했습니다.',
-        });
       assertShownStaffTerms(terms, shown);
       const now = new Date();
       await tx.accountTermsAgreementLog.createMany({
