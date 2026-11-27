@@ -178,8 +178,9 @@ In one transaction:
    still completes without the consent (ATT-30 v253 — the consent is optional, so a changed wording must
    not block joining) and a warn log names the account and both versions (the sent value JSON-quoted, since it
    comes from a public route). **약관 동의 (ACC-23)**: the 약관 in force now (`currentStaffTerms` in
-   `src/my-profile/staff-terms.ts` — the same rule as the public 약관 API and 관리자 가입: active, not deleted, 시행일 ≤ KST
-   today, latest first) — one of the two **required** missing → 500 「지금은 가입할 수 없습니다 …」 before the account is made (an error log names it;
+   `src/my-profile/staff-terms.ts` — the same rule as the public 약관 API: only types the platform common code `TERMS_TYPE` keeps
+   active, then active, not deleted, 시행일 ≤ KST today, latest first; otherwise a code switched off would hide a 약관 from the
+   screen while the server still compared against it) — one of the two **required** missing → 500 「지금은 가입할 수 없습니다 …」 before the account is made (an error log names it;
    only read when the 약관 fields were sent).
    The account gets `terms_agreed_at` = the signup time and `account_terms_agreement_logs` rows (required two agreed,
    marketing as chosen — two rows when no `MARKETING` 약관 is in force; `channel: SIGNUP`, `client_address` = `@Ip()` — the 직원 앱 sends the user's IP in

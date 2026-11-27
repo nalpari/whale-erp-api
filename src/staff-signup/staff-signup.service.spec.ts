@@ -51,6 +51,7 @@ describe('StaffSignupService', () => {
     contract: { updateManyAndReturn: jest.Mock };
     contractStatusHistory: { createManyAndReturn: jest.Mock };
     termsVersion: { findMany: jest.Mock };
+    codeItem: { findMany: jest.Mock };
     accountTermsAgreementLog: { createMany: jest.Mock };
   };
   let prisma: typeof tx & { $transaction: jest.Mock };
@@ -169,6 +170,16 @@ describe('StaffSignupService', () => {
           },
           { termsTypeCode: 'MARKETING', termsVersionId: 5, version: 'v1.0' },
         ]),
+      },
+      // 플랫폼 공통코드 TERMS_TYPE 에서 쓰는 약관 유형
+      codeItem: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue(
+            ['STAFF_TERMS_SERVICE', 'STAFF_PRIVACY', 'MARKETING'].map(
+              (itemCode) => ({ itemCode }),
+            ),
+          ),
       },
       accountTermsAgreementLog: { createMany: jest.fn() },
     };

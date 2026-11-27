@@ -1,5 +1,6 @@
 import { ConflictException, HttpStatus } from '@nestjs/common';
 import type { Prisma, TermsAgreementChannel } from '@prisma/client';
+import { PLATFORM_BP_CODE } from '../codes/codes.service';
 import { kstToday } from '../staff-members/kst-date';
 
 /**
@@ -24,13 +25,35 @@ export type StaffTerms = {
  * 지금 시행 중인 직원 앱 약관 셋. 공개 약관 API · 관리자 가입 동의와 같은 규칙 — 시행일이 KST 오늘까지인 사용 중 버전 가운데
  * 늦게 시행한 것. 그래야 화면의 「보기」와 같은 버전에 동의가 남는다. 필수 둘 가운데 하나라도 없으면(운영자가 끄거나 지움) null 이다.
  * 선택 약관(마케팅)이 없는 것은 막지 않는다 — 1팀 공통 약관 하나를 꺼서 직원 가입이 멈추지 않게(api 리뷰).
+ * 약관 유형은 플랫폼 공통코드 `TERMS_TYPE` 에서 쓰는 것만 본다 — 공개 약관 API(TermsVersionsService)와 같은 기준이다. 안 그러면
+ * 코드를 끈 약관은 화면이 404 로 받아 보이지 않는데 서버는 시행 중으로 봐, 보인 버전 비교가 늘 409 가 된다(api #326 code-review).
  */
 export async function currentStaffTerms(db: {
   termsVersion: Pick<Prisma.TransactionClient['termsVersion'], 'findMany'>;
+  codeItem: Pick<Prisma.TransactionClient['codeItem'], 'findMany'>;
 }): Promise<StaffTerms | null> {
+  // CodesService.forPlatform(['TERMS_TYPE']) 와 같은 조건 — 트랜잭션 안에서 부를 수 있게 직접 읽는다
+  const activeTypes = new Set(
+    (
+      await db.codeItem.findMany({
+        where: {
+          groupCode: 'TERMS_TYPE',
+          bpCode: PLATFORM_BP_CODE,
+          isDeleted: false,
+          status: 'ACTIVE',
+          codeGroup: { isDeleted: false, status: 'ACTIVE' },
+        },
+        select: { itemCode: true },
+      })
+    ).map((item) => item.itemCode),
+  );
   const rows = await db.termsVersion.findMany({
     where: {
-      termsTypeCode: { in: Object.values(STAFF_TERMS_TYPES) },
+      termsTypeCode: {
+        in: Object.values(STAFF_TERMS_TYPES).filter((code) =>
+          activeTypes.has(code),
+        ),
+      },
       isActive: true,
       isDeleted: false,
       effectiveDate: { lte: kstToday() },
@@ -39,6 +62,7 @@ export async function currentStaffTerms(db: {
     select: { termsTypeCode: true, termsVersionId: true, version: true },
   });
   const pick = (code: string) => {
+    if (!activeTypes.has(code)) return undefined;
     const row = rows.find((r) => r.termsTypeCode === code);
     return row && { termsVersionId: row.termsVersionId, version: row.version };
   };

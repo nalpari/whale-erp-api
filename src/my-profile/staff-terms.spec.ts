@@ -3,8 +3,14 @@ import { currentStaffTerms, staffTermsAgreementRows } from './staff-terms';
 const NOW = new Date('2026-11-27T01:00:00.000Z');
 
 describe('currentStaffTerms', () => {
-  const db = (rows: unknown[]) => ({
+  const ALL_TYPES = ['STAFF_TERMS_SERVICE', 'STAFF_PRIVACY', 'MARKETING'];
+  const db = (rows: unknown[], activeTypes: string[] = ALL_TYPES) => ({
     termsVersion: { findMany: jest.fn().mockResolvedValue(rows) },
+    codeItem: {
+      findMany: jest
+        .fn()
+        .mockResolvedValue(activeTypes.map((itemCode) => ({ itemCode }))),
+    },
   });
   const row = (
     termsTypeCode: string,
@@ -34,6 +40,51 @@ describe('currentStaffTerms', () => {
       orderBy: [{ effectiveDate: 'desc' }, { termsVersionId: 'desc' }],
       select: { termsTypeCode: true, termsVersionId: true, version: true },
     });
+  });
+
+  it('약관 유형은 플랫폼 공통코드 TERMS_TYPE 에서 쓰는 것만 — 공개 약관 API 와 같은 기준(api #326 code-review)', async () => {
+    const d = db([]);
+    await currentStaffTerms(d);
+    expect(d.codeItem.findMany).toHaveBeenCalledWith({
+      where: {
+        groupCode: 'TERMS_TYPE',
+        bpCode: 'BP000000',
+        isDeleted: false,
+        status: 'ACTIVE',
+        codeGroup: { isDeleted: false, status: 'ACTIVE' },
+      },
+      select: { itemCode: true },
+    });
+  });
+
+  it('공통코드에서 마케팅을 끄면 마케팅 null — 화면도 그 약관을 404 로 받아 보이지 않는다', async () => {
+    await expect(
+      currentStaffTerms(
+        db(
+          [
+            row('STAFF_TERMS_SERVICE', 3),
+            row('STAFF_PRIVACY', 4),
+            row('MARKETING', 5),
+          ],
+          ['STAFF_TERMS_SERVICE', 'STAFF_PRIVACY'],
+        ),
+      ),
+    ).resolves.toMatchObject({ marketing: null });
+  });
+
+  it('공통코드에서 필수 약관을 끄면 null — 시행 중인 필수 약관이 없는 것과 같다', async () => {
+    await expect(
+      currentStaffTerms(
+        db(
+          [
+            row('STAFF_TERMS_SERVICE', 3),
+            row('STAFF_PRIVACY', 4),
+            row('MARKETING', 5),
+          ],
+          ['STAFF_PRIVACY', 'MARKETING'],
+        ),
+      ),
+    ).resolves.toBeNull();
   });
 
   it('유형마다 맨 앞(지금 시행 중) 것을 고른다', async () => {

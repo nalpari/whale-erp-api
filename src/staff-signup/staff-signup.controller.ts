@@ -66,7 +66,7 @@ export class StaffSignupController {
   @Post('signup')
   @ApiBadRequestResponse({
     description:
-      '형식 오류 · 비밀번호 규칙 · 필수 약관(termsServiceAgreed · privacyAgreed)이 true 가 아님 · 만 19세 미만(SIGNUP_UNDER_AGE, 초대는 가입 불가가 됨)',
+      '형식 오류 · 비밀번호 규칙 · 필수 약관(termsServiceAgreed · privacyAgreed)이 true 가 아님 · 약관 칸을 실었는데 보인 약관 버전(termsServiceVersion · privacyVersion · marketingVersion)이 없음 · 만 19세 미만(SIGNUP_UNDER_AGE, 초대는 가입 불가가 됨)',
   })
   @ApiInternalServerErrorResponse({
     description:
@@ -77,7 +77,7 @@ export class StaffSignupController {
   })
   @ApiConflictResponse({
     description:
-      'INVITATION_ALREADY_JOINED · ACCOUNT_EXISTS · 이미 쓰는 이메일(ACCOUNT_EMAIL_TAKEN)',
+      'INVITATION_ALREADY_JOINED · ACCOUNT_EXISTS · 이미 쓰는 이메일(ACCOUNT_EMAIL_TAKEN) · 화면이 보인 약관 버전이 시행 중인 것과 다름(TERMS_CHANGED — 「그사이 약관이 바뀌었습니다. …」, 화면은 약관을 다시 받는다)',
   })
   @ApiTooManyRequestsResponse({
     description:

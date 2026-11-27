@@ -124,7 +124,7 @@ export class MyConsentController {
   @ApiNoContentResponse({ description: '동의함' })
   @ApiConflictResponse({
     description:
-      '보인 약관 버전이 시행 중인 것과 다름(TERMS_CHANGED — 「그사이 약관이 바뀌었습니다. …」, 화면은 다시 받는다) · 이미 동의함',
+      '이미 동의함(TERMS_ALREADY_AGREED — 앱은 팝업을 내린다, 버전 비교보다 먼저) · 보인 약관 버전이 시행 중인 것과 다름(TERMS_CHANGED — 「그사이 약관이 바뀌었습니다. …」, 화면은 다시 받는다)',
   })
   @ApiBadRequestResponse({
     description:

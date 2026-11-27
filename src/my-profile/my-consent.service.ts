@@ -182,7 +182,7 @@ export class MyConsentService {
    * 동의하고 마케팅 정보 수신은 고른 대로다. 이력(경로 FIRST_LOGIN · 접속 IP — 세 줄, 시행 중인 마케팅 약관이 없으면 두 줄)을 남기고 계정의
    * 동의 일시를 채운다.
    * `shown`(동의 시트가 보인 약관 버전 셋)은 시행 중인 것과 같아야 한다 — 다르면 409(code TERMS_CHANGED)로 거절해 보인 약관과
-   * 남는 버전이 어긋나지 않게 한다(위치정보 동의와 같은 순서 — 버전이 먼저, 「이미 동의함」이 뒤).
+   * 남는 버전이 어긋나지 않게 한다(「이미 동의함」 409 `TERMS_ALREADY_AGREED` 가 먼저, 버전이 뒤 — 다시 보낸 요청을 실패로 보이지 않게).
    */
   agreeTerms(
     accountId: number,
@@ -201,8 +201,8 @@ export class MyConsentService {
           '지금은 약관 동의를 받을 수 없습니다. 관리자에게 문의해 주세요.',
         );
       }
-      assertShownStaffTerms(terms, shown);
-      // 두 번 누름 · 응답을 잃고 다시 보냄 — 앱이 code 로 가려 팝업을 내린다(api #326 code-review)
+      // 두 번 누름 · 응답을 잃고 다시 보냄 — 앱이 code 로 가려 팝업을 내린다. 버전 비교보다 먼저 본다 — 다시 보낸 사이 약관이
+      // 바뀌었어도 이미 동의한 계정에 「약관이 바뀌었다」를 보이지 않게(api #326 code-review)
       if (account.termsAgreedAt)
         throw new ConflictException({
           statusCode: HttpStatus.CONFLICT,
@@ -210,6 +210,7 @@ export class MyConsentService {
           code: 'TERMS_ALREADY_AGREED',
           message: '이미 약관에 동의했습니다.',
         });
+      assertShownStaffTerms(terms, shown);
       const now = new Date();
       await tx.accountTermsAgreementLog.createMany({
         data: staffTermsAgreementRows({

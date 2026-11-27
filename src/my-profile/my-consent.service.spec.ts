@@ -31,6 +31,7 @@ describe('MyConsentService', () => {
       update: jest.Mock;
     };
     termsVersion: { findFirst: jest.Mock; findMany: jest.Mock };
+    codeItem: { findMany: jest.Mock };
     locationConsentHistory: { create: jest.Mock };
     accountTermsAgreementLog: { createMany: jest.Mock };
   };
@@ -87,6 +88,16 @@ describe('MyConsentService', () => {
         ]),
       },
       locationConsentHistory: { create: jest.fn().mockResolvedValue({}) },
+      // 플랫폼 공통코드 TERMS_TYPE 에서 쓰는 약관 유형
+      codeItem: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue(
+            ['STAFF_TERMS_SERVICE', 'STAFF_PRIVACY', 'MARKETING'].map(
+              (itemCode) => ({ itemCode }),
+            ),
+          ),
+      },
       accountTermsAgreementLog: { createMany: jest.fn() },
     };
     const prisma = {
@@ -473,6 +484,16 @@ describe('MyConsentService', () => {
       const [{ data }] = tx.accountTermsAgreementLog.createMany.mock
         .calls[0] as [{ data: { termsVersionId: number }[] }];
       expect(data.map((r) => r.termsVersionId)).toEqual([3, 4]);
+    });
+
+    it('이미 동의했으면 보인 버전이 낡았어도 409 TERMS_ALREADY_AGREED 가 먼저 — 응답을 잃고 다시 보낸 사이 약관이 바뀐 경우(api #326 code-review)', async () => {
+      const service = await build({ termsAgreedAt: AGREED_AT });
+      const e = (await service
+        .agreeTerms(12, { ...shown, privacyVersion: 'v0.9' }, false, undefined)
+        .catch((error: unknown) => error)) as ConflictException;
+      expect((e.getResponse() as { code?: string }).code).toBe(
+        'TERMS_ALREADY_AGREED',
+      );
     });
 
     it('이미 동의했으면 409 TERMS_ALREADY_AGREED — 이력을 더 남기지 않는다(앱이 code 로 가려 팝업을 내린다)', async () => {
