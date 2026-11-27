@@ -829,6 +829,14 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     const auth = await token(a.accountId);
     const signed = await pending(a);
     await sign(signed.contractId, auth, signed.sentAt).expect(200);
+    // 날인한 레코드는 퇴직하고 같은 근무지에 새 레코드로 다시 들어온 것처럼 — 두 줄이 각자의 레코드 id 를 싣는다(WHALEERP-775)
+    await prisma.staffMember.update({
+      where: { staffMemberId: signed.staffMemberId },
+      data: {
+        retiredDate: addDays(kstToday(), -1),
+        employmentStatus: 'RETIRED',
+      },
+    });
     const waiting = await pending(a);
     const notSent = await pending(a);
     await prisma.contract.update({

@@ -1191,8 +1191,8 @@ apply to reading.
   contract and one waiting for 소속 추가 확인 (only `candidate_account_id`) are absent too — the detail
   is the same 404 「근로계약을 찾을 수 없습니다.」 for all of them. A 퇴직 직원 still sees their contracts.
 - **`GET /me/contracts`** — all of them, not paged (a 직원 has a handful): `{ items, total }`. A row is
-  `contractId` · `status` · `staffMemberId` (the 직원 레코드 — the same id as `GET /me/memberships`; a 퇴직 뒤 재입사 makes a new
-  record, so two rows of one 근무지 can differ, WHALEERP-775) · `storeId` · `storeName` (근무지 — the app groups by it) · `employmentType`
+  `contractId` · `status` · `staffMemberId` (the 직원 레코드 — the same id as `GET /me/memberships`, where a 퇴직 record appears only with
+  `includeRetired=true`; a 퇴직 뒤 재입사 makes a new record, so two rows of one 근무지 can differ, WHALEERP-775) · `storeId` · `storeName` (근무지 — the app groups by it) · `employmentType`
   (the contract's copy; the 직원 레코드's when empty, as in the 관리자 detail) · `contractMethod` · `startDate` · `endDate` · `sentAt` · `signDeadlineAt` ·
   `processedAt` · `awaitingSignature`. `processedAt` is the last status-history row's `changed_at` when it
   is the current status (날인 일자, a 종이 계약's 등록일, 거부 · 만료 · 종료 일자), else null; for 서명 대기
