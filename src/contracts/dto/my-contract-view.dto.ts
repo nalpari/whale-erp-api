@@ -152,6 +152,8 @@ export class MyContractDetailDto extends ContractTermsDto {
   contractId: number;
   @ApiProperty({ enum: ContractStatus, enumName: 'ContractStatus' })
   status: ContractStatus;
+  /** 목록과 같다 — 이 계약의 직원 레코드(소속), `GET /me/memberships` 의 staffMemberId */
+  staffMemberId: number;
   storeId: number;
   @ApiProperty({
     enum: EmploymentType,

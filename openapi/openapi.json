@@ -28890,6 +28890,10 @@
           "contractId": {
             "type": "number"
           },
+          "staffMemberId": {
+            "type": "number",
+            "description": "목록과 같다 — 이 계약의 직원 레코드(소속), `GET /me/memberships` 의 staffMemberId"
+          },
           "storeId": {
             "type": "number"
           },
@@ -28943,6 +28947,7 @@
           "documents",
           "articles",
           "contractId",
+          "staffMemberId",
           "storeId",
           "awaitingSignature",
           "signable",
