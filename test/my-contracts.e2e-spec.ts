@@ -258,7 +258,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
         },
       },
     });
-    return { contractId, sentAt };
+    return { contractId, sentAt, staffMemberId: staff.staffMemberId };
   }
 
   const token = async (accountId: number) => {
@@ -850,6 +850,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     expect(body.total).toBe(2);
     expect(body.items[0]).toMatchObject({
       status: 'PENDING_SIGNATURE',
+      staffMemberId: waiting.staffMemberId,
       storeId,
       storeName: '날인 테스트 직영점',
       employmentType: 'PART_TIME',
@@ -859,6 +860,7 @@ describe('직원 근로계약 날인 (e2e, DB)', () => {
     });
     expect(body.items[1]).toMatchObject({
       status: 'SIGNED',
+      staffMemberId: signed.staffMemberId,
       awaitingSignature: false,
       processedAt: expect.any(String) as unknown,
     });

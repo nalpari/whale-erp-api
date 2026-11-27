@@ -15,6 +15,11 @@ export class MyContractListItemDto {
   contractId: number;
   @ApiProperty({ enum: ContractStatus, enumName: 'ContractStatus' })
   status: ContractStatus;
+  /**
+   * 이 계약의 직원 레코드(소속) — `GET /me/memberships` 의 staffMemberId 와 같다. 퇴직 뒤 다시 입사하면 레코드가 새로 생겨 같은
+   * 근무지라도 값이 다르다(직원 앱이 이 소속의 계약인지 가른다, WHALEERP-775)
+   */
+  staffMemberId: number;
   /** 근무지(소속) — 점포가 지워졌어도 이름은 보인다 */
   storeId: number;
   storeName: string;
