@@ -141,7 +141,8 @@ anything else (false · null · a string) is 400 「필수 약관에 동의해 �
 error** — an app that predates the fields joins without 약관 동의 written, the account's `terms_agreed_at` stays empty and
 the app asks on 홈 (`needsTermsAgreement`, [My profile](/api/my-profile.md)); a warn log names the account. So deploying the
 api before the app never blocks a signup, as with `hqSharingConsentVersion`) · `marketingAgreed` (optional, 선택 — missing is
-not agreed) · `deviceIdentifier`
+not agreed) · `termsServiceVersion` · `privacyVersion` · `marketingVersion` (the 약관 versions the screen showed — required
+once any 약관 field is sent, `marketingVersion` null when no marketing 약관 was shown) · `deviceIdentifier`
 (optional, as in login). **There is no phone field**: the account takes the invitation's
 (근로계약서) phone — if a 직원 could type it, they could sign up on someone else's number and block
 that person's next invitation (JOIN-7). The 약관 are 1팀's `terms_versions` rows `STAFF_TERMS_SERVICE` ·
@@ -182,8 +183,9 @@ In one transaction:
    only read when the 약관 fields were sent).
    The account gets `terms_agreed_at` = the signup time and `account_terms_agreement_logs` rows (required two agreed,
    marketing as chosen — two rows when no `MARKETING` 약관 is in force; `channel: SIGNUP`, `client_address` = `@Ip()` — the 직원 앱 sends the user's IP in
-   `X-Forwarded-For`). Unlike 본사 제공 동의 the shown versions are not compared at signup — the versions in force are
-   recorded, as 관리자 가입 does. The optional `MARKETING` 약관 may be off: then only the two required rows are written —
+   `X-Forwarded-For`). The shown versions must equal the ones in force (`assertShownStaffTerms`) — otherwise
+   **409 `TERMS_CHANGED`** 「그사이 약관이 바뀌었습니다 …」 inside the transaction, so no account is made and the invitation stays
+   `SENT`; a 약관 changed while the screen was open is never recorded as agreed unseen (api #326 code-review, same rule as 홈 약관 동의). The optional `MARKETING` 약관 may be off: then only the two required rows are written —
    switching one 1팀 common 약관 off must not stop 직원 signup.
 5. Link the record (`account_id`, `join_status = JOINED`, conditioned on no account yet).
 6. The record's 발송 대기 contracts → 서명 대기, history actor `STAFF`. The deadline from the send stays.

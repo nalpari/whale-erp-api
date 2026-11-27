@@ -116,6 +116,10 @@ describe('직원 가입 (e2e, DB)', () => {
       addressDetail: '2층',
       termsServiceAgreed: true,
       privacyAgreed: true,
+      // 시행 중인 직원 앱 약관 — 모두 v1.0(20261006000100_team1_initial_data)
+      termsServiceVersion: 'v1.0',
+      privacyVersion: 'v1.0',
+      marketingVersion: 'v1.0',
       deviceIdentifier: `e2e-${n}`,
       ...overrides,
     };
@@ -373,7 +377,13 @@ describe('직원 가입 (e2e, DB)', () => {
     const s = await invited(directStoreId);
     const payload = body(
       { token: s.token },
-      { termsServiceAgreed: undefined, privacyAgreed: undefined },
+      {
+        termsServiceAgreed: undefined,
+        privacyAgreed: undefined,
+        termsServiceVersion: undefined,
+        privacyVersion: undefined,
+        marketingVersion: undefined,
+      },
     );
     const joined = await post('/auth/account/signup', payload).expect(201);
     const account = await prisma.account.findUniqueOrThrow({

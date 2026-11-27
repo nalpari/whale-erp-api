@@ -39,6 +39,7 @@ import { ageOn, lockPeople } from '../contracts/contracts.service';
 import { OpsNotificationService } from '../notifications/ops-notification.service';
 import { storeManagers } from '../notifications/recipients';
 import {
+  assertShownStaffTerms,
   currentStaffTerms,
   staffTermsAgreementRows,
 } from '../my-profile/staff-terms';
@@ -291,6 +292,13 @@ export class StaffSignupService {
             '지금은 가입할 수 없습니다. 관리자에게 문의해 주세요.',
           );
         }
+        // 화면이 보인 약관 버전이 시행 중인 것과 다르면 409 — 보지 않은 버전에 동의한 것으로 남기지 않는다(트랜잭션이라 초대도 그대로)
+        if (terms)
+          assertShownStaffTerms(terms, {
+            termsServiceVersion: dto.termsServiceVersion ?? '',
+            privacyVersion: dto.privacyVersion ?? '',
+            marketingVersion: dto.marketingVersion ?? null,
+          });
         // 보인 문구 버전이 지금과 다르면 가입은 마치고 동의만 남기지 않는다(ATT-30 v253)
         const hqSharingConsentRecorded = hqSharingConsentRecordOf(
           asksHqSharingConsentAt(store.storeTypeCode),

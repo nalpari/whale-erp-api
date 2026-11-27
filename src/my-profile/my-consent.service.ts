@@ -15,24 +15,17 @@ import {
 } from '../admin-scope/hq-sharing';
 import { PrismaService } from '../prisma/prisma.service';
 import { currentLocationTermsVersion } from './location-terms';
-import { currentStaffTerms, staffTermsAgreementRows } from './staff-terms';
+import {
+  type ShownStaffTermsVersions,
+  assertShownStaffTerms,
+  currentStaffTerms,
+  staffTermsAgreementRows,
+} from './staff-terms';
 
 const NOT_AGREED_MESSAGE = '위치정보 수집에 동의한 상태가 아닙니다.';
 /** 화면이 보인 본사 제공 동의 문구 버전이 지금 것과 다름(ATT-30 v252) — 직원 앱이 이 사유를 그대로 보인다 */
 export const HQ_SHARING_TERMS_CHANGED =
   '사업자 제공 동의 내용이 바뀌었습니다. 화면을 새로 고쳐 바뀐 내용을 확인한 뒤 다시 동의해 주세요.';
-
-/** 화면이 보인 직원 앱 약관 버전이 시행 중인 것과 다름(ACC-23) — 직원 앱이 이 사유를 그대로 보인다 */
-const TERMS_CHANGED =
-  '그사이 약관이 바뀌었습니다. 바뀐 약관을 확인하고 다시 동의해 주세요.';
-
-/** 약관 동의 시트에 보인 직원 앱 약관 버전 셋 */
-export type ShownStaffTermsVersions = {
-  termsServiceVersion: string;
-  privacyVersion: string;
-  /** 보인 마케팅 약관이 없었으면(시행 중인 것이 없음) null */
-  marketingVersion: string | null;
-};
 
 type LockedAccount = HqSharingAccount & { termsAgreedAt: Date | null };
 
@@ -208,19 +201,15 @@ export class MyConsentService {
           '지금은 약관 동의를 받을 수 없습니다. 관리자에게 문의해 주세요.',
         );
       }
-      if (
-        shown.termsServiceVersion !== terms.termsService.version ||
-        shown.privacyVersion !== terms.privacy.version ||
-        shown.marketingVersion !== (terms.marketing?.version ?? null)
-      )
+      assertShownStaffTerms(terms, shown);
+      // 두 번 누름 · 응답을 잃고 다시 보냄 — 앱이 code 로 가려 팝업을 내린다(api #326 code-review)
+      if (account.termsAgreedAt)
         throw new ConflictException({
           statusCode: HttpStatus.CONFLICT,
           error: 'Conflict',
-          code: 'TERMS_CHANGED',
-          message: TERMS_CHANGED,
+          code: 'TERMS_ALREADY_AGREED',
+          message: '이미 약관에 동의했습니다.',
         });
-      if (account.termsAgreedAt)
-        throw new ConflictException('이미 약관에 동의했습니다.');
       const now = new Date();
       await tx.accountTermsAgreementLog.createMany({
         data: staffTermsAgreementRows({

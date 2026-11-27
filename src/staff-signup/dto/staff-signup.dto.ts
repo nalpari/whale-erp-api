@@ -25,16 +25,21 @@ const REQUIRED_TERMS = '필수 약관에 동의해 주세요.';
 /**
  * 필수 약관 두 칸을 볼지 — 둘 다 빠졌으면 보지 않는다. 약관 동의 칸이 생기기 전의 앱(열어 둔 탭 · PWA, api 를 먼저 배포한 사이)이
  * 가입하지 못하게 막지 않으려는 것이다 — 그 계정은 약관 동의 일시가 비어 홈에서 동의를 받는다(본사 제공 동의 버전과 같은 생각, ATT-30 v253).
- * 약관 칸(마케팅 포함)을 하나라도 실으면 필수 둘이 true 여야 한다.
+ * 약관 칸(마케팅 · 보인 버전 포함)을 하나라도 실으면 필수 둘이 true 이고 보인 버전 셋이 있어야 한다.
  */
-const sendsTerms = (o: {
-  termsServiceAgreed?: unknown;
-  privacyAgreed?: unknown;
-  marketingAgreed?: unknown;
-}) =>
-  o.termsServiceAgreed !== undefined ||
-  o.privacyAgreed !== undefined ||
-  o.marketingAgreed !== undefined;
+const TERMS_FIELDS = [
+  'termsServiceAgreed',
+  'privacyAgreed',
+  'marketingAgreed',
+  'termsServiceVersion',
+  'privacyVersion',
+  'marketingVersion',
+] as const;
+const sendsTerms = (
+  o: Partial<Record<(typeof TERMS_FIELDS)[number], unknown>>,
+) => TERMS_FIELDS.some((field) => o[field] !== undefined);
+const SHOWN_VERSION = (field: string) =>
+  `가입 화면에 보인 약관 버전(${field})을 보내 주세요.`;
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.normalize('NFC').trim() : value;
 const trimLower = ({ value }: { value: unknown }) =>
@@ -138,6 +143,38 @@ export class StaffSignupDto extends InvitationLookupDto {
   @IsOptional()
   @IsBoolean()
   marketingAgreed?: boolean;
+
+  /**
+   * 가입 화면이 보인 약관 버전 — 서비스 이용약관(STAFF_TERMS_SERVICE) · 개인정보 수집·이용(STAFF_PRIVACY) · 마케팅(MARKETING).
+   * 약관 칸을 실으면 셋 다 싣는다(마케팅은 보인 것이 없었으면 null). 시행 중인 버전과 다르면 409 TERMS_CHANGED — 화면을 연 사이
+   * 약관이 바뀌었으면 보지 않은 버전에 동의한 것으로 남기지 않는다(홈 약관 동의와 같다, api #326 code-review)
+   */
+  @ApiProperty({ required: false, minLength: 1, maxLength: 64 })
+  @ValidateIf(sendsTerms)
+  @IsString({ message: SHOWN_VERSION('termsServiceVersion') })
+  @IsNotEmpty({ message: SHOWN_VERSION('termsServiceVersion') })
+  @MaxLength(64)
+  termsServiceVersion?: string;
+
+  @ApiProperty({ required: false, minLength: 1, maxLength: 64 })
+  @ValidateIf(sendsTerms)
+  @IsString({ message: SHOWN_VERSION('privacyVersion') })
+  @IsNotEmpty({ message: SHOWN_VERSION('privacyVersion') })
+  @MaxLength(64)
+  privacyVersion?: string;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    type: String,
+    minLength: 1,
+    maxLength: 64,
+  })
+  @ValidateIf((o: StaffSignupDto, value) => sendsTerms(o) && value !== null)
+  @IsString({ message: SHOWN_VERSION('marketingVersion') })
+  @IsNotEmpty({ message: SHOWN_VERSION('marketingVersion') })
+  @MaxLength(64)
+  marketingVersion?: string | null;
 
   /** 이 기기 — 로그인과 같다. 같은 기기의 앞 접속을 끝낸다 */
   @IsOptional()

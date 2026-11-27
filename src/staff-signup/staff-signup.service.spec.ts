@@ -94,6 +94,9 @@ describe('StaffSignupService', () => {
     addressDetail: '2층',
     termsServiceAgreed: true,
     privacyAgreed: true,
+    termsServiceVersion: 'v1.0',
+    privacyVersion: 'v1.0',
+    marketingVersion: 'v1.0',
     deviceIdentifier: 'device-1',
     ...overrides,
   });
@@ -551,7 +554,9 @@ describe('StaffSignupService', () => {
         },
         { termsTypeCode: 'STAFF_PRIVACY', termsVersionId: 4, version: 'v1.0' },
       ]);
-      await service().signup(input({ marketingAgreed: true }));
+      await service().signup(
+        input({ marketingAgreed: true, marketingVersion: null }),
+      );
       expect(
         (
           argOf(tx.accountTermsAgreementLog.createMany).data as {
@@ -562,6 +567,16 @@ describe('StaffSignupService', () => {
       expect(argOf(tx.account.create).data).toMatchObject({
         termsAgreedAt: NOW,
       });
+    });
+
+    it('가입 화면이 보인 약관 버전이 시행 중인 것과 다르면 409 TERMS_CHANGED — 계정을 만들지 않는다', async () => {
+      const e = await thrown(
+        service().signup(input({ privacyVersion: 'v0.9' })),
+      );
+      expect(e.getStatus()).toBe(409);
+      expect(codeOf(e)).toBe('TERMS_CHANGED');
+      expect(tx.account.create).not.toHaveBeenCalled();
+      expect(tx.accountTermsAgreementLog.createMany).not.toHaveBeenCalled();
     });
 
     it('필수 약관 가운데 시행 중인 것이 없으면 500 — 계정을 만들지 않는다(운영자가 끄거나 지움)', async () => {

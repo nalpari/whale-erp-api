@@ -36596,6 +36596,23 @@
             "minLength": 1,
             "maxLength": 64
           },
+          "termsServiceVersion": {
+            "type": "string",
+            "description": "가입 화면이 보인 약관 버전 — 서비스 이용약관(STAFF_TERMS_SERVICE) · 개인정보 수집·이용(STAFF_PRIVACY) · 마케팅(MARKETING).\n약관 칸을 실으면 셋 다 싣는다(마케팅은 보인 것이 없었으면 null). 시행 중인 버전과 다르면 409 TERMS_CHANGED — 화면을 연 사이\n약관이 바뀌었으면 보지 않은 버전에 동의한 것으로 남기지 않는다(홈 약관 동의와 같다, api #326 code-review)",
+            "maxLength": 64,
+            "minLength": 1
+          },
+          "privacyVersion": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1
+          },
+          "marketingVersion": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64,
+            "minLength": 1
+          },
           "email": {
             "type": "string",
             "description": "로그인 아이디. 소문자로 맞춰 저장한다(accounts_email_lower). 핀으로 확인하지 않는다",

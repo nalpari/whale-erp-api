@@ -475,11 +475,15 @@ describe('MyConsentService', () => {
       expect(data.map((r) => r.termsVersionId)).toEqual([3, 4]);
     });
 
-    it('이미 동의했으면 409 — 이력을 더 남기지 않는다', async () => {
+    it('이미 동의했으면 409 TERMS_ALREADY_AGREED — 이력을 더 남기지 않는다(앱이 code 로 가려 팝업을 내린다)', async () => {
       const service = await build({ termsAgreedAt: AGREED_AT });
-      await expect(
-        service.agreeTerms(12, shown, false, undefined),
-      ).rejects.toBeInstanceOf(ConflictException);
+      const e = (await service
+        .agreeTerms(12, shown, false, undefined)
+        .catch((error: unknown) => error)) as ConflictException;
+      expect(e).toBeInstanceOf(ConflictException);
+      expect((e.getResponse() as { code?: string }).code).toBe(
+        'TERMS_ALREADY_AGREED',
+      );
       expect(tx.accountTermsAgreementLog.createMany).not.toHaveBeenCalled();
     });
 

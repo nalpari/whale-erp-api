@@ -1,3 +1,4 @@
+import { ConflictException, HttpStatus } from '@nestjs/common';
 import type { Prisma, TermsAgreementChannel } from '@prisma/client';
 import { kstToday } from '../staff-members/kst-date';
 
@@ -46,6 +47,39 @@ export async function currentStaffTerms(db: {
   const marketing = pick(STAFF_TERMS_TYPES.marketing);
   if (!termsService || !privacy) return null;
   return { termsService, privacy, marketing: marketing ?? null };
+}
+
+/** 동의 화면(가입 · 홈 약관 동의 팝업)이 보인 직원 앱 약관 버전 셋 */
+export type ShownStaffTermsVersions = {
+  termsServiceVersion: string;
+  privacyVersion: string;
+  /** 보인 마케팅 약관이 없었으면(시행 중인 것이 없음) null */
+  marketingVersion: string | null;
+};
+
+/** 화면이 보인 직원 앱 약관 버전이 시행 중인 것과 다름(ACC-23) — 직원 앱이 이 사유를 그대로 보인다 */
+export const TERMS_CHANGED =
+  '그사이 약관이 바뀌었습니다. 바뀐 약관을 확인하고 다시 동의해 주세요.';
+
+/**
+ * 화면이 보인 약관 버전 셋이 시행 중인 것과 같아야 한다 — 다르면 409(code TERMS_CHANGED)로 거절해, 보인 약관과 남는 동의 버전이
+ * 어긋나지 않게 한다(위치정보 · 본사 제공 동의와 같은 방식). 가입과 홈 약관 동의가 같이 쓴다.
+ */
+export function assertShownStaffTerms(
+  terms: StaffTerms,
+  shown: ShownStaffTermsVersions,
+): void {
+  if (
+    shown.termsServiceVersion !== terms.termsService.version ||
+    shown.privacyVersion !== terms.privacy.version ||
+    shown.marketingVersion !== (terms.marketing?.version ?? null)
+  )
+    throw new ConflictException({
+      statusCode: HttpStatus.CONFLICT,
+      error: 'Conflict',
+      code: 'TERMS_CHANGED',
+      message: TERMS_CHANGED,
+    });
 }
 
 /** 약관 동의 이력(account_terms_agreement_logs) — 필수 둘은 동의, 마케팅은 고른 대로(시행 중인 마케팅 약관이 없으면 두 줄) */

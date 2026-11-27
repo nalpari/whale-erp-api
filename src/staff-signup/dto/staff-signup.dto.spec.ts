@@ -17,6 +17,9 @@ const signup = (overrides: Record<string, unknown> = {}) => ({
   address: '서울 마포구 동교로 1',
   termsServiceAgreed: true,
   privacyAgreed: true,
+  termsServiceVersion: 'v1.0',
+  privacyVersion: 'v1.0',
+  marketingVersion: 'v1.0',
   ...overrides,
 });
 const errorsOf = <T extends object>(cls: new () => T, plain: object) =>
@@ -46,7 +49,13 @@ describe('직원 가입 DTO', () => {
     expect(
       errorsOf(
         StaffSignupDto,
-        signup({ termsServiceAgreed: undefined, privacyAgreed: undefined }),
+        signup({
+          termsServiceAgreed: undefined,
+          privacyAgreed: undefined,
+          termsServiceVersion: undefined,
+          privacyVersion: undefined,
+          marketingVersion: undefined,
+        }),
       ),
     ).toEqual([]);
   });
@@ -62,6 +71,36 @@ describe('직원 가입 DTO', () => {
         }),
       ),
     ).toEqual(['termsServiceAgreed', 'privacyAgreed']);
+  });
+
+  it('약관 칸을 실으면 보인 버전 셋도 실어야 한다 — 마케팅만 null 을 받는다', () => {
+    expect(
+      errorsOf(
+        StaffSignupDto,
+        signup({ termsServiceVersion: undefined, privacyVersion: '' }),
+      ),
+    ).toEqual(['termsServiceVersion', 'privacyVersion']);
+    expect(
+      errorsOf(StaffSignupDto, signup({ marketingVersion: null })),
+    ).toEqual([]);
+    expect(
+      errorsOf(StaffSignupDto, signup({ marketingVersion: undefined })),
+    ).toEqual(['marketingVersion']);
+  });
+
+  it('약관 칸이 모두 빠지면(예전 앱) 버전도 보지 않는다', () => {
+    expect(
+      errorsOf(
+        StaffSignupDto,
+        signup({
+          termsServiceAgreed: undefined,
+          privacyAgreed: undefined,
+          termsServiceVersion: undefined,
+          privacyVersion: undefined,
+          marketingVersion: undefined,
+        }),
+      ),
+    ).toEqual([]);
   });
 
   it('필수 약관이 null 이면 받지 않는다 — 빠진 것과 다르다', () => {
