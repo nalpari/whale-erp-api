@@ -128,18 +128,25 @@ export class StaffSignupDto extends InvitationLookupDto {
 
   /**
    * [필수] 직원 앱 서비스 이용약관 동의 — 실으면 true 만 받는다(ACC-23). 시행 중인 버전(STAFF_TERMS_SERVICE)에 동의한 것으로 남는다.
-   * 이 칸과 privacyAgreed 가 둘 다 빠지면(약관 칸이 없던 예전 앱) 가입은 마치고 동의를 남기지 않는다 — 앱이 홈에서 받는다
+   * 약관 칸을 모두 빼면(약관 칸이 없던 예전 앱) 가입은 마치고 동의를 남기지 않는다 — 앱이 홈에서 받는다.
+   * 약관 칸 여섯(termsServiceAgreed · privacyAgreed · marketingAgreed · termsServiceVersion · privacyVersion · marketingVersion)은 모두 싣거나 모두 뺀다 — 하나라도 실으면 필수 둘이 true 이고 보인 버전 셋이 있어야 한다(아니면 400). 모두 빼는 것은 약관 칸이 없던 예전 앱뿐이다
    */
   @ValidateIf(sendsTerms)
   @Equals(true, { message: REQUIRED_TERMS })
   termsServiceAgreed?: boolean;
 
-  /** [필수] 개인정보 수집·이용 동의 — 실으면 true 만 받는다(ACC-23). 시행 중인 버전(STAFF_PRIVACY)에 동의한 것으로 남는다 */
+  /**
+   * [필수] 개인정보 수집·이용 동의 — 실으면 true 만 받는다(ACC-23). 시행 중인 버전(STAFF_PRIVACY)에 동의한 것으로 남는다.
+   * 약관 칸 여섯(termsServiceAgreed · privacyAgreed · marketingAgreed · termsServiceVersion · privacyVersion · marketingVersion)은 모두 싣거나 모두 뺀다 — 하나라도 실으면 필수 둘이 true 이고 보인 버전 셋이 있어야 한다(아니면 400). 모두 빼는 것은 약관 칸이 없던 예전 앱뿐이다
+   */
   @ValidateIf(sendsTerms)
   @Equals(true, { message: REQUIRED_TERMS })
   privacyAgreed?: boolean;
 
-  /** [선택] 마케팅 정보 수신 동의(MARKETING) — 빼면 동의하지 않음. 동의하지 않아도 이력에 한 줄 남는다 */
+  /**
+   * [선택] 마케팅 정보 수신 동의(MARKETING) — 빼면 동의하지 않음. 동의하지 않아도 이력에 한 줄 남는다.
+   * 약관 칸 여섯(termsServiceAgreed · privacyAgreed · marketingAgreed · termsServiceVersion · privacyVersion · marketingVersion)은 모두 싣거나 모두 뺀다 — 하나라도 실으면 필수 둘이 true 이고 보인 버전 셋이 있어야 한다(아니면 400). 모두 빼는 것은 약관 칸이 없던 예전 앱뿐이다
+   */
   @IsOptional()
   @IsBoolean()
   marketingAgreed?: boolean;
